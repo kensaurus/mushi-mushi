@@ -20,12 +20,18 @@ import { checkReportPayloadSize } from './payload-guard';
 import { sha256Hex, hmacSha256Hex } from './digest';
 import { isPageUnloading, sendOnUnload } from './unload-transport';
 
-let lastOutbound: { url: string; headers: Record<string, string>; body: string; path: string } | null = null;
+type Outbound = { url: string; headers: Record<string, string>; body: string; path: string };
 
-/** Replay the last POST via keepalive/beacon during pagehide. */
+// The POST still waiting on a response (or on a retry). Cleared when the
+// request settles, so a pagehide long after a delivered report sends nothing.
+let lastOutbound: Outbound | null = null;
+
+/** Replay the in-flight POST via keepalive/beacon during pagehide. */
 export function flushLastOutboundOnUnload(): boolean {
   if (!lastOutbound) return false;
-  return sendOnUnload(lastOutbound);
+  const outbound = lastOutbound;
+  lastOutbound = null;
+  return sendOnUnload(outbound);
 }
 
 // One-time credential-failure warning gate — emitted at most once per JS
@@ -187,8 +193,10 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       ...extraHeaders,
     };
     const serialized = body ? JSON.stringify(body) : undefined;
+    let outbound: Outbound | null = null;
     if (serialized && method !== 'GET' && internalKind !== 'reporter-poll') {
-      lastOutbound = { url, headers, body: serialized, path };
+      outbound = { url, headers, body: serialized, path };
+      lastOutbound = outbound;
     }
 
     try {
@@ -307,6 +315,9 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           message: error instanceof Error ? error.message : 'Unknown network error',
         },
       };
+    } finally {
+      // A retry replaces lastOutbound with its own entry, so only clear ours.
+      if (outbound && lastOutbound === outbound) lastOutbound = null;
     }
   }
 

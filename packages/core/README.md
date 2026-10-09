@@ -48,13 +48,13 @@ const resolved = expandPreset(config); // preset → nested options, explicit va
 
 ## Sampling and filters
 
-Sampling and URL filters apply to **automatic** error reports only, so a report a user sends from the widget is never sampled or filtered out. Only your own `beforeSend` can change or drop it.
+Sampling applies to **automatic** error reports, and the error filters to automatic reports and `captureException()`. A report a user sends from the widget is never sampled or filtered out. Only your own `beforeSend` can change or drop it.
 
 | Field | Default | What it does |
 | --- | --- | --- |
 | `sampleRate` | `1` | Share of automatic error reports to send (`0`–`1`) |
 | `replaySampleRate` | `1` | Share of sessions that record replay |
-| `ignoreErrors` / `denyUrls` / `allowUrls` | — | Drop matching automatic captures |
+| `ignoreErrors` / `denyUrls` / `allowUrls` | — | Drop matching errors from automatic capture and `captureException()`. URLs match the frame that threw |
 | `beforeSend` | — | `(report) => report \| null` for every report, after the PII scrubber. Return `null` to drop |
 | `tunnel` | — | Same-origin ingest path (e.g. `/api/mushi-tunnel`) so ad blockers don't drop reports |
 

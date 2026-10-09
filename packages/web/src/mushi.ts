@@ -1883,6 +1883,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         shouldDropCapturedError({
           message: normalised.message,
           filename,
+          stack: normalised.stack,
           ignoreErrors: activeConfig.ignoreErrors,
           denyUrls: activeConfig.denyUrls,
           allowUrls: activeConfig.allowUrls,

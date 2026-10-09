@@ -248,6 +248,7 @@ export function setupProactiveTriggers(
       if (
         shouldDropCapturedError({
           message,
+          stack: event.reason instanceof Error ? event.reason.stack : undefined,
           ignoreErrors: config.ignoreErrors,
           denyUrls: config.denyUrls,
           allowUrls: config.allowUrls,

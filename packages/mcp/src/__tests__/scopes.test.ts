@@ -300,4 +300,15 @@ describe('structured tool output (MCP 2025-06-18)', () => {
       outdated: false,
     })
   })
+
+  it('check_sdk_version reads a package.json range as its version', async () => {
+    for (const [current, outdated] of [['^1.27.2', false], ['~1.27.2', false], ['>=1.27.2', false], ['^1.27.0', true]] as const) {
+      fetchStub.enqueue({ ok: true, data: { package: '@mushi-mushi/web', latest: '1.27.2' } })
+      const res = await client.callTool({
+        name: 'check_sdk_version',
+        arguments: { package: '@mushi-mushi/web', current },
+      })
+      expect(res.structuredContent).toMatchObject({ current, outdated })
+    }
+  })
 })
