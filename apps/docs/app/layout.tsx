@@ -12,6 +12,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
+import { releaseHeadline } from '../lib/release-headline'
 import {
   DOCS_SITE,
   OG_CARD_IMAGE,
@@ -87,13 +88,7 @@ export const metadata: Metadata = {
  */
 const latestRelease = changelog[0]
 const latestVersion = latestRelease.versions?.[0] ?? latestRelease.majorMinor
-const latestHeadline =
-  latestRelease.headline ??
-  latestRelease.highlights
-    ?.slice(0, 2)
-    .map((h) => h.title.replace(/:$/, ''))
-    .join(', ') ??
-  'See what shipped.'
+const latestHeadline = releaseHeadline(latestRelease)
 
 const banner = (
   <Banner storageKey={`v${latestRelease.majorMinor.replace(/\./g, '-')}-release`}>
