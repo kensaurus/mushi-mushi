@@ -20,9 +20,10 @@
 //      Flat monthly:
 //        mushi:indie:base:v1             $15.00/mo  → plan_id=indie
 //        mushi:pro:base:v2               $49.00/mo  → plan_id=pro  (new subs; existing on :v1)
-//      Metered overage (diagnoses meter):
-//        mushi:diagnoses:overage:indie:v1  $0.030000/diagnosis  → Indie
-//        mushi:diagnoses:overage:pro:v1    $0.025000/diagnosis  → Pro
+//      Metered overage (diagnoses meter, graduated: included units free):
+//        mushi:diagnoses:overage:indie:v2  first 500 $0, then $0.030/diagnosis   → Indie
+//        mushi:diagnoses:overage:pro:v2    first 2,000 $0, then $0.025/diagnosis → Pro
+//        (:v1 flat per-unit prices billed the included units; unused since 2026-10-09)
 //      Legacy (kept for existing subscribers — not removed):
 //        mushi:starter:base:v1             $19.00/mo
 //        mushi:pro:base:v1                 $99.00/mo  (legacy)
@@ -320,28 +321,41 @@ async function main() {
   })
 
   // Diagnoses overage prices — pegged to the mushi_diagnoses meter.
+  // The usage aggregator sends EVERY diagnosis to the meter, so the included
+  // allowance lives in the price: a graduated first tier at $0 up to the
+  // plan's included_diagnoses_per_month, then the overage rate.
   // unit_amount_decimal uses sub-cent precision ($0.030 = 3 cents).
+  // v1 (flat per_unit, no free tier) billed the included diagnoses too; it
+  // stays in Stripe but is no longer used. Live v2 created 2026-10-09.
   const indieDiagnosesOverage = await findOrCreatePrice({
     product: products.diagnosesOverage.id,
     currency: 'usd',
-    unit_amount_decimal: '3.0',
-    billing_scheme: 'per_unit',
-    lookup_key: 'mushi:diagnoses:overage:indie:v1',
-    nickname: 'Mushi Mushi diagnoses overage — Indie ($0.030/diagnosis)',
+    billing_scheme: 'tiered',
+    tiers_mode: 'graduated',
+    tiers: [
+      { up_to: 500, unit_amount_decimal: '0' },
+      { up_to: 'inf', unit_amount_decimal: '3' },
+    ],
+    lookup_key: 'mushi:diagnoses:overage:indie:v2',
+    nickname: 'Mushi Mushi diagnoses — Indie (500 included, then $0.030/diagnosis)',
     tax_behavior: 'exclusive',
     recurring: { interval: 'month', usage_type: 'metered', meter: diagnosesMeter.id },
-    metadata: { project: 'mushi-mushi', tier: 'indie', kind: 'overage', unit: 'diagnoses', version: 'v1' },
+    metadata: { project: 'mushi-mushi', tier: 'indie', kind: 'overage', unit: 'diagnoses', version: 'v2', included: '500' },
   })
   const proDiagnosesOverage = await findOrCreatePrice({
     product: products.diagnosesOverage.id,
     currency: 'usd',
-    unit_amount_decimal: '2.5',
-    billing_scheme: 'per_unit',
-    lookup_key: 'mushi:diagnoses:overage:pro:v1',
-    nickname: 'Mushi Mushi diagnoses overage — Pro ($0.025/diagnosis)',
+    billing_scheme: 'tiered',
+    tiers_mode: 'graduated',
+    tiers: [
+      { up_to: 2000, unit_amount_decimal: '0' },
+      { up_to: 'inf', unit_amount_decimal: '2.5' },
+    ],
+    lookup_key: 'mushi:diagnoses:overage:pro:v2',
+    nickname: 'Mushi Mushi diagnoses — Pro (2,000 included, then $0.025/diagnosis)',
     tax_behavior: 'exclusive',
     recurring: { interval: 'month', usage_type: 'metered', meter: diagnosesMeter.id },
-    metadata: { project: 'mushi-mushi', tier: 'pro', kind: 'overage', unit: 'diagnoses', version: 'v1' },
+    metadata: { project: 'mushi-mushi', tier: 'pro', kind: 'overage', unit: 'diagnoses', version: 'v2', included: '2000' },
   })
 
   // ── Annual billing prices (~2 months free = 10/12 discount) ───────────────
