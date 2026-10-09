@@ -33,6 +33,7 @@ import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds } from '../shared.ts';
+import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -102,7 +103,7 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
     }
 
     const db = getServiceClient();
-    const chunks = chunk(normalizedPath, body.source);
+    const chunks = chunk(normalizedPath, pgSafeText(body.source));
     let inserted = 0;
     for (const ch of chunks) {
       try {
@@ -119,7 +120,7 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
             line_end: ch.lineEnd,
             language: ch.language,
             content_hash: contentHash,
-            content_preview: ch.body.slice(0, 600),
+            content_preview: pgSafeSlice(ch.body, 600),
             embedding,
             embedding_model: 'text-embedding-3-small',
             last_modified: new Date().toISOString(),

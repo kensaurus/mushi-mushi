@@ -76,11 +76,11 @@ describe('withRetry', () => {
 })
 
 describe('backoff budget', () => {
-  it('caps each wait and stays within a few minutes overall', () => {
+  it('caps each wait and outlasts the npm per-version 404 window (5.5 min on 2026-10-09)', () => {
     const waits = Array.from({ length: RETRY_DEFAULTS.attempts - 1 }, (_, i) => backoffDelay(i + 1))
     assert.equal(Math.max(...waits), RETRY_DEFAULTS.maxDelayMs)
     const total = waits.reduce((a, b) => a + b, 0)
-    assert.ok(total >= 4 * 60_000 && total <= 6 * 60_000, `total wait ${total}ms`)
+    assert.ok(total >= 8 * 60_000 && total <= 11 * 60_000, `total wait ${total}ms`)
   })
 })
 
