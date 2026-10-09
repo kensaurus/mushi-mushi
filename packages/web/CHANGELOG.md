@@ -1,5 +1,11 @@
 # @mushi-mushi/web
 
+## 1.32.1
+
+### Patch Changes
+
+- db20d23: A host `trigger: 'manual'` or `'attach'` now keeps its launcher when the console sets one. A console `banner`, `auto` or `edge-tab` used to replace it, so an app that draws its own "Report a bug" button got a second, SDK-drawn banner. Only an explicit console `hidden` still applies, so the console can still hide the widget.
+
 ## 1.32.0
 
 ### Minor Changes
