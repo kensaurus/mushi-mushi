@@ -73,7 +73,7 @@ import { ALWAYS_REDACT_SELECTORS, type ScreenshotFailureReason } from './capture
 // it runs at submit, where an offline chunk fetch would drop the screenshot.
 import type { AnnotationSession, AnnotationTool } from './capture/screenshot-annotation';
 import { captureSentryContext, tagSentryScope } from './sentry';
-import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
+import { scriptUrlFromStack, setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version';
 import { subscribeHistory, uninstallHistoryPatchForce } from './history-patch';
@@ -1875,10 +1875,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     async captureException(error, options) {
       const normalised = normaliseThrown(error);
+      // denyUrls / allowUrls match where it threw, as for automatic capture:
+      // an explicit metadata.filename, else the stack's innermost frame.
       const filename =
         typeof options?.metadata?.filename === 'string'
           ? options.metadata.filename
-          : undefined;
+          : scriptUrlFromStack(normalised.stack);
       if (
         shouldDropCapturedError({
           message: normalised.message,

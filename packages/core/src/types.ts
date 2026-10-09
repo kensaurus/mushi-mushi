@@ -84,17 +84,20 @@ export interface MushiConfig {
    */
   tunnel?: string;
   /**
-   * Drop automatic error reports whose message matches any string (substring)
-   * or RegExp. Never applied to user-submitted widget feedback.
+   * Drop automatic error reports and `captureException()` calls whose message
+   * matches any string (substring) or RegExp. Never applied to user-submitted
+   * widget feedback.
    */
   ignoreErrors?: Array<string | RegExp>;
   /**
-   * Drop automatic error reports whose script URL / stack filename matches.
+   * Drop automatic error reports and `captureException()` calls whose
+   * throw-site URL (script filename, else the stack's first frame) matches.
    */
   denyUrls?: Array<string | RegExp>;
   /**
-   * When set, drop automatic error reports unless the script URL matches
-   * at least one entry.
+   * When set, drop automatic error reports and `captureException()` calls
+   * unless the throw-site URL matches at least one entry. An error with no
+   * known URL (e.g. cross-origin "Script error.") is dropped.
    */
   allowUrls?: Array<string | RegExp>;
   /**

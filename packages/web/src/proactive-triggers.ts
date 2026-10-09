@@ -53,10 +53,11 @@ const DEFAULT_EXCLUDE_ROUTES: readonly string[] = [
 const STACK_FRAME_URL = /(?:^\s*at\s+(?:.*?\()?|@)([a-z][a-z0-9+.-]*:\/\/[^\s()]*?)(?::\d+){1,2}\)?\s*$/i
 
 /**
- * @internal Exported for tests only.
+ * @internal Also used by `captureException` in mushi.ts.
  * The script URL of the innermost frame in `stack`, or undefined when no frame
- * carries one. An unhandled rejection has no `filename` the way an ErrorEvent
- * does, so this is what `denyUrls` / `allowUrls` match against for it.
+ * carries one. An unhandled rejection or a `captureException` call has no
+ * `filename` the way an ErrorEvent does, so this is what `denyUrls` /
+ * `allowUrls` match against for it.
  */
 export function scriptUrlFromStack(stack: unknown): string | undefined {
   if (typeof stack !== 'string' || stack.length === 0) return undefined
