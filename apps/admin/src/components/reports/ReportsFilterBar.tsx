@@ -8,6 +8,7 @@ import type { ReactNode, RefObject } from 'react'
 import { FilterSelect, Input, FILTER_SELECT_CLASS } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
+import { ORIGIN_FILTER_OPTIONS } from '../../lib/reportOrigin'
 import {
   PLATFORM_FILTER_OPTIONS,
   SDK_FILTER_OPTIONS,
@@ -32,6 +33,8 @@ interface Props {
   platform?: string
   /** Filter by `sdk_package`, e.g. `@mushi-mushi/react-native`. */
   sdkPackage?: string
+  /** `deployed` or `local`: sent from the deployed app or a developer's machine. */
+  origin?: string
   /** Created in the last N days (`days` param), e.g. from a KPI tile. */
   days?: string
   contextChips: ContextChip[]
@@ -51,6 +54,7 @@ export function ReportsFilterBar({
   severity,
   platform = '',
   sdkPackage = '',
+  origin = '',
   days = '',
   contextChips,
   hasFilters,
@@ -96,6 +100,13 @@ export function ReportsFilterBar({
       label: 'SDK',
       value: optionLabel(SDK_FILTER_OPTIONS, sdkPackage),
       onClear: () => onSetFilter('sdkPackage', ''),
+      tone: 'neutral' as const,
+    },
+    origin && {
+      key: 'origin',
+      label: 'Where',
+      value: optionLabel(ORIGIN_FILTER_OPTIONS, origin),
+      onClear: () => onSetFilter('origin', ''),
       tone: 'neutral' as const,
     },
     days && {
@@ -162,6 +173,21 @@ export function ReportsFilterBar({
           >
             <option value="">All SDKs</option>
             {SDK_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="inline-flex flex-col gap-0.5">
+          <span className="sr-only">Where</span>
+          <select
+            value={origin}
+            onChange={(e) => onSetFilter('origin', e.currentTarget.value)}
+            aria-label="Filter by where the report was sent from"
+            title="Local dev: sent from a developer's machine (a dev server or a phone on the same Wi-Fi)."
+            className={FILTER_SELECT_CLASS}
+          >
+            <option value="">Deployed and local</option>
+            {ORIGIN_FILTER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>

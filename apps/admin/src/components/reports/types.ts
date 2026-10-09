@@ -11,6 +11,8 @@ export interface ReportRow {
   id: string
   /** custom_metadata.source; 'admin_test_report' marks a sample from "Send a test report". */
   metadata_source?: string | null
+  /** Where the report came from: widget, sentry, library_modernizer, store_review, … */
+  source?: string | null
   project_id: string
   description: string
   category: string

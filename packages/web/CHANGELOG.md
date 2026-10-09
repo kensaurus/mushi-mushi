@@ -1,5 +1,22 @@
 # @mushi-mushi/web
 
+## 1.32.1
+
+### Patch Changes
+
+- db20d23: A host `trigger: 'manual'` or `'attach'` now keeps its launcher when the console sets one. A console `banner`, `auto` or `edge-tab` used to replace it, so an app that draws its own "Report a bug" button got a second, SDK-drawn banner. Only an explicit console `hidden` still applies, so the console can still hide the widget.
+
+## 1.32.0
+
+### Minor Changes
+
+- ead9f42: The bug widget and reporter updates now speak Simplified Chinese. `locale: 'zh'` (or a `zh-*` browser language) used to fall back to English, so a Chinese-language app showed English buttons around its own Chinese categories.
+
+### Patch Changes
+
+- Updated dependencies [ead9f42]
+  - @mushi-mushi/core@1.32.0
+
 ## 1.31.2
 
 ### Patch Changes
