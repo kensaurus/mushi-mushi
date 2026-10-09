@@ -22,6 +22,11 @@ describe('getLocale', () => {
     expect(locale.widget.trigger).toBe('Reportar problema');
   });
 
+  it('returns Simplified Chinese for "zh" and its regions', () => {
+    expect(getLocale('zh').widget.trigger).toBe('反馈问题');
+    expect(getLocale('zh-CN').step1.categories.bug).toBe('错误');
+  });
+
   it('falls back to English for unknown locale', () => {
     const locale = getLocale('zz');
     expect(locale.widget.trigger).toBe('Report Issue');

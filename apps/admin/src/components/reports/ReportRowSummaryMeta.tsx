@@ -116,7 +116,7 @@ export function ReportRowLayerPill({ row }: Props) {
 }
 
 export function ReportRowMeta({ row }: Props) {
-  const capture = captureMode(row.proactive_trigger)
+  const capture = captureMode(row.proactive_trigger, row)
   const who = reporterWho(row)
   const { path, fullTitle } = resolveReportPath(row)
   const traceShort = row.sentry_trace_id ? `${row.sentry_trace_id.slice(0, 7)}…` : null

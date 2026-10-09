@@ -31,8 +31,9 @@
  *        node scripts/check-release-version.mjs --skip-dirty   # warn, exit 0
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -45,6 +46,51 @@ const skipDirty = process.argv.includes('--skip-dirty')
 // two CI runs before printing anything, so every call fails fast instead.
 const GIT_TIMEOUT_MS = 60_000
 const VERSION_TIMEOUT_MS = 5 * 60_000
+
+// changesets captures the output of the git commands it runs, so GIT_TRACE
+// goes to a file whose tail is printed when the step fails.
+const GIT_TRACE_FILE = path.join(tmpdir(), `check-release-version-git-trace-${process.pid}.log`)
+
+function printGitTrace() {
+  if (!existsSync(GIT_TRACE_FILE)) return
+  const lines = readFileSync(GIT_TRACE_FILE, 'utf8').trim().split('\n')
+  console.error(`\n   Last git commands changesets ran (${lines.length} trace lines in total):`)
+  console.error(lines.slice(-30).map((l) => `   ${l}`).join('\n'))
+}
+
+function runVersion() {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const stamp = () => `[${((Date.now() - started) / 1000).toFixed(1)}s]`
+    let stdout = ''
+    let stderr = ''
+    let error = null
+    const child = spawn('pnpm', ['exec', 'changeset', 'version'], {
+      cwd: ROOT,
+      shell: process.platform === 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: CI ? { ...process.env, GIT_TRACE: GIT_TRACE_FILE } : process.env,
+    })
+    const relay = (chunk, sink) => {
+      const text = chunk.toString()
+      for (const line of text.split('\n')) if (line.trim()) sink.write(`   ${stamp()} ${line}\n`)
+      return text
+    }
+    child.stdout.on('data', (c) => { stdout += relay(c, process.stdout) })
+    child.stderr.on('data', (c) => {
+      stderr += relay(c, process.stderr)
+    })
+    const timer = setTimeout(() => {
+      error = new Error(`timed out after ${VERSION_TIMEOUT_MS / 1000}s (the last lines above show where it stopped)`)
+      child.kill('SIGKILL')
+    }, VERSION_TIMEOUT_MS)
+    child.on('error', (err) => { error = err })
+    child.on('close', (status) => {
+      clearTimeout(timer)
+      resolve({ status: error ? null : status, stdout, stderr, error })
+    })
+  })
+}
 
 function git(args) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', timeout: GIT_TIMEOUT_MS }).trim()
@@ -79,13 +125,16 @@ if (dirty) {
 
 // ── 3. Run it, then always restore ──────────────────────────────────────────
 console.log(`   Running \`changeset version\` against ${changesets.length} pending changeset(s)…`)
-const run = spawnSync('pnpm', ['exec', 'changeset', 'version'], {
-  cwd: ROOT,
-  encoding: 'utf8',
-  shell: process.platform === 'win32',
-  timeout: VERSION_TIMEOUT_MS,
-})
+// Output streams as it arrives, stamped with seconds since start. On
+// 2026-10-09 the step hit its 5-minute timeout twice on CI having printed
+// nothing, and nothing could say where it stopped. No stdin, so a prompt can
+// never wait for an answer. On CI, GIT_TRACE records every git command
+// changesets runs (it deepens a shallow clone to find the commit that added a
+// changeset); the tail is printed when the step fails.
+const run = await runVersion()
 if (run.error) console.error(`✗  \`changeset version\` did not finish: ${run.error.message}`)
+if (run.error || run.status !== 0) printGitTrace()
+rmSync(GIT_TRACE_FILE, { force: true })
 
 let restoreError = null
 try {

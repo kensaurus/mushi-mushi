@@ -43,7 +43,7 @@ export const REPORTER_CANONICAL_STATUSES = [
 
 export type ReporterCanonicalStatus = (typeof REPORTER_CANONICAL_STATUSES)[number];
 
-export const REPORTER_LOCALES = ['en', 'ja', 'es', 'th'] as const;
+export const REPORTER_LOCALES = ['en', 'ja', 'es', 'th', 'zh'] as const;
 export type ReporterLocale = (typeof REPORTER_LOCALES)[number];
 
 /** Optional type chips on the one-screen report form, in display order. */
@@ -539,7 +539,99 @@ const TH: ReporterCopy = {
   },
 };
 
-const COPY: Record<ReporterLocale, ReporterCopy> = { en: EN, ja: JA, es: ES, th: TH };
+const ZH: ReporterCopy = {
+  status: {
+    received: '已收到',
+    reviewing: '处理中',
+    reviewing_again: '重新查看中',
+    fixing: '修复中',
+    verified: '已确认修复',
+    fixed_next: '已修复 — 下次更新上线',
+    fixed_version: '已在 v{version} 修复',
+    fixed: '已修复',
+    closed: '已关闭',
+    waiting: '等待你的回复',
+  },
+  detail: {
+    received: '我们已收到你的反馈。',
+    reviewing: '开发者已把它加入待处理列表。',
+    reviewing_again: '谢谢，我们正在重新查看。',
+    fixing: '正在修复。',
+    verified: '感谢你确认修复！',
+    fixed_next: '会在下一个版本中上线。',
+    fixed_version: '请更新到 v{version}。问题解决了吗？',
+    fixed: '问题解决了吗？',
+    closed: '已关闭。',
+    waiting: '开发者有问题想问你，请在下方回复。',
+  },
+  idea: {
+    received: '谢谢你的想法',
+    reviewing: '考虑中',
+    fixing: '开发中',
+    shipped: '已上线',
+    shippedVersion: '已在 v{version} 上线',
+  },
+  closedReason: {
+    duplicate: '和之前的一条反馈相同，我们会在那条里通知进展。',
+    not_reproducible: '我们没能复现。如果再次发生，请回复。',
+    wont_fix: '我们决定不修改这一点。',
+    working_as_intended: '这是预期的行为。',
+    none: '已关闭。',
+  },
+  others: {
+    few: '包括你在内，有几个人反馈了这个问题',
+    many: '很多人反馈了这个问题',
+  },
+  timeline: {
+    received: '你提交了反馈',
+    reviewing: '开发者正在查看',
+    duplicate_linked: '和已有反馈相同，我们会在那条里通知进展',
+    info_requested: '开发者的问题：{text}',
+    reporter_comment: '你',
+    fix_started: '正在修复',
+    fixed: '已修复 — 下次更新上线',
+    released: '已在 v{version} 发布 — 请更新',
+    verified: '已确认修复',
+    reopened: '已重新打开',
+  },
+  categories: {
+    bug: '错误',
+    slow: '慢',
+    visual: '显示问题',
+    confusing: '难以理解',
+    idea: '想法',
+  },
+  ui: {
+    yes: '是',
+    notYet: '还没有',
+    empty: '还没有反馈。提交后会在这里显示进展。',
+    loadError: '无法加载更新',
+    retry: '重试',
+    sending: '发送中…',
+    sent: '已发送',
+    sendFailed: '发送失败',
+    noReplies: '开发者还没有回复。',
+    you: '你',
+    developer: '开发者',
+    addWords: '请再多写几个字',
+    developerReplied: '开发者回复：“{text}”',
+    updates: '你的反馈有 {n} 条更新',
+    receipt: '已发送。有进展时会在这里通知你。',
+    trackIt: '查看进展',
+    done: '完成',
+    emailOptIn: '通过邮件接收更新',
+    emailPlaceholder: 'you@example.com',
+    emailSubmit: '用邮件接收',
+    emailCheckInbox: '请点击收件箱中邮件里的链接完成确认。',
+    emailInvalid: '邮箱地址格式不正确。',
+    emailFailed: '无法设置邮件通知，请稍后再试。',
+    toastReplied: '开发者回复了你的反馈',
+    toastFixed: '你反馈的问题已修复',
+    view: '查看',
+  },
+};
+
+const COPY: Record<ReporterLocale, ReporterCopy> = { en: EN, ja: JA, es: ES, th: TH, zh: ZH };
 
 /** Resolve a BCP-47 tag (`ja-JP`, `es-419`) to a supported locale; English otherwise. */
 export function resolveReporterLocale(tag: string | null | undefined): ReporterLocale {

@@ -199,7 +199,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     label: 'Classification model',
     summary: 'Which LLM writes the plain-English read on each report after noise is filtered out.',
     howItWorks:
-      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
+      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku 5.5 costs about a twentieth of Sonnet 5.5 but is rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
     default: { value: 'claude-sonnet-5-5' },
     backend: {
       table: 'project_settings',
@@ -215,11 +215,68 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
   },
   {
+    id: 'settings.general.stage1_model',
+    label: 'Quick check model',
+    summary: 'Which Claude model runs the fast first pass on every report.',
+    howItWorks:
+      'Stage 1 reads each new report, filters spam and test noise, and sorts the easy bugs. Only reports it is unsure about go on to the triage model. Haiku 4.5 is the default; Haiku 5.5 costs a tenth as much per token. Only Claude models are accepted, because Stage 1 calls Claude first and OpenAI only as a fallback.',
+    default: { value: 'claude-haiku-4-5-20251001' },
+    backend: {
+      table: 'project_settings',
+      column: 'stage1_model',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['fast-filter edge function'],
+    },
+    whenToChange: 'Pick Haiku 5.5 to cut the cost of every report. Check the Judge page after a week to see whether triage quality held.',
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
+  },
+  {
+    id: 'settings.general.judge_model',
+    label: 'Judge model',
+    summary: 'Which Claude model grades a sample of triage results on the Judge page.',
+    howItWorks:
+      'The judge re-reads classified reports and scores the triage for accuracy, severity, component and reproduction steps. Sonnet 5.5 is the default. Haiku 5.5 is much cheaper, but a judge on the same model as the triage tends to agree with it, so scores read more generously.',
+    default: { value: 'claude-sonnet-5-5' },
+    backend: {
+      table: 'project_settings',
+      column: 'judge_model',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['judge-batch edge function'],
+    },
+    whenToChange: 'Pick Haiku 5.5 when cost matters more than an independent second opinion.',
+    learnMore: {
+      label: 'About the AI judge',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
+  },
+  {
+    id: 'settings.general.fix_model',
+    label: 'Fix model',
+    summary: "Which Claude model Mushi's own fix agent writes code fixes with.",
+    howItWorks:
+      'When Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.',
+    default: { value: 'claude-sonnet-5-5' },
+    backend: {
+      table: 'project_settings',
+      column: 'claude_default_model',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['fix-worker edge function'],
+    },
+    whenToChange: 'Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.',
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
+  },
+  {
     id: 'settings.general.stage1_confidence_threshold',
     label: 'Noise filter confidence',
     summary: 'How confident Mushi must be that a report is spam or test noise before dropping it.',
     howItWorks:
-      'Every inbound report runs through Stage 1 (Haiku 4.5). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).',
+      'Every inbound report runs through Stage 1 (the quick check model, Haiku 4.5 by default). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).',
     default: { value: '0.85', range: '0.50 – 0.99' },
     backend: {
       table: 'project_settings',

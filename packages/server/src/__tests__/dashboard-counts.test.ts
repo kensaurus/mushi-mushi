@@ -67,6 +67,9 @@ function report(i: number, p: Partial<Row>): Row {
     description: null,
     created_at: iso(DAY),
     judge_evaluated_at: '2026-10-01T00:00:00Z',
+    // NOT NULL in prod; the judge-eligible count also needs classifier output.
+    reporter_token_hash: `rk1_${i}`,
+    stage1_classification: { category: 'bug' },
     ...p,
   }
 }
@@ -184,6 +187,8 @@ describe('/v1/admin/dashboard', () => {
       report(2, { status: 'fixing', judge_evaluated_at: null }),
       report(3, { status: 'classified' }),
       report(4, { status: 'new', judge_evaluated_at: null }),
+      // A cron-filed notice the classifier never labelled: nothing to grade.
+      report(5, { status: 'classified', judge_evaluated_at: null, reporter_token_hash: 'cron:library-modernizer', stage1_classification: null }),
     ])
     const { body } = await get('/v1/admin/dashboard')
     const check = body.data.pdcaStages.find((s: { id: string }) => s.id === 'check')
