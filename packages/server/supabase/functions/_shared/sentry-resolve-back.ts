@@ -23,6 +23,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import {
+  archiveSentryIssue,
   commentOnSentryIssue,
   getSentryIssue,
   resolveSentryIssue,
@@ -278,6 +279,81 @@ export async function resolveLinkedSentryIssues(
         dedupeKey: `sentry_resolve_fail:${link.external_id}`,
       });
       result.failed.push({ issueId: link.external_id, error: message });
+    }
+  }
+  return result;
+}
+
+/** Close reasons that mean "not a bug to fix", so Sentry should stop listing
+ *  the issue. Others leave it open: "couldn't reproduce" may still be firing,
+ *  a duplicate is handled through its group, spam has no Sentry issue. */
+const ARCHIVE_ON_CLOSE: Readonly<Record<string, string>> = {
+  working_as_intended: 'works as intended',
+  wont_fix: "won't fix",
+};
+
+/** What closing a report with `closedReason` does to its linked Sentry issues. */
+export function sentryCloseAction(closedReason: string | null | undefined): 'archive' | null {
+  return closedReason && Object.hasOwn(ARCHIVE_ON_CLOSE, closedReason) ? 'archive' : null;
+}
+
+export interface SentryArchiveResult {
+  archived: string[];
+  failed: Array<{ issueId: string; error: string }>;
+  skipped?: 'not_archivable' | 'no_links' | 'no_credentials';
+}
+
+/**
+ * Archive (until escalating) each open Sentry issue linked to a report closed
+ * as not-a-bug. Before this, a report closed as "works as intended" in Mushi
+ * stayed unresolved in Sentry (MUSHI-MUSHI-SERVER-2M, 2026-10-09).
+ * resolved_at stays unset: the issue is archived, not fixed, and Sentry
+ * brings it back if it escalates.
+ */
+export async function archiveLinkedSentryIssues(
+  db: SupabaseClient,
+  input: { projectId: string; reportId: string; closedReason: string },
+  deps: {
+    credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
+    fetchImpl?: FetchLike;
+  } = {},
+): Promise<SentryArchiveResult> {
+  if (!sentryCloseAction(input.closedReason)) return { archived: [], failed: [], skipped: 'not_archivable' };
+  const label = ARCHIVE_ON_CLOSE[input.closedReason];
+  const links = (await loadSentryLinks(db, input.projectId, input.reportId, true)).filter((l) =>
+    /^\d+$/.test(l.external_id),
+  );
+  if (links.length === 0) return { archived: [], failed: [], skipped: 'no_links' };
+  const creds = await (deps.credentials ?? loadSentryCredentials)(db, input.projectId);
+  if (!creds) {
+    log.warn('Sentry archive skipped: no credentials', { projectId: input.projectId, reportId: input.reportId });
+    return {
+      archived: [],
+      failed: links.map((l) => ({ issueId: l.external_id, error: 'no_credentials' })),
+      skipped: 'no_credentials',
+    };
+  }
+  const result: SentryArchiveResult = { archived: [], failed: [] };
+  for (const link of links) {
+    try {
+      await archiveSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl);
+      result.archived.push(link.external_id);
+    } catch (err) {
+      const message = String(err instanceof Error ? err.message : err).slice(0, 300);
+      log.error('Sentry archive failed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id, err: message });
+      result.failed.push({ issueId: link.external_id, error: message });
+      continue;
+    }
+    try {
+      await commentOnSentryIssue(
+        creds.token,
+        creds.orgSlug,
+        link.external_id,
+        `Archived by Mushi: the report was closed as "${label}". Sentry brings it back if it escalates.`,
+        deps.fetchImpl,
+      );
+    } catch (err) {
+      log.warn('Sentry comment failed (issue is archived)', { issueId: link.external_id, err: String(err).slice(0, 200) });
     }
   }
   return result;

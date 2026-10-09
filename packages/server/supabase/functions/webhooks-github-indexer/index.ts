@@ -75,6 +75,7 @@ import {
   parseCloudAgentBranchRef,
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
+import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -1102,7 +1103,9 @@ interface IndexChunk extends PlannedChunk {
 }
 
 /** Chunk one file, hashing each chunk and extracting the whole file's imports up front. */
-async function chunksForFile(path: string, source: string): Promise<IndexChunk[]> {
+async function chunksForFile(path: string, rawSource: string): Promise<IndexChunk[]> {
+  // A NUL in a source file failed every chunk row of it (MUSHI-MUSHI-SERVER-2B).
+  const source = pgSafeText(rawSource);
   const imports = extractRelativeImports(source);
   const out: IndexChunk[] = [];
   for (const ch of chunk(path, source)) {
@@ -1155,7 +1158,7 @@ function chunkRow(projectId: string, c: IndexChunk) {
     line_end: c.chunk.lineEnd,
     language: c.chunk.language,
     content_hash: c.hash,
-    content_preview: c.chunk.body.slice(0, 600),
+    content_preview: pgSafeSlice(c.chunk.body, 600),
     imports: c.imports,
     last_modified: new Date().toISOString(),
     tombstoned_at: null,
