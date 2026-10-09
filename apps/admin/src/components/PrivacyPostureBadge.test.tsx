@@ -36,11 +36,11 @@ import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 let root: Root | null = null
 let container: HTMLDivElement
 
-function render() {
+function render(props: { compact?: boolean } = {}) {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  act(() => root!.render(createElement(MemoryRouter, null, createElement(PrivacyPostureBadge))))
+  act(() => root!.render(createElement(MemoryRouter, null, createElement(PrivacyPostureBadge, props))))
 }
 
 beforeEach(() => {
@@ -74,5 +74,26 @@ describe('PrivacyPostureBadge', () => {
     state.page = { data: null, loading: false, error: 'Request failed (HTTP_500)', errorMessage: 'Request failed' }
     render()
     expect(container.textContent).toContain('Privacy unavailable')
+  })
+
+  // The rail flyout is portaled and only mounted on hover, so the rail link
+  // must carry its explanation in the DOM, as NavRailLink does.
+  it('gives the compact rail link an in-DOM description', () => {
+    state.projectId = '11111111-1111-4111-8111-111111111111'
+    state.page = {
+      data: { byok_configured: false, storage_provider: null, region: null, retention_days: null, last_audit_at: null },
+      loading: false,
+      error: null,
+      errorMessage: null,
+    }
+    render({ compact: true })
+    const link = container.querySelector('a[aria-describedby]')
+    expect(link).not.toBeNull()
+    const descId = link?.getAttribute('aria-describedby') ?? ''
+    const desc = descId ? document.getElementById(descId) : null
+    expect(desc).not.toBeNull()
+    expect(link?.contains(desc)).toBe(true)
+    expect(desc?.textContent).toContain('Mushi platform API key')
+    expect(desc?.textContent).toContain('Platform key in use')
   })
 })

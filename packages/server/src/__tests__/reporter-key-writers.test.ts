@@ -103,7 +103,8 @@ function columnsWritten(src: string): Set<string> {
   //     Zod schemas declare the same names and are not writes.
   for (const line of src.split('\n')) {
     const trimmed = line.trim()
-    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue
+    // Comment lines, including a block comment's opening line (`/**`, `/*`).
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) continue
     if (/\bz\./.test(line)) continue
     for (const col of COLUMNS) {
       if (new RegExp(`\\b${col}\\s*:`).test(line)) out.add(col)
@@ -160,5 +161,8 @@ describe('reporter-key column writers', () => {
     expect(columnsWritten(`db.rpc('fn', { p_reporter_token_hash: body.hash })`)).toContain('reporter_token_hash')
     // A read is not a write.
     expect(columnsWritten(`db.from('t').select('id').eq('reporter_token_hash', key)`).size).toBe(0)
+    // Neither is prose in a comment, wherever the comment starts.
+    expect(columnsWritten(`/** reporter_token_hash: the stored key */`).size).toBe(0)
+    expect(columnsWritten(`/* row.reporter_token_hash = x */`).size).toBe(0)
   })
 })

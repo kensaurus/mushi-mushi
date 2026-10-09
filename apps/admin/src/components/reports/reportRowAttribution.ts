@@ -169,7 +169,7 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon·${hex}`,
-      tooltip: `Anonymous device fingerprint ·${hex}`,
+      tooltip: `Anonymous reporter key ·${hex} (one-way, not a credential)`,
     }
   }
   return { label: 'anon', tooltip: 'Anonymous reporter' }

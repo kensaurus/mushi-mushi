@@ -120,6 +120,21 @@ describe('decideHostedLlmCharge', () => {
     expect(skip.reason).toBe('zero-cost')
   })
 
+  // NaN fails every comparison, so `cost <= 0` alone let it through as a
+  // `charge` with providerCostMicro: NaN, headed for the wallet debit.
+  it('refuses usage that computes to NaN or Infinity', () => {
+    for (const [price, usage] of [
+      [seconds(), { units: Number.NaN }],
+      [seconds(), { units: Number.POSITIVE_INFINITY }],
+      [tokens(), { inputTokens: Number.NaN, outputTokens: 500 }],
+    ] as const) {
+      const skip = expectSkip(
+        decideHostedLlmCharge({ price, usage, provider: price.provider, model: price.model }),
+      )
+      expect(skip.reason).toBe('non-finite-cost')
+    }
+  })
+
   it('refuses a token model whose usage arrived as 0/0', () => {
     const decision = decideHostedLlmCharge({
       price: tokens(),

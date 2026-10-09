@@ -19,7 +19,7 @@
  *   node scripts/smoke-node-compat.mjs <dir-with-.tgz-files>
  */
 
-import { execSync, spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -46,9 +46,10 @@ const ok = (msg) => console.log(`  ✓ ${msg}`)
 
 const project = mkdtempSync(join(tmpdir(), 'mushi-node-compat-'))
 try {
-  console.log(`Node ${process.version} · npm ${execSync('npm --version', { encoding: 'utf8' }).trim()}`)
+  console.log(`Node ${process.version} · npm ${execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim()}`)
   writeFileSync(join(project, 'package.json'), '{ "name": "node-compat-smoke", "private": true }\n')
-  execSync(`npm install --no-audit --no-fund --ignore-scripts ${tarballs.map((t) => `"${t}"`).join(' ')}`, {
+  // argv, no shell: a tarball path is one argument whatever characters it holds.
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts', ...tarballs], {
     cwd: project,
     stdio: 'inherit',
   })

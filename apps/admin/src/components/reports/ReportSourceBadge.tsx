@@ -108,10 +108,10 @@ function reporterMonogram(row: ReportRow): { label: string; tooltip: string } {
     const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon\u00B7${hex}`,
-      tooltip: `Anonymous reporter — stable device fingerprint hash starts with ${hex}. Two reports with the same monogram are the same device.`,
+      tooltip: `Anonymous reporter — reporter key starts with ${hex}. It is a one-way key, not a credential. Two reports with the same monogram came from the same device.`,
     }
   }
-  return { label: 'anon', tooltip: 'Anonymous reporter, no device fingerprint available.' }
+  return { label: 'anon', tooltip: 'Anonymous reporter, no reporter key stored.' }
 }
 
 /** Pulls a humane "where" string out of the report environment. Prefers

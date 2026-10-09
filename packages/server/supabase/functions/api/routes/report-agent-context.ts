@@ -232,10 +232,10 @@ export function registerReportAgentContextRoutes(app: Hono<{ Variables: Variable
     });
   });
 
-  // Repo bootstrap files for setup_repo_for_mushi. The server cannot write
+  // Repo bootstrap files (once fetched by the retired setup_repo_for_mushi
+  // MCP tool; `mushi setup` replaced it). The server cannot write
   // into the caller's checkout; it returns the files and the agent writes
-  // them at the repository root. Read-only here, so mcp:read suffices; the
-  // MCP tool itself is gated on mcp:write because it writes to disk.
+  // them at the repository root. Read-only here, so mcp:read suffices.
   app.post('/v1/admin/projects/:id/repo/bootstrap', adminOrApiKey(), async (c) => {
     const projectId = c.req.param('id') ?? '';
     if (!UUID_RE.test(projectId)) {

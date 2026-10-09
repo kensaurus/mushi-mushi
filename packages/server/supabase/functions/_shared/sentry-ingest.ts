@@ -302,10 +302,26 @@ export async function ingestSentryError(
       external_id: sentryIssueId,
       external_url: sentryUrl,
     });
+    if (linkError?.code === '23505') {
+      // A concurrent delivery for the same issue linked first: the partial
+      // unique index report_external_issues_sentry_issue_key allows one
+      // sentry link per (project, issue). Ours is the duplicate, so drop the
+      // row we just inserted and answer with the winner. Classifying it
+      // anyway (the old behaviour) left an orphan report per lost race.
+      const { error: dropError } = await db.from('reports').delete().eq('id', reportId);
+      if (dropError) {
+        log.error('Sentry duplicate report could not be dropped', { reportId, sentryIssueId, err: dropError.message });
+      }
+      const winner = await findLinkedReport(db, projectId, sentryIssueId);
+      log.info('Sentry delivery lost the link race — deduped', { sentryIssueId, winner: winner?.reportId ?? null });
+      return { outcome: 'deduped', reportId: winner?.reportId };
+    }
     if (linkError) {
-      // Unique-violation here means a concurrent delivery won the race —
-      // treat ours as the duplicate and drop the just-inserted row.
-      log.warn('Sentry link insert failed (likely concurrent delivery)', {
+      // Any other failure: the report is real, only its dedup link is
+      // missing, so keep it and classify it — but say so loudly.
+      log.error('Sentry link insert failed — report kept without its dedup link', {
+        reportId,
+        sentryIssueId,
         err: linkError.message,
       });
     }

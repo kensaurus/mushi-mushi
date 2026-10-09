@@ -40,6 +40,7 @@ vi.mock('../../supabase/functions/_shared/dispatch.ts', () => ({
 import {
   describeDispatchOutcome,
   findOrCreateLinearReport,
+  isNewAgentSession,
   linearPriorityToSeverity,
   runLinearAgentDispatch,
 } from '../../supabase/functions/webhooks-linear-agent/index.ts'
@@ -124,6 +125,22 @@ describe('findOrCreateLinearReport', () => {
     expect(linearPriorityToSeverity(4)).toBe('low')
     expect(linearPriorityToSeverity(0)).toBe('low')
     expect(linearPriorityToSeverity(null)).toBe('low')
+  })
+})
+
+describe('isNewAgentSession', () => {
+  it('dispatches only for a created AgentSessionEvent', () => {
+    expect(isNewAgentSession({ type: 'AgentSessionEvent', action: 'created' })).toBe(true)
+  })
+
+  it('ignores a follow-up prompt in an existing session (it used to start a second fix job)', () => {
+    expect(isNewAgentSession({ type: 'AgentSessionEvent', action: 'prompted' })).toBe(false)
+  })
+
+  it('ignores other webhook types even when their action is created', () => {
+    expect(isNewAgentSession({ type: 'Issue', action: 'created' })).toBe(false)
+    expect(isNewAgentSession({ type: 'Comment', action: 'created' })).toBe(false)
+    expect(isNewAgentSession({})).toBe(false)
   })
 })
 

@@ -212,8 +212,10 @@ describe('structured tool output (MCP 2025-06-18)', () => {
     expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
     // Non-greedy: report bodies are reporter-authored and can contain a
     // literal </content>, which a greedy match would swallow past.
-    const payload = content[0].text.match(/<content>\n([\s\S]*?)\n<\/content>/)?.[1] ?? ''
-    expect(JSON.parse(payload)).toEqual({
+    const envelope = content[0].text.match(/<content>\n([\s\S]*?)\n<\/content>/)
+    // Fail on the missing envelope itself, not on JSON.parse('') downstream.
+    expect(envelope, 'text channel is missing its <content> envelope').not.toBeNull()
+    expect(JSON.parse(envelope?.[1] ?? '')).toEqual({
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })

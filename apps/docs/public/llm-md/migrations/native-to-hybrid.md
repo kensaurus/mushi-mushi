@@ -81,10 +81,15 @@ Both **must use the same `projectId` and `apiKey`**. Reports from each
 land in the same inbox; the SDK tag on the report (`ios`, `android`,
 `capacitor`, `react-native`) lets you tell them apart on the dashboard.
 
-```ts
+```swift
 // Native iOS — stays as-is during the migration
-import Mushi from "MushiMushi"
-Mushi.shared.configure(projectId: "YOUR_PROJECT_ID", apiKey: "YOUR_PUBLIC_KEY")
+import MushiMushi
+
+Mushi.shared.configure(with: MushiConfig(
+    projectId: "YOUR_PROJECT_ID",
+    apiKey: "YOUR_PUBLIC_KEY",
+    endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
+))
 ```
 
 ```ts

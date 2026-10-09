@@ -29,7 +29,21 @@ begin
   end if;
 end
 $$;
-grant mushi_nl_reader to postgres with set true, inherit false;
+-- WITH SET / INHERIT on a role grant is PostgreSQL 16+ syntax. PG15 (the Helm
+-- chart's supabase/postgres 15.8 image) only accepts WITH ADMIN OPTION, so the
+-- whole migration used to fail there. PG16+ (hosted runs 17) keeps the exact
+-- grant. On PG15 plain membership is the closest equivalent: postgres can
+-- SET ROLE and hand ownership over, and what it inherits is SELECT on tables it
+-- already owns.
+do $
+begin
+  if current_setting('server_version_num')::int >= 160000 then
+    execute 'grant mushi_nl_reader to postgres with set true, inherit false';
+  else
+    execute 'grant mushi_nl_reader to postgres';
+  end if;
+end
+$;
 
 create schema if not exists mushi_nl;
 revoke all on schema mushi_nl from public;
