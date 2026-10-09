@@ -72,6 +72,9 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       data: {
         project_id: projectId,
         project_name: projectName,
+        // The key's own scopes, so a client can tell an SDK key (report:write)
+        // from an MCP/CLI key before calling a route that needs mcp:read.
+        scopes: (c.get('apiKeyScopes') as string[] | undefined) ?? [],
         stats: {
           total_reports: totalResult.count ?? 0,
           open_reports: openResult.count ?? 0,

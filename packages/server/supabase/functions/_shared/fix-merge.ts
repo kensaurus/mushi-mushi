@@ -27,6 +27,7 @@ import {
 } from './fix-loop-status.ts';
 import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 import { keepAlive } from './background.ts';
+import { closeReportPipelines } from './report-pipelines-close.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -221,6 +222,15 @@ export async function finalizeFixMerge(
         }
       })(),
     );
+  }
+
+  // Handoff pipelines on the report end with it (they stayed "pending" after a merge).
+  if (reportStatus === 'fixed' && previousStatus !== 'fixed') {
+    closeReportPipelines(db as never, {
+      reportId: attempt.report_id,
+      projectId: attempt.project_id,
+      reportStatus: 'fixed',
+    }).catch((e: unknown) => log.warn('Closing the report pipelines failed', { reportId: attempt.report_id, err: String(e) }));
   }
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed' && report?.reporter_token_hash) {
