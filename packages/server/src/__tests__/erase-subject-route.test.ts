@@ -46,7 +46,7 @@ const eraseClaims = {
 
 let calls: string[];
 let targets: { screenshot_path: string | null }[];
-let rateLimited: boolean;
+let rateError: { message: string; code?: string } | null;
 let eraseResult: Record<string, unknown>;
 
 function fakeDb() {
@@ -54,7 +54,7 @@ function fakeDb() {
     rpc: async (name: string, args: Record<string, unknown>) => {
       calls.push(`rpc:${name}`);
       if (name === 'scoped_rate_limit_claim') {
-        return { data: null, error: rateLimited ? { message: 'limit' } : null };
+        return { data: null, error: rateError };
       }
       if (name === 'erase_subject_targets') return { data: targets, error: null };
       if (name === 'erase_subject') {
@@ -89,7 +89,7 @@ function deps(over: Partial<Parameters<typeof eraseSubject>[1]> = {}) {
 beforeEach(() => {
   calls = [];
   targets = [];
-  rateLimited = false;
+  rateError = null;
   eraseResult = { reports: 0, identity: null, subject_known: false };
 });
 
@@ -119,10 +119,18 @@ describe('eraseSubject auth', () => {
   });
 
   it('429 when the per-project rate limit is spent', async () => {
-    rateLimited = true;
+    rateError = { message: 'rate_limit_exceeded', code: 'P0001' };
     const r = await eraseSubject(tokenFor(eraseClaims), deps());
-    expect(r.status).toBe(429);
+    expect(r).toMatchObject({ status: 429, body: { error: { code: 'RATE_LIMITED' } } });
     expect(calls).not.toContain('loadSecret');
+  });
+
+  it('500, not 429, when the rate-limit claim itself fails; still erases nothing', async () => {
+    rateError = { message: 'function public.scoped_rate_limit_claim does not exist', code: '42883' };
+    const r = await eraseSubject(tokenFor(eraseClaims), deps());
+    expect(r).toMatchObject({ status: 500, body: { error: { code: 'ERASE_FAILED' } } });
+    expect(calls).not.toContain('loadSecret');
+    expect(calls).not.toContain('rpc:erase_subject');
   });
 });
 

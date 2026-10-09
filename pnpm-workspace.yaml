@@ -135,6 +135,12 @@ auditConfig:
     # a release-time dev tool that globs our own package names. Never in a
     # published package or an edge function. Remove when braces ships a fix.
     - 'GHSA-vfj7-8cjw-p6xm'
+    # @ai-sdk/provider-utils <3.0.28 (GHSA-866g-f22w-33x8, low): unbounded
+    # response-body reads in the provider response handlers. 2.2.8 comes from
+    # ai@4 / @ai-sdk/ui-utils@1: a packages/server test devDep here, and the
+    # edge functions through deno.lock. Bodies are read only from the AI hosts
+    # allowlisted in byok-validation.ts. Remove with the ai@5 migration.
+    - 'GHSA-866g-f22w-33x8'
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)

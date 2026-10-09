@@ -621,7 +621,9 @@ registerQaCoverageRoutes(app);
 registerRewardsRoutes(app);
 
 // Host-backend account deletion: erase one end user's reports + reporter data.
-// Erase-token auth (identity secret), not the SDK key. Not CORS-exposed.
+// Erase-token auth (identity secret), not the SDK key. The /v1/sdk/* CORS
+// policy above matches this path, but X-Mushi-Erase-Token is not in its
+// allowHeaders, so a browser preflight fails: only host servers can call it.
 registerEraseSubjectRoutes(app);
 
 // RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
