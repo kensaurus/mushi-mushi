@@ -24,6 +24,8 @@ import { getStorageAdapter } from '../../_shared/storage.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
 import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
+import { bulkClosedReason } from '../../_shared/report-close-reasons.ts';
+import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
 import {
   NEW_BUCKET_STATUSES,
   REPORT_LIST_PLATFORMS,
@@ -321,6 +323,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const sdkPackageParam = sdkPackageRaw ? resolveSdkPackageFilter(sdkPackageRaw) : '';
     const daysRaw = c.req.query('days');
     const windowDays = parseWindowDays(daysRaw);
+    // `origin=local|deployed`: reports from a developer's machine vs a deployed app.
+    const originParam = c.req.query('origin')?.trim() ?? '';
+    if (originParam && !(REPORT_ORIGIN_FILTERS as readonly string[]).includes(originParam)) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: `origin must be one of: ${REPORT_ORIGIN_FILTERS.join(', ')}` } },
+        400,
+      );
+    }
     if (platformParam && !REPORT_LIST_PLATFORMS.includes(platformParam)) {
       return c.json(
         { ok: false, error: { code: 'VALIDATION_ERROR', message: `platform must be one of: ${REPORT_LIST_PLATFORMS.join(', ')}` } },
@@ -352,7 +362,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category, metadata_source:custom_metadata->>source, category_confirmed_at',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error, user_intent, stage1_category:stage1_classification->>category, stage2_category:stage2_analysis->>category, metadata_source:custom_metadata->>source, category_confirmed_at, source',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -390,6 +400,9 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       orGroups.push(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`);
     }
     if (platformParam) orGroups.push(platformOrClause(platformParam) ?? '');
+    const originFilter = originParam ? reportOriginFilter(originParam) : null;
+    if (originFilter?.kind === 'or') orGroups.push(originFilter.clause);
+    else if (originFilter) query = query.filter(originFilter.column, originFilter.operator, originFilter.value);
     const orFilter = combineOrGroups(orGroups);
     if (orFilter) query = query.or(orFilter);
     if (tagParam) {
@@ -1182,6 +1195,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       ids?: unknown;
       action?: unknown;
       value?: unknown;
+      /** Close reason for a dismiss; the reporter message follows it ("spam" sends none). */
+      reason?: unknown;
     } | null;
     if (!body || !Array.isArray(body.ids) || body.ids.length === 0) {
       return c.json(
@@ -1243,13 +1258,20 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       updates.category = String(body.value);
     }
 
+    // A dismiss may carry why; any other status clears an old reason, as PATCH does.
+    const reasonVerdict = bulkClosedReason(updates.status, body.reason);
+    if (!reasonVerdict.ok) {
+      return c.json({ ok: false, error: { code: 'INVALID_VALUE', message: reasonVerdict.message } }, 400);
+    }
+    if (reasonVerdict.value !== undefined) updates.closed_reason = reasonVerdict.value;
+
     // Snapshot pre-update rows so we can fan out reputation events for status
     // transitions, identical to the per-row PATCH path. We also capture
     // severity + category here so the Wave T.2.4a undo path can revert every
     // field this endpoint is capable of changing with a single replay.
     const { data: before } = await db
       .from('reports')
-      .select('id, project_id, reporter_token_hash, status, severity, category')
+      .select('id, project_id, reporter_token_hash, status, severity, category, closed_reason')
       .in('id', ids)
       .in('project_id', projectIds);
     const beforeMap = new Map((before ?? []).map((r) => [r.id, r]));
@@ -1281,6 +1303,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         status: prev?.status ?? null,
         severity: (prev as { severity?: string | null } | undefined)?.severity ?? null,
         category: (prev as { category?: string | null } | undefined)?.category ?? null,
+        closed_reason: (prev as { closed_reason?: string | null } | undefined)?.closed_reason ?? null,
       };
     });
     const firstProjectIdForLog = beforeMap.values().next().value?.project_id ?? projectIds[0];
@@ -1291,7 +1314,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         admin_id: userId,
         project_id: firstProjectIdForLog,
         action,
-        payload: { action, value: body.value ?? null, ids: allowedIds },
+        payload: { action, value: body.value ?? null, reason: updates.closed_reason ?? null, ids: allowedIds },
         prior_state: priorState,
         affected_count: allowedIds.length,
       })
@@ -1321,6 +1344,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
           previousStatus: prev.status,
           newStatus,
           actor: { kind: 'admin', id: userId },
+          closedReason: (updates.closed_reason as string | null | undefined) ?? null,
         });
       }
     }
@@ -1329,6 +1353,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     await logAudit(db, firstProjectId, userId, 'report.triaged', 'report', undefined, {
       action,
       value: body.value ?? null,
+      reason: updates.closed_reason ?? null,
       count: allowedIds.length,
       ids: allowedIds,
       mutation_id: mutationId,
@@ -1402,12 +1427,15 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       status: string | null;
       severity: string | null;
       category: string | null;
+      /** Absent on mutations recorded before close reasons were bulk-settable. */
+      closed_reason?: string | null;
     };
     const action = mutation.action as string;
     const restrictFields = (prev: PriorRow): Record<string, unknown> => {
       const patch: Record<string, unknown> = {};
       if (action === 'dismiss' || action === 'set_status') {
         if (prev.status !== null) patch.status = prev.status;
+        if (prev.closed_reason !== undefined) patch.closed_reason = prev.closed_reason;
       } else if (action === 'set_severity') {
         patch.severity = prev.severity;
       } else if (action === 'set_category') {

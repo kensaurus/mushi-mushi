@@ -671,6 +671,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       await db.from('reports').insert({
         id: reportId,
         project_id: projectId,
+        source: 'sentry',
         description: (feedback.message as string) ?? '',
         user_category: 'other',
         category: 'other',

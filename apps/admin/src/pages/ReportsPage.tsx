@@ -50,6 +50,7 @@ import { IconReports } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DismissReportDialog } from '../components/reports/DismissReportDialog'
+import { CloseReasonSelect } from '../components/reports/CloseReasonSelect'
 import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
 import { humanizeDispatchError } from '../lib/dispatchConfirm'
 
@@ -73,10 +74,11 @@ export function ReportsPage() {
   const severity = searchParams.get('severity') ?? ''
   // Unknown values from old bookmarks are dropped, not sent (the server
   // rejects them); legacy React / Capacitor SDK values map to the web SDK.
-  const { platform, sdkPackage, days } = sanitizeListFilters({
+  const { platform, sdkPackage, days, origin } = sanitizeListFilters({
     platform: searchParams.get('platform') ?? '',
     sdkPackage: searchParams.get('sdkPackage') ?? '',
     days: searchParams.get('days') ?? '',
+    origin: searchParams.get('origin') ?? '',
   })
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
@@ -122,6 +124,7 @@ export function ReportsPage() {
     if (severity) p.set('severity', severity)
     if (platform) p.set('platform', platform)
     if (sdkPackage) p.set('sdkPackage', sdkPackage)
+    if (origin) p.set('origin', origin)
     if (component) p.set('component', component)
     if (reporter) p.set('reporter', reporter)
     if (endUser) p.set('end_user', endUser)
@@ -134,7 +137,7 @@ export function ReportsPage() {
     p.set('limit', String(PAGE_SIZE))
     p.set('offset', String(page * PAGE_SIZE))
     return p.toString()
-  }, [status, category, userCategory, severity, platform, sdkPackage, component, reporter, endUser, session, area, days, q, sort, dir, page])
+  }, [status, category, userCategory, severity, platform, sdkPackage, origin, component, reporter, endUser, session, area, days, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     // Wait for ProjectSwitcher to hydrate active project so the first fetch
@@ -313,9 +316,11 @@ export function ReportsPage() {
   // Bulk changes that tell reporters their report was closed or fixed. Undo
   // puts the status back but cannot recall those notices, so ask first.
   const [pendingBulk, setPendingBulk] = useState<{ action: 'set_status' | 'dismiss'; value?: string } | null>(null)
+  // Why the selected reports are closed; the reporter message follows it.
+  const [bulkReason, setBulkReason] = useState('')
 
   const runBulk = useCallback(
-    async (action: 'set_status' | 'set_severity' | 'dismiss', value?: string) => {
+    async (action: 'set_status' | 'set_severity' | 'dismiss', value?: string, reason?: string) => {
       if (selected.size === 0) return
       setBulkBusy(true)
       const ids = [...selected]
@@ -323,7 +328,7 @@ export function ReportsPage() {
         `/v1/admin/reports/bulk`,
         {
           method: 'POST',
-          body: JSON.stringify({ ids, action, value }),
+          body: JSON.stringify({ ids, action, value, ...(reason ? { reason } : {}) }),
         },
       )
       setBulkBusy(false)
@@ -584,6 +589,7 @@ export function ReportsPage() {
   const requestBulk = useCallback(
     (action: 'set_status' | 'set_severity' | 'dismiss', value?: string) => {
       if (action === 'dismiss' || (action === 'set_status' && (value === 'dismissed' || value === 'fixed'))) {
+        setBulkReason('')
         setPendingBulk({ action, value })
       } else {
         void runBulk(action, value)
@@ -602,7 +608,7 @@ export function ReportsPage() {
     contextChips.push({ key: 'session', label: 'Session', value: `${session.slice(0, 12)}…` })
   if (area) contextChips.push({ key: 'area', label: 'Area', value: area })
 
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || component || reporter || endUser || session || area || days || q)
+  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || component || reporter || endUser || session || area || days || q)
   const queuedCount = reports.filter((r) => r.status === 'queued' || r.status === 'new').length
   const criticalQueuedCount = reports.filter(
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
@@ -813,6 +819,7 @@ export function ReportsPage() {
         severity={severity}
         platform={platform}
         sdkPackage={sdkPackage}
+        origin={origin}
         days={days}
         contextChips={contextChips}
         hasFilters={hasFilters}
@@ -851,10 +858,15 @@ export function ReportsPage() {
           onCancel={() => setPendingBulk(null)}
           onConfirm={async () => {
             const { action, value } = pendingBulk
-            await runBulk(action, value)
+            const closing = action === 'dismiss' || value === 'dismissed'
+            await runBulk(action, value, closing ? bulkReason : undefined)
             setPendingBulk(null)
           }}
-        />
+        >
+          {(pendingBulk.action === 'dismiss' || pendingBulk.value === 'dismissed') && (
+            <CloseReasonSelect value={bulkReason} onChange={setBulkReason} count={selected.size} />
+          )}
+        </ConfirmDialog>
       )}
 
       {dismissTarget && (

@@ -7,6 +7,8 @@
  *          packages/server/supabase/functions/_shared/report-list-filters.ts.
  */
 
+import { ORIGIN_FILTER_OPTIONS } from './reportOrigin'
+
 /** Stats shape from GET /v1/admin/stats that the quick-filter chips read. */
 export interface ReportStatusStats {
   total?: number
@@ -118,17 +120,19 @@ const SDK_FILTER_ALIASES: Record<string, string> = {
  * the web SDK) or values that never existed; an unknown one is dropped
  * rather than sent, so a stale link still opens a list instead of an error.
  */
-export function sanitizeListFilters(raw: { platform: string; sdkPackage: string; days: string }): {
+export function sanitizeListFilters(raw: { platform: string; sdkPackage: string; days: string; origin?: string }): {
   platform: string
   sdkPackage: string
   days: string
+  origin: string
 } {
   const platform = PLATFORM_FILTER_OPTIONS.some((o) => o.value === raw.platform) ? raw.platform : ''
   const sdk = SDK_FILTER_ALIASES[raw.sdkPackage] ?? raw.sdkPackage
   const sdkPackage = SDK_FILTER_OPTIONS.some((o) => o.value === sdk) ? sdk : ''
   const n = Number(raw.days)
   const days = raw.days && Number.isInteger(n) && n >= 1 && n <= 90 ? String(n) : ''
-  return { platform, sdkPackage, days }
+  const origin = ORIGIN_FILTER_OPTIONS.some((o) => o.value === raw.origin) ? raw.origin! : ''
+  return { platform, sdkPackage, days, origin }
 }
 
 export function optionLabel(options: ReadonlyArray<{ value: string; label: string }>, value: string): string {
@@ -193,7 +197,7 @@ export function bulkConfirmCopy(
   }
   return {
     title: `Dismiss ${n}?`,
-    body: 'Each reporter is told their report was closed. Undo puts the status back, but it cannot take those messages back.',
+    body: 'Each reporter gets the message below. Undo puts the status back, but it cannot take those messages back.',
     confirmLabel: 'Dismiss',
   }
 }

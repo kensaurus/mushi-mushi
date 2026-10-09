@@ -15,6 +15,7 @@ import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
 import { reporterLabel } from '../../lib/reporterLabel'
 import { reporterReportsHref } from '../../lib/reportsListFilters'
+import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
@@ -61,6 +62,11 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
             <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi">
               via Sentry
+            </Badge>
+          )}
+          {isLocalDevUrl(report.environment?.url) && (
+            <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title={LOCAL_DEV_TOOLTIP}>
+              Local dev
             </Badge>
           )}
         </div>

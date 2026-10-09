@@ -53,8 +53,26 @@ async function render(onClose = vi.fn(), onDismissed = vi.fn()) {
 describe('DismissReportDialog', () => {
   it('explains the reporter is told and sends nothing before confirm', async () => {
     await render()
-    expect(document.body.textContent).toContain('The reporter is told their report was closed')
+    expect(document.body.textContent).toContain('The reporter gets the message below, and it cannot be taken back.')
+    expect(document.body.textContent).toContain('The reporter sees “Closed.”')
     expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  // 2026-10-09: the row × closed with no reason; only the report page could give one.
+  it('sends the reason picked in the dialog and shows the reporter message', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: null })
+    await render()
+    const select = document.body.querySelector('select') as HTMLSelectElement
+    await act(async () => {
+      select.value = 'not_reproducible'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("The reporter sees “We couldn't reproduce it. Reply if it happens again.”")
+    await act(async () => button('Dismiss')?.click())
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/v1/admin/reports/r1',
+      expect.objectContaining({ body: JSON.stringify({ status: 'dismissed', closed_reason: 'not_reproducible' }) }),
+    )
   })
 
   it('Keep / Cancel closes without a request', async () => {
