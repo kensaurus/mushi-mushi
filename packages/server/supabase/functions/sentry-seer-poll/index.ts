@@ -12,7 +12,8 @@
  *
  * Second pass: projects with `sentry_auto_import = true` get new unresolved
  * Sentry issues imported as reports, through the same idempotent path as the
- * console's "Import existing Sentry issues". Before it, only an alert-rule
+ * console's "Import existing Sentry issues" (a fixed report whose issue fired
+ * again is reopened, as a webhook alert would). Before it, only an alert-rule
  * webhook built by hand in Sentry brought new issues in, and four of five
  * connected projects had none (2026-10-09).
  */
@@ -173,30 +174,32 @@ async function autoImportProject(
     sentry_extra_project_slugs: unknown
     sentry_auto_import_last_at: string | null
   },
-): Promise<{ created: number; seen: number; skipped: string | null }> {
+): Promise<{ created: number; reopened: number; seen: number; skipped: string | null }> {
   const projectSlugs = allowedSentryProjectSlugs(row.sentry_project_slug, row.sentry_extra_project_slugs)
-  if (projectSlugs.length === 0) return { created: 0, seen: 0, skipped: 'no_project_slug' }
+  if (projectSlugs.length === 0) return { created: 0, reopened: 0, seen: 0, skipped: 'no_project_slug' }
   // Token and org may be inherited from the organization's defaults.
   const { settings } = await resolveAndDereferencePlatformSettings(db, row.project_id)
   const token = settings.sentry_auth_token_ref ?? null
   const orgSlug = settings.sentry_org_slug ?? null
-  if (!token || !orgSlug) return { created: 0, seen: 0, skipped: 'no_token_or_org' }
+  if (!token || !orgSlug) return { created: 0, reopened: 0, seen: 0, skipped: 'no_token_or_org' }
 
   const startedAt = new Date()
   const query = sentryAutoImportQuery(row.sentry_auto_import_last_at, startedAt)
   let created = 0
+  let reopened = 0
   let seen = 0
   for (const sentryProject of projectSlugs) {
     let cursor: string | undefined
     for (let page = 0; page < SENTRY_AUTO_IMPORT_MAX_PAGES; page++) {
       const result = await importSentryIssues(db, {
         projectId: row.project_id,
-        request: { query, limit: SENTRY_IMPORT_MAX, sentryProject, cursor },
+        request: { query, limit: SENTRY_IMPORT_MAX, sentryProject, cursor, intake: 'poll' },
         sentry: { token, orgSlug, projectSlugs },
         triggerClassification: kickClassification,
       })
       seen += result.items.length
       created += result.items.filter((i) => i.outcome === 'created').length
+      reopened += result.items.filter((i) => i.outcome === 'reopened').length
       if (!result.nextCursor) break
       cursor = result.nextCursor
     }
@@ -206,7 +209,7 @@ async function autoImportProject(
     .from('project_settings')
     .update({ sentry_auto_import_last_at: startedAt.toISOString() })
     .eq('project_id', row.project_id)
-  return { created, seen, skipped: null }
+  return { created, reopened, seen, skipped: null }
 }
 
 app.get('/sentry-seer-poll/health', (c) => c.json({ ok: true }))
@@ -252,7 +255,7 @@ app.post('/sentry-seer-poll', async (c) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       log.error('sentry auto-import failed', { projectId: r.project_id, err: msg })
-      return { projectId: r.project_id, created: 0, seen: 0, skipped: `error:${msg.slice(0, 80)}` }
+      return { projectId: r.project_id, created: 0, reopened: 0, seen: 0, skipped: `error:${msg.slice(0, 80)}` }
     }
   })
 

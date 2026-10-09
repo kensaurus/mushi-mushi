@@ -216,6 +216,37 @@ describe('ingestSentryError — import intake, extra, frames', () => {
     state = { links: [], reports: [], inserted: [], updated: [] }
   })
 
+  it('a poll of a fixed issue that fired again reopens it, as an alert would (2D, 2026-10-09)', async () => {
+    state.links = [{ report_id: 'r-1' }]
+    state.reports = [{ id: 'r-1', status: 'fixed', regression_count: 0 }]
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: EVENT,
+      issue: null,
+      triggerClassification: () => {},
+      intake: 'poll',
+    })
+    expect(result).toEqual({ outcome: 'reopened', reportId: 'r-1' })
+    const upd = state.updated.find((u) => u.table === 'reports')!
+    expect(upd.row.status).toBe('reopened')
+    expect(upd.row.regression_count).toBe(1)
+  })
+
+  it('a poll of an issue whose report is still open leaves it alone', async () => {
+    state.links = [{ report_id: 'r-1' }]
+    state.reports = [{ id: 'r-1', status: 'fixing', regression_count: 0 }]
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: EVENT,
+      issue: null,
+      triggerClassification: () => {},
+      intake: 'poll',
+    })
+    expect(result).toEqual({ outcome: 'linked', reportId: 'r-1' })
+    expect(state.updated).toHaveLength(0)
+    expect(state.inserted).toHaveLength(0)
+  })
+
   it('an import of an already-linked fixed issue answers linked and never reopens it', async () => {
     state.links = [{ report_id: 'r-1' }]
     state.reports = [{ id: 'r-1', status: 'fixed', regression_count: 0 }]

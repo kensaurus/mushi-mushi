@@ -43,10 +43,14 @@ export const SENTRY_AUTO_IMPORT_MAX_PAGES = 3;
 
 /**
  * The search for an auto-import run (project_settings.sentry_auto_import):
- * unresolved issues first seen since the last run, plus a 15-minute overlap
- * so a slow run cannot open a gap. Re-importing is a no-op ("linked"), so the
- * overlap costs nothing. The first run, or one after a long stall, looks
- * back 24 hours; older issues are the console's "Import existing" job.
+ * unresolved issues seen since the last run, plus a 15-minute overlap so a
+ * slow run cannot open a gap. `lastSeen` rather than `firstSeen`, so it also
+ * catches an issue that was fixed in Mushi and fired again: with the `poll`
+ * intake that reopens the report. A firstSeen search left MUSHI-MUSHI-SERVER-2D
+ * "fixed" in Mushi while Sentry showed it regressed (2026-10-09). An issue
+ * already linked to an open report answers `linked`, so the overlap costs
+ * nothing. The first run, or one after a long stall, looks back 24 hours;
+ * older issues are the console's "Import existing" job.
  */
 export function sentryAutoImportQuery(lastRunAt: string | null, now: Date): string {
   const DAY_MIN = 24 * 60;
@@ -54,10 +58,13 @@ export function sentryAutoImportQuery(lastRunAt: string | null, now: Date): stri
   const minutes = Number.isFinite(last)
     ? Math.min(DAY_MIN, Math.max(15, Math.ceil((now.getTime() - last) / 60_000) + 15))
     : DAY_MIN;
-  return `${SENTRY_IMPORT_DEFAULT_QUERY} firstSeen:-${minutes}m`;
+  return `${SENTRY_IMPORT_DEFAULT_QUERY} lastSeen:-${minutes}m`;
 }
 
 export interface SentryImportRequest {
+  /** `poll` (the auto-import) reopens a fixed report whose issue fired again;
+   *  the default `import` never does. Not accepted from the route body. */
+  intake?: 'import' | 'poll';
   issueIds?: string[];
   query?: string;
   limit?: number;
@@ -268,7 +275,7 @@ export async function importSentryIssues(
           platform: issue.platform,
         },
         triggerClassification: input.triggerClassification,
-        intake: 'import',
+        intake: request.intake ?? 'import',
       });
       items.push({ input: raw, issueId, shortId, outcome: result.outcome, reportId: result.reportId ?? null });
     } catch (err) {

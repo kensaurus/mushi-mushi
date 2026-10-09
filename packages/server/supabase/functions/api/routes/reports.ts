@@ -1097,6 +1097,11 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if (typeof updates.status === 'string' && updates.status !== 'dismissed' && updates.closed_reason === undefined) {
       updates.closed_reason = null;
     }
+    // Reopening by hand records when, as an alert or a reporter reply does;
+    // the console's regression chain reads it.
+    if (updates.status === 'reopened') {
+      updates.reopened_at = new Date().toISOString();
+    }
 
     if (Object.keys(updates).length === 0 && !reporterMessage) {
       return c.json(
