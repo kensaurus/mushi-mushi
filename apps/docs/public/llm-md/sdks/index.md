@@ -13,7 +13,7 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.32.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.31.x |
 | @mushi-mushi/react | 1.31.x |
 | @mushi-mushi/react-native | 0.24.x |
 | @mushi-mushi/cli | 0.30.x |
