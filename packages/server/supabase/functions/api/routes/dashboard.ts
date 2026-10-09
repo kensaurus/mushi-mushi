@@ -13,7 +13,7 @@ import {
 } from '../shared.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
-import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
+import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts';
 import {
   IntegrationHealthReadError,
@@ -92,12 +92,14 @@ function triageBacklogCount(db: DashDb, projectIds: string[]): Promise<number> {
 function ungradedReportCount(db: DashDb, projectIds: string[]): Promise<number> {
   return exactCount(
     'ungraded reports',
-    db
-      .from('reports')
-      .select('id', { count: 'exact', head: true })
-      .in('project_id', projectIds)
-      .in('status', [...JUDGE_ELIGIBLE_STATUSES])
-      .is('judge_evaluated_at', null),
+    onlyJudgeable(
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+        .is('judge_evaluated_at', null),
+    ),
   );
 }
 

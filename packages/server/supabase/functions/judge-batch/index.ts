@@ -17,7 +17,7 @@ import { JUDGE_EFFORT, JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
-import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult } from '../_shared/judge-eligibility.ts'
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -175,12 +175,14 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       const fallbackProvider = (settings.judge_fallback_provider ?? 'openai') as 'openai' | 'none'
       const fallbackModelId = settings.judge_fallback_model ?? JUDGE_FALLBACK
 
-      const { data: reports } = await db
-        .from('reports')
-        .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
-        .eq('project_id', project.id)
-        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
-        .is('judge_evaluated_at', null)
+      const { data: reports } = await onlyJudgeable(
+        db
+          .from('reports')
+          .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
+          .eq('project_id', project.id)
+          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+          .is('judge_evaluated_at', null),
+      )
         .order('created_at', { ascending: false })
         .limit(sampleSize)
 

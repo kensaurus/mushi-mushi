@@ -126,7 +126,8 @@ import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecraw
 import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { FIX_EFFORT, FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { FIX_EFFORT, FIX_FALLBACK } from '../_shared/models.ts';
+import { fixModelFor } from '../_shared/project-models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
@@ -403,7 +404,7 @@ Deno.serve(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
               'github_repo_url, github_default_branch, codebase_repo_url, fix_branch_template, ' +
               'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, ' +
-              'cursor_default_model',
+              'cursor_default_model, claude_default_model',
           )
           .eq('project_id', dispatch.project_id)
           .single(),
@@ -912,7 +913,11 @@ ${
       let outputTokens = 0;
       let usedKeySource: 'byok' | 'env' | null = null;
 
-      const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
+      // The Claude Code agent card's "Default model" (claude_default_model).
+      // Retired ids (the column default claude-opus-4-1 included) resolve to
+      // FIX_MODEL, so only a project that picked a current model changes;
+      // a non-Claude id is ignored, the Anthropic call is first.
+      const DEFAULT_ANTHROPIC_MODEL = fixModelFor(settings?.claude_default_model);
       const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
       const MAX_OUTPUT_RETRIES = 2;
 

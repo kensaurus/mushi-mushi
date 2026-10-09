@@ -42,6 +42,8 @@ import {
   bindFindingsToRegistry,
   npmLatestStableInfo,
   splitPeerBlocked,
+  expoBundledModules,
+  splitExpoPinned,
   upgradeCandidates,
 } from '../_shared/modernizer-versions.ts'
 
@@ -240,7 +242,8 @@ async function processRepo(
     return { scanned: 0, created: 0, skipped: 'registry_check_unsupported' }
   }
 
-  const allDeps = parseManifest(manifestKind, manifestContents).slice(0, 40)
+  const parsedDeps = parseManifest(manifestKind, manifestContents)
+  const allDeps = parsedDeps.slice(0, 40)
   if (allDeps.length === 0) return { scanned: 0, created: 0, skipped: 'empty_manifest' }
 
   const latestByName = new Map<string, string | null>()
@@ -263,7 +266,17 @@ async function processRepo(
       blocked: blocked.map((b) => `${b.name}@${b.latest} (${b.blockedBy} needs ${b.requires})`),
     })
   }
-  const candidates = ready.slice(0, 10)
+  // In an Expo app the SDK decides native module versions.
+  const expoDep = parsedDeps.find((d) => d.name === 'expo')
+  const expoPins = expoDep ? await expoBundledModules(expoDep.version) : null
+  const { ready: proposable, pinned } = splitExpoPinned(ready, expoPins)
+  if (pinned.length > 0) {
+    log.info('upgrades held by the Expo SDK pin', {
+      projectId: row.project_id,
+      pinned: pinned.map((p) => `${p.name}@${p.latest} (expo pins ${p.expoPin})`),
+    })
+  }
+  const candidates = proposable.slice(0, 10)
   if (candidates.length === 0) return { scanned: allDeps.length, created: 0, skipped: null }
   const deps = candidates.map((c) => ({ name: c.name, version: c.installed }))
 

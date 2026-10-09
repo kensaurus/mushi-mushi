@@ -6,6 +6,8 @@ import {
   npmLatestStable,
   npmLatestStableInfo,
   splitPeerBlocked,
+  expoBundledModules,
+  splitExpoPinned,
   parseSemver,
   upgradeCandidates,
   upgradeTarget,
@@ -131,4 +133,31 @@ Deno.test('npmLatestStableInfo returns the latest release and its peers', async 
       versions: { '4.4.0': { peerDependencies: { '@sentry/react': '10.69.0' } } },
     }))) as unknown as typeof fetch
   assertEquals(await npmLatestStableInfo('@sentry/capacitor', fake), { version: '4.4.0', peers: { '@sentry/react': '10.69.0' } })
+})
+
+Deno.test('HHTP 2026-10-09: an Expo SDK pin holds async-storage 3.x back', async () => {
+  let asked = ''
+  const fakeFetch = ((url: string) => {
+    asked = url
+    return Promise.resolve(new Response(JSON.stringify({ '@react-native-async-storage/async-storage': '2.2.0', 'expo-camera': '~57.0.3' })))
+  }) as unknown as typeof fetch
+  const pins = await expoBundledModules('~57.0.27', fakeFetch)
+  assertEquals(asked, 'https://cdn.jsdelivr.net/npm/expo@57.0.27/bundledNativeModules.json')
+  const { ready, pinned } = splitExpoPinned(
+    [
+      { name: '@react-native-async-storage/async-storage', installed: '2.2.0', latest: '3.1.1' },
+      { name: 'zustand', installed: '^4.5.0', latest: '5.0.8' },
+    ],
+    pins,
+  )
+  assertEquals(ready.map((c) => c.name), ['zustand'])
+  assertEquals(pinned.map((p) => [p.name, p.expoPin]), [['@react-native-async-storage/async-storage', '2.2.0']])
+})
+
+Deno.test('expoBundledModules: an unreadable pin list holds nothing', async () => {
+  const failing = (() => Promise.resolve(new Response('nope', { status: 404 }))) as unknown as typeof fetch
+  assertEquals(await expoBundledModules('~57.0.27', failing), null)
+  assertEquals(await expoBundledModules('workspace:*', failing), null)
+  const c = [{ name: 'a', installed: '^1.0.0', latest: '2.0.0' }]
+  assertEquals(splitExpoPinned(c, null), { ready: c, pinned: [] })
 })

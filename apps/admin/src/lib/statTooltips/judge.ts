@@ -6,7 +6,7 @@
 export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
 
 import type { MetricTooltipData } from '../../components/ui'
-import type { JudgeStats } from '../../components/judge/JudgeStatsTypes'
+import { judgeWeekTitle, type JudgeStats } from '../../components/judge/JudgeStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'
 
 export function weekTooltip(stats: JudgeStats): MetricTooltipData {
@@ -15,10 +15,10 @@ export function weekTooltip(stats: JudgeStats): MetricTooltipData {
   const takeaway =
     stats.latestWeekEvalCount === 0
       ? 'No judge evaluations this week yet — run judge-batch or wait for cron to grade recent classifications.'
-      : `This week averaged ${scorePct} across ${stats.latestWeekEvalCount} evaluation${stats.latestWeekEvalCount === 1 ? '' : 's'}.`
+      : `${judgeWeekTitle(stats.latestWeekLabel)} averaged ${scorePct} across ${stats.latestWeekEvalCount} evaluation${stats.latestWeekEvalCount === 1 ? '' : 's'}.`
 
   return metricTip(
-    'Average classifier quality score for the current ISO week (0–100% scale).',
+    'Average classifier quality score for the latest week with evaluations (0–100% scale).',
     'Calls weekly_judge_scores RPC for the active project; latest week avg_score and eval_count.',
     takeaway,
     stats.latestWeekScore != null && stats.latestWeekScore < 0.6
