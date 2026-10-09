@@ -49,7 +49,7 @@ export function SentryAutoImportToggle({ enabled, lastRunAt }: Props) {
       />
       <p className="text-2xs text-fg-faint leading-snug">
         {on
-          ? `Every 15 minutes, new unresolved issues become reports. No Sentry webhook needed.${
+          ? `Every 15 minutes, new unresolved issues become reports, and a fixed report reopens if its issue fires again. No Sentry webhook needed.${
               lastRunAt ? ` Last checked ${formatRelative(lastRunAt)}.` : ' The first check runs within 15 minutes.'
             }`
           : 'Off: new issues arrive only through a Sentry alert webhook or the import below. Turn on to check every 15 minutes, no webhook needed. Each new issue is triaged like any report.'}

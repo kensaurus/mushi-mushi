@@ -189,8 +189,11 @@ export async function ingestSentryError(
     triggerClassification: (reportId: string, projectId: string) => void;
     /** `import` = an operator pulled an existing issue. A linked issue then
      *  answers `linked` and is never reopened: re-importing is not a
-     *  regression signal, a fresh alert is. Default `webhook`. */
-    intake?: 'webhook' | 'import';
+     *  regression signal, a fresh alert is. `poll` = the auto-import found
+     *  the issue unresolved and seen in its window, which is the same signal
+     *  as a fresh alert: a fixed report is reopened, an open one is left
+     *  alone (`linked`). Default `webhook`. */
+    intake?: 'webhook' | 'import' | 'poll';
   },
 ): Promise<SentryIngestResult> {
   const { projectId, event, issue } = input;
@@ -222,6 +225,7 @@ export async function ingestSentryError(
         });
         return { outcome: 'reopened', reportId: linked.reportId };
       }
+      if (intake === 'poll') return { outcome: 'linked', reportId: linked.reportId };
       return { outcome: 'deduped', reportId: linked.reportId };
     }
   }
