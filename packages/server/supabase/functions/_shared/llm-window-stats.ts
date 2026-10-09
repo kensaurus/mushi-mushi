@@ -36,7 +36,11 @@ export interface LlmWindowStats {
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
 
-type CountResult = { count: number | null; error: { message: string } | null }
+type CountResult = {
+  count: number | null
+  error: { message: string; code?: string } | null
+  status?: number
+}
 
 function pct(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
@@ -88,7 +92,12 @@ export async function loadLlmWindowStats(
   ])) as [CountResult, CountResult, CountResult, { data: unknown; error: { message: string; code?: string } | null }]
 
   for (const r of [totalRes, successRes, fallbackRes]) {
-    if (r.error) throw new Error(`llm_invocations count failed: ${r.error.message}`)
+    // A head (count-only) request has no response body, so a statement timeout
+    // arrives with an empty message (MUSHI-MUSHI-SERVER-2H): name the code or status.
+    if (r.error) {
+      const why = r.error.message || r.error.code || (r.status ? `HTTP ${r.status}` : 'no detail')
+      throw new Error(`llm_invocations count failed: ${why}`)
+    }
   }
   const totalCalls = totalRes.count ?? 0
   const errors = Math.max(0, totalCalls - (successRes.count ?? 0))

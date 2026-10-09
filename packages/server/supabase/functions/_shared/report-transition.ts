@@ -17,7 +17,7 @@ import { log } from './logger.ts';
 import { normalizeAdminStatus, toStoredStatus } from './report-status.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
-import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
+import { archiveLinkedSentryIssues, resolveLinkedSentryIssues, sentryCloseAction } from './sentry-resolve-back.ts';
 import { dispatchPluginEventDetached } from './plugins.ts';
 import { closeReportPipelines, closesPipelines } from './report-pipelines-close.ts';
 
@@ -92,6 +92,20 @@ export function runStatusTransitionSideEffects(
       })
       .catch((e: unknown) => transitionLog.error('Sentry resolve on fixed threw', { reportId: input.reportId, err: String(e) }));
   }
+  // Closed as not-a-bug: archive the linked Sentry issue so it leaves
+  // Sentry's unresolved list too (it comes back if it escalates).
+  if (input.newStatus === 'dismissed' && sentryCloseAction(input.closedReason) === 'archive') {
+    archiveLinkedSentryIssues(db, {
+      projectId: input.projectId,
+      reportId: input.reportId,
+      closedReason: input.closedReason as string,
+    })
+      .then((r) => {
+        if (r.failed.length) transitionLog.error('Sentry archive on close failed', { reportId: input.reportId, failed: r.failed })
+      })
+      .catch((e: unknown) => transitionLog.error('Sentry archive on close threw', { reportId: input.reportId, err: String(e) }));
+  }
+
   if (closesPipelines(input.newStatus)) {
     closeReportPipelines(db, {
       reportId: input.reportId,

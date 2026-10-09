@@ -38,6 +38,25 @@ export const SENTRY_IMPORT_MAX = 10;
 export const SENTRY_IMPORT_DEFAULT_QUERY = 'is:unresolved';
 export const SENTRY_IMPORT_MAX_DAYS = 90;
 
+/** Pages of SENTRY_IMPORT_MAX one auto-import run reads per Sentry project. */
+export const SENTRY_AUTO_IMPORT_MAX_PAGES = 3;
+
+/**
+ * The search for an auto-import run (project_settings.sentry_auto_import):
+ * unresolved issues first seen since the last run, plus a 15-minute overlap
+ * so a slow run cannot open a gap. Re-importing is a no-op ("linked"), so the
+ * overlap costs nothing. The first run, or one after a long stall, looks
+ * back 24 hours; older issues are the console's "Import existing" job.
+ */
+export function sentryAutoImportQuery(lastRunAt: string | null, now: Date): string {
+  const DAY_MIN = 24 * 60;
+  const last = lastRunAt ? Date.parse(lastRunAt) : NaN;
+  const minutes = Number.isFinite(last)
+    ? Math.min(DAY_MIN, Math.max(15, Math.ceil((now.getTime() - last) / 60_000) + 15))
+    : DAY_MIN;
+  return `${SENTRY_IMPORT_DEFAULT_QUERY} firstSeen:-${minutes}m`;
+}
+
 export interface SentryImportRequest {
   issueIds?: string[];
   query?: string;

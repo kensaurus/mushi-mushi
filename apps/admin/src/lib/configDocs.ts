@@ -644,6 +644,23 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.',
   },
   {
+    id: 'integrations.sentry.auto_import',
+    label: 'Import new Sentry issues automatically',
+    summary:
+      'Every 15 minutes, new unresolved Sentry issues in this app’s Sentry projects become Mushi reports. No Sentry webhook needed.',
+    howItWorks:
+      'The Sentry poll searches each configured Sentry project for issues first seen since its last run (with a 15-minute overlap) and imports them through the same path as “Import existing Sentry issues”: one report per Sentry issue, already-imported issues are linked, not duplicated. Each new report is triaged like any other.',
+    default: { value: 'off' },
+    backend: {
+      table: 'project_settings',
+      column: 'sentry_auto_import',
+      endpoint: 'PUT /v1/admin/integrations/platform/sentry',
+      readBy: ['sentry-seer-poll edge function'],
+    },
+    whenToChange:
+      'Turn on when you have not set up a Sentry alert-rule webhook, or want new issues in Mushi without one. Leave off if every Sentry issue should not cost a triage.',
+  },
+  {
     id: 'integrations.sentry.auth_token',
     label: 'Sentry auth token',
     summary:

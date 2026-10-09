@@ -12,7 +12,7 @@ import {
   validatePlatformBody,
   validateRoutingConfig,
 } from '../../_shared/integration-validation.ts';
-import { platformCardValues } from '../../_shared/platform-config.ts';
+import { fieldsSharedAcrossApps, platformCardValues } from '../../_shared/platform-config.ts';
 import { removePlatformKeys, type PlatformKeyStore } from '../../_shared/platform-key-removal.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
@@ -426,6 +426,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       'sentry_seer_enabled',
       'sentry_webhook_secret',
       'sentry_consume_user_feedback',
+      'sentry_auto_import',
     ],
     langfuse: ['langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref'],
     github: [
@@ -903,8 +904,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       return c.json({ ok: false, error: { code: 'NO_ORG', message: 'Project has no organization. Assign it to an org before using bulk-apply.' } }, 422);
     }
 
-    // Read source credentials (raw, not masked).
-    const fields = PLATFORM_KIND_FIELDS[kind] ?? [];
+    // Read source credentials (raw, not masked). Fields that name the source
+    // app (its Sentry project, DSN, repo) stay with it: copying them pointed
+    // every target at the source app's Sentry project.
+    const fields = fieldsSharedAcrossApps(kind, PLATFORM_KIND_FIELDS[kind] ?? []);
     const { data: sourceSettings } = await db
       .from('project_settings')
       .select(fields.join(', '))

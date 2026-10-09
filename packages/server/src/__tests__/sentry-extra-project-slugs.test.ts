@@ -16,7 +16,11 @@ import {
   parseSentryExtraProjectSlugs,
   SENTRY_PROJECT_SLUG_RE,
 } from '../../supabase/functions/_shared/integration-validation.ts'
-import { platformCardValues, PROJECT_LIST_FIELDS_BY_KIND } from '../../supabase/functions/_shared/platform-config.ts'
+import {
+  fieldsSharedAcrossApps,
+  platformCardValues,
+  PROJECT_LIST_FIELDS_BY_KIND,
+} from '../../supabase/functions/_shared/platform-config.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
 
@@ -62,7 +66,13 @@ describe('platformCardValues (platform GET)', () => {
       fields,
       { sentry_org_slug: 'acme', sentry_auth_token_ref: 'vault://x' },
       tracked,
-      { sentry_org_slug: null, sentry_project_slug: 'web', sentry_seer_enabled: true, sentry_extra_project_slugs: ['api'] },
+      {
+        sentry_org_slug: null,
+        sentry_project_slug: 'web',
+        sentry_seer_enabled: true,
+        sentry_extra_project_slugs: ['api'],
+        sentry_auto_import_last_at: '2026-10-09T12:00:00Z',
+      },
     )
     expect(out).toEqual({
       sentry_org_slug: 'acme',
@@ -70,6 +80,8 @@ describe('platformCardValues (platform GET)', () => {
       sentry_auth_token_ref: 'vault://x',
       sentry_seer_enabled: true,
       sentry_extra_project_slugs: ['api'],
+      // Read-only: shown on the card, never accepted by the PUT.
+      sentry_auto_import_last_at: '2026-10-09T12:00:00Z',
     })
   })
 
@@ -110,5 +122,32 @@ describe('integrations route wiring', () => {
     expect(onError).toContain('return c.json(')
     expect(onError).toContain("code: 'SETTINGS_UNREADABLE'")
     expect(onError).toMatch(/\s500,\s/)
+  })
+})
+
+describe('apply to all projects in org', () => {
+  // Applying Sentry from one app used to copy its Sentry project slug and DSN
+  // into every other app in the org (2026-10-09).
+  it('copies the account (token, org, webhook secret), never the app', () => {
+    const shared = fieldsSharedAcrossApps('sentry', [
+      'sentry_org_slug',
+      'sentry_project_slug',
+      'sentry_auth_token_ref',
+      'sentry_dsn',
+      'sentry_webhook_secret',
+    ])
+    expect(shared).toEqual(['sentry_org_slug', 'sentry_auth_token_ref', 'sentry_webhook_secret'])
+    expect(fieldsSharedAcrossApps('github', ['github_repo_url', 'github_installation_token_ref'])).toEqual([
+      'github_installation_token_ref',
+    ])
+    expect(fieldsSharedAcrossApps('langfuse', ['langfuse_host'])).toEqual(['langfuse_host'])
+  })
+
+  it('the apply route filters its fields through fieldsSharedAcrossApps', () => {
+    const src = readFileSync(resolve(FUNCTIONS, 'api/routes/integrations.ts'), 'utf-8')
+    const apply = src.slice(src.indexOf("app.post('/v1/admin/integrations/platform/:kind/apply'"))
+    expect(apply.slice(0, apply.indexOf("from('project_settings')"))).toContain(
+      'fieldsSharedAcrossApps(kind, PLATFORM_KIND_FIELDS[kind] ?? [])',
+    )
   })
 })

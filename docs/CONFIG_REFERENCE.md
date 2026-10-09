@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_114 configuration knobs across 19 sections · last regenerated 2026-10-08._
+_115 configuration knobs across 19 sections · last regenerated 2026-10-09._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -14,7 +14,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (3)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
 - [Projects](#projects) (8)
-- [Integrations](#integrations) (25)
+- [Integrations](#integrations) (26)
 - [Storage (BYO)](#storage-byo-) (9)
 - [Compliance](#compliance) (7)
 - [SSO](#sso) (4)
@@ -552,6 +552,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`, `api edge function (POST /v1/admin/projects/:id/sentry/import)`
 
 **When to change** — Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.
+
+### Import new Sentry issues automatically
+
+<a id="integrations-sentry-auto-import"></a>
+
+`integrations.sentry.auto_import`
+
+**Summary** — Every 15 minutes, new unresolved Sentry issues in this app’s Sentry projects become Mushi reports. No Sentry webhook needed.
+
+**How it works** — The Sentry poll searches each configured Sentry project for issues first seen since its last run (with a 15-minute overlap) and imports them through the same path as “Import existing Sentry issues”: one report per Sentry issue, already-imported issues are linked, not duplicated. Each new report is triaged like any other.
+
+**Default** — `off`
+
+**Where it lives** — table `project_settings.sentry_auto_import` · endpoint `PUT /v1/admin/integrations/platform/sentry` · read by `sentry-seer-poll edge function`
+
+**When to change** — Turn on when you have not set up a Sentry alert-rule webhook, or want new issues in Mushi without one. Leave off if every Sentry issue should not cost a triage.
 
 ### Sentry auth token
 

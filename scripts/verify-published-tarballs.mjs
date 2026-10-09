@@ -35,7 +35,7 @@ import { pathToFileURL } from 'node:url'
 const PROTOCOL_RE = /^(workspace|link|file|portal|catalog):/
 const REQUEST_TIMEOUT_MS = 30_000
 
-export const RETRY_DEFAULTS = Object.freeze({ attempts: 10, baseDelayMs: 3_000, maxDelayMs: 60_000 })
+export const RETRY_DEFAULTS = Object.freeze({ attempts: 14, baseDelayMs: 3_000, maxDelayMs: 60_000 })
 
 /** An HTTP failure; `retryable` marks the statuses registry propagation produces. */
 export class HttpError extends Error {

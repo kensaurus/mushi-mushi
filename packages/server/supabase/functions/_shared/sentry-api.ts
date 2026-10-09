@@ -195,6 +195,22 @@ export async function resolveSentryIssue(
   return { status: 'resolved' };
 }
 
+/**
+ * Archive an issue until it escalates (Sentry's default "Archive"): it leaves
+ * the unresolved list but comes back if its volume jumps.
+ */
+export async function archiveSentryIssue(
+  token: string,
+  org: string,
+  issueId: string,
+  fetchImpl: FetchLike = defaultFetch,
+): Promise<void> {
+  await sentryJson<unknown>(fetchImpl, token, `/organizations/${seg(org)}/issues/${seg(issueId)}/`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'ignored', substatus: 'archived_until_escalating' }),
+  });
+}
+
 export async function commentOnSentryIssue(
   token: string,
   org: string,

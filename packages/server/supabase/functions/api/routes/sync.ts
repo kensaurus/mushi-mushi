@@ -27,6 +27,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts'
 import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
+import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
 
@@ -507,7 +508,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: true, data: { chunks: 0, file_path: filePath, skipped: 'unsupported_extension' } })
     }
 
-    const chunks = chunk(filePath, source)
+    const chunks = chunk(filePath, pgSafeText(source))
     let inserted = 0
     const chunkErrors: string[] = []
     for (const ch of chunks) {
@@ -525,7 +526,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
             line_end: ch.lineEnd,
             language: ch.language,
             content_hash: contentHash,
-            content_preview: ch.body.slice(0, 500),
+            content_preview: pgSafeSlice(ch.body, 500),
             embedding,
             tombstoned_at: null,
           },

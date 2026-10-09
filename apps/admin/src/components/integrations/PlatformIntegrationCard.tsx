@@ -18,6 +18,7 @@ import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle, IconDots } f
 import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
 import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
+import { SentryAutoImportToggle } from './SentryAutoImportToggle'
 import { SentryImportPanel } from './SentryImportPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
@@ -583,7 +584,13 @@ export function PlatformIntegrationCard({
       )}
 
       {def.kind === 'sentry' && !isEditing && requiredOk && (
-        <SentryImportPanel sentryProjects={sentryProjectsFromConfig(config)} />
+        <>
+          <SentryAutoImportToggle
+            enabled={config.sentry_auto_import === true}
+            lastRunAt={typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null}
+          />
+          <SentryImportPanel sentryProjects={sentryProjectsFromConfig(config)} />
+        </>
       )}
     </Card>
   )

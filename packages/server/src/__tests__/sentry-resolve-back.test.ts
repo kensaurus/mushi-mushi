@@ -251,3 +251,55 @@ describe('wiring (source shape)', () => {
     expect(src).toMatch(/commitTrailers: sentryFixesTrailers\(\s*await sentryShortIdsForReport\(/)
   })
 })
+
+describe('archive on close (not-a-bug reasons)', () => {
+  let state: State
+  beforeEach(() => {
+    state = { links: [{ id: 'l1', external_id: '4501' }], report: null, fixEvents: [], stamped: [] }
+  })
+  const closed = { projectId: 'p1', reportId: 'r1', closedReason: 'working_as_intended' }
+
+  it('archives only for "works as intended" and "won\'t fix"', () => {
+    expect(rb.sentryCloseAction('working_as_intended')).toBe('archive')
+    expect(rb.sentryCloseAction('wont_fix')).toBe('archive')
+    for (const r of ['not_reproducible', 'duplicate', 'spam', '', null, undefined, 'toString']) {
+      expect(rb.sentryCloseAction(r)).toBeNull()
+    }
+  })
+
+  it('archives until escalating, comments why, and leaves resolved_at unset', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url: url.replace(api.SENTRY_API_BASE, ''), body: String(init?.body ?? '') })
+      return json({})
+    }
+    const result = await rb.archiveLinkedSentryIssues(makeDb(state), closed, { credentials: creds, fetchImpl })
+    expect(result).toEqual({ archived: ['4501'], failed: [] })
+    expect(calls[0]).toEqual({
+      url: '/organizations/sakuramoto/issues/4501/',
+      body: '{"status":"ignored","substatus":"archived_until_escalating"}',
+    })
+    expect(calls[1].url).toBe('/organizations/sakuramoto/issues/4501/comments/')
+    expect(calls[1].body).toContain('works as intended')
+    expect(state.stamped).toEqual([])
+  })
+
+  it('does nothing for other close reasons', async () => {
+    let called = false
+    const fetchImpl = async () => {
+      called = true
+      return json({})
+    }
+    const result = await rb.archiveLinkedSentryIssues(makeDb(state), { ...closed, closedReason: 'not_reproducible' }, { credentials: creds, fetchImpl })
+    expect(result.skipped).toBe('not_archivable')
+    expect(called).toBe(false)
+  })
+
+  it('reports a refusal instead of throwing, and skips without credentials', async () => {
+    const refused = await rb.archiveLinkedSentryIssues(makeDb(state), closed, { credentials: creds, fetchImpl: async () => json({ detail: 'no' }, 403) })
+    expect(refused.archived).toEqual([])
+    expect(refused.failed).toHaveLength(1)
+    const none = await rb.archiveLinkedSentryIssues(makeDb(state), closed, { credentials: noCreds })
+    expect(none.skipped).toBe('no_credentials')
+  })
+})
