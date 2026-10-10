@@ -18,11 +18,13 @@
  * of every count. Until 2026-09-21 a local Playwright run against a
  * production key made up 203 of one project's 212 weekly sessions.
  *
- * Identity: when the SDK forwards a signed X-Mushi-User-Token, session_start
- * and page_view verify it (_shared/end-user-identity.ts) and store
- * end_user_id, which the activity RPCs count as identified. Heartbeats and
- * session_end skip it: verifying reads Vault, and a heartbeat arrives every
- * minute per tab. An unverified or failed token never blocks the write.
+ * Identity: when the SDK forwards a signed X-Mushi-User-Token, the token is
+ * verified (_shared/end-user-identity.ts) and end_user_id stored, which the
+ * activity RPCs count as identified. Verifying reads Vault and upserts
+ * end_users, so it runs at most once per session: on session_start, or on a
+ * page_view whose session row has no end_user_id yet (identification can
+ * arrive mid-session). Heartbeats and session_end never verify. An
+ * unverified or failed token never blocks the write.
  */
 
 import type { Hono } from 'npm:hono@4';
@@ -131,18 +133,18 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
     // stored count. Only the session_start insert defaults it to 1.
     const pageViews = event.page_view_count !== undefined ? { page_view_count: event.page_view_count } : {};
 
-    let endUserId: string | null = null;
     const userToken = c.req.header(MUSHI_USER_TOKEN_HEADER);
-    if (userToken && (event.kind === 'session_start' || event.kind === 'page_view')) {
+    const verifiedEndUserId = async (): Promise<string | null> => {
+      if (!userToken) return null;
       const verified = await verifyEndUserToken(db, projectId, userToken).catch((err: unknown) => {
         log.warn('sessions: verifyEndUserToken threw (fail-open)', { projectId, err: String(err) });
         return null;
       });
-      endUserId = verified?.endUserId ?? null;
-    }
-    const identity = endUserId ? { end_user_id: endUserId } : {};
+      return verified?.endUserId ?? null;
+    };
 
     if (event.kind === 'session_start') {
+      const endUserId = await verifiedEndUserId();
       const { error } = await db.from('end_user_sessions').upsert(
         {
           project_id: projectId,
@@ -153,7 +155,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
           page_view_count: event.page_view_count ?? 1,
           started_at: ts,
           last_seen_at: ts,
-          ...identity,
+          ...(endUserId ? { end_user_id: endUserId } : {}),
           // Only sent when true: the column defaults to false, so human
           // sessions keep writing even before migration 20260921000010 lands.
           ...(automated ? { is_bot: true } : {}),
@@ -183,9 +185,10 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
       const [updateRes, insertRes] = await Promise.all([
         db
           .from('end_user_sessions')
-          .update({ last_seen_at: ts, ...pageViews, ...identity })
+          .update({ last_seen_at: ts, ...pageViews })
           .eq('project_id', projectId)
-          .eq('session_id', event.session_id),
+          .eq('session_id', event.session_id)
+          .select('end_user_id'),
         sanitisedRoute && !automated
           ? db.from('session_page_views').insert({
               project_id: projectId,
@@ -196,6 +199,21 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
           : Promise.resolve({ error: null }),
       ]);
       if (updateRes.error) log.warn('page_view session update failed', { err: updateRes.error.message });
+      // Link identity once: only a session row that has none yet pays for
+      // verification, so an identified session does not hit Vault per page.
+      const row = (updateRes.data as Array<{ end_user_id: string | null }> | null)?.[0];
+      if (userToken && row && !row.end_user_id) {
+        const endUserId = await verifiedEndUserId();
+        if (endUserId) {
+          const { error: linkErr } = await db
+            .from('end_user_sessions')
+            .update({ end_user_id: endUserId })
+            .eq('project_id', projectId)
+            .eq('session_id', event.session_id)
+            .is('end_user_id', null);
+          if (linkErr) log.warn('page_view identity link failed', { err: linkErr.message, projectId });
+        }
+      }
       const pgvErr = (insertRes as { error?: { message: string } | null }).error;
       if (pgvErr) log.warn('page_view insert failed', { err: pgvErr.message });
     }

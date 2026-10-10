@@ -89,6 +89,20 @@ describe('POST /v1/sdk/session identity', () => {
     expect(row().end_user_id).toBe(END_USER)
   })
 
+  it('an already identified session does not verify again on page_view', async () => {
+    row().end_user_id = END_USER
+    await send({ kind: 'page_view', route: '/b' }, { 'X-Mushi-User-Token': 'tok' })
+    expect(verify).not.toHaveBeenCalled()
+    expect(row().end_user_id).toBe(END_USER)
+  })
+
+  it('session_start verifies and stores end_user_id on a new session', async () => {
+    verify.mockResolvedValue({ endUserId: END_USER, externalUserId: 'u1', organizationId: 'o1' })
+    await send({ session_id: 'sess-2', kind: 'session_start', route: '/' }, { 'X-Mushi-User-Token': 'tok' })
+    const sessions = (fake as unknown as { tables: Record<string, Array<Record<string, unknown>>> }).tables.end_user_sessions
+    expect(sessions.find((s) => s.session_id === 'sess-2')?.end_user_id).toBe(END_USER)
+  })
+
   it('heartbeats do not verify (Vault read per minute per tab)', async () => {
     await send({ kind: 'session_heartbeat' }, { 'X-Mushi-User-Token': 'tok' })
     expect(verify).not.toHaveBeenCalled()
