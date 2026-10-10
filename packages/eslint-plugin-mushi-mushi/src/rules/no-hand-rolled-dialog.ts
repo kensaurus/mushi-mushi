@@ -53,6 +53,21 @@ function classesContainAll(node: Node | JSXExprContainer, ...tokens: string[]): 
   return false
 }
 
+/**
+ * `aria-modal` marks a dialog unless it is explicitly false: omitted value,
+ * `"true"`, `{true}` and dynamic expressions count; `"false"` and `{false}`
+ * do not.
+ */
+function ariaModalIsSet(value: Node | JSXExprContainer | null): boolean {
+  if (value === null) return true
+  const inner = (value as JSXExprContainer).type === 'JSXExpressionContainer'
+    ? (value as JSXExprContainer).expression
+    : (value as Node)
+  if (inner.type !== 'Literal') return true
+  const v = (inner as Literal).value
+  return v !== false && v !== 'false'
+}
+
 const rule: Rule.RuleModule = {
   meta: {
     type: 'problem',
@@ -89,7 +104,7 @@ const rule: Rule.RuleModule = {
             const v = a.value as unknown as { value?: unknown }
             if (v.value === 'dialog') hasDialogRole = true
           }
-          if (attrName === 'aria-modal') hasDialogRole = true
+          if (attrName === 'aria-modal' && ariaModalIsSet(a.value)) hasDialogRole = true
         }
 
         if (!hasFixedInset || !hasDialogRole) return

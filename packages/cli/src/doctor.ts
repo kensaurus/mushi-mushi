@@ -652,7 +652,7 @@ const HASH_ROUTER_PATTERNS = [
   /addEventListener\(['"]hashchange['"]/,
 ];
 
-const HASH_TEMPLATE_PATTERN = /['"`]#\//; // detects '/#/...' or '#/...' in Mushi config
+const HASH_TEMPLATE_PATTERN = /['"`]\/?#\//; // detects '/#/...' or '#/...' in Mushi config
 
 async function scanDirForPattern(
   dir: string,

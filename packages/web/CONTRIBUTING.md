@@ -219,7 +219,7 @@ chore: bump dependencies
 ## License
 
 - SDK packages are MIT — your contributions will be MIT-licensed
-- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3. A [commercial license](./COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications. The `packages/server/ee/` directory is source-available but commercial (production use needs a license); contributions there are accepted under the same EE terms.
+- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3. A [commercial license](../../COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications. The `packages/server/ee/` directory is source-available but commercial (production use needs a license); contributions there are accepted under the same EE terms.
 
 ## Questions?
 

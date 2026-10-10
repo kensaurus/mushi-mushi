@@ -70,7 +70,7 @@ ask first** — describe what you'd need to do and we'll spin up a sandbox.
 
 Researchers who report a confirmed vulnerability are credited in the
 release notes for the patched version and added to
-[`docs/SECURITY_HALL_OF_FAME.md`](./docs/SECURITY_HALL_OF_FAME.md) (with
+[`docs/SECURITY_HALL_OF_FAME.md`](../../docs/SECURITY_HALL_OF_FAME.md) (with
 permission).
 
 ## Scope

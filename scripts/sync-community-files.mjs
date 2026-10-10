@@ -43,6 +43,13 @@ async function readCanonical() {
   return out
 }
 
+// The canonical files link repo-relative (`docs/DEPLOYMENT.md`,
+// `./COMMERCIAL-LICENSE.md`); from packages/<name>/ those resolve inside the
+// package and 404, so point them back at the repository root.
+function rebaseRelativeLinks(text, toRoot) {
+  return text.replace(/\]\((?!https?:|mailto:|#|\/)(?:\.\/)?([^)\s]+)\)/g, `](${toRoot}/$1)`)
+}
+
 async function findPackageDirs() {
   const dirs = []
   for (const parent of SEARCH_DIRS) {
@@ -83,7 +90,7 @@ async function sync({ check }) {
     }
     for (const name of FILES) {
       const dest = join(dir, name)
-      const want = canonical[name]
+      const want = rebaseRelativeLinks(canonical[name], relative(dir, ROOT).replaceAll('\\', '/'))
       let current = null
       try {
         current = await readFile(dest, 'utf8')

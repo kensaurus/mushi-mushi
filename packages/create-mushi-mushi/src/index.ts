@@ -12,8 +12,8 @@
  *          only the bin name, header, and usage lines live here.
  */
 
-import { cpSync, existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { cpSync, existsSync, renameSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInit } from '@mushi-mushi/cli/init'
 import {
@@ -68,6 +68,9 @@ function scaffoldTemplate(id: TemplateId, targetArg: string | undefined): void {
   }
   const templateDir = fileURLToPath(new URL(`../templates/${id}`, import.meta.url))
   cpSync(templateDir, targetDir, { recursive: true })
+  // npm strips `.gitignore` from published tarballs, so templates ship it as
+  // `gitignore`. Restore the dot so the .env the next step writes is ignored.
+  renameSync(join(targetDir, 'gitignore'), join(targetDir, '.gitignore'))
   process.stdout.write(
     `Scaffolded the ${id} starter into ${targetDir}\n\n` +
       'Next steps:\n' +

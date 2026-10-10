@@ -31,17 +31,19 @@ export function registerNudgeCommand(program: Command): void {
       }
       const phase = opts.phase as NudgePhase
       const overrides: Record<string, number> = {}
-      const parseNumericFlag = (flag: string, raw: string, min: number): number => {
+      // Durations (cooldown hours, dwell minutes, welcome seconds) may be
+      // fractional; --max is a count, so it must be a whole number.
+      const parseNumericFlag = (flag: string, raw: string, min: number, integer = false): number => {
         const n = Number(raw)
-        if (!Number.isFinite(n) || n < min) {
+        if (!Number.isFinite(n) || n < min || (integer && !Number.isInteger(n))) {
           console.error(
-            `error: --${flag} must be a finite number >= ${min} (got "${raw}")`,
+            `error: --${flag} must be a finite ${integer ? 'integer' : 'number'} >= ${min} (got "${raw}")`,
           )
           process.exit(1)
         }
         return n
       }
-      if (opts.max !== undefined) overrides.maxProactivePerSession = parseNumericFlag('max', opts.max, 1)
+      if (opts.max !== undefined) overrides.maxProactivePerSession = parseNumericFlag('max', opts.max, 1, true)
       if (opts.cooldown !== undefined) overrides.dismissCooldownHours = parseNumericFlag('cooldown', opts.cooldown, 0)
       if (opts.dwell !== undefined) overrides.pageDwellMinutes = parseNumericFlag('dwell', opts.dwell, 0)
       if (opts.welcome !== undefined) overrides.firstSessionSeconds = parseNumericFlag('welcome', opts.welcome, 0)

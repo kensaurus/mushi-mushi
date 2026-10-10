@@ -40,7 +40,7 @@ silently dimmed the cloud marketing landing for any visitor whose OS
 happened to be in dark mode — undoing the page's editorial-light intent.
 Three surfaces want different posture:
 
-- **`apps/cloud`** — editorial-light by design, never flips.
+- **The marketing landing** (`@mushi-mushi/marketing-ui`, formerly `apps/cloud`) — editorial-light by design, never flips.
 - **`apps/admin`** — drives its own theme via `html[data-theme="…"]`.
 - **`packages/web` (SDK widget)** — computes light/dark in JS via
   `matchMedia` so the widget blends with whatever app it's embedded in.

@@ -6,7 +6,7 @@
 import type { Command } from 'commander';
 import { ensureClientId, loadConfig, saveConfig } from '../config.js';
 import { resolveConsoleUrl, openInBrowser } from '../console-url.js';
-import { resolveCloudEndpoint } from '../endpoint.js';
+import { firstEndpoint, resolveCloudEndpoint } from '../endpoint.js';
 import {
   createProject,
   listProjects,
@@ -45,7 +45,7 @@ Typical first-time flow:
     // --endpoint flag → MUSHI_API_ENDPOINT env → saved config → cloud default.
     const savedConfig = loadConfig()
     const endpoint = resolveCloudEndpoint(
-      opts.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim() ?? savedConfig.endpoint,
+      firstEndpoint(opts.endpoint, process.env.MUSHI_API_ENDPOINT, savedConfig.endpoint),
     )
     const consoleBase = await resolveConsoleUrl()
 
