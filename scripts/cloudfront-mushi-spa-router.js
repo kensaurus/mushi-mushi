@@ -109,9 +109,13 @@ var ASSET_EXT =
 // redirect) because some agent fetchers do not follow redirects.
 var LLMS_ROOT = /^\/mushi-mushi\/(llms(?:-full|-ctx)?\.txt)$/;
 
-// CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a
-// pre-encoded string — naively concatenating it into a URL yields the literal
-// text "[object Object]". Mirrors cloudfront-mushi-apex-redirect.js.
+// CloudFront's `request.querystring` is a map of `{ key: { value, multiValue } }`,
+// not a string — naively concatenating it into a URL yields the literal text
+// "[object Object]". Keys and values arrive still percent-encoded as the
+// viewer sent them, so they are re-emitted as is (encoding again turned %20
+// into %2520). Every key is kept: a valueless or empty one as `key=`, and a
+// repeated key once per value (multiValue lists them all, the first too).
+// Mirrors cloudfront-mushi-apex-redirect.js.
 function serializeQuerystring(qs) {
   if (!qs) {
     return '';
@@ -126,8 +130,15 @@ function serializeQuerystring(qs) {
       continue;
     }
     var entry = qs[key];
-    if (entry && entry.value !== undefined && entry.value !== '') {
-      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    if (!entry) {
+      continue;
+    }
+    if (entry.multiValue && entry.multiValue.length) {
+      for (var i = 0; i < entry.multiValue.length; i++) {
+        parts.push(key + '=' + (entry.multiValue[i].value || ''));
+      }
+    } else {
+      parts.push(key + '=' + (entry.value || ''));
     }
   }
   return parts.join('&');

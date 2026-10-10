@@ -259,7 +259,8 @@ describe('cloudfront-mushi-spa-router', () => {
   });
 
   it('302 to admin SPA keeps the query string', () => {
-    const out = spa(reqWithQs('/mushi-mushi/login', { next: '/reports', utm_source: 'x' }));
+    // CloudFront passes values still percent-encoded, as the viewer sent them.
+    const out = spa(reqWithQs('/mushi-mushi/login', { next: '%2Freports', utm_source: 'x' }));
     assert.equal(out.statusCode, 302);
     assert.equal(out.headers.location.value, '/mushi-mushi/admin/login?next=%2Freports&utm_source=x');
   });
@@ -798,4 +799,51 @@ describe('stripSource regex detection after a closing paren', () => {
     assert.ok(out.includes('(a + b) / 2;'), out);
     assert.ok(!out.includes('note'), out);
   });
+});
+
+describe('redirects keep the query string exactly as CloudFront passes it', () => {
+  // Modelled on a live probe of the www 301 (2026-10-10): CloudFront hands
+  // values over still percent-encoded, a valueless `flag` and an empty `e=`
+  // both as value '', and a repeated key with every value in multiValue (the
+  // first included). The old serializer dropped flag, e and x=2 and turned
+  // %20 into %2520 and + into %2B.
+  const QS = {
+    q: { value: 'a%20b' },
+    flag: { value: '' },
+    e: { value: '' },
+    x: { value: '1', multiValue: [{ value: '1' }, { value: '2' }] },
+    p: { value: 'a+b' },
+  };
+  const EXPECTED = 'q=a%20b&flag=&e=&x=1&x=2&p=a+b';
+
+  function wwwReq(uri) {
+    const event = req(uri, QS);
+    event.request.headers = { host: { value: 'www.kensaur.us' } };
+    return event;
+  }
+
+  const cases = [
+    ['docs-router www 301', 'cloudfront-mushi-docs-router.js', wwwReq('/mushi-mushi/docs/admin'),
+      'https://kensaur.us/mushi-mushi/docs/admin'],
+    ['docs-router trailing-slash 301', 'cloudfront-mushi-docs-router.js', req('/mushi-mushi/docs/admin/', QS),
+      '/mushi-mushi/docs/admin'],
+    ['docs-router bare docs root 301', 'cloudfront-mushi-docs-router.js', req('/mushi-mushi/docs', QS),
+      '/mushi-mushi/docs/'],
+    ['spa-router www 301', 'cloudfront-mushi-spa-router.js', wwwReq('/mushi-mushi/'),
+      'https://kensaur.us/mushi-mushi/'],
+    ['spa-router admin catch-all 302', 'cloudfront-mushi-spa-router.js', req('/mushi-mushi/login', QS),
+      '/mushi-mushi/admin/login'],
+    ['apex docs 301', 'cloudfront-mushi-apex-redirect.js', req('/quickstart/mcp', QS),
+      '/mushi-mushi/docs/quickstart/mcp'],
+    ['default viewer www 301', 'cloudfront-kensaur-default-viewer.js', wwwReq('/glot-it/'),
+      'https://kensaur.us/glot-it/'],
+    ['www-redirect 301', 'cloudfront-kensaur-www-redirect.js', wwwReq('/babuu-ai/'),
+      'https://kensaur.us/babuu-ai/'],
+  ];
+  for (const [name, file, event, path] of cases) {
+    it(name, () => {
+      const out = loadHandler(file)(event);
+      assert.equal(out.headers.location.value, `${path}?${EXPECTED}`);
+    });
+  }
 });

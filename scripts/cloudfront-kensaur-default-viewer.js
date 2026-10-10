@@ -88,6 +88,9 @@ var SPA_PREFIXES = [
   '/reset-password',
 ];
 
+// request.querystring is { key: { value, multiValue } }, still percent-encoded
+// as the viewer sent it: re-emit it as is, every key (empty ones as `key=`)
+// and every repeated value. Mirrors cloudfront-mushi-spa-router.js.
 function serializeQuerystring(qs) {
   if (!qs) {
     return '';
@@ -102,8 +105,15 @@ function serializeQuerystring(qs) {
       continue;
     }
     var entry = qs[key];
-    if (entry && entry.value !== undefined && entry.value !== '') {
-      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    if (!entry) {
+      continue;
+    }
+    if (entry.multiValue && entry.multiValue.length) {
+      for (var i = 0; i < entry.multiValue.length; i++) {
+        parts.push(key + '=' + (entry.multiValue[i].value || ''));
+      }
+    } else {
+      parts.push(key + '=' + (entry.value || ''));
     }
   }
   return parts.join('&');
