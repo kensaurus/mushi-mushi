@@ -41,6 +41,14 @@ on:
     branches: [master]
     paths:
       - 'apps/docs/**'
+      # Packages whose output the docs pages render (brand tokens, the
+      # marketing components, the MCP catalog and /connect clients). The
+      # bundled core/web SDK is left out on purpose so every SDK change does
+      # not redeploy the docs; the next docs deploy picks it up.
+      - 'packages/brand/src/**'
+      - 'packages/brand/tokens/**'
+      - 'packages/marketing-ui/src/**'
+      - 'packages/mcp/src/**'
       - 'scripts/cloudfront-mushi-docs-*'
       - 'scripts/cloudfront-mushi-apex-redirect.js'
       - 'scripts/cloudfront-mushi-spa-router.js'

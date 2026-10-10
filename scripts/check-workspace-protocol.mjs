@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // FILE: check-workspace-protocol.mjs
-// PURPOSE: Fail the build if any publishable package leaks `workspace:*`
-// (or any other workspace-protocol specifier) into `dependencies` or
-// `peerDependencies`. Such specifiers MUST be replaced with real semver ranges
-// at publish time; otherwise external `npm install` fails with EUNSUPPORTEDPROTOCOL.
+// PURPOSE: Fail the build if any publishable package has `workspace:*` or a
+// link:/file:/portal:/catalog: specifier in `dependencies` or
+// `peerDependencies`. Those leak into the tarball and external `npm install`
+// fails with EUNSUPPORTEDPROTOCOL. `workspace:^` and `workspace:~` are
+// allowed: `pnpm publish` rewrites them to real `^X.Y.Z` / `~X.Y.Z` ranges.
 //
 // Background: in 2026-04 all @mushi-mushi/*@0.1.0 packages were published with
 // `"@mushi-mushi/core": "workspace:*"` baked into the tarballs because

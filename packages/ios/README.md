@@ -127,7 +127,7 @@ target, which keeps the native SDK dependency-free by default.
 | `endpoint`              | _required_                           | Mushi Cloud: `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`; self-hosters pass their own functions URL |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |
-| `captureBreadcrumbs`    | `true`                               | Recent breadcrumbs are attached to each report |
+| `captureBreadcrumbs`    | `true`                               | Attaches the in-app breadcrumb buffer to each report; no Sentry needed |
 | `minDescriptionLength`  | `20`                                 | Matches the web SDK contract |
 | `offlineQueueMaxBytes`  | `1_000_000`                          | Soft cap; oldest entries trim first |
 | `theme`                 | `Theme(accentColor: "#6366f1")`      | Hex string |
