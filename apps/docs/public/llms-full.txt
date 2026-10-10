@@ -2012,7 +2012,7 @@ the situations people actually search for.
 - **[AI code bug fixing](/use-cases/ai-code-bug-fixing)** — the full pipeline
   from user report to merged fix, including lessons that prevent repeats.
 - **[MCP server for bug fixing](/use-cases/mcp-bug-fixing-server)** — what a
-  bug-fixing MCP server is and the tools Mushi's exposes.
+  bug-fixing MCP server is and the tools Mushi exposes.
 
 Ready to try it? One command installs the SDK and walks you through your
 first report:
