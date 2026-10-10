@@ -340,9 +340,13 @@ export async function probeIntegration(
       //   2. Platform settings: static API key (vault-backed)
       //   3. Legacy routing config: apiKey (project_integrations.config)
       //   4. Server env var: LINEAR_API_KEY
+      // OAuth access tokens need `Bearer`; personal API keys go raw (as in
+      // getLinearAuthHeader, _shared/linear.ts).
       let linearToken: string | null = null
+      let linearOAuth = false
       if (settings.linear_access_token_ref) {
         linearToken = await dereferenceMaybeVault(db, settings.linear_access_token_ref)
+        linearOAuth = Boolean(linearToken)
       }
       if (!linearToken && settings.linear_api_key_ref) {
         linearToken = await dereferenceMaybeVault(db, settings.linear_api_key_ref)
@@ -359,7 +363,7 @@ export async function probeIntegration(
       } else {
         const res = await fetch('https://api.linear.app/graphql', {
           method: 'POST',
-          headers: { Authorization: linearToken, 'Content-Type': 'application/json' },
+          headers: { Authorization: linearOAuth ? `Bearer ${linearToken}` : linearToken, 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: '{ viewer { id name organization { name } } }' }),
           signal: AbortSignal.timeout(8_000),
         })
@@ -647,11 +651,14 @@ export async function probeLinear(
   let httpStatus = 0
   let workspaceName: string | undefined
 
-  // Resolve credential: OAuth access token wins over static API key.
+  // Resolve credential: OAuth access token wins over static API key. OAuth
+  // tokens need `Bearer`; personal API keys go raw (getLinearAuthHeader).
   let token: string | null = null
+  let oauth = false
   const accessRef = settings.linear_access_token_ref
   if (accessRef) {
     token = await dereferenceMaybeVault(db, accessRef)
+    oauth = Boolean(token)
   }
   if (!token) {
     const keyRef = settings.linear_api_key_ref
@@ -674,7 +681,7 @@ export async function probeLinear(
     const res = await fetch('https://api.linear.app/graphql', {
       method: 'POST',
       headers: {
-        Authorization: token,
+        Authorization: oauth ? `Bearer ${token}` : token,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

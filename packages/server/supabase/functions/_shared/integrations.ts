@@ -411,13 +411,13 @@ async function createLinearIssue(
   traceparent?: string,
 ): Promise<ExternalIssue> {
   // Resolve teamId: prefer project_settings column over legacy config
-  let teamId: string | null = null
   const { data: ps } = await db
     .from('project_settings')
     .select('linear_team_id')
     .eq('project_id', projectId)
     .maybeSingle()
-  teamId = ps?.linear_team_id ?? String(config.teamId ?? '')
+  const teamId = String(ps?.linear_team_id || config.teamId || '').trim()
+  if (!teamId) throw new Error('Linear team not configured for this project')
 
   const MUTATION = `mutation CreateIssue($input: IssueCreateInput!) {
     issueCreate(input: $input) { success issue { id identifier url } }
@@ -436,7 +436,10 @@ async function createLinearIssue(
     type CreateData = { issueCreate: { success: boolean; issue: { id: string; identifier: string; url: string } | null } }
     const data = await linearGql<CreateData>(db, projectId, MUTATION, variables)
     const issue = data.issueCreate?.issue
-    return { externalId: issue?.identifier ?? '', url: issue?.url ?? '', provider: 'linear' }
+    if (!data.issueCreate?.success || !issue?.identifier || !issue.url) {
+      throw new Error('Linear issueCreate returned no issue')
+    }
+    return { externalId: issue.identifier, url: issue.url, provider: 'linear' }
   } catch (err) {
     const msg = String(err)
     if (!msg.includes('No Linear credentials configured') || !config.apiKey) throw err
@@ -452,9 +455,22 @@ async function createLinearIssue(
     }, traceparent),
     body: JSON.stringify({ query: MUTATION, variables }),
   })
-  const data = await res.json()
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Linear API HTTP ${res.status}: ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as {
+    data?: { issueCreate?: { success?: boolean; issue?: { identifier?: string; url?: string } | null } }
+    errors?: Array<{ message: string }>
+  }
+  if (data.errors?.length) {
+    throw new Error(`Linear GraphQL error: ${data.errors.map((e) => e.message).join('; ')}`)
+  }
   const issue = data.data?.issueCreate?.issue
-  return { externalId: issue?.identifier ?? '', url: issue?.url ?? '', provider: 'linear' }
+  if (!data.data?.issueCreate?.success || !issue?.identifier || !issue.url) {
+    throw new Error('Linear issueCreate returned no issue')
+  }
+  return { externalId: issue.identifier, url: issue.url, provider: 'linear' }
 }
 
 async function createGitHubIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
