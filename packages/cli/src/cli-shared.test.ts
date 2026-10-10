@@ -42,6 +42,13 @@ describe('apiCall', () => {
     expect(r).toEqual({ ok: false, httpStatus: 500, error: { code: 'HTTP_500', message: 'boom' } })
   })
 
+  it('strips a trailing slash from an env-supplied endpoint', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true, data: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+    await apiCall('/v1/x', { ...config, endpoint: 'https://api.test/functions/v1/api/' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.test/functions/v1/api/v1/x')
+  })
+
   it('passes a successful envelope through untouched', async () => {
     vi.stubGlobal('fetch', async () => jsonResponse(200, { ok: true, data: { a: 1 }, delivery: { n: 2 } }))
     expect(await apiCall('/x', config)).toEqual({ ok: true, data: { a: 1 }, delivery: { n: 2 } })
