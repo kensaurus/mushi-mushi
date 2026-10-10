@@ -19,6 +19,15 @@ In the admin console: **Settings → AI keys**.
 2. Click **Save & validate**. Mushi checks the key with the provider first (a free call), then stores it in **Supabase Vault**. The database row keeps only the secret's ID, and the key is never returned to the browser.
 3. Add more than one key for a service and Mushi moves to the next one when a key is rejected or runs out of quota.
 
+## One key for every app
+
+If your apps are in an organization, an owner or admin can add a key once for all of them. In the add form, leave **Use for all N apps in your organization** ticked. To share a key you already added to one app, click **Use in all apps** on its row; **Use in this app only** moves it back.
+
+- An app always tries its own keys first. The shared key is used when the app has none for that service, or as its backup.
+- A shared key is marked **All apps** on every app's **AI keys** tab. Other members can see it and use it, but only owners and admins can test, turn off, change or remove it.
+- Turning off or removing a shared key affects every app in the organization, so the confirmation says so.
+- The CLI and MCP `add` commands still add a key to one app.
+
 <Callout type="warning">
   Keys take effect on the **next** LLM call. No Edge Function redeploy is required. If you rotate a key, update it here — stale keys return `401` from Anthropic/OpenAI and the key shows as rejected on **Settings → AI keys**.
 </Callout>
@@ -35,7 +44,7 @@ In the admin console: **Settings → AI keys**.
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
-Your own keys are used first; when a project has none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
+Your own keys are used first (the app's, then your organization's shared keys); when there are none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
 
 ## OpenRouter
 

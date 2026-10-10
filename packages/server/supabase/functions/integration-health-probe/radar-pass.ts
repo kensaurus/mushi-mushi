@@ -23,6 +23,7 @@ import {
 import { parseGithubRepoUrl } from '../_shared/github.ts'
 import { resolveCostUsd } from '../_shared/llm-budget.ts'
 import { readAllPages } from '../_shared/paged-read.ts'
+import { keyOwnerFilter, projectKeyOwner } from '../_shared/byok-scope.ts'
 import { latestIso } from '../_shared/index-coverage.ts'
 
 export interface RadarPassDeps {
@@ -123,7 +124,7 @@ async function collectFindings(
     await db
       .from('byok_keys')
       .select('provider_slug, label, key_hint, status, last_error')
-      .eq('project_id', projectId),
+      .or(keyOwnerFilter(await projectKeyOwner(db, projectId))),
     'byok_keys',
   ) as Array<{ provider_slug: string; label: string | null; key_hint: string | null; status: string; last_error: string | null }>
   findings.push(...detectByokKeyInvalid(keys))

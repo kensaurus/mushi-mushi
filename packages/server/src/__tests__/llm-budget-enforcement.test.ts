@@ -29,6 +29,8 @@ function fakeDb(answer: (op: Op) => Answer) {
         eq: (c: string, v: unknown) => ((op.filters[c] = v), b),
         gte: (c: string, v: unknown) => ((op.filters[`${c}>=`] = v), b),
         in: () => b,
+        // byok_keys: the project's own keys or its organization's (ADR 0023).
+        or: (f: string) => ((op.filters.or = f), b),
         order: () => b,
         range: (from: number, to: number) => ((op.range = [from, to]), b),
         maybeSingle: () => b,

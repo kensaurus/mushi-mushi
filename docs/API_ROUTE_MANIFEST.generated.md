@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-10 · **685** routes.
+> Generated: 2026-10-10 · **686** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 171 |
+| `adminOrApiKey` | 172 |
 | `apiKeyAuth` | 58 |
 | `jwtAuth` | 349 |
 | `jwtOrApiKey` | 3 |
@@ -77,6 +77,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PATCH | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/keys/:keyId/expiry` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| POST | `/v1/admin/byok/keys/:keyId/scope` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/keys/:keyId/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/clusters` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
