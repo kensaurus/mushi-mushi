@@ -27,7 +27,8 @@ export const BYOK_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 export interface ByokKeyRow {
   id: string
-  project_id: string
+  /** Null for an organization's shared key (ADR 0023). */
+  project_id: string | null
   provider_slug: string
   vault_secret_id: string | null
   base_url: string | null
@@ -166,6 +167,9 @@ export function healthRowsFromOutcomes(
 ): Array<{ project_id: string; kind: string; status: HealthStatus; latency_ms: number; message: string; source: 'cron' }> {
   const groups = new Map<string, ByokProbeOutcome[]>()
   for (const o of outcomes) {
+    // A shared key belongs to no single project: its probe result lives on
+    // the key row (status, test_status), not in one app's health history.
+    if (!o.key.project_id) continue
     const k = `${o.key.project_id}|${o.key.provider_slug}`
     groups.set(k, [...(groups.get(k) ?? []), o])
   }
@@ -173,7 +177,7 @@ export function healthRowsFromOutcomes(
     const worst = group.reduce((a, b) => (SEVERITY[b.health] > SEVERITY[a.health] ? b : a))
     const problems = group.filter((o) => o.health !== 'ok').map((o) => o.detail)
     return {
-      project_id: worst.key.project_id,
+      project_id: worst.key.project_id as string,
       kind: worst.key.provider_slug,
       status: worst.health,
       latency_ms: 0,

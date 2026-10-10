@@ -8,12 +8,14 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import { usePageData, type PageDataState } from '../../lib/usePageData'
-import type { PoolKey } from './byokPool'
+import type { KeySharing, PoolKey } from './byokPool'
 import type { LegacyKey } from './keyStatus'
 
 export interface ByokPoolResponse {
   keys: PoolKey[]
   legacyKeys?: LegacyKey[]
+  /** Null when the app is not in an organization. */
+  sharing?: KeySharing | null
 }
 
 export type ByokPoolState = PageDataState<ByokPoolResponse>

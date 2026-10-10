@@ -340,7 +340,7 @@ async function handler(req: Request): Promise<Response> {
     if (byokErr) throw new Error(`byok_keys load failed: ${byokErr.message}`)
     // Supabase tokens are checked against their project's linked ref.
     const allByokRows = (byokRows ?? []) as ByokKeyRow[]
-    const supabaseProjectIds = [...new Set(allByokRows.filter((r) => r.provider_slug === 'supabase').map((r) => r.project_id))]
+    const supabaseProjectIds = [...new Set(allByokRows.filter((r) => r.provider_slug === 'supabase' && r.project_id).map((r) => r.project_id as string))]
     if (supabaseProjectIds.length > 0) {
       const { data: refRows, error: refErr } = await db
         .from('project_settings')
@@ -350,7 +350,7 @@ async function handler(req: Request): Promise<Response> {
       // providers' probes still matter more than one failed lookup.
       if (refErr) plog.warn('supabase_project_ref load failed; skipping Supabase token probes', { error: refErr.message })
       const refs = new Map(((refRows ?? []) as Array<{ project_id: string; supabase_project_ref: string | null }>).map((r) => [r.project_id, r.supabase_project_ref]))
-      for (const r of allByokRows) if (r.provider_slug === 'supabase') r.supabase_project_ref = refs.get(r.project_id) ?? null
+      for (const r of allByokRows) if (r.provider_slug === 'supabase' && r.project_id) r.supabase_project_ref = refs.get(r.project_id) ?? null
     }
     const dueKeys = selectDueByokKeys(allByokRows, Date.now())
     const byokOutcomes: ByokProbeOutcome[] = []

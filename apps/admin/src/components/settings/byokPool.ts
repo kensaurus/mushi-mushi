@@ -24,6 +24,20 @@ export interface PoolKey {
   created_at: string;
   /** Owner-entered date the key stops working; null when unknown. */
   expires_at?: string | null;
+  /** 'organization' = shared by every app in the organization (ADR 0023). */
+  scope?: 'project' | 'organization';
+}
+
+/** Whether this app can share keys with the rest of its organization. */
+export interface KeySharing {
+  organizationName: string;
+  appCount: number;
+  /** Owners and admins add, move and change shared keys. */
+  canManage: boolean;
+}
+
+export function isSharedKey(key: { scope?: string } | null | undefined): boolean {
+  return key?.scope === 'organization';
 }
 
 export function isRuntimeEligiblePoolKey(key: PoolKey, nowMs = Date.now()): boolean {

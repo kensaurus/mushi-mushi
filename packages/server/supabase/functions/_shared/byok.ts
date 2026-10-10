@@ -19,6 +19,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { isRunnableByokPoolState, validateOpenAiBaseUrl } from './byok-validation.ts';
+import { keyOwnerFilter, ownKeysFirst, projectKeyOwner } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 
 const log = rootLog.child('byok');
@@ -178,7 +179,10 @@ export async function resolveLlmKeys(
   return await legacyOrEnvCandidates(db, projectId, provider);
 }
 
-/** Step 1: the project's byok_keys rows for one provider, ordered by priority. */
+/**
+ * Step 1: the byok_keys rows the project may use for one provider: its own,
+ * then its organization's shared keys (ADR 0023), each by priority.
+ */
 async function byokPoolCandidates(
   db: SupabaseClient,
   projectId: string,
@@ -192,14 +196,16 @@ async function byokPoolCandidates(
   // keys that are still cooling). Without this, a single 429 would drop the
   // key permanently until a human re-enabled it. 'auth_failed' and 'disabled'
   // stay excluded — those require explicit operator action to recover.
-  const { data: keyRows } = await db
+  const owner = await projectKeyOwner(db, projectId);
+  const { data: rawRows } = await db
     .from('byok_keys')
-    .select('id, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url')
-    .eq('project_id', projectId)
+    .select('id, project_id, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url')
+    .or(keyOwnerFilter(owner))
     .eq('provider_slug', provider)
     .in('status', ['active', 'quota_exhausted'])
     .in('test_status', ['ok', 'error_quota'])
     .order('priority', { ascending: true });
+  const keyRows = rawRows ? ownKeysFirst(rawRows) : rawRows;
 
   const candidates: ResolvedKey[] = [];
 
@@ -383,7 +389,8 @@ export async function markKeyUsed(
       .from('byok_keys')
       .update({ last_used_at: usedAt })
       .eq('id', keyId)
-      .eq('project_id', projectId);
+      // The key may be the organization's shared key (ADR 0023).
+      .or(keyOwnerFilter(await projectKeyOwner(db, projectId)));
     if (error) {
       log.warn('Failed to update pooled BYOK last-used timestamp', {
         projectId,

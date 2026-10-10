@@ -50,6 +50,11 @@ function fakeDb(answer: (op: Op) => Answer): { db: any; ops: Op[] } {
         op.filters[`${col}>=`] = v
         return b
       },
+      // byok_keys: the project's own keys or its organization's (ADR 0023).
+      or(f: string) {
+        op.filters.or = f
+        return b
+      },
       order: () => b,
       limit: () => b,
       range: () => b,
