@@ -23,7 +23,7 @@
 // `supabaseUrl`), which breaks `deno check` when a npm-typed client is passed
 // to a function typed against the jsr build.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { keyOwnerFilter, projectKeyOwner } from './byok-scope.ts'
+import { keyOwnerFilter, ownKeysFirst, projectKeyOwner } from './byok-scope.ts'
 import { mcpCallTool } from './mcp-http-session.ts'
 
 const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
@@ -156,16 +156,17 @@ export async function resolveSupabasePat(
   db: SupabaseClient,
   projectId: string,
 ): Promise<string | null> {
-  const { data, error } = await db
+  const { data: rows, error } = await db
     .from('byok_keys')
-    .select('vault_secret_id')
+    .select('vault_secret_id, project_id, priority')
     .or(keyOwnerFilter(await projectKeyOwner(db, projectId)))
     .eq('provider_slug', 'supabase')
     .eq('status', 'active')
     .order('priority', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+    .limit(20)
 
+  // The app's own token first (ADR 0023); Supabase tokens are not shareable now.
+  const data = rows ? ownKeysFirst(rows as Array<{ vault_secret_id: string | null; project_id: string | null; priority: number | null }>)[0] : null
   if (error || !data?.vault_secret_id) return null
 
   const { data: secret, error: secretErr } = await db.rpc('vault_get_secret', {

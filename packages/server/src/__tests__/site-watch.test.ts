@@ -66,6 +66,27 @@ describe('classifyPage', () => {
   })
 })
 
+describe('review fixes 2026-10-10', () => {
+  it('the judge only counts for pages: a sitemap that changed is not broken', () => {
+    const judged = { ...ok(`${BASE}/sitemap.xml`, 'changed'), judgment: { meaningful: true, reason: 'nearly empty' } }
+    expect(sw.classifyPage({ ...judged, metadata: { contentType: 'application/xml; charset=utf-8' } })).toBeNull()
+    expect(sw.classifyPage({ ...judged, metadata: { contentType: 'text/html' } })).toMatchObject({ problem: 'judged_broken' })
+  })
+
+  it('a load error files at medium; a 5xx at high', () => {
+    const now = new Date('2026-10-11T00:00:00Z')
+    const load = sw.buildSiteWatchReport('p1', `${BASE}/x`, { problem: 'load_error', statusCode: null, detail: 'timeout' }, null, now)
+    const http = sw.buildSiteWatchReport('p1', `${BASE}/x`, { problem: 'http_error', statusCode: 502, detail: '502' }, null, now)
+    expect(load.severity).toBe('medium')
+    expect(http.severity).toBe('high')
+  })
+
+  it('when the last check read has dropped off the list, only the newest finished one is read', () => {
+    const c = (id: string, status = 'completed') => ({ id, status })
+    expect(sw.checksToProcess([c('12', 'running'), c('11'), c('10'), c('9')], 'gone').map((x) => x.id)).toEqual(['11'])
+  })
+})
+
 describe('checksToProcess', () => {
   const c = (id: string, status = 'completed') => ({ id, status })
   it('finished checks newer than the last one read, oldest first', () => {
@@ -79,48 +100,74 @@ describe('checksToProcess', () => {
   })
 })
 
-/** A fake db: site_watch_pages rows, reports inserts, and recorded updates. */
-function makeDb(pages: Array<Record<string, unknown>>) {
+/**
+ * A fake db with the parts of PostgREST processCheck uses: site_watch_pages
+ * rows (unique per url, like the real table), reports, and filters on
+ * update/delete (eq id, is/not resolved_at null). `shared` lets two
+ * "polls" use one table to test the race.
+ */
+function makeDb(pages: Array<Record<string, unknown>> = [], opts: { failReports?: boolean } = {}) {
   const reports: Array<Record<string, unknown>> = []
-  return {
-    reports,
-    pages,
-    db: {
-      from(table: string) {
-        let filter: Record<string, unknown> = {}
-        const q: Record<string, unknown> = {
-          select: () => q,
-          eq: (col: string, v: unknown) => ((filter[col] = v), q),
-          then: (resolve: (v: unknown) => void) => resolve({ data: table === 'site_watch_pages' ? pages : [], error: null }),
-          insert: (row: Record<string, unknown>) => {
-            if (table === 'reports') reports.push(row)
-            if (table === 'site_watch_pages') pages.push({ id: `p${pages.length + 1}`, ...row })
-            return Promise.resolve({ error: null })
-          },
-          update: (patch: Record<string, unknown>) => ({
-            eq: (_col: string, id: unknown) => {
-              const row = pages.find((p) => p.id === id)
-              if (row) Object.assign(row, patch)
-              return Promise.resolve({ error: null })
-            },
-          }),
+  let seq = pages.length
+  const db = {
+    from(table: string) {
+      const filters: Array<(row: Record<string, unknown>) => boolean> = []
+      let op: 'select' | 'update' | 'delete' = 'select'
+      let patch: Record<string, unknown> = {}
+      let returning = false
+      const rows = () => (table === 'site_watch_pages' ? pages : []).filter((r) => filters.every((f) => f(r)))
+      const run = () => {
+        if (op === 'update') {
+          const hit = rows()
+          hit.forEach((r) => Object.assign(r, patch))
+          return { data: returning ? hit.map((r) => ({ id: r.id })) : null, error: null }
         }
-        filter = {}
-        return q
-      },
-    } as never,
+        if (op === 'delete') {
+          for (const r of rows()) pages.splice(pages.indexOf(r), 1)
+          return { data: null, error: null }
+        }
+        return { data: rows(), error: null }
+      }
+      const q: Record<string, unknown> = {
+        select: () => ((returning = op !== 'select'), q),
+        eq: (col: string, v: unknown) => (filters.push((r) => r[col] === v), q),
+        is: (col: string, v: unknown) => (filters.push((r) => (r[col] ?? null) === v), q),
+        not: (col: string, _op: string, v: unknown) => (filters.push((r) => (r[col] ?? null) !== v), q),
+        update: (p: Record<string, unknown>) => ((op = 'update'), (patch = p), q),
+        delete: () => ((op = 'delete'), q),
+        then: (resolve: (v: unknown) => void) => resolve(run()),
+        insert: (row: Record<string, unknown>) => {
+          if (table === 'reports') {
+            if (opts.failReports) return Promise.resolve({ error: { message: 'boom' } })
+            reports.push(row)
+            return Promise.resolve({ error: null })
+          }
+          // site_watch_pages: unique (watch_id, url), like the real table.
+          const clash = pages.some((p) => p.watch_id === row.watch_id && p.url === row.url)
+          const created = clash ? null : { id: `p${++seq}`, ...row }
+          if (created) pages.push(created)
+          const result = clash
+            ? { data: null, error: { code: '23505', message: 'duplicate key' } }
+            : { data: { id: created!.id }, error: null }
+          const chain = { select: () => chain, single: () => Promise.resolve(result), then: (r: (v: unknown) => void) => r(result) }
+          return chain
+        },
+      }
+      return q
+    },
   }
+  return { db: db as never, reports, pages }
 }
 
 describe('processCheck', () => {
   const watch = { id: 'w1', project_id: 'p1', base_url: BASE }
   const deps = { now: () => new Date('2026-10-11T01:35:00Z'), classify: vi.fn(async () => {}) }
-  const broken = { ...ok(`${BASE}/pair`), statusCode: 500, metadata: { title: 'Pair' } }
+  const broken = (path: string, code = 500) => ({ ...ok(`${BASE}${path}`), statusCode: code, metadata: { title: 'Page' } })
   afterEach(() => deps.classify.mockClear())
 
   it('files one report for a newly broken page and queues its diagnosis', async () => {
-    const f = makeDb([])
-    const r = await sw.processCheck(f.db, watch, [ok(`${BASE}/terms`), broken], deps)
+    const f = makeDb()
+    const r = await sw.processCheck(f.db, watch, [ok(`${BASE}/terms`), broken('/pair')], deps)
     expect(r).toEqual({ broken: 1, filed: 1, resolved: 0 })
     expect(f.reports).toHaveLength(1)
     expect(f.reports[0]).toMatchObject({
@@ -130,33 +177,78 @@ describe('processCheck', () => {
       severity: 'high',
       category: 'bug',
     })
-    expect(f.pages[0]).toMatchObject({ url: `${BASE}/pair`, problem: 'http_error', status_code: 500, resolved_at: null })
+    expect(f.pages[0]).toMatchObject({ url: `${BASE}/pair`, problem: 'http_error', status_code: 500, resolved_at: null, report_id: f.reports[0]!.id })
     expect(deps.classify).toHaveBeenCalledWith(f.db, f.reports[0]!.id, 'p1')
   })
 
+  it('two polls reading the same check at once file the page once', async () => {
+    const f = makeDb()
+    const [a, b] = await Promise.all([
+      sw.processCheck(f.db, watch, [broken('/pair')], deps),
+      sw.processCheck(f.db, watch, [broken('/pair')], deps),
+    ])
+    expect(a.filed + b.filed).toBe(1)
+    expect(f.reports).toHaveLength(1)
+    expect(f.pages).toHaveLength(1)
+    expect(deps.classify).toHaveBeenCalledTimes(1)
+  })
+
+  it('a burst of broken pages files one outage report, linked from every page', async () => {
+    const f = makeDb()
+    const many = Array.from({ length: 7 }, (_, i) => broken(`/p${i}`, 503))
+    const r = await sw.processCheck(f.db, watch, many, deps)
+    expect(r).toEqual({ broken: 7, filed: 1, resolved: 0 })
+    expect(f.reports).toHaveLength(1)
+    expect(f.reports[0]).toMatchObject({ title: 'Live site: 7 pages broke at once', severity: 'critical', source: 'site_watch' })
+    expect(String(f.reports[0]!.description)).toContain(`${BASE}/p6`)
+    expect(f.pages.every((p) => p.report_id === f.reports[0]!.id)).toBe(true)
+    expect(deps.classify).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed report gives the claim back so the next poll files it', async () => {
+    const f = makeDb([], { failReports: true })
+    const r = await sw.processCheck(f.db, watch, [broken('/pair')], deps)
+    expect(r.filed).toBe(0)
+    expect(f.pages).toHaveLength(0)
+    const g = makeDb(f.pages)
+    expect((await sw.processCheck(g.db, watch, [broken('/pair')], deps)).filed).toBe(1)
+  })
+
   it('stays quiet while the page is still broken', async () => {
-    const f = makeDb([{ id: 'p1', url: `${BASE}/pair`, resolved_at: null, report_id: 'r1' }])
-    const r = await sw.processCheck(f.db, watch, [broken], deps)
+    const f = makeDb([{ id: 'p1', watch_id: 'w1', url: `${BASE}/pair`, resolved_at: null, report_id: 'r1' }])
+    const r = await sw.processCheck(f.db, watch, [broken('/pair')], deps)
     expect(r).toEqual({ broken: 1, filed: 0, resolved: 0 })
     expect(f.reports).toHaveLength(0)
     expect(f.pages[0]!.last_seen_at).toBe('2026-10-11T01:35:00.000Z')
   })
 
   it('resolves when the page loads again, and files again if it breaks later', async () => {
-    const f = makeDb([{ id: 'p1', url: `${BASE}/pair`, resolved_at: null, report_id: 'r1' }])
+    const f = makeDb([{ id: 'p1', watch_id: 'w1', url: `${BASE}/pair`, resolved_at: null, report_id: 'r1' }])
     expect(await sw.processCheck(f.db, watch, [ok(`${BASE}/pair`)], deps)).toEqual({ broken: 0, filed: 0, resolved: 1 })
     expect(f.pages[0]!.resolved_at).toBe('2026-10-11T01:35:00.000Z')
 
-    expect(await sw.processCheck(f.db, watch, [broken], deps)).toEqual({ broken: 1, filed: 1, resolved: 0 })
+    expect(await sw.processCheck(f.db, watch, [broken('/pair')], deps)).toEqual({ broken: 1, filed: 1, resolved: 0 })
     expect(f.reports).toHaveLength(1)
     expect(f.pages).toHaveLength(1)
-    expect(f.pages[0]!.resolved_at).toBeNull()
+    expect(f.pages[0]).toMatchObject({ resolved_at: null, report_id: f.reports[0]!.id })
   })
 
-  it('a page dropped from the crawl does not resolve an open finding', async () => {
-    const f = makeDb([{ id: 'p1', url: `${BASE}/pair`, resolved_at: null, report_id: 'r1' }])
-    await sw.processCheck(f.db, watch, [{ ...ok(`${BASE}/pair`), status: 'removed' }], deps)
-    expect(f.pages[0]!.resolved_at).toBeNull()
+  it('resolves a page that was removed from the site or is now skipped on purpose', async () => {
+    const f = makeDb([
+      { id: 'p1', watch_id: 'w1', url: `${BASE}/old`, resolved_at: null, report_id: 'r1' },
+      { id: 'p2', watch_id: 'w1', url: `${BASE}/feedback`, resolved_at: null, report_id: 'r2' },
+    ])
+    const r = await sw.processCheck(
+      f.db,
+      watch,
+      [
+        { ...ok(`${BASE}/old`), status: 'removed' },
+        { url: `${BASE}/feedback`, status: 'error', statusCode: null, error: "This URL is blocked by the website's robots.txt file" },
+      ],
+      deps,
+    )
+    expect(r.resolved).toBe(2)
+    expect(f.pages.every((p) => p.resolved_at === '2026-10-11T01:35:00.000Z')).toBe(true)
   })
 })
 

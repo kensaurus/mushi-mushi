@@ -106,9 +106,11 @@ for inventory drift, `SyntheticTimeline` for the synthetic walks.
 
 Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
 
-Each broken page files one report. While it stays broken, Mushi doesn't file again. When it loads cleanly it's marked fixed, and if it breaks later it files again. **Check now** runs a check straight away, and results show in 1 to 3 minutes.
+Each broken page files one report. When 5 or more pages break in the same check (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it files again.
 
-The watch uses your Firecrawl key, or a key shared with all your apps. It costs about 1 credit per page per day, about 750 a month for 25 pages, plus 1 per changed page that gets checked. **Turn off** deletes the crawl; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
+**Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
+
+The watch uses your Firecrawl key, or a key shared with all your apps. It costs 1 credit per page per day, about 750 a month for 25 pages. Firecrawl's own estimate is up to twice that, because it holds back 1 credit per page for checking changed pages. **Turn off** deletes the crawl in Firecrawl and needs the key to do so; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
 
 ## Synthetic monitor
 

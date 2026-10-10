@@ -15,7 +15,9 @@ import {
   parseUuidParam,
   OPEN_REPORT_STATUSES,
   TRIAGE_BACKLOG_STATUSES,
+  userCanAccessProject,
 } from '../shared.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
 import { buildReportFixPacket } from './report-agent-context.ts';
@@ -41,6 +43,9 @@ import {
 
 /** `reports_closed_reason_check` values (migration 20261002120000). */
 const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam']);
+
+/** "Search again" web searches per app per hour (each costs a few Firecrawl credits). */
+const KNOWN_ISSUE_SEARCHES_PER_HOUR = 30;
 
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -801,8 +806,10 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .from('research_snippets')
         .select('id, url, title, snippet, attached_by, attached_at')
         .eq('attached_to_report_id', reportId)
-        .order('attached_at', { ascending: true })
-        .limit(5),
+        // Newest first: "Search again" adds results, and the oldest-five cut
+        // hid exactly the ones the toast announced (review 2026-10-10).
+        .order('attached_at', { ascending: false })
+        .limit(12),
       // Whether the automatic search is on, so the page can say it is off.
       db
         .from('project_settings')
@@ -869,7 +876,6 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     });
   });
 
-  // Unified timeline — merges reporter comments, fixes, QA, pipelines, Ask Mushi.
   // "Search again" on "Others who hit this": run the known-issue lookup now
   // (developer index, then GitHub / Stack Overflow) and attach any results
   // not already on the report. Spends the project's own Firecrawl credits.
@@ -886,8 +892,39 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       .eq('id', reportId)
       .maybeSingle();
     if (error) return dbError(c, error);
-    if (!report || !(await canAccessReportProject(c, db, userId, report.project_id as string))) {
+    if (!report) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+    const access = await userCanAccessProject(db, userId, report.project_id as string);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+    // A search spends the project's Firecrawl credits: viewers are read-only,
+    // and each app gets KNOWN_ISSUE_SEARCHES_PER_HOUR searches an hour. A
+    // limiter error refuses the search rather than letting it through.
+    const viewerDenied = denyViewerWrite(c, access.role, 'search the web for this error');
+    if (viewerDenied) return viewerDenied;
+    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: report.project_id as string,
+      p_scope: 'known_issues_search',
+      p_max_per_window: KNOWN_ISSUE_SEARCHES_PER_HOUR,
+      p_window: '1 hour',
+    });
+    if (rateErr) {
+      const limited = (rateErr.message ?? '').includes('rate_limit_exceeded');
+      if (!limited) log.warn('known-issues rate limit check failed', { err: rateErr.message });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: limited ? 'RATE_LIMITED' : 'RATE_LIMIT_UNAVAILABLE',
+            message: limited
+              ? `This app already ran ${KNOWN_ISSUE_SEARCHES_PER_HOUR} web searches in the last hour. Try again later.`
+              : 'The search did not run. Retry in a moment.',
+          },
+        },
+        limited ? 429 : 503,
+      );
     }
 
     const { lookupKnownIssues } = await import('../../_shared/known-issues.ts');
@@ -918,6 +955,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     return c.json({ ok: true, data: result });
   });
 
+  // Unified timeline — merges reporter comments, fixes, QA, pipelines, Ask Mushi.
   app.get('/v1/admin/reports/:id/timeline', adminOrApiKey(), async (c) => {
     const idParsed = parseUuidParam(c);
     if (!idParsed.ok) return idParsed.error;

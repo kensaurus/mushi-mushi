@@ -122,7 +122,7 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   const keyOwner = await projectKeyOwner(db as never, projectId)
   const [keysRes, byokRes, reportRes, eventRes, snapRes, bindRes, ownedRes] = await Promise.all([
     db.from('project_api_keys').select('id, label, scopes, is_active, created_at, last_seen_at, last_seen_origin, last_seen_user_agent').eq('project_id', projectId),
-    db.from('byok_keys').select('id, provider_slug, label, key_hint, status, test_status, last_tested_at, created_at, last_used_at').or(keyOwnerFilter(keyOwner)),
+    db.from('byok_keys').select('id, provider_slug, label, key_hint, status, test_status, last_tested_at, created_at, last_used_at, project_id').or(keyOwnerFilter(keyOwner)),
     db.from('reports').select('created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('product_events').select('ts').eq('project_id', projectId).order('ts', { ascending: false }).limit(1).maybeSingle(),
     db.from('connector_snapshots').select('kind, connector_instance_id, ok, error_kind, observed_at, snapshot').eq('project_id', projectId).eq('is_current', true),
@@ -247,8 +247,10 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
       providerSpendUsd30d: providerSpend,
       providerSpendVendor,
       liveFunctions,
-      // A revoked (auth_failed) or quarantined key cannot spend.
-      liveProviderKeys: byok.filter(isUsableByokKey).length,
+      // A revoked (auth_failed) or quarantined key cannot spend. Only the
+      // app's own keys: a shared key (ADR 0023) serves the other apps too,
+      // and this rule's fix is to revoke the key.
+      liveProviderKeys: byok.filter((k) => (k as { project_id?: string | null }).project_id && isUsableByokKey(k)).length,
     }, now),
     provider_key_invalid: () => evaluateProviderKeys(observations, now),
     store_credential_scope_missing: () => evaluateStoreScopes(storeStates, catalog, now),

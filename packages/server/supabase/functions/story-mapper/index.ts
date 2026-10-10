@@ -23,7 +23,7 @@ import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
-import { firecrawlMap, firecrawlScrapeOwnSite } from '../_shared/firecrawl.ts'
+import { firecrawlMapOwnSite, firecrawlScrapeOwnSite } from '../_shared/firecrawl.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
@@ -69,7 +69,7 @@ function extractFencedJson(text: string): unknown {
 /**
  * Map the app, pick distinct pages, scrape each. Goes through the shared
  * Firecrawl client: the project's key (own or shared), usage bookkeeping,
- * the 24h cache and API v2. The app's own host is trusted: the user typed
+ * live fetches and API v2. The app's own host is trusted: the user typed
  * this URL into the crawl form and assertSafeOutboundUrl already passed it.
  */
 async function crawlWithFirecrawl(
@@ -79,10 +79,9 @@ async function crawlWithFirecrawl(
   maxPages: number,
 ): Promise<CrawledPage[]> {
   const pages: CrawledPage[] = []
-  const trustedHosts = [new URL(baseUrl).hostname]
 
   // More links than pages: language copies and files are dropped below.
-  const links = await firecrawlMap(db, projectId, baseUrl, { limit: Math.min(maxPages * 5, 200), trustedHosts })
+  const links = await firecrawlMapOwnSite(db, projectId, baseUrl, { limit: Math.min(maxPages * 5, 200) })
   const urls = pickCrawlUrls(links, baseUrl, maxPages)
 
   for (const url of urls) {

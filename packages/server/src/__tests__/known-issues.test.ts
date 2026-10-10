@@ -128,6 +128,12 @@ function makeDb(state: DbState) {
           }
           return ins
         },
+        update(patch: Record<string, unknown>) {
+          // The session's result_count, written after the search.
+          const row = state.inserted.find((i) => i.table === table)
+          if (row) Object.assign(row.rows as Record<string, unknown>, patch)
+          return { eq: () => Promise.resolve({ error: null }) }
+        },
       }
       return q
     },
@@ -277,6 +283,52 @@ describe('lookupKnownIssues', () => {
     expect(await queryFor({ ...sentryReport, customMetadata: { ...sentryReport.customMetadata, platform: 'javascript' } })).not.toMatch(
       /javascript$/,
     )
+  })
+
+  describe('review fixes 2026-10-10', () => {
+    const sentry = (line: string, platform = 'javascript') => ({
+      projectId: 'p1',
+      reportId: 'r1',
+      description: `${line} (captured by Sentry — no user description)`,
+      customMetadata: { source: 'sentry_webhook', platform },
+      consoleLogs: [],
+    })
+
+    it('a short error keeps its matching results: the runtime word is not required', async () => {
+      // "TypeError: Load failed" + javascript used to require "load failed javascript".
+      const hit = { url: 'https://stackoverflow.com/q/load-failed', title: 'TypeError: Load failed in Safari', snippet: 'fetch' }
+      searches([hit])
+      const res = await mod.lookupKnownIssues(makeDb(state), sentry('TypeError: Load failed'))
+      expect(firecrawl.firecrawlSearch.mock.calls[0]![2]).toBe('TypeError: Load failed javascript')
+      // Two words: no phrase, nothing filtered.
+      expect(res).toMatchObject({ attached: 1 })
+    })
+
+    it('an "Uncaught" prefix and chunk numbers do not make every result fail the filter', async () => {
+      const uncaught = { url: 'https://github.com/a/b/issues/1', title: "Cannot read properties of undefined (reading 'map')", snippet: '' }
+      searches([uncaught])
+      expect(
+        await mod.lookupKnownIssues(makeDb(state), sentry("Uncaught TypeError: Cannot read properties of undefined (reading 'map')")),
+      ).toMatchObject({ attached: 1 })
+
+      state.inserted = []
+      const chunk = { url: 'https://github.com/vercel/next.js/issues/2', title: 'ChunkLoadError: Loading chunk 812 failed', snippet: '' }
+      searches([chunk])
+      expect(await mod.lookupKnownIssues(makeDb(state), sentry('ChunkLoadError: Loading chunk 123 failed'))).toMatchObject({ attached: 1 })
+    })
+
+    it('neither search pays for page fetches', async () => {
+      searches([], [SO])
+      await mod.lookupKnownIssues(makeDb(state), input)
+      for (const call of firecrawl.firecrawlSearch.mock.calls) expect(call[3]).toMatchObject({ scrape: false })
+    })
+
+    it('the search is recorded before it spends, so a failed one still counts against the repeat window', async () => {
+      firecrawl.firecrawlSearch.mockReset().mockRejectedValue(new Error('FIRECRAWL_HTTP_500'))
+      expect(await mod.lookupKnownIssues(makeDb(state), { ...input, force: true })).toMatchObject({ skipped: 'error' })
+      const sessions = state.inserted.filter((i) => i.table === 'research_sessions')
+      expect(sessions).toHaveLength(1)
+    })
   })
 
   it('never throws: a failed search is reported as skipped', async () => {
