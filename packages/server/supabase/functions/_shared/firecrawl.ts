@@ -267,25 +267,76 @@ export async function firecrawlSearch(
 
 export interface FirecrawlScrapeOptions {
   bypassCache?: boolean;
-  /**
-   * Hosts the caller itself built this URL on (a package registry for a
-   * changelog). The project allow-list limits URLs a person or a model
-   * chose; with an empty list production refuses every URL, which silently
-   * stopped the library modernizer from reading any changelog.
-   */
-  trustedHosts?: readonly string[];
 }
 
-export async function firecrawlScrape(
+/**
+ * The package-registry hosts the library modernizer builds changelog URLs on
+ * (guessChangelogUrls). Only firecrawlScrapeChangelog may read them past the
+ * project allow-list.
+ */
+export const CHANGELOG_HOSTS: readonly string[] = [
+  'www.npmjs.com',
+  'github.com',
+  'pypi.org',
+  'crates.io',
+  'pkg.go.dev',
+];
+
+/**
+ * Scrape a URL the project allow-list permits. Every caller whose URL a
+ * person or a model chose goes through here, with no way to widen the list.
+ */
+export function firecrawlScrape(
   db: SupabaseClient,
   projectId: string,
   url: string,
   opts: FirecrawlScrapeOptions = {},
 ): Promise<FirecrawlScrapeResult> {
+  return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, []);
+}
+
+/**
+ * The library modernizer's changelog scrape. It builds the URL itself on a
+ * package registry, so CHANGELOG_HOSTS pass even when the project allow-list
+ * is empty (production otherwise refuses every URL, which silently stopped
+ * the modernizer reading any changelog). Every other host still needs the
+ * allow-list. Nothing else may use this: the bypass is not an option.
+ */
+export function firecrawlScrapeChangelog(
+  db: SupabaseClient,
+  projectId: string,
+  url: string,
+  opts: FirecrawlScrapeOptions = {},
+): Promise<FirecrawlScrapeResult> {
+  return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, CHANGELOG_HOSTS);
+}
+
+/**
+ * The story mapper's crawl of the project's own app (#471): `siteUrl` is the
+ * base URL the project configured for that crawl, and only its exact host
+ * passes past the allow-list. Report text never reaches this path.
+ */
+export function firecrawlScrapeOwnSite(
+  db: SupabaseClient,
+  projectId: string,
+  url: string,
+  siteUrl: string,
+  opts: FirecrawlScrapeOptions = {},
+): Promise<FirecrawlScrapeResult> {
+  return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, [new URL(siteUrl).hostname]);
+}
+
+async function scrapeAllowed(
+  db: SupabaseClient,
+  projectId: string,
+  url: string,
+  opts: FirecrawlScrapeOptions,
+  trustedHosts: readonly string[],
+): Promise<FirecrawlScrapeResult> {
   const resolved = await resolveFirecrawl(db, projectId);
   if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
 
-  const trusted = (opts.trustedHosts?.length ?? 0) > 0 && isHostAllowed(url, [...opts.trustedHosts!]);
+  const trusted = trustedHosts.length > 0 && isHostAllowed(url, [...trustedHosts]);
   if (!trusted && !isHostAllowed(url, resolved.allowedDomains)) {
     throw new Error('FIRECRAWL_DOMAIN_NOT_ALLOWED');
   }

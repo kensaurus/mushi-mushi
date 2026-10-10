@@ -16,10 +16,14 @@ import { SETTINGS_TAB_IDS, type SettingsTabId } from '../components/settings/typ
 /** Section ids on the Settings page that the aliases scroll to. */
 export const SETTINGS_SECTION_IDS = {
   firecrawl: 'firecrawl',
+  knownIssuesSearch: 'known-issues-search',
   browserbase: 'browserbase',
   connection: 'connection',
   debugLogging: 'debug-logging',
 } as const
+
+/** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
+export const KNOWN_ISSUES_SEARCH_HREF = `/settings?tab=tools#${SETTINGS_SECTION_IDS.knownIssuesSearch}`
 
 export interface SettingsTabTarget {
   tab: SettingsTabId

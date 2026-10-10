@@ -329,6 +329,8 @@ export interface ReportDetail {
     attached_by: string | null
     attached_at: string | null
   }> | null
+  /** Whether the project's automatic known-fix search is on; null = unknown. */
+  known_issues_search_enabled?: boolean | null
   // ── Project metadata needed by CodeFramePanel (available when page fetches project) ──
   project?: { repo_url?: string | null } | null
 }

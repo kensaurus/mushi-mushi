@@ -26,6 +26,7 @@ import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from '../lib/settingsTabExplainer';
 import { ByokPanel } from '../components/settings/ByokPanel';
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel';
+import { KnownIssuesSearchCard } from '../components/settings/KnownIssuesSearchCard';
 import { BrowserbasePanel } from '../components/settings/BrowserbasePanel';
 import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
@@ -320,6 +321,7 @@ function SettingsPageBody({
             <div id={SETTINGS_SECTION_IDS.firecrawl} className="scroll-mt-6 space-y-4">
               <FirecrawlPanel />
             </div>
+            <KnownIssuesSearchCard projectId={activeProjectId} id={SETTINGS_SECTION_IDS.knownIssuesSearch} />
             <div id={SETTINGS_SECTION_IDS.browserbase} className="scroll-mt-6 space-y-4">
               <BrowserbasePanel />
             </div>

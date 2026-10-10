@@ -123,6 +123,7 @@ function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | und
   }
 }
 import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts';
+import { knownIssuesSearchEnabled } from '../_shared/known-issues.ts';
 import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
@@ -783,7 +784,9 @@ ${
         try {
           const symptom =
             (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? (report.component as string | undefined) ?? '';
-          if (symptom.length > 0) {
+          // Report text goes to Firecrawl only on projects that opted in
+          // (project_settings.known_issues_search_enabled, default off).
+          if (symptom.length > 0 && (await knownIssuesSearchEnabled(db, dispatch.project_id))) {
             const augSpan = trace.span('fix.augment.firecrawl');
             webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 });
             augSpan.end({ resultCount: webSnippets.length });

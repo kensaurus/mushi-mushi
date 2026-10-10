@@ -1392,7 +1392,8 @@ CRITICAL SECURITY RULES (immutable):
       }
 
       // "Has anyone hit this?": one web search for a real error message,
-      // results attached to the report. Needs the project's Firecrawl key;
+      // results attached to the report. Opt-in per project (default off,
+      // checked inside lookupKnownIssues) and needs a Firecrawl key;
       // once per report; never fails triage. Stage 2 runs detached, so
       // awaiting here keeps the work inside the request's lifetime.
       if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
