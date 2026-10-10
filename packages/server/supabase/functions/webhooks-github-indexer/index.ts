@@ -76,6 +76,7 @@ import {
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
 import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
+import { projectIdsForRepo } from './repo-projects.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -305,16 +306,20 @@ async function emitFixEvent(
  * the fix-worker asked for, or the head_ref the poller learned) and then
  * against the `MUSHI-<report uuid>-<cursor-cloud|github-agent>` pattern that
  * generateCursorCloudBranchName produces. Only attempts that still have no
- * PR and belong to a cloud agent qualify.
+ * PR and belong to a cloud agent qualify, and only in `projectIds` (the
+ * projects bound to the PR's repository, see repo-projects.ts): a head ref
+ * is just a name, so the same ref in another tenant's repo must not match.
  */
 async function matchCloudAttemptByHeadRef(
   db: ReturnType<typeof getDb>,
   headRef: string,
+  projectIds: string[],
 ): Promise<{ id: string; project_id: string; report_id: string; agent: string } | null> {
   const cloudKinds = [...DISPATCHABLE_CLOUD_AGENTS];
   const { data: byBranch } = await db
     .from('fix_attempts')
     .select('id, project_id, report_id, agent')
+    .in('project_id', projectIds)
     .eq('branch_name', headRef)
     .is('pr_url', null)
     .in('agent', cloudKinds)
@@ -327,6 +332,7 @@ async function matchCloudAttemptByHeadRef(
   const { data: byReport } = await db
     .from('fix_attempts')
     .select('id, project_id, report_id, agent')
+    .in('project_id', projectIds)
     .eq('report_id', parsed.reportId)
     .is('pr_url', null)
     .in('agent', cloudKinds)
@@ -371,7 +377,9 @@ async function handlePullRequestState(
     const headRef = payload.pull_request?.head?.ref ?? null;
     const isOpening =
       payload.action === 'opened' || payload.action === 'reopened' || payload.action === 'ready_for_review';
-    const cloudAttempt = headRef && isOpening ? await matchCloudAttemptByHeadRef(db, headRef) : null;
+    const repoProjectIds = headRef && isOpening ? await projectIdsForRepo(db, payload.repository?.full_name) : [];
+    const cloudAttempt =
+      headRef && repoProjectIds.length > 0 ? await matchCloudAttemptByHeadRef(db, headRef, repoProjectIds) : null;
     if (!cloudAttempt) {
       return new Response(
         JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
@@ -500,12 +508,23 @@ async function handleCheckRun(
   }
 
   const db = getDb();
+  // A branch name or SHA is only meaningful inside the repository it came
+  // from: match only attempts of projects bound to it (repo-projects.ts).
+  const projectIds = await projectIdsForRepo(db, payload.repository?.full_name);
+  if (projectIds.length === 0) {
+    return new Response(
+      JSON.stringify({ ok: true, ignored: 'no_project_for_repo', repo: payload.repository?.full_name ?? null }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
   // Prefer matching by branch name; fall back to commit SHA for CI runs
-  // that only report a detached head.
-  const q = db.from('fix_attempts').select('id, project_id');
-  const { data: attempt } = await (headRef
-    ? q.eq('branch', headRef).maybeSingle()
-    : q.eq('commit_sha', headSha).maybeSingle());
+  // that only report a detached head. Newest first: a retried dispatch
+  // reuses its branch name, and maybeSingle errors on two rows.
+  const q = db.from('fix_attempts').select('id, project_id').in('project_id', projectIds);
+  const { data: attempt } = await (headRef ? q.eq('branch', headRef) : q.eq('commit_sha', headSha))
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (!attempt) {
     return new Response(
       JSON.stringify({ ok: true, ignored: 'check_not_a_mushi_fix', headRef, headSha }),
@@ -549,9 +568,12 @@ async function handleCheckRun(
  * known fix_attempt. Multi-commit pushes on the same agent branch (e.g.
  * "fix lint, then fix types") each get their own row so the timeline can
  * render the progression. Safe to call even when no fix_attempt matches.
+ * Scoped to `projectId` (the project this push was routed to): a branch
+ * name is not unique across tenants.
  */
 async function emitCommitEventsForPush(
   db: ReturnType<typeof getDb>,
+  projectId: string,
   payload: {
     ref?: string;
     commits?: Array<{
@@ -572,7 +594,10 @@ async function emitCommitEventsForPush(
   const { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, commit_sha')
+    .eq('project_id', projectId)
     .eq('branch', branch)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!attempt) return;
 
@@ -1640,7 +1665,8 @@ async function indexPushForProject(
   try {
     await emitCommitEventsForPush(
       db,
-      payload as Parameters<typeof emitCommitEventsForPush>[1],
+      projectId,
+      payload as Parameters<typeof emitCommitEventsForPush>[2],
       deliveryId,
     );
   } catch (err) {
