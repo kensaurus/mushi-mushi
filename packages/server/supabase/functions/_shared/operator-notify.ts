@@ -36,8 +36,8 @@ import { reportError } from './sentry.ts'
 const opLog = log.child('operator-notify')
 
 const SLACK_HOST = 'hooks.slack.com'
-const DISCORD_HOST = 'discord.com'
-const DISCORDAPP_HOST = 'discordapp.com'
+/** Hosts that serve Discord webhooks (stable, PTB, Canary and the legacy domain). */
+const DISCORD_HOSTS = new Set(['discord.com', 'ptb.discord.com', 'canary.discord.com', 'discordapp.com'])
 
 export type NotifyLevel = 'info' | 'warn' | 'urgent'
 
@@ -92,8 +92,10 @@ async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
   // Compare the parsed host, not a substring (js/incomplete-url-substring-
   // sanitization): `url.includes('hooks.slack.com')` also matches hostile
   // hosts like `hooks.slack.com.evil.test` or `evil.test/hooks.slack.com`.
+  // Fail closed so a wrong URL cannot carry operator notifications elsewhere.
   if (safeHost(url) !== SLACK_HOST) {
     opLog.warn('slack_url_host_mismatch', { host: safeHost(url) })
+    return false
   }
 
   const blocks: unknown[] = [
@@ -148,8 +150,9 @@ async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
 
 async function postDiscord(url: string, args: NotifyArgs): Promise<boolean> {
   const host = safeHost(url)
-  if (host !== DISCORD_HOST && host !== DISCORDAPP_HOST) {
+  if (!DISCORD_HOSTS.has(host)) {
     opLog.warn('discord_url_host_mismatch', { host })
+    return false
   }
 
   const embed: Record<string, unknown> = {
