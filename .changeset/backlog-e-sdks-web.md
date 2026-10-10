@@ -10,3 +10,4 @@ A report the user opened themselves no longer resets the proactive prompts' dism
 If the rewards activity listeners fail part-way through setup, the next init installs them again instead of skipping them for the rest of the session.
 `Mushi.init()` accepts a config without `projectId` / `apiKey` (`MushiInitConfig`) when env vars supply them, and the widget's recorder hooks are tagged `@internal`.
 `avoidSelectors` only moves the widget away from elements in the half of the viewport it is anchored to, so an avoided top header no longer pushes the default bottom-anchored trigger and panel off-screen (and a bottom tab bar no longer does the same to a top-anchored one).
+`createTimelineCapture()` no longer throws without a DOM (SSR or headless); it skips the click and hashchange listeners and still records `setScreen()` entries.
