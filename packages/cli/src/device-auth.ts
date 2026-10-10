@@ -390,8 +390,9 @@ export async function createProject(
 /**
  * Mint a fresh report:write key for an existing project (raw keys can't be
  * recovered, so selecting a project always mints a new one). Throws
- * DeviceAuthRequestError on failure (after one transient retry) so the wizard
- * can tell the user WHY minting failed instead of a bare "could not mint".
+ * DeviceAuthRequestError on failure (a single attempt, no retry — minting isn't
+ * idempotent) so the wizard can tell the user WHY minting failed instead of a
+ * bare "could not mint".
  */
 export async function mintProjectKey(
   endpoint: string,
