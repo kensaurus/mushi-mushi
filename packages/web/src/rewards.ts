@@ -325,8 +325,19 @@ function installActivityListeners(projectId: string): void {
     removeActivityListeners();
   }
 
+  // If setup throws part-way (e.g. document.body still null on a very early
+  // init), undo what was attached so the next call installs from scratch
+  // instead of returning early with no click handler.
   listenersInstalled = true;
+  try {
+    attachActivityListeners(projectId);
+  } catch (err) {
+    removeActivityListeners();
+    throw err;
+  }
+}
 
+function attachActivityListeners(projectId: string): void {
   const emitRoute = () => {
     const route = location.pathname;
     if (route === lastRoute) return;
