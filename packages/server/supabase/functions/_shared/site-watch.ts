@@ -42,6 +42,13 @@ export const DEFAULT_SCHEDULE_CRON = '30 1 * * *';
 /** Status codes that mean "you may not see this", not "this is broken". */
 const NOT_BREAKAGE = new Set([401, 403, 407, 429]);
 
+/**
+ * Firecrawl marks a URL 'error' when it skipped it because the same page
+ * was already scraped under another address (a redirect, a UTM variant).
+ * glot.it's first check had 9 of these (2026-10-10); none was broken.
+ */
+const DUPLICATE_SKIP = /already scraped this url|prevent duplicate scrapes/i;
+
 export interface MonitorPage {
   url: string;
   status: 'same' | 'new' | 'changed' | 'removed' | 'error' | string;
@@ -63,6 +70,7 @@ export function classifyPage(page: MonitorPage): PageProblem | null {
   if (page.status === 'removed') return null;
   const code = typeof page.statusCode === 'number' ? page.statusCode : null;
   if (page.status === 'error') {
+    if (DUPLICATE_SKIP.test(page.error ?? '')) return null;
     return { problem: 'load_error', statusCode: code, detail: page.error?.trim() || 'The page did not load.' };
   }
   if (code !== null && code >= 400 && !NOT_BREAKAGE.has(code)) {
@@ -129,7 +137,9 @@ function monitorBody(spec: MonitorSpec): Record<string, unknown> {
       {
         type: 'crawl',
         url: spec.baseUrl,
-        crawlOptions: { limit: spec.pageLimit, maxDiscoveryDepth: 3 },
+        // ignoreQueryParameters: "?utm_source=…" links are the same page;
+        // without it they used crawl slots and came back as duplicate skips.
+        crawlOptions: { limit: spec.pageLimit, maxDiscoveryDepth: 3, ignoreQueryParameters: true },
       },
     ],
   };

@@ -39,6 +39,13 @@ describe('classifyPage', () => {
     for (const code of [401, 403, 407, 429]) expect(sw.classifyPage({ ...ok(`${BASE}/account`), statusCode: code })).toBeNull()
   })
 
+  it("Firecrawl's duplicate skip (a redirect or UTM variant) is not breakage", () => {
+    // Verbatim from glot.it's first check (2026-10-10).
+    const error =
+      'This URL was not scraped because another scrape job in this same crawl or batch scrape has already scraped this URL (usually due to a redirect). This is an expected error used to prevent duplicate scrapes of the same URL and ensure efficiency. No action is needed - the content is already captured by the other scrape job.'
+    expect(sw.classifyPage({ url: 'https://kensaur.us/glot-it/?utm_source=seo', status: 'error', statusCode: null, error })).toBeNull()
+  })
+
   it('a page that fails to load, or a change the judge calls broken', () => {
     expect(sw.classifyPage({ url: `${BASE}/x`, status: 'error', statusCode: null, error: 'timeout' })).toMatchObject({
       problem: 'load_error',
@@ -162,7 +169,7 @@ describe('Firecrawl monitor calls', () => {
     expect(body).toMatchObject({
       schedule: { cron: '30 1 * * *', timezone: 'UTC' },
       goal: sw.SITE_WATCH_GOAL,
-      targets: [{ type: 'crawl', url: BASE, crawlOptions: { limit: 25 } }],
+      targets: [{ type: 'crawl', url: BASE, crawlOptions: { limit: 25, ignoreQueryParameters: true } }],
     })
     expect(body).not.toHaveProperty('webhook')
   })
