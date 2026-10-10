@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/lib/billingErrors.ts
- * PURPOSE: Plain-English text for billing checkout and portal failures
+ * PURPOSE: Plain-English text for billing checkout, plan-change and portal failures
  *          (suspected-bugs entry 254: the toast read "NO_STRIPE_CUSTOMER").
  *
  * A server message is used when there is one. When the server sent only a
@@ -19,7 +19,15 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   PLAN_SALES_LED: 'That plan is arranged with our team, not bought online. Email kensaurus@gmail.com and we will set it up with you.',
   COMPLIMENTARY_ACCOUNT: 'This account is on a free complimentary plan, so there is nothing to pay.',
   ALREADY_SUBSCRIBED:
-    'This project already has a paid plan. To switch plans, cancel it in Manage billing, or email support and we will switch it for you.',
+    'This project already has a paid plan. Use Change plan to switch between Indie and Pro or between monthly and annual.',
+  NO_SUBSCRIPTION: 'This project has no paid plan to change. Pick a plan to start one.',
+  SUBSCRIPTION_NOT_CHANGEABLE:
+    'This subscription has an unpaid invoice or is not active. Open Manage billing to settle it, then change the plan.',
+  PLAN_NOT_SELF_SERVE: 'Only Indie and Pro can be changed here. For Enterprise, use "Contact us" on the Plans tab.',
+  NO_CHANGE: 'The project is already on that plan and billing interval.',
+  PAYMENT_FAILED:
+    'Your card was declined for the prorated charge, so the plan did not change. Update the card in Manage billing and try again.',
+  PLAN_CHANGE_UNAVAILABLE: 'Stripe could not change the plan. Nothing was changed or charged. Try again in a minute.',
   CHECKOUT_UNAVAILABLE: 'Stripe could not open checkout. Nothing was charged. Try again in a minute, or email support.',
   NETWORK_ERROR: 'Mushi could not be reached. Check your connection and try again.',
 }

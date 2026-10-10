@@ -40,6 +40,16 @@ describe('estimateCost', () => {
     expect(atCapResult.total).toBe(200)
     expect(atCapResult.capped).toBe(true)
   })
+
+  // Annual plans stop at the included diagnoses (no overage, 2026-10-10).
+  it('annual Indie: discounted base, no overage, hard stop above 500', () => {
+    expect(estimateCost(indie, 300, true)).toEqual({ total: 12.5, overage: 0, capped: false })
+    expect(estimateCost(indie, 5000, true)).toEqual({ total: 12.5, overage: 0, capped: true })
+  })
+
+  it('annual toggle leaves the free plan unchanged', () => {
+    expect(estimateCost(free, 100, true)).toEqual({ total: 0, overage: 0, capped: true })
+  })
 })
 
 describe('annual pricing', () => {

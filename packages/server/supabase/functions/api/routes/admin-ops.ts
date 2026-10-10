@@ -1633,6 +1633,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     // plans either: Stripe only lets customers cancel, not update, a
     // subscription with a metered price (docs.stripe.com/customer-management,
     // "Limitations").
+    // Paying projects switch through POST /v1/admin/billing/change-plan
+    // (routes/billing-change-plan.ts) instead.
     const { data: liveSubs, error: liveSubsErr } = await db
       .from('billing_subscriptions')
       .select('status, plan_id')
@@ -1645,7 +1647,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
           ok: false,
           error: {
             code: 'ALREADY_SUBSCRIBED',
-            message: `This project already has a paid plan (${liveSub.plan_id ?? 'unknown'}, ${liveSub.status}). To switch plans, cancel it in Manage billing and choose the new plan when it ends, or email ${SUPPORT_EMAIL} and we will switch it for you.`,
+            message: `This project already has a paid plan (${liveSub.plan_id ?? 'unknown'}, ${liveSub.status}). To switch between Indie and Pro or between monthly and annual, use Change plan on the Billing page; the difference is prorated.`,
           },
         },
         409,

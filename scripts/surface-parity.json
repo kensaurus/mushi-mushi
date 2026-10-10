@@ -370,6 +370,8 @@
     "POST /v1/admin/ask-mushi/messages/stream": {"allow": "jwt-only"},
     "POST /v1/admin/billing/checkout": {"allow": "jwt-only"},
     "POST /v1/admin/billing/portal": {"allow": "jwt-only"},
+    "POST /v1/admin/billing/change-plan": {"allow": "jwt-only"},
+    "POST /v1/admin/billing/change-plan/preview": {"allow": "jwt-only"},
     "POST /v1/admin/byok/:provider/test": {"allow": "jwt-only"},
     "POST /v1/admin/byok/keys": {"mcp": ["add_byok_key"], "cli": ["keys add"]},
     "POST /v1/admin/byok/keys/:keyId/test": {"mcp": ["test_byok_key"], "cli": ["keys test"]},

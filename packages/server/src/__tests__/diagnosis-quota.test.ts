@@ -184,3 +184,47 @@ describe('decideDiagnosisQuota — Enterprise (unlimited)', () => {
     expect(v.limit).toBeNull()
   })
 })
+
+// Annual plans (2026-10-10): the subscription has no metered overage item, so
+// nothing could bill a diagnosis above the included quota. They stop there.
+describe('decideDiagnosisQuota — annual plans stop at the included quota', () => {
+  const annual = (plan: PricingPlan, used: number) =>
+    decideDiagnosisQuota({
+      plan,
+      used,
+      hasSubscription: true,
+      spendCapUsd: plan.monthly_spend_cap_usd ?? null,
+      periodResetsAt: PERIOD_RESETS,
+      overageBillable: false,
+    })
+
+  it('allows Indie annual under the included 500', () => {
+    const v = annual(INDIE, 499)
+    expect(v.allowed).toBe(true)
+    expect(v.overage).toBe(false)
+  })
+
+  it('blocks Indie annual at 500 with OVER_INCLUDED_NO_OVERAGE instead of unbilled overage', () => {
+    const v = annual(INDIE, 500)
+    expect(v.allowed).toBe(false)
+    expect(v.overage).toBe(false)
+    expect(v.reason).toBe('OVER_INCLUDED_NO_OVERAGE')
+    expect(v.limit).toBe(500)
+  })
+
+  it('blocks Pro annual at 2,000', () => {
+    const v = annual(PRO, 2000)
+    expect(v.allowed).toBe(false)
+    expect(v.reason).toBe('OVER_INCLUDED_NO_OVERAGE')
+  })
+
+  it('keeps monthly overage when the flag is omitted (back-compat default)', () => {
+    const v = decide({ plan: INDIE, used: 700, hasSubscription: true })
+    expect(v.allowed).toBe(true)
+    expect(v.overage).toBe(true)
+  })
+
+  it('leaves unlimited plans unlimited', () => {
+    expect(annual(ENTERPRISE, 1_000_000).allowed).toBe(true)
+  })
+})

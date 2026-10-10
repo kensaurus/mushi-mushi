@@ -39,8 +39,13 @@ import {
   type StripeSubscription,
 } from '../_shared/stripe.ts'
 import { getPlan, getPlanByBaseLookupKey } from '../_shared/plans.ts'
-import { customerPaymentMethodChanged, tierFromBasePrice } from '../_shared/billing-rules.ts'
-import { invalidateQuotaCache } from '../_shared/quota.ts'
+import {
+  baseSubscriptionItem,
+  customerPaymentMethodChanged,
+  overageSubscriptionItem,
+  tierFromBasePrice,
+} from '../_shared/billing-rules.ts'
+import { invalidateDiagnosisCache, invalidateQuotaCache } from '../_shared/quota.ts'
 import { reportMessage, withSentry } from '../_shared/sentry.ts'
 import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
 import { emitProductEvent } from '../_shared/product-events.ts'
@@ -143,17 +148,17 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
     sub = raw as unknown as StripeSubscription
   }
 
-  const item = sub.items?.data?.[0]
+  // The base (flat) item, not items[0]: after an in-app plan change adds or
+  // removes the overage item, Stripe does not keep the base item first.
+  const item = baseSubscriptionItem(sub.items?.data ?? [])
   const priceId = item?.price?.id
   if (!priceId) {
-    throw new Error(`subscription ${subId} has no items[0].price.id — cannot persist`)
+    throw new Error(`subscription ${subId} has no base item price id — cannot persist`)
   }
 
   const planId = await resolvePlanId(db, sub)
   const { start, end } = periodFromAny(sub as unknown as Record<string, unknown>)
-  const overageItem = sub.items.data.find((i) =>
-    (i.price?.metadata?.kind ?? '') === 'overage',
-  )
+  const overageItem = overageSubscriptionItem(sub.items.data)
 
   const organizationId = await organizationIdForProject(db, projectId)
   const { error } = await db.from('billing_subscriptions').upsert(
@@ -175,6 +180,9 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   )
   if (error) throw new Error(`subscription_upsert_failed: ${error.message}`)
   invalidateQuotaCache(projectId)
+  // A plan change can add or remove the overage item, which decides whether
+  // diagnoses above the included quota are allowed.
+  invalidateDiagnosisCache(projectId)
 
   // Company funnel (mushi-self): a paid plan going active. Dedup on the Stripe
   // subscription id so created/updated retries collapse to one row.

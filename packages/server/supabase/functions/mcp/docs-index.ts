@@ -93,7 +93,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/billing",
     markdown: "admin/billing.md",
     keywords: ["admin", "billing"],
-    headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Managing payment and invoices", "CLI parity", "Related docs"],
+    headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity", "Related docs"],
     excerpt: "The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.",
   },
   {

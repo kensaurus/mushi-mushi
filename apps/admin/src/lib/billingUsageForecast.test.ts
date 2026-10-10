@@ -5,7 +5,19 @@ import {
   estimateDiagnosisBill,
   fmtBillingLimit,
   formatPeriodResetLabel,
+  monthlyQuotaWindowEnd,
 } from './billingUsageForecast'
+
+describe('monthlyQuotaWindowEnd (annual plans reset monthly)', () => {
+  it('ends at the first of the next UTC month', () => {
+    expect(monthlyQuotaWindowEnd('2026-10-01T00:00:00.000Z')).toBe('2026-11-01T00:00:00.000Z')
+    expect(monthlyQuotaWindowEnd('2026-12-01T00:00:00.000Z')).toBe('2027-01-01T00:00:00.000Z')
+  })
+  it('returns null without a usable start', () => {
+    expect(monthlyQuotaWindowEnd(null)).toBeNull()
+    expect(monthlyQuotaWindowEnd('not a date')).toBeNull()
+  })
+})
 
 describe('estimateDiagnosisBill', () => {
   const indie = {

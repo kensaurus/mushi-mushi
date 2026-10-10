@@ -21,6 +21,8 @@ import { ConfigHelp } from '../ConfigHelp'
 interface Props {
   projectId: string
   isSubscribed: boolean
+  /** Annual plans have no overage, so a spend cap has nothing to cap. */
+  noOverage?: boolean
   spendCapUsd: number | null
   planDefaultCapUsd: number | null
   alertEmail: string | null
@@ -31,6 +33,7 @@ interface Props {
 export function BillingPredictabilityControls({
   projectId,
   isSubscribed,
+  noOverage = false,
   spendCapUsd,
   planDefaultCapUsd,
   alertEmail,
@@ -114,16 +117,18 @@ export function BillingPredictabilityControls({
             value={capInput}
             onChange={(e) => setCapInput(e.target.value)}
             placeholder={planDefaultCapUsd != null ? String(planDefaultCapUsd) : 'Plan default'}
-            disabled={disabled || savingCap || !isSubscribed}
+            disabled={disabled || savingCap || !isSubscribed || noOverage}
           />
           <InlineProof className="border-0 bg-transparent px-0 py-0 text-fg-muted">
             {!isSubscribed
               ? 'Upgrade to a paid plan to set a custom spend cap.'
+              : noOverage
+              ? 'Annual plans have no overage, so no spend cap applies. Diagnoses stop at the included amount.'
               : planDefaultCapUsd != null
               ? `Plan default: $${planDefaultCapUsd}/mo. Leave blank to reset.`
               : 'Hard stop tier — no overage cap applies.'}
           </InlineProof>
-          <Btn size="sm" onClick={saveCap} loading={savingCap} disabled={disabled || !isSubscribed}>
+          <Btn size="sm" onClick={saveCap} loading={savingCap} disabled={disabled || !isSubscribed || noOverage}>
             Save cap
           </Btn>
         </div>
