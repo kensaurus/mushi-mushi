@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010134000_drop_enterprise_sso_oidc_client_secret
+-- 20261010180500_drop_enterprise_sso_oidc_client_secret
 --
 -- 20260527110000_enterprise_sso_oidc_fields added a plaintext
 -- enterprise_sso_configs.oidc_client_secret column. Nothing reads or writes

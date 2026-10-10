@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010170000_award_tester_points_idempotent_balance
+-- 20261010180900_award_tester_points_idempotent_balance
 --
 -- award_tester_points() returned balance_after = current + delta even when
 -- ON CONFLICT (idempotency_key) DO NOTHING skipped the insert. On a replay

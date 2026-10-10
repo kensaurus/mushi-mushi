@@ -228,7 +228,7 @@ Deno.serve(async (req: Request) => {
   // signatures. Written even when null, so a failed viewer fetch leaves a
   // legacy (scanned) row rather than a stale id that hides the project. A
   // separate best-effort write: if this function deploys before migration
-  // 20261010140000, the unknown column must not fail the install.
+  // 20261010180700, the unknown column must not fail the install.
   const { error: orgIdError } = await db
     .from('project_settings')
     .update({ linear_organization_id: linearOrgId })

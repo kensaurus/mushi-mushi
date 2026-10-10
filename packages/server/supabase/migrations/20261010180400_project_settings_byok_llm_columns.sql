@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010133000_project_settings_byok_llm_columns
+-- 20261010180400_project_settings_byok_llm_columns
 --
 -- _shared/byok.ts resolveLlmKey selects byok_openai_base_url and
 -- byok_<provider>_test_status for anthropic/openai, and the key-test route

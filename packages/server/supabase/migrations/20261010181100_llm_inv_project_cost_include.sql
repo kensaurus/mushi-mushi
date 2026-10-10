@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010172000_llm_inv_project_cost_include
+-- 20261010181100_llm_inv_project_cost_include
 --
 -- 20260420000200 added idx_llm_inv_project_cost "so the /v1/admin/billing
 -- per-project monthly $ rollup stays index-only", but the index held only

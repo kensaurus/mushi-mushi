@@ -20,7 +20,7 @@ const read = (rel: string) => readFileSync(resolve(SUPABASE, rel), 'utf8')
 describe('Linear webhook organization filter', () => {
   const webhook = read('functions/webhooks-linear/index.ts')
   const callback = read('functions/linear-oauth-callback/index.ts')
-  const migration = read('migrations/20261010140000_project_settings_linear_organization_id.sql')
+  const migration = read('migrations/20261010180700_project_settings_linear_organization_id.sql')
 
   it('adds the nullable column the filter reads', () => {
     expect(migration).toMatch(

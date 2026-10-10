@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010120000_release_stats_totals
+-- 20261010180000_release_stats_totals
 --
 -- GET /v1/admin/releases/stats (and the sidebar counters through nav-meta)
 -- summed fixed_report_ids / credited_reporter_ids by reading every release

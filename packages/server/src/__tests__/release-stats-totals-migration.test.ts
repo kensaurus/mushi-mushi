@@ -1,5 +1,5 @@
 /**
- * release_stats_totals() (20261010120000) replaces the paged read of every
+ * release_stats_totals() (20261010180000) replaces the paged read of every
  * release behind GET /v1/admin/releases/stats. The route reads its keys by
  * name, so the SQL must return each of them, stay service-role only, and
  * scope every subquery to the one project.
@@ -9,12 +9,12 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const sql = readFileSync(
-  resolve(__dirname, '../../supabase/migrations/20261010120000_release_stats_totals.sql'),
+  resolve(__dirname, '../../supabase/migrations/20261010180000_release_stats_totals.sql'),
   'utf8',
 )
 const route = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/releases.ts'), 'utf8')
 
-describe('20261010120000_release_stats_totals', () => {
+describe('20261010180000_release_stats_totals', () => {
   it('returns every key the route reads', () => {
     const keys = [...route.matchAll(/t\.(\w+) \?\? 0/g)].map((m) => m[1])
     expect(keys).toHaveLength(6)

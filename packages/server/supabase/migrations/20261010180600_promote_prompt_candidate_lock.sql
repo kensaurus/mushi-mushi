@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010136000_promote_prompt_candidate_lock
+-- 20261010180600_promote_prompt_candidate_lock
 --
 -- promote_prompt_candidate (20260511120100) made the swap atomic, but two
 -- promotions for the same project + stage could still interleave: under

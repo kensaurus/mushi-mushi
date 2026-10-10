@@ -200,7 +200,7 @@ export async function getPromptForStage(
  * If projectId is omitted, we restrict to global rows (project_id IS NULL).
  *
  * The update runs in one statement (record_prompt_judge_score, migration
- * 20261010131000): judge-batch fires this without awaiting, and a JS
+ * 20261010180200): judge-batch fires this without awaiting, and a JS
  * read-then-write let concurrent scores for one version lose increments.
  */
 export async function recordPromptResult(

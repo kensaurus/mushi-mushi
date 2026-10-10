@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010132000_reports_stranded_scan_index
+-- 20261010180300_reports_stranded_scan_index
 --
 -- recover_stranded_pipeline() runs every 5 minutes and scans reports across
 -- all projects: WHERE status IN ('new','queued') AND created_at < now() - 5

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010131000_record_prompt_judge_score
+-- 20261010180200_record_prompt_judge_score
 --
 -- recordPromptResult (_shared/prompt-ab.ts) read avg_judge_score and
 -- total_evaluations, computed the new running average in JS and wrote both

@@ -162,7 +162,7 @@ describe('releases/stats', () => {
       { releases, release_credits: credits, reports: [], support_tickets: [] },
       { maxRows: 1000 },
     )
-    // Migration 20261010120000 not applied yet: PostgREST answers PGRST202.
+    // Migration 20261010180000 not applied yet: PostgREST answers PGRST202.
     ;(db as unknown as { rpc: unknown }).rpc = async () => ({
       data: null,
       error: { code: 'PGRST202', message: 'Could not find the function public.release_stats_totals' },

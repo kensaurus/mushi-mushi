@@ -13,8 +13,8 @@ import { describe, expect, it } from 'vitest'
 const read = (name: string) =>
   readFileSync(resolve(__dirname, '../../supabase/migrations', name), 'utf8')
 
-describe('20261010170000_award_tester_points_idempotent_balance', () => {
-  const sql = read('20261010170000_award_tester_points_idempotent_balance.sql')
+describe('20261010180900_award_tester_points_idempotent_balance', () => {
+  const sql = read('20261010180900_award_tester_points_idempotent_balance.sql')
 
   it('returns the stored balance when the insert was skipped', () => {
     expect(sql).toMatch(/'balance_after',\s+case when v_ledger_id is null then v_current_balance else v_new_balance end/)
@@ -27,8 +27,8 @@ describe('20261010170000_award_tester_points_idempotent_balance', () => {
   })
 })
 
-describe('20261010171000_tremendous_worker_cron_repair', () => {
-  const sql = read('20261010171000_tremendous_worker_cron_repair.sql')
+describe('20261010181000_tremendous_worker_cron_repair', () => {
+  const sql = read('20261010181000_tremendous_worker_cron_repair.sql')
   const code = sql.replace(/--.*$/gm, '')
 
   it('posts through the shared cron helper, not an unseeded config key', () => {
@@ -42,8 +42,8 @@ describe('20261010171000_tremendous_worker_cron_repair', () => {
   })
 })
 
-describe('20261010172000_llm_inv_project_cost_include', () => {
-  const sql = read('20261010172000_llm_inv_project_cost_include.sql')
+describe('20261010181100_llm_inv_project_cost_include', () => {
+  const sql = read('20261010181100_llm_inv_project_cost_include.sql')
 
   it('includes cost_usd in the partial index', () => {
     expect(sql).toMatch(/create index idx_llm_inv_project_cost\s+on public\.llm_invocations \(project_id, created_at desc\)\s+include \(cost_usd\)\s+where cost_usd is not null;/)

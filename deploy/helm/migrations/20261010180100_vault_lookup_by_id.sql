@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010130000_vault_lookup_by_id
+-- 20261010180100_vault_lookup_by_id
 --
 -- byok_keys.vault_secret_id (and the other *_vault_secret_id / vault://<id>
 -- refs) store the UUID that vault_store_secret returns, and _shared/byok.ts

@@ -85,7 +85,7 @@ const RELEASE_STATS_PAGE = 500
 /**
  * Counts for GET /v1/admin/releases/stats. Counts are exact counts, and the
  * array totals and credit counts come from release_stats_totals() (migration
- * 20261010120000) in one SQL pass: the route feeds the sidebar counters
+ * 20261010180000) in one SQL pass: the route feeds the sidebar counters
  * (nav-meta) on every page. Until that migration is applied they are read
  * page by page instead (the old unbounded select of every release and every
  * credit capped silently at PostgREST's 1,000 rows). A failed read throws:

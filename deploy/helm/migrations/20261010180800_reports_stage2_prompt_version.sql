@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261010141000_reports_stage2_prompt_version
+-- 20261010180800_reports_stage2_prompt_version
 --
 -- classify-report writes reports.stage2_prompt_version and judge-batch,
 -- api/routes/judge.ts and the classify dedup clone read it, but no migration

@@ -2,7 +2,7 @@
  * resolveLlmKey (_shared/byok.ts) selects project_settings byok_* columns by
  * name. byok_openai_base_url and the anthropic/openai test-status columns
  * existed only on the hosted project, so self-host and Helm databases built
- * from the migrations errored on that select until 20261010133000.
+ * from the migrations errored on that select until 20261010180400.
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'

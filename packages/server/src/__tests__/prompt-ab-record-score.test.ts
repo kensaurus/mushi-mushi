@@ -2,7 +2,7 @@
  * recordPromptResult used to read avg_judge_score/total_evaluations and write
  * the new average back from JS. judge-batch fires it without awaiting, so
  * concurrent scores for one version lost increments. It now delegates to the
- * single-statement record_prompt_judge_score RPC (20261010131000).
+ * single-statement record_prompt_judge_score RPC (20261010180200).
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -44,9 +44,9 @@ describe('recordPromptResult', () => {
   })
 })
 
-describe('20261010131000_record_prompt_judge_score', () => {
+describe('20261010180200_record_prompt_judge_score', () => {
   const sql = readFileSync(
-    resolve(__dirname, '../../supabase/migrations/20261010131000_record_prompt_judge_score.sql'),
+    resolve(__dirname, '../../supabase/migrations/20261010180200_record_prompt_judge_score.sql'),
     'utf8',
   ).replace(/--[^\n]*/g, '')
 
