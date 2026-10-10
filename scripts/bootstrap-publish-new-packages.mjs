@@ -85,7 +85,8 @@ const ROOT = resolve(__dirname, '..')
 //
 // To bootstrap a NEW package in future:
 //   1. Add an entry below with its workspace path and npm package name.
-//   2. Run: NPM_TOKEN=npm_… pnpm bootstrap:new-npm-packages
+//   2. Run `pnpm bootstrap:new-npm-packages` (dry run), then publish with:
+//      NPM_TOKEN=npm_… pnpm bootstrap:new-npm-packages --for-real
 //   3. Then configure the Trusted Publisher rule on npmjs.com (see
 //      docs/HANDOVER-2026-05-05-npm-trusted-publisher-bootstrap.md).
 const TARGETS = [
@@ -105,6 +106,23 @@ const TARGETS = [
 // through the version field.
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
+// `npm publish`, unlike `pnpm publish`, ships these specifiers verbatim, and
+// an external `npm install` of the tarball then fails. That includes
+// `workspace:^`, which scripts/check-workspace-protocol.mjs allows because
+// the release flow publishes through pnpm.
+const UNPUBLISHABLE_RE = /^(workspace|link|file|portal|catalog):/
+
+function unpublishableSpecifiers(rel) {
+  const json = JSON.parse(readFileSync(resolve(ROOT, rel, 'package.json'), 'utf8'))
+  const leaks = []
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const [dep, spec] of Object.entries(json[field] ?? {})) {
+      if (typeof spec === 'string' && UNPUBLISHABLE_RE.test(spec)) leaks.push(`${field}.${dep}: ${spec}`)
+    }
+  }
+  return leaks
+}
+
 function readPkg(rel) {
   const json = JSON.parse(readFileSync(resolve(ROOT, rel, 'package.json'), 'utf8'))
   const { name, version } = json
@@ -121,9 +139,11 @@ async function npmRegistryHas(name, version) {
   // percent-encoding the slash (`%40scope%2Fpkg`) — `encodeURIComponent`
   // produces exactly that, so we use it as-is. We use GET (matching
   // scripts/verify-published-tarballs.mjs); only the status code
-  // matters here, so the response body is discarded.
+  // matters here, so the response body is cancelled unread (otherwise
+  // undici holds the connection until it is garbage-collected).
   const url = `https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`
   const res = await fetch(url, { method: 'GET' })
+  await res.body?.cancel()
   if (res.status === 200) return true
   if (res.status === 404) return false
   throw new Error(`unexpected registry response for ${name}@${version}: HTTP ${res.status}`)
@@ -189,6 +209,16 @@ async function main() {
     console.log('')
     console.log('All targets are already published. Nothing to do.')
     return
+  }
+
+  for (const p of todo) {
+    const leaks = unpublishableSpecifiers(p.rel)
+    if (leaks.length > 0) {
+      throw new Error(
+        `${p.rel}/package.json has specifiers npm publish would ship unresolved: ${leaks.join(', ')}. ` +
+          'Replace them with real semver ranges before bootstrapping.',
+      )
+    }
   }
 
   console.log('')
