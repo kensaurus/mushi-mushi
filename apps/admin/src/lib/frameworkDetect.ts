@@ -430,13 +430,16 @@ export function monorepoInstallGuidance(
     result.monorepo === 'pnpm-workspaces' ||
     result.monorepo === 'yarn-workspaces'
 
+  // appPath is a directory, not a package name. npm's --workspace takes a
+  // path; pnpm's --filter only reads it as a path with a leading `./`; and
+  // `yarn workspace` takes only a package name, so yarn installs from the dir.
   const runIn = !isWorkspaceManager
     ? `cd ${appPath} && ${installPart}`
     : result.monorepo === 'npm-workspaces'
       ? `npm install --workspace=${appPath} ${pkgArgs}`
       : result.monorepo === 'pnpm-workspaces'
-        ? `pnpm add --filter ${appPath} ${pkgArgs}`
-        : `yarn workspace ${appPath} add ${pkgArgs}`  // yarn-workspaces
+        ? `pnpm add --filter ${appPath.startsWith('.') ? appPath : `./${appPath}`} ${pkgArgs}`
+        : `cd ${appPath} && yarn add ${pkgArgs}`  // yarn-workspaces
 
   return (
     `Detected ${tool} monorepo. Run the install inside your app's workspace — not the root:\n\n` +
