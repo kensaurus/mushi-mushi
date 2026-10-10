@@ -29,6 +29,8 @@ export interface ChangePlanTarget {
 }
 
 interface PlanChangePreview {
+  /** Unix seconds when Stripe would bill this; later than now during a trial. */
+  invoice_at: number | null
   amount_due: number
   total: number
   currency: string
@@ -126,7 +128,13 @@ export function ChangePlanDialog({ target, onClose, onChanged }: ChangePlanDialo
           <>
             <ContainedBlock tone="neutral" className="space-y-1">
               <InlineProof className="border-0 bg-transparent px-0 py-0">
-                {preview.amount_due > 0 ? (
+                {preview.invoice_at != null && preview.invoice_at * 1000 > Date.now() + 3_600_000 ? (
+                  <>
+                    Nothing is charged now. Next invoice on{' '}
+                    {new Date(preview.invoice_at * 1000).toLocaleDateString()}:{' '}
+                    <strong>{formatBillingMoney(Math.max(0, preview.amount_due), preview.currency)}</strong>
+                  </>
+                ) : preview.amount_due > 0 ? (
                   <>Charged now: <strong>{formatBillingMoney(preview.amount_due, preview.currency)}</strong></>
                 ) : preview.total < 0 ? (
                   <>

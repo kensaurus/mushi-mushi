@@ -581,6 +581,8 @@ export interface PlanChangeRequest {
 }
 
 export interface StripeInvoicePreview {
+  /** When the previewed invoice would be created (unix seconds). */
+  created?: number
   amount_due: number
   total: number
   currency: string

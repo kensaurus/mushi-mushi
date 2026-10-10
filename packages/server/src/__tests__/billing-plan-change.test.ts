@@ -93,6 +93,21 @@ describe('planChangeItems', () => {
     expect(plan.fromInterval).toBe('monthly')
   })
 
+  it('never resets the billing anchor during a trial (Stripe refuses an anchor before trial_end)', () => {
+    const plan = planChangeItems({
+      items: [monthlyBase('si_b', 'price_indie'), overage('si_o', 'price_indie_ovg')],
+      targetBasePriceId: 'price_indie_annual',
+      targetOveragePriceId: null,
+      targetInterval: 'annual',
+      trialing: true,
+    })
+    expect(plan.resetBillingAnchor).toBe(false)
+    expect(plan.items).toEqual([
+      { id: 'si_b', price: 'price_indie_annual', quantity: 1 },
+      { id: 'si_o', deleted: true },
+    ])
+  })
+
   it('Pro annual → Indie monthly: adds the overage item', () => {
     const plan = planChangeItems({
       items: [annualBase('si_b', 'price_pro_annual')],

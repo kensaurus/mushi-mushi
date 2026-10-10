@@ -216,7 +216,12 @@ export type PlanChangeItem =
 
 export interface PlanChangePlan {
   items: PlanChangeItem[]
-  /** The interval changes, so the new price starts a fresh period today. */
+  /**
+   * The interval changes, so the new price starts a fresh period today.
+   * Never during a trial: Stripe refuses an anchor before `trial_end`
+   * ("Trial end cannot be after billing_cycle_anchor", live probe
+   * 2026-10-10), and the trial's end starts the new period anyway.
+   */
   resetBillingAnchor: boolean
   fromInterval: BillingInterval
 }
@@ -239,6 +244,8 @@ export function planChangeItems(input: {
   targetBasePriceId: string
   targetOveragePriceId: string | null
   targetInterval: BillingInterval
+  /** The subscription is in a free trial (status `trialing`). */
+  trialing?: boolean
 }): PlanChangePlan {
   const base = baseSubscriptionItem(input.items)
   if (!base) throw new Error('subscription has no base item')
@@ -252,7 +259,11 @@ export function planChangeItems(input: {
   if (input.targetOveragePriceId && overage?.price?.id !== input.targetOveragePriceId) {
     items.push({ price: input.targetOveragePriceId })
   }
-  return { items, resetBillingAnchor: fromInterval !== input.targetInterval, fromInterval }
+  return {
+    items,
+    resetBillingAnchor: fromInterval !== input.targetInterval && !input.trialing,
+    fromInterval,
+  }
 }
 
 /** Form fields for `items[]` under a prefix (`items` or `subscription_details[items]`). */

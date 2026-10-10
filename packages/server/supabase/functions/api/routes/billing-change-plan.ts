@@ -169,6 +169,7 @@ async function resolveChange(c: Ctx): Promise<Resolved | Response> {
     targetBasePriceId: prices.base,
     targetOveragePriceId: prices.overage ?? null,
     targetInterval: body.billing_interval,
+    trialing: sub.status === 'trialing',
   });
 
   return {
@@ -214,6 +215,9 @@ export function registerBillingChangePlanRoutes(app: Hono<{ Variables: Variables
           amount_due: preview.amount_due,
           total: preview.total,
           currency: preview.currency,
+          // When Stripe would bill it: now for an active subscription
+          // (always_invoice), the trial's end for a trialing one.
+          invoice_at: preview.created ?? null,
           resets_billing_date: resolved.request.resetBillingAnchor,
           // Annual plans stop at the included diagnoses each month.
           overage_billed: resolved.toInterval === 'monthly',
