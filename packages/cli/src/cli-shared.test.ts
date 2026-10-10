@@ -43,7 +43,7 @@ describe('apiCall', () => {
   })
 
   it('strips a trailing slash from an env-supplied endpoint', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true, data: {} }))
+    const fetchMock = vi.fn(async (_url: string) => jsonResponse(200, { ok: true, data: {} }))
     vi.stubGlobal('fetch', fetchMock)
     await apiCall('/v1/x', { ...config, endpoint: 'https://api.test/functions/v1/api/' })
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.test/functions/v1/api/v1/x')
