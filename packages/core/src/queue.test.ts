@@ -78,15 +78,22 @@ describe('offline queue give-up gates', () => {
     expect(await queue.size()).toBe(0);
   });
 
-  it.each(['HTTP_401', 'HTTP_403'])(
-    'drops a report immediately on a credential failure (%s)',
-    async (code) => {
+  it.each([
+    // What api-client returns for the server's real 401/403 bodies…
+    { code: 'INVALID_API_KEY', status: 401 },
+    { code: 'INSUFFICIENT_SCOPE', status: 403 },
+    // …and for a 401/403 whose body carries no code.
+    { code: 'HTTP_401', status: undefined },
+    { code: 'HTTP_403', status: undefined },
+  ])(
+    'drops a report immediately on a credential failure ($code)',
+    async ({ code, status }) => {
       const queue = createOfflineQueue({ encryptAtRest: false, syncOnReconnect: false });
       await queue.enqueue(makeReport(`cred-${code}`));
 
       const { client, calls } = makeClient({
         ok: false,
-        error: { code, message: 'credentials rejected' },
+        error: { code, message: 'credentials rejected', ...(status ? { status } : {}) },
       });
       await queue.flush(client);
 
