@@ -116,7 +116,7 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
       // creates Sentry noise that drowns out the genuine load failures (e.g.
       // schema drift, RLS misconfig, hard 4xx). Classify the upstream 5xx /
       // network blips as `warn` and reserve `error` for status codes that
-      // actually require code or schema action.
+      // actually require code or schema action — a PostgREST 500 is one.
       const code = (error as { code?: string }).code ?? null;
       const status =
         (error as { statusCode?: number }).statusCode ??
@@ -126,7 +126,7 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
         // PostgREST / Supabase relays the gateway status through `code` and
         // `statusCode`. 502/503/504 + the JS-side "fetch failed" wrapper are
         // all "external blip, retry", not "we have a bug".
-        (typeof status === 'number' && status >= 500 && status < 600) ||
+        (typeof status === 'number' && (status === 502 || status === 503 || status === 504)) ||
         code === 'PGRST301' || // pool timeout
         /(?:bad gateway|gateway timeout|fetch failed|network|temporarily unavailable)/i.test(
           error.message ?? '',
