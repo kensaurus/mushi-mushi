@@ -419,7 +419,7 @@ export function monorepoInstallGuidance(
   const installPart = installCmd.split(/&&/)[0].trim()
   const pkgArgs = installPart
     .replace(/^(npx expo install|npm install|pnpm add|yarn add)\s+/, '')
-    .replace(/^(-\w+|--\w[\w-]*)\s+/, '')  // strip leading short (-g, -D) or long (--save-dev) flags
+    .replace(/^(?:(?:-\w+|--\w[\w-]*)\s+)+/, '')  // strip every leading short (-g, -D) or long (--save-dev) flag
     .trim()
 
   // For non-workspace monorepo tools (Turborepo, Nx, Lerna, Rush), the user

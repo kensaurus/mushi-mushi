@@ -259,6 +259,15 @@ describe('monorepoInstallGuidance', () => {
     expect(guidance).not.toContain('--filter -g')
   })
 
+  it('strips every leading flag, short and long', () => {
+    const result = detectFromPackageJson(
+      JSON.stringify({ workspaces: ['apps/web'], dependencies: { react: '*' } }),
+    )
+    const guidance = monorepoInstallGuidance(result, 'npm install -D --save-exact @mushi-mushi/react')
+    expect(guidance).toContain('@mushi-mushi/react')
+    expect(guidance).not.toContain('--save-exact @mushi-mushi/react')
+  })
+
   it('uses cd <path> for non-workspace monorepos (Turborepo)', () => {
     const result = detectFromPackageJson(
       JSON.stringify({
