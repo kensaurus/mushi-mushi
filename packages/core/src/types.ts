@@ -8,6 +8,14 @@ import type {
 // Configuration
 // ---------------------------------------------------------------------------
 
+/**
+ * What `Mushi.init()` and `<MushiProvider config>` accept: a {@link MushiConfig}
+ * whose `projectId` / `apiKey` may instead come from the NEXT_PUBLIC_MUSHI_* /
+ * VITE_MUSHI_* / MUSHI_* env vars. Init still throws if neither supplies them.
+ */
+export type MushiInitConfig = Omit<MushiConfig, 'projectId' | 'apiKey'> &
+  Partial<Pick<MushiConfig, 'projectId' | 'apiKey'>>;
+
 export interface MushiConfig {
   projectId: string;
   apiKey: string;
@@ -489,9 +497,12 @@ export interface MushiCaptureConfig {
   screenshot?: 'on-report' | 'auto' | 'off';
   /**
    * Custom screenshot capture function. When provided, the SDK calls this
-   * instead of its built-in DOM-snapshot capturer. Return a JPEG/PNG data URI
-   * on success, or `null` to skip attachment. If the function throws the SDK
-   * falls back to the built-in capturer.
+   * instead of its built-in DOM-snapshot capturer. Resolve to a
+   * `data:image/jpeg` or `data:image/png` URL on success, or `null` to skip
+   * attachment. Any other string (a `file://` or `https://` URI) is ignored
+   * with a warning, so a native plugin's file must be read and returned as a
+   * data URL. If the function throws the SDK falls back to the built-in
+   * capturer.
    *
    * Primary use-case: Capacitor / WebView hosts that route through a native
    * plugin (e.g. `@capawesome/capacitor-screenshot`) to obtain a real pixel-
@@ -501,9 +512,9 @@ export interface MushiCaptureConfig {
    * capture: {
    *   screenshot: 'auto',
    *   screenshotProvider: async () => {
-   *     const { Screenshot } = await import('@capawesome/capacitor-screenshot');
-   *     const { uri } = await Screenshot.take();
-   *     return uri; // data URI on web, file:// on native (SDK handles both)
+   *     // Base64 PNG from your native screenshot plugin.
+   *     const base64 = await takeNativeScreenshot();
+   *     return base64 ? `data:image/png;base64,${base64}` : null;
    *   },
    * }
    */
@@ -1879,7 +1890,8 @@ export interface MushiDiscoveryEventPayload {
 
 /** Payload for /v1/sdk/session — lightweight session lifecycle tracking.
  *  Best-effort, no offline queue. Privacy-safe: no PII by default;
- *  `user_id_hash` is the same device-fingerprint hash used elsewhere. */
+ *  `user_id_hash` is a one-way SHA-256 hex of the host's user id, never the
+ *  id itself, and stays null until the host identifies the user. */
 export interface MushiSessionEventPayload {
   /** Lifecycle event kind. */
   kind: 'session_start' | 'session_heartbeat' | 'session_end' | 'page_view';
@@ -1894,7 +1906,7 @@ export interface MushiSessionEventPayload {
   page_view_count?: number;
   /** Device fingerprint hash — same token used in reports. */
   reporter_token_hash?: string | null;
-  /** user_id_hash when the host app called Mushi.identify(). */
+  /** SHA-256 hex of the host user id, set after Mushi.identifyWithToken(). */
   user_id_hash?: string | null;
   user_agent?: string | null;
   sdk_version?: string;
@@ -1952,10 +1964,15 @@ export interface MushiApiResponse<T> {
   error?: { code: string; message: string; status?: number };
 }
 
+/** Widget block of the runtime config: older edge functions send `triggerText: null` for "use the SDK default". */
+export type MushiRuntimeWidgetConfig = Omit<MushiWidgetConfig, 'triggerText'> & {
+  triggerText?: string | null;
+};
+
 export interface MushiRuntimeSdkConfig {
   enabled?: boolean;
   version?: string | null;
-  widget?: MushiWidgetConfig;
+  widget?: MushiRuntimeWidgetConfig;
   capture?: MushiCaptureConfig;
   native?: {
     triggerMode?: 'shake' | 'button' | 'both' | 'none';
