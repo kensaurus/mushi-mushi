@@ -91,14 +91,28 @@ describe('the search query for a report', () => {
   })
 })
 
-/** A fake db that records inserts and answers the "already attached?" count. */
-function makeDb(state: { attachedCount: number; inserted: Array<{ table: string; rows: unknown }> }) {
+interface DbState {
+  /** URLs already attached to the report. */
+  attached: string[]
+  /** Sessions with the same query in the repeat window. */
+  recentSessions: number
+  inserted: Array<{ table: string; rows: unknown }>
+}
+
+/** A fake db that records inserts and answers the attached / recent reads. */
+function makeDb(state: DbState) {
   return {
     from(table: string) {
       const q = {
         select: () => q,
         eq: () => q,
-        then: (resolve: (v: unknown) => void) => resolve({ count: state.attachedCount, error: null }),
+        gte: () => q,
+        then: (resolve: (v: unknown) => void) =>
+          resolve(
+            table === 'research_snippets'
+              ? { data: state.attached.map((url) => ({ url })), error: null }
+              : { count: state.recentSessions, error: null },
+          ),
         insert(rows: unknown) {
           state.inserted.push({ table, rows })
           const ins = {
@@ -115,40 +129,124 @@ function makeDb(state: { attachedCount: number; inserted: Array<{ table: string;
 }
 
 describe('lookupKnownIssues', () => {
-  let state: { attachedCount: number; inserted: Array<{ table: string; rows: unknown }> }
+  let state: DbState
+  // Each mentions the error's first words, as a real result about it does.
+  const PR = { url: 'https://github.com/o/r/pull/9', title: 'Fix: cannot add postgres_changes callbacks', snippet: 'resubscribe' }
+  const ISSUE = { url: 'https://github.com/supabase/realtime-js/issues/1', title: 'Cannot add `postgres_changes` callbacks after subscribe()', snippet: 'reuse of channel' }
+  const SO = { url: 'https://stackoverflow.com/q/1', title: 'Supabase realtime', snippet: 'Error: cannot add postgres_changes callbacks for realtime' }
+  /** Developer-index results first, then web results. */
+  function searches(developer: unknown[], web: unknown[] = []) {
+    firecrawl.firecrawlSearch.mockReset().mockImplementation(async (_db: unknown, _p: string, _q: string, opts: { category?: string }) =>
+      opts.category === 'developer' ? developer : web,
+    )
+  }
   beforeEach(() => {
-    state = { attachedCount: 0, inserted: [] }
+    state = { attached: [], recentSessions: 0, inserted: [] }
     firecrawl.resolveFirecrawl.mockReset().mockResolvedValue({ key: 'k' })
-    firecrawl.firecrawlSearch.mockReset().mockResolvedValue([
-      { url: 'https://github.com/supabase/realtime-js/issues/1', title: 'cannot add callbacks', snippet: 'reuse of channel' },
-    ])
+    searches([ISSUE])
   })
   const input = { projectId: 'p1', reportId: 'r1', ...sentryReport }
+  const snippetUrls = () =>
+    ((state.inserted.find((i) => i.table === 'research_snippets')?.rows ?? []) as Array<{ url: string }>).map((r) => r.url)
 
-  it('searches GitHub and Stack Overflow once and attaches the results to the report', async () => {
+  it('searches the developer index first, then fills the rest from GitHub and Stack Overflow', async () => {
+    searches([PR], [SO, PR])
     const res = await mod.lookupKnownIssues(makeDb(state), input)
-    expect(res).toEqual({ attached: 1 })
-    expect(firecrawl.firecrawlSearch).toHaveBeenCalledWith(expect.anything(), 'p1', expect.any(String), {
-      limit: 3,
-      domains: ['github.com', 'stackoverflow.com'],
-    })
+    expect(res).toMatchObject({ attached: 2 })
+    expect(firecrawl.firecrawlSearch.mock.calls[0]![3]).toMatchObject({ limit: 3, category: 'developer', scrape: false })
+    expect(firecrawl.firecrawlSearch.mock.calls[1]![3]).toMatchObject({ limit: 3, domains: ['github.com', 'stackoverflow.com'] })
+    // The PR comes first and the duplicate web copy of it is dropped.
+    expect(snippetUrls()).toEqual([PR.url, SO.url])
     const snippets = state.inserted.find((i) => i.table === 'research_snippets')!.rows as Array<Record<string, unknown>>
     expect(snippets[0]).toMatchObject({ attached_to_report_id: 'r1', attached_by: null, session_id: 'sess-1' })
     const session = state.inserted.find((i) => i.table === 'research_sessions')!.rows as Record<string, unknown>
     expect(session).toMatchObject({ created_by: null, mode: 'search' })
   })
 
+  it('skips the web search when the developer index fills every slot', async () => {
+    searches([PR, ISSUE, SO])
+    await mod.lookupKnownIssues(makeDb(state), input)
+    expect(firecrawl.firecrawlSearch).toHaveBeenCalledTimes(1)
+  })
+
   it('does nothing without a Firecrawl key, or when results are already attached', async () => {
     firecrawl.resolveFirecrawl.mockResolvedValueOnce(null)
-    expect(await mod.lookupKnownIssues(makeDb(state), input)).toEqual({ attached: 0, skipped: 'no_key' })
-    state.attachedCount = 2
-    expect(await mod.lookupKnownIssues(makeDb(state), input)).toEqual({ attached: 0, skipped: 'already_attached' })
+    expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 0, skipped: 'no_key' })
+    state.attached = [ISSUE.url]
+    expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 0, skipped: 'already_attached' })
     expect(firecrawl.firecrawlSearch).not.toHaveBeenCalled()
   })
 
+  it('"Search again" runs anyway, adds only new results, and records who asked', async () => {
+    state.attached = [ISSUE.url]
+    searches([ISSUE, PR])
+    const res = await mod.lookupKnownIssues(makeDb(state), { ...input, force: true, requestedBy: 'user-1' })
+    expect(res).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([PR.url])
+    expect(firecrawl.firecrawlSearch.mock.calls[0]![3]).toMatchObject({ bypassCache: true })
+    const session = state.inserted.find((i) => i.table === 'research_sessions')!.rows as Record<string, unknown>
+    expect(session).toMatchObject({ created_by: 'user-1' })
+  })
+
+  it('"Search again" twice within ten minutes searches once', async () => {
+    state.recentSessions = 1
+    expect(await mod.lookupKnownIssues(makeDb(state), { ...input, force: true })).toMatchObject({ attached: 0, skipped: 'recent' })
+    expect(firecrawl.firecrawlSearch).not.toHaveBeenCalled()
+  })
+
+  it('a failed developer search falls back to the web search', async () => {
+    firecrawl.firecrawlSearch.mockReset()
+      .mockRejectedValueOnce(new Error('FIRECRAWL_HTTP_400'))
+      .mockResolvedValueOnce([SO])
+    expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([SO.url])
+  })
+
+  it('drops results about something else that shares a word or two', async () => {
+    // The solo-boss "Request was aborted" lookup (2026-10-10) attached these.
+    const abortReport = {
+      description: 'Error: Request was aborted. in POST /api/file-uploads/:file_id/analyze (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', culprit: 'POST /api/file-uploads/:file_id/analyze', platform: 'node' },
+      consoleLogs: [],
+    }
+    const shopify = { url: 'https://community.shopify.dev/t/15054', title: 'AbortError: The user aborted a request', snippet: 'a request timeout or cancellation' }
+    const aurelia = { url: 'https://github.com/aurelia/aurelia/blob/x/abort-controller.md', title: 'Request Cancellation with AbortController', snippet: 'aborted requests' }
+    const vellum = { url: 'https://github.com/vellum-ai/vellum-assistant/pull/26676', title: 'vellum-ai/vellum-assistant#26676', snippet: 'remove /request was aborted/i from RETRYABLE_NETWORK_MESSAGE_PATTERNS' }
+    searches([shopify, vellum], [aurelia])
+    const res = await mod.lookupKnownIssues(makeDb(state), { projectId: 'p1', reportId: 'r1', ...abortReport })
+    expect(res).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([vellum.url])
+  })
+
+  it("searches Sentry's WatchdogTermination crash and keeps results about it", async () => {
+    const watchdog = {
+      description: 'WatchdogTermination: The OS watchdog terminated your app, possibly because it overused RAM. (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', platform: 'cocoa' },
+      consoleLogs: [],
+    }
+    const lottie = { url: 'https://github.com/lottie-react-native/lottie-react-native/issues/1364', title: 'The OS watchdog terminated your app, possibly because it overused RAM.', snippet: '' }
+    const other = { url: 'https://example.dev/watchdog', title: 'Watchdog timers in embedded C', snippet: 'reset the watchdog' }
+    searches([lottie, other])
+    const res = await mod.lookupKnownIssues(makeDb(state), { projectId: 'p1', reportId: 'r1', ...watchdog })
+    expect(res).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([lottie.url])
+  })
+
+  it('adds the runtime to a short error, not to a long one', async () => {
+    const short = {
+      description: 'Error: Request was aborted. (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', platform: 'node' },
+      consoleLogs: [],
+    }
+    expect(await queryFor(short)).toBe('Error: Request was aborted. node')
+    expect(await queryFor({ ...sentryReport, customMetadata: { ...sentryReport.customMetadata, platform: 'javascript' } })).not.toMatch(
+      /javascript$/,
+    )
+  })
+
   it('never throws: a failed search is reported as skipped', async () => {
-    firecrawl.firecrawlSearch.mockRejectedValueOnce(new Error('FIRECRAWL_RATE_LIMITED'))
-    expect(await mod.lookupKnownIssues(makeDb(state), input)).toEqual({ attached: 0, skipped: 'error' })
+    firecrawl.firecrawlSearch.mockReset().mockRejectedValue(new Error('FIRECRAWL_RATE_LIMITED'))
+    expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 0, skipped: 'error' })
   })
 
   it('spends nothing on a report with no error message', async () => {

@@ -498,6 +498,7 @@
     "POST /v1/admin/repo/repos": {"allow": "jwt-only"},
     "POST /v1/admin/reporter-outbox/:id/discard": {"mcp": ["release_reporter_update"], "cli": ["outbox discard"]},
     "POST /v1/admin/reporter-outbox/:id/release": {"mcp": ["release_reporter_update"], "cli": ["outbox release"]},
+    "POST /v1/admin/reports/:id/known-issues": {"allow": "jwt-only"},
     "POST /v1/admin/reports/:id/request-info": {"mcp": ["request_reporter_info"]},
     "POST /v1/admin/reports/bulk": {"allow": "jwt-only"},
     "POST /v1/admin/reports/bulk/:mutationId/undo": {"allow": "jwt-only"},
