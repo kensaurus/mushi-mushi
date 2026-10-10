@@ -84,9 +84,17 @@ export async function mergeGithubPullRequest(
   if (res.status === 405 || res.status === 422) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     const msg = body.message ?? `GitHub merge rejected (${res.status})`;
-    if (/already been merged|not mergeable/i.test(msg)) {
+    // "not mergeable" is also GitHub's answer for conflicts and blocked or
+    // failing required checks, so the message cannot say the PR merged. Ask
+    // the PR itself: only `merged === true` lets the caller finalize the fix
+    // (mark the report Fixed, meter fixes_succeeded).
+    const after = await fetchPullRequest(token, ref, pullNumber).catch(() => undefined);
+    const alreadyMerged = after === undefined
+      ? /already been merged/i.test(msg)
+      : after?.merged === true;
+    if (alreadyMerged) {
       // When GitHub actually merged it earlier, keep that time (finalizeFixMerge).
-      return { merged: true, alreadyMerged: true, message: msg, mergedAt: pr?.mergedAt ?? null };
+      return { merged: true, alreadyMerged: true, message: msg, mergedAt: after?.mergedAt ?? pr?.mergedAt ?? null };
     }
     return { merged: false, alreadyMerged: false, message: msg };
   }
