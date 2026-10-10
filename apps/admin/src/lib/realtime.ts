@@ -37,6 +37,11 @@ interface UseRealtimeOptions {
 export function useRealtime(opts: UseRealtimeOptions, onChange: () => void): void {
   const { table, schema = 'public', event = '*', filter, enabled = true } = opts
 
+  // Latest callback without re-subscribing: an inline `onChange` would
+  // otherwise tear the channel down every render (and drop events between).
+  const handlerRef = useRef(onChange)
+  handlerRef.current = onChange
+
   useEffect(() => {
     if (!enabled) return
     const uid = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -49,14 +54,14 @@ export function useRealtime(opts: UseRealtimeOptions, onChange: () => void): voi
         // postgres_changes is supported but not in the public TS types of supabase-js v2
         'postgres_changes' as never,
         { event, schema, table, ...(filter ? { filter } : {}) } as never,
-        () => onChange(),
+        () => handlerRef.current(),
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [table, schema, event, filter, enabled, onChange])
+  }, [table, schema, event, filter, enabled])
 }
 
 /* ── useRealtimeReload ─────────────────────────────────────────────────── */
