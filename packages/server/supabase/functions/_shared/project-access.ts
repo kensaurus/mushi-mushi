@@ -158,5 +158,8 @@ export async function accessibleProjectIdsInOrganization(
  * code that still says `ownedProjectIds`. New code should use
  * `accessibleProjectIds` directly — the "owned" naming pre-dated Teams
  * v1 / org membership and is misleading.
+ *
+ * @deprecated Use `accessibleProjectIds`. This returns member projects
+ * (viewers included) and is NOT an owner or write check.
  */
 export const ownedProjectIds = accessibleProjectIds

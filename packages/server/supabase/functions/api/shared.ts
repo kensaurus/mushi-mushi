@@ -185,6 +185,12 @@ export function jsonForbidden(c: Context, message = 'Forbidden'): Response {
 // crawler / synthetic-monitor deploy regression). The aliases here keep
 // existing callers in `api/routes/*` working without churn.
 export const accessibleProjectIds = _accessibleProjectIds;
+/**
+ * @deprecated Use `accessibleProjectIds`. Despite the name this returns every
+ * project the user can reach as owner, org member or project member
+ * (viewers included). It is NOT an owner or write check: gate mutations on
+ * the role from `userCanAccessProject` / `callerCanAccessProject`.
+ */
 export const ownedProjectIds = _ownedProjectIds;
 
 /**
