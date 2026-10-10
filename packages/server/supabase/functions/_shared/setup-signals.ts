@@ -220,6 +220,13 @@ export async function loadIntegrationSignals(
 }
 
 /**
+ * project_codebase_files rows that are one live indexed file. The table also
+ * holds a row per symbol chunk (symbol_name set) and tombstones for deleted
+ * files, which outnumber the files by more than ten to one on a big repo.
+ */
+export const INDEXED_FILE_ROW = ['symbol_name', 'tombstoned_at']
+
+/**
  * Exact per-project row counts. A shared `.limit(500)` across every project
  * let a busy project starve a quiet one, so a project with older reports read
  * as "no reports yet" and the Getting Started card showed a capped count.
@@ -229,12 +236,13 @@ export async function countRowsPerProject(
   db: Db,
   table: 'reports' | 'fix_attempts' | 'project_codebase_files',
   projectIds: string[],
-  opts: { notNullColumn?: string } = {},
+  opts: { notNullColumn?: string; nullColumns?: string[] } = {},
 ): Promise<Map<string, number>> {
   const counts = await Promise.all(
     projectIds.map(async (pid) => {
       let q = db.from(table).select('id', { count: 'exact', head: true }).eq('project_id', pid)
       if (opts.notNullColumn) q = q.not(opts.notNullColumn, 'is', null)
+      for (const col of opts.nullColumns ?? []) q = q.is(col, null)
       const { count } = await q
       return [pid, count ?? 0] as const
     }),
@@ -337,7 +345,7 @@ export async function loadProjectSetupSignals(
     countRowsPerProject(db, 'fix_attempts', projectIds),
     countRowsPerProject(db, 'fix_attempts', projectIds, { notNullColumn: 'merged_at' }),
     // Head counts: a plain select is capped at the API's 1000-row limit.
-    countRowsPerProject(db, 'project_codebase_files', projectIds),
+    countRowsPerProject(db, 'project_codebase_files', projectIds, { nullColumns: INDEXED_FILE_ROW }),
   ])
 
   const keysBy = new Map<string, Array<Record<string, string | null>>>()

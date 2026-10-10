@@ -100,6 +100,32 @@ export const testRefSchema = z.object({
   framework: z.enum(['playwright', 'vitest', 'jest', 'cypress', 'other']).optional(),
 })
 
+// Mirrors expectedOutcomeSchema in packages/inventory-schema: the synthetic
+// monitor, fix-worker and spec validation read it as an object.
+const expectedOutcomeSchema = z.object({
+  summary: z.string().max(400).optional(),
+  response: z.object({
+    status_in: z.array(z.number().int().min(100).max(599)).optional(),
+    json_path: z.array(z.object({
+      path: z.string().min(1).max(200),
+      op: z.enum(['exists', 'equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'matches']),
+      value: z.unknown().optional(),
+    })).optional(),
+  }).optional(),
+  database: z.object({
+    table: z.string().min(1).max(120),
+    schema: z.string().min(1).max(80).optional().default('public'),
+    where: z.record(z.string(), z.unknown()).optional(),
+    expect: z.enum(['row_exists', 'row_absent', 'row_count_at_least']).optional().default('row_exists'),
+    min_count: z.number().int().min(1).optional(),
+  }).optional(),
+  ui: z.object({
+    visible_text: z.string().max(400).optional(),
+    route_change_to: z.string().max(200).optional(),
+  }).optional(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+})
+
 export const elementSchema = z.object({
   id: slug,
   type: z.enum(ELEMENT_TYPES),
@@ -115,7 +141,7 @@ export const elementSchema = z.object({
   notes: z.string().max(1000).optional(),
   owner_team: z.string().max(80).optional(),
   testid: z.string().max(120).optional(),
-  expected_outcome: z.string().max(1000).optional(),
+  expected_outcome: expectedOutcomeSchema.optional(),
 })
 export type Element = z.infer<typeof elementSchema>
 

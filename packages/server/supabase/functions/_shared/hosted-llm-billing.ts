@@ -308,9 +308,11 @@ function allowPreflight(reason?: string): HostedLlmPreflightResult {
  * triage — deliberately the opposite of the canonical `meteredCall`, which
  * fails closed for interactive consumer features.
  *
- * Bounded twice: `AbortSignal.timeout` genuinely cancels the request, and an
- * outer race caps the whole operation — including identity resolution — at
- * PREFLIGHT_BUDGET_MS.
+ * Bounded twice: `AbortSignal.timeout` genuinely cancels the wallet request,
+ * and an outer race caps how long the caller waits — including identity
+ * resolution — at PREFLIGHT_BUDGET_MS. The race does not cancel anything:
+ * when the budget wins, identity resolution and its DB queries keep running
+ * in the background and their result is discarded.
  */
 export async function hostedLlmPreflight(args: {
   db: SupabaseClient;

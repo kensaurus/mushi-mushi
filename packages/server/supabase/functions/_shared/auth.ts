@@ -5,6 +5,7 @@ import { mergeLogContext, type LogContext } from './log-context.ts'
 import { emitFunnelEvent } from './setup-funnel.ts'
 import type { ApiErrorCode } from './error-codes.ts'
 import { trustedSubRequestUser } from './request-memo.ts'
+import { log } from './logger.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -164,10 +165,12 @@ export function requireServiceRoleAuth(req: Request): Response | null {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
   if (!internalSecret && !serviceRoleKey) {
+    // Logged here, not told to the caller: the body matches a token mismatch.
+    log.error('requireServiceRoleAuth: neither MUSHI_INTERNAL_CALLER_SECRET nor SUPABASE_SERVICE_ROLE_KEY is set')
     return new Response(
       JSON.stringify({
         ok: false,
-        error: { code: 'SERVER_MISCONFIGURED', message: 'No internal auth configured' },
+        error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' },
       }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
     )

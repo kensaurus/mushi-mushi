@@ -154,24 +154,38 @@ Deno.serve(async (req: Request) => {
   // Linear webhooks include organizationId in the payload. We use this to
   // find the project(s) with a matching connection. Multiple projects in the
   // same Mushi org may share a Linear workspace — we fan out to all of them.
+  //
+  // The id is unverified until the HMAC check below, so it only narrows the
+  // candidate set (parameterised .eq, never interpolated into a filter
+  // string). Rows whose linear_organization_id is still null predate the
+  // column (linear-oauth-callback records it on install) and are always
+  // candidates. A teamId is not an organization id, so it is not used here.
 
-  const linearOrgId = (payload.organizationId ?? payload.teamId) as string | undefined
+  const linearOrgId = typeof payload.organizationId === 'string' ? payload.organizationId : undefined
 
   type ProjectRow = { project_id: string; linear_webhook_secret_ref: string | null }
   let projectRows: ProjectRow[] = []
 
   if (linearOrgId) {
-    // Prefer matching on webhook_secret rows (set per-install) which already
-    // bound this URL to a specific project.
-    const { data } = await dbAny
-      .from('project_settings')
-      .select('project_id, linear_webhook_secret_ref')
-      .not('linear_webhook_secret_ref', 'is', null)
-    projectRows = (data ?? []) as ProjectRow[]
+    const [byOrg, legacy] = await Promise.all([
+      dbAny
+        .from('project_settings')
+        .select('project_id, linear_webhook_secret_ref')
+        .not('linear_webhook_secret_ref', 'is', null)
+        .eq('linear_organization_id', linearOrgId),
+      dbAny
+        .from('project_settings')
+        .select('project_id, linear_webhook_secret_ref')
+        .not('linear_webhook_secret_ref', 'is', null)
+        .is('linear_organization_id', null),
+    ])
+    projectRows = [...(byOrg.data ?? []), ...(legacy.data ?? [])] as ProjectRow[]
   }
 
   if (projectRows.length === 0) {
-    // Fallback: find projects that have a webhook secret configured.
+    // Fallback: no organizationId on the payload, nothing matched it, or the
+    // column is not there yet (both narrowed queries error → no rows): scan
+    // every project that has a webhook secret configured.
     // We only include rows with a non-null secret — HMAC verification is
     // mandatory and we cannot authenticate events for installs that lack one.
     const { data } = await dbAny

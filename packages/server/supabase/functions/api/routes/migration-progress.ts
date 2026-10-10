@@ -82,9 +82,9 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
   //   - guide_slug   (optional) — filter to one guide
   //   - project_id   (optional) — when present, list project-scoped progress
   //                               for that project (subject to access check).
-  //                               When omitted, returns the caller's own
-  //                               account-scoped + project-scoped rows for
-  //                               every project they can access.
+  //                               When omitted, returns every row the
+  //                               caller wrote (account-scoped and
+  //                               project-scoped).
   //   - scope        'all' | 'mine' (default 'mine') — 'all' returns rows
   //                  from every project member (admin card uses this on
   //                  ProjectsPage to surface teammates' in-progress work).
@@ -110,19 +110,18 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
 
     const scope = c.req.query('scope') === 'all' ? 'all' : 'mine';
 
-    // Decide the access surface:
-    //   * project_id explicit → must be a project the caller can access.
-    //     scope=all returns everyone's rows (RLS already enforces project
-    //     membership read), scope=mine returns only the caller's rows.
-    //   * project_id omitted, scope=mine (default) → caller's own rows
-    //     only (account-scoped + every project they're in).
-    //   * project_id omitted, scope=all → caller's own account-scoped rows
-    //     PLUS any project-scoped row on a project they can access (which
-    //     INCLUDES other team members' progress). Used by the admin
-    //     ProjectsPage card to surface "what teammates are mid-migrating".
-    //     The OR clause below makes this surface explicit; RLS provides
-    //     the second line of defence (caller cannot see rows for projects
-    //     they aren't a member of, no matter what they pass).
+    // Decide the access surface. `db` is the service-role client, so RLS
+    // does not apply here: these checks are the only access control.
+    //   * project_id explicit → callerCanAccessProject must allow it.
+    //     scope=all returns every member's rows on that project, scope=mine
+    //     returns only the caller's rows.
+    //   * project_id omitted, scope=mine (default) → every row the caller
+    //     wrote (account-scoped and project-scoped).
+    //   * project_id omitted, scope=all → every row the caller wrote PLUS
+    //     any row on a project in accessibleProjectIds (which INCLUDES other
+    //     team members' progress). Used by the admin ProjectsPage card to
+    //     surface "what teammates are mid-migrating". Other users' rows are
+    //     only ever returned for projects the caller can access.
     let query = db
       .from('migration_progress')
       .select(
@@ -147,7 +146,7 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
       if (scope === 'mine') {
         query = query.eq('user_id', userId);
       } else {
-        // OR clause: own account-scoped (project_id IS NULL AND user_id=me)
+        // OR clause: any row I wrote (user_id=me, on any scope)
         // OR any row on a project I can access.
         const inList =
           projectIds.length > 0
@@ -189,8 +188,9 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
   //     client_updated_at?: string         // ISO timestamp
   //   }
   //
-  // Always self-scoped to the caller (RLS enforces, but we also set
-  // user_id = caller server-side so the body can never spoof it).
+  // Always self-scoped to the caller: the service-role client bypasses
+  // RLS, so user_id = caller is set server-side and the body can never
+  // spoof it.
   // ─────────────────────────────────────────────────────────────────────
     app.put('/v1/admin/migrations/progress/:guide_slug', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -220,8 +220,8 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
     const db = getServiceClient();
 
     // If a project_id is provided, the caller MUST be a member of that
-    // project. RLS would also block this, but checking here lets us return
-    // a precise 403 instead of a generic policy-denied DB error.
+    // project. This check is the only gate: the service-role client
+    // bypasses RLS, so the write below would succeed for any project.
     if (projectId) {
       const access = await callerCanAccessProject(c, db, userId, projectId);
       if (!access.allowed) {

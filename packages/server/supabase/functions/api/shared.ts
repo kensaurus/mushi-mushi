@@ -11,6 +11,7 @@ import {
   accessibleProjectIds as _accessibleProjectIds,
   accessibleProjectIdsInOrganization as _accessibleProjectIdsInOrganization,
   ownedProjectIds as _ownedProjectIds,
+  ProjectAccessReadError,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
 import { fanoutMemo } from '../_shared/request-memo.ts';
@@ -52,6 +53,7 @@ export function dbError(
   if (isTransientDbConnectionError(err)) {
     // Do NOT report transient pooler/network failures as Sentry exceptions —
     // they are infrastructure noise, not app bugs. Route to Supabase Logs.
+    const requestId = c.get('requestId') as string | undefined;
     console.warn(
       JSON.stringify({
         ts: new Date().toISOString(),
@@ -61,6 +63,9 @@ export function dbError(
         msg: 'transient DB connectivity failure — not an app bug, not reported to Sentry',
         path: c.req.path,
         method: c.req.method,
+        // Same id jsonError puts in the 500 body, so a client-reported
+        // requestId can be matched to this log line.
+        ...(requestId ? { requestId } : {}),
         db_code: err?.code ?? 'unknown',
         // Truncate: pooler error messages can be verbose; 500 chars is enough to classify.
         err_message: (err?.message ?? '').slice(0, 500),
@@ -180,6 +185,12 @@ export function jsonForbidden(c: Context, message = 'Forbidden'): Response {
 // crawler / synthetic-monitor deploy regression). The aliases here keep
 // existing callers in `api/routes/*` working without churn.
 export const accessibleProjectIds = _accessibleProjectIds;
+/**
+ * @deprecated Use `accessibleProjectIds`. Despite the name this returns every
+ * project the user can reach as owner, org member or project member
+ * (viewers included). It is NOT an owner or write check: gate mutations on
+ * the role from `userCanAccessProject` / `callerCanAccessProject`.
+ */
 export const ownedProjectIds = _ownedProjectIds;
 
 /**
@@ -257,17 +268,21 @@ export async function enumerateAccessibleProjectIds(
  * or the caller has no relationship to it. Callers translate that to a
  * 403 (or 404 if they want to hide existence — keep the shape consistent
  * with the rest of the api).
+ *
+ * A failed read throws `ProjectAccessReadError` (app.onError answers 500)
+ * rather than reading as "no access", so a DB outage is not a 403.
  */
 export async function userCanAccessProject(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   projectId: string,
 ): Promise<{ allowed: boolean; role: 'owner' | 'admin' | 'member' | 'viewer' | null }> {
-  const { data: project } = await db
+  const { data: project, error: projectErr } = await db
     .from('projects')
     .select('id, owner_id, organization_id')
     .eq('id', projectId)
     .maybeSingle();
+  if (projectErr) throw new ProjectAccessReadError('projects', projectErr.message);
   if (!project) return { allowed: false, role: null };
 
   // 1. Direct ownership wins immediately — owner has full rights regardless
@@ -276,24 +291,26 @@ export async function userCanAccessProject(
 
   // 2. Org-scoped membership (Teams v1).
   if (project.organization_id) {
-    const { data: orgMembership } = await db
+    const { data: orgMembership, error: orgErr } = await db
       .from('organization_members')
       .select('role')
       .eq('organization_id', project.organization_id)
       .eq('user_id', userId)
       .maybeSingle();
+    if (orgErr) throw new ProjectAccessReadError('organization_members', orgErr.message);
     const role = (orgMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
     if (role) return { allowed: true, role };
   }
 
   // 3. Per-project membership (older system; still seeded for project
   //    creators and used by some dispatch gates).
-  const { data: projectMembership } = await db
+  const { data: projectMembership, error: memberErr } = await db
     .from('project_members')
     .select('role')
     .eq('project_id', projectId)
     .eq('user_id', userId)
     .maybeSingle();
+  if (memberErr) throw new ProjectAccessReadError('project_members', memberErr.message);
   const projRole = (projectMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
   if (projRole) return { allowed: true, role: projRole };
 
