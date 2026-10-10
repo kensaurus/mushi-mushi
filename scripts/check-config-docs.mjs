@@ -15,4 +15,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const GEN = resolve(__dirname, 'generate-config-reference.mjs')
 
 const child = spawn(process.execPath, [GEN, 'check'], { stdio: 'inherit' })
-child.on('exit', (code) => process.exit(code ?? 0))
+// A delegate killed by a signal exits with code null; that must fail the
+// gate, not pass it.
+child.on('error', (err) => {
+  console.error(`config docs: could not start the check: ${err.message}`)
+  process.exit(1)
+})
+child.on('exit', (code, signal) => process.exit(signal ? 1 : (code ?? 1)))

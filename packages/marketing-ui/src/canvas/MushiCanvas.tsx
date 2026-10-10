@@ -10,8 +10,8 @@ import { stages } from './data'
  * IMPL NOTE: the cloud app used `next/dynamic({ ssr: false, loading })` to ship
  * this server-rendered while the heavy ReactFlow bundle loaded client-side.
  * The shared package can't depend on Next, so we use React.lazy + Suspense,
- * which behaves identically in apps/cloud (Next handles RSC + hydration) and
- * apps/admin (Vite SPA, never SSR'd in the first place). The viewport import
+ * which works under Next (RSC + hydration) and in apps/admin (Vite SPA, never
+ * SSR'd in the first place). The viewport import
  * must stay in a dynamic factory to keep ReactFlow + framer-motion out of the
  * first-paint bundle.
  */

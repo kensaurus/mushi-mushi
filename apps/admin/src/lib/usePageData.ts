@@ -68,8 +68,9 @@ export interface PageDataState<T> {
 export interface UsePageDataOptions<T> {
   /** When false the hook will not auto-fetch on mount. Defaults to true. */
   autoLoad?: boolean
-  /** Re-runs the fetch whenever any of these change (deep-eq via JSON). */
-  deps?: ReadonlyArray<unknown>
+  /** Re-runs the fetch whenever any of these change (compared via JSON, so
+   *  primitives only: an object dep could be circular and throw in render). */
+  deps?: ReadonlyArray<string | number | boolean | null | undefined>
   /**
    * FE-API-1 (audit 2026-04-21): optional runtime Zod validation. See
    * apiSchemas.ts. A failed parse is reported to Sentry and surfaced here
@@ -147,6 +148,8 @@ export function usePageData<T>(
     if (pathChanged) {
       hasLoadedOnce.current = false
       setData(null)
+      // Freshness belongs to the resource: don't show the old path's time.
+      setLastFetchedAt(null)
     }
     lastPath.current = path
     // SWR semantics: only show the skeleton while we've never resolved

@@ -113,7 +113,10 @@ function extractHighlights(body) {
     if (!m) continue
     const indent = m[1].length
     const title = m[2].trim()
-    const parts = m[3].trim() ? [m[3].trim()] : []
+    // Package changelogs also write "- **X** — desc"; drop that separator so
+    // the " — " added below doesn't render as "— —".
+    const first = m[3].trim().replace(/^(?:[—–]|-(?=\s))\s*/, '')
+    const parts = first ? [first] : []
     // Changesets wrap long bullet descriptions across several more-indented
     // lines. Capture those continuations so the public changelog never renders
     // a sentence truncated at the first physical line. Stop at a blank line, a
@@ -127,7 +130,8 @@ function extractHighlights(body) {
       parts.push(next.trim())
     }
     i = j - 1
-    out.push({ title, description: parts.join(' ').trim() })
+    // `- **Title** — desc` bullets: renderers add their own dash, so drop this one.
+    out.push({ title, description: parts.join(' ').trim().replace(/^[—–]\s*/, '') })
   }
   return out
 }

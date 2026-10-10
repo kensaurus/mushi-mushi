@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { assertEndpoint, normalizeEndpoint } from './endpoint.js'
+import { assertEndpoint, firstEndpoint, normalizeEndpoint } from './endpoint.js'
+
+describe('firstEndpoint', () => {
+  it('skips a blank env value so a saved self-hosted endpoint still wins over Cloud', () => {
+    expect(firstEndpoint(undefined, '', 'https://self.example/api')).toBe('https://self.example/api')
+    expect(firstEndpoint(undefined, '   ', 'https://self.example/api')).toBe('https://self.example/api')
+  })
+
+  it('keeps flag → env → saved precedence and trims', () => {
+    expect(firstEndpoint(' https://flag.example ', 'https://env.example', 'https://saved.example')).toBe('https://flag.example')
+    expect(firstEndpoint(undefined, 'https://env.example', 'https://saved.example')).toBe('https://env.example')
+  })
+
+  it('returns undefined when every candidate is blank', () => {
+    expect(firstEndpoint(undefined, '', '  ')).toBeUndefined()
+  })
+})
 
 describe('assertEndpoint', () => {
   it('accepts https URLs', () => {

@@ -16,8 +16,20 @@ const PAGE_CONTEXT_MAX = 300
 
 type FeedbackType = 'bug' | 'feature'
 
+/** Query keys whose values are console view state. Every other value (invite
+ *  tokens, CLI / MCP auth codes, free-text search) is masked in the ticket. */
+const SAFE_PAGE_PARAMS = new Set(['tab', 'status', 'severity', 'category', 'sort', 'view', 'bucket', 'filter', 'range', 'page'])
+
+function maskedSearch(search: string): string {
+  const parts: string[] = []
+  for (const [key, value] of new URLSearchParams(search)) {
+    parts.push(`${key}=${SAFE_PAGE_PARAMS.has(key) ? encodeURIComponent(value) : '…'}`)
+  }
+  return parts.length ? `?${parts.join('&')}` : ''
+}
+
 export function feedbackPageContextLine(pathname: string, search: string): string {
-  const line = `Page: ${pathname}${search}`
+  const line = `Page: ${pathname}${maskedSearch(search)}`
   return line.length > PAGE_CONTEXT_MAX ? `${line.slice(0, PAGE_CONTEXT_MAX - 1)}…` : line
 }
 

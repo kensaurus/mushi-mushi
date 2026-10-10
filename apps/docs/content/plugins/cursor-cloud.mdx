@@ -30,7 +30,7 @@ The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-c
 | **Workspace ID** | ✓ | Your Cursor workspace ID (`ws_…`) — find it at cursor.com/settings |
 | **Model** | — | `composer-2.5` (default) or `composer-latest` |
 | **Auto-create PRs** | — | When enabled, Cursor opens a signed draft PR automatically (default: enabled) |
-| **Max iterations** | — | Maximum agent loops per run (default: 1) |
+| **Max iterations** | — | Retired and ignored: one dispatch is one Cursor run |
 
 4. Click **Install**.
 5. Click **Test** to send a test event and confirm delivery.

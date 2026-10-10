@@ -232,11 +232,11 @@ describe('monorepoInstallGuidance', () => {
       }),
     )
     const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    expect(guidance).toContain('--filter')
-    expect(guidance).toContain('@mushi-mushi/react')
+    // A bare `apps/web` is a package-name pattern to pnpm; `./` makes it a path.
+    expect(guidance).toContain('pnpm add --filter ./apps/web @mushi-mushi/react')
   })
 
-  it('generates workspace <name> add for yarn-workspaces', () => {
+  it('installs from the workspace dir for yarn-workspaces (yarn workspace takes a name, not a path)', () => {
     const result = detectFromPackageJson(
       JSON.stringify({
         workspaces: ['apps/web'],
@@ -245,8 +245,8 @@ describe('monorepoInstallGuidance', () => {
       }),
     )
     const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    expect(guidance).toContain('yarn workspace')
-    expect(guidance).toContain('add')
+    expect(guidance).toContain('cd apps/web && yarn add @mushi-mushi/react')
+    expect(guidance).not.toContain('yarn workspace apps/web')
   })
 
   it('strips -g flag from global CLI commands', () => {
@@ -257,6 +257,15 @@ describe('monorepoInstallGuidance', () => {
     // Should not produce a malformed command with -g mushi-mcp still in the pkg slot
     expect(guidance).not.toContain('--workspace=-g')
     expect(guidance).not.toContain('--filter -g')
+  })
+
+  it('strips every leading flag, short and long', () => {
+    const result = detectFromPackageJson(
+      JSON.stringify({ workspaces: ['apps/web'], dependencies: { react: '*' } }),
+    )
+    const guidance = monorepoInstallGuidance(result, 'npm install -D --save-exact @mushi-mushi/react')
+    expect(guidance).toContain('@mushi-mushi/react')
+    expect(guidance).not.toContain('--save-exact @mushi-mushi/react')
   })
 
   it('uses cd <path> for non-workspace monorepos (Turborepo)', () => {

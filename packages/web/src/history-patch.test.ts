@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   subscribeHistory,
   uninstallHistoryPatchForce,
@@ -59,6 +59,57 @@ describe('history-patch hub', () => {
     history.pushState({}, '', '/multi');
     expect(a).toEqual(['a']);
     expect(b).toEqual(['b']);
+  });
+
+  it('keeps a host wrapper installed before it and restores that wrapper on uninstall', () => {
+    const native = history.pushState;
+    const seen: string[] = [];
+    const hostWrapper = function hostPushState(this: History, ...args: Parameters<History['pushState']>) {
+      seen.push(String(args[2]));
+      return native.apply(this, args);
+    } as History['pushState'];
+    history.pushState = hostWrapper;
+    try {
+      const pushes: string[] = [];
+      const unsub = subscribeHistory({ onPush: () => pushes.push(location.pathname) });
+      history.pushState({}, '', '/host-wrapped');
+      expect(seen).toEqual(['/host-wrapped']);
+      expect(pushes).toEqual(['/host-wrapped']);
+
+      unsub();
+      expect(history.pushState).toBe(hostWrapper);
+    } finally {
+      history.pushState = native;
+    }
+  });
+
+  it('a wrapper left under another tool forwards without notifying after re-install', () => {
+    let count = 0;
+    const unsub = subscribeHistory({ onPush: () => { count++; } });
+    const ours = history.pushState;
+    const outer = function outerPushState(this: History, ...args: Parameters<History['pushState']>) {
+      return ours.apply(this, args);
+    } as History['pushState'];
+    history.pushState = outer;
+    unsub(); // ours stays under `outer`
+
+    subscribeHistory({ onPush: () => { count++; } });
+    history.pushState({}, '', '/layered');
+    expect(count).toBe(1);
+    uninstallHistoryPatchForce();
+    expect(history.pushState).toBe(outer);
+    history.pushState = History.prototype.pushState;
+  });
+
+  it('keeps no subscriber when there is no window (SSR)', () => {
+    vi.stubGlobal('window', undefined);
+    try {
+      const unsub = subscribeHistory({ onPush: () => undefined });
+      expect(__historyPatchDebug()).toEqual({ patched: false, subscriberCount: 0 });
+      expect(() => unsub()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('popstate fan-out does not throw when subscriber errors', () => {

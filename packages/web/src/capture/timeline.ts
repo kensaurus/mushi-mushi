@@ -63,8 +63,11 @@ export function createTimelineCapture(): TimelineCapture {
     onPop: () => recordRoute('popstate'),
   });
 
-  window.addEventListener('hashchange', handleHashChange);
-  document.addEventListener('click', handleClick, true);
+  // No DOM (SSR, headless): record only what setScreen() and getEntries() add.
+  const hasWindow = typeof window !== 'undefined';
+  const hasDocument = typeof document !== 'undefined';
+  if (hasWindow) window.addEventListener('hashchange', handleHashChange);
+  if (hasDocument) document.addEventListener('click', handleClick, true);
 
   return {
     setScreen(screen) {
@@ -104,8 +107,8 @@ export function createTimelineCapture(): TimelineCapture {
     },
     destroy() {
       unsubHistory();
-      window.removeEventListener('hashchange', handleHashChange);
-      document.removeEventListener('click', handleClick, true);
+      if (hasWindow) window.removeEventListener('hashchange', handleHashChange);
+      if (hasDocument) document.removeEventListener('click', handleClick, true);
     },
   };
 }

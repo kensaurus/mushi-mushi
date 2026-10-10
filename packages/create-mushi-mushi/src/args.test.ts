@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join, resolve } from 'node:path'
@@ -89,6 +89,8 @@ describe('create-mushi-mushi', () => {
       expect(existsSync(join(target, 'package.json'))).toBe(true)
       expect(existsSync(join(target, 'src', 'server.mjs'))).toBe(true)
       expect(existsSync(join(target, '.env.example'))).toBe(true)
+      expect(existsSync(join(target, 'gitignore'))).toBe(false)
+      expect(readFileSync(join(target, '.gitignore'), 'utf-8')).toMatch(/^\.env$/m)
     } finally {
       rmSync(target, { recursive: true, force: true })
     }

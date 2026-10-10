@@ -66,7 +66,8 @@ jobs:
           sleep 5
           body=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi")
           echo "$body" | grep -q "io.github.kensaurus/mushi-mushi"
-          if echo "$body" | grep -q "\"version\": \"${expected}\""; then
+          # -F: the dots in a semver are regex wildcards otherwise.
+          if echo "$body" | grep -qF "\"version\": \"${expected}\""; then
             echo "✓ Mushi MCP server ${expected} is live in the official registry"
           else
             echo "::warning::Registry may still be propagating ${expected}; record exists but exact version string not yet visible."

@@ -8,7 +8,7 @@ import { loadConfig } from './config.js'
 import type { CliConfig } from './config.js'
 import { MUSHI_CLI_VERSION } from './version.js'
 import { getAbortSignal } from './signals.js'
-import { CLOUD_API_ENDPOINT } from './endpoint.js'
+import { CLOUD_API_ENDPOINT, normalizeEndpoint } from './endpoint.js'
 import { resolveConsoleUrlSync, consoleUrl } from './console-url.js'
 import { MushiCliError, printAndExit } from './errors.js'
 
@@ -127,7 +127,9 @@ export async function apiCall<T = unknown>(
   callOptions: ApiCallOptions = {},
 ): Promise<ApiResult<T>> {
   const timeoutMs = callOptions.timeoutMs ?? API_TIMEOUT_MS
-  const endpoint = config.endpoint
+  // Saved endpoints are already normalized, but MUSHI_API_ENDPOINT overlays
+  // the config raw, so strip trailing slashes here too (no `.../api//v1/...`).
+  const endpoint = config.endpoint ? normalizeEndpoint(config.endpoint) : config.endpoint
   if (!endpoint) {
     return {
       ok: false,

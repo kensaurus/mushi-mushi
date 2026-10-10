@@ -13,12 +13,12 @@ Investigate a Mushi bug report and dispatch an automated fix attempt, with human
 2. After presenting triage findings, ask: "Shall I dispatch a fix attempt? The PR will be a draft for your review."
 3. On confirmation, call:
    ```
-   dispatch_fix { reportId: "<id>", autoReadyPr: false }
+   dispatch_fix { reportId: "<id>" }
    ```
-4. The response includes a `prUrl` (GitHub pull request). Share it with the user.
+4. The response is `{ fixId, status }`. Poll `get_fix_timeline` with the `fixId` until the draft PR is open, then share its link with the user.
 5. Monitor progress (optional):
    ```
-   get_report_timeline { reportId: "<id>" }
+   get_fix_timeline { fixId: "<fixId>" }
    ```
    Then:
    ```
@@ -32,6 +32,6 @@ Investigate a Mushi bug report and dispatch an automated fix attempt, with human
 
 ## Safety
 
-- `autoReadyPr: false` is mandatory unless the user explicitly requests auto-ready.
+- `dispatch_fix` always opens a draft PR. Never merge it (`merge_fix`) without the user's explicit go-ahead.
 - Never dispatch a fix for `severity: critical` reports without also sharing the blast radius.
 - If `dispatch_fix` returns an error, do not retry automatically — surface the error and ask the user what to do next.

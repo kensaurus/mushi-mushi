@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
       "id": "2026-06-17-sidebar-micro-chrome",
@@ -25,6 +24,8 @@
         }
       ]
     },
+    {
+      "id": "2026-05-10-pipeline-loop",
       "date": "2026-05-10",
       "title": "Closing the data pipeline loop — failure categories, fix RAG, drift watch, multi-repo",
       "summary": "Every fix attempt now categorises why it failed, the fix-worker learns from past merged fixes, inventory drift auto-proposes updates, structured reporter feedback feeds the prompt-tune loop, and a single bug can fan out fixes across multiple linked repos.",

@@ -32,7 +32,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PACKAGES_DIR = join(ROOT, 'packages')
-const SPDX_RE = /^\s*\/\/\s*SPDX-License-Identifier:\s*(\S+)/m
+const SPDX_RE = /^\s*\/\/\s*SPDX-License-Identifier:\s*(\S+)/
+// Lines allowed above the identifier: a shebang and 'use …' directives.
+const PREAMBLE_RE = /^\s*(?:#!.*|(['"])use [^'"]+\1;?)\s*$/
 const JS_TARGET = /\.(?:global\.js|iife\.js|m?js|cjs)$/
 const SOURCE_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.jsx']
 const MANIFEST_FIELDS = ['main', 'module', 'browser', 'unpkg', 'jsdelivr']
@@ -139,6 +141,19 @@ export function resolveSource(target, entries, exists) {
 }
 
 /** The identifier a source file must carry, or null when the manifest has none. */
+/**
+ * The SPDX identifier on the file's first line (after an optional BOM, a
+ * shebang, 'use …' directives and blank lines), or null. An identifier further
+ * down the file does not count.
+ */
+export function leadingSpdx(text) {
+  for (const line of text.replace(/^﻿/, '').split(/\r?\n/)) {
+    if (!line.trim() || PREAMBLE_RE.test(line)) continue
+    return line.match(SPDX_RE)?.[1] ?? null
+  }
+  return null
+}
+
 export function expectedIdentifier(pkg) {
   return typeof pkg.license === 'string' ? pkg.license : null
 }
@@ -184,15 +199,15 @@ function main() {
       checked++
       const rel = `packages/${name}/${source}`
       const text = readFileSync(join(pkgDir, source), 'utf8')
-      const m = text.match(SPDX_RE)
+      const id = leadingSpdx(text)
       if (KNOWN_MISSING.has(rel)) {
         seenKnown.add(rel)
-        if (m) failures.push(`${rel}: has its SPDX header now — remove it from KNOWN_MISSING in scripts/check-spdx-headers.mjs`)
+        if (id) failures.push(`${rel}: has its SPDX header now — remove it from KNOWN_MISSING in scripts/check-spdx-headers.mjs`)
         else known.push(rel)
-      } else if (!m) {
-        failures.push(`${rel}: MISSING SPDX header (entry for ${target})`)
-      } else if (license && m[1] !== license) {
-        failures.push(`${rel}: SPDX identifier ${m[1]} does not match package.json license ${license}`)
+      } else if (!id) {
+        failures.push(`${rel}: MISSING SPDX header on the first line (entry for ${target})`)
+      } else if (license && id !== license) {
+        failures.push(`${rel}: SPDX identifier ${id} does not match package.json license ${license}`)
       }
     }
   }

@@ -1,7 +1,8 @@
 /**
  * WCAG AA chip / pill / tinted-surface copy — pair muted backgrounds with
- * *-foreground text tokens. Never use `text-accent` or `text-accent-foreground`
- * on `bg-accent/*` / `bg-accent-muted` (fails on dark theme).
+ * *-foreground text tokens. Never use `text-accent` on `bg-accent/*` /
+ * `bg-accent-muted` (fails on dark theme); `text-accent-foreground` is the
+ * AA-safe copy token for those washes.
  */
 
 export const CHIP_TONE = {

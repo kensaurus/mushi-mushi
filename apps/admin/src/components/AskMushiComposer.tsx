@@ -16,7 +16,7 @@
  */
 
 import { Command } from 'cmdk'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import {
   detectComposerToken,
@@ -56,7 +56,9 @@ export interface AskMushiComposerProps {
 
 const MAX_ROWS = 8
 
-export function AskMushiComposer({
+/** The forwarded ref is the composer's own `<textarea>`, so the sidebar can
+ *  focus it when the drawer opens. */
+export const AskMushiComposer = forwardRef<HTMLTextAreaElement, AskMushiComposerProps>(function AskMushiComposer({
   value,
   onChange,
   onSubmit,
@@ -64,8 +66,10 @@ export function AskMushiComposer({
   disabled = false,
   placeholder,
   mentionables = [],
-}: AskMushiComposerProps) {
+}, ref) {
   const taRef = useRef<HTMLTextAreaElement | null>(null)
+  // The textarea always renders, and the handle is set after it mounts.
+  useImperativeHandle(ref, () => taRef.current as HTMLTextAreaElement, [])
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const [popover, setPopover] = useState<ComposerToken | null>(null)
   const [mentionResults, setMentionResults] = useState<MentionResult[]>([])
@@ -307,4 +311,4 @@ export function AskMushiComposer({
       />
     </div>
   )
-}
+})

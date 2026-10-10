@@ -5,9 +5,11 @@
  *          either:
  *            1. has a no-op onClick (e.g. `onClick={() => {}}` or
  *               `onClick={noop}`), or
- *            2. is `disabled` without a matching `title` or `aria-label`
- *               or `<Tooltip>` wrapper, meaning a user who hovers gets no
- *               explanation of why the button is dead.
+ *            2. is `disabled={true}` without a `title`, `aria-label`,
+ *               `aria-describedby` or `<Tooltip>` within three lines,
+ *               meaning a user who hovers gets no explanation of why the
+ *               button is dead. Shorthand `disabled` (no RHS) is not
+ *               checked: a line-based grep cannot tell it from prose.
  *            3. `apiFetch` followed by a success toast without an `res.ok`
  *               guard in the same handler (KycForm-class false success).
  *            4. `usePageData` in pages / tester components without `error`
@@ -56,8 +58,7 @@ const NOOP_NAMED = /onClick=\{\s*noop\s*\}/
 // Only permanent-disabled buttons are "dead". Transient `disabled={loading}`
 // / `disabled={saving}` are valid UX — the button shows a spinner and
 // re-enables when work completes. We only flag literal `disabled={true}`
-// and shorthand `disabled` (no RHS) that is NOT paired with a hint.
-const DISABLED_HARD = /\bdisabled(?=(\s|>|\/))/
+// that is NOT paired with a hint.
 const DISABLED_TRUE_LITERAL = /\bdisabled=\{true\}/
 
 /** Paths where usePageData is a transport hook — parent owns error UI. */

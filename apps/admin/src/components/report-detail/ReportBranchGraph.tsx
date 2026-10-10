@@ -96,12 +96,17 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   const [secondsToNextPoll, setSecondsToNextPoll] = useState<number>(POLL_INTERVAL_MS / 1000)
   const cancelledRef = useRef(false)
 
-  const lastFixIdRef = useRef(fix.id)
-  if (lastFixIdRef.current !== fix.id) {
-    lastFixIdRef.current = fix.id
+  // A newer attempt can replace `fix` without a remount. Reset per-fix state
+  // with React's previous-prop pattern: state, not a ref mutated in render,
+  // so a discarded render cannot skip the reset.
+  const [prevFixId, setPrevFixId] = useState(fix.id)
+  if (prevFixId !== fix.id) {
+    setPrevFixId(fix.id)
     setOpen(readOpen(fix.id, true))
     setEvents(null)
+    setBaseBranch(null)
     setLoadError(false)
+    setSecondsToNextPoll(POLL_INTERVAL_MS / 1000)
   }
 
   const isLive = fix.status === 'queued' || fix.status === 'running'

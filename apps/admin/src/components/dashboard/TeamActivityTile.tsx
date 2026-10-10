@@ -5,8 +5,8 @@
  *          can see, at a glance, which teammate created data or ran an action
  *          without opening the full Audit console. Reuses the existing
  *          GET /v1/admin/audit endpoint (project-scoped via ProjectSwitcher),
- *          so no backend change is needed. Rows deep-link into the Audit log
- *          pre-filtered by that actor.
+ *          which also returns each row's actor_type. Rows deep-link into the
+ *          Audit log pre-filtered by that actor.
  */
 
 import { Link } from 'react-router-dom'
@@ -50,6 +50,8 @@ interface AuditEntry {
   actor_name?: string | null
   /** Stored email, or the member's email looked up from the user id. */
   actor_display_email?: string | null
+  /** Who wrote the row ('user', 'console', 'agent', 'api_key', …); absent from older API responses. */
+  actor_type?: string | null
   action: string
   resource_type: string
   resource_id: string | null
@@ -65,16 +67,22 @@ type ActorKind = 'human' | 'agent' | 'system'
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000'
 
+/** Same groupings as the Audit page's actor filter (server `_shared/audit-signals.ts`). */
+const HUMAN_ACTOR_TYPES = new Set(['user', 'console', 'cli', 'slack'])
+
 /**
  * Classify the actor for a small tone glyph. A user id the server could name
  * is a member; `agent_*` ids and `agent-…@` emails are agents; no actor, the
- * all-zero id, or a `…@mushi-mushi` service address is the system.
+ * all-zero id, or a `…@mushi-mushi` service address is the system. A user id
+ * the server could not name (a deleted member) is still a member when the row
+ * says a person wrote it.
  */
 function actorKind(e: AuditEntry): ActorKind {
   const email = e.actor_email ?? ''
   if (!e.actor_id || e.actor_id === NIL_UUID || email.endsWith('@mushi-mushi')) return 'system'
   if (e.actor_id.startsWith('agent_') || email.startsWith('agent-')) return 'agent'
   if (e.actor_name || e.actor_display_email) return 'human'
+  if (e.actor_type && HUMAN_ACTOR_TYPES.has(e.actor_type)) return 'human'
   return 'agent'
 }
 

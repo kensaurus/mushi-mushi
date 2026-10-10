@@ -1,8 +1,9 @@
 /**
  * @mushi-mushi/marketing-ui
  *
- * Shared editorial marketing components used by apps/cloud (Next.js) and
- * apps/admin (Vite + react-router). Components are framework-agnostic and
+ * Shared editorial marketing components used by apps/admin (Vite +
+ * react-router); apps/cloud (Next.js) has been retired. Components are
+ * framework-agnostic and
  * read their `Link` component + URL helpers from <MarketingProvider>.
  *
  * Setup:

@@ -523,10 +523,17 @@ interface CodeValueProps {
 export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline, multiline }: CodeValueProps) {
   const toneClass = CODE_TONES[tone]
   if (inline) {
-    return (
+    const code = (
       <code className={`mushi-code-inline ${toneClass} wrap-anywhere ${className}`}>
         {value}
       </code>
+    )
+    if (!copyable) return code
+    return (
+      <span className="group/code inline-flex min-w-0 max-w-full items-center gap-1">
+        {code}
+        <CopyButton value={value} className="shrink-0" />
+      </span>
     )
   }
   if (multiline) {

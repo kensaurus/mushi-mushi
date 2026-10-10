@@ -85,7 +85,6 @@ export const KNOWN_FAILING = new Map([
   ],
   ['packages/vue/README.md#1', { reason: 'App is used without an import', errors: ['TS2304'] }],
   ['packages/web/README.md#7', { reason: "runCheckout is the reader's own function", errors: ['TS2304'] }],
-  ['packages/web/README.md#10', { reason: 'Mushi.init({ /* ... */ }) is a placeholder config', errors: ['TS2345'] }],
 ])
 
 // Where a framework's types come from: the SDK package that depends on it.

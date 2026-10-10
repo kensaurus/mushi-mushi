@@ -33,7 +33,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import process from 'node:process'
 import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // The deploy endpoint rejects a request over about 5 MB ("request entity too
 // large"). Past this many bytes the upload is compacted: comments dropped by
@@ -43,7 +43,7 @@ import { pathToFileURL } from 'node:url'
 export const UPLOAD_COMPACT_BYTES = 4_800_000
 
 function loadTypescript() {
-  const roots = [process.env.MUSHI_TYPESCRIPT_DIR, SERVER_PKG_ABS, new URL('../apps/admin/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')]
+  const roots = [process.env.MUSHI_TYPESCRIPT_DIR, SERVER_PKG_ABS, fileURLToPath(new URL('../apps/admin/', import.meta.url))]
   for (const root of roots) {
     if (!root) continue
     try {
@@ -173,7 +173,8 @@ export function stripCommentsAndIndent(ts, sf, src) {
 
 const SUPABASE_API = 'https://api.supabase.com'
 const FUNCTIONS_ROOT_REL = 'supabase/functions'
-const SERVER_PKG_ABS = new URL('../packages/server/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+// fileURLToPath, not URL.pathname: pathname keeps %20 and a leading /C: on Windows.
+const SERVER_PKG_ABS = fileURLToPath(new URL('../packages/server/', import.meta.url))
 
 function loadDotenv() {
   for (const f of ['.env', '.env.local']) {
@@ -276,12 +277,17 @@ function flag(name) {
 // need is verify_jwt, and the supabase config schema for it is a trivial
 // boolean inside a `[functions.<slug>]` table. Keeping this lightweight
 // avoids adding a runtime dependency for one regex.
-function readVerifyJwtFromConfig(slug) {
+//
+// Only a missing config.toml means "no entry". Any other read error throws:
+// returning null there would deploy with the platform default (JWT on) and
+// silently break public functions such as `api`.
+export function readVerifyJwtFromConfig(slug, configPath = join(SERVER_PKG_ABS, 'supabase/config.toml')) {
   let raw
   try {
-    raw = readFileSync(join(SERVER_PKG_ABS, 'supabase/config.toml'), 'utf8')
-  } catch {
-    return null
+    raw = readFileSync(configPath, 'utf8')
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null
+    throw err
   }
   const lines = raw.split(/\r?\n/)
   const header = `[functions.${slug}]`

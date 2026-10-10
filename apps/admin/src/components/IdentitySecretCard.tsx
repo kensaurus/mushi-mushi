@@ -16,8 +16,10 @@
  * SECURITY:
  *   - The raw secret is shown ONCE after generation.  Reloading the page
  *     clears it from state permanently — it is never retrievable again.
- *   - The backend stores only a Vault UUID reference, never plaintext.
- *   - Rotating mints a new secret; old tokens become invalid immediately.
+ *   - The backend stores only a `vault://mushi_<projectId>_identity` name
+ *     reference in project_settings, never plaintext.
+ *   - Rotating mints a new secret and overwrites that Vault entry's value in
+ *     place; old tokens become invalid immediately.
  *
  * DEPENDENCIES:
  *   - ../lib/supabase  : apiFetch
@@ -28,7 +30,7 @@
  *   Mounted below AssistantConfigCard in ProjectsPage per-project accordion.
  *   <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { describeActionError } from '../lib/actionError'
@@ -94,7 +96,6 @@ export function IdentitySecretCard({
   const [loadError, setLoadError] = useState<string | null>(null)
   // Raw secret is only held in memory and cleared on unmount / page reload.
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
-  const revealedRef = useRef<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -112,7 +113,6 @@ export function IdentitySecretCard({
     return () => {
       // Wipe the secret from memory on unmount so it can never leak to the
       // next render if the component is recycled inside a list.
-      revealedRef.current = null
       setRevealedSecret(null)
     }
   }, [load])
@@ -125,7 +125,6 @@ export function IdentitySecretCard({
     )
     setGenerating(false)
     if (res.ok && res.data) {
-      revealedRef.current = res.data.secret
       setRevealedSecret(res.data.secret)
       setStatus({ configured: true, createdAt: res.data.createdAt })
       toast.success('Identity secret generated — copy it now, it won\'t be shown again.')
@@ -144,7 +143,6 @@ export function IdentitySecretCard({
     if (res.ok) {
       setStatus({ configured: false, createdAt: null })
       setRevealedSecret(null)
-      revealedRef.current = null
       toast.success('Identity secret disabled')
     } else {
       toast.error('Could not disable signed identity', describeActionError(res.error, 'Try again in a moment.'))

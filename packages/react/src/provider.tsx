@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MushiConfig, MushiSDKInstance } from '@mushi-mushi/core';
+import type { MushiInitConfig, MushiSDKInstance } from '@mushi-mushi/core';
 import { createLogger } from '@mushi-mushi/core';
 import { Mushi } from '@mushi-mushi/web';
 
@@ -16,11 +16,12 @@ const MushiContext = createContext<MushiContextValue>({
 });
 
 export interface MushiProviderProps {
-  config?: MushiConfig;
+  /** Credentials may be omitted when NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* env vars supply them. */
+  config?: MushiInitConfig;
   children: ReactNode;
 }
 
-export function MushiProvider({ config = {} as MushiConfig, children }: MushiProviderProps) {
+export function MushiProvider({ config = {}, children }: MushiProviderProps) {
   const [isReady, setIsReady] = useState(false);
   const sdkRef = useRef<MushiSDKInstance | null>(null);
 

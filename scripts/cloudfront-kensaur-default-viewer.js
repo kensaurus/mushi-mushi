@@ -5,6 +5,7 @@
  * RUNTIME: cloudfront-js-2.0
  */
 
+var mushiApexHandler = (function () {
 // Docs folder roots (exact match) + single-page slugs at apex.
 var DOCS_EXACT = [
   '/quickstart',
@@ -87,6 +88,9 @@ var SPA_PREFIXES = [
   '/reset-password',
 ];
 
+// request.querystring is { key: { value, multiValue } }, still percent-encoded
+// as the viewer sent it: re-emit it as is, every key (empty ones as `key=`)
+// and every repeated value. Mirrors cloudfront-mushi-spa-router.js.
 function serializeQuerystring(qs) {
   if (!qs) {
     return '';
@@ -101,8 +105,15 @@ function serializeQuerystring(qs) {
       continue;
     }
     var entry = qs[key];
-    if (entry && entry.value !== undefined && entry.value !== '') {
-      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    if (!entry) {
+      continue;
+    }
+    if (entry.multiValue && entry.multiValue.length) {
+      for (var i = 0; i < entry.multiValue.length; i++) {
+        parts.push(key + '=' + (entry.multiValue[i].value || ''));
+      }
+    } else {
+      parts.push(key + '=' + (entry.value || ''));
     }
   }
   return parts.join('&');
@@ -158,7 +169,7 @@ function matchesSpa(uri) {
   return false;
 }
 
-function mushiApexHandler(event) {
+function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var qs = request.querystring;
@@ -225,6 +236,9 @@ function mushiApexHandler(event) {
   return request;
 }
 
+return handler;
+})();
+var glotSpaHandler = (function () {
 var SECURITY_HEADERS = {
   'x-content-type-options': { value: 'nosniff' },
   'x-frame-options': { value: 'SAMEORIGIN' },
@@ -265,7 +279,7 @@ function serializeQuerystring(qs) {
   return parts.join('&');
 }
 
-function glotSpaHandler(event) {
+function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var hostHeader = request.headers && request.headers.host;
@@ -328,6 +342,8 @@ function glotSpaHandler(event) {
   return request;
 }
 
+return handler;
+})();
 
 function handler(event) {
   var out = mushiApexHandler(event);

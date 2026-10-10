@@ -53,9 +53,13 @@ var MOVED = {
 var ASSET_EXT =
   /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules|pagefind|pf_(?:meta|index|fragment|filter))$/i;
 
-// CloudFront exposes querystring as { key: { value } }, not a
-// pre-encoded string — naively concatenating it into a URL yields the literal
-// text "[object Object]". Mirrors cloudfront-mushi-spa-router.js.
+// CloudFront exposes querystring as { key: { value, multiValue } }, not a
+// string — naively concatenating it into a URL yields the literal text
+// "[object Object]". Keys and values arrive still percent-encoded as the
+// viewer sent them, so they are re-emitted as is (encoding again turned %20
+// into %2520). Every key is kept: a valueless or empty one as `key=`, and a
+// repeated key once per value (multiValue lists them all, the first too).
+// Mirrors cloudfront-mushi-spa-router.js.
 function serializeQuerystring(qs) {
   if (!qs) {
     return '';
@@ -70,8 +74,15 @@ function serializeQuerystring(qs) {
       continue;
     }
     var entry = qs[key];
-    if (entry && entry.value !== undefined && entry.value !== '') {
-      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    if (!entry) {
+      continue;
+    }
+    if (entry.multiValue && entry.multiValue.length) {
+      for (var i = 0; i < entry.multiValue.length; i++) {
+        parts.push(key + '=' + (entry.multiValue[i].value || ''));
+      }
+    } else {
+      parts.push(key + '=' + (entry.value || ''));
     }
   }
   return parts.join('&');

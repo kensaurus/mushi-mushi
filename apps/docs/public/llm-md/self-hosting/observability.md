@@ -58,7 +58,7 @@ npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 The Vite SPA also ships a Sentry integration. Pass the DSN at build time:
 
 ```bash
-VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter @mushi-mushi/admin build
+VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter "@mushi-mushi/admin..." build
 ```
 
 ## OpenTelemetry

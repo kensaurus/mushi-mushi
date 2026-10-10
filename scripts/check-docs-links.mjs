@@ -62,8 +62,10 @@ function absoluteRouteExists(route) {
 /** Resolve a relative link against the linking file's directory. */
 function relativeTargetExists(fromFile, target) {
   const base = path.resolve(path.dirname(fromFile), target)
+  // The bare path counts only when it is a file; a directory without an
+  // index page is a broken link.
+  if (existsSync(base) && statSync(base).isFile()) return true
   const candidates = [
-    base,
     `${base}.mdx`,
     `${base}.md`,
     path.join(base, "index.mdx"),

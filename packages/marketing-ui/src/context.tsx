@@ -5,9 +5,9 @@
  * PURPOSE: Router-agnostic glue between marketing components and the host app.
  *
  * BACKGROUND: Hero, MushiCanvas, ClosingCta, MarketingFooter all need to render
- * navigation links. apps/cloud (Next.js) wants `next/link`; apps/admin (Vite +
- * react-router) wants `react-router-dom`'s `Link`. Hardcoding either turns the
- * package into a single-app dependency.
+ * navigation links. apps/admin (Vite + react-router) wants `react-router-dom`'s
+ * `Link`; the retired apps/cloud (Next.js) wanted `next/link`. Hardcoding either
+ * turns the package into a single-app dependency.
  *
  * INSTEAD: every consumer wraps the marketing surface in <MarketingProvider>,
  * passing the framework's `Link` component plus the runtime URL helpers (docs

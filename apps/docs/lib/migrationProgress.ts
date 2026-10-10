@@ -62,6 +62,8 @@ const DEFAULT_ADMIN_ORIGIN =
 const DEFAULT_ADMIN_BRIDGE_PATH =
   process.env.NEXT_PUBLIC_MUSHI_ADMIN_BRIDGE_PATH ??
   '/mushi-mushi/admin/docs-bridge'
+/** Admin console root, from the same env as the sign-in bridge (the bridge path minus `/docs-bridge`). */
+export const ADMIN_CONSOLE_URL = `${DEFAULT_ADMIN_ORIGIN.replace(/\/$/, '')}${DEFAULT_ADMIN_BRIDGE_PATH.replace(/\/docs-bridge\/?$/, '')}`
 const DEFAULT_API_URL =
   process.env.NEXT_PUBLIC_MUSHI_API_URL ??
   'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'

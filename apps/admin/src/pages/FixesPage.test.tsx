@@ -186,6 +186,28 @@ describe('FixesPage', () => {
     expect(document.body.textContent).toContain('1 selected')
   })
 
+  it('freezes row selection while a bulk retry runs against its start-time selection', async () => {
+    mocks.fixes = [fix({ id: 'a', report_id: 'r1' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
+    mocks.total = 2
+    let release: (v: unknown) => void = () => {}
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === '/v1/admin/fixes/dispatch'
+        ? new Promise((resolve) => { release = () => resolve({ ok: true, data: { dispatchId: 'd1' } }) })
+        : base(path, init),
+    )
+    await render('/fixes')
+    const box = () => document.querySelector('input[aria-label="Select the fix for Login loops"]') as HTMLInputElement
+    click(box())
+    click(buttons('Retry 1').find((b) => !b.closest('[role="dialog"]')))
+    click(buttons('Retry').find((b) => !b.closest('tr')))
+    await flush()
+    expect(box().disabled).toBe(true)
+    await act(async () => { release(null) })
+    await flush()
+    expect(box().disabled).toBe(false)
+  })
+
   it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
     mocks.fixes = [fix({ id: 'a', status: 'running', report_fix_state: 'in_flight' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
     mocks.total = 2

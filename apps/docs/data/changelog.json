@@ -1,5 +1,13 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "Unreleased",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
     "majorMinor": "1.32",
     "headline": null,
     "pending": false,
@@ -213,11 +221,11 @@
       },
       {
         "title": "`@mushi-mushi/web/otel`",
-        "description": "— new subpath: `createBrowserOtelSpanProcessor(mushi, { otelPresent: context })` forwards OTel error spans to Mushi as programmatic reports. Dependency-injection design (caller passes an import from `@opentelemetry/api`) avoids dynamic-import probing that breaks Vite's static analysis. Size-limit gated at ≤5 KB gzip. 16 unit tests."
+        "description": "new subpath: `createBrowserOtelSpanProcessor(mushi, { otelPresent: context })` forwards OTel error spans to Mushi as programmatic reports. Dependency-injection design (caller passes an import from `@opentelemetry/api`) avoids dynamic-import probing that breaks Vite's static analysis. Size-limit gated at ≤5 KB gzip. 16 unit tests."
       },
       {
         "title": "`@mushi-mushi/web/headless`",
-        "description": "— new subpath: zero-widget capture bundle. Exports `createHeadlessCapture({ projectId, apiKey })` (programmatic `captureEvent`/`captureException` over fetch, no DOM mutations), browser capture primitives (`createConsoleCapture`, `createNetworkCapture`, `createPerformanceCapture`, etc.), and the OTel bridge. Size-limit gated at ≤35 KB gzip. 17 unit tests. Both subpaths are tree-shakeable and independently published — applications that skip the widget pay zero widget bytes."
+        "description": "new subpath: zero-widget capture bundle. Exports `createHeadlessCapture({ projectId, apiKey })` (programmatic `captureEvent`/`captureException` over fetch, no DOM mutations), browser capture primitives (`createConsoleCapture`, `createNetworkCapture`, `createPerformanceCapture`, etc.), and the OTel bridge. Size-limit gated at ≤35 KB gzip. 17 unit tests. Both subpaths are tree-shakeable and independently published — applications that skip the widget pay zero widget bytes."
       }
     ],
     "packages": [
@@ -417,11 +425,11 @@
     "highlights": [
       {
         "title": "`capture.screenshotProvider`",
-        "description": "— an optional `() => Promise<string | null>` that lets a host (e.g. a Capacitor/WebView app) supply a real pixel-accurate screen grab from a native plugin instead of the built-in DOM-snapshot capturer. The built-in capturer is used as a fallback when the provider throws."
+        "description": "an optional `() => Promise<string | null>` that lets a host (e.g. a Capacitor/WebView app) supply a real pixel-accurate screen grab from a native plugin instead of the built-in DOM-snapshot capturer. The built-in capturer is used as a fallback when the provider throws."
       },
       {
         "title": "\"Reporting as &lt;name&gt;\"",
-        "description": "— when the host calls `Mushi.identify()` / `Mushi.identifyWithToken()`, the report details step now shows who the report will be attributed to. Cleared when `identifyWithToken(null)` is called."
+        "description": "when the host calls `Mushi.identify()` / `Mushi.identifyWithToken()`, the report details step now shows who the report will be attributed to. Cleared when `identifyWithToken(null)` is called."
       }
     ],
     "packages": [
@@ -834,7 +842,7 @@
       },
       {
         "title": "Minimap removed",
-        "description": "— unnecessary for a fixed 4-node diagram; reclaims ~88 px of vertical canvas."
+        "description": "unnecessary for a fixed 4-node diagram; reclaims ~88 px of vertical canvas."
       },
       {
         "title": "X-axis",
@@ -1010,11 +1018,11 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Global XHR capture",
@@ -1072,11 +1080,11 @@
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -1115,15 +1123,15 @@
     "highlights": [
       {
         "title": "`createBreadcrumbBuffer(options?)`",
-        "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
+        "description": "50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
       },
       {
         "title": "`normaliseThrown(thrown)`",
-        "description": "— turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation."
+        "description": "turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation."
       },
       {
         "title": "`captureEnvironment()` expansion",
-        "description": "— same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload."
+        "description": "same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload."
       }
     ],
     "packages": [
@@ -1222,15 +1230,15 @@
     "highlights": [
       {
         "title": "`mushi upgrade --self`",
-        "description": "— upgrade the globally-installed CLI itself (detects npm/pnpm/yarn/bun install method, semver-guarded, registry cooldown)."
+        "description": "upgrade the globally-installed CLI itself (detects npm/pnpm/yarn/bun install method, semver-guarded, registry cooldown)."
       },
       {
         "title": "Multi-profile credentials",
-        "description": "— `mushi profile list|current|use`, plus a global `--profile <name>` flag and `MUSHI_PROFILE` env var. Legacy single-profile config files keep the flat format until the first profile-scoped write, then upgrade transparently (all profiles preserved)."
+        "description": "`mushi profile list|current|use`, plus a global `--profile <name>` flag and `MUSHI_PROFILE` env var. Legacy single-profile config files keep the flat format until the first profile-scoped write, then upgrade transparently (all profiles preserved)."
       },
       {
         "title": "Global `-o, --output <text|json>`",
-        "description": "— uniform machine-readable output across commands (wired into `reports list`, `keys list`, `profile list`; per-command `--json` still works)."
+        "description": "uniform machine-readable output across commands (wired into `reports list`, `keys list`, `profile list`; per-command `--json` still works)."
       },
       {
         "title": "Shell-completion install docs",
@@ -2009,11 +2017,11 @@
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -2075,11 +2083,11 @@
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -2237,11 +2245,11 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Fix `fix.status` event name",
@@ -2334,23 +2342,23 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Graph",
-        "description": "— interactive ReactFlow canvas with layer-filter pills"
+        "description": "interactive ReactFlow canvas with layer-filter pills"
       },
       {
         "title": "Layer Sankey",
-        "description": "— horizontal lane diagram showing files per architectural tier"
+        "description": "horizontal lane diagram showing files per architectural tier"
       },
       {
         "title": "Search",
-        "description": "— semantic search via the `match_codebase_files` embedding RPC"
+        "description": "semantic search via the `match_codebase_files` embedding RPC"
       },
       {
         "title": "Per-scope tool filtering",
@@ -2447,11 +2455,11 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
+        "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+        "description": "`lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Launcher README",
@@ -2605,11 +2613,11 @@
       },
       {
         "title": "\"What you get\"",
-        "description": "— 6 benefit bullets with emoji, each tied to a capability, not a wizard step."
+        "description": "6 benefit bullets with emoji, each tied to a capability, not a wizard step."
       },
       {
         "title": "\"Who it's for\"",
-        "description": "— 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds."
+        "description": "4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds."
       }
     ],
     "packages": [

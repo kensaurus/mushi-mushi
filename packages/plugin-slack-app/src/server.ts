@@ -15,9 +15,10 @@
  * The factory also exposes a `handleSlackInteraction` method for mounting an
  * HTTP endpoint that receives Slack interactive component payloads (button
  * clicks). That endpoint verifies the Slack signing secret with `verifySlackRequest`
- * and is separate from the Mushi webhook path.
+ * and acknowledges the click; it does not act on it (the hosted backend's
+ * `slack-interactions` function does). It is separate from the Mushi webhook path.
  *
- * Usage:
+ * Usage (the adapters are your own framework glue, not exports):
  *   const plugin = createSlackPlugin({ ... })
  *   app.post('/mushi/webhook', adaptToExpress(plugin))
  *   app.post('/slack/interactions', adaptInteractionsToExpress(plugin.handleSlackInteraction))

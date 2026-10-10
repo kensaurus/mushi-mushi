@@ -59,6 +59,10 @@ const REGEX_PRECEDERS = new Set([
 // `return /re/` — keywords that can precede a regex literal.
 const REGEX_PRECEDER_WORDS =
   /(?:return|typeof|case|in|of|new|delete|void|instanceof|do|else|yield)$/;
+// `)` is not in REGEX_PRECEDERS because `(a + b) / 2` is division. It does
+// precede a regex when it closes the head of `if (…) /re/` and friends, so
+// each `(` records whether it opens such a head.
+const KEYWORD_PAREN_HEAD = /(?:^|[^\w$.])(?:if|while|for|with)\s*$/;
 
 /**
  * Strip comments from JS source without touching string, template, or regex
@@ -69,6 +73,8 @@ export function stripComments(src) {
   let i = 0;
   const n = src.length;
   let lastCode = ''; // trailing non-whitespace of emitted code, for regex detection
+  const parenHeads = []; // per open `(`: does it open an if/while/for/with head?
+  let closedKeywordHead = false; // the last `)` closed such a head
   while (i < n) {
     const c = src[i];
     const next = src[i + 1];
@@ -107,7 +113,8 @@ export function stripComments(src) {
       const isRegex =
         tail === '' ||
         REGEX_PRECEDERS.has(tail[tail.length - 1]) ||
-        REGEX_PRECEDER_WORDS.test(tail);
+        REGEX_PRECEDER_WORDS.test(tail) ||
+        (tail.endsWith(')') && closedKeywordHead);
       if (isRegex) {
         out += c;
         i++;
@@ -135,6 +142,11 @@ export function stripComments(src) {
         lastCode = '/';
         continue;
       }
+    }
+    if (c === '(') {
+      parenHeads.push(KEYWORD_PAREN_HEAD.test(src.slice(Math.max(0, i - 16), i)));
+    } else if (c === ')') {
+      closedKeywordHead = parenHeads.pop() === true;
     }
     out += c;
     if (!/\s/.test(c)) {

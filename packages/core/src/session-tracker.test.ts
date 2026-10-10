@@ -9,7 +9,7 @@ function makeMockClient(): MushiApiClient & { calls: unknown[] } {
     calls,
     postSessionEvent: vi.fn(async (payload) => {
       calls.push(payload);
-      return { success: true, data: { accepted: true } } as ReturnType<MushiApiClient['postSessionEvent']> extends Promise<infer T> ? T : never;
+      return { ok: true, data: { accepted: true } };
     }),
   } as unknown as MushiApiClient & { calls: unknown[] };
 }
@@ -114,6 +114,23 @@ describe('initSessionTracker', () => {
       ([p]: [Record<string, unknown>]) => p.kind === 'session_start',
     );
     expect(starts).toHaveLength(2);
+
+    destroySessionTracker();
+  });
+
+  it('a destroy → re-init on the same page sends one session_end per hide, not two', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+
+    initSessionTracker({ client });
+    destroySessionTracker();
+    initSessionTracker({ client });
+    window.dispatchEvent(new Event('pagehide'));
+
+    const ends = (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([p]: [Record<string, unknown>]) => p.kind === 'session_end',
+    );
+    expect(ends).toHaveLength(1);
 
     destroySessionTracker();
   });

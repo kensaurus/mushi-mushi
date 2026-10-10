@@ -5238,6 +5238,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // tool name before passing the request through to the SDK's registered
   // handler. No new tool registrations → tools/list is unaffected.
   {
+    // The three setup aliases collapsed into diagnose_setup, which defaults to
+    // mode 'full'. Keep each old name's scope unless the caller picks a mode.
+    const ALIAS_DEFAULT_ARGS: Record<string, Record<string, unknown>> = {
+      setup_check: { mode: 'dispatch' },
+      ingest_setup_check: { mode: 'ingest' },
+      diagnose_connection: { mode: 'full' },
+    };
     type LowLevelServer = { _requestHandlers: Map<string, (...a: unknown[]) => unknown> };
     const llAliasServer = (server as unknown as { server: LowLevelServer }).server;
     const innerHandler = llAliasServer?._requestHandlers?.get('tools/call');
@@ -5251,12 +5258,22 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           // Rewrite name in-place (same object reference is fine — the SDK
           // only reads params once). Restore after the call to avoid aliasing
           // surprises in case the SDK re-uses the request object.
+          const defaults = ALIAS_DEFAULT_ARGS[originalName as string];
+          const callerArgs =
+            req?.params?.arguments && typeof req.params.arguments === 'object'
+              ? (req.params.arguments as Record<string, unknown>)
+              : {};
           const rewritten = {
             ...(args[0] as Record<string, unknown>),
-            params: { ...(req?.params ?? {}), name: canonicalName },
+            params: {
+              ...(req?.params ?? {}),
+              name: canonicalName,
+              ...(defaults ? { arguments: { ...defaults, ...callerArgs } } : {}),
+            },
           };
           const result = await innerHandler(rewritten, ...args.slice(1));
-          // Inject a deprecation notice into the text content so callers see it.
+          // Append a deprecation notice to the text content so callers see it.
+          // It goes last: legacy configs parse content[0].text as JSON.
           if (
             result != null &&
             typeof result === 'object' &&
@@ -5267,13 +5284,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             return {
               ...r,
               content: [
+                ...r.content,
                 {
                   type: 'text',
                   text:
                     `⚠️ Deprecated: \`${originalName}\` was renamed to \`${canonicalName}\`. ` +
                     `Update your agent config — this alias will be removed in the next release.`,
                 },
-                ...r.content,
               ],
             };
           }

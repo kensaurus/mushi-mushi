@@ -6,6 +6,7 @@
  */
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, Suspense } from 'react'
+import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
 
 interface PublicApp {
@@ -180,9 +181,9 @@ function AppsPageInner() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {apps.map(app => (
-              <a
+              <Link
                 key={app.id}
-                href={`/mushi-mushi/testers/apps/${app.slug}/`}
+                href={`/apps/${app.slug}/`}
                 className="testers-panel testers-panel-hover group flex gap-4 p-5"
               >
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--mushi-paper-wash)] text-2xl">
@@ -206,7 +207,7 @@ function AppsPageInner() {
                     )}
                   </div>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         )}

@@ -329,14 +329,15 @@ export function numberInRange({ min, max, step, unit, optional }: NumberRangeOpt
 
 /**
  * Slug validator for org/project slugs (Sentry, GitHub, Linear, etc).
- * Rules mirror what those platforms accept in URL path segments:
- *   - lowercase letters, digits, hyphens
+ * Deliberately permissive, the union of what those platforms accept in URL
+ * path segments:
+ *   - letters (either case), digits, hyphens, dots, underscores
  *   - 1-100 chars
- *   - cannot start or end with a hyphen
+ *   - starts with a letter or digit; ends with a letter, digit or underscore
+ *     (never a dot or hyphen)
  *
- * GitHub specifically also allows underscores and dots in repo names; that
- * relaxation is handled separately so this slug validator stays strict
- * enough for the platforms (Sentry, Linear teams) that genuinely require it.
+ * Platforms with a stricter rule get their own validator (see the Sentry
+ * project slugs below).
  */
 export function slug(opts?: ValidatorOptions): Validator {
   return withOptional(opts, (value) => {

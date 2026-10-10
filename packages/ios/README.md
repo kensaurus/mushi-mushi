@@ -59,6 +59,7 @@ struct MyApp: App {
         Mushi.shared.configure(with: MushiConfig(
             projectId: "proj_...",
             apiKey: "mushi_...",
+            endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
             triggerMode: .both,           // .shake | .button | .both | .none
             captureScreenshot: true,
             minDescriptionLength: 20
@@ -123,13 +124,13 @@ target, which keeps the native SDK dependency-free by default.
 |-------------------------|--------------------------------------|-------|
 | `projectId`             | _required_                           | Project UUID from Mushi admin |
 | `apiKey`                | _required_                           | Project API key (`mushi_...`) |
-| `endpoint`              | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
+| `endpoint`              | _required_                           | Mushi Cloud: `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`; self-hosters pass their own functions URL |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |
-| `captureBreadcrumbs`    | `true`                               | Hooked when Sentry bridge is installed |
+| `captureBreadcrumbs`    | `true`                               | Attaches the in-app breadcrumb buffer to each report; no Sentry needed |
 | `minDescriptionLength`  | `20`                                 | Matches the web SDK contract |
-| `offlineQueueMaxBytes`  | `2 * 1024 * 1024`                    | Soft cap; oldest entries trim first |
-| `theme`                 | `Theme(accentColor: "#22c55e")`      | Hex string |
+| `offlineQueueMaxBytes`  | `1_000_000`                          | Soft cap; oldest entries trim first |
+| `theme`                 | `Theme(accentColor: "#6366f1")`      | Hex string |
 
 ## Privacy
 

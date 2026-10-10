@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { captureMode, reporterWho } from './reportRowAttribution'
+import { captureMode, reporterWho, routePathname } from './reportRowAttribution'
 import type { ReportRow } from './types'
 
 const row = (reporter_token_hash: string | null) => ({ reporter_token_hash }) as unknown as ReportRow
@@ -28,5 +28,18 @@ describe('reports a Mushi job filed itself', () => {
     expect(captureMode(null, r).label).toBe('user')
     expect(captureMode('captureException', r).label).toBe('server')
     expect(reporterWho(r).label.startsWith('anon·')).toBe(true)
+  })
+})
+
+describe('routePathname', () => {
+  it('drops origin, query and fragment so URL-embedded PII never reaches a chip or link', () => {
+    expect(routePathname('https://app.example.com/checkout?email=a@b.co#step2')).toBe('/checkout')
+    expect(routePathname('/settings?token=abc')).toBe('/settings')
+    expect(routePathname('/orders#latest')).toBe('/orders')
+  })
+
+  it('returns null for nothing', () => {
+    expect(routePathname(undefined)).toBeNull()
+    expect(routePathname('?q=1')).toBeNull()
   })
 })

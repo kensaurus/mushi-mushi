@@ -52,6 +52,21 @@ describe('TeamActivityTile', () => {
     expect(text).not.toContain(id)
     expect(text).toContain('System')
   })
+
+  it('labels a member the server could not name (deleted user) as a former member, not an agent', () => {
+    page.data = {
+      count: 1,
+      logs: [
+        { id: '1', actor_id: '5f1c0b7e-2d3a-4c4b-9e8f-0a1b2c3d4e5f', actor_email: null, actor_name: null, actor_display_email: null, actor_type: 'user', action: 'fix.merge', resource_type: 'fix', resource_id: null, created_at: '2026-10-03T00:00:00Z' },
+      ],
+    }
+    act(() => root.render(createElement(MemoryRouter, null, createElement(TeamActivityTile, { projectId: 'p1' }))))
+    const text = host.textContent ?? ''
+    expect(text).toContain('Former member')
+    expect(text).toContain('Member')
+    expect(text).not.toContain('Automation')
+    expect(text).not.toContain('Agent')
+  })
 })
 
 describe('auditActionPhrase', () => {
