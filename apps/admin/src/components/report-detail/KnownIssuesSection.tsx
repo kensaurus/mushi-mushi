@@ -33,7 +33,7 @@ function sourceLabel(url: string): string {
 const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b|\b[A-Z][A-Za-z]+(?:Termination|Crash|Panic)\b/
 
 /** Does the report carry an error message worth searching for? */
-export function reportHasSearchableError(
+function reportHasSearchableError(
   report: Pick<ReportDetail, 'description' | 'console_logs' | 'custom_metadata'>,
 ): boolean {
   if (report.custom_metadata?.source === 'sentry_webhook') {

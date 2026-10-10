@@ -14,31 +14,13 @@ const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), toast: { success: vi.fn(), 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => mocks.toast }))
 
-import { KnownIssuesSection, reportHasSearchableError } from './KnownIssuesSection'
+import { KnownIssuesSection } from './KnownIssuesSection'
 
 const sentryError = {
   description: 'Error: Request was aborted. in analyze (captured by Sentry)\n\nmore',
   console_logs: null,
   custom_metadata: { source: 'sentry_webhook' },
 }
-
-describe('reportHasSearchableError', () => {
-  it('is true for a Sentry exception or an error-level console line', () => {
-    expect(reportHasSearchableError(sentryError)).toBe(true)
-    expect(
-      reportHasSearchableError({
-        description: 'Button broken',
-        console_logs: [{ level: 'error', message: 'TypeError: x is undefined', timestamp: 1 }],
-        custom_metadata: null,
-      }),
-    ).toBe(true)
-  })
-
-  it('is false for telemetry messages and plain feedback', () => {
-    expect(reportHasSearchableError({ ...sentryError, description: 'Poor TTFB: 2467 on /account' })).toBe(false)
-    expect(reportHasSearchableError({ description: 'Add dark mode', console_logs: [], custom_metadata: null })).toBe(false)
-  })
-})
 
 describe('KnownIssuesSection', () => {
   let container: HTMLDivElement
@@ -63,9 +45,24 @@ describe('KnownIssuesSection', () => {
     container.remove()
   })
 
-  it('renders nothing for a report without an error or results', async () => {
+  it('renders nothing for plain feedback or a telemetry message', async () => {
     await render({ id: 'r1', known_issues: [], description: 'Add dark mode', console_logs: [], custom_metadata: null })
     expect(container.textContent).toBe('')
+    await render({ id: 'r1', known_issues: [], ...sentryError, description: 'Poor TTFB: 2467 on /account' })
+    expect(container.textContent).toBe('')
+  })
+
+  it('offers a search for an error-level console line or a crash name', async () => {
+    await render({
+      id: 'r1',
+      known_issues: [],
+      description: 'Button broken',
+      console_logs: [{ level: 'error', message: 'TypeError: x is undefined', timestamp: 1 }],
+      custom_metadata: null,
+    })
+    expect(button('Search now')).toBeTruthy()
+    await render({ id: 'r1', known_issues: [], ...sentryError, description: 'WatchdogTermination: The OS watchdog terminated your app' })
+    expect(button('Search now')).toBeTruthy()
   })
 
   it('offers "Search now" on an error report with no results, and reloads after', async () => {
