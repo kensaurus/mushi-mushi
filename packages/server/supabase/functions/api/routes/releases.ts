@@ -84,11 +84,12 @@ const RELEASE_STATS_PAGE = 500
 
 /**
  * Counts for GET /v1/admin/releases/stats. Counts are exact counts, and the
- * array totals read only the two array columns, page by page: the route feeds
- * the sidebar counters (nav-meta) on every page, and the old unbounded select
- * of every release and every credit capped silently at PostgREST's 1,000
- * rows. A failed read throws: the banner must not turn an outage into
- * "0 drafts".
+ * array totals and credit counts come from release_stats_totals() (migration
+ * 20261010120000) in one SQL pass: the route feeds the sidebar counters
+ * (nav-meta) on every page. Until that migration is applied they are read
+ * page by page instead (the old unbounded select of every release and every
+ * credit capped silently at PostgREST's 1,000 rows). A failed read throws:
+ * the banner must not turn an outage into "0 drafts".
  */
 async function loadReleaseStatsCounts(db: ReleaseStatsDb, pid: string): Promise<ReleaseStatsCounts> {
   const must = <T extends { error: { message?: string } | null }>(r: T): T => {
@@ -163,6 +164,20 @@ async function loadReleaseStatsCounts(db: ReleaseStatsDb, pid: string): Promise<
     totalCredits: 0,
     creditsNotified: 0,
   }
+  const { data: totals, error: totalsErr } = await db.rpc('release_stats_totals', { p_project_id: pid })
+  const missing = totalsErr && (totalsErr.code === 'PGRST202' || totalsErr.code === '42883')
+  if (totalsErr && !missing) throw new Error(totalsErr.message ?? 'release stats read failed')
+  if (!missing) {
+    const t = (totals ?? {}) as Record<string, number | string | null | undefined>
+    out.totalFixesLinked = Number(t.total_fixes_linked ?? 0)
+    out.totalContributors = Number(t.total_contributors ?? 0)
+    out.draftFixes = Number(t.draft_fixes ?? 0)
+    out.draftContributors = Number(t.draft_contributors ?? 0)
+    out.totalCredits = Number(t.total_credits ?? 0)
+    out.creditsNotified = Number(t.credits_notified ?? 0)
+    return out
+  }
+
   for (let from = 0; from < totalReleases; from += RELEASE_STATS_PAGE) {
     const { data: page } = must(
       await db
