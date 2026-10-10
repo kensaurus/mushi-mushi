@@ -1,7 +1,9 @@
 /**
  * FILE: known-issues.test.ts
  * PURPOSE: "Has anyone hit this?" — the query built from a report's error,
- *          and the lookup's skip / once-per-report / attach behaviour.
+ *          and the lookup's opt-in / skip / once-per-report / attach
+ *          behaviour. The search sends report text to Firecrawl, so it runs
+ *          only when the project turned known_issues_search_enabled on.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,6 +29,7 @@ async function queryFor(source: { description: string | null; customMetadata: Re
       q.select = () => q
       q.eq = () => q
       q.then = (resolve: (v: unknown) => void) => resolve({ count: 0, error: null })
+      q.maybeSingle = async () => ({ data: { known_issues_search_enabled: true }, error: null })
       q.insert = () => ({ select: () => ({ single: async () => ({ data: { id: 's' }, error: null }) }) })
       return q
     },
@@ -97,15 +100,18 @@ interface DbState {
   /** Sessions with the same query in the repeat window. */
   recentSessions: number
   inserted: Array<{ table: string; rows: unknown }>
+  /** What reading project_settings.known_issues_search_enabled returns. */
+  settings: { data: unknown; error: { message: string } | null }
 }
 
-/** A fake db that records inserts and answers the attached / recent reads. */
+/** A fake db that answers the opt-in read, records inserts and answers the attached / recent reads. */
 function makeDb(state: DbState) {
   return {
     from(table: string) {
       const q = {
         select: () => q,
         eq: () => q,
+        maybeSingle: async () => (table === 'project_settings' ? state.settings : { data: null, error: null }),
         gte: () => q,
         then: (resolve: (v: unknown) => void) =>
           resolve(
@@ -141,7 +147,12 @@ describe('lookupKnownIssues', () => {
     )
   }
   beforeEach(() => {
-    state = { attached: [], recentSessions: 0, inserted: [] }
+    state = {
+      attached: [],
+      recentSessions: 0,
+      inserted: [],
+      settings: { data: { known_issues_search_enabled: true }, error: null },
+    }
     firecrawl.resolveFirecrawl.mockReset().mockResolvedValue({ key: 'k' })
     searches([ISSUE])
   })
@@ -175,6 +186,30 @@ describe('lookupKnownIssues', () => {
     state.attached = [ISSUE.url]
     expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 0, skipped: 'already_attached' })
     expect(firecrawl.firecrawlSearch).not.toHaveBeenCalled()
+  })
+
+  it('sends nothing to Firecrawl unless the project turned the search on', async () => {
+    const off: Array<[string, DbState['settings']]> = [
+      ['setting off', { data: { known_issues_search_enabled: false }, error: null }],
+      ['no settings row', { data: null, error: null }],
+      ['column missing (migration not applied)', { data: null, error: { message: 'column does not exist' } }],
+    ]
+    for (const [label, settings] of off) {
+      state.settings = settings
+      expect(await mod.lookupKnownIssues(makeDb(state), input), label).toMatchObject({ attached: 0, skipped: 'disabled' })
+    }
+    // "Search again" goes through the same gate.
+    state.settings = off[0][1]
+    expect(await mod.lookupKnownIssues(makeDb(state), { ...input, force: true, requestedBy: 'u1' })).toMatchObject({ skipped: 'disabled' })
+    expect(firecrawl.resolveFirecrawl).not.toHaveBeenCalled()
+    expect(firecrawl.firecrawlSearch).not.toHaveBeenCalled()
+    expect(state.inserted).toEqual([])
+  })
+
+  it('searches when the project turned it on', async () => {
+    state.settings = { data: { known_issues_search_enabled: true }, error: null }
+    await mod.lookupKnownIssues(makeDb(state), input)
+    expect(firecrawl.firecrawlSearch).toHaveBeenCalled()
   })
 
   it('"Search again" runs anyway, adds only new results, and records who asked', async () => {

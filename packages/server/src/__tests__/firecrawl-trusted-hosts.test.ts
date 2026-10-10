@@ -3,8 +3,10 @@
  * PURPOSE: The project domain allow-list limits URLs a person or a model
  *          chose. With it empty, production refused every scrape — including
  *          the changelog URLs the library modernizer builds on package
- *          registries, so it never read one. Trusted hosts pass; anything
- *          else is still refused.
+ *          registries, so it never read one. Only the modernizer's changelog
+ *          scrape (firecrawlScrapeChangelog) lets those registry hosts past
+ *          the allow-list; every other caller, and every other host, is still
+ *          refused.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,7 +19,9 @@ vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   markKeyUsed: vi.fn(async () => {}),
 }))
 
-const { firecrawlScrape } = await import('../../supabase/functions/_shared/firecrawl.ts')
+const { firecrawlScrape, firecrawlScrapeChangelog, firecrawlScrapeOwnSite, CHANGELOG_HOSTS } = await import(
+  '../../supabase/functions/_shared/firecrawl.ts'
+)
 
 /** project_settings with an empty allow-list; an empty scrape cache. */
 function makeDb() {
@@ -37,7 +41,7 @@ function makeDb() {
   } as never
 }
 
-describe('firecrawlScrape trustedHosts', () => {
+describe('trusted changelog hosts', () => {
   beforeEach(() => {
     vi.stubEnv('SUPABASE_ENV', 'production')
     vi.stubGlobal(
@@ -50,25 +54,47 @@ describe('firecrawlScrape trustedHosts', () => {
     vi.unstubAllGlobals()
   })
 
-  it('scrapes a URL on a trusted host although the project allow-list is empty', async () => {
-    const res = await firecrawlScrape(makeDb(), 'p1', 'https://github.com/vercel-next.js/releases', {
-      trustedHosts: ['github.com'],
-    })
+  it('lets the changelog scrape read a registry URL although the project allow-list is empty', async () => {
+    const res = await firecrawlScrapeChangelog(makeDb(), 'p1', 'https://github.com/vercel-next.js/releases')
     expect(res.markdown).toContain('changelog')
+    for (const host of CHANGELOG_HOSTS) {
+      await expect(firecrawlScrapeChangelog(makeDb(), 'p1', `https://${host}/x`)).resolves.toBeTruthy()
+    }
   })
 
-  it('still refuses any other host, and refuses everything without trusted hosts', async () => {
-    await expect(
-      firecrawlScrape(makeDb(), 'p1', 'https://evil.example/x', { trustedHosts: ['github.com'] }),
-    ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
-    await expect(firecrawlScrape(makeDb(), 'p1', 'https://github.com/a/b')).rejects.toThrow(
+  it('refuses any other host on the changelog scrape', async () => {
+    await expect(firecrawlScrapeChangelog(makeDb(), 'p1', 'https://evil.example/x')).rejects.toThrow(
       'FIRECRAWL_DOMAIN_NOT_ALLOWED',
     )
   })
 
   it('a look-alike host is not a subdomain of a trusted one', async () => {
     await expect(
-      firecrawlScrape(makeDb(), 'p1', 'https://github.com.evil.example/x', { trustedHosts: ['github.com'] }),
+      firecrawlScrapeChangelog(makeDb(), 'p1', 'https://github.com.evil.example/x'),
+    ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
+  })
+
+  it('gives every other caller no bypass: plain firecrawlScrape refuses registry hosts', async () => {
+    await expect(firecrawlScrape(makeDb(), 'p1', 'https://github.com/a/b')).rejects.toThrow(
+      'FIRECRAWL_DOMAIN_NOT_ALLOWED',
+    )
+  })
+
+  it('ignores a trustedHosts option smuggled into firecrawlScrape', async () => {
+    await expect(
+      firecrawlScrape(makeDb(), 'p1', 'https://github.com/a/b', { trustedHosts: ['github.com'] } as never),
+    ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("lets the story mapper read its own site's host and nothing else", async () => {
+    const site = 'https://app.example.com/'
+    await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://app.example.com/pricing', site)).resolves.toBeTruthy()
+    await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://github.com/a/b', site)).rejects.toThrow(
+      'FIRECRAWL_DOMAIN_NOT_ALLOWED',
+    )
+    await expect(
+      firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://app.example.com.evil.example/x', site),
     ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
   })
 })
