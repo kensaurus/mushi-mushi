@@ -75,6 +75,8 @@ export interface PlanCatalog {
   overage_price_lookup_key: string | null
   included_reports_per_month: number | null
   overage_unit_amount_decimal: number | null
+  included_diagnoses_per_month?: number | null
+  overage_unit_amount_decimal_diagnoses?: number | null
   retention_days: number
   seat_limit: number | null
   is_self_serve: boolean
@@ -108,6 +110,8 @@ export interface BillingProject {
     current_period_end?: string
     cancel_at_period_end?: boolean
     synthetic?: boolean
+    /** Annual plans have no overage; they stop at the included diagnoses. */
+    billing_interval?: 'monthly' | 'annual'
   } | null
   customer: {
     stripe_customer_id?: string

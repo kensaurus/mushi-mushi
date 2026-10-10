@@ -10,6 +10,7 @@ import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
+import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
 import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
@@ -611,6 +612,9 @@ registerEnterpriseIntegrationsRoutes(app);
 registerMigrationProgressRoutes(app);
 
 registerAdminOpsRoutes(app);
+
+// In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
+registerBillingChangePlanRoutes(app);
 
 registerDoctorRoutes(app);
 

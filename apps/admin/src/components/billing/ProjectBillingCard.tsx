@@ -18,6 +18,7 @@ import { PlanBenefitsList } from './PlanBenefitsList'
 import { BillingPredictabilityControls } from './BillingPredictabilityControls'
 import { BillingUsageBar } from './BillingUsageBar'
 import { usePageData } from '../../lib/usePageData'
+import { monthlyQuotaWindowEnd } from '../../lib/billingUsageForecast'
 import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
 import type { BillingProject, Invoice, PlanCatalog } from './types'
 import { BILLING_STATUS_TONE as STATUS_TONE, BILLING_TIER_TONE as TIER_TONE, formatBillingMoney as formatMoney } from './billing-tokens'
@@ -68,7 +69,14 @@ export function ProjectBillingCard({
       : null
 
   const overageRate = tier?.overage_unit_amount_decimal
-  const purchasable = plans.filter((p: PlanCatalog) => !isSalesLedPlan(p) && p.id !== 'hobby' && p.id !== tierId)
+  const currentInterval = project.subscription?.billing_interval ?? 'monthly'
+  const isAnnual = subscribed && currentInterval === 'annual'
+  // A paying project switches in-app between Indie and Pro, monthly and
+  // annual (Change plan). The picker keeps the current plan so the other
+  // interval of it stays selectable; the exact current choice is disabled.
+  const purchasable = subscribed && !project.subscription?.synthetic
+    ? plans.filter((p: PlanCatalog) => p.id === 'indie' || p.id === 'pro')
+    : plans.filter((p: PlanCatalog) => !isSalesLedPlan(p) && p.id !== 'hobby' && p.id !== tierId)
 
   return (
     <Card className="p-3 space-y-3">
@@ -118,6 +126,14 @@ export function ProjectBillingCard({
                     {statusLabel}
                   </Badge>
                 )}
+                {isAnnual && (
+                  <Badge
+                    className="bg-surface-overlay text-fg-muted border border-edge-subtle"
+                    title="Annual plans include a fixed number of diagnoses each month and have no pay-as-you-go overage."
+                  >
+                    Annual
+                  </Badge>
+                )}
               </>
             )}
             {project.subscription?.cancel_at_period_end && (
@@ -129,7 +145,7 @@ export function ProjectBillingCard({
                 so the chip and the bar are co-located — fixes the dup-datum
                 fold issue and gives the severity signal a proper home next to
                 the number it grades. */}
-            {overageRate != null && !isComplimentary && (
+            {overageRate != null && !isComplimentary && !isAnnual && (
               <SignalChip tone="warn" className="font-mono">
                 Overage ${Number(overageRate).toFixed(4)} / report
               </SignalChip>
@@ -168,6 +184,7 @@ export function ProjectBillingCard({
         <PlanPicker
           plans={purchasable}
           currentPlanId={tierId}
+          currentInterval={subscribed ? currentInterval : null}
           busy={actioning?.startsWith(`checkout:${project.project_id}`) ?? false}
           onPick={onPickPlan}
         />
@@ -178,11 +195,15 @@ export function ProjectBillingCard({
         limitReports={project.limit_reports}
         pct={usagePct}
         periodStart={project.period_start}
-        periodEnd={project.subscription?.current_period_end ?? null}
+        periodEnd={
+          isAnnual
+            ? monthlyQuotaWindowEnd(project.period_start)
+            : (project.subscription?.current_period_end ?? null)
+        }
         llmCostUsd={project.llm_cost_usd_this_month}
         overQuota={project.over_diagnosis_quota ?? project.over_quota}
-        overageRate={overageRate ?? null}
-        overageRateDiagnoses={tier?.overage_unit_amount_decimal_diagnoses ?? null}
+        overageRate={isAnnual ? null : (overageRate ?? null)}
+        overageRateDiagnoses={isAnnual ? null : (tier?.overage_unit_amount_decimal_diagnoses ?? null)}
         basePriceUsd={tier?.monthly_price_usd ?? 0}
         spendCapUsd={project.spend_cap_usd ?? tier?.monthly_spend_cap_usd ?? null}
         tierId={tierId}
@@ -197,6 +218,7 @@ export function ProjectBillingCard({
           isSubscribed={subscribed}
           spendCapUsd={project.spend_cap_usd ?? null}
           planDefaultCapUsd={tier?.monthly_spend_cap_usd ?? null}
+          noOverage={isAnnual}
           alertEmail={project.alert_email ?? null}
           onSaved={onReload}
         />
@@ -223,12 +245,14 @@ export function ProjectBillingCard({
 interface PlanPickerProps {
   plans: PlanCatalog[]
   currentPlanId: string
+  /** The paying project's interval; null when it has no paid plan. */
+  currentInterval: 'monthly' | 'annual' | null
   busy: boolean
   onPick: (planId: string, billingInterval: 'monthly' | 'annual') => void
 }
 
-function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
-  const [billingInterval, setBillingInterval] = React.useState<'monthly' | 'annual'>('monthly')
+function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: PlanPickerProps) {
+  const [billingInterval, setBillingInterval] = React.useState<'monthly' | 'annual'>(currentInterval ?? 'monthly')
   const annualDiscountPct = 17 // ~2 months free
 
   return (
@@ -254,6 +278,9 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
           const annualMonthlyPrice = billingInterval === 'annual'
             ? Math.round(monthlyPrice * (1 - annualDiscountPct / 100))
             : null
+          const isCurrent = p.id === currentPlanId && billingInterval === currentInterval
+          const includedDiagnoses = p.included_diagnoses_per_month
+          const diagnosisRate = p.overage_unit_amount_decimal_diagnoses
 
           return (
             <article key={p.id} className="rounded-md border border-edge-subtle p-3 bg-surface">
@@ -271,6 +298,16 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
                 </p>
               )}
               <ContainedBlock tone="neutral" className="mt-1 space-y-1">
+                {includedDiagnoses != null && (
+                  <InlineProof className="border-0 bg-transparent px-0 py-0">
+                    {includedDiagnoses.toLocaleString()} diagnoses/mo included
+                    {billingInterval === 'annual'
+                      ? <> · stops there (no overage on annual)</>
+                      : diagnosisRate != null
+                        ? <> · ${Number(diagnosisRate).toFixed(3)}/diagnosis after</>
+                        : null}
+                  </InlineProof>
+                )}
                 <InlineProof className="border-0 bg-transparent px-0 py-0">
                   {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
                   {billingInterval === 'monthly' && p.overage_unit_amount_decimal != null && (
@@ -290,10 +327,10 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
                 size="sm"
                 className="mt-2 w-full"
                 onClick={() => onPick(p.id, billingInterval)}
-                disabled={busy}
+                disabled={busy || isCurrent}
                 loading={busy}
               >
-                {`Select ${p.display_name}`}
+                {isCurrent ? 'Current plan' : `Select ${p.display_name}`}
               </Btn>
             </article>
           )
