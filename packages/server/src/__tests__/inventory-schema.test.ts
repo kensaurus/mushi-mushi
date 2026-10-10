@@ -79,6 +79,31 @@ describe('Deno-side parseInventoryYaml', () => {
     expect(r.ok).toBe(false)
   })
 
+  it('accepts an object expected_outcome contract, as the canonical schema does', () => {
+    const withOutcome = VALID_YAML.replace(
+      '        status: verified',
+      [
+        '        status: verified',
+        '        expected_outcome:',
+        '          summary: attempt is stored',
+        '          response:',
+        '            status_in: [200, 201]',
+        '            json_path:',
+        '              - path: data.id',
+        '                op: exists',
+        '          database:',
+        '            table: attempts',
+      ].join('\n'),
+    )
+    const r = parseInventoryYaml(withOutcome)
+    expect(r.ok, JSON.stringify(r.issues)).toBe(true)
+    expect(r.inventory?.pages[0]?.elements[0]?.expected_outcome).toMatchObject({
+      response: { status_in: [200, 201] },
+      database: { table: 'attempts', schema: 'public', expect: 'row_exists' },
+    })
+    expect(parseInventoryYaml(withOutcome.replace('op: exists', 'op: approx')).ok).toBe(false)
+  })
+
   it('returns issues for non-yaml input', () => {
     const r = parseInventoryYaml('@@@@: not yaml :: { ::')
     expect(r.ok).toBe(false)
