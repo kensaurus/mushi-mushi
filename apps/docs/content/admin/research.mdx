@@ -62,9 +62,19 @@ if you initiated the search from those pages.
 
 ---
 
+## Automatic results on error reports
+
+When a report carries a real error (a Sentry exception or an error-level console line), Mushi searches for it once after diagnosis and shows the results on the report under **Others who hit this**.
+
+- **Where it looks:** Firecrawl's developer index first (GitHub issues, merged pull requests, READMEs and docs), then GitHub and Stack Overflow web results for any remaining slots. The developer index often finds the pull request that fixed the same error.
+- **Search again / Search now:** runs the search from the report page. Only results not already on the report are added. Pressing it twice within 10 minutes searches once.
+- **Cost:** about 2 to 5 Firecrawl credits per search, billed to your own key.
+
+---
+
 ## Prerequisites
 
-A Firecrawl API key must be configured in **Settings → API keys** before Research works.
+A Firecrawl API key must be configured in **Settings → AI keys** before Research works. A key shared with every app in your organization works too.
 Visit [Integration health](/admin/health) to confirm the key is active.
 
 ---

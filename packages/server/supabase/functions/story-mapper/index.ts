@@ -23,6 +23,7 @@ import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
+import { firecrawlMap, firecrawlScrape } from '../_shared/firecrawl.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
@@ -65,66 +66,44 @@ function extractFencedJson(text: string): unknown {
   return JSON.parse(src)
 }
 
+/**
+ * Map the app, pick distinct pages, scrape each. Goes through the shared
+ * Firecrawl client: the project's key (own or shared), usage bookkeeping,
+ * the 24h cache and API v2. The app's own host is trusted: the user typed
+ * this URL into the crawl form and assertSafeOutboundUrl already passed it.
+ */
 async function crawlWithFirecrawl(
-  apiKey: string,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
   baseUrl: string,
   maxPages: number,
 ): Promise<CrawledPage[]> {
   const pages: CrawledPage[] = []
+  const trustedHosts = [new URL(baseUrl).hostname]
 
-  // Step 1: map routes
-  const mapRes = await fetch('https://api.firecrawl.dev/v1/map', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    // More links than pages: language copies and files are dropped below.
-    body: JSON.stringify({ url: baseUrl, limit: Math.min(maxPages * 5, 200) }),
-    signal: AbortSignal.timeout(30_000),
-  })
+  // More links than pages: language copies and files are dropped below.
+  const links = await firecrawlMap(db, projectId, baseUrl, { limit: Math.min(maxPages * 5, 200), trustedHosts })
+  const urls = pickCrawlUrls(links, baseUrl, maxPages)
 
-  if (!mapRes.ok) {
-    const err = await mapRes.text().catch(() => 'unknown')
-    throw new Error(`Firecrawl map failed: HTTP ${mapRes.status} — ${err.slice(0, 200)}`)
-  }
-
-  const mapData = await mapRes.json() as { links?: string[] }
-  const urls = pickCrawlUrls(mapData.links ?? [], baseUrl, maxPages)
-
-  // Step 2: scrape each route
   for (const url of urls) {
     try {
-      const scrapeRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          url,
-          formats: ['markdown'],
-          onlyMainContent: true,
-          timeout: 10000,
-        }),
-        signal: AbortSignal.timeout(20_000),
-      })
-
-      if (!scrapeRes.ok) continue
-
-      const scrapeData = await scrapeRes.json() as {
-        data?: { markdown?: string; metadata?: { title?: string } }
-      }
-
-      const md = scrapeData.data?.markdown ?? ''
-      // Extract data-testid attributes from markdown/HTML snippets
+      const page = await firecrawlScrape(db, projectId, url, { trustedHosts })
+      const md = page.markdown ?? ''
+      // data-testid attributes and API-looking paths in the page
       const testids = Array.from(md.matchAll(/data-testid="([^"]+)"/g)).map(m => m[1]!)
-      // Extract API-looking paths
       const apis = Array.from(md.matchAll(/(?:\/api\/|\/v\d+\/)[a-zA-Z0-9/_:-]+/g)).map(m => m[0]!)
-
       pages.push({
         url,
-        title: scrapeData.data?.metadata?.title ?? null,
+        title: page.title ?? null,
         markdown: md.slice(0, 3000),
         testids: [...new Set(testids)].slice(0, 20),
         apis: [...new Set(apis)].slice(0, 15),
       })
     } catch (err) {
-      log.warn('Failed to scrape page', { url, error: String(err).slice(0, 200) })
+      // A missing key or a rejected key fails the whole run; one bad page does not.
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg === 'FIRECRAWL_NOT_CONFIGURED' || msg === 'FIRECRAWL_AUTH_FAILED') throw err
+      log.warn('Failed to scrape page', { url, error: msg.slice(0, 200) })
     }
   }
 
@@ -217,26 +196,18 @@ Deno.serve(
       let pages: CrawledPage[] = []
       const crawlStart = Date.now()
 
-      if (provider === 'firecrawl') {
-        const firecrawlKey = await (async () => {
-          const { resolveLlmKey } = await import('../_shared/byok.ts')
-          const r = await resolveLlmKey(db, project_id, 'firecrawl')
-          return r?.key ?? Deno.env.get('FIRECRAWL_API_KEY') ?? ''
-        })()
-
-        if (!firecrawlKey) {
-          throw new Error('No Firecrawl API key configured. Add one in Settings → API Key Pool.')
-        }
-
-        pages = await crawlWithFirecrawl(firecrawlKey, base_url, max_pages)
-      } else {
-        // Browserbase: create a session and note the replay URL; actual execution
-        // needs the CLI runner. For now capture what we can via Firecrawl.
+      if (provider !== 'firecrawl') {
+        // Browserbase needs the CLI runner for a real session; the edge crawl
+        // uses Firecrawl either way.
         log.warn('Browserbase provider: falling back to Firecrawl for edge crawl', { run_id })
-        const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY') ?? ''
-        if (firecrawlKey) {
-          pages = await crawlWithFirecrawl(firecrawlKey, base_url, max_pages)
+      }
+      try {
+        pages = await crawlWithFirecrawl(db, project_id, base_url, max_pages)
+      } catch (err) {
+        if (err instanceof Error && err.message === 'FIRECRAWL_NOT_CONFIGURED') {
+          throw new Error('No Firecrawl key. Add one in Settings → AI keys (it can be shared with all your apps).')
         }
+        throw err
       }
 
       await db.from('story_map_runs').update({
