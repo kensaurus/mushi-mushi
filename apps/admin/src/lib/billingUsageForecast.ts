@@ -112,6 +112,18 @@ export function buildUsageForecast(
   }
 }
 
+/**
+ * End of the calendar-month quota window that starts at `periodStart` (UTC).
+ * Annual plans renew yearly, but their included diagnoses reset monthly, so
+ * the usage bar counts down to this instead of the subscription period end.
+ */
+export function monthlyQuotaWindowEnd(periodStart: string | null | undefined): string | null {
+  if (!periodStart) return null
+  const start = new Date(periodStart)
+  if (Number.isNaN(start.getTime())) return null
+  return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1)).toISOString()
+}
+
 export function daysUntilPeriodReset(periodEnd: string | null): number | null {
   if (!periodEnd) return null
   const endMs = new Date(periodEnd).getTime()

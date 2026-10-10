@@ -5,6 +5,7 @@ import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { countPeriodUsage, llmCostSince } from '../../_shared/billing-usage-counts.ts';
 import { log } from '../../_shared/logger.ts';
+import { diagnosisOverageBillable } from '../../_shared/billing-rules.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
 
 /** Stripe price IDs of the annual (flat-rate, no overage) base prices. */
@@ -104,7 +105,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     ] = await Promise.all([
       db
         .from('billing_subscriptions')
-        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end, monthly_spend_cap_usd_override')
+        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end, monthly_spend_cap_usd_override, overage_subscription_item_id')
         .in('project_id', projectIds),
       db
         .from('billing_customers')
@@ -131,7 +132,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
     let pastDueProjects = 0;
     let unpaidProjects = 0;
-    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean; monthly_spend_cap_usd_override?: number | null }>();
+    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean; monthly_spend_cap_usd_override?: number | null; overage_subscription_item_id?: string | null }>();
     for (const s of subs ?? []) {
       subByProject.set(s.project_id, s);
       if (s.status === 'past_due') pastDueProjects += 1;
@@ -188,11 +189,14 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       u.reports >= limit &&
       !plan.overage_price_lookup_key;
     const approachingQuota = usagePct != null && usagePct >= 80 && !overQuota;
+    // Annual subscriptions carry no overage item: diagnoses stop at the limit.
+    const diagnosisOverage =
+      !!plan.overage_unit_amount_decimal_diagnoses && diagnosisOverageBillable(subPlanActive ? sub : null);
     const overDiagnosisQuota =
       !isComplimentary &&
       diagnosesLimit !== null &&
       u.diagnoses >= diagnosesLimit &&
-      !plan.overage_unit_amount_decimal_diagnoses;
+      !diagnosisOverage;
     const approachingDiagnosisQuota = diagnosesUsagePct != null && diagnosesUsagePct >= 80 && !overDiagnosisQuota;
     // Effective spend cap: subscription override takes priority, then plan default.
     const monthlySpendCapUsd =
@@ -238,7 +242,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         overDiagnosisQuota,
         approachingDiagnosisQuota,
         monthlySpendCapUsd,
-        overageRateDiagnoses: plan.overage_unit_amount_decimal_diagnoses ?? null,
+        overageRateDiagnoses: diagnosisOverage ? (plan.overage_unit_amount_decimal_diagnoses ?? null) : null,
         fixesAttempted: u.fixes,
         fixesSucceeded: u.fixesSucceeded,
         llmCostUsdMonth,
@@ -584,7 +588,12 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             !isComplimentary &&
             diagnosesLimit !== null &&
             u.diagnoses >= diagnosesLimit &&
-            !plan.overage_unit_amount_decimal_diagnoses,
+            !(
+              plan.overage_unit_amount_decimal_diagnoses &&
+              diagnosisOverageBillable(
+                subPlanActive ? (sub as { overage_subscription_item_id?: string | null } | null) : null,
+              )
+            ),
           spend_cap_usd: spendCapUsd,
           alert_email: settingsByProject.get(p.id)?.alert_email ?? null,
         };

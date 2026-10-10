@@ -18,6 +18,7 @@ import { PlanBenefitsList } from './PlanBenefitsList'
 import { BillingPredictabilityControls } from './BillingPredictabilityControls'
 import { BillingUsageBar } from './BillingUsageBar'
 import { usePageData } from '../../lib/usePageData'
+import { monthlyQuotaWindowEnd } from '../../lib/billingUsageForecast'
 import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
 import type { BillingProject, Invoice, PlanCatalog } from './types'
 import { BILLING_STATUS_TONE as STATUS_TONE, BILLING_TIER_TONE as TIER_TONE, formatBillingMoney as formatMoney } from './billing-tokens'
@@ -194,10 +195,14 @@ export function ProjectBillingCard({
         limitReports={project.limit_reports}
         pct={usagePct}
         periodStart={project.period_start}
-        periodEnd={project.subscription?.current_period_end ?? null}
+        periodEnd={
+          isAnnual
+            ? monthlyQuotaWindowEnd(project.period_start)
+            : (project.subscription?.current_period_end ?? null)
+        }
         llmCostUsd={project.llm_cost_usd_this_month}
         overQuota={project.over_diagnosis_quota ?? project.over_quota}
-        overageRate={overageRate ?? null}
+        overageRate={isAnnual ? null : (overageRate ?? null)}
         overageRateDiagnoses={isAnnual ? null : (tier?.overage_unit_amount_decimal_diagnoses ?? null)}
         basePriceUsd={tier?.monthly_price_usd ?? 0}
         spendCapUsd={project.spend_cap_usd ?? tier?.monthly_spend_cap_usd ?? null}
@@ -213,6 +218,7 @@ export function ProjectBillingCard({
           isSubscribed={subscribed}
           spendCapUsd={project.spend_cap_usd ?? null}
           planDefaultCapUsd={tier?.monthly_spend_cap_usd ?? null}
+          noOverage={isAnnual}
           alertEmail={project.alert_email ?? null}
           onSaved={onReload}
         />
