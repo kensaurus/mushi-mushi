@@ -783,3 +783,19 @@ describe('dotted slugs under /mushi-mushi/* (spa-router, apex)', () => {
     assert.equal(out.uri, '/some/file.riv');
   });
 });
+
+describe('stripSource regex detection after a closing paren', () => {
+  it('keeps a regex after an if/while head and still treats (a + b) / 2 as division', () => {
+    const src = [
+      'function f(s, a, b) {',
+      '  if (s) /x\/*y/.test(s);',
+      '  var half = (a + b) / 2; /* note */',
+      '  return half;',
+      '}',
+    ].join('\n');
+    const out = stripSource(src);
+    assert.ok(out.includes('/x\/*y/.test(s)'), out);
+    assert.ok(out.includes('(a + b) / 2;'), out);
+    assert.ok(!out.includes('note'), out);
+  });
+});
