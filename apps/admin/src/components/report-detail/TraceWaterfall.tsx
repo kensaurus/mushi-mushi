@@ -129,7 +129,6 @@ export function TraceWaterfall({
 
   // Backend spans: build a depth map via parentSpanId.
   const spanDepths = new Map<string, number>()
-  const spanParents = new Map<string, string>()
 
   const sortedSpans = [...(backendSpans ?? [])].sort(
     (a, b) => new Date(a.ingested_at).getTime() - new Date(b.ingested_at).getTime(),
@@ -144,7 +143,6 @@ export function TraceWaterfall({
     const parentId = sj?.parentSpanId
     const depth = parentId && spanDepths.has(parentId) ? (spanDepths.get(parentId) ?? 0) + 1 : 1
     spanDepths.set(spanId, depth)
-    if (parentId) spanParents.set(spanId, parentId)
 
     rows.push({
       id: `span-${span.id}`,
