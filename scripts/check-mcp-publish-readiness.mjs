@@ -69,6 +69,7 @@ for (const field of requiredPkgFields) {
   }
 }
 if (pkg.name === '@mushi-mushi/mcp') ok(`package name: ${pkg.name}`)
+else fail(`package name must be @mushi-mushi/mcp (got ${pkg.name})`)
 if (pkg.version) ok(`version: ${pkg.version}`)
 if (!pkg.engines?.node) warn('package.json missing engines.node — add "node": ">=18" for clarity')
 
