@@ -209,8 +209,9 @@ export function loadConfig(path = CONFIG_PATH, opts: { profile?: string } = {}):
   }
 
   // Env vars overlay the file: a set env var always wins.
+  // A blank value counts as unset, so it can't hide the alias or the file.
   const endpointFromEnv =
-    process.env['MUSHI_API_ENDPOINT'] ?? process.env['MUSHI_ENDPOINT'] ?? undefined
+    process.env['MUSHI_API_ENDPOINT']?.trim() || process.env['MUSHI_ENDPOINT']?.trim() || undefined
   const fromEnv: CliConfig = {
     ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
     ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),

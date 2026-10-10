@@ -87,6 +87,14 @@ describe('loadConfig', () => {
     delete process.env['MUSHI_ENDPOINT']
   })
 
+  it('a blank MUSHI_API_ENDPOINT does not hide the saved endpoint or the alias', () => {
+    saveConfig({ endpoint: 'https://self.example.com' }, TEST_PATH)
+    process.env['MUSHI_API_ENDPOINT'] = '   '
+    expect(loadConfig(TEST_PATH).endpoint).toBe('https://self.example.com')
+    process.env['MUSHI_ENDPOINT'] = 'https://alias.example.com'
+    expect(loadConfig(TEST_PATH).endpoint).toBe('https://alias.example.com')
+  })
+
   it('file values survive when env vars are absent', () => {
     saveConfig({ apiKey: 'from-file', projectId: 'proj_fileonly' }, TEST_PATH)
     const config = loadConfig(TEST_PATH)
