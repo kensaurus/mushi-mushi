@@ -67,6 +67,22 @@ describe('the search query for a report', () => {
     expect(await queryFor({ description: null, customMetadata: null, consoleLogs: [{ level: 'error', message: 'oops' }] })).toBeNull()
   })
 
+  it('does not search app telemetry sent through Sentry (glot.it, 2026-10-10)', async () => {
+    for (const line of [
+      'Poor TTFB: 2467.2 on /account in https://kensaur.us/glot-it/account/',
+      'Rage click: 3x on button[Skip].inline-flex at / in /glot-it/',
+      'sync_timeout in /glot-it/learn/thai-on-duolingo/',
+      '[mistakes] fetch_patterns_failed in /glot-it/practice/',
+    ]) {
+      const q = await queryFor({
+        description: `${line} (captured by Sentry — no user description)`,
+        customMetadata: { source: 'sentry_webhook' },
+        consoleLogs: [],
+      })
+      expect(q, line).toBeNull()
+    }
+  })
+
   it('caps a long error at a word boundary', async () => {
     const long = `Error: ${'something went quite wrong '.repeat(20)}`
     const q = (await queryFor({ description: null, customMetadata: null, consoleLogs: [{ level: 'error', message: long }] }))!

@@ -21,6 +21,8 @@ const log = rootLog.child('known-issues');
 /** Where people post "I hit this error too", with answers. */
 const KNOWN_ISSUE_DOMAINS: readonly string[] = ['github.com', 'stackoverflow.com'];
 const MAX_RESULTS = 3;
+/** "Error:", "TypeError", "FunctionsHttpError", "CppException", "APIUserAbortError"… */
+const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b/;
 const MAX_QUERY_CHARS = 150;
 
 interface KnownIssueSource {
@@ -75,6 +77,11 @@ function knownIssueQuery(source: KnownIssueSource): string | null {
     raw = firstConsoleError(source.consoleLogs);
   }
   if (!raw) return null;
+  // Only an exception is worth a web search. Apps also send Sentry messages
+  // and console errors for their own telemetry ("Poor TTFB: 2467.2 on
+  // /account", "Rage click: 3x on …", "sync_timeout"); searching those spends
+  // credits on results about nothing.
+  if (!EXCEPTION_NAME.test(raw)) return null;
   const text = normalizeErrorText(raw);
   if (text.length < 12 || text.split(' ').length < 3) return null;
   if (text.length <= MAX_QUERY_CHARS) return text;
