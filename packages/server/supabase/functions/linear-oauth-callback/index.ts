@@ -210,10 +210,6 @@ Deno.serve(async (req: Request) => {
   const updates: Record<string, string | null> = {
     linear_access_token_ref: accessTokenRef,
     linear_workspace_name: workspaceName,
-    // webhooks-linear narrows its candidate projects by this before checking
-    // signatures. Written even when null so a failed viewer fetch leaves a
-    // legacy (scanned) row rather than a stale id that hides the project.
-    linear_organization_id: linearOrgId,
   }
   if (refreshTokenRef) updates.linear_refresh_token_ref = refreshTokenRef
   if (defaultTeamId) updates.linear_team_id = defaultTeamId
@@ -226,6 +222,19 @@ Deno.serve(async (req: Request) => {
   if (upsertError) {
     log.error('Failed to save Linear settings', { err: upsertError.message, projectId })
     return errorRedirect('Failed to save integration settings.')
+  }
+
+  // webhooks-linear narrows its candidate projects by this before checking
+  // signatures. Written even when null, so a failed viewer fetch leaves a
+  // legacy (scanned) row rather than a stale id that hides the project. A
+  // separate best-effort write: if this function deploys before migration
+  // 20261010140000, the unknown column must not fail the install.
+  const { error: orgIdError } = await db
+    .from('project_settings')
+    .update({ linear_organization_id: linearOrgId })
+    .eq('project_id', projectId)
+  if (orgIdError) {
+    log.warn('Could not record Linear organization id', { err: orgIdError.message, projectId })
   }
 
   // ── Register inbound webhook on Linear ───────────────────────────────────

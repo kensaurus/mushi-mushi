@@ -28,8 +28,12 @@ describe('Linear webhook organization filter', () => {
     )
   })
 
-  it('records the organization id at OAuth install', () => {
-    expect(callback).toMatch(/linear_organization_id: linearOrgId,/)
+  it('records the organization id at OAuth install, in its own best-effort write', () => {
+    expect(callback).toMatch(/\.update\(\{ linear_organization_id: linearOrgId \}\)/)
+    // Not in the main settings update: deployed before the migration, the
+    // unknown column would fail every Linear install.
+    const updates = callback.split('const updates')[1]?.split('\n  }\n')[0] ?? ''
+    expect(updates).not.toContain('linear_organization_id')
   })
 
   it('narrows candidates by organization id and keeps legacy null rows', () => {
