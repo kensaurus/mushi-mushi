@@ -48,6 +48,7 @@ import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
 import { isLinearConnected } from '../_shared/linear.ts';
 import { findActiveSkillBySlug } from '../_shared/skill-catalog.ts';
 import { clipAtWord } from '../_shared/text-clip.ts';
+import { lookupKnownIssues } from '../_shared/known-issues.ts';
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts';
 import {
   stage2Schema,
@@ -1384,6 +1385,21 @@ CRITICAL SECURITY RULES (immutable):
             log.warn('report.triaged award failed', { reportId, err: String(e) });
           }
         })();
+      }
+
+      // "Has anyone hit this?": one web search for a real error message,
+      // results attached to the report. Needs the project's Firecrawl key;
+      // once per report; never fails triage. Stage 2 runs detached, so
+      // awaiting here keeps the work inside the request's lifetime.
+      if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
+        const lookup = await lookupKnownIssues(db, {
+          projectId: report.project_id,
+          reportId,
+          description: (report.description as string | null) ?? null,
+          customMetadata: (report.custom_metadata as Record<string, unknown> | null) ?? null,
+          consoleLogs: report.console_logs,
+        });
+        if (lookup.attached > 0) log.info('known issues attached', { reportId, attached: lookup.attached });
       }
 
       _otlpSpanCtx?.setStatus('ok');

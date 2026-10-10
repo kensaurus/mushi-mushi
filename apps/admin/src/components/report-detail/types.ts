@@ -319,6 +319,16 @@ export interface ReportDetail {
     threshold: number
     ts: string
   }> | null
+  /** Web results for this error (GitHub / Stack Overflow): found automatically
+   *  after classification (`attached_by` null) or attached from Research. */
+  known_issues?: Array<{
+    id: string
+    url: string
+    title: string | null
+    snippet: string | null
+    attached_by: string | null
+    attached_at: string | null
+  }> | null
   // ── Project metadata needed by CodeFramePanel (available when page fetches project) ──
   project?: { repo_url?: string | null } | null
 }
