@@ -550,6 +550,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Reporter updates in the SDK widget (Notifications → Setup). It
       // messages end users, so project admins only. Validated below.
       'reporter_notifications_enabled',
+      // "Others who hit this" (migration 20261010190000): sends the scrubbed
+      // error message to Firecrawl, a third party, so project admins only.
+      // Validated below.
+      'known_issues_search_enabled',
       // Supabase link (ADR 0016): the project ref the read-only Supabase
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
@@ -633,6 +637,22 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (typeof value !== 'boolean') {
           return c.json(
             { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Reporter updates can only be turned on or off.' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
+      if (key === 'known_issues_search_enabled') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can turn the known-fix web search on or off.',
+        );
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'The known-fix web search can only be turned on or off.' } },
             400,
           );
         }

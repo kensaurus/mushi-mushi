@@ -479,6 +479,23 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     whenToChange:
       "Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.",
   },
+  {
+    id: 'settings.firecrawl.known_issues_search',
+    label: 'Search the web for known fixes',
+    summary:
+      'Off by default. When on, Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.',
+    howItWorks:
+      "After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left to Firecrawl's search, limited to github.com and stackoverflow.com. The top 3 results appear on the report as \"Others who hit this\". It runs once per report, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). About 5 Firecrawl credits per error report.",
+    default: { value: 'false (nothing is sent)' },
+    backend: {
+      table: 'project_settings',
+      column: 'known_issues_search_enabled',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['classify-report edge function (_shared/known-issues.ts)'],
+    },
+    whenToChange:
+      'Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi for a third party.',
+  },
 ];
 
 const SETTINGS_DEVTOOLS: ConfigDoc[] = [

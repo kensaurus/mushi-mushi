@@ -33,7 +33,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
-import { firecrawlScrape } from '../_shared/firecrawl.ts'
+import { firecrawlScrapeChangelog } from '../_shared/firecrawl.ts'
 import { MODERNIZER_EFFORT, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
@@ -290,7 +290,7 @@ async function processRepo(
     const guesses = guessChangelogUrls(manifestKind, dep.name)
     for (const url of guesses.slice(0, 2)) {
       try {
-        const scraped = await firecrawlScrape(db, row.project_id, url, { trustedHosts: CHANGELOG_HOSTS })
+        const scraped = await firecrawlScrapeChangelog(db, row.project_id, url)
         const md = scraped.markdown.slice(0, 4000)
         if (md.length > 200) {
           releaseNotes.push({ name: dep.name, notes: md })
@@ -398,9 +398,7 @@ async function processRepo(
   return { scanned: deps.length, created, skipped: null }
 }
 
-/** Every host guessChangelogUrls builds a URL on: trusted for its scrapes. */
-const CHANGELOG_HOSTS: readonly string[] = ['www.npmjs.com', 'github.com', 'pypi.org', 'crates.io', 'pkg.go.dev']
-
+/** Keep every host here in CHANGELOG_HOSTS (_shared/firecrawl.ts), or its scrapes need the allow-list. */
 function guessChangelogUrls(kind: ManifestKind, name: string): string[] {
   if (kind === 'package.json') {
     const safeName = name.replace(/^@/, '').replace('/', '-')

@@ -53,6 +53,20 @@ describe('reporter_notifications_enabled', () => {
   })
 })
 
+describe('known_issues_search_enabled', () => {
+  // It sends the scrubbed error message to Firecrawl, a third party.
+  it('is on the allow-list', () => {
+    expect(route).toContain("'known_issues_search_enabled',")
+  })
+
+  it('is admin-only and boolean-only', () => {
+    const block = route.slice(route.indexOf("if (key === 'known_issues_search_enabled')"))
+    const body = block.slice(0, block.indexOf('continue;'))
+    expect(body).toContain('requireProjectAdmin(')
+    expect(body).toContain("typeof value !== 'boolean'")
+  })
+})
+
 describe('who may change settings', () => {
   it('refuses viewers before reading any key', () => {
     const gate = route.indexOf("denyViewerWrite(c, project.organization_role, 'change project settings')")

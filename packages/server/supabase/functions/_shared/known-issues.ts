@@ -5,8 +5,10 @@
  *          the top results to the report, so the diagnosis can say "this is
  *          a known issue in X, fixed in Y" instead of starting from zero.
  *
- * Runs only for a project with a Firecrawl key (BYOK or env), once per
- * report, after classification. Results land in the existing research
+ * Opt-in per project, default off (project_settings.known_issues_search_enabled,
+ * Settings → Web tools): the scrubbed error message goes to Firecrawl, a
+ * third-party processor. Runs only when that is on and the project has a
+ * Firecrawl key (BYOK or env), once per report, after classification. Results land in the existing research
  * tables: an automatic session (created_by null) whose snippets are attached
  * to the report (attached_by null), so the Research page lists them too.
  * One search, 3 results: about 5 Firecrawl credits per error report.
@@ -90,16 +92,39 @@ function knownIssueQuery(source: KnownIssueSource): string | null {
 }
 
 /**
+ * The project's opt-in. A missing row, a missing column (migration not yet
+ * applied) or a failed read all count as off: fail closed, since "on" sends
+ * report text to a third party.
+ */
+async function searchEnabled(db: SupabaseClient, projectId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from('project_settings')
+    .select('known_issues_search_enabled')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error) {
+    log.warn('known-issue opt-in unreadable; treating as off', { projectId, err: error.message });
+    return false;
+  }
+  return (data as { known_issues_search_enabled?: unknown } | null)?.known_issues_search_enabled === true;
+}
+
+/**
  * Search once and attach the results to the report. Never throws: the
  * lookup is best effort and must not fail classification.
  */
 export async function lookupKnownIssues(
   db: SupabaseClient,
   input: { projectId: string; reportId: string } & KnownIssueSource,
-): Promise<{ attached: number; skipped?: 'no_query' | 'no_key' | 'already_attached' | 'error' }> {
+): Promise<{
+  attached: number;
+  skipped?: 'no_query' | 'disabled' | 'no_key' | 'already_attached' | 'error';
+}> {
   const query = knownIssueQuery(input);
   if (!query) return { attached: 0, skipped: 'no_query' };
   try {
+    // Nothing leaves Mushi unless the project turned the search on.
+    if (!(await searchEnabled(db, input.projectId))) return { attached: 0, skipped: 'disabled' };
     if (!(await resolveFirecrawl(db, input.projectId))) return { attached: 0, skipped: 'no_key' };
 
     const { count } = await db

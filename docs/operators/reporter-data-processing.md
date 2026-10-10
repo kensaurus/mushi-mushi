@@ -36,6 +36,12 @@ Report text and sanitised screenshots are sent to the LLM provider listed in
 the privacy policy for diagnosis. With your own model key (BYOK), the call runs
 against **your** provider account.
 
+If you turn on **Search the web for known fixes** (Settings → Web tools, off by
+default, per project), the report's error message, with IDs, URLs and long
+numbers removed, is also sent to Firecrawl as a search query against GitHub
+and Stack Overflow. Report text from the reporter, screenshots and the
+reporter key are not sent.
+
 What the reporter is **never** shown: internal severity or category, PR or
 branch names, the coding agent used, LLM output, or other reporters' content
 (duplicate counts are bucketed: "a few others", "many people").

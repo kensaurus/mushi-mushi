@@ -2,11 +2,15 @@
  * FILE: apps/admin/src/components/report-detail/KnownIssuesSection.tsx
  * PURPOSE: "Others who hit this" on the report detail page: GitHub and
  *          Stack Overflow results for the report's error, found once after
- *          classification when the project has a Firecrawl key
- *          (known-issues.ts), plus snippets attached from Research.
- *          Renders nothing when there are none.
+ *          classification when the project turned the search on and has a
+ *          Firecrawl key (known-issues.ts), plus snippets attached from
+ *          Research. With no results it renders nothing, or one line saying
+ *          the search is off (with a link to the setting) when the project
+ *          has it off.
  */
 
+import { Link } from 'react-router-dom'
+import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { Section, Badge } from '../ui'
 import { IconExternalLink, IconLink } from '../icons'
 import type { ReportDetail } from './types'
@@ -25,8 +29,26 @@ function sourceLabel(url: string): string {
   }
 }
 
-export function KnownIssuesSection({ issues }: { issues: KnownIssue[] | null | undefined }) {
-  if (!issues || issues.length === 0) return null
+export function KnownIssuesSection({
+  issues,
+  searchEnabled,
+}: {
+  issues: KnownIssue[] | null | undefined
+  /** project_settings.known_issues_search_enabled; null/undefined = unknown. */
+  searchEnabled?: boolean | null
+}) {
+  if (!issues || issues.length === 0) {
+    // Only an explicit "off" earns the hint: unknown says nothing.
+    if (searchEnabled !== false) return null
+    return (
+      <p className="text-2xs text-fg-faint leading-snug">
+        Web search for known fixes is off for this project.{' '}
+        <Link to={KNOWN_ISSUES_SEARCH_HREF} className="underline hover:text-fg-secondary">
+          Turn it on in Settings
+        </Link>
+      </p>
+    )
+  }
   return (
     <Section title="Others who hit this" icon={<IconLink />}>
       <p className="text-2xs text-fg-faint leading-snug mb-2">

@@ -675,7 +675,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
         </Section>
 
-        <KnownIssuesSection issues={report.known_issues} />
+        <KnownIssuesSection issues={report.known_issues} searchEnabled={report.known_issues_search_enabled} />
 
         {/* Skill recommendations — shown when Stage 2 has classified */}
         {(report.recommended_skills?.length || report.status === 'classified') && (
