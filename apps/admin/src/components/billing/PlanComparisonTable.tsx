@@ -15,6 +15,7 @@
 import { Badge, Btn } from '../ui'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
 
 interface PlanCatalogEntry {
   id: string
@@ -282,10 +283,10 @@ export function PlanComparisonTable({
                 )}
               </div>
               <div className="text-sm font-mono text-fg-secondary mt-1">
-                {p.monthly_price_usd > 0
-                  ? `$${p.monthly_price_usd}/mo`
-                  : p.id === 'enterprise'
-                    ? 'Talk to us'
+                {isSalesLedPlan(p)
+                  ? 'Contact us'
+                  : p.monthly_price_usd > 0
+                    ? `$${p.monthly_price_usd}/mo`
                     : 'Free'}
               </div>
               {currentUsage && (() => {
@@ -324,7 +325,7 @@ export function PlanComparisonTable({
                   </div>
                 )
               })()}
-              {onSelectPlan && !isCurrent && p.is_self_serve && (
+              {onSelectPlan && !isCurrent && !isSalesLedPlan(p) && (
                 <Btn
                   size="sm"
                   className="mt-2 w-full"
@@ -335,12 +336,12 @@ export function PlanComparisonTable({
                   {currentPlanId === 'hobby' ? `Start ${p.display_name}` : `Switch to ${p.display_name}`}
                 </Btn>
               )}
-              {p.id === 'enterprise' && !isCurrent && (
+              {isSalesLedPlan(p) && !isCurrent && (
                 <a
-                  href="mailto:kensaurus@gmail.com?subject=Enterprise%20inquiry"
+                  href={ENTERPRISE_MAILTO}
                   className="mt-2 block text-2xs text-accent-foreground hover:text-accent"
                 >
-                  Email sales →
+                  Contact us →
                 </a>
               )}
             </div>

@@ -25,6 +25,34 @@ export function blocksNewCheckout(status: string | null | undefined): boolean {
   return !!status && LIVE_SUBSCRIPTION_STATUSES.has(status)
 }
 
+/** The product inbox (docs/adr/0015). Enterprise is arranged here. */
+export const SALES_CONTACT_EMAIL = 'kensaurus@gmail.com'
+
+/**
+ * Plans that are arranged with us rather than bought through Checkout.
+ * Enterprise is sales-led by owner decision (2026-10-10), whatever its
+ * `pricing_plans.is_self_serve` row says: that row was once flipped to
+ * self-serve outside a migration, and this keeps such a drift from
+ * reopening checkout.
+ */
+export function isSalesLedPlan(plan: { id: string; is_self_serve: boolean }): boolean {
+  return plan.id === 'enterprise' || !plan.is_self_serve
+}
+
+/** The checkout refusal for a sales-led plan, with the address to write to. */
+export function salesLedCheckoutError(displayName: string): {
+  code: 'PLAN_SALES_LED'
+  message: string
+  contact: string
+} {
+  const subject = encodeURIComponent(`Mushi ${displayName} inquiry`)
+  return {
+    code: 'PLAN_SALES_LED',
+    message: `${displayName} is arranged with our team, not bought online. Email ${SALES_CONTACT_EMAIL} and we will set it up with you.`,
+    contact: `mailto:${SALES_CONTACT_EMAIL}?subject=${subject}`,
+  }
+}
+
 /** Stripe accepts meter events up to 35 days old and at most 5 min ahead. */
 export const METER_EVENT_MAX_AGE_DAYS = 35
 

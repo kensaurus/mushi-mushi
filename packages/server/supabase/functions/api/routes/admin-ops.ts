@@ -22,7 +22,7 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { blocksNewCheckout } from '../../_shared/billing-rules.ts';
+import { blocksNewCheckout, isSalesLedPlan, salesLedCheckoutError } from '../../_shared/billing-rules.ts';
 import {
   assertTargetProjectAccess,
   callerCanAccessProject,
@@ -1537,11 +1537,6 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       }
     }
 
-    const cfg = stripeFromEnv();
-    if (!cfg.secretKey) {
-      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Payments are not set up on this Mushi server yet, so plans cannot be bought here.' } }, 503);
-    }
-
     const planId = body.plan_id ?? 'indie';
     const plan = await getPlan(planId);
     if (plan.id === 'hobby' || plan.id === 'free_cloud') {
@@ -1556,18 +1551,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         400,
       );
     }
-    if (!plan.is_self_serve) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'PLAN_SALES_LED',
-            message: `${plan.display_name} requires contacting sales.`,
-          },
-        },
-        400,
-      );
+    // Checked before Stripe config so the answer is the same on every server.
+    if (isSalesLedPlan(plan)) {
+      return c.json({ ok: false, error: salesLedCheckoutError(plan.display_name) }, 400);
     }
+
+    const cfg = stripeFromEnv();
+    if (!cfg.secretKey) {
+      return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Payments are not set up on this Mushi server yet, so plans cannot be bought here.' } }, 503);
+    }
+
     if (!plan.base_price_lookup_key) {
       return c.json(
         {
@@ -1611,13 +1604,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
           ? undefined
           : (Deno.env.get('STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE') ?? Deno.env.get('STRIPE_PRICE_PRO_OVERAGE')),
       },
-      // Enterprise is self-serve as of 2026-08-08. Flat annual-style base fee
-      // with no metered overage — enterprise commits are negotiated, so an
-      // overage line item would double-bill against the contract.
-      enterprise: {
-        base: Deno.env.get('STRIPE_PRICE_ENTERPRISE_BASE'),
-        overage: undefined,
-      },
+      // No enterprise entry: Enterprise is sales-led (isSalesLedPlan above).
       // Legacy plan kept for existing subscribers migrating off starter.
       starter: {
         base: Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? cfg.defaultPriceId,

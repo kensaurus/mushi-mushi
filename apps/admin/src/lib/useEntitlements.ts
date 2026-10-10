@@ -34,6 +34,8 @@ export interface UpgradeTarget {
   id: string
   display_name: string
   monthly_price_usd: number
+  /** False for a plan arranged with sales (Enterprise). */
+  is_self_serve?: boolean
 }
 
 interface EntitlementResponse {
