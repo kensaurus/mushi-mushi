@@ -780,13 +780,18 @@ ${
 
       let webSnippets: FirecrawlSearchResult[] = [];
       let augmentTraceId: string | null = null;
+      // True when a web search would have helped but the project has not
+      // opted in: the skip reason below then says how to turn it on.
+      let webSearchOff = false;
       if (augmentReason) {
         try {
           const symptom =
             (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? (report.component as string | undefined) ?? '';
           // Report text goes to Firecrawl only on projects that opted in
           // (project_settings.known_issues_search_enabled, default off).
-          if (symptom.length > 0 && (await knownIssuesSearchEnabled(db, dispatch.project_id))) {
+          const searchEnabled = symptom.length > 0 && (await knownIssuesSearchEnabled(db, dispatch.project_id));
+          webSearchOff = symptom.length > 0 && !searchEnabled;
+          if (searchEnabled) {
             const augSpan = trace.span('fix.augment.firecrawl');
             webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 });
             augSpan.end({ resultCount: webSnippets.length });
@@ -830,11 +835,14 @@ ${
       // literal search found the emitting file is grounded even when RAG
       // returned nothing (indexing off, embedding key revoked).
       if (fullContext.shownCount < MIN_RAG_CHUNKS && webSnippets.length === 0) {
-        const reason =
+        const codeReason =
           codeFiles.length > 0
             ? `None of the ${codeFiles.length} indexed file(s) matching this report could be read from ${repo.owner}/${repo.repo}` +
               `${base ? `@${base.branch}` : ''} (${fullContext.outcomes.map((o) => `${o.path}: ${o.reason ?? o.shown}`).join('; ').slice(0, 240)}). Re-index the repo, then retry.`
             : ragSkipReasonMessage(ragResult.reason, ragResult.detail);
+        // Since #474 the web search is opt-in; say so instead of failing
+        // silently where it used to fill the gap.
+        const reason = webSearchOff ? `${codeReason} ${WEB_SEARCH_OFF_HINT}` : codeReason;
         log.warn('Fix skipped: no grounding context available', {
           reportId: dispatch.report_id,
           codeFiles: codeFiles.length,
@@ -2313,6 +2321,15 @@ const SECRET_PATTERNS = [
 function containsObviousSecret(content: string): boolean {
   return SECRET_PATTERNS.some((p) => p.test(content));
 }
+
+/**
+ * Added to a "not enough code context" skip when the web search would have
+ * run but the project has not opted in. The console matches the setting's
+ * name to offer a link to it (deriveRecommendation.ts), so keep the quoted
+ * name in step with KnownIssuesSearchCard.
+ */
+const WEB_SEARCH_OFF_HINT =
+  'Turning on "Search the web for known fixes" in Settings → Web tools can help: the agent then also reads how others fixed this error.';
 
 /**
  * Web results go into the fix prompt as fenced DATA: any public page can

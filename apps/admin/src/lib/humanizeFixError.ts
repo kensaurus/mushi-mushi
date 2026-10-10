@@ -352,6 +352,16 @@ export function humanizeFixError(
 
   // No relevant code
   if (m.includes('no grounding context') || m.includes('skipped_no_context') || category === 'no_relevant_code') {
+    // The fix worker names this setting when it is off (WEB_SEARCH_OFF_HINT).
+    if (m.includes('search the web for known fixes')) {
+      return {
+        title: "Mushi couldn't find relevant code to fix.",
+        hint: 'Web search is off for this app. Turn on "Search the web for known fixes" under Settings → Web tools, or re-index under Settings → Codebase Indexing, then retry.',
+        severity: 'hard',
+        action: { label: 'Turn on web search', target: { kind: 'route', to: '/settings?tab=tools', hash: 'known-issues-search' } },
+        raw,
+      };
+    }
     return {
       title: "Mushi couldn't find relevant code to fix.",
       hint: "The codebase index may be out of date. Re-index under Settings \u2192 Codebase Indexing and retry.",
