@@ -3,6 +3,7 @@
  * Revalidates every 15 minutes (aligned with the pg_cron MV refresh).
  */
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
 
 export const metadata: Metadata = {
@@ -60,12 +61,12 @@ export default async function LeaderboardPage() {
           <div className="testers-panel p-12 text-center">
             <p className="mb-3 text-3xl">🏆</p>
             <p className="font-medium">No testers yet — be the first!</p>
-            <a
-              href="/mushi-mushi/testers/apps/"
+            <Link
+              href="/apps/"
               className="testers-brand-mark mt-4 inline-block text-sm underline underline-offset-2 hover:opacity-90"
             >
               Browse apps →
-            </a>
+            </Link>
           </div>
         ) : (
           <div className="testers-panel overflow-hidden">
@@ -93,9 +94,9 @@ export default async function LeaderboardPage() {
           </div>
         )}
 
-        <a href="/mushi-mushi/testers/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)]">
+        <Link href="/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)]">
           ← Back to marketplace
-        </a>
+        </Link>
       </div>
     </TestersPageShell>
   )

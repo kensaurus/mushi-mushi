@@ -3,6 +3,7 @@
 /** @public */
 export type {
   MushiConfig,
+  MushiInitConfig,
   MushiPreset,
   MushiSentryConfig,
   MushiWidgetConfig,
@@ -45,6 +46,7 @@ export type {
   MushiApiClient,
   MushiApiResponse,
   MushiRuntimeSdkConfig,
+  MushiRuntimeWidgetConfig,
   MushiSdkVersionInfo,
   MushiReporterReport,
   MushiReporterComment,

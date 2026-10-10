@@ -5,7 +5,7 @@
  * Images live under public/screenshots/ (synced from docs/screenshots/).
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { publicAssetPath } from '../lib/public-asset-path'
 
@@ -41,14 +41,34 @@ export function DocScreenshot({
   const [expanded, setExpanded] = useState(false)
   const darkUrl = publicAssetPath(`/screenshots/${src}`)
   const lightUrl = lightSrc ? publicAssetPath(`/screenshots/${lightSrc}`) : darkUrl
-  const expandUrl = animated || !lightSrc ? darkUrl : darkUrl
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
 
   const closeLightbox = useCallback(() => setExpanded(false), [])
 
   useEffect(() => {
     if (!expanded) return
+    // Modal dialog: focus moves in on open, Tab stays inside, and focus goes
+    // back to whichever expand trigger opened it.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeLightbox()
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      } else if (!panelRef.current.contains(document.activeElement)) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
@@ -56,6 +76,7 @@ export function DocScreenshot({
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
+      opener?.focus()
     }
   }, [closeLightbox, expanded])
 
@@ -178,12 +199,14 @@ export function DocScreenshot({
               onClick={closeLightbox}
             >
               <div
+                ref={panelRef}
                 className="docs-screenshot-lightbox__panel"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="docs-screenshot-lightbox__toolbar">
                   <p className="docs-screenshot-lightbox__title">{alt}</p>
                   <button
+                    ref={closeRef}
                     type="button"
                     className="docs-screenshot-lightbox__close"
                     onClick={closeLightbox}
@@ -192,11 +215,15 @@ export function DocScreenshot({
                   </button>
                 </div>
                 <div className="docs-screenshot-lightbox__body">
-                  <img
-                    src={expandUrl}
-                    alt={alt}
-                    className="docs-screenshot-lightbox__img"
-                  />
+                  {!animated && lightSrc ? (
+                    <picture>
+                      <source media="(prefers-color-scheme: dark)" srcSet={darkUrl} />
+                      <source media="(prefers-color-scheme: light)" srcSet={lightUrl} />
+                      <img src={darkUrl} alt={alt} className="docs-screenshot-lightbox__img" />
+                    </picture>
+                  ) : (
+                    <img src={darkUrl} alt={alt} className="docs-screenshot-lightbox__img" />
+                  )}
                 </div>
                 {href ? (
                   <div className="docs-screenshot-lightbox__footer">

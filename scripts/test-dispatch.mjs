@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Ad-hoc reproducer for the /v1/admin/fixes/dispatch 500.
-// Logs in as the e2e test user, submits a fresh report, then tries to
-// dispatch a fix — printing the raw status + body so we can see the
+// Logs in as the e2e test user, then tries to dispatch a fix for an
+// existing report — printing the raw status + body so we can see the
 // actual error instead of Hono's generic 500 wrapper.
 //
 // Usage:
 //   SUPABASE_URL=... SUPABASE_ANON_KEY=... \
 //   TEST_EMAIL=... TEST_PASSWORD=... TEST_PROJECT_ID=... \
-//   node scripts/test-dispatch.mjs [reportId]
+//   node scripts/test-dispatch.mjs <reportId>
 //
 // No secrets are embedded: all credentials come from env vars. Put a
 // local `.env.test` outside of git if you need to store them.

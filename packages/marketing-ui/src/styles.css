@@ -1,14 +1,12 @@
 /* =============================================================================
    FILE: styles.css
-   PURPOSE: Marketing-surface styles shared between apps/cloud and apps/admin.
+   PURPOSE: Marketing-surface styles for apps/admin's public pages (apps/cloud,
+   the former Next.js consumer, has been retired).
    Imported by the host app (alongside Tailwind's own entry) so the @xyflow
    chrome and the Mushi canvas / stage / log-ticker visuals are available
    wherever <MushiCanvas /> renders.
 
    IMPORTING:
-     apps/cloud:   handled by globals.css (already imports the brand tokens
-                    + xyflow chrome explicitly; this file is loaded via the
-                    package import chain).
      apps/admin:   imports this file from src/index.css (see Tailwind v4 setup).
 
    The file is intentionally token-driven: every colour, radius, and shadow
@@ -145,7 +143,7 @@
    apps/cloud's globals.css used to bake this into <body>. Moving it here lets
    apps/admin opt in by adding a `mushi-marketing-surface` class to its <main>
    wrapper (since admin's body is the dark dashboard surface and must NOT flip
-   globally). Cloud can keep using body or switch to the class — either works.
+   globally).
 ---------------------------------------------------------------------------- */
 
 .mushi-marketing-surface {

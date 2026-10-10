@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import {
   checkCliAuthPath,
   checkCliConfig,
+  checkHashRouterCapture,
   checkEndpointReachability,
   checkMcpConfig,
   checkPipelineDoctor,
@@ -542,5 +543,32 @@ describe('checkMcpConfig', () => {
     const checks = await checkMcpConfig(makeConfig(), root, noFetch, home);
     expect(checks).toEqual([expect.objectContaining({ name: '[mcp] MCP config present', ok: false })]);
     expect(fixHintForCheck('[mcp] MCP config present')).toContain('--ide claude');
+  });
+});
+
+describe('checkHashRouterCapture', () => {
+  let root: string;
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'mushi-doctor-hash-'));
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'src', 'router.tsx'), 'import { HashRouter } from "react-router-dom";\n');
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it.each([`'/#/article/[slug]'`, `'#/article/[slug]'`])('sees %s as a configured hash template', async (tpl) => {
+    await writeFile(
+      join(root, 'src', 'mushi.ts'),
+      `Mushi.init({ discoverInventory: { routeTemplates: [${tpl}] } });\n`,
+    );
+    const [check] = await checkHashRouterCapture(root);
+    expect(check).toMatchObject({ ok: true });
+    expect(check?.warn).toBeUndefined();
+  });
+
+  it('warns when no hash template is configured', async () => {
+    const [check] = await checkHashRouterCapture(root);
+    expect(check).toMatchObject({ ok: true, warn: true });
   });
 });

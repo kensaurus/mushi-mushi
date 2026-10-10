@@ -328,32 +328,32 @@ async function resolveCursorCredentials(
   db: SupabaseClient,
   projectId: string,
   pluginConfig: Record<string, unknown> | null,
-): Promise<{ apiKeyRef: string; model: string; autoCreatePR: boolean; maxIterations: number }> {
+): Promise<{ apiKeyRef: string; model: string; autoCreatePR: boolean }> {
+  // No iteration cap: one dispatch is one Cursor v1 run, so the plugin's
+  // max_iterations and project_settings.cursor_max_iterations are retired
+  // (owner decision 2026-10-10) and not read.
   const cfg = pluginConfig ?? {}
   let apiKeyRef = typeof cfg.api_key_ref === 'string' ? cfg.api_key_ref : ''
   let model = typeof cfg.model === 'string' ? cfg.model : 'composer-2.5'
   let autoCreatePR = cfg.auto_create_pr !== false
-  let maxIterations = typeof cfg.max_iterations === 'number' ? cfg.max_iterations : 1
 
   if (!apiKeyRef) {
     const { data: settings } = await db
       .from('project_settings')
-      .select('cursor_api_key_ref, cursor_default_model, cursor_auto_create_pr, cursor_max_iterations')
+      .select('cursor_api_key_ref, cursor_default_model, cursor_auto_create_pr')
       .eq('project_id', projectId)
       .maybeSingle()
     const row = settings as {
       cursor_api_key_ref?: string | null
       cursor_default_model?: string | null
       cursor_auto_create_pr?: boolean | null
-      cursor_max_iterations?: number | null
     } | null
     apiKeyRef = row?.cursor_api_key_ref ?? ''
     if (row?.cursor_default_model) model = row.cursor_default_model
     if (row?.cursor_auto_create_pr === false) autoCreatePR = false
-    if (typeof row?.cursor_max_iterations === 'number') maxIterations = row.cursor_max_iterations
   }
 
-  return { apiKeyRef, model, autoCreatePR, maxIterations }
+  return { apiKeyRef, model, autoCreatePR }
 }
 
 async function deliverCursorAgent(

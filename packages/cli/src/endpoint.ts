@@ -19,6 +19,20 @@ export const TEST_REPORT_FETCH_TIMEOUT_MS = TEST_REPORT_TIMEOUT_MS
 export const CLOUD_API_ENDPOINT =
   'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 
+/**
+ * First non-blank candidate, trimmed. Use instead of `??` when chaining
+ * flag → env → saved config: a blank `MUSHI_API_ENDPOINT=` is not nullish,
+ * so `??` would stop there and `resolveCloudEndpoint` would fall through to
+ * Mushi Cloud, skipping a saved self-hosted endpoint.
+ */
+export function firstEndpoint(...candidates: Array<string | undefined>): string | undefined {
+  for (const c of candidates) {
+    const v = c?.trim()
+    if (v) return v
+  }
+  return undefined
+}
+
 /** Resolve the API endpoint: explicit flag → env → cloud default. */
 export function resolveCloudEndpoint(explicit?: string): string {
   if (explicit?.trim()) return explicit.trim()

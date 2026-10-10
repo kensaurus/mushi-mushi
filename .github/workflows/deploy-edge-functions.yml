@@ -27,8 +27,9 @@
 # - Each function is deployed individually to keep error attribution clean
 #   when one function fails — `supabase functions deploy` without args would
 #   silently abort the rest of the batch on the first failure.
-# - `--no-verify-jwt=false` keeps JWT verification on by default; functions
-#   that need to be public override this in their own config (rare).
+# - No verify-jwt flag is passed: scripts/deploy-edge-function.mjs reads each
+#   function's `verify_jwt` from packages/server/supabase/config.toml and
+#   defaults to true when the function has no entry (see the deploy step).
 # - Third-party actions are pinned to commit SHAs (Dependabot bumps).
 ##
 
@@ -160,7 +161,7 @@ jobs:
 
       - name: Smoke test CORS preflight from kensaur.us
         run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+          HTTP=$(curl -s -o /dev/null -D /tmp/preflight-headers -w "%{http_code}" \
             -X OPTIONS \
             -H "Origin: https://kensaur.us" \
             -H "Access-Control-Request-Method: GET" \
@@ -169,6 +170,18 @@ jobs:
           echo "preflight HTTP=$HTTP"
           if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then
             echo "::error::CORS preflight from kensaur.us failed (HTTP $HTTP) — allowlist may not have taken effect"
+            exit 1
+          fi
+          # A 2xx without the allow-origin header is still a browser CORS
+          # failure, so check the headers the console actually needs.
+          if ! grep -qi '^access-control-allow-origin: https://kensaur.us\s*$' /tmp/preflight-headers; then
+            echo "::error::CORS preflight from kensaur.us returned HTTP $HTTP without Access-Control-Allow-Origin: https://kensaur.us"
+            cat /tmp/preflight-headers
+            exit 1
+          fi
+          if ! grep -qi '^access-control-allow-credentials: true\s*$' /tmp/preflight-headers; then
+            echo "::error::CORS preflight from kensaur.us is missing Access-Control-Allow-Credentials: true"
+            cat /tmp/preflight-headers
             exit 1
           fi
           echo "::notice::CORS preflight from kensaur.us passed (HTTP $HTTP)"

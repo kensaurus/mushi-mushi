@@ -21,6 +21,17 @@ export function locationLabel(env: ReportRow['environment']): string | null {
   return null
 }
 
+/** Path only: drops origin, query and fragment, which can carry PII and never
+ *  match the pathnames the activity tracker stores. */
+export function routePathname(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  try {
+    return new URL(raw).pathname
+  } catch {
+    return raw.split(/[?#]/, 1)[0] || null
+  }
+}
+
 /** FE / BE / API / RN from inventory path or SDK family. */
 export function inferReportLayer(row: ReportRow): ReportLayer | null {
   const comp = row.component?.toLowerCase() ?? ''

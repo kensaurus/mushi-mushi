@@ -1688,3 +1688,65 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
     w.destroy();
   });
 });
+
+// ── avoidSelectors — only the anchored half of the viewport counts ─────────────
+
+describe('MushiWidget avoidSelectors', () => {
+  const H = 800;
+  let restoreHeight: number;
+
+  beforeEach(() => {
+    restoreHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: H });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: restoreHeight });
+    document.querySelectorAll('[data-mushi-test-avoid]').forEach((el) => el.remove());
+  });
+
+  /** Adds an element whose measured rect spans `top`..`bottom`. */
+  function injectAvoided(name: string, top: number, bottom: number): void {
+    const el = document.createElement('div');
+    el.setAttribute('data-mushi-test-avoid', name);
+    el.getBoundingClientRect = () =>
+      ({ top, bottom, left: 0, right: 400, width: 400, height: bottom - top, x: 0, y: top }) as DOMRect;
+    document.body.appendChild(el);
+  }
+
+  function insetsFor(config: ConstructorParameters<typeof MushiWidget>[0]): { top: string; bottom: string } {
+    const w = new MushiWidget(config, noopCallbacks);
+    const el = document.createElement('div');
+    (w as unknown as { applyInsetVars(el: HTMLElement): void }).applyInsetVars(el);
+    return {
+      top: el.style.getPropertyValue('--mushi-top'),
+      bottom: el.style.getPropertyValue('--mushi-bottom'),
+    };
+  }
+
+  it('a top header does not push the default bottom-anchored widget off-screen', () => {
+    injectAvoided('header', 0, 56);
+    const { bottom } = insetsFor({ avoidSelectors: ['[data-mushi-test-avoid="header"]'] });
+    // Same as no avoidance at all (it used to be innerHeight + 8px).
+    expect(bottom).toBe(insetsFor({}).bottom);
+  });
+
+  it('a bottom tab bar lifts the bottom-anchored widget above it', () => {
+    injectAvoided('header', 0, 56);
+    injectAvoided('tabs', H - 64, H);
+    const { bottom } = insetsFor({
+      avoidSelectors: ['[data-mushi-test-avoid="header"]', '[data-mushi-test-avoid="tabs"]'],
+    });
+    expect(bottom).toBe(`${64 + 8}px`);
+  });
+
+  it('a top-anchored widget clears the header and ignores the bottom tab bar', () => {
+    injectAvoided('header', 0, 56);
+    injectAvoided('tabs', H - 64, H);
+    const { top } = insetsFor({
+      position: 'top-right',
+      avoidSelectors: ['[data-mushi-test-avoid="header"]', '[data-mushi-test-avoid="tabs"]'],
+    });
+    expect(top).toBe(`${56 + 8}px`);
+  });
+});

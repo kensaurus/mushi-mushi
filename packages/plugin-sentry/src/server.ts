@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
- * Stand-alone Node HTTPS entry point. Usage:
+ * Stand-alone Node HTTP entry point (plain HTTP — terminate TLS at a reverse
+ * proxy or your platform's load balancer). Usage:
  *
  *   MUSHI_PLUGIN_SECRET=... SENTRY_DSN=... PORT=3000 \
  *     npx mushi-plugin-sentry

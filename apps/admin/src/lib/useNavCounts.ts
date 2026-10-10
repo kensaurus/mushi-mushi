@@ -29,7 +29,7 @@ import { useEntitlements } from './useEntitlements'
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
 export interface NavCounts {
-  /** Reports with status='new' that have been sitting > 1h. */
+  /** Reports with status='new' (no age filter). */
   untriagedBacklog: number
   /** Unfixed reports with a fix queued or running (counted per report). */
   fixesInFlight: number

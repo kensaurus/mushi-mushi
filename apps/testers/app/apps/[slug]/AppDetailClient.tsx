@@ -1,6 +1,7 @@
 'use client'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { TestersPageShell } from '../../components/TestersPageShell'
 
 interface BountyTier {
@@ -75,7 +76,7 @@ export default function AppDetailClient() {
   const params = useParams<{ slug: string }>()
   const slug = params.slug
 
-  const joinUrl = `/mushi-mushi/testers/join/?app=${slug}`
+  const joinUrl = `/join/?app=${slug}`
 
   const [app, setApp] = useState<AppDetail | null | 'loading'>('loading')
 
@@ -103,9 +104,9 @@ export default function AppDetailClient() {
           <p className="mb-4 text-4xl">🔍</p>
           <h1 className="mb-2 text-2xl font-bold">App not found</h1>
           <p className="testers-muted mb-6">This app may have been removed from the marketplace.</p>
-          <a href="/mushi-mushi/testers/apps/" className="testers-brand-mark underline underline-offset-2 hover:opacity-90">
+          <Link href="/apps/" className="testers-brand-mark underline underline-offset-2 hover:opacity-90">
             ← Browse all apps
-          </a>
+          </Link>
         </div>
       </TestersPageShell>
     )
@@ -117,9 +118,9 @@ export default function AppDetailClient() {
   return (
     <TestersPageShell>
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
-        <a href="/mushi-mushi/testers/apps/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)] motion-safe:transition-colors">
+        <Link href="/apps/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)] motion-safe:transition-colors">
           ← All apps
-        </a>
+        </Link>
 
         <div className="flex items-start gap-5">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--mushi-paper-wash)] text-3xl">
@@ -146,9 +147,9 @@ export default function AppDetailClient() {
             <p className="font-semibold">Ready to test {app.name}?</p>
             <p className="testers-muted mt-0.5 text-sm">Sign up free — find bugs, earn points, redeem rewards.</p>
           </div>
-          <a href={joinUrl} className="testers-cta shrink-0 px-6 py-2.5 text-sm">
+          <Link href={joinUrl} className="testers-cta shrink-0 px-6 py-2.5 text-sm">
             Join to test →
-          </a>
+          </Link>
         </div>
 
         {app.description && (
@@ -200,15 +201,15 @@ export default function AppDetailClient() {
             <li>Submit a report with steps to reproduce, expected vs actual behavior, and screenshots.</li>
             <li>The developer reviews and awards points if the report is accepted.</li>
           </ol>
-          <a href="/mushi-mushi/testers/how-it-works/" className="testers-brand-mark mt-2 inline-block text-sm underline underline-offset-2 hover:opacity-90">
+          <Link href="/how-it-works/" className="testers-brand-mark mt-2 inline-block text-sm underline underline-offset-2 hover:opacity-90">
             Full guide: How Mushi Bounties works →
-          </a>
+          </Link>
         </div>
 
         <div className="pt-4">
-          <a href={joinUrl} className="testers-cta block w-full px-8 py-3 text-center text-base">
+          <Link href={joinUrl} className="testers-cta block w-full px-8 py-3 text-center text-base">
             Start testing {app.name} →
-          </a>
+          </Link>
         </div>
       </div>
     </TestersPageShell>

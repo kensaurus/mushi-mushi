@@ -18,7 +18,7 @@
 # - GitHub Actions workflow (deploy-admin.yml) handles all subsequent deploys
 #
 # NOTES:
-# - The S3 bucket kensaur.us-glot-it already had static website hosting enabled
+# - The S3 bucket kensaur.us-mushi-mushi already had static website hosting enabled
 # - The github-actions-deploy IAM user already had write access to this bucket
 # - CloudFront Functions were created and published via the deploy user
 # - The distribution update added behaviors pointing to the existing origin
@@ -65,7 +65,7 @@ done
 
 echo ""
 echo "=== Step 2: Add cache behaviors to CloudFront distribution ==="
-echo "This was done via AWS CLI update-distribution."
+echo "This was done via AWS CLI update-distribution on distribution $DIST_ID."
 echo "Added /mushi-mushi and /mushi-mushi/* behaviors pointing to kensaur.us/mushi-mushi origin."
 echo "The /mushi-mushi/* behavior has both CF functions associated."
 echo ""

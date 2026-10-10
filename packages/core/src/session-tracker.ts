@@ -121,6 +121,17 @@ function activate(): void {
   }, HEARTBEAT_INTERVAL_MS);
 }
 
+// Module-level so a destroy → re-init on the same page re-adds the SAME
+// functions, which addEventListener ignores: one session_end per hide, not
+// one per init. After destroy they stay attached but send() is a no-op.
+function onHide(): void {
+  if (document.visibilityState === 'hidden') send(buildPayload('session_end', { route: currentRoute() }));
+}
+
+function onPagehide(): void {
+  send(buildPayload('session_end', { route: currentRoute() }));
+}
+
 /** Stop sending immediately (consent denied). Listeners stay but go quiet. */
 function deactivate(): void {
   _active = false;
@@ -175,17 +186,10 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
   _userIdHash = opts.userIdHash ?? null;
 
   // session_end on visibility-change to hidden / pagehide
-  const onHide = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      send(buildPayload('session_end', { route: currentRoute() }));
-    }
-  };
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', onHide, { passive: true });
   }
-  window.addEventListener('pagehide', () => {
-    send(buildPayload('session_end', { route: currentRoute() }));
-  }, { passive: true });
+  window.addEventListener('pagehide', onPagehide, { passive: true });
 
   // page_view on History API navigation (SPA route changes) — unless the
   // host owns the history patch and reports page views via trackPageView().
@@ -210,7 +214,7 @@ export function trackPageView(route?: string): void {
   recordPageView(route ?? currentRoute());
 }
 
-/** Update the user identity after a Mushi.identify() call. */
+/** Set the identity heartbeats carry: a SHA-256 hex of the host user id, never the raw id. */
 export function updateSessionIdentity(userIdHash: string | null): void {
   _userIdHash = userIdHash;
 }

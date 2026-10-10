@@ -3,12 +3,13 @@
  */
 import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const BASE = 'https://kensaur.us/mushi-mushi/admin'
 const PROJECT = '542b34e0-019e-41fe-b900-7b637717bb86'
 const STORY = '506596e5-374c-4e3b-8461-19451fa4103f'
 // Repo-relative default — override via PLAYWRIGHT_OUT_DIR.
-const OUT = process.env.PLAYWRIGHT_OUT_DIR ?? new URL('../.playwright-mcp', import.meta.url).pathname
+const OUT = process.env.PLAYWRIGHT_OUT_DIR ?? fileURLToPath(new URL('../.playwright-mcp', import.meta.url))
 
 mkdirSync(OUT, { recursive: true })
 

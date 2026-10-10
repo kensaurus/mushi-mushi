@@ -3,6 +3,7 @@ import type { WidgetSubmitOutcome } from './widget-helpers';
 import { shouldShowSdkFreshness } from './widget-helpers';
 import {
   type MushiConfig,
+  type MushiInitConfig,
   type MushiReport,
   type MushiReportCategory,
   type MushiRuntimeSdkConfig,
@@ -108,7 +109,7 @@ let instance: MushiSDKInstance | null = null;
 export class Mushi {
   private constructor() {}
 
-  static init(config: MushiConfig): MushiSDKInstance {
+  static init(config: MushiInitConfig = {}): MushiSDKInstance {
     if (instance) {
       createLogger({ scope: 'mushi', level: 'warn', format: 'pretty' })
         .warn('Already initialized — call destroy() first to reinitialize');
@@ -130,7 +131,7 @@ export class Mushi {
     // Merge env-var defaults under any explicit config so developers can
     // use zero-config mode: <MushiProvider> with no props reads from
     // NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* / MUSHI_* automatically.
-    const resolved: MushiConfig = { ...resolveEnvConfig(), ...config };
+    const resolved: MushiInitConfig = { ...resolveEnvConfig(), ...config };
 
     if (!resolved.projectId || !resolved.apiKey) {
       // Diagnose WHY env resolution failed (wrong prefix, var not exposed to
@@ -147,7 +148,8 @@ export class Mushi {
       return createNoopInstance();
     }
 
-    instance = createInstance(resolved);
+    // Both credentials were checked above.
+    instance = createInstance(resolved as MushiConfig);
     return instance;
   }
 
@@ -743,7 +745,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         // DOM capturer instead of silently returning no screenshot. (Setting a
         // provider used to disable the built-in path entirely, so a null return
         // meant the "screenshot included automatically" promise broke.)
-        if (result) return result;
+        // Ingest decodes a base64 data:image/ URL; anything else (a native
+        // file:// URI) would be dropped server-side, so treat it as null here.
+        if (result?.startsWith('data:image/')) return result;
+        if (result) log.warn('screenshotProvider must resolve to a data:image/ URL; ignoring', { prefix: result.slice(0, 16) });
       } catch (err) {
         log.warn('screenshotProvider threw, falling back to built-in capturer', {
           error: err instanceof Error ? err.message : String(err),
@@ -796,7 +801,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
-      proactiveManager?.recordSubmission();
+      // Only a submit from a proactive prompt resets the dismissal streak; a
+      // report the user opened themselves says nothing about the prompts.
+      if (pendingProactiveTrigger) proactiveManager?.recordSubmission();
       await autoCaptureScreenshot('submit');
       const outcome = await submitReport(category, description, intent, userCategory);
       // Surface the server-confirmed id back to the widget so the
@@ -1981,8 +1988,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           }
           // Propagate identity to session tracker so subsequent heartbeats
           // carry the user_id_hash and the activity dashboard can show the
-          // identified vs anonymous split.
-          updateSessionIdentity(claims.sub);
+          // identified vs anonymous split. `sub` is the host's own user id
+          // (often an email), so only its SHA-256 leaves the device — the
+          // same hash discovery events carry. Dropped if the user changed
+          // while hashing.
+          const sub = claims.sub;
+          void sha256Hex(sub)
+            .then((hash) => { if (userInfo?.id === sub) updateSessionIdentity(hash); })
+            .catch(() => { /* no identity beats a raw one */ });
           // Hydrate display identity from the (unverified) claims so the
           // widget can greet the user; the server re-verifies for trust.
           userInfo = {
@@ -2002,6 +2015,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       } else {
         userInfo = null;
         lastIdentifySig = null;
+        updateSessionIdentity(null);
         widget.setIdentifiedUser(null);
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken(null)' });
       }

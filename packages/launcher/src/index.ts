@@ -58,6 +58,13 @@ ${FLAGS_HELP}`
 function forwardToCli(argv: readonly string[]): never {
   const cliBin = fileURLToPath(import.meta.resolve('@mushi-mushi/cli'))
   const result = spawnSync(process.execPath, [cliBin, ...argv], { stdio: 'inherit' })
+  // A spawn failure (ENOENT, missing dist) or a kill leaves status null; say
+  // why instead of exiting 1 silently.
+  if (result.error) {
+    process.stderr.write(`${BIN}: could not start @mushi-mushi/cli (${result.error.message})\n`)
+  } else if (result.signal) {
+    process.stderr.write(`${BIN}: @mushi-mushi/cli was stopped by ${result.signal}\n`)
+  }
   process.exit(result.status ?? 1)
 }
 

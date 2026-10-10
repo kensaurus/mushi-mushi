@@ -634,8 +634,20 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         { status: 429, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    log.warn('ask-mushi rate limit RPC failed', { error: msg });
-    return null;
+    // Fail closed (owner decision 2026-10-10): every Ask Mushi call spends
+    // LLM money, so an RPC outage must not lift the 300/hour cap. Same rule
+    // as repo-digest's claimDigestBuild.
+    log.error('ask-mushi rate limit RPC failed; refusing the call', { error: msg });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: {
+          code: 'RATE_LIMIT_UNAVAILABLE',
+          message: 'Ask Mushi is paused for a moment. Try again shortly.',
+        },
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '30' } },
+    );
   }
 
   async function handleAskMushiMessageBody(

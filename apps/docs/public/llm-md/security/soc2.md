@@ -22,7 +22,7 @@ Mushi ships a SOC 2 Type 1 readiness module. It is not a third-party certificati
 | Access — who / what / when | `audit_log` table, append-only, RLS per user | Real-time |
 | RLS policy coverage | `mushi_rls_coverage_snapshot()` — verifies every public table has at least one policy | Daily cron |
 | Data retention | `data_retention_policies` per project; nightly hard-delete cron | Nightly |
-| DSAR (data subject access) | `request_dsar()` SQL fn → signed tarball URL | On-demand |
+| DSAR (data subject access) | `data_subject_requests` audit trail via `POST /v1/admin/compliance/dsars` | On-demand |
 | Evidence pack | `soc2-evidence` Edge Function → quarterly snapshot in `soc2_evidence` | Quarterly + on-demand |
 | Encryption-in-transit | TLS 1.2+ enforced by Supabase edge | Always |
 | Encryption-at-rest | `pgsodium` for PII columns; Supabase disk encryption for all storage | Always |
@@ -65,14 +65,14 @@ The nightly cron hard-deletes rows older than the configured window and logs the
 
 ## DSAR (Data Subject Access Request)
 
-Submit a DSAR via the admin API:
+File a DSAR in the admin console (**Compliance → DSARs**) or through the admin API with a signed-in user's access token:
 
 ```bash
-curl -X POST https://<your-project>.supabase.co/functions/v1/api/v1/admin/dsar \
-  -H "Authorization: Bearer <admin-api-key>" \
+curl -X POST https://<your-project>.supabase.co/functions/v1/api/v1/admin/compliance/dsars \
+  -H "Authorization: Bearer <user-access-token>" \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com"}'
-# Returns a signed URL to a tarball of all rows referencing that email.
+  -d '{"projectId": "<project-id>", "request_type": "access", "subject_email": "user@example.com"}'
+# Returns the new data_subject_requests row (status: pending).
 ```
 
-The tarball includes: `reports`, `reporter_identities`, `activity_events`, `audit_log` rows where `actor_email = ?`. PII columns are decrypted in the export (the tarball itself is signed and expires in 48 hours).
+`request_type` is one of `access`, `export`, `deletion` or `rectification`. The row is the audit trail, not the export: you fulfil the request, then `PATCH /v1/admin/compliance/dsars/:id` with `status: "completed"` (and an optional `evidence_url`) records who completed it and when.

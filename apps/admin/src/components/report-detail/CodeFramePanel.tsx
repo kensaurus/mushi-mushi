@@ -43,7 +43,8 @@ interface ConsoleLogEntry {
 /**
  * Parse V8-style stack frames from a stack string.
  * Handles both "at FnName (file.ts:10:5)" and "at file.ts:10:5" forms.
- * Skips Mushi SDK-internal frames (contains "mushi-mushi" or "@mushi").
+ * Skips dependency, bundler and Mushi SDK frames, that is every file path containing
+ * "node_modules", "webpack:" or "mushi-mushi" (which covers @mushi-mushi/*).
  */
 function parseStackFrames(stack: string): { fn?: string; file: string; line: number; col: number; raw: string }[] {
   const frames: { fn?: string; file: string; line: number; col: number; raw: string }[] = []

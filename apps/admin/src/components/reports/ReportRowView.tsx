@@ -122,8 +122,9 @@ function ReportRowViewInner({
 
   // Wave T.2.5 single-shot background wash when a realtime update flips
   // the status — e.g. triager sees the row go `new → classified` in place.
-  // We key the flash on `status|severity` so either transition fires the
-  // animation; tone tracks whichever value changed most recently.
+  // Keyed on `status` only: a severity change alone does not flash (it
+  // usually lands with a status change, which already does). Tone follows
+  // the new status.
   const flashStatusTone = useCallback((s: ReportRow['status']) => {
     switch (s) {
       case 'fixed':

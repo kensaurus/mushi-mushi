@@ -23,6 +23,7 @@ import { spawnSync } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
+import { normalizeEndpoint } from './endpoint.js'
 import { tryLoadKeyFromKeychain } from './keychain.js'
 
 /**
@@ -208,12 +209,15 @@ export function loadConfig(path = CONFIG_PATH, opts: { profile?: string } = {}):
   }
 
   // Env vars overlay the file: a set env var always wins.
+  // A blank value counts as unset, so it can't hide the alias or the file.
   const endpointFromEnv =
-    process.env['MUSHI_API_ENDPOINT'] ?? process.env['MUSHI_ENDPOINT'] ?? undefined
+    process.env['MUSHI_API_ENDPOINT']?.trim() || process.env['MUSHI_ENDPOINT']?.trim() || undefined
   const fromEnv: CliConfig = {
     ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
     ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),
-    ...(endpointFromEnv ? { endpoint: endpointFromEnv } : {}),
+    // Saved endpoints are normalized by assertEndpoint; the env value isn't,
+    // so strip trailing slashes here (no `.../api//v1/...` in any caller).
+    ...(endpointFromEnv ? { endpoint: normalizeEndpoint(endpointFromEnv) } : {}),
     ...(process.env['MUSHI_CONSOLE_URL']
       ? { consoleUrl: process.env['MUSHI_CONSOLE_URL'].trim() }
       : {}),

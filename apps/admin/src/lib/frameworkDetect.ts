@@ -419,7 +419,7 @@ export function monorepoInstallGuidance(
   const installPart = installCmd.split(/&&/)[0].trim()
   const pkgArgs = installPart
     .replace(/^(npx expo install|npm install|pnpm add|yarn add)\s+/, '')
-    .replace(/^(-\w+|--\w[\w-]*)\s+/, '')  // strip leading short (-g, -D) or long (--save-dev) flags
+    .replace(/^(?:(?:-\w+|--\w[\w-]*)\s+)+/, '')  // strip every leading short (-g, -D) or long (--save-dev) flag
     .trim()
 
   // For non-workspace monorepo tools (Turborepo, Nx, Lerna, Rush), the user
@@ -430,13 +430,16 @@ export function monorepoInstallGuidance(
     result.monorepo === 'pnpm-workspaces' ||
     result.monorepo === 'yarn-workspaces'
 
+  // appPath is a directory, not a package name. npm's --workspace takes a
+  // path; pnpm's --filter only reads it as a path with a leading `./`; and
+  // `yarn workspace` takes only a package name, so yarn installs from the dir.
   const runIn = !isWorkspaceManager
     ? `cd ${appPath} && ${installPart}`
     : result.monorepo === 'npm-workspaces'
       ? `npm install --workspace=${appPath} ${pkgArgs}`
       : result.monorepo === 'pnpm-workspaces'
-        ? `pnpm add --filter ${appPath} ${pkgArgs}`
-        : `yarn workspace ${appPath} add ${pkgArgs}`  // yarn-workspaces
+        ? `pnpm add --filter ${appPath.startsWith('.') ? appPath : `./${appPath}`} ${pkgArgs}`
+        : `cd ${appPath} && yarn add ${pkgArgs}`  // yarn-workspaces
 
   return (
     `Detected ${tool} monorepo. Run the install inside your app's workspace — not the root:\n\n` +

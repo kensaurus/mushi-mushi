@@ -43,7 +43,7 @@
   This release is **non-breaking** for SDK consumers. New surface only.
 
   ## Highlights
-  - **On-device pre-classifier** (`@mushi-mushi/wasm-classifier`, public 0.1.0):
+  - **On-device pre-classifier** (`@mushi-mushi/wasm-classifier`, first published as 0.2.0):
     ships both a zero-dependency heuristic mode and an ONNX mode (lazy-loads
     `onnxruntime-web` only when wired up). Plugs into `submitReport` via
     `preFilter.wasmClassifier`. Cuts LLM cost by ~25-40% on noisy widgets and
@@ -85,8 +85,8 @@
   `20260418000900_realtime_collab`, `20260418001000_finetune_pipeline`,
   `20260418001100_intelligence_reports`, `20260418001200_age_parallel_write`.
 
-  ## New dependencies
-  - `@mushi-mushi/wasm-classifier@0.1.0` — published as a separate package so
+  ## New packages
+  - `@mushi-mushi/wasm-classifier@0.2.0` — published as a separate package so
     consumers who don't want the ONNX runtime in their bundle can stay on the
     heuristic mode.
 
