@@ -87,8 +87,8 @@ app.post('/slack/command', async (c) => {
   const raw = await c.req.text()
   const verdict = verifySlackRequest({
     signingSecret,
-    timestamp: c.req.header('X-Slack-Request-Timestamp') ?? '',
-    signature: c.req.header('X-Slack-Signature') ?? '',
+    timestampHeader: c.req.header('X-Slack-Request-Timestamp'),
+    signatureHeader: c.req.header('X-Slack-Signature'),
     rawBody: raw,
   })
   if (!verdict.ok) return c.json({ error: verdict.reason }, 401)
