@@ -827,8 +827,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     // logging `code 23502 — null value in column "organization_id"`).
     // Resolve the active org from the same `X-Mushi-Org-Id` header the FE
     // already sends for every other org-scoped call. Fall back to the
-    // user's first org membership (oldest first, owner roles preferred)
-    // when no header is set so that legacy SDK calls keep working.
+    // user's oldest owner or admin membership (created_at order, owner not
+    // ranked above admin) when no header is set so that legacy SDK calls keep
+    // working.
     const orgIdHint = c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null;
     if (orgIdHint && !UUID_RE.test(orgIdHint)) {
       return c.json(
