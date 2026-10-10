@@ -6,7 +6,9 @@
 -- "plugin_marketplace". Renaming the table is a breaking change for installed
 -- catalogs, so we expose a read-through alias view instead.
 --
--- The view inherits RLS from the base table.
+-- The view does NOT inherit RLS here: a plain view runs with its owner's
+-- rights. 20260418004500_plugin_marketplace_security_invoker sets
+-- security_invoker = true so the base table's RLS applies to the caller.
 -- =============================================================================
 
 create or replace view plugin_marketplace as
