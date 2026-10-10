@@ -784,7 +784,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // merged and a declared production deploy target reported a commit;
     // `unknown` (never `live`) on a failed read or when a merged attempt's PR
     // is in a repo other than the one the deploy heads come from.
-    const [{ fixPacket: fix_packet }, deploy_live] = await Promise.all([
+    const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes] = await Promise.all([
       buildReportFixPacket(
         db,
         data as Record<string, unknown>,
@@ -795,6 +795,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         { project_id: data.project_id as string, status: (data.status as string | null) ?? null },
         (fixesRes.data ?? []) as MergedFixRow[],
       ),
+      // "Has anyone hit this?" results (known-issues.ts) and snippets a
+      // person attached from the Research page; attached_by null = automatic.
+      db
+        .from('research_snippets')
+        .select('id, url, title, snippet, attached_by, attached_at')
+        .eq('attached_to_report_id', reportId)
+        .order('attached_at', { ascending: true })
+        .limit(5),
     ]);
 
     return c.json({
@@ -843,6 +851,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // Phase 2a: anomaly context when this report was auto-filed by CI metric regression.
         // Provides provenance: baseline_mean/std + score (σ above baseline) + threshold.
         anomalies: anomaliesRes.data ?? [],
+        known_issues: knownIssuesRes.data ?? [],
       },
     });
   });

@@ -290,7 +290,7 @@ async function processRepo(
     const guesses = guessChangelogUrls(manifestKind, dep.name)
     for (const url of guesses.slice(0, 2)) {
       try {
-        const scraped = await firecrawlScrape(db, row.project_id, url)
+        const scraped = await firecrawlScrape(db, row.project_id, url, { trustedHosts: CHANGELOG_HOSTS })
         const md = scraped.markdown.slice(0, 4000)
         if (md.length > 200) {
           releaseNotes.push({ name: dep.name, notes: md })
@@ -397,6 +397,9 @@ async function processRepo(
 
   return { scanned: deps.length, created, skipped: null }
 }
+
+/** Every host guessChangelogUrls builds a URL on: trusted for its scrapes. */
+const CHANGELOG_HOSTS: readonly string[] = ['www.npmjs.com', 'github.com', 'pypi.org', 'crates.io', 'pkg.go.dev']
 
 function guessChangelogUrls(kind: ManifestKind, name: string): string[] {
   if (kind === 'package.json') {

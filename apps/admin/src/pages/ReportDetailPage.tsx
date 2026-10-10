@@ -61,6 +61,7 @@ import {
   EnvironmentFields,
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
+import { KnownIssuesSection } from '../components/report-detail/KnownIssuesSection'
 import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
@@ -673,6 +674,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             <div className="text-fg-muted text-xs italic">Pending classification — refresh in a few seconds.</div>
           )}
         </Section>
+
+        <KnownIssuesSection issues={report.known_issues} />
 
         {/* Skill recommendations — shown when Stage 2 has classified */}
         {(report.recommended_skills?.length || report.status === 'classified') && (
