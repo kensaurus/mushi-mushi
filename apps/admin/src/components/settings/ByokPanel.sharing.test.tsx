@@ -84,11 +84,16 @@ describe('ByokPanel shared keys', () => {
     document.body.innerHTML = ''
   })
 
-  it('an admin moves an app key to every app in one click', async () => {
+  it('an admin moves an app key to every app after confirming', async () => {
     mocks.keys = [OWN]
     mocks.sharing = { organizationName: 'kenji', appCount: 9, canManage: true }
     await render()
     await act(async () => button('Use in all apps').click())
+    // Nothing moves until the dialog is confirmed.
+    expect(posts('/v1/admin/byok/keys/key-own/scope')).toHaveLength(0)
+    expect(document.body.textContent).toContain('Use this key in all 9 apps?')
+    const confirm = Array.from(document.body.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Use in all apps').pop()!
+    await act(async () => confirm.click())
     const calls = posts('/v1/admin/byok/keys/key-own/scope')
     expect(calls).toHaveLength(1)
     expect(bodyOf(calls[0]!)).toEqual({ scope: 'organization' })
@@ -101,6 +106,9 @@ describe('ByokPanel shared keys', () => {
     await render()
     expect(document.body.textContent).toContain('All apps in kenji')
     await act(async () => button('Use in this app only').click())
+    expect(document.body.textContent).toContain('The other apps in kenji stop using it')
+    const confirm = Array.from(document.body.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Use in this app only').pop()!
+    await act(async () => confirm.click())
     expect(bodyOf(posts('/v1/admin/byok/keys/key-shared/scope')[0]!)).toEqual({ scope: 'project' })
   })
 
@@ -111,6 +119,13 @@ describe('ByokPanel shared keys', () => {
     expect(document.body.textContent).toContain('An owner or admin can change or remove it')
     expect(buttons().some((b) => b.textContent?.trim() === 'Turn off')).toBe(false)
     expect(buttons().some((b) => b.textContent?.trim() === 'Use in this app only')).toBe(false)
+  })
+
+  it('a Supabase token offers no Use in all apps', async () => {
+    mocks.keys = [{ ...OWN, provider_slug: 'supabase' }]
+    mocks.sharing = { organizationName: 'kenji', appCount: 9, canManage: true }
+    await render()
+    expect(buttons().some((b) => b.textContent?.trim() === 'Use in all apps')).toBe(false)
   })
 
   it('no sharing controls for an app outside an organization', async () => {

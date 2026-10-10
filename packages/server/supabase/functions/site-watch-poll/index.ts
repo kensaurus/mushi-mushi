@@ -35,6 +35,14 @@ const deps: ProcessDeps = {
   classify: (db, reportId, projectId) => queueReportClassification(db as never, reportId, projectId),
 }
 
+/** last_error is shown on the console card: a sentence, never a code. */
+function pollErrorSentence(msg: string): string {
+  if (msg === 'FIRECRAWL_AUTH_FAILED') return 'Firecrawl rejected the key. Check it in Settings → AI keys.'
+  if (msg === 'FIRECRAWL_NO_CREDITS') return 'The Firecrawl account is out of credits.'
+  if (msg === 'FIRECRAWL_RATE_LIMITED') return 'Firecrawl was rate-limiting the key; the next hourly read retries.'
+  return 'Mushi could not read the last check; the next hourly read retries.'
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
@@ -48,7 +56,7 @@ interface WatchRow {
 }
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('site-watch-poll', async (req: Request) => {
     const authResp = requireServiceRoleAuth(req)
     if (authResp) return authResp
     const db = getServiceClient()
@@ -124,8 +132,13 @@ Deno.serve(
           .from('site_watches')
           .update(
             lost
-              ? { status: 'error', last_error: 'The Firecrawl monitor no longer exists. Turn the watch off and on again.' }
-              : { last_error: msg.slice(0, 300) },
+              ? {
+                  status: 'error',
+                  last_error:
+                    'Firecrawl no longer finds this watch. If you switched to a key from a different Firecrawl account, ' +
+                    'delete the old monitor in that account; then press Change and Save to start a new one.',
+                }
+              : { last_error: pollErrorSentence(msg) },
           )
           .eq('id', w.id)
         plog.warn('site watch poll failed', { projectId: w.project_id, err: msg.slice(0, 300) })

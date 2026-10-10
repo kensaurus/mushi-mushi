@@ -198,6 +198,8 @@ export function ByokPanel() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ManagedKey | null>(null);
   const [disableTarget, setDisableTarget] = useState<PoolKey | null>(null);
+  // Moving a key changes which key every app in the organization bills to: confirmed first.
+  const [moveTarget, setMoveTarget] = useState<{ key: PoolKey; scope: 'project' | 'organization' } | null>(null);
   const [removing, setRemoving] = useState(false);
   const [togglePending, setTogglePending] = useState<string | null>(null);
   const [testPending, setTestPending] = useState<string | null>(null);
@@ -266,7 +268,7 @@ export function ByokPanel() {
             ? 'Key checked and in use. Your old key is no longer needed; remove it below.'
             : 'Key checked and in use.'
         : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi won't use it yet.");
-      const where = shared && sharing ? ` ${sharedWithText(sharing)}` : '';
+      const where = shared && sharing && validated ? ` ${sharedWithText(sharing)}` : '';
       setNotice({
         scope: `provider:${provider}`,
         ok: validated && !data?.expiryWarning,
@@ -596,7 +598,7 @@ export function ByokPanel() {
               </Btn>
             </Tooltip>
           )}
-          {poolKey && sharing?.canManage && (
+          {poolKey && sharing?.canManage && (shared || poolKey.provider_slug !== 'supabase') && (
             <Tooltip
               content={
                 shared
@@ -609,7 +611,7 @@ export function ByokPanel() {
                 variant="ghost"
                 type="button"
                 loading={scopePending === poolKey.id}
-                onClick={() => void moveKey(poolKey, shared ? 'project' : 'organization')}
+                onClick={() => setMoveTarget({ key: poolKey, scope: shared ? 'project' : 'organization' })}
               >
                 {shared ? 'Use in this app only' : 'Use in all apps'}
               </Btn>
@@ -784,10 +786,35 @@ export function ByokPanel() {
         })}
       </SettingsList>
 
+      {moveTarget && sharing && (
+        <ConfirmDialog
+          title={
+            moveTarget.scope === 'organization'
+              ? `Use this key in all ${sharing.appCount} apps?`
+              : 'Use this key in this app only?'
+          }
+          body={
+            moveTarget.scope === 'organization'
+              ? `Every app in ${sharing.organizationName} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. Apps with no key of their own for this service start billing to it; an app's own key is still tried first.`
+              : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. The other apps in ${sharing.organizationName} stop using it and fall back to their own keys, or Mushi's own key where there is one.`
+          }
+          confirmLabel={moveTarget.scope === 'organization' ? 'Use in all apps' : 'Use in this app only'}
+          cancelLabel="Cancel"
+          loading={scopePending === moveTarget.key.id}
+          onConfirm={async () => {
+            await moveKey(moveTarget.key, moveTarget.scope)
+            setMoveTarget(null)
+          }}
+          onCancel={() => {
+            if (scopePending !== moveTarget.key.id) setMoveTarget(null)
+          }}
+        />
+      )}
+
       {disableTarget && (
         <ConfirmDialog
           title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
-          body={`${isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or its shared key where there is one. To turn it back on later, press Test and then Turn on.`}
+          body={`${isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
           confirmLabel="Turn off key"
           cancelLabel="Keep it on"
           tone="danger"
@@ -805,7 +832,7 @@ export function ByokPanel() {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove this ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
-          body={`${!isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or its shared key where there is one.`}
+          body={`${!isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or Mushi's own key where there is one.`}
           confirmLabel="Remove key"
           cancelLabel="Keep key"
           tone="danger"

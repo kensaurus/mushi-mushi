@@ -73,6 +73,8 @@ interface CardProps {
    *  staggered KPI tiles) can pass an `animationDelay` to the actual grid
    *  item rather than a nested wrapper that the keyframe never reaches. */
   style?: React.CSSProperties
+  /** Forwarded to the card root for tests and e2e selectors. */
+  'data-testid'?: string
 }
 
 export function Card({
@@ -84,6 +86,7 @@ export function Card({
   onClick,
   title,
   style,
+  'data-testid': testId,
 }: CardProps) {
   // When the card has an onClick handler we promote it to button semantics so
   // the keyboard story is honest — a div with a click handler isn't reachable.
@@ -111,6 +114,7 @@ export function Card({
         style={style}
         onClick={onClick}
         title={title}
+        data-testid={testId}
         {...interactiveProps}
       >
         {children}
@@ -124,6 +128,7 @@ export function Card({
         style={style}
         onClick={onClick}
         title={title}
+        data-testid={testId}
         {...interactiveProps}
       >
         {children}
@@ -136,6 +141,7 @@ export function Card({
       style={style}
       onClick={onClick}
       title={title}
+      data-testid={testId}
       {...interactiveProps}
     >
       {children}

@@ -115,6 +115,28 @@ describe('resolveLlmKeys with a shared key', () => {
     expect(keys.map((k) => k.keyId)).toEqual(['own-fc', 'org-fc'])
   })
 
+  it("an app's own legacy credential still comes before the shared key", async () => {
+    // Review 2026-10-10: the shared pool key used to win over the app's own
+    // project_settings key, silently moving its billing to the org key.
+    const { db } = fakeDb([key('org-fc', { organization_id: ORG })], ORG)
+    const withLegacy = {
+      ...db,
+      from(table: string) {
+        const b = (db as unknown as { from: (t: string) => Record<string, unknown> }).from(table)
+        if (table !== 'project_settings') return b
+        return {
+          ...b,
+          select: () => withLegacy.from(table),
+          eq: () => withLegacy.from(table),
+          single: () =>
+            Promise.resolve({ data: { byok_firecrawl_key_ref: 'vault://own-legacy', byok_firecrawl_test_status: 'ok' }, error: null }),
+        }
+      },
+    } as never
+    const keys = await byok.resolveLlmKeys(withLegacy, P, 'firecrawl')
+    expect(keys.map((k) => k.keyId ?? 'legacy')).toEqual(['legacy', 'org-fc'])
+  })
+
   it("never uses another organization's key", async () => {
     const { db } = fakeDb([key('other-org', { organization_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })], ORG)
     // Only the platform env fallback may remain; never the other org's row.
@@ -131,12 +153,32 @@ describe('key routes', () => {
     const add = src.slice(src.indexOf("'/v1/admin/byok/keys',\n"), src.indexOf("'/v1/admin/byok/keys/:keyId/expiry'"))
     expect(add).toContain("rawScope === 'organization'")
     expect(add).toContain("code: 'NO_ORGANIZATION'")
-    expect(add).toContain('canManageSharedKeys(project.organization_role)')
+    expect(add).toContain('canManageOrgKeys(c, db, sharedOrgId)')
     expect(add).toContain('organization_id: sharedOrgId')
+    expect(add).toContain("denyViewerWrite(c, project.organization_role, 'add AI keys')")
+    expect(add).toContain('isShareableProvider(rawProvider)')
   })
 
-  it('every per-key write checks the shared-key rule first', () => {
+  it('every per-key write checks the viewer and shared-key rules first', () => {
     expect(src.match(/await sharedKeyWriteGuard\(c, db, project, keyId\)/g)?.length).toBe(4)
+    const guard = src.slice(src.indexOf('async function sharedKeyWriteGuard('), src.indexOf("import {\n  countByokKeyHealth"))
+    expect(guard).toContain("denyViewerWrite(c, project.organization_role, 'change AI keys')")
+    expect(guard).toContain('canManageOrgKeys(c, db, data.organization_id')
+  })
+
+  it("shared-key rights come from a fresh membership read, never organization_role; API keys never manage them", () => {
+    // Review 2026-10-10: organization_role is 'owner' for any project-bound
+    // API key and for a project's creator via the legacy owner_id fallback.
+    expect(src).not.toMatch(/canManageSharedKeys\(project\.organization_role\)/)
+    const fn = src.slice(src.indexOf('async function canManageOrgKeys('), src.indexOf('function isShareableProvider('))
+    expect(fn).toContain("c.get('authMethod') !== 'jwt'")
+    expect(fn).toContain(".from('organization_members')")
+    expect(fn).toContain('canManageSharedKeys(')
+  })
+
+  it('a Supabase token cannot be shared, by adding or by moving', () => {
+    const scopeRoute = src.slice(src.indexOf("'/v1/admin/byok/keys/:keyId/scope'"))
+    expect(scopeRoute.slice(0, scopeRoute.indexOf('.update('))).toContain('isShareableProvider(own.provider_slug)')
   })
 
   it('no byok_keys query is limited to the project alone any more', () => {
@@ -185,6 +227,12 @@ describe('key routes', () => {
     }
     walk(root)
     expect(offenders).toEqual([])
+  })
+
+  it("the radar's dead-app rule counts only the app's own keys", () => {
+    // Its fix is "revoke the key": a shared key serves every other app.
+    const radar = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/radar/operator.ts'), 'utf-8')
+    expect(radar).toMatch(/liveProviderKeys: byok\.filter\(\(k\) => \(k as \{ project_id\?: string \| null \}\)\.project_id && isUsableByokKey\(k\)\)/)
   })
 
   it('a key can be shared with every app, or brought back to one', () => {

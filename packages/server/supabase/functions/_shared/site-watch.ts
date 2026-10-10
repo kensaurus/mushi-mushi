@@ -81,7 +81,10 @@ export function classifyPage(page: MonitorPage): PageProblem | null {
     return { problem: 'http_error', statusCode: code, detail: `The page returned HTTP ${code}${what}.` };
   }
   const meaningful = page.judgment?.meaningful ?? page.isMeaningful ?? null;
-  if (page.status === 'changed' && meaningful === true) {
+  // The judge reads pages; a sitemap or feed that changes daily is not a broken page.
+  const contentType = page.metadata?.contentType ?? '';
+  const isHtml = contentType === '' || /html/i.test(contentType);
+  if (page.status === 'changed' && meaningful === true && isHtml) {
     return {
       problem: 'judged_broken',
       statusCode: code,
@@ -89,13 +92,6 @@ export function classifyPage(page: MonitorPage): PageProblem | null {
     };
   }
   return null;
-}
-
-/** A page the watch can say loaded cleanly. */
-function loadedCleanly(page: MonitorPage): boolean {
-  if (page.status === 'removed' || page.status === 'error') return false;
-  const code = typeof page.statusCode === 'number' ? page.statusCode : null;
-  return code !== null && code < 400 && classifyPage(page) === null;
 }
 
 // ── Firecrawl monitor API ────────────────────────────────────────────────
@@ -267,8 +263,10 @@ export function buildSiteWatchReport(
       : problem.problem === 'load_error'
         ? `${path} does not load`
         : `${path} looks broken`;
-  const severity =
-    problem.problem === 'load_error' || (problem.statusCode !== null && problem.statusCode >= 500) ? 'high' : 'medium';
+  // A 5xx is the site failing; a load error can be Firecrawl's side (a
+  // timeout, an anti-bot wall), so it files at medium until the diagnosis
+  // says otherwise.
+  const severity = problem.statusCode !== null && problem.statusCode >= 500 ? 'high' : 'medium';
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
@@ -303,15 +301,86 @@ export function buildSiteWatchReport(
   };
 }
 
+/**
+ * A burst of newly broken pages in one check (the site is down, a deploy
+ * broke a layout) becomes ONE report listing them, not one report and one
+ * diagnosis per page: a 60-page outage would otherwise file 60.
+ */
+export const OUTAGE_PAGE_THRESHOLD = 5;
+const OUTAGE_LIST_MAX = 25;
+
+/** The single report for a burst of newly broken pages. */
+export function buildSiteOutageReport(
+  projectId: string,
+  baseUrl: string,
+  broken: Array<{ url: string; problem: PageProblem }>,
+  now: Date,
+): Record<string, unknown> {
+  const nowIso = now.toISOString();
+  const serverErrors = broken.filter(
+    (b) => b.problem.problem === 'load_error' || (b.problem.statusCode !== null && b.problem.statusCode >= 500),
+  ).length;
+  const lines = broken.slice(0, OUTAGE_LIST_MAX).map((b) => `- ${b.url}: ${b.problem.detail}`);
+  if (broken.length > OUTAGE_LIST_MAX) lines.push(`- …and ${broken.length - OUTAGE_LIST_MAX} more`);
+  return {
+    id: crypto.randomUUID(),
+    project_id: projectId,
+    title: `Live site: ${broken.length} pages broke at once`.slice(0, 200),
+    description:
+      `${broken.length} pages of ${baseUrl} were newly broken in the same check, which usually means ` +
+      'one cause (the site or an API is down, or a deploy broke a shared layout).\n\n' +
+      `${lines.join('\n')}\n\n` +
+      'Found by the live-site watch, which crawls your live site on a schedule. No user reported this yet.',
+    category: 'bug',
+    severity: serverErrors > 0 ? 'critical' : 'high',
+    status: 'new',
+    source: 'site_watch',
+    reporter_token_hash: 'site-watch',
+    environment: {
+      userAgent: 'site-watch',
+      platform: 'web',
+      language: '',
+      viewport: { width: 0, height: 0 },
+      url: baseUrl,
+      referrer: '',
+      timestamp: nowIso,
+      timezone: 'UTC',
+    },
+    custom_metadata: {
+      source: 'site_watch',
+      outage: true,
+      url: baseUrl,
+      pages: broken.slice(0, OUTAGE_LIST_MAX).map((b) => ({ url: b.url, problem: b.problem.problem, statusCode: b.problem.statusCode })),
+      pageCount: broken.length,
+    },
+    synced_at: nowIso,
+    created_at: nowIso,
+  };
+}
+
 export interface ProcessResult {
   broken: number;
   filed: number;
   resolved: number;
 }
 
+interface FindingRow {
+  id: string;
+  url: string;
+  resolved_at: string | null;
+  report_id: string | null;
+}
+
 /**
- * Record a finished check: file a report for each newly broken page, keep
- * open findings that are still broken, resolve the ones that load again.
+ * Record a finished check: file reports for newly broken pages, keep open
+ * findings that are still broken, resolve the ones that are no longer
+ * broken.
+ *
+ * Several polls can read the same check at once (the two reads after
+ * "Check now" and the hourly one), so each newly broken page is CLAIMED
+ * first: a new finding row (unique per watch and url) or a conditional
+ * reopen of a resolved one. Only the poll that wins the claim files the
+ * report; a failed report releases the claim so the next poll retries.
  */
 export async function processCheck(
   db: SupabaseClient,
@@ -328,18 +397,17 @@ export async function processCheck(
     .select('id, url, resolved_at, report_id')
     .eq('watch_id', watch.id);
   if (readErr) throw new Error(`site_watch_pages read failed: ${readErr.message}`);
-  const existing = new Map(
-    ((existingRows ?? []) as Array<{ id: string; url: string; resolved_at: string | null; report_id: string | null }>).map(
-      (r) => [r.url, r],
-    ),
-  );
+  const existing = new Map(((existingRows ?? []) as FindingRow[]).map((r) => [r.url, r]));
 
+  const fresh: Array<{ page: MonitorPage; problem: PageProblem; row: FindingRow | undefined }> = [];
   for (const page of pages) {
     const problem = classifyPage(page);
     const row = existing.get(page.url);
     if (!problem) {
-      if (row && !row.resolved_at && loadedCleanly(page)) {
-        await db.from('site_watch_pages').update({ resolved_at: nowIso }).eq('id', row.id);
+      // No longer broken: it loads, it was removed from the site, or
+      // Firecrawl now skips it on purpose.
+      if (row && !row.resolved_at) {
+        await db.from('site_watch_pages').update({ resolved_at: nowIso }).eq('id', row.id).is('resolved_at', null);
         result.resolved++;
       }
       continue;
@@ -352,39 +420,96 @@ export async function processCheck(
         .eq('id', row.id);
       continue;
     }
+    fresh.push({ page, problem, row });
+  }
 
-    // New, or broken again after it was fixed: file a report.
-    const report = buildSiteWatchReport(watch.project_id, page.url, problem, page.metadata?.title ?? null, now);
-    const { error: insErr } = await db.from('reports').insert(report);
-    if (insErr) {
-      log.warn('site-watch report insert failed', { watchId: watch.id, url: page.url, err: insErr.message });
-      continue;
-    }
+  // Claim each newly broken page; a concurrent poll that already did skips it.
+  const claimed: Array<{ page: MonitorPage; problem: PageProblem; rowId: string; reopened: boolean }> = [];
+  for (const f of fresh) {
     const finding = {
-      watch_id: watch.id,
-      project_id: watch.project_id,
-      url: page.url,
-      problem: problem.problem,
-      status_code: problem.statusCode,
-      detail: problem.detail,
+      problem: f.problem.problem,
+      status_code: f.problem.statusCode,
+      detail: f.problem.detail,
       first_seen_at: nowIso,
       last_seen_at: nowIso,
       resolved_at: null,
-      report_id: report.id,
+      report_id: null,
     };
-    const { error: upErr } = row
-      ? await db.from('site_watch_pages').update(finding).eq('id', row.id)
-      : await db.from('site_watch_pages').insert(finding);
-    if (upErr) log.warn('site_watch_pages write failed', { watchId: watch.id, url: page.url, err: upErr.message });
+    if (f.row) {
+      const { data, error } = await db
+        .from('site_watch_pages')
+        .update(finding)
+        .eq('id', f.row.id)
+        .not('resolved_at', 'is', null)
+        .select('id');
+      if (error) {
+        log.warn('site_watch_pages reopen failed', { watchId: watch.id, url: f.page.url, err: error.message });
+        continue;
+      }
+      if (!data || (data as unknown[]).length === 0) continue;
+      claimed.push({ ...f, rowId: f.row.id, reopened: true });
+    } else {
+      const { data, error } = await db
+        .from('site_watch_pages')
+        .insert({ watch_id: watch.id, project_id: watch.project_id, url: f.page.url, ...finding })
+        .select('id')
+        .single();
+      if (error) {
+        if (error.code !== '23505') {
+          log.warn('site_watch_pages claim failed', { watchId: watch.id, url: f.page.url, err: error.message });
+        }
+        continue;
+      }
+      claimed.push({ ...f, rowId: (data as { id: string }).id, reopened: false });
+    }
+  }
+  if (claimed.length === 0) return result;
+
+  /** Give a claim back so the next poll can file it. */
+  const release = async (c: (typeof claimed)[number]) => {
+    if (c.reopened) {
+      await db.from('site_watch_pages').update({ resolved_at: nowIso }).eq('id', c.rowId);
+    } else {
+      await db.from('site_watch_pages').delete().eq('id', c.rowId);
+    }
+  };
+
+  const groups =
+    claimed.length >= OUTAGE_PAGE_THRESHOLD
+      ? [{ report: buildSiteOutageReport(watch.project_id, watch.base_url, claimed.map((c) => ({ url: c.page.url, problem: c.problem })), now), members: claimed }]
+      : claimed.map((c) => ({
+          report: buildSiteWatchReport(watch.project_id, c.page.url, c.problem, c.page.metadata?.title ?? null, now),
+          members: [c],
+        }));
+
+  for (const g of groups) {
+    const { error: insErr } = await db.from('reports').insert(g.report);
+    if (insErr) {
+      log.warn('site-watch report insert failed', { watchId: watch.id, err: insErr.message });
+      for (const m of g.members) await release(m);
+      continue;
+    }
+    for (const m of g.members) {
+      await db.from('site_watch_pages').update({ report_id: g.report.id }).eq('id', m.rowId);
+    }
     result.filed++;
-    await deps.classify(db, report.id as string, watch.project_id);
+    await deps.classify(db, g.report.id as string, watch.project_id);
   }
   return result;
 }
 
-/** Checks newer than the last one read, oldest first; only finished ones. */
+/**
+ * Checks newer than the last one read, oldest first; only finished ones.
+ * When the last one read is no longer among `checks` (many manual runs, or
+ * days without a key), only the newest finished check is read: replaying
+ * older ones would file pages that may have been fixed since.
+ */
 export function checksToProcess(checks: MonitorCheck[], lastCheckId: string | null): MonitorCheck[] {
   const finished = (c: MonitorCheck) => c.status === 'completed' || c.status === 'partial';
+  if (lastCheckId && !checks.some((c) => c.id === lastCheckId)) {
+    const newest = checks.find(finished);
+    return newest ? [newest] : [];
+  }
   const out: MonitorCheck[] = [];
   for (const c of checks) {
     if (c.id === lastCheckId) break;

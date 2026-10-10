@@ -27,12 +27,25 @@ merged into each project's setup signals). Keys did not.
 - `resolveLlmKeys` (and every other key reader) uses one filter,
   `keyOwnerFilter`: the project's own keys, then its organization's.
   `ownKeysFirst` puts the project's own keys first; priority orders keys
-  within each group. A shared key is therefore the fallback or backup, never
-  a replacement for an app's own key.
+  within each group. The resolver order is: the app's pool keys, else its
+  legacy `project_settings` credential, then the shared keys, then the
+  platform key. A shared key is therefore the fallback or backup, never a
+  replacement for an app's own key.
 - Adding, moving, testing, turning off, changing the expiry of, or removing
   a shared key requires organization **owner or admin**
   (`SHARED_KEY_ADMIN_ONLY`, 403), because it changes what every app bills
-  to. Members see shared keys in the list, read-only.
+  to. Members see shared keys in the list, read-only. The role is read fresh
+  from `organization_members` (`canManageOrgKeys`), never from the project's
+  `organization_role`, which is `owner` for any project-bound API key and
+  for a project's creator. API keys (CLI, MCP) never change shared keys.
+  Viewers change no key at all.
+- Supabase access tokens are not shareable: each app tests one against its
+  own Supabase project, so one app's failed test would quarantine it for
+  every app.
+- Moving a key either way asks for confirmation in the console.
+
+Amended 2026-10-10 after review: the fresh role check, legacy-before-shared
+order, viewer guard, Supabase exclusion and move confirmation.
 - `POST /v1/admin/byok/keys` takes `scope: 'project' | 'organization'`.
   `POST /v1/admin/byok/keys/:keyId/scope` moves a key between this project
   and its organization. Only this project's key can go up, and only this
