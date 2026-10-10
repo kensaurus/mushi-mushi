@@ -82,12 +82,36 @@ export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) 
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [anomaliesRes, metricsRes, metricNamesRes] = await Promise.all([
+    // Head counts per bucket instead of every detection counted in JS: a
+    // select stops at PostgREST's max-rows cap, so counts went wrong past it.
+    // Only open rows are read, for the score-vs-threshold comparison that a
+    // filter cannot express.
+    const detections = () =>
+      db().from('anomaly_detections').select('id', { count: 'exact', head: true }).eq('project_id', pid)
+    const [
+      openRowsRes,
+      confirmedRes,
+      dismissedRes,
+      autoReportedRes,
+      latestRes,
+      metricsRes,
+      metricNamesRes,
+    ] = await Promise.all([
       db()
         .from('anomaly_detections')
-        .select('id, status, method, score, threshold, confirmed, auto_report_id, detected_at')
+        .select('method, score, threshold')
         .eq('project_id', pid)
-        .order('detected_at', { ascending: false }),
+        .eq('status', 'open'),
+      detections().or('confirmed.eq.true,status.eq.confirmed'),
+      detections().eq('status', 'dismissed'),
+      detections().not('auto_report_id', 'is', null),
+      db()
+        .from('anomaly_detections')
+        .select('detected_at')
+        .eq('project_id', pid)
+        .order('detected_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       db()
         .from('metric_series')
         .select('id, ts', { count: 'exact', head: true })
@@ -100,15 +124,14 @@ export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) 
         .limit(500),
     ])
 
-    const anomalies = anomaliesRes.data ?? []
     const metricPointCount = metricsRes.count ?? 0
     const distinctMetrics = new Set((metricNamesRes.data ?? []).map((m) => m.metric_name)).size
 
-    const openRows = anomalies.filter((a) => a.status === 'open')
+    const openRows = openRowsRes.data ?? []
     const openAnomalies = openRows.length
-    const confirmedAnomalies = anomalies.filter((a) => a.confirmed || a.status === 'confirmed').length
-    const dismissedAnomalies = anomalies.filter((a) => a.status === 'dismissed').length
-    const autoReported = anomalies.filter((a) => a.auto_report_id != null).length
+    const confirmedAnomalies = confirmedRes.count ?? 0
+    const dismissedAnomalies = dismissedRes.count ?? 0
+    const autoReported = autoReportedRes.count ?? 0
     const releaseRegressionOpen = openRows.filter((a) => a.method === 'release-regression').length
     const highScoreOpen = openRows.filter((a) => (a.score ?? 0) >= (a.threshold ?? 3)).length
 
@@ -157,7 +180,7 @@ export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) 
         highScoreOpen,
         metricPointCount,
         distinctMetrics,
-        lastDetectionAt: anomalies[0]?.detected_at ?? null,
+        lastDetectionAt: latestRes.data?.detected_at ?? null,
         lastMetricAt: lastMetricRes.data?.ts ?? null,
         topPriority,
         topPriorityLabel,

@@ -92,6 +92,15 @@ describe('SDK_CONFIG_CONSOLE_COLUMNS', () => {
   })
 })
 
+describe('coerceSdkConfigUpdate triggerText', () => {
+  it('stores the trimmed text, so padding does not eat the 24-char cap', () => {
+    expect(coerceSdkConfigUpdate({ widget: { triggerText: '   Report a bug   ' } }).sdk_widget_trigger_text).toBe('Report a bug')
+    expect(
+      coerceSdkConfigUpdate({ widget: { triggerText: `      ${'x'.repeat(24)}` } }).sdk_widget_trigger_text,
+    ).toBe('x'.repeat(24))
+  })
+})
+
 describe('coerceSdkConfigUpdate bannerBugCta', () => {
   it('null clears a custom bug button label back to the default (QA #259)', () => {
     expect(coerceSdkConfigUpdate({ widget: { bannerBugCta: null } }).sdk_banner_bug_cta).toBeNull()

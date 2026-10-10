@@ -270,7 +270,7 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
   if (isOneOf(widget.theme, SDK_WIDGET_THEMES)) updates.sdk_widget_theme = widget.theme;
   if (typeof widget.triggerText === 'string') {
     const trimmed = widget.triggerText.trim();
-    updates.sdk_widget_trigger_text = trimmed ? widget.triggerText.slice(0, 24) : null;
+    updates.sdk_widget_trigger_text = trimmed ? trimmed.slice(0, 24) : null;
   } else if (widget.triggerText === null) {
     updates.sdk_widget_trigger_text = null;
   }

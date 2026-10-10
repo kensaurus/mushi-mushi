@@ -67,6 +67,15 @@ async function assertClusterRowAccess(
   return { ok: true as const, projectId: cluster.project_id as string, role: access.role }
 }
 
+/**
+ * A paging query param as a bounded integer. parseInt alone turns ?limit=abc
+ * into NaN, which then reaches .limit() / .range().
+ */
+function intParam(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(raw ?? '', 10)
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback
+}
+
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
   app.get('/v1/admin/lessons/stats', jwtAuth, async (c) => {
@@ -209,8 +218,8 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     const db = getServiceClient()
     const authMethod = c.get('authMethod') as string | undefined
     const userId = c.get('userId') as string | undefined
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 500)
-    const offset = parseInt(c.req.query('offset') ?? '0')
+    const limit = intParam(c.req.query('limit'), 50, 1, 500)
+    const offset = intParam(c.req.query('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
     const severity = c.req.query('severity')
     const retired = c.req.query('retired') === 'true'
 
@@ -357,8 +366,8 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: true, data: [], meta: { total: 0, limit: 50, offset: 0 } })
     }
 
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200)
-    const offset = parseInt(c.req.query('offset') ?? '0')
+    const limit = intParam(c.req.query('limit'), 50, 1, 200)
+    const offset = intParam(c.req.query('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
     const status = c.req.query('status') // 'candidate' | 'promoted' | 'retired'
 
     let query = db
@@ -591,7 +600,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: false, error: { code: 'MISSING_PROJECT', message: 'projectId could not be resolved from API key' } }, 400)
     }
 
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '500'), 1000)
+    const limit = intParam(c.req.query('limit'), 500, 1, 1000)
     const severity = c.req.query('severity')
 
     let query = db
