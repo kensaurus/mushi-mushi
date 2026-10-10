@@ -77,14 +77,15 @@ export function MiniInlineBar({
   'aria-label'?: string
 }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
+  // Range ARIA is only valid with the meter role, and a meter needs a name:
+  // an unlabeled bar is decoration beside its own number, so hide it.
+  const a11y = ariaLabel
+    ? { role: 'meter', 'aria-label': ariaLabel, 'aria-valuenow': Math.round(pct), 'aria-valuemin': 0, 'aria-valuemax': 100 }
+    : { 'aria-hidden': true }
   return (
     <div
       className={`h-1 ${widthClass} rounded-full overflow-hidden ${trackClassName} ${className}`.trim()}
-      role={ariaLabel ? 'meter' : undefined}
-      aria-label={ariaLabel}
-      aria-valuenow={Math.round(pct)}
-      aria-valuemin={0}
-      aria-valuemax={100}
+      {...a11y}
     >
       <div className={`h-full rounded-full ${barClassName}`} style={{ width: `${pct}%` }} />
     </div>
