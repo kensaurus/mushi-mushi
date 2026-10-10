@@ -5,10 +5,14 @@
  *          classification when the project has a Firecrawl key
  *          (known-issues.ts), plus snippets attached from Research.
  *          "Search again" runs the lookup now. With no results yet, it shows
- *          only for a report that carries an error.
+ *          only for a report that carries an error. The search is a per-project
+ *          opt-in (default off); when it is off, a link to the setting replaces
+ *          the button.
  */
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { Section, Badge, Btn } from '../ui'
 import { IconExternalLink, IconLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
@@ -44,15 +48,18 @@ function reportHasSearchableError(
 
 interface LookupReply {
   attached: number
-  skipped?: 'no_query' | 'no_key' | 'already_attached' | 'recent' | 'error'
+  skipped?: 'no_query' | 'disabled' | 'no_key' | 'already_attached' | 'recent' | 'error'
 }
 
 export function KnownIssuesSection({
   report,
   onReload,
+  searchEnabled,
 }: {
   report: Pick<ReportDetail, 'id' | 'known_issues' | 'description' | 'console_logs' | 'custom_metadata'>
   onReload: () => void
+  /** project_settings.known_issues_search_enabled; null/undefined = unknown. */
+  searchEnabled?: boolean | null
 }) {
   const toast = useToast()
   const [searching, setSearching] = useState(false)
@@ -65,7 +72,11 @@ export function KnownIssuesSection({
     setSearching(false)
     if (!res.ok) {
       toast.error(
-        res.error?.code === 'FIRECRAWL_NOT_CONFIGURED' ? 'No Firecrawl key' : 'Search did not run',
+        res.error?.code === 'FIRECRAWL_NOT_CONFIGURED'
+          ? 'No Firecrawl key'
+          : res.error?.code === 'KNOWN_ISSUES_SEARCH_OFF'
+            ? 'Web search is off'
+            : 'Search did not run',
         res.error?.message ?? 'Retry in a moment.',
       )
       return
@@ -79,7 +90,12 @@ export function KnownIssuesSection({
     onReload()
   }
 
-  const action = (
+  // Only an explicit "off" swaps the button for the setting link; unknown keeps it.
+  const action = searchEnabled === false ? (
+    <Link to={KNOWN_ISSUES_SEARCH_HREF} className="text-2xs underline text-fg-muted hover:text-fg-secondary shrink-0">
+      Turn on web search in Settings
+    </Link>
+  ) : (
     <Btn size="sm" variant="ghost" type="button" loading={searching} onClick={() => void searchAgain()}>
       {issues.length > 0 ? 'Search again' : 'Search now'}
     </Btn>

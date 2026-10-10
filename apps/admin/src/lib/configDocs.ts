@@ -479,6 +479,27 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     whenToChange:
       "Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.",
   },
+  {
+    id: 'settings.firecrawl.known_issues_search',
+    label: 'Search the web for known fixes',
+    summary:
+      'Off by default. When on, Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.',
+    howItWorks:
+      "After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as \"Others who hit this\". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.",
+    default: { value: 'false (nothing is sent)' },
+    backend: {
+      table: 'project_settings',
+      column: 'known_issues_search_enabled',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: [
+        'classify-report edge function (_shared/known-issues.ts)',
+        'POST /v1/admin/reports/:id/known-issues (Search again)',
+        'fix-worker edge function (web search for fix context)',
+      ],
+    },
+    whenToChange:
+      'Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi for a third party.',
+  },
 ];
 
 const SETTINGS_DEVTOOLS: ConfigDoc[] = [

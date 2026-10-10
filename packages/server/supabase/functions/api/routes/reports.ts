@@ -784,7 +784,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // merged and a declared production deploy target reported a commit;
     // `unknown` (never `live`) on a failed read or when a merged attempt's PR
     // is in a repo other than the one the deploy heads come from.
-    const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes] = await Promise.all([
+    const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes, knownIssuesOptInRes] = await Promise.all([
       buildReportFixPacket(
         db,
         data as Record<string, unknown>,
@@ -803,7 +803,19 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .eq('attached_to_report_id', reportId)
         .order('attached_at', { ascending: true })
         .limit(5),
+      // Whether the automatic search is on, so the page can say it is off.
+      db
+        .from('project_settings')
+        .select('known_issues_search_enabled')
+        .eq('project_id', data.project_id as string)
+        .maybeSingle(),
     ]);
+    // true / false from project_settings; null when unknown (no row, the
+    // column not migrated yet, or a failed read), so the page never claims
+    // "off" on a guess.
+    const optIn = (knownIssuesOptInRes.data as { known_issues_search_enabled?: unknown } | null)
+      ?.known_issues_search_enabled;
+    const known_issues_search_enabled = !knownIssuesOptInRes.error && typeof optIn === 'boolean' ? optIn : null;
 
     return c.json({
       ok: true,
@@ -852,6 +864,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // Provides provenance: baseline_mean/std + score (σ above baseline) + threshold.
         anomalies: anomaliesRes.data ?? [],
         known_issues: knownIssuesRes.data ?? [],
+        known_issues_search_enabled,
       },
     });
   });
@@ -887,6 +900,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       force: true,
       requestedBy: userId,
     });
+    if (result.skipped === 'disabled') {
+      return c.json(
+        { ok: false, error: { code: 'KNOWN_ISSUES_SEARCH_OFF', message: 'Turn on "Search the web for known fixes" in Settings → Web tools first.' } },
+        412,
+      );
+    }
     if (result.skipped === 'no_key') {
       return c.json(
         { ok: false, error: { code: 'FIRECRAWL_NOT_CONFIGURED', message: 'Add a Firecrawl key in Settings → AI keys first.' } },

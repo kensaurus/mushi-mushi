@@ -23,7 +23,7 @@ import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
-import { firecrawlMap, firecrawlScrape } from '../_shared/firecrawl.ts'
+import { firecrawlMap, firecrawlScrapeOwnSite } from '../_shared/firecrawl.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
@@ -87,7 +87,7 @@ async function crawlWithFirecrawl(
 
   for (const url of urls) {
     try {
-      const page = await firecrawlScrape(db, projectId, url, { trustedHosts })
+      const page = await firecrawlScrapeOwnSite(db, projectId, url, baseUrl)
       const md = page.markdown ?? ''
       // data-testid attributes and API-looking paths in the page
       const testids = Array.from(md.matchAll(/data-testid="([^"]+)"/g)).map(m => m[1]!)
