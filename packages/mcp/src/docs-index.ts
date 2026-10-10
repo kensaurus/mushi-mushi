@@ -471,7 +471,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/research",
     markdown: "admin/research.md",
     keywords: ["admin", "research"],
-    headings: ["What it's for", "Running a search", "Saving results", "Prerequisites", "Related pages"],
+    headings: ["What it's for", "Running a search", "Saving results", "Automatic results on error reports", "Prerequisites", "Related pages"],
     excerpt: "The Research page runs a Firecrawl web search scoped to your tech stack and returns summarised answers with links to their sources.",
   },
   {
