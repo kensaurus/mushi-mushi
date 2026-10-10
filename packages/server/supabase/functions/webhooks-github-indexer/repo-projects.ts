@@ -11,13 +11,16 @@
  *          lookups now stay inside the projects that bound
  *          `repository.full_name`, through any of the bindings the
  *          fix-worker reads: a project_repos row, or project_settings
- *          github_repo_url / codebase_repo_url.
+ *          github_repo_url / codebase_repo_url, plus the organization
+ *          default (organization_integration_settings.github_repo_url) that
+ *          projects without their own repo inherit.
  *
  *          Pure apart from the injected client, so the vitest suite can run it.
  */
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any }
+type QueryResult = { data?: Array<Record<string, unknown>> | null; error?: { message: string } | null }
 
 const REPO_URL_RE = /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i
 
@@ -45,17 +48,29 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
     { table: 'project_repos', column: 'repo_url' },
     { table: 'project_settings', column: 'github_repo_url' },
     { table: 'project_settings', column: 'codebase_repo_url' },
+    { table: 'organization_integration_settings', column: 'github_repo_url' },
   ]
   const results = await Promise.all(
-    sources.map(({ table, column }) => db.from(table).select(`project_id, ${column}`).ilike(column, pattern)),
+    sources.map(({ table, column }) => {
+      const key = table === 'organization_integration_settings' ? 'organization_id' : 'project_id'
+      return db.from(table).select(`${key}, ${column}`).ilike(column, pattern)
+    }),
   )
   const ids = new Set<string>()
-  results.forEach((res: { data?: Array<Record<string, unknown>> | null; error?: { message: string } | null }, i) => {
+  const orgIds = new Set<string>()
+  results.forEach((res: QueryResult, i) => {
     const { table, column } = sources[i]
     if (res.error) throw new Error(`${table}.${column} lookup failed: ${res.error.message}`)
     for (const row of res.data ?? []) {
-      if (typeof row.project_id === 'string' && isRepoUrl(row[column], fullName)) ids.add(row.project_id)
+      if (!isRepoUrl(row[column], fullName)) continue
+      if (typeof row.project_id === 'string') ids.add(row.project_id)
+      if (typeof row.organization_id === 'string') orgIds.add(row.organization_id)
     }
   })
+  if (orgIds.size > 0) {
+    const res: QueryResult = await db.from('projects').select('id').in('organization_id', [...orgIds])
+    if (res.error) throw new Error(`projects lookup failed: ${res.error.message}`)
+    for (const row of res.data ?? []) if (typeof row.id === 'string') ids.add(row.id)
+  }
   return [...ids]
 }

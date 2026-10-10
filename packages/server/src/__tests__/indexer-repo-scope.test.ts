@@ -33,7 +33,7 @@ describe('isRepoUrl', () => {
 })
 
 describe('projectIdsForRepo', () => {
-  it('collects projects bound through project_repos and either settings column', async () => {
+  it('collects projects bound through project_repos, either settings column or their organization default', async () => {
     const { db, queries } = createFakeDb((q) => {
       if (q.table === 'project_repos') {
         return { data: [
@@ -41,12 +41,22 @@ describe('projectIdsForRepo', () => {
           { project_id: 'p-other', repo_url: 'https://github.com/acme/app-two' },
         ] }
       }
+      if (q.table === 'organization_integration_settings') {
+        return { data: [
+          { organization_id: 'org-1', github_repo_url: 'https://github.com/acme/app' },
+          { organization_id: 'org-2', github_repo_url: 'https://github.com/acme/app-two' },
+        ] }
+      }
+      if (q.table === 'projects') return { data: [{ id: 'p-org' }] }
       const column = String(q.filters.find((f) => f.method === 'ilike')?.args[0])
       if (column === 'github_repo_url') return { data: [{ project_id: 'p-settings', github_repo_url: 'https://github.com/Acme/App.git' }] }
       return { data: [{ project_id: 'p-repos', codebase_repo_url: 'https://github.com/acme/app' }] }
     })
     const ids = await projectIdsForRepo(db, 'acme/app')
-    expect(ids.sort()).toEqual(['p-repos', 'p-settings'])
+    expect(ids.sort()).toEqual(['p-org', 'p-repos', 'p-settings'])
+    // Only the organization whose default is this exact repo.
+    const orgLookup = findQueries(queries, 'projects')[0]
+    expect(orgLookup?.filters).toContainEqual({ method: 'in', args: ['organization_id', ['org-1']] })
   })
 
   it('escapes LIKE wildcards in the repository name', async () => {
