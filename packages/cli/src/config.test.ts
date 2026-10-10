@@ -62,6 +62,11 @@ describe('loadConfig', () => {
     expect(config.endpoint).toBe('https://env.example.com')
   })
 
+  it('strips trailing slashes from an env endpoint', () => {
+    process.env['MUSHI_API_ENDPOINT'] = 'https://xyz.supabase.co/functions/v1/api/'
+    expect(loadConfig('/tmp/nonexistent-mushirc').endpoint).toBe('https://xyz.supabase.co/functions/v1/api')
+  })
+
   it('env vars work without a config file', () => {
     process.env['MUSHI_API_KEY'] = 'mushi_envkey123'
     process.env['MUSHI_PROJECT_ID'] = '542b34e0-019e-41fe-b900-7b637717bb86'
