@@ -223,9 +223,11 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     if (severity) query = query.eq('severity', severity)
     if (search) {
       // Bilateral ILIKE search across summary and description fields.
-      // Strip commas in addition to % and _ — a comma in a PostgREST .or()
-      // condition string splits the expression and can malform the query.
-      const escaped = search.replace(/[%_,]/g, (c) => c === ',' ? ' ' : `\\${c}`)
+      // Escape the LIKE wildcards % and _, and blank out the PostgREST .or()
+      // syntax: `,` splits the expression, `(` `)` close the group early and
+      // `"` opens a quoted value (the set routes/reports.ts strips). Left in,
+      // a search like "crash (android)" answered 500 DB_ERROR.
+      const escaped = search.replace(/[%_,()"]/g, (c) => (c === '%' || c === '_' ? `\\${c}` : ' '))
       query = query.or(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`)
     }
 

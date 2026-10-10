@@ -7,6 +7,8 @@
  *   by_status.
  * - reports parsed ?limit / ?offset with parseInt and no fallback, so
  *   ?limit=abc put NaN into .range().
+ * - reports put ( ) " from ?search straight into the .or() filter, so a
+ *   search like "crash (android)" broke the PostgREST group.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -83,5 +85,25 @@ describe('GET /v1/sync/reports', () => {
     expect(res.status).toBe(200)
     expect(res.json.data).toMatchObject({ limit: 20, offset: 0, total: 6 })
     expect(res.json.data.reports).toHaveLength(6)
+  })
+
+  it('keeps PostgREST or() syntax in a search out of the filter', async () => {
+    // The fake cannot evaluate ilike inside or(), so record the filter string.
+    const proto = Object.getPrototypeOf(db.from('reports')) as { or: (f: string) => unknown }
+    const filters: string[] = []
+    const spy = vi.spyOn(proto, 'or').mockImplementation(function (this: unknown, f: string) {
+      filters.push(f)
+      return this
+    })
+    try {
+      const res = await get(`/v1/sync/reports?search=${encodeURIComponent('crash (android), "x" 100%_')}`)
+      expect(res.status).toBe(200)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(filters).toHaveLength(1)
+    expect(filters[0]).not.toMatch(/[()"]/)
+    expect(filters[0].split(',')).toHaveLength(2)
+    expect(filters[0]).toContain('100\\%\\_')
   })
 })
