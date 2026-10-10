@@ -1,5 +1,15 @@
 # @mushi-mushi/react-native
 
+## 0.24.1
+
+### Patch Changes
+
+- 8378a94: Docs only: the README no longer lists a `'none'` trigger or `show()` / `hide()` / `setTrigger()` on `useMushi()`, which the SDK does not have, and the provider header lists every `widget.trigger` value.
+- Updated dependencies [8378a94]
+- Updated dependencies [8378a94]
+  - @mushi-mushi/core@1.32.3
+  - @mushi-mushi/web@1.32.3
+
 ## 0.24.0
 
 ### Minor Changes
