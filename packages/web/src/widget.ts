@@ -2284,12 +2284,15 @@ export class MushiWidget {
   }
 
   /* ── Marketing / Playwright recorder (debug GIF capture) ─────────── */
+  // Hooks for `window.__mushiRecorder` (marketing-recorder.ts, `debug: true`
+  // only). Tagged @internal: not supported public API, may change any release.
 
+  /** @internal */
   getRecorderStep(): WidgetStep {
     return this.step;
   }
 
-  /** QA / Playwright: report-screen IA without piercing the shadow root. */
+  /** @internal QA / Playwright: report-screen IA without piercing the shadow root. */
   getRecorderCategoryStepIA(): {
     sectionLabel: string;
     moreToggle: boolean;
@@ -2302,27 +2305,33 @@ export class MushiWidget {
     };
   }
 
+  /** @internal */
   getRecorderTrigger(): Element | null {
     return this.triggerEl;
   }
 
+  /** @internal */
   getRecorderCategoryButton(category: MushiReportCategory): Element | null {
     return this.shadow.querySelector(`[data-category="${category}"]`);
   }
 
+  /** @internal */
   getRecorderIntentButton(label: string): Element | null {
     return Array.from(this.shadow.querySelectorAll<HTMLElement>('[data-intent]')).find((el) => el.dataset.intent === label) ?? null;
   }
 
+  /** @internal */
   getRecorderSubmitButton(): Element | null {
     return this.shadow.querySelector('[data-action="submit"]');
   }
 
+  /** @internal */
   recorderClickTrigger(): void {
     if (this.isOpen) this.close();
     this.open();
   }
 
+  /** @internal */
   recorderSelectCategory(category: MushiReportCategory): void {
     if (!this.isOpen) this.open();
     this.step = 'report';
@@ -2331,20 +2340,24 @@ export class MushiWidget {
     this.render();
   }
 
+  /** @internal */
   recorderSelectIntent(label: string): void {
     if (!this.isOpen || this.step !== 'report') return;
     this.intent = label;
     this.render();
   }
 
+  /** @internal */
   recorderFocusDescription(): void {
     this.shadow.querySelector<HTMLTextAreaElement>('[data-role="description"]')?.focus();
   }
 
+  /** @internal */
   recorderSubmit(): void {
     this.submitReport();
   }
 
+  /** @internal */
   recorderOpenMyReports(): void {
     void this.loadReporterReports();
   }
