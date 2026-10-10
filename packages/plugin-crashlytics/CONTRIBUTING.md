@@ -150,7 +150,7 @@ Select the affected packages, the semver bump type, and write a summary. The cha
 ## Release flow
 
 Releases are fully automated once the version PR is merged. Maintainers don't run
-`npm publish` by hand for routine bumps. See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**
+`npm publish` by hand for routine bumps. See **[`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md)**
 for the full production runbook (edge functions, admin SPA, docs site, migrations).
 
 1. PRs land on `master` with one or more changeset files in `.changeset/`.
@@ -219,7 +219,7 @@ chore: bump dependencies
 ## License
 
 - SDK packages are MIT — your contributions will be MIT-licensed
-- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3. A [commercial license](./COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications. The `packages/server/ee/` directory is source-available but commercial (production use needs a license); contributions there are accepted under the same EE terms.
+- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3. A [commercial license](../../COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications. The `packages/server/ee/` directory is source-available but commercial (production use needs a license); contributions there are accepted under the same EE terms.
 
 ## Questions?
 
