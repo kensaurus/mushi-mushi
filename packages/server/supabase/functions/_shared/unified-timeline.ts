@@ -48,8 +48,9 @@ export async function buildUnifiedReportTimeline(
 ): Promise<UnifiedTimelineEntry[]> {
   const entries: UnifiedTimelineEntry[] = []
 
-  // Phase 1c: include telemetry columns in the initial report fetch so we can merge
-  // breadcrumbs, console errors, and backend spans into the timeline without a 2nd round-trip.
+  // Phase 1c: include telemetry columns in the initial report fetch so breadcrumbs,
+  // console errors, and the trace ids need no 2nd round-trip. Backend spans live in
+  // their own table and cost one more query when a trace id is present.
   const { data: report } = await db
     .from('reports')
     .select('id, status, description, category, created_at, breadcrumbs, console_logs, custom_metadata, sentry_trace_id')
@@ -198,7 +199,8 @@ export async function buildUnifiedReportTimeline(
   //   user action → SDK event → network request → backend span → error → report.
   // Only error/warn console entries are included to avoid noise (not all 50 log entries).
   // Breadcrumbs use their wall-clock timestamp; backend_spans use ingested_at.
-  // `report` already contains these columns from the select above — no extra round-trip.
+  // Breadcrumbs and console entries come from the `report` select above; backend
+  // spans need one extra `backend_spans` query, only when the report has a trace id.
 
   // Breadcrumbs: navigation, click, lifecycle, custom — entire ring buffer.
   const breadcrumbs = report.breadcrumbs as Array<{
