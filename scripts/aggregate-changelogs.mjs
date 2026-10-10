@@ -127,7 +127,8 @@ function extractHighlights(body) {
       parts.push(next.trim())
     }
     i = j - 1
-    out.push({ title, description: parts.join(' ').trim() })
+    // `- **Title** — desc` bullets: renderers add their own dash, so drop this one.
+    out.push({ title, description: parts.join(' ').trim().replace(/^[—–]\s*/, '') })
   }
   return out
 }
