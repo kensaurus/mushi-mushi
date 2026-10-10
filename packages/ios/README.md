@@ -126,7 +126,7 @@ target, which keeps the native SDK dependency-free by default.
 | `endpoint`              | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |
-| `captureBreadcrumbs`    | `true`                               | Hooked when Sentry bridge is installed |
+| `captureBreadcrumbs`    | `true`                               | Attaches the in-app breadcrumb buffer to each report; no Sentry needed |
 | `minDescriptionLength`  | `20`                                 | Matches the web SDK contract |
 | `offlineQueueMaxBytes`  | `2 * 1024 * 1024`                    | Soft cap; oldest entries trim first |
 | `theme`                 | `Theme(accentColor: "#22c55e")`      | Hex string |
