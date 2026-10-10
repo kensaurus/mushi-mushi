@@ -5,6 +5,7 @@
  * RUNTIME: cloudfront-js-2.0
  */
 
+var mushiApexHandler = (function () {
 // Docs folder roots (exact match) + single-page slugs at apex.
 var DOCS_EXACT = [
   '/quickstart',
@@ -158,7 +159,7 @@ function matchesSpa(uri) {
   return false;
 }
 
-function mushiApexHandler(event) {
+function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var qs = request.querystring;
@@ -225,6 +226,9 @@ function mushiApexHandler(event) {
   return request;
 }
 
+return handler;
+})();
+var glotSpaHandler = (function () {
 var SECURITY_HEADERS = {
   'x-content-type-options': { value: 'nosniff' },
   'x-frame-options': { value: 'SAMEORIGIN' },
@@ -265,7 +269,7 @@ function serializeQuerystring(qs) {
   return parts.join('&');
 }
 
-function glotSpaHandler(event) {
+function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var hostHeader = request.headers && request.headers.host;
@@ -328,6 +332,8 @@ function glotSpaHandler(event) {
   return request;
 }
 
+return handler;
+})();
 
 function handler(event) {
   var out = mushiApexHandler(event);

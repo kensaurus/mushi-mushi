@@ -187,6 +187,13 @@ describe('cloudfront-mushi-apex-redirect', () => {
 describe('cloudfront-kensaur-default-viewer', () => {
   const combined = loadHandler('cloudfront-kensaur-default-viewer.js');
 
+  it('keeps each composed source in its own scope (no shared top-level helpers)', () => {
+    const src = stripSource(readFileSync(join(__dirname, 'cloudfront-kensaur-default-viewer.js'), 'utf8'));
+    // eslint-disable-next-line no-new-func
+    const topLevel = new Function(`${src}\nreturn typeof serializeQuerystring;`);
+    assert.equal(topLevel(), 'undefined');
+  });
+
   it('redirects mushi docs before glot SPA rewrite', () => {
     const out = combined(req('/quickstart/incident-loop'));
     assert.equal(out.statusCode, 301);
