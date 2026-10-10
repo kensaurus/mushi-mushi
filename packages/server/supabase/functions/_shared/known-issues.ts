@@ -1,15 +1,22 @@
 /**
  * FILE: known-issues.ts
  * PURPOSE: "Has anyone hit this?" — when a report carries a real error
- *          message, search GitHub and Stack Overflow for it once and attach
- *          the top results to the report, so the diagnosis can say "this is
- *          a known issue in X, fixed in Y" instead of starting from zero.
+ *          message, search for it once and attach the top results to the
+ *          report, so the diagnosis can say "this is a known issue in X,
+ *          fixed in Y" instead of starting from zero.
  *
- * Runs only for a project with a Firecrawl key (BYOK or env), once per
- * report, after classification. Results land in the existing research
- * tables: an automatic session (created_by null) whose snippets are attached
- * to the report (attached_by null), so the Research page lists them too.
- * One search, 3 results: about 5 Firecrawl credits per error report.
+ * Firecrawl's developer index (GitHub issues, merged PRs, READMEs, docs)
+ * goes first: for the solo-boss "Request was aborted" report it found the
+ * merged PR that fixed that exact error, where a GitHub/Stack Overflow web
+ * search found generic Lambda timeout pages (2026-10-10). The web search
+ * only fills the remaining slots.
+ *
+ * Runs for a project with a Firecrawl key (BYOK, shared or env): once per
+ * report after classification, and again when someone presses "Search
+ * again" on the report (force). Results land in the existing research
+ * tables: an automatic session (created_by null for the pipeline) whose
+ * snippets are attached to the report, so the Research page lists them too.
+ * About 2–5 Firecrawl credits per lookup.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -21,8 +28,14 @@ const log = rootLog.child('known-issues');
 /** Where people post "I hit this error too", with answers. */
 const KNOWN_ISSUE_DOMAINS: readonly string[] = ['github.com', 'stackoverflow.com'];
 const MAX_RESULTS = 3;
-/** "Error:", "TypeError", "FunctionsHttpError", "CppException", "APIUserAbortError"… */
-const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b/;
+/** "Search again" twice on the same error within this window runs once. */
+const REPEAT_WINDOW_MS = 10 * 60_000;
+/**
+ * "Error:", "TypeError", "FunctionsHttpError", "CppException",
+ * "APIUserAbortError"…, and crash names such as Sentry's
+ * "WatchdogTermination" (an iOS out-of-memory kill), which end in neither.
+ */
+const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b|\b[A-Z][A-Za-z]+(?:Termination|Crash|Panic)\b/;
 const MAX_QUERY_CHARS = 150;
 
 interface KnownIssueSource {
@@ -84,34 +97,122 @@ function knownIssueQuery(source: KnownIssueSource): string | null {
   if (!EXCEPTION_NAME.test(raw)) return null;
   const text = normalizeErrorText(raw);
   if (text.length < 12 || text.split(' ').length < 3) return null;
+
+  // A short message ("Error: Request was aborted.") says nothing about the
+  // runtime, and the search returns pages about the same words in other
+  // stacks (Shopify, Aurelia, .NET). Add the runtime the event came from.
+  const runtime = typeof meta.platform === 'string' ? PLATFORM_TERMS[meta.platform] : undefined;
+  if (runtime && errorMessage(text).split(' ').length <= 6) return `${text} ${runtime}`;
+
   if (text.length <= MAX_QUERY_CHARS) return text;
   const cut = text.slice(0, MAX_QUERY_CHARS);
   return cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : MAX_QUERY_CHARS);
+}
+
+/** Sentry event platforms, as words a page about that stack would use. */
+const PLATFORM_TERMS: Record<string, string> = {
+  node: 'node',
+  javascript: 'javascript',
+  cocoa: 'ios',
+  java: 'android',
+  python: 'python',
+  dart: 'flutter',
+};
+
+/** "TypeError: x is not a function" → "x is not a function". */
+function errorMessage(text: string): string {
+  return text.replace(/^[\w$.]*(?:Error|Exception|Termination|Crash|Panic)\s*:\s*/, '').trim();
+}
+
+/** Lowercase words only, so punctuation and case never decide a match. */
+function wordsOf(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+}
+
+/**
+ * The first three words of the error message, or null when it is shorter.
+ * A result whose title and excerpt do not contain them is about something
+ * else that shares a word or two.
+ */
+function relevancePhrase(query: string): string | null {
+  const words = wordsOf(errorMessage(query)).trim().split(' ').filter(Boolean);
+  return words.length >= 3 ? ` ${words.slice(0, 3).join(' ')} ` : null;
+}
+
+function isAboutTheError(result: { title: string; snippet: string }, phrase: string | null): boolean {
+  return phrase === null || wordsOf(`${result.title} ${result.snippet}`).includes(phrase);
 }
 
 /**
  * Search once and attach the results to the report. Never throws: the
  * lookup is best effort and must not fail classification.
  */
+export type KnownIssueSkip = 'no_query' | 'no_key' | 'already_attached' | 'recent' | 'error';
+
 export async function lookupKnownIssues(
   db: SupabaseClient,
-  input: { projectId: string; reportId: string } & KnownIssueSource,
-): Promise<{ attached: number; skipped?: 'no_query' | 'no_key' | 'already_attached' | 'error' }> {
+  input: {
+    projectId: string;
+    reportId: string;
+    /** "Search again": run even when results are attached; add only new ones. */
+    force?: boolean;
+    /** The person who pressed "Search again"; null for the pipeline. */
+    requestedBy?: string | null;
+  } & KnownIssueSource,
+): Promise<{ attached: number; query?: string; skipped?: KnownIssueSkip }> {
   const query = knownIssueQuery(input);
   if (!query) return { attached: 0, skipped: 'no_query' };
   try {
-    if (!(await resolveFirecrawl(db, input.projectId))) return { attached: 0, skipped: 'no_key' };
+    if (!(await resolveFirecrawl(db, input.projectId))) return { attached: 0, query, skipped: 'no_key' };
 
-    const { count } = await db
+    const { data: attachedRows } = await db
       .from('research_snippets')
-      .select('id', { count: 'exact', head: true })
+      .select('url')
       .eq('attached_to_report_id', input.reportId);
-    if ((count ?? 0) > 0) return { attached: 0, skipped: 'already_attached' };
+    const alreadyAttached = new Set(((attachedRows ?? []) as Array<{ url: string }>).map((r) => r.url));
+    if (!input.force && alreadyAttached.size > 0) return { attached: 0, query, skipped: 'already_attached' };
 
-    const results = await firecrawlSearch(db, input.projectId, query, {
+    if (input.force) {
+      const since = new Date(Date.now() - REPEAT_WINDOW_MS).toISOString();
+      const { count: recent } = await db
+        .from('research_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', input.projectId)
+        .eq('query', query)
+        .gte('created_at', since);
+      if ((recent ?? 0) > 0) return { attached: 0, query, skipped: 'recent' };
+    }
+
+    // Developer index first (no page fetch: its excerpts already carry the
+    // matched passage), then the web search for whatever slots are left.
+    const developer = await firecrawlSearch(db, input.projectId, query, {
       limit: MAX_RESULTS,
-      domains: [...KNOWN_ISSUE_DOMAINS],
+      category: 'developer',
+      scrape: false,
+      bypassCache: input.force,
+    }).catch((err) => {
+      log.warn('developer-index search failed; using web results only', { err: String(err).slice(0, 200) });
+      return [];
     });
+    let results = developer;
+    if (results.length < MAX_RESULTS) {
+      const web = await firecrawlSearch(db, input.projectId, query, {
+        limit: MAX_RESULTS,
+        domains: [...KNOWN_ISSUE_DOMAINS],
+        bypassCache: input.force,
+      });
+      results = [...results, ...web];
+    }
+    const seen = new Set(alreadyAttached);
+    const phrase = relevancePhrase(query);
+    results = results
+      .filter((r) => isAboutTheError(r, phrase))
+      .filter((r) => {
+        if (seen.has(r.url)) return false;
+        seen.add(r.url);
+        return true;
+      })
+      .slice(0, MAX_RESULTS);
 
     const { data: session, error: sErr } = await db
       .from('research_sessions')
@@ -119,14 +220,14 @@ export async function lookupKnownIssues(
         project_id: input.projectId,
         query,
         mode: 'search',
-        domains: [...KNOWN_ISSUE_DOMAINS],
+        domains: ['developer', ...KNOWN_ISSUE_DOMAINS],
         result_count: results.length,
-        created_by: null,
+        created_by: input.requestedBy ?? null,
       })
       .select('id')
       .single();
     if (sErr || !session) throw new Error(sErr?.message ?? 'research session insert failed');
-    if (results.length === 0) return { attached: 0 };
+    if (results.length === 0) return { attached: 0, query };
 
     const now = new Date().toISOString();
     const { error: snErr } = await db.from('research_snippets').insert(
@@ -143,13 +244,13 @@ export async function lookupKnownIssues(
       })),
     );
     if (snErr) throw new Error(snErr.message);
-    return { attached: results.length };
+    return { attached: results.length, query };
   } catch (err) {
     log.warn('known-issue lookup failed (non-fatal)', {
       projectId: input.projectId,
       reportId: input.reportId,
       err: String(err).slice(0, 200),
     });
-    return { attached: 0, skipped: 'error' };
+    return { attached: 0, query, skipped: 'error' };
   }
 }
