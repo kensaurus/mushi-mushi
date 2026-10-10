@@ -26,7 +26,12 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts'
-import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
+import {
+  CANONICAL_REPORT_STATUSES,
+  normalizeSyncStatus,
+  isReporterFixedStatus,
+  toStoredStatus,
+} from '../../_shared/report-status.ts'
 import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
@@ -67,6 +72,10 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         .eq('project_id', projectId)
         .in('status', ['new', 'triaged', 'in_progress']),
     ])
+    const countErr = totalResult.error ?? openResult.error
+    if (countErr) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: countErr.message } }, 500)
+    }
 
     return c.json({
       ok: true,
@@ -97,13 +106,11 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     // reports. Running them all in parallel keeps the latency equivalent to a
     // single round-trip.
     //
-    // STATUS_BUCKETS must match the DB CHECK constraint on reports.status
-    // (see phase0_initial_schema.sql). The user-facing labels returned to the
-    // CLI map the internal pipeline statuses to readable names.
-    const STATUS_BUCKETS = [
-      'new', 'pending', 'submitted', 'queued',
-      'classified', 'grouped', 'fixing', 'fixed', 'dismissed',
-    ] as const
+    // One bucket per value the reports_status_check constraint allows
+    // (CANONICAL_REPORT_STATUSES), keyed by the raw status: the pipeline ones
+    // plus triaged / in_progress / resolved / verified / reopened, which the
+    // CLI's PATCH and the reporter verify flow write.
+    const STATUS_BUCKETS = CANONICAL_REPORT_STATUSES
     // Severity can be NULL for reports that haven't been classified yet.
     // We count each named bucket plus an explicit 'unset' bucket for NULLs.
     const SEVERITY_BUCKETS = ['critical', 'high', 'medium', 'low'] as const
@@ -192,8 +199,11 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
 
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '20'), 100)
-    const offset = parseInt(c.req.query('offset') ?? '0')
+    // ?limit=abc must not put NaN into .range(); clamp both to sane bounds.
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '20', 10)
+    const offsetRaw = Number.parseInt(c.req.query('offset') ?? '0', 10)
+    const limit = Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, limitRaw)) : 20
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0
     const status = c.req.query('status')
     const severity = c.req.query('severity')
     const search = c.req.query('search')?.trim()
