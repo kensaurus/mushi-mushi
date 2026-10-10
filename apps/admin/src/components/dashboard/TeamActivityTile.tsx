@@ -5,8 +5,8 @@
  *          can see, at a glance, which teammate created data or ran an action
  *          without opening the full Audit console. Reuses the existing
  *          GET /v1/admin/audit endpoint (project-scoped via ProjectSwitcher),
- *          so no backend change is needed. Rows deep-link into the Audit log
- *          pre-filtered by that actor.
+ *          which also returns each row's actor_type. Rows deep-link into the
+ *          Audit log pre-filtered by that actor.
  */
 
 import { Link } from 'react-router-dom'
