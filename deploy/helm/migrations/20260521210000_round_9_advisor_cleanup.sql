@@ -79,19 +79,47 @@ CREATE INDEX IF NOT EXISTS
 -- `USING ((SELECT auth.uid()) = user_id)` evaluates it once as an initplan.
 -- ============================================================================
 
--- qa_stories.qa_stories_all
+-- Predicates stay the project_members checks from 20260514000000_qa_coverage
+-- (the hosted project runs exactly these); only auth.uid() moves into a
+-- subquery. qa_story_evidence has no story_id, and qa_coverage named the
+-- write policy qa_stories_insert_update_delete, so the owner-based rewrite
+-- this file first shipped could not replay on a fresh database.
+
+-- qa_stories.qa_stories_all (qa_coverage created it under its old name)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'qa_stories'
+      AND policyname = 'qa_stories_insert_update_delete'
+  ) THEN
+    ALTER POLICY qa_stories_insert_update_delete ON public.qa_stories RENAME TO qa_stories_all;
+  END IF;
+END $$;
+
 ALTER POLICY qa_stories_all ON public.qa_stories
-  USING ((SELECT auth.uid()) = owner);
+  USING (
+    project_id IN (
+      SELECT project_id FROM public.project_members
+      WHERE user_id = (SELECT auth.uid()) AND role IN ('owner', 'admin', 'member')
+    )
+  );
 
 -- qa_stories.qa_stories_select
 ALTER POLICY qa_stories_select ON public.qa_stories
-  USING ((SELECT auth.uid()) = owner);
+  USING (
+    project_id IN (
+      SELECT project_id FROM public.project_members WHERE user_id = (SELECT auth.uid())
+    )
+  );
 
 -- qa_story_evidence.qa_story_evidence_select
 ALTER POLICY qa_story_evidence_select ON public.qa_story_evidence
   USING (
-    (SELECT auth.uid()) IN (
-      SELECT qs.owner FROM public.qa_stories qs WHERE qs.id = qa_story_evidence.story_id
+    run_id IN (
+      SELECT r.id FROM public.qa_story_runs r
+      JOIN public.project_members pm ON pm.project_id = r.project_id
+      WHERE pm.user_id = (SELECT auth.uid())
     )
   );
 
@@ -100,16 +128,16 @@ ALTER POLICY qa_story_evidence_select ON public.qa_story_evidence
 -- visibility for SELECT/UPDATE/DELETE, not INSERT permission.
 ALTER POLICY qa_story_runs_insert ON public.qa_story_runs
   WITH CHECK (
-    (SELECT auth.uid()) IN (
-      SELECT qs.owner FROM public.qa_stories qs WHERE qs.id = qa_story_runs.story_id
+    project_id IN (
+      SELECT project_id FROM public.project_members WHERE user_id = (SELECT auth.uid())
     )
   );
 
 -- qa_story_runs.qa_story_runs_select
 ALTER POLICY qa_story_runs_select ON public.qa_story_runs
   USING (
-    (SELECT auth.uid()) IN (
-      SELECT qs.owner FROM public.qa_stories qs WHERE qs.id = qa_story_runs.story_id
+    project_id IN (
+      SELECT project_id FROM public.project_members WHERE user_id = (SELECT auth.uid())
     )
   );
 
