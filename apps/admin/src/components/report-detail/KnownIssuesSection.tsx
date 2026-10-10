@@ -43,7 +43,14 @@ function reportHasSearchableError(
   if (report.custom_metadata?.source === 'sentry_webhook') {
     return EXCEPTION_NAME.test((report.description ?? '').split('\n')[0] ?? '')
   }
-  return (report.console_logs ?? []).some((l) => l.level === 'error' && EXCEPTION_NAME.test(l.message ?? ''))
+  // Like the server: only the FIRST error-level line is searched.
+  const first = (report.console_logs ?? []).find((l) => l.level === 'error' && (l.message ?? '').trim())
+  return Boolean(first && EXCEPTION_NAME.test(first.message))
+}
+
+/** Only http(s) links are rendered; anything else shows as text. */
+function safeHref(url: string): string | undefined {
+  return /^https?:\/\//i.test(url) ? url : undefined
 }
 
 interface LookupReply {
@@ -68,8 +75,12 @@ export function KnownIssuesSection({
 
   async function searchAgain() {
     setSearching(true)
-    const res = await apiFetch<LookupReply>(`/v1/admin/reports/${report.id}/known-issues`, { method: 'POST' })
-    setSearching(false)
+    let res: Awaited<ReturnType<typeof apiFetch<LookupReply>>>
+    try {
+      res = await apiFetch<LookupReply>(`/v1/admin/reports/${report.id}/known-issues`, { method: 'POST' })
+    } finally {
+      setSearching(false)
+    }
     if (!res.ok) {
       toast.error(
         res.error?.code === 'FIRECRAWL_NOT_CONFIGURED'
@@ -126,7 +137,7 @@ export function KnownIssuesSection({
         {issues.map((issue) => (
           <li key={issue.id} className="min-w-0">
             <a
-              href={issue.url}
+              href={safeHref(issue.url)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-start gap-1 text-xs font-medium text-fg hover:underline wrap-break-word"

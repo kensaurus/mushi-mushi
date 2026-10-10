@@ -87,11 +87,26 @@ describe('SiteWatchCard', () => {
       firecrawlReady: true,
     }
     await render()
+    expect(container.querySelector('[data-testid="mushi-site-watch-card"]')).toBeTruthy()
     expect(container.textContent).toContain('Watching https://kensaur.us/yen-yen')
-    expect(container.textContent).toContain('about 900 Firecrawl credits a month')
-    expect(container.textContent).toContain('24 pages, 1 broken')
+    expect(container.textContent).toContain('up to 900 Firecrawl credits a month')
+    // The count comes from the open list, not the last check's summary.
+    expect(container.textContent).toContain('24 pages. 1 broken right now.')
     expect(container.textContent).toContain('/yen-yen/pricing')
     expect(container.querySelector('a[href="/reports/r9"]')).toBeTruthy()
+  })
+
+  it('shows a watch whose monitor is gone as needing attention, with the reason', async () => {
+    mocks.data = {
+      watch: { ...WATCH, status: 'error', last_error: 'The Firecrawl monitor no longer exists. Turn the watch off and on again.' },
+      openPages: [],
+      suggestedUrl: null,
+      firecrawlReady: true,
+    }
+    await render()
+    expect(container.textContent).toContain('needs attention')
+    expect(container.textContent).toContain('The Firecrawl monitor no longer exists')
+    expect(container.textContent).toContain('Nothing broken right now.')
   })
 
   it('runs a check now and turns off', async () => {
@@ -100,6 +115,33 @@ describe('SiteWatchCard', () => {
     await act(async () => button('Check now')!.click())
     expect(mocks.apiFetch).toHaveBeenCalledWith('/v1/admin/projects/p1/site-watch/run', { method: 'POST' })
     await act(async () => button('Turn off')!.click())
+    // Asks first.
+    expect(mocks.apiFetch).not.toHaveBeenCalledWith('/v1/admin/projects/p1/site-watch', { method: 'DELETE' })
+    expect(document.body.textContent).toContain('Turn off the live-site watch?')
+    const confirm = Array.from(document.body.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Turn off').pop()!
+    await act(async () => confirm.click())
     expect(mocks.apiFetch).toHaveBeenCalledWith('/v1/admin/projects/p1/site-watch', { method: 'DELETE' })
+  })
+
+  it('keeps Turn off reachable without a Firecrawl key, so the monitor can still be stopped', async () => {
+    mocks.data = { watch: WATCH, openPages: [], suggestedUrl: null, firecrawlReady: false }
+    await render()
+    expect(button('Turn off')).toBeTruthy()
+    expect(button('Check now')).toBeUndefined()
+  })
+
+  it('the pages field accepts what is typed and refuses an out-of-range value', async () => {
+    mocks.data = { watch: null, openPages: [], suggestedUrl: 'https://kensaur.us/yen-yen', firecrawlReady: true }
+    await render()
+    await act(async () => button('Turn on')!.click())
+    const field = container.querySelector('input[type=number]') as HTMLInputElement
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => {
+      setValue.call(field, '150')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Between 1 and 100.')
+    const submit = Array.from(container.querySelectorAll('form button')).find((b) => b.textContent?.trim() === 'Turn on') as HTMLButtonElement
+    expect(submit.disabled).toBe(true)
   })
 })

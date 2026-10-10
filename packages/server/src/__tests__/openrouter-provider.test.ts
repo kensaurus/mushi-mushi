@@ -89,9 +89,13 @@ describe('call sites', () => {
     expect(read('_shared/fine-tune-vendor.ts')).toMatch(/resolveLlmKey\(db, projectId, 'openai', \{ openAiOnly: true \}\)/)
   })
 
-  it('OpenRouter keys follow OpenAI keys in the OpenAI pool', () => {
+  it('OpenRouter keys follow OpenAI keys in the OpenAI pool: own keys first, then shared ones (ADR 0023)', () => {
     const byok = read('_shared/byok.ts')
-    expect(byok).toMatch(/if \(provider === 'openai' && !opts\.openAiOnly\) \{\s*for \(const c of await byokPoolCandidates\(db, projectId, 'openrouter'\)\)/)
+    // An app's own OpenRouter key comes before the org's shared OpenAI key.
+    expect(byok).toMatch(/if \(provider === 'openai' && !opts\.openAiOnly\) \{\s*const router = await byokPoolCandidates\(db, projectId, 'openrouter'\);/)
+    expect(byok).toMatch(/own\.push\(\.\.\.router\.own\.map/)
+    expect(byok).toMatch(/shared\.push\(\.\.\.router\.shared\.map/)
+    expect(byok).toContain('if (own.length > 0) return [...own, ...shared];')
   })
 })
 

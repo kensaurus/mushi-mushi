@@ -59,6 +59,12 @@ describe('pickCrawlUrls', () => {
     ])
   })
 
+  it('treats www and the bare domain as one site', () => {
+    expect(
+      pickCrawlUrls(['https://www.app.example/pricing', 'https://app.example/pricing', 'https://blog.app.example/x'], 'https://app.example', 10),
+    ).toEqual(['https://app.example/', 'https://www.app.example/pricing'])
+  })
+
   it('keeps a two-letter route that is not a language', () => {
     expect(pickCrawlUrls(['https://a.example/ai', 'https://a.example/en/ai'], 'https://a.example', 10)).toEqual([
       'https://a.example/',

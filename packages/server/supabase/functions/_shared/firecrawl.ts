@@ -161,7 +161,14 @@ export interface FirecrawlSearchOptions {
 
 /** The host part of an allow-list entry ("https://github.com/x" → "github.com"). */
 function bareHost(entry: string): string {
-  return entry.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  // includeDomains takes hostnames: drop a scheme, path, "*." wildcard or port.
+  return entry
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/^\*\./, '')
+    .replace(/:\d+$/, '');
 }
 
 /**
@@ -232,7 +239,13 @@ export async function firecrawlSearch(
     const rows = Array.isArray(json.data) ? json.data : (json.data?.web ?? []);
     const results: FirecrawlSearchResult[] = rows
       .filter((r) => typeof r?.url === 'string')
-      .filter((r) => category || domainFilter.length === 0 || isHostAllowed(r.url, domainFilter))
+      // The developer index cannot take includeDomains (Firecrawl ignores it),
+      // so a project allow-list is enforced here instead.
+      .filter((r) =>
+        category
+          ? resolved.allowedDomains.length === 0 || isHostAllowed(r.url, resolved.allowedDomains)
+          : domainFilter.length === 0 || isHostAllowed(r.url, domainFilter),
+      )
       .slice(0, limit)
       .map((r) => ({
         url: r.url,
@@ -267,6 +280,11 @@ export async function firecrawlSearch(
 
 export interface FirecrawlScrapeOptions {
   bypassCache?: boolean;
+}
+
+/** "www.example.com" and "example.com" are one site; the bare host covers both. */
+function siteHost(siteUrl: string): string {
+  return new URL(siteUrl).hostname.toLowerCase().replace(/^www./, '');
 }
 
 /**
@@ -313,24 +331,25 @@ export function firecrawlScrapeChangelog(
 
 /**
  * The story mapper's crawl of the project's own app (#471): `siteUrl` is the
- * base URL the project configured for that crawl, and only its exact host
- * passes past the allow-list. Report text never reaches this path.
+ * base URL the project configured for that crawl, and only its host (with or
+ * without "www.", and its subdomains) passes past the allow-list. Report text
+ * never reaches this path. Always a live fetch: a re-map right after a deploy
+ * must not read a cached copy (review 2026-10-10).
  */
 export function firecrawlScrapeOwnSite(
   db: SupabaseClient,
   projectId: string,
   url: string,
   siteUrl: string,
-  opts: FirecrawlScrapeOptions = {},
 ): Promise<FirecrawlScrapeResult> {
-  return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, [new URL(siteUrl).hostname]);
+  return scrapeAllowed(db, projectId, url, { bypassCache: true, fresh: true }, [siteHost(siteUrl)]);
 }
 
 async function scrapeAllowed(
   db: SupabaseClient,
   projectId: string,
   url: string,
-  opts: FirecrawlScrapeOptions,
+  opts: FirecrawlScrapeOptions & { fresh?: boolean },
   trustedHosts: readonly string[],
 ): Promise<FirecrawlScrapeResult> {
   const resolved = await resolveFirecrawl(db, projectId);
@@ -356,8 +375,15 @@ async function scrapeAllowed(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${resolved.key}`,
       },
-      body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
-      signal: AbortSignal.timeout(30_000),
+      // fresh: no Firecrawl cache (its default maxAge is 2 days), and a
+      // Firecrawl timeout under our abort, so a slow page is not billed and
+      // then thrown away.
+      body: JSON.stringify(
+        opts.fresh
+          ? { url, formats: ['markdown'], onlyMainContent: true, maxAge: 0, timeout: 15_000 }
+          : { url, formats: ['markdown'], onlyMainContent: true },
+      ),
+      signal: AbortSignal.timeout(opts.fresh ? 20_000 : 30_000),
     });
 
     if (!res.ok) {
@@ -407,37 +433,35 @@ async function scrapeAllowed(
 export interface FirecrawlMapOptions {
   /** Most links to return. Default 50, at most 500. */
   limit?: number;
-  /** As for firecrawlScrape: hosts the caller chose, outside the allow-list. */
-  trustedHosts?: readonly string[];
 }
 
 /**
- * The URLs Firecrawl knows under `url` (1 credit per call), without their
- * content. Same key, allow-list and usage bookkeeping as search and scrape.
+ * The URLs Firecrawl knows under the project's own app at `siteUrl` (1 credit
+ * per call), without their content: the story mapper's first step. As for
+ * firecrawlScrapeOwnSite, only the site's own host passes past the
+ * allow-list, and no caller can widen it.
  */
-export async function firecrawlMap(
+export async function firecrawlMapOwnSite(
   db: SupabaseClient,
   projectId: string,
-  url: string,
+  siteUrl: string,
   opts: FirecrawlMapOptions = {},
 ): Promise<string[]> {
+  const url = siteUrl;
   const resolved = await resolveFirecrawl(db, projectId);
   if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
-
-  const trusted = (opts.trustedHosts?.length ?? 0) > 0 && isHostAllowed(url, [...opts.trustedHosts!]);
-  if (!trusted && !isHostAllowed(url, resolved.allowedDomains)) {
-    throw new Error('FIRECRAWL_DOMAIN_NOT_ALLOWED');
-  }
 
   const trace = createTrace('firecrawl.map', { projectId, url: url.slice(0, 200) });
   const span = trace.span('http');
   const res = await fetch(`${FIRECRAWL_BASE}/v2/map`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resolved.key}` },
-    body: JSON.stringify({ url, limit: Math.min(Math.max(opts.limit ?? 50, 1), 500) }),
+    // The app itself, not its subdomains (v2 includes them by default).
+    body: JSON.stringify({ url, limit: Math.min(Math.max(opts.limit ?? 50, 1), 500), includeSubdomains: false }),
     signal: AbortSignal.timeout(30_000),
-  }).catch((err) => {
+  }).catch(async (err) => {
     span.end({ error: String(err) });
+    await trace.end();
     throw err;
   });
   if (!res.ok) {

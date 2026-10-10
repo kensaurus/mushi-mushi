@@ -37,7 +37,7 @@ import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-r
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
-import { canManageSharedKeys, keyOwnerFilter, type KeyOwner } from '../../_shared/byok-scope.ts';
+import { canManageSharedKeys, keyOwnerFilter, ownKeysFirst, type KeyOwner } from '../../_shared/byok-scope.ts';
 
 /** The rows this project may use: its own keys and its organization's (ADR 0023). */
 function keyOwnerOf(project: { id: string; organization_id?: string | null }): KeyOwner {
@@ -45,7 +45,56 @@ function keyOwnerOf(project: { id: string; organization_id?: string | null }): K
 }
 
 /**
- * A shared key is used by every app in the organization, so only an owner or
+ * May this caller add, move or change the organization's shared keys?
+ * Read fresh from organization_members: `project.organization_role` is
+ * 'owner' for a project-bound API key and for a project's creator via the
+ * legacy owner_id fallback, neither of which is an org admin (review
+ * 2026-10-10). API keys (CLI, MCP) never manage shared keys: sharing is a
+ * console action (ADR 0023).
+ */
+async function canManageOrgKeys(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  organizationId: string | null | undefined,
+): Promise<boolean> {
+  if (!organizationId || c.get('authMethod') !== 'jwt') return false;
+  const userId = c.get('userId') as string | undefined;
+  if (!userId) return false;
+  const { data, error } = await db
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return false;
+  return canManageSharedKeys((data?.role as string | undefined) ?? null);
+}
+
+/**
+ * A Supabase access token reaches one Supabase account, and each app tests
+ * it against its own Supabase project: shared, one app's failed test would
+ * quarantine it for every app (review 2026-10-10). Add it to each app.
+ */
+function isShareableProvider(provider: unknown): boolean {
+  return provider !== 'supabase';
+}
+
+function notShareable(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'NOT_SHAREABLE',
+        message: 'A Supabase access token belongs to one Supabase account, so it cannot be shared. Add it to each app that uses it.',
+      },
+    },
+    400,
+  );
+}
+
+/**
+ * Every per-key change (expiry, status, test, delete): viewers are read-only;
+ * a shared key is used by every app in the organization, so only an owner or
  * admin may change, re-test or delete it. Answers 404 when the project cannot
  * see the key at all.
  */
@@ -55,6 +104,8 @@ async function sharedKeyWriteGuard(
   project: { id: string; organization_id?: string | null; organization_role?: string | null },
   keyId: string,
 ): Promise<Response | null> {
+  const viewerDenied = denyViewerWrite(c, project.organization_role, 'change AI keys');
+  if (viewerDenied) return viewerDenied;
   const { data, error } = await db
     .from('byok_keys')
     .select('organization_id')
@@ -63,7 +114,7 @@ async function sharedKeyWriteGuard(
     .maybeSingle();
   if (error) return dbError(c, error);
   if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
-  if (data.organization_id && !canManageSharedKeys(project.organization_role)) {
+  if (data.organization_id && !(await canManageOrgKeys(c, db, data.organization_id as string))) {
     return c.json(
       {
         ok: false,
@@ -2815,7 +2866,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .maybeSingle(),
       db
         .from('byok_keys')
-        .select('key_hint, test_status, status, cooldown_until, priority')
+        .select('key_hint, test_status, status, cooldown_until, priority, project_id')
         // The project's own keys or its organization's shared ones (ADR 0023).
         .or(keyOwnerFilter(keyOwnerOf(project)))
         .eq('provider_slug', 'firecrawl')
@@ -2843,12 +2894,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       ? Math.floor((Date.now() - new Date(lastSessionAt).getTime()) / (24 * 60 * 60 * 1000))
       : null;
 
-    const poolRows = (pooledFirecrawlRows ?? []) as Array<{
+    // The app's own key first, then its organization's shared one (ADR 0023).
+    const poolRows = ownKeysFirst((pooledFirecrawlRows ?? []) as Array<{
       key_hint: string | null;
       test_status: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null;
       status: 'pending_validation' | 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed';
       cooldown_until: string | null;
-    }>;
+      project_id: string | null;
+      priority: number | null;
+    }>);
     const runnablePoolRow = poolRows.find((row) => isRunnableByokPoolState(row)) ?? null;
     const diagnosticPoolRow = runnablePoolRow ?? poolRows[0] ?? null;
     const legacyConfigured = Boolean(settingsRow?.byok_firecrawl_key_ref);
@@ -3201,7 +3255,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       sharing = {
         organizationName: (orgRes.data?.name as string | undefined) ?? 'your organization',
         appCount: appsRes.count ?? 1,
-        canManage: canManageSharedKeys(project.organization_role),
+        canManage: await canManageOrgKeys(c, db, project.organization_id as string),
       };
     }
 
@@ -3259,6 +3313,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (!expiry.ok) {
         return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
       }
+      const viewerDenied = denyViewerWrite(c, project.organization_role, 'add AI keys');
+      if (viewerDenied) return viewerDenied;
       // "organization": one key for every app in the organization (ADR 0023).
       const rawScope = raw.scope ?? 'project';
       if (rawScope !== 'project' && rawScope !== 'organization') {
@@ -3275,7 +3331,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             400,
           );
         }
-        if (!canManageSharedKeys(project.organization_role)) {
+        if (!(await canManageOrgKeys(c, db, sharedOrgId))) {
           return c.json(
             {
               ok: false,
@@ -3284,6 +3340,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
             403,
           );
         }
+        if (!isShareableProvider(rawProvider)) return notShareable(c);
       }
       const parsed = createByokKeySchema.safeParse({
         projectId: project.id,
@@ -3940,7 +3997,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           400,
         );
       }
-      if (!canManageSharedKeys(project.organization_role)) {
+      if (!(await canManageOrgKeys(c, db, orgId))) {
         return c.json(
           {
             ok: false,
@@ -3953,6 +4010,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Only this project's own key can be shared, and only this
       // organization's key can be brought back to this project.
       const toOrg = body.scope === 'organization';
+      if (toOrg) {
+        const { data: own, error: ownErr } = await db
+          .from('byok_keys')
+          .select('provider_slug, project_id')
+          .eq('id', keyId)
+          .or(keyOwnerFilter(keyOwnerOf(project)))
+          .maybeSingle();
+        if (ownErr) return dbError(c, ownErr);
+        if (own?.project_id === project.id && !isShareableProvider(own.provider_slug)) return notShareable(c);
+      }
       const { data, error } = await db
         .from('byok_keys')
         .update(toOrg ? { project_id: null, organization_id: orgId } : { project_id: project.id, organization_id: null })

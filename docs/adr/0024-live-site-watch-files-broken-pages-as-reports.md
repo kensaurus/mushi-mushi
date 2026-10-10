@@ -55,20 +55,29 @@ a normal page with status 404.
     not to fetch (already scraped under another address, or disallowed by
     the site's robots.txt). The first checks had 9 duplicate skips on
     glot.it and a robots.txt block on yen-yen's /feedback; none was broken.
-- **One report per broken page.**
+- **One report per broken page; one report for an outage.**
   - Each newly broken page becomes a report with `source = 'site_watch'`,
     queued for diagnosis like store reviews (the user opted in by turning on
-    the watch).
-  - `site_watch_pages` keeps one row per page. A page that stays broken does
-    not file again. A page that loads cleanly again is resolved. If it
-    breaks later, it files again.
-- **Turning the watch off deletes the Firecrawl monitor.** Reports already
-  filed stay.
+    the watch). When 5 or more pages are newly broken in one check, they
+    file one report listing them, so an outage costs one diagnosis, not one
+    per page.
+  - `site_watch_pages` keeps one row per page. Each newly broken page is
+    claimed (a new row, or a conditional reopen) before its report is filed,
+    so overlapping polls (the hourly one and the two after "Check now") file
+    it once; a failed report releases the claim.
+  - A page that stays broken does not file again. A page that is no longer
+    broken (it loads, was removed, or is skipped on purpose) is resolved; its
+    report is left for the user. If it breaks later, it files again.
+- **Spend is capped.** "Check now" runs at most 6 times an hour per app.
+- **Turning the watch off deletes the Firecrawl monitor**, and needs the
+  Firecrawl key to do so: without it the monitor would keep crawling and
+  billing unseen. Reports already filed stay.
 
 ## Consequences
 
-- Six apps at 25 pages a day is about 4,500 credits a month, plus one per
-  changed page the judge checks.
+- Credits: 1 per page per daily check (the 6 kenji apps at 205 pages a day
+  use about 6,150 a month), plus 1 per changed page the judge checks.
+  Firecrawl's estimate reserves up to twice the page count.
 - Breakage on a public page can become a report before any user reports it.
   This passes ADR 0017's drift test: a hole found before a user hits it.
 - Only public pages are crawled. Pages behind sign-in are not checked; the
