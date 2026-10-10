@@ -117,7 +117,7 @@ Full list and maturity: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks
 | Catches | Thrown errors **and** silent UX bugs (dead clicks, slow screens, broken layouts) | Thrown errors, performance traces |
 | You get | A plain-English root cause and a fix prompt, in your editor | A stack trace and breadcrumbs, in a dashboard |
 | Auto-fix | Optional: an agent opens a draft PR | Seer add-on (paid) |
-| Setup | One command, no account needed to try | SDK + DSN + dashboard |
+| Setup | One command that signs you in through the browser; the demo needs no account | SDK + DSN + dashboard |
 
 **It works with what you already run.** Point a Sentry alert webhook at `/v1/webhooks/sentry?projectId=<id>` and errors land in the same queue. Merging a Mushi fix resolves the Sentry issue, and the reverse. Adapters also bring in Datadog, Bugsnag, Rollbar, Crashlytics and others. Plugins keep Linear, Jira, GitHub Issues, Slack, Discord, Teams and PagerDuty in sync. Nothing gets ripped out. Details: [Sentry vs Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi).
 
