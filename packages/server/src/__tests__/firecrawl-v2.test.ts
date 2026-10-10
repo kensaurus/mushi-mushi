@@ -16,7 +16,7 @@ vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   markKeyUsed: vi.fn(async () => {}),
 }))
 
-const { firecrawlSearch, firecrawlMap } = await import('../../supabase/functions/_shared/firecrawl.ts')
+const { firecrawlSearch, firecrawlMapOwnSite, firecrawlScrapeOwnSite } = await import('../../supabase/functions/_shared/firecrawl.ts')
 
 function makeDb() {
   return {
@@ -95,11 +95,47 @@ describe('firecrawl v2 client', () => {
     expect(res).toHaveLength(1)
   })
 
-  it('map returns URLs from v2 link objects and keeps the allow-list rule', async () => {
+  it('maps the app itself (not its subdomains) and returns URLs from v2 link objects', async () => {
     reply({ success: true, links: [{ url: 'https://app.example/a', title: 'A' }, 'https://app.example/b'] })
-    const links = await firecrawlMap(makeDb(), 'p1', 'https://app.example', { trustedHosts: ['app.example'] })
+    const links = await firecrawlMapOwnSite(makeDb(), 'p1', 'https://app.example')
     expect(sent().url).toBe('https://api.firecrawl.dev/v2/map')
+    expect(sent().body).toMatchObject({ url: 'https://app.example', includeSubdomains: false })
     expect(links).toEqual(['https://app.example/a', 'https://app.example/b'])
-    await expect(firecrawlMap(makeDb(), 'p1', 'https://other.example')).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
+  })
+
+  it('the own-site scrape is a live fetch with a Firecrawl timeout under the abort', async () => {
+    reply({ data: { markdown: '# Home', metadata: { title: 'Home' } } })
+    await firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://www.app.example/pricing', 'https://app.example')
+    expect(sent().body).toMatchObject({ maxAge: 0, timeout: 15000 })
+    // The site with or without www passes; another site does not.
+    await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://other.example/x', 'https://app.example')).rejects.toThrow(
+      'FIRECRAWL_DOMAIN_NOT_ALLOWED',
+    )
+  })
+
+  it('a project allow-list still filters developer-index results', async () => {
+    reply({ data: { web: [{ url: 'https://github.com/a/b/pull/1', title: 'fix' }, { url: 'https://evil.example/x', title: 'x' }] } })
+    const db = {
+      from(table: string) {
+        const q: Record<string, unknown> = {}
+        q.select = () => q
+        q.eq = () => q
+        q.gt = () => q
+        q.maybeSingle = async () =>
+          table === 'project_settings'
+            ? { data: { firecrawl_allowed_domains: ['*.github.com:443', 'github.com'], firecrawl_max_pages_per_call: 5 }, error: null }
+            : { data: null, error: null }
+        q.upsert = async () => ({ error: null })
+        return q
+      },
+    } as never
+    const res = await firecrawlSearch(db, 'p1', 'Request was aborted', { category: 'developer', scrape: false, bypassCache: true })
+    expect(res.map((r) => r.url)).toEqual(['https://github.com/a/b/pull/1'])
+  })
+
+  it('allow-list entries become bare hostnames for includeDomains', async () => {
+    reply({ data: { web: [] } })
+    await firecrawlSearch(makeDb(), 'p1', 'some error text here', { domains: ['*.example.com', 'docs.example.org:8443'], bypassCache: true })
+    expect(sent().body.includeDomains).toEqual(['example.com', 'docs.example.org'])
   })
 })

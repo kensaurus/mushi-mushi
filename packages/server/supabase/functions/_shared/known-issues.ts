@@ -81,6 +81,22 @@ function firstConsoleError(consoleLogs: unknown): string | null {
  * searching (feature requests, UX feedback, a one-word error).
  */
 function knownIssueQuery(source: KnownIssueSource): string | null {
+  return knownIssueSearch(source)?.query ?? null;
+}
+
+/**
+ * The query and the error text it was built from. The relevance phrase comes
+ * from `message`, never from the query: the runtime word appended to a short
+ * error ("TypeError: Load failed javascript") is not something a matching
+ * result has to contain (review 2026-10-10).
+ */
+function knownIssueSearch(source: KnownIssueSource): { query: string; message: string } | null {
+  const query = knownIssueQueryText(source);
+  if (!query) return null;
+  return { query: query.text, message: query.message };
+}
+
+function knownIssueQueryText(source: KnownIssueSource): { text: string; message: string } | null {
   let raw: string | null = null;
   const meta = source.customMetadata ?? {};
   if (meta.source === 'sentry_webhook' && source.description) {
@@ -106,11 +122,12 @@ function knownIssueQuery(source: KnownIssueSource): string | null {
   // runtime, and the search returns pages about the same words in other
   // stacks (Shopify, Aurelia, .NET). Add the runtime the event came from.
   const runtime = typeof meta.platform === 'string' ? PLATFORM_TERMS[meta.platform] : undefined;
-  if (runtime && errorMessage(text).split(' ').length <= 6) return `${text} ${runtime}`;
+  if (runtime && errorMessage(text).split(' ').length <= 6) return { text: `${text} ${runtime}`, message: text };
 
-  if (text.length <= MAX_QUERY_CHARS) return text;
+  if (text.length <= MAX_QUERY_CHARS) return { text, message: text };
   const cut = text.slice(0, MAX_QUERY_CHARS);
-  return cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : MAX_QUERY_CHARS);
+  const clipped = cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : MAX_QUERY_CHARS);
+  return { text: clipped, message: clipped };
 }
 
 /** Sentry event platforms, as words a page about that stack would use. */
@@ -123,9 +140,16 @@ const PLATFORM_TERMS: Record<string, string> = {
   dart: 'flutter',
 };
 
-/** "TypeError: x is not a function" → "x is not a function". */
+/**
+ * "TypeError: x is not a function" → "x is not a function"; also drops a
+ * runtime prefix such as "Uncaught" or "Unhandled Promise Rejection:"
+ * before the exception name.
+ */
 function errorMessage(text: string): string {
-  return text.replace(/^[\w$.]*(?:Error|Exception|Termination|Crash|Panic)\s*:\s*/, '').trim();
+  return text
+    .replace(/^(?:uncaught(?:\s*\(in promise\))?|unhandled(?:\s+promise)?\s+rejection\s*:?)\s+/i, '')
+    .replace(/^[\w$.]*(?:Error|Exception|Termination|Crash|Panic)\s*:\s*/, '')
+    .trim();
 }
 
 /** Lowercase words only, so punctuation and case never decide a match. */
@@ -134,17 +158,29 @@ function wordsOf(text: string): string {
 }
 
 /**
- * The first three words of the error message, or null when it is shorter.
- * A result whose title and excerpt do not contain them is about something
- * else that shares a word or two.
+ * The first three words of the error message, or null when it has fewer.
+ * Numbers are left out ("Loading chunk 123 failed": the chunk number differs
+ * per build). A result whose title and excerpt do not contain the phrase is
+ * about something else that shares a word or two. Non-Latin messages give no
+ * phrase, so nothing is filtered for them.
  */
-function relevancePhrase(query: string): string | null {
-  const words = wordsOf(errorMessage(query)).trim().split(' ').filter(Boolean);
+function relevancePhrase(message: string): string | null {
+  const words = wordsOf(errorMessage(message))
+    .trim()
+    .split(' ')
+    .filter((w) => w && !/^\d+$/.test(w));
   return words.length >= 3 ? ` ${words.slice(0, 3).join(' ')} ` : null;
 }
 
 function isAboutTheError(result: { title: string; snippet: string }, phrase: string | null): boolean {
-  return phrase === null || wordsOf(`${result.title} ${result.snippet}`).includes(phrase);
+  if (phrase === null) return true;
+  // Match against the same number-free words the phrase was built from.
+  const text = wordsOf(`${result.title} ${result.snippet}`)
+    .trim()
+    .split(' ')
+    .filter((w) => w && !/^\d+$/.test(w))
+    .join(' ');
+  return ` ${text} `.includes(phrase);
 }
 
 /**
@@ -182,8 +218,9 @@ export async function lookupKnownIssues(
     requestedBy?: string | null;
   } & KnownIssueSource,
 ): Promise<{ attached: number; query?: string; skipped?: KnownIssueSkip }> {
-  const query = knownIssueQuery(input);
-  if (!query) return { attached: 0, skipped: 'no_query' };
+  const search = knownIssueSearch(input);
+  if (!search) return { attached: 0, skipped: 'no_query' };
+  const { query, message } = search;
   try {
     // Nothing leaves Mushi unless the project turned the search on.
     if (!(await knownIssuesSearchEnabled(db, input.projectId))) return { attached: 0, query, skipped: 'disabled' };
@@ -207,8 +244,25 @@ export async function lookupKnownIssues(
       if ((recent ?? 0) > 0) return { attached: 0, query, skipped: 'recent' };
     }
 
-    // Developer index first (no page fetch: its excerpts already carry the
-    // matched passage), then the web search for whatever slots are left.
+    // Record the search before spending: a search that fails half way still
+    // counts against the repeat window instead of being retried for free.
+    const { data: session, error: sErr } = await db
+      .from('research_sessions')
+      .insert({
+        project_id: input.projectId,
+        query,
+        mode: 'search',
+        domains: ['developer', ...KNOWN_ISSUE_DOMAINS],
+        result_count: 0,
+        created_by: input.requestedBy ?? null,
+      })
+      .select('id')
+      .single();
+    if (sErr || !session) throw new Error(sErr?.message ?? 'research session insert failed');
+
+    // Developer index first, then the web search for whatever slots are
+    // left. Neither fetches the pages: only the title and excerpt are shown,
+    // and each page fetch costs another credit.
     const developer = await firecrawlSearch(db, input.projectId, query, {
       limit: MAX_RESULTS,
       category: 'developer',
@@ -223,12 +277,13 @@ export async function lookupKnownIssues(
       const web = await firecrawlSearch(db, input.projectId, query, {
         limit: MAX_RESULTS,
         domains: [...KNOWN_ISSUE_DOMAINS],
+        scrape: false,
         bypassCache: input.force,
       });
       results = [...results, ...web];
     }
     const seen = new Set(alreadyAttached);
-    const phrase = relevancePhrase(query);
+    const phrase = relevancePhrase(message);
     results = results
       .filter((r) => isAboutTheError(r, phrase))
       .filter((r) => {
@@ -238,19 +293,7 @@ export async function lookupKnownIssues(
       })
       .slice(0, MAX_RESULTS);
 
-    const { data: session, error: sErr } = await db
-      .from('research_sessions')
-      .insert({
-        project_id: input.projectId,
-        query,
-        mode: 'search',
-        domains: ['developer', ...KNOWN_ISSUE_DOMAINS],
-        result_count: results.length,
-        created_by: input.requestedBy ?? null,
-      })
-      .select('id')
-      .single();
-    if (sErr || !session) throw new Error(sErr?.message ?? 'research session insert failed');
+    await db.from('research_sessions').update({ result_count: results.length }).eq('id', session.id);
     if (results.length === 0) return { attached: 0, query };
 
     const now = new Date().toISOString();
