@@ -18,6 +18,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
+import { countRowsPerProject, INDEXED_FILE_ROW } from '../../_shared/setup-signals.ts';
 
 /**
  * Exact report count per project, one `head: true` count query each. Never
@@ -204,13 +205,11 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         // are a real "is this thing wired up" signal — a project with
         // an attached repo but zero indexed files is a project where
         // codebase-aware features (RAG-augmented triage, fix
-        // suggestions, ontology mapping) silently degrade. We pull only
-        // the project_id column so the row count stays cheap; the
-        // aggregation happens in JS below.
-        db
-          .from('project_codebase_files')
-          .select('project_id')
-          .in('project_id', projectIds),
+        // suggestions, ontology mapping) silently degrade. One head count
+        // per project of live file rows: reading the rows and counting them
+        // in JS stopped at PostgREST's row cap and counted symbol chunks and
+        // tombstones as files.
+        countRowsPerProject(db, 'project_codebase_files', projectIds, { nullColumns: INDEXED_FILE_ROW }),
         // Severity breakdown over the last 30 days, plus signal data
         // for the new ProjectsPage chips: 7-day report trend (this
         // 7d vs prior 7d) and "Sentry connected" detection (≥1
@@ -410,10 +409,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       else void runScans();
     }
 
-    const codebaseFileCount: Record<string, number> = {};
-    for (const row of codebaseFileRows.data ?? []) {
-      codebaseFileCount[row.project_id] = (codebaseFileCount[row.project_id] ?? 0) + 1;
-    }
+    const codebaseFileCount: Record<string, number> = Object.fromEntries(codebaseFileRows);
 
     // Severity breakdown over `thirtyDaysAgo`. We accept any string for
     // `severity` since the column is plain text — the FE collapses
@@ -841,11 +837,14 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
-    const { data: memberships } = await db
+    const { data: memberships, error: membershipsErr } = await db
       .from('organization_members')
       .select('organization_id, role, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
+    // A failed read is not "no memberships": that would answer 403 or fall
+    // into the personal-org bootstrap below.
+    if (membershipsErr) return dbError(c, membershipsErr);
 
     const memberOrgs = memberships ?? [];
     let organizationId: string | null = null;
@@ -1176,39 +1175,33 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    // Belt-and-suspenders: if FE sent a confirm_slug it MUST match. Treat
-    // a mismatch as a hard 400, never silently delete.
-    if (body.confirm_slug !== undefined && body.confirm_slug !== project.slug) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'SLUG_MISMATCH',
-            message: `confirm_slug must equal "${project.slug}"`,
-          },
-        },
-        400,
-      );
-    }
-
     // Resolve the caller's role in this project's org. Two-tier authz:
     //   • Org-backed project (the new normal) → require role in
     //     {owner, admin}.
     //   • Legacy ownerless-org project → fall back to owner_id match.
+    // Authz runs before the confirm_slug check, and a caller who cannot see
+    // the project gets the same 404 as a missing one, so a project UUID alone
+    // reveals neither existence nor slug.
     let allowed = false;
+    let visible = project.owner_id === userId;
     if (project.organization_id) {
-      const { data: membership } = await db
+      const { data: membership, error: membershipErr } = await db
         .from('organization_members')
         .select('role')
         .eq('organization_id', project.organization_id)
         .eq('user_id', userId)
         .maybeSingle();
+      if (membershipErr) return dbError(c, membershipErr);
       const role = membership?.role ?? null;
+      if (role) visible = true;
       allowed = role === 'owner' || role === 'admin';
     } else if (project.owner_id === userId) {
       allowed = true;
     }
 
+    if (!visible) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
     if (!allowed) {
       return c.json(
         {
@@ -1219,6 +1212,21 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           },
         },
         403,
+      );
+    }
+
+    // Belt-and-suspenders: if FE sent a confirm_slug it MUST match. Treat
+    // a mismatch as a hard 400, never silently delete.
+    if (body.confirm_slug !== undefined && body.confirm_slug !== project.slug) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'SLUG_MISMATCH',
+            message: "confirm_slug does not match this project's slug",
+          },
+        },
+        400,
       );
     }
 
