@@ -319,10 +319,13 @@ export interface MushiWidgetConfig {
   /**
    * CSS selectors of host-app elements that the widget trigger and panel must
    * never visually overlap. At render time the widget queries each selector,
-   * measures the union bounding rect, and nudges `--mushi-top` / `--mushi-bottom`
-   * so the panel clears every avoided element by at least 8px.
+   * measures its bounding rect, and moves the widget's anchored edge
+   * (`--mushi-bottom` for bottom positions, the default; `--mushi-top` for top
+   * positions) so it clears every avoided element in that half of the viewport
+   * by at least 8px. Elements in the other half are left alone.
    *
-   * Typical use: avoid a sticky mobile header or a fixed sign-in CTA.
+   * Typical use: a sticky mobile header for a top position, or a bottom tab
+   * bar or fixed sign-in CTA for a bottom position.
    *
    * @example
    * avoidSelectors: ['[data-mobile-header]', '#sign-in-cta']

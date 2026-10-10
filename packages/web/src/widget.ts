@@ -1358,32 +1358,44 @@ export class MushiWidget {
     }
   }
 
-  /** Queries `avoidSelectors` and returns a top offset clearing all of them, or null. */
+  /**
+   * Queries `avoidSelectors` and returns a top offset clearing the ones in the
+   * top half of the viewport, or null. A bottom tab bar is ignored here: clearing
+   * it from the top edge would push the widget off-screen.
+   */
   private computeAvoidTopPx(gap = 8): number | null {
     const sels = this.config.avoidSelectors;
     if (!sels?.length) return null;
+    const mid = window.innerHeight / 2;
     let maxBottom = 0;
     for (const sel of sels) {
       try {
         const el = document.querySelector(sel);
         if (!el) continue;
         const r = el.getBoundingClientRect();
+        if ((r.top + r.bottom) / 2 >= mid) continue;
         if (r.bottom > maxBottom && r.width > 0 && r.height > 0) maxBottom = r.bottom;
       } catch { /* invalid selector — skip silently */ }
     }
     return maxBottom > 0 ? Math.ceil(maxBottom) + gap : null;
   }
 
-  /** Bottom offset so a bottom-anchored trigger clears avoided elements (tab bars, fixed CTAs). */
+  /**
+   * Bottom offset so a bottom-anchored trigger clears avoided elements in the
+   * bottom half of the viewport (tab bars, fixed CTAs). A top header is ignored
+   * here: clearing it from the bottom edge would push the widget off-screen.
+   */
   private computeAvoidBottomPx(gap = 8): number | null {
     const sels = this.config.avoidSelectors;
     if (!sels?.length) return null;
+    const mid = window.innerHeight / 2;
     let maxClearance = 0;
     for (const sel of sels) {
       try {
         const el = document.querySelector(sel);
         if (!el) continue;
         const r = el.getBoundingClientRect();
+        if ((r.top + r.bottom) / 2 <= mid) continue;
         if (r.width > 0 && r.height > 0) {
           const clearance = window.innerHeight - r.top + gap;
           if (clearance > maxClearance) maxClearance = clearance;
