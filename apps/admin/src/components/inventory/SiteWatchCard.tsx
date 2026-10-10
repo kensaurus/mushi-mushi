@@ -103,8 +103,9 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       toast.error('The check did not start', res.error?.message ?? 'Retry in a moment.')
       return
     }
-    toast.success('Check started', 'Results show here in about a minute; broken pages become reports.')
-    window.setTimeout(() => state.reload(), 60_000)
+    toast.success('Check started', 'Results show here in 1–3 minutes; broken pages become reports.')
+    window.setTimeout(() => state.reload(), 75_000)
+    window.setTimeout(() => state.reload(), 155_000)
   }
 
   async function turnOff() {

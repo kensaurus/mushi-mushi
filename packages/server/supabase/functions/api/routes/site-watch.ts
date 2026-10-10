@@ -69,19 +69,28 @@ function firecrawlFailure(c: Ctx, err: unknown): Response {
 
 const NO_KEY = { ok: false, error: { code: 'FIRECRAWL_NOT_CONFIGURED', message: 'Add a Firecrawl key in Settings → AI keys first. A key shared with all your apps works too.' } };
 
-/** Read the new check's results shortly after "Check now" instead of waiting for the hourly poll. */
+/**
+ * Read the new check's results shortly after "Check now" instead of waiting
+ * for the hourly poll: at 60 s, and again at 140 s for a bigger site (a
+ * 63-page glot.it check took 47 s). Reading twice is safe: the poll only
+ * processes checks newer than the last one read.
+ */
 function pollSoon(projectId: string): void {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceKey) return;
+  const poll = () =>
+    fetch(`${supabaseUrl}/functions/v1/site-watch-poll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ projectId }),
+    });
   runInBackground(
     (async () => {
-      await new Promise((r) => setTimeout(r, 45_000));
-      await fetch(`${supabaseUrl}/functions/v1/site-watch-poll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-        body: JSON.stringify({ projectId }),
-      });
+      await new Promise((r) => setTimeout(r, 60_000));
+      await poll();
+      await new Promise((r) => setTimeout(r, 80_000));
+      await poll();
     })(),
     'site-watch-poll-soon',
   );

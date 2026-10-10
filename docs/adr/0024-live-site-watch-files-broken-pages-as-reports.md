@@ -40,9 +40,9 @@ a normal page with status 404.
   - Monitor webhooks are signed with a secret that only the key owner's
     Firecrawl dashboard shows. Accepting them would mean asking every user
     to paste it.
-  - `site-watch-poll` (pg_cron hourly at :14, and once about 45 seconds after
-    "Check now") reads each monitor's newly finished checks with the key
-    Mushi already holds. No public endpoint is added.
+  - `site-watch-poll` reads each monitor's newly finished checks with the
+    key Mushi already holds: hourly at :14 (pg_cron), and about 60 and 140
+    seconds after "Check now". No public endpoint is added.
 - **What counts as broken** (`classifyPage`):
   - a 5xx;
   - a 4xx other than 401/403/407/429. A crawl reaches only pages the app
