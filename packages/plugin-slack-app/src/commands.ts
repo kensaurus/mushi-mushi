@@ -7,8 +7,9 @@
  *   2. We MUST respond within 3 seconds with HTTP 200, either with a public
  *      or ephemeral message. For longer work, send `response_type: 'ephemeral'`
  *      and defer to the `response_url`.
- *   3. For interactive buttons (transition/resolve), Slack sends a signed
- *      `payload=<url-encoded-json>` back to the same endpoint.
+ *   3. Button clicks do not come back here: Slack sends a signed
+ *      `payload=<url-encoded-json>` to the app's Interactivity URL, which
+ *      `createSlackPlugin(...).handleSlackInteraction` (server.ts) verifies.
  */
 
 export interface SlashCommandPayload {

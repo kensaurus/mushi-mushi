@@ -11,8 +11,12 @@ you can drop into the Slack API console to provision the app in seconds.
 
 > Slack's built-in **incoming webhook** path is still available via
 > [`@mushi-mushi/plugin-zapier`](../plugin-zapier) for one-way
-> notifications. This package is the full bidirectional app: slash
-> commands, interactive buttons, and OAuth scopes for user-scoped actions.
+> notifications. This package adds the two-way pieces: slash commands,
+> report cards with buttons, and OAuth scopes for user-scoped actions.
+> Button clicks are handled by the hosted backend's `slack-interactions`
+> function. Run standalone, `createSlackPlugin(...).handleSlackInteraction`
+> only verifies and acknowledges a click; acting on it (dispatching a fix,
+> say) is up to your server.
 
 ## Install
 
@@ -35,7 +39,9 @@ npm i @mushi-mushi/plugin-slack-app
    - Interactivity → `<functions>/slack-interactions`
    - OAuth redirect → `<functions>/api/v1/webhooks/slack/oauth-callback`
    (Running this package standalone instead? Point everything at
-   `https://<your-host>/slack/command` and `/slack/oauth/callback`.)
+   `https://<your-host>/slack/command`, `/slack/interactions` (mount
+   `handleSlackInteraction` there; see the note above) and
+   `/slack/oauth/callback`.)
 3. Copy the signing secret + client ID / secret into the backend secrets
    (`SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`).
 4. Install to the workspace from the Mushi console (**Integrations → Slack →
