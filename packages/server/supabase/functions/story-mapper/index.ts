@@ -22,6 +22,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
+import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
@@ -75,7 +76,8 @@ async function crawlWithFirecrawl(
   const mapRes = await fetch('https://api.firecrawl.dev/v1/map', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ url: baseUrl, limit: maxPages }),
+    // More links than pages: language copies and files are dropped below.
+    body: JSON.stringify({ url: baseUrl, limit: Math.min(maxPages * 5, 200) }),
     signal: AbortSignal.timeout(30_000),
   })
 
@@ -85,7 +87,7 @@ async function crawlWithFirecrawl(
   }
 
   const mapData = await mapRes.json() as { links?: string[] }
-  const urls = (mapData.links ?? [baseUrl]).slice(0, maxPages)
+  const urls = pickCrawlUrls(mapData.links ?? [], baseUrl, maxPages)
 
   // Step 2: scrape each route
   for (const url of urls) {

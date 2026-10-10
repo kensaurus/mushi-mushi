@@ -5,8 +5,8 @@
  *          can now belong to the organization, and an app uses its own keys
  *          first, then the shared ones.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 ;(globalThis as typeof globalThis & { Deno?: { env: { get: (k: string) => string | undefined } } }).Deno ??= {
@@ -155,6 +155,36 @@ describe('key routes', () => {
       const table = [...src.slice(0, at).matchAll(/\.from\('([a-z_]+)'\)/g)].pop()?.[1]
       expect(table, `owner filter at offset ${at}`).toBe('byok_keys')
     }
+  })
+
+  it('no byok_keys read anywhere in the functions filters on project_id alone', () => {
+    // The research stats and the duplicate check were missed on the first pass
+    // (they used `pid` / `projectId`, not `project.id`) and showed Research as
+    // "not set up" for apps using a shared key (2026-10-10).
+    const root = resolve(__dirname, '../../supabase/functions')
+    // Reviewed: these pair the project query with a separate organization query.
+    const pairedWithOrgQuery = new Set(['_shared/fix-report-truth-load.ts', '_shared/setup-signals.ts'])
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name)
+        if (statSync(p).isDirectory()) {
+          if (name !== 'node_modules') walk(p)
+          continue
+        }
+        if (!name.endsWith('.ts') || name.includes('.test.')) continue
+        const rel = relative(root, p).replace(/\\/g, '/')
+        const text = readFileSync(p, 'utf-8')
+        for (const rest of text.split(".from('byok_keys')").slice(1)) {
+          const ends = [rest.indexOf(';'), rest.indexOf('.from(')].filter((i) => i >= 0)
+          const chain = rest.slice(0, Math.min(...ends))
+          if (!/\.(eq|in)\('project_id'/.test(chain) || chain.includes('keyOwnerFilter')) continue
+          if (!pairedWithOrgQuery.has(rel)) offenders.push(rel)
+        }
+      }
+    }
+    walk(root)
+    expect(offenders).toEqual([])
   })
 
   it('a key can be shared with every app, or brought back to one', () => {
