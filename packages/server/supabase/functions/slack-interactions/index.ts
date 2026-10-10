@@ -322,6 +322,7 @@ Deno.serve(
       responseUrl,
       slackUser,
       slackThreadTs: report.slack_message_ts ?? undefined,
+      channelId: payload.channel?.id,
       slackMeta: { source: 'slack', slackUserId: slackUser, triggeredAt: new Date().toISOString() },
     }).catch((err) => {
       log.error('Async dispatch failed', { err: String(err) })
@@ -428,6 +429,8 @@ async function finishDispatch(input: {
   responseUrl?: string
   slackUser: string
   slackThreadTs?: string
+  /** Channel of the card the button sits on: the thread parent lives there. */
+  channelId?: string
   slackMeta?: Record<string, unknown>
 }) {
   const result = await dispatchFixForReport({
@@ -448,6 +451,10 @@ async function finishDispatch(input: {
     await sendBotMessage({
       text: threadText,
       threadTs: input.slackThreadTs,
+      // A thread_ts only resolves in its parent's channel. Without this,
+      // sendBotMessage falls back to the SLACK_CHANNEL_ID env only, so a
+      // project posting to its own slack_channel_id got no_channel.
+      channel: input.channelId,
       db: getServiceClient(),
       projectId: input.projectId,
     }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
@@ -567,6 +574,8 @@ async function finishStatusTransition(input: {
     await sendBotMessage({
       text: `${emoji} ${verb} by <@${input.slackUser}> from Slack.`,
       threadTs: report.slack_message_ts,
+      // Same channel as the card (see finishDispatch).
+      channel: input.channelId,
       db: input.db,
       projectId: report.project_id,
     }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
