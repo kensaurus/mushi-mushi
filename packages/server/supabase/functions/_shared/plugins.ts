@@ -469,7 +469,7 @@ async function deliverCursorAgent(
         },
       },
     )
-    httpStatus = 200
+    httpStatus = created.httpStatus
     agentId = created.agent.id
     dispatchStatus = 'ok'
     const prUrl = extractCursorPrUrl(created.run)
@@ -578,6 +578,7 @@ async function deliverSkillPipelineStep(
   const start = Date.now()
   let agentId: string | null = null
   let runId: string | null = null
+  let httpStatus: number | null = null
   let excerpt = ''
 
   // v1 has no `target.branchName`; the prompt asks for the branch instead.
@@ -599,10 +600,12 @@ async function deliverSkillPipelineStep(
     )
     agentId = created.agent.id
     runId = created.run?.id ?? null
+    httpStatus = created.httpStatus
   } catch (err) {
     if (err instanceof CursorApiError && err.status === 409 && err.code === 'agent_id_conflict') {
       // Retried delivery for a step that is already running — idempotent.
       agentId = await deterministicCursorAgentId(agentIdSeed)
+      httpStatus = err.status
     } else {
       excerpt = String(err).slice(0, 512)
       await failSkillPipelineStep(db, d, excerpt.slice(0, 500))
@@ -643,7 +646,7 @@ async function deliverSkillPipelineStep(
       event: 'skill_pipeline.step.dispatched',
       attempt: 1,
       status: agentId ? 'ok' : 'error',
-      http_status: agentId ? 200 : null,
+      http_status: httpStatus,
       response_excerpt: agentId ? `agentId=${agentId}` : excerpt,
       duration_ms: Date.now() - start,
       next_retry_at: null,
