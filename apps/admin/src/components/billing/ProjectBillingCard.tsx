@@ -18,6 +18,7 @@ import { PlanBenefitsList } from './PlanBenefitsList'
 import { BillingPredictabilityControls } from './BillingPredictabilityControls'
 import { BillingUsageBar } from './BillingUsageBar'
 import { usePageData } from '../../lib/usePageData'
+import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
 import type { BillingProject, Invoice, PlanCatalog } from './types'
 import { BILLING_STATUS_TONE as STATUS_TONE, BILLING_TIER_TONE as TIER_TONE, formatBillingMoney as formatMoney } from './billing-tokens'
 
@@ -67,7 +68,7 @@ export function ProjectBillingCard({
       : null
 
   const overageRate = tier?.overage_unit_amount_decimal
-  const purchasable = plans.filter((p: PlanCatalog) => p.is_self_serve && p.id !== 'hobby' && p.id !== tierId)
+  const purchasable = plans.filter((p: PlanCatalog) => !isSalesLedPlan(p) && p.id !== 'hobby' && p.id !== tierId)
 
   return (
     <Card className="p-3 space-y-3">
@@ -108,7 +109,7 @@ export function ProjectBillingCard({
               <>
                 <Badge className={TIER_TONE[tierId] ?? 'bg-surface-overlay text-fg-muted'}>
                   {planLabel}
-                  {tier && tier.monthly_price_usd > 0 && (
+                  {tier && tier.monthly_price_usd > 0 && !isSalesLedPlan(tier) && (
                     <span className="ml-1 opacity-70">${tier.monthly_price_usd}/mo</span>
                   )}
                 </Badge>
@@ -299,11 +300,11 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
         })}
       </div>
       <InlineProof className="mt-2 border-0 bg-transparent px-0 py-0">
-        Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
-        <a href="mailto:kensaurus@gmail.com" className="text-accent-foreground hover:text-accent">
-          Email sales
+        Need SSO, an air-gapped install, a custom DPA, or &gt; 500k reports/mo?{' '}
+        <a href={ENTERPRISE_MAILTO} className="text-accent-foreground hover:text-accent">
+          Contact us
         </a>{' '}
-        for Enterprise.
+        about Enterprise.
       </InlineProof>
     </ContainedBlock>
   )

@@ -37,6 +37,7 @@ import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
 import { getPlan, listPlans, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
 import { log } from './logger.ts'
+import { isSalesLedPlan, SALES_CONTACT_EMAIL } from './billing-rules.ts'
 
 export type FeatureFlag =
   | 'sso'
@@ -195,6 +196,8 @@ interface EntitlementErrorBody {
       id: string
       display_name: string
       monthly_price_usd: number
+      /** False for a plan arranged with sales (Enterprise): no checkout. */
+      is_self_serve: boolean
     } | null
   }
 }
@@ -248,6 +251,7 @@ export function requireFeature(flag: FeatureFlag) {
     }
 
     const upgradePlan = await minimumPlanFor(flag)
+    const upgradeSelfServe = upgradePlan ? !isSalesLedPlan(upgradePlan) : false
     log.info('entitlement_blocked', {
       path: c.req.path,
       method: c.req.method,
@@ -264,7 +268,9 @@ export function requireFeature(flag: FeatureFlag) {
           `This endpoint requires a plan that includes "${flag}". ` +
           `Your current plan is "${entitlement.plan.display_name}". ` +
           (upgradePlan
-            ? `Upgrade to ${upgradePlan.display_name} or higher to enable it.`
+            ? upgradeSelfServe
+              ? `Upgrade to ${upgradePlan.display_name} or higher to enable it.`
+              : `It comes with ${upgradePlan.display_name}, which is arranged with our team: email ${SALES_CONTACT_EMAIL}.`
             : 'Contact support to enable this feature.'),
         flag,
         current_plan: entitlement.plan.id,
@@ -273,6 +279,7 @@ export function requireFeature(flag: FeatureFlag) {
               id: upgradePlan.id,
               display_name: upgradePlan.display_name,
               monthly_price_usd: upgradePlan.monthly_price_usd,
+              is_self_serve: upgradeSelfServe,
             }
           : null,
       },

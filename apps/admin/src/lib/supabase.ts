@@ -390,7 +390,7 @@ async function doFetch<T>(
               code?: string
               flag?: string
               current_plan?: string
-              upgrade_to?: { id: string; display_name: string; monthly_price_usd: number } | null
+              upgrade_to?: { id: string; display_name: string; monthly_price_usd: number; is_self_serve?: boolean } | null
             }
           }
           if (parsed?.error?.code === 'feature_not_in_plan' && typeof window !== 'undefined') {
