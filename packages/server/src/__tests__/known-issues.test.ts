@@ -218,6 +218,20 @@ describe('lookupKnownIssues', () => {
     expect(snippetUrls()).toEqual([vellum.url])
   })
 
+  it("searches Sentry's WatchdogTermination crash and keeps results about it", async () => {
+    const watchdog = {
+      description: 'WatchdogTermination: The OS watchdog terminated your app, possibly because it overused RAM. (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', platform: 'cocoa' },
+      consoleLogs: [],
+    }
+    const lottie = { url: 'https://github.com/lottie-react-native/lottie-react-native/issues/1364', title: 'The OS watchdog terminated your app, possibly because it overused RAM.', snippet: '' }
+    const other = { url: 'https://example.dev/watchdog', title: 'Watchdog timers in embedded C', snippet: 'reset the watchdog' }
+    searches([lottie, other])
+    const res = await mod.lookupKnownIssues(makeDb(state), { projectId: 'p1', reportId: 'r1', ...watchdog })
+    expect(res).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([lottie.url])
+  })
+
   it('adds the runtime to a short error, not to a long one', async () => {
     const short = {
       description: 'Error: Request was aborted. (captured by Sentry — no user description)',

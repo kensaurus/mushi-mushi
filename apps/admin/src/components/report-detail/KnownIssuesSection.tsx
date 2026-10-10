@@ -30,7 +30,7 @@ function sourceLabel(url: string): string {
 }
 
 /** Same test the server uses before spending a search (known-issues.ts). */
-const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b/
+const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b|\b[A-Z][A-Za-z]+(?:Termination|Crash|Panic)\b/
 
 /** Does the report carry an error message worth searching for? */
 export function reportHasSearchableError(

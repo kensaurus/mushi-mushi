@@ -30,8 +30,12 @@ const KNOWN_ISSUE_DOMAINS: readonly string[] = ['github.com', 'stackoverflow.com
 const MAX_RESULTS = 3;
 /** "Search again" twice on the same error within this window runs once. */
 const REPEAT_WINDOW_MS = 10 * 60_000;
-/** "Error:", "TypeError", "FunctionsHttpError", "CppException", "APIUserAbortError"… */
-const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b/;
+/**
+ * "Error:", "TypeError", "FunctionsHttpError", "CppException",
+ * "APIUserAbortError"…, and crash names such as Sentry's
+ * "WatchdogTermination" (an iOS out-of-memory kill), which end in neither.
+ */
+const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b|\b[A-Z][A-Za-z]+(?:Termination|Crash|Panic)\b/;
 const MAX_QUERY_CHARS = 150;
 
 interface KnownIssueSource {
@@ -117,7 +121,7 @@ const PLATFORM_TERMS: Record<string, string> = {
 
 /** "TypeError: x is not a function" → "x is not a function". */
 function errorMessage(text: string): string {
-  return text.replace(/^[\w$.]*(?:Error|Exception)\s*:\s*/, '').trim();
+  return text.replace(/^[\w$.]*(?:Error|Exception|Termination|Crash|Panic)\s*:\s*/, '').trim();
 }
 
 /** Lowercase words only, so punctuation and case never decide a match. */
