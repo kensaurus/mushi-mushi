@@ -1,5 +1,15 @@
 # @mushi-mushi/web
 
+## 1.32.2
+
+### Patch Changes
+
+- d5849a1: `denyUrls` / `allowUrls` now work for `captureException()`. They match the script URL of the frame that threw, read from the stack unless you pass `metadata.filename`. Before, `allowUrls` dropped every `captureException()` call that didn't pass a filename. A `/g` or `/y` RegExp filter now matches on every call, not every other one. On pagehide the SDK replays only a POST that is still in flight, not one already delivered. MCP `check_sdk_version` reads a package.json range such as `^1.27.0` as its version.
+- b1bcc44: `denyUrls` and `allowUrls` now apply to unhandled promise rejections too. A rejection has no `filename` the way an error event does, so these filters used to let every rejection through. The SDK now reads the script URL from the innermost stack frame of the rejected `Error`.
+- Updated dependencies [b1bcc44]
+- Updated dependencies [d5849a1]
+  - @mushi-mushi/core@1.32.2
+
 ## 1.32.1
 
 ### Patch Changes

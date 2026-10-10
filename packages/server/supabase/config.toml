@@ -382,6 +382,11 @@ verify_jwt = false
 [functions.store-review-intake]
 verify_jwt = false
 
+# Cron-invoked hourly (mushi-site-watch-poll, :14) and by the api after "Check now";
+# reads Firecrawl monitor checks and files broken live pages as reports (ADR 0024).
+[functions.site-watch-poll]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

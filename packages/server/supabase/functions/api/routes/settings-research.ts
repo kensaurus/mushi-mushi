@@ -550,7 +550,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Reporter updates in the SDK widget (Notifications → Setup). It
       // messages end users, so project admins only. Validated below.
       'reporter_notifications_enabled',
-      // "Others who hit this" (migration 20261010190000): sends the scrubbed
+      // "Others who hit this" (migration 20261010200000): sends the scrubbed
       // error message to Firecrawl, a third party, so project admins only.
       // Validated below.
       'known_issues_search_enabled',
