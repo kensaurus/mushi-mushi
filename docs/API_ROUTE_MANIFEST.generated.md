@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-10 · **687** routes.
+> Generated: 2026-10-10 · **691** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 172 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 350 |
+| `jwtAuth` | 354 |
 | `jwtOrApiKey` | 3 |
 | `public` | 59 |
 | `unknown` | 45 |
@@ -362,6 +362,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/sentry/import` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sentry-import.ts` |
 | POST | `/v1/admin/projects/:id/setup-funnel/diagnosis-viewed` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| DELETE | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
+| GET | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
+| PUT | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
+| POST | `/v1/admin/projects/:id/site-watch/run` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
 | GET | `/v1/admin/projects/:id/store` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | POST | `/v1/admin/projects/:id/store/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | GET | `/v1/admin/projects/:id/store/reviews` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |

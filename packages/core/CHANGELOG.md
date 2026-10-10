@@ -1,5 +1,12 @@
 # @mushi-mushi/core
 
+## 1.32.2
+
+### Patch Changes
+
+- b1bcc44: No behaviour change: a source comment in the config-key list now describes the earlier `replaySampleRate` bug accurately (it was declared on `MushiConfig` but missing from the known-keys list, so setting it logged "Unknown config key").
+- d5849a1: `denyUrls` / `allowUrls` now work for `captureException()`. They match the script URL of the frame that threw, read from the stack unless you pass `metadata.filename`. Before, `allowUrls` dropped every `captureException()` call that didn't pass a filename. A `/g` or `/y` RegExp filter now matches on every call, not every other one. On pagehide the SDK replays only a POST that is still in flight, not one already delivered. MCP `check_sdk_version` reads a package.json range such as `^1.27.0` as its version.
+
 ## 1.32.0
 
 ### Minor Changes
