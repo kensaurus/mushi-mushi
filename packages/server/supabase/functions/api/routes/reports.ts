@@ -870,6 +870,54 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
   });
 
   // Unified timeline — merges reporter comments, fixes, QA, pipelines, Ask Mushi.
+  // "Search again" on "Others who hit this": run the known-issue lookup now
+  // (developer index, then GitHub / Stack Overflow) and attach any results
+  // not already on the report. Spends the project's own Firecrawl credits.
+  app.post('/v1/admin/reports/:id/known-issues', jwtAuth, async (c) => {
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const { data: report, error } = await db
+      .from('reports')
+      .select('id, project_id, description, custom_metadata, console_logs')
+      .eq('id', reportId)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!report || !(await canAccessReportProject(c, db, userId, report.project_id as string))) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const { lookupKnownIssues } = await import('../../_shared/known-issues.ts');
+    const result = await lookupKnownIssues(db, {
+      projectId: report.project_id as string,
+      reportId,
+      description: (report.description as string | null) ?? null,
+      customMetadata: (report.custom_metadata as Record<string, unknown> | null) ?? null,
+      consoleLogs: report.console_logs,
+      force: true,
+      requestedBy: userId,
+    });
+    if (result.skipped === 'disabled') {
+      return c.json(
+        { ok: false, error: { code: 'KNOWN_ISSUES_SEARCH_OFF', message: 'Turn on "Search the web for known fixes" in Settings → Web tools first.' } },
+        412,
+      );
+    }
+    if (result.skipped === 'no_key') {
+      return c.json(
+        { ok: false, error: { code: 'FIRECRAWL_NOT_CONFIGURED', message: 'Add a Firecrawl key in Settings → AI keys first.' } },
+        412,
+      );
+    }
+    if (result.skipped === 'error') {
+      return c.json({ ok: false, error: { code: 'SEARCH_FAILED', message: 'The search did not run. Retry in a moment.' } }, 502);
+    }
+    return c.json({ ok: true, data: result });
+  });
+
   app.get('/v1/admin/reports/:id/timeline', adminOrApiKey(), async (c) => {
     const idParsed = parseUuidParam(c);
     if (!idParsed.ok) return idParsed.error;

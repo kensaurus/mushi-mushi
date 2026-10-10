@@ -1,18 +1,22 @@
 /**
  * FILE: apps/admin/src/components/report-detail/KnownIssuesSection.tsx
- * PURPOSE: "Others who hit this" on the report detail page: GitHub and
- *          Stack Overflow results for the report's error, found once after
- *          classification when the project turned the search on and has a
- *          Firecrawl key (known-issues.ts), plus snippets attached from
- *          Research. With no results it renders nothing, or one line saying
- *          the search is off (with a link to the setting) when the project
- *          has it off.
+ * PURPOSE: "Others who hit this" on the report detail page: issues, merged
+ *          PRs and answers for the report's error, found after
+ *          classification when the project has a Firecrawl key
+ *          (known-issues.ts), plus snippets attached from Research.
+ *          "Search again" runs the lookup now. With no results yet, it shows
+ *          only for a report that carries an error. The search is a per-project
+ *          opt-in (default off); when it is off, a link to the setting replaces
+ *          the button.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
-import { Section, Badge } from '../ui'
+import { Section, Badge, Btn } from '../ui'
 import { IconExternalLink, IconLink } from '../icons'
+import { apiFetch } from '../../lib/supabase'
+import { useToast } from '../../lib/toast'
 import type { ReportDetail } from './types'
 
 type KnownIssue = NonNullable<ReportDetail['known_issues']>[number]
@@ -29,31 +33,95 @@ function sourceLabel(url: string): string {
   }
 }
 
+/** Same test the server uses before spending a search (known-issues.ts). */
+const EXCEPTION_NAME = /\b(?:[A-Za-z_$][\w$]*)?(?:Error|Exception)\b|\b[A-Z][A-Za-z]+(?:Termination|Crash|Panic)\b/
+
+/** Does the report carry an error message worth searching for? */
+function reportHasSearchableError(
+  report: Pick<ReportDetail, 'description' | 'console_logs' | 'custom_metadata'>,
+): boolean {
+  if (report.custom_metadata?.source === 'sentry_webhook') {
+    return EXCEPTION_NAME.test((report.description ?? '').split('\n')[0] ?? '')
+  }
+  return (report.console_logs ?? []).some((l) => l.level === 'error' && EXCEPTION_NAME.test(l.message ?? ''))
+}
+
+interface LookupReply {
+  attached: number
+  skipped?: 'no_query' | 'disabled' | 'no_key' | 'already_attached' | 'recent' | 'error'
+}
+
 export function KnownIssuesSection({
-  issues,
+  report,
+  onReload,
   searchEnabled,
 }: {
-  issues: KnownIssue[] | null | undefined
+  report: Pick<ReportDetail, 'id' | 'known_issues' | 'description' | 'console_logs' | 'custom_metadata'>
+  onReload: () => void
   /** project_settings.known_issues_search_enabled; null/undefined = unknown. */
   searchEnabled?: boolean | null
 }) {
-  if (!issues || issues.length === 0) {
-    // Only an explicit "off" earns the hint: unknown says nothing.
-    if (searchEnabled !== false) return null
+  const toast = useToast()
+  const [searching, setSearching] = useState(false)
+  const issues: KnownIssue[] = report.known_issues ?? []
+  if (issues.length === 0 && !reportHasSearchableError(report)) return null
+
+  async function searchAgain() {
+    setSearching(true)
+    const res = await apiFetch<LookupReply>(`/v1/admin/reports/${report.id}/known-issues`, { method: 'POST' })
+    setSearching(false)
+    if (!res.ok) {
+      toast.error(
+        res.error?.code === 'FIRECRAWL_NOT_CONFIGURED'
+          ? 'No Firecrawl key'
+          : res.error?.code === 'KNOWN_ISSUES_SEARCH_OFF'
+            ? 'Web search is off'
+            : 'Search did not run',
+        res.error?.message ?? 'Retry in a moment.',
+      )
+      return
+    }
+    const r = res.data
+    const added = r?.attached ?? 0
+    if (r?.skipped === 'no_query') toast.success('Nothing to search', "This report's error is too short or generic to search for.")
+    else if (r?.skipped === 'recent') toast.success('Already searched', 'This error was searched in the last 10 minutes.')
+    else if (added > 0) toast.success(`${added} new result${added === 1 ? '' : 's'}`, 'Added below.')
+    else toast.success('No new results', 'Nothing new beyond what is already here.')
+    onReload()
+  }
+
+  // Only an explicit "off" swaps the button for the setting link; unknown keeps it.
+  const action = searchEnabled === false ? (
+    <Link to={KNOWN_ISSUES_SEARCH_HREF} className="text-2xs underline text-fg-muted hover:text-fg-secondary shrink-0">
+      Turn on web search in Settings
+    </Link>
+  ) : (
+    <Btn size="sm" variant="ghost" type="button" loading={searching} onClick={() => void searchAgain()}>
+      {issues.length > 0 ? 'Search again' : 'Search now'}
+    </Btn>
+  )
+
+  if (issues.length === 0) {
     return (
-      <p className="text-2xs text-fg-faint leading-snug">
-        Web search for known fixes is off for this project.{' '}
-        <Link to={KNOWN_ISSUES_SEARCH_HREF} className="underline hover:text-fg-secondary">
-          Turn it on in Settings
-        </Link>
-      </p>
+      <Section title="Others who hit this" icon={<IconLink />}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-2xs text-fg-faint leading-snug min-w-0">
+            Look for GitHub issues, merged fixes and answers about this error.
+          </p>
+          {action}
+        </div>
+      </Section>
     )
   }
+
   return (
     <Section title="Others who hit this" icon={<IconLink />}>
-      <p className="text-2xs text-fg-faint leading-snug mb-2">
-        Web results for this error. Check whether one already has the cause or a fix before digging in.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+        <p className="text-2xs text-fg-faint leading-snug min-w-0">
+          Issues, merged fixes and answers about this error. Check whether one already has the cause or a fix before digging in.
+        </p>
+        {action}
+      </div>
       <ul className="space-y-2">
         {issues.map((issue) => (
           <li key={issue.id} className="min-w-0">

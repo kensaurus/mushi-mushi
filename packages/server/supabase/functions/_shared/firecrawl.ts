@@ -1,9 +1,11 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/firecrawl.ts
- * PURPOSE: BYOK Firecrawl client used by:
+ * PURPOSE: BYOK Firecrawl client (API v2) used by:
  *            * /v1/admin/research/* (manual triage research)
+ *            * known-issues ("Others who hit this" on error reports)
  *            * fix-worker (auto-augment when local RAG is sparse)
  *            * library-modernizer cron (release-notes scraping)
+ *            * story-mapper (map + scrape of the app's live site)
  *
  * GUARDRAILS:
  *   1. Per-project BYOK key resolved via Supabase Vault (vault://<id>); falls
@@ -146,10 +148,24 @@ export interface FirecrawlSearchOptions {
   domains?: string[];
   /** Bypass the 24h cache when true. */
   bypassCache?: boolean;
+  /**
+   * `developer`: Firecrawl's index of GitHub issues, merged pull requests,
+   * READMEs and docs. For an error message it finds the PR that fixed it,
+   * where a web search finds generic how-to pages. It cannot be combined
+   * with `domains` (v2 rule), so results are not domain-filtered.
+   */
+  category?: 'developer';
+  /** Also fetch each result page as markdown: 1 more credit per result. Default true. */
+  scrape?: boolean;
+}
+
+/** The host part of an allow-list entry ("https://github.com/x" → "github.com"). */
+function bareHost(entry: string): string {
+  return entry.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 }
 
 /**
- * firecrawlSearch — calls Firecrawl `/v1/search` for a query string.
+ * firecrawlSearch — calls Firecrawl `/v2/search` for a query string.
  * Returns up to `limit` snippets, capped by project policy.
  *
  * Throws on API auth/network failure so the caller can degrade gracefully
@@ -168,10 +184,14 @@ export async function firecrawlSearch(
   const domainFilter =
     opts.domains && opts.domains.length > 0 ? opts.domains : resolved.allowedDomains;
 
+  const category = opts.category;
+  const scrape = opts.scrape !== false;
   const cacheKey = JSON.stringify({
     q: query.trim().toLowerCase().slice(0, 240),
     limit,
-    d: domainFilter.slice().sort(),
+    d: category ? [] : domainFilter.slice().sort(),
+    c: category ?? null,
+    s: scrape,
   });
   if (!opts.bypassCache) {
     const cached = await readCache<FirecrawlSearchResult[]>(db, projectId, 'search', cacheKey);
@@ -182,16 +202,12 @@ export async function firecrawlSearch(
   const span = trace.span('http');
 
   try {
-    const body: Record<string, unknown> = {
-      query,
-      limit,
-      scrapeOptions: { formats: ['markdown'], onlyMainContent: true },
-    };
-    if (domainFilter.length > 0) {
-      body.query = `${query} ${domainFilter.map((d) => `site:${d}`).join(' OR ')}`;
-    }
+    const body: Record<string, unknown> = { query, limit, sources: ['web'] };
+    if (scrape) body.scrapeOptions = { formats: ['markdown'], onlyMainContent: true };
+    if (category) body.categories = [category];
+    else if (domainFilter.length > 0) body.includeDomains = [...new Set(domainFilter.map(bareHost).filter(Boolean))];
 
-    const res = await fetch(`${FIRECRAWL_BASE}/v1/search`, {
+    const res = await fetch(`${FIRECRAWL_BASE}/v2/search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -210,12 +226,14 @@ export async function firecrawlSearch(
       throw new Error(`FIRECRAWL_HTTP_${res.status}`);
     }
 
-    const json = (await res.json()) as {
-      data?: Array<{ url: string; title?: string; description?: string; markdown?: string }>;
-    };
-    const results: FirecrawlSearchResult[] = (json.data ?? [])
+    type SearchRow = { url: string; title?: string; description?: string; markdown?: string };
+    const json = (await res.json()) as { data?: SearchRow[] | { web?: SearchRow[] } };
+    // v2 groups results by source (`data.web`); v1 returned a flat array.
+    const rows = Array.isArray(json.data) ? json.data : (json.data?.web ?? []);
+    const results: FirecrawlSearchResult[] = rows
+      .filter((r) => typeof r?.url === 'string')
+      .filter((r) => category || domainFilter.length === 0 || isHostAllowed(r.url, domainFilter))
       .slice(0, limit)
-      .filter((r) => domainFilter.length === 0 || isHostAllowed(r.url, domainFilter))
       .map((r) => ({
         url: r.url,
         title: r.title ?? r.url,
@@ -317,7 +335,7 @@ async function scrapeAllowed(
   const span = trace.span('http');
 
   try {
-    const res = await fetch(`${FIRECRAWL_BASE}/v1/scrape`, {
+    const res = await fetch(`${FIRECRAWL_BASE}/v2/scrape`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -369,6 +387,65 @@ async function scrapeAllowed(
     }
     throw err;
   }
+}
+
+export interface FirecrawlMapOptions {
+  /** Most links to return. Default 50, at most 500. */
+  limit?: number;
+  /** As for firecrawlScrape: hosts the caller chose, outside the allow-list. */
+  trustedHosts?: readonly string[];
+}
+
+/**
+ * The URLs Firecrawl knows under `url` (1 credit per call), without their
+ * content. Same key, allow-list and usage bookkeeping as search and scrape.
+ */
+export async function firecrawlMap(
+  db: SupabaseClient,
+  projectId: string,
+  url: string,
+  opts: FirecrawlMapOptions = {},
+): Promise<string[]> {
+  const resolved = await resolveFirecrawl(db, projectId);
+  if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
+
+  const trusted = (opts.trustedHosts?.length ?? 0) > 0 && isHostAllowed(url, [...opts.trustedHosts!]);
+  if (!trusted && !isHostAllowed(url, resolved.allowedDomains)) {
+    throw new Error('FIRECRAWL_DOMAIN_NOT_ALLOWED');
+  }
+
+  const trace = createTrace('firecrawl.map', { projectId, url: url.slice(0, 200) });
+  const span = trace.span('http');
+  const res = await fetch(`${FIRECRAWL_BASE}/v2/map`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resolved.key}` },
+    body: JSON.stringify({ url, limit: Math.min(Math.max(opts.limit ?? 50, 1), 500) }),
+    signal: AbortSignal.timeout(30_000),
+  }).catch((err) => {
+    span.end({ error: String(err) });
+    throw err;
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    span.end({ statusCode: res.status, error: text.slice(0, 200) });
+    await trace.end();
+    if (res.status === 401 || res.status === 403) throw new Error('FIRECRAWL_AUTH_FAILED');
+    if (res.status === 429) throw new Error('FIRECRAWL_RATE_LIMITED');
+    throw new Error(`FIRECRAWL_HTTP_${res.status}`);
+  }
+  // v2 returns link objects ({ url, title, description }); v1 returned strings.
+  const json = (await res.json()) as { links?: Array<string | { url?: string }> };
+  const links = (json.links ?? [])
+    .map((l) => (typeof l === 'string' ? l : l?.url))
+    .filter((l): l is string => typeof l === 'string');
+  span.end({ statusCode: res.status });
+  await trace.end();
+  if (resolved.source === 'byok') {
+    await markKeyUsed(db, projectId, 'firecrawl', resolved.keyId).catch((error) => {
+      log.warn('Firecrawl usage bookkeeping failed (non-fatal)', { projectId, error: String(error) });
+    });
+  }
+  return links;
 }
 
 /**
