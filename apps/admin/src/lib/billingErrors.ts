@@ -23,7 +23,7 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   NO_SUBSCRIPTION: 'This project has no paid plan to change. Pick a plan to start one.',
   SUBSCRIPTION_NOT_CHANGEABLE:
     'This subscription has an unpaid invoice or is not active. Open Manage billing to settle it, then change the plan.',
-  PLAN_NOT_SELF_SERVE: 'Only Indie and Pro can be changed here. For Enterprise, use "Email sales" on the Plans tab.',
+  PLAN_NOT_SELF_SERVE: 'Only Indie and Pro can be changed here. For Enterprise, use "Contact us" on the Plans tab.',
   NO_CHANGE: 'The project is already on that plan and billing interval.',
   PAYMENT_FAILED:
     'Your card was declined for the prorated charge, so the plan did not change. Update the card in Manage billing and try again.',
