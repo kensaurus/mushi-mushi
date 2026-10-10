@@ -119,8 +119,8 @@ jobs:
 
       # Admin now consumes `@mushi-mushi/web` (workspace) for the
       # self-feedback widget (`apps/admin/src/lib/mushi-self.ts`).
-      # Build the dependency graph in topological order so admin's
-      # `tsc --noEmit` finds the published `dist/index.d.ts` types.
+      # Build the dependency graph in topological order so admin's build
+      # (`tsc -b && vite build`) finds the published `dist/index.d.ts` types.
       # Without this, admin sees `error TS2307: Cannot find module
       # '@mushi-mushi/web'` because pnpm doesn't auto-build workspace
       # deps on a `--filter <leaf> build` invocation.
@@ -224,6 +224,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # AWS CLI filters are fnmatch patterns joined onto the source root, and
+      # `*` crosses `/`: "*.js" already matches assets/x.js, while "**/*.js"
+      # needs a subdirectory and misses root files. The "**/" form once sent
+      # index.html and sw.js through the immutable "other static" step, after
+      # which the no-cache HTML sync skipped the unchanged index.html.
       - name: Sync immutable assets to S3 (JS)
         run: |
           aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
@@ -231,7 +236,8 @@ jobs:
             --content-type "application/javascript" \
             --no-guess-mime-type \
             --exclude "*" \
-            --include "**/*.js"
+            --include "*.js" \
+            --exclude "sw.js"
 
       - name: Sync immutable assets to S3 (CSS)
         run: |
@@ -240,15 +246,15 @@ jobs:
             --content-type "text/css" \
             --no-guess-mime-type \
             --exclude "*" \
-            --include "**/*.css"
+            --include "*.css"
 
       - name: Sync immutable assets to S3 (other static)
         run: |
           aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
             --cache-control "public, max-age=31536000, immutable" \
-            --exclude "**/*.html" \
-            --exclude "**/*.js" \
-            --exclude "**/*.css" \
+            --exclude "*.html" \
+            --exclude "*.js" \
+            --exclude "*.css" \
             --exclude "version.json"
 
       - name: Sync HTML to S3 (no cache)
@@ -259,6 +265,13 @@ jobs:
             --no-guess-mime-type \
             --exclude "*" \
             --include "*.html"
+
+      - name: Sync service worker to S3 (no cache)
+        # sw.js has a fixed name, so it must revalidate like index.html.
+        run: |
+          aws s3 cp apps/admin/dist/sw.js s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/sw.js \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --content-type "application/javascript"
 
       - name: Sync version.json to S3 (no cache)
         run: |
