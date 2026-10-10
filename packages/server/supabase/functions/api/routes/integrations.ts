@@ -436,11 +436,13 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       'github_webhook_secret',
       'github_deploy_key',
     ],
+    // cursor_max_iterations is retired (owner decision 2026-10-10): one
+    // dispatch is one Cursor v1 run, and nothing enforced the cap. The column
+    // stays (dropping it is a destructive migration) but is no longer written.
     cursor_cloud: [
       'cursor_api_key_ref',
       'cursor_default_model',
       'cursor_auto_create_pr',
-      'cursor_max_iterations',
     ],
     // The three settings the card renders next to the key. They were missing
     // here, so a save that changed only them hit NO_FIELDS and a save with

@@ -12,6 +12,7 @@ import {
   accessibleProjectIdsInOrganization as _accessibleProjectIdsInOrganization,
   ownedProjectIds as _ownedProjectIds,
   ProjectAccessReadError,
+  type AccessReadOptions,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
 import { fanoutMemo } from '../_shared/request-memo.ts';
@@ -573,7 +574,12 @@ export async function resolveOwnedProject(
  * - API-key auth (MCP / SDK): always `[key.project_id]`; mismatched
  *   `project_id` query/header returns `[]` so list routes never leak rows.
  * - JWT admin: honours `X-Mushi-Project-Id` when set; otherwise all owned.
+ * - Strict: a failed org/project/member read throws ProjectAccessReadError
+ *   (app.onError answers 500) instead of an empty list. A blank reports list
+ *   during a DB blip read as "no bugs" (owner decision 2026-10-10, Plan 020 P-1).
  */
+const STRICT: AccessReadOptions = { strict: true };
+
 export async function callerProjectIds(
   c: Context,
   db: ReturnType<typeof getServiceClient>,
@@ -587,7 +593,7 @@ export async function callerProjectIds(
     // Org-scoped keys (project_id NULL on the key row) enumerate every
     // project the key owner can reach — same set JWT callers see.
     if (isOrgScoped && !bound) {
-      const all = await accessibleProjectIds(db, userId);
+      const all = await accessibleProjectIds(db, userId, STRICT);
       if (!requested) return all;
       if (!UUID_RE.test(requested)) return [];
       return all.includes(requested) ? [requested] : [];
@@ -597,7 +603,7 @@ export async function callerProjectIds(
     if (requested && requested !== bound) return [];
     return [bound];
   }
-  return scopedOwnedProjectIds(c, db, userId);
+  return scopedOwnedProjectIds(c, db, userId, STRICT);
 }
 
 /**
@@ -649,11 +655,12 @@ export async function scopedOwnedProjectIds(
   c: Context,
   db: ReturnType<typeof getServiceClient>,
   userId: string,
+  opts: AccessReadOptions = {},
 ): Promise<string[]> {
   if (c.get('authMethod') === 'apiKey') {
     return callerProjectIds(c, db, userId);
   }
-  const all = await ownedProjectIds(db, userId);
+  const all = await ownedProjectIds(db, userId, opts);
   const requested = requestedProjectId(c);
   if (!requested) return all;
   if (!UUID_RE.test(requested)) return [];

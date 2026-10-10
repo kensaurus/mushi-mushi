@@ -73,6 +73,38 @@ describe('accessibleProjectIds lenient mode', () => {
   })
 })
 
+describe('callerProjectIds is strict (owner decision 2026-10-10)', () => {
+  // A reports list that came back empty on a DB blip read as "no bugs".
+  function ctx(vars: Record<string, unknown>) {
+    return {
+      get: (k: string) => vars[k],
+      req: { query: () => undefined, header: () => undefined },
+    }
+  }
+  const jwt = ctx({ authMethod: 'jwt' })
+  const orgKey = ctx({ authMethod: 'apiKey', isOrgScopedKey: true })
+
+  it('lists the projects a member can reach', async () => {
+    await expect(shared.callerProjectIds(jwt as never, db(null) as never, USER)).resolves.toEqual([P_ORG])
+    await expect(shared.callerProjectIds(orgKey as never, db(null) as never, USER)).resolves.toEqual([P_ORG])
+  })
+
+  for (const table of ['projects', 'organization_members', 'project_members']) {
+    it(`throws (a 500) instead of an empty list when ${table} fails`, async () => {
+      for (const c of [jwt, orgKey]) {
+        await expect(shared.callerProjectIds(c as never, db(table) as never, USER)).rejects.toBeInstanceOf(
+          access.ProjectAccessReadError,
+        )
+      }
+    })
+  }
+
+  it('a project-bound key reads nothing, so it is unaffected', async () => {
+    const bound = ctx({ authMethod: 'apiKey', projectId: P_ORG })
+    await expect(shared.callerProjectIds(bound as never, db('projects') as never, USER)).resolves.toEqual([P_ORG])
+  })
+})
+
 describe('dbError transient log line', () => {
   it('includes the requestId that the 500 body returns', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

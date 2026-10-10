@@ -461,12 +461,19 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
         break;
       }
 
+      // Permanent failures are dropped, never retried:
+      // - 401/403: a rejected or mis-scoped key never succeeds on retry
+      //   (api-client and the live submit paths already drop these instead of
+      //   queueing). The server's code (INVALID_API_KEY, INSUFFICIENT_SCOPE, …)
+      //   replaces HTTP_4xx, so match the status as well.
+      // - PAYLOAD_TOO_LARGE: a payload over the size guard never shrinks on its
+      //   own; retrying re-serialises the multi-MB body every sync tick and
+      //   wedges the queue (it matches neither permanent nor transient
+      //   otherwise). SERIALIZE_FAILED (circular ref) is likewise unrecoverable.
+      // These notes sit above the statement, not inside the expression: the
+      // unminified bundle keeps in-expression comments and ships them (size-limit).
       const permanent =
         result.error?.code === 'HTTP_400' ||
-        // A rejected or mis-scoped key never succeeds on retry (api-client and
-        // the live submit paths already drop these instead of queueing). The
-        // server's code (INVALID_API_KEY, INSUFFICIENT_SCOPE, …) replaces
-        // HTTP_4xx, so match the status as well.
         result.error?.status === 401 ||
         result.error?.status === 403 ||
         result.error?.code === 'HTTP_401' ||
@@ -475,10 +482,6 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
         result.error?.code === 'HTTP_422' ||
         result.error?.code === 'INGEST_ERROR' ||
         result.error?.code === 'VALIDATION_ERROR' ||
-        // A payload that exceeds the size guard will never shrink on its own;
-        // retrying re-serialises the multi-MB body every sync tick and wedges
-        // the queue (it matches neither permanent nor transient otherwise).
-        // SERIALIZE_FAILED (circular ref) is likewise unrecoverable on retry.
         result.error?.code === 'PAYLOAD_TOO_LARGE' ||
         result.error?.code === 'SERIALIZE_FAILED' ||
         (typeof result.error?.message === 'string' &&
