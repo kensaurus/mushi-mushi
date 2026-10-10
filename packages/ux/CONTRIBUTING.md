@@ -150,7 +150,7 @@ Select the affected packages, the semver bump type, and write a summary. The cha
 ## Release flow
 
 Releases are fully automated once the version PR is merged. Maintainers don't run
-`npm publish` by hand for routine bumps. See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**
+`npm publish` by hand for routine bumps. See **[`docs/DEPLOYMENT.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/DEPLOYMENT.md)**
 for the full production runbook (edge functions, admin SPA, docs site, migrations).
 
 1. PRs land on `master` with one or more changeset files in `.changeset/`.

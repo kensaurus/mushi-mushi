@@ -10,6 +10,7 @@ export { MushiRewardsBadge, useReputation, useTier } from './rewards';
 export { Mushi } from '@mushi-mushi/web';
 export type {
   MushiConfig,
+  MushiInitConfig,
   MushiReport,
   MushiReportCategory,
   MushiSDKInstance,

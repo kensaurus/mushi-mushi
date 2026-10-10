@@ -463,6 +463,14 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
 
       const permanent =
         result.error?.code === 'HTTP_400' ||
+        // A rejected or mis-scoped key never succeeds on retry (api-client and
+        // the live submit paths already drop these instead of queueing). The
+        // server's code (INVALID_API_KEY, INSUFFICIENT_SCOPE, …) replaces
+        // HTTP_4xx, so match the status as well.
+        result.error?.status === 401 ||
+        result.error?.status === 403 ||
+        result.error?.code === 'HTTP_401' ||
+        result.error?.code === 'HTTP_403' ||
         result.error?.code === 'HTTP_413' ||
         result.error?.code === 'HTTP_422' ||
         result.error?.code === 'INGEST_ERROR' ||
@@ -480,7 +488,6 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       const transient =
         !permanent &&
         (result.error?.code === 'NETWORK_ERROR' ||
-          result.error?.code === 'HTTP_403' ||
           result.error?.code === 'HTTP_429' ||
           result.error?.code === 'HTTP_502' ||
           result.error?.code === 'HTTP_503' ||

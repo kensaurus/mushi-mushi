@@ -35,7 +35,8 @@ export function createConsoleCapture(): ConsoleCapture {
 
       // Phase 3b: stamp the active network request's correlationId so this log
       // entry can be linked to the fetch/XHR that was in-flight when it was emitted
-      // (e.g. "this console.error was thrown inside the catch block of that request").
+      // (e.g. from a request interceptor). Not from the caller's own catch block:
+      // the ID is popped before it runs. Best-effort; see network.ts.
       const correlationId = getActiveCorrelationId();
 
       const entry: MushiConsoleEntry = {

@@ -103,6 +103,45 @@ describe('rewards pushState — idempotent install', () => {
     expect(() => history.pushState({}, '', '/double-init')).not.toThrow();
   });
 
+  it('double initRewards attaches one click listener (one element_selected per click)', async () => {
+    vi.mocked(ctx.client.submitActivity).mockResolvedValue({ ok: true, data: { accepted: 1, total: 1 } });
+    initRewards(ctx);
+    initRewards(ctx);
+    const button = document.createElement('button');
+    button.dataset.testid = 'save';
+    document.body.appendChild(button);
+    try {
+      button.click();
+      await flush(ctx);
+      const batch = vi.mocked(ctx.client.submitActivity).mock.calls.flatMap((c) => c[1] ?? []);
+      expect(batch.filter((e) => e.action === 'element_selected')).toHaveLength(1);
+    } finally {
+      button.remove();
+    }
+  });
+
+  it('a setup throw leaves nothing half-installed, so the next init attaches the click listener', async () => {
+    vi.mocked(ctx.client.submitActivity).mockResolvedValue({ ok: true, data: { accepted: 1, total: 1 } });
+    const observe = vi.spyOn(MutationObserver.prototype, 'observe').mockImplementationOnce(() => {
+      throw new TypeError("Failed to execute 'observe': parameter 1 is not of type 'Node'.");
+    });
+    expect(() => initRewards(ctx)).toThrow(TypeError);
+    observe.mockRestore();
+
+    initRewards(ctx);
+    const button = document.createElement('button');
+    button.dataset.testid = 'retry';
+    document.body.appendChild(button);
+    try {
+      button.click();
+      await flush(ctx);
+      const batch = vi.mocked(ctx.client.submitActivity).mock.calls.flatMap((c) => c[1] ?? []);
+      expect(batch.filter((e) => e.action === 'element_selected')).toHaveLength(1);
+    } finally {
+      button.remove();
+    }
+  });
+
   it('re-init after stale hub wrapper left on history does not stack-overflow', () => {
     initRewards(ctx);
     const hubWrapper = history.pushState;

@@ -51,7 +51,7 @@ Control how users open the report form:
 | `'button'` (default) | Floating action button — safe on all Hermes builds |
 | `'shake'` | Shake-to-report listener (requires optional `expo-sensors` peer) |
 | `'both'` | Floating button + shake |
-| `'manual'` / `'hidden'` / `'none'` | No auto UI — call `open()` programmatically |
+| `'manual'` / `'hidden'` | No auto UI — call `open()` programmatically |
 | `'attach'` | Hides default UI; host renders its own button and calls `attachTo()` |
 
 > **Note on shake + Hermes:** `expo-sensors` is loaded lazily via `require()` so apps that ship `trigger: 'button'` never pay the shake-sensor cost. Both triggers are fully Hermes-compatible as of v0.11.0.
@@ -79,7 +79,7 @@ import { useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/react-nat
 
 const { submitReport } = useMushiReport()
 const { open, close } = useMushiWidget()
-const mushi = useMushi()  // full SDK instance: show(), hide(), setTrigger(), attachTo()
+const mushi = useMushi()  // full SDK instance: open(), close(), attachTo(), identify(), submitReport()
 ```
 
 ## Headless / bring your own button
