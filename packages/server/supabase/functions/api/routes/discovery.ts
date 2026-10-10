@@ -399,8 +399,9 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
   //      lockouts are inherited from Auth instead of duplicated here.
   //
   //   2. Introspection — POST with `Authorization: Bearer <jwt>` and no body.
-  //      Returns { active, sub, email, exp } — RFC 7662 shape minus claims an
-  //      A2A agent doesn't need (aud, iss, scope are constant per cluster).
+  //      Returns { active, sub, email } — RFC 7662 shape minus claims an
+  //      A2A agent doesn't need (aud, iss, scope are constant per cluster) and
+  //      minus exp, which auth.getUser() does not expose (decode the JWT).
   //
   // Anything else returns 400 with a typed error so the agent can react.
   app.post('/v1/admin/auth/token', async (c) => {

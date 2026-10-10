@@ -21,7 +21,7 @@ BEGIN
     PERFORM cron.schedule(
       'mushi-anomaly-detector',
       '7 * * * *',
-      $$ SELECT mushi.edge_function_post('anomaly-detector', '{"trigger":"cron"}'::jsonb); $$
+      $cron$ SELECT mushi.edge_function_post('anomaly-detector', '{"trigger":"cron"}'::jsonb); $cron$
     );
   END IF;
 END;

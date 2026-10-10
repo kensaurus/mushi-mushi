@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   loads: 0,
   plans: [] as Array<Record<string, unknown>>,
   error: null as null | { message: string; statusCode?: number },
+  logged: [] as Array<{ level: 'warn' | 'error'; msg: string }>,
 }));
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({
@@ -22,8 +23,8 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const noop = {
     info: () => {},
-    warn: () => {},
-    error: () => {},
+    warn: (msg: string) => state.logged.push({ level: 'warn', msg }),
+    error: (msg: string) => state.logged.push({ level: 'error', msg }),
     debug: () => {},
     child: () => noop,
   };
@@ -39,6 +40,7 @@ describe('pricing plan warm-isolate cache', () => {
     vi.setSystemTime(new Date('2026-08-06T00:00:00.000Z'));
     state.loads = 0;
     state.error = null;
+    state.logged = [];
     state.plans = [
       {
         id: 'pro',
@@ -96,5 +98,22 @@ describe('pricing plan warm-isolate cache', () => {
 
     await getPlan('pro');
     expect(state.loads).toBe(1);
+  });
+
+  // A persistent PostgREST 500 (schema drift, RLS) needs a fix, so it must
+  // reach Sentry at error level; only gateway blips are downgraded to warn.
+  it('logs gateway 502/503/504 as transient but a 500 as an error', async () => {
+    for (const statusCode of [502, 503, 504]) {
+      invalidatePlanCache();
+      state.error = { message: 'upstream', statusCode };
+      await listPlans();
+    }
+    expect(state.logged.map((l) => l.level)).toEqual(['warn', 'warn', 'warn']);
+
+    state.logged = [];
+    invalidatePlanCache();
+    state.error = { message: 'column pricing_plans.foo does not exist', statusCode: 500 };
+    await listPlans();
+    expect(state.logged).toEqual([{ level: 'error', msg: 'plans_load_failed' }]);
   });
 });

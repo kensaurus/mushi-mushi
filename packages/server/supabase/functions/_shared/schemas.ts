@@ -37,7 +37,9 @@ export const reportSubmissionSchema = z.object({
    */
   userCategory: z.string().max(128).optional(),
   description: z.string().min(20, 'Description must be at least 20 characters').max(5000),
-  userIntent: z.coerce.string().optional(),
+  // Lenient: numbers/booleans coerce to text, but null means "not given";
+  // z.coerce alone would store the literal string 'null'.
+  userIntent: z.preprocess((v) => (v == null ? undefined : v), z.coerce.string().optional()),
 
   // `passthrough()` lets the SDK ship richer environment fields (the
   // 2026-05-07 boost added screen / userAgentData / prefersColorScheme /

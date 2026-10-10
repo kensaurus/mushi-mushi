@@ -160,6 +160,24 @@ type AskMushiIntent = z.infer<typeof AskMushiIntentSchema>;
 // model can answer about the entity without the user pasting an id.
 const MENTION_RE = /@(report|fix|branch|page|project):([a-zA-Z0-9_\-/.]+)/g;
 
+/**
+ * Escape a DB value before it goes inside a `<context-block>`. Report
+ * descriptions are written by end users, so a `</context-block>` or a fake
+ * instruction in one must not break out of the wrapper.
+ */
+export function escapeBlockText(value: unknown): string {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * The search term as a value inside a PostgREST `.or()` filter. A comma or
+ * parenthesis there splits or reshapes the filter, and `%` / `_` are LIKE
+ * wildcards; same treatment as the /v1/sync/reports search.
+ */
+export function orFilterTerm(q: string): string {
+  return q.replace(/[,()]/g, ' ').replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
 interface ResolvedMention {
   kind: string;
   id: string;
@@ -197,7 +215,7 @@ async function resolveMentions(
           out.push({
             kind,
             id,
-            block: `<context-block kind="report" id="${data.id}">\n  description: ${String(data.description ?? '').slice(0, 500)}\n  category: ${data.category ?? '?'}\n  severity: ${data.severity ?? '?'}\n  status: ${data.status ?? '?'}\n  created_at: ${data.created_at ?? '?'}\n</context-block>`,
+            block: `<context-block kind="report" id="${data.id}">\n  description: ${escapeBlockText(String(data.description ?? '').slice(0, 500))}\n  category: ${escapeBlockText(data.category ?? '?')}\n  severity: ${data.severity ?? '?'}\n  status: ${data.status ?? '?'}\n  created_at: ${data.created_at ?? '?'}\n</context-block>`,
           });
         }
       } else if (kind === 'fix') {
@@ -211,7 +229,7 @@ async function resolveMentions(
           out.push({
             kind,
             id,
-            block: `<context-block kind="fix" id="${data.id}">\n  status: ${data.status ?? '?'}\n  branch: ${data.branch_name ?? '?'}\n  pr_url: ${data.pr_url ?? '?'}\n</context-block>`,
+            block: `<context-block kind="fix" id="${data.id}">\n  status: ${data.status ?? '?'}\n  branch: ${escapeBlockText(data.branch_name ?? '?')}\n  pr_url: ${escapeBlockText(data.pr_url ?? '?')}\n</context-block>`,
           });
         }
       } else if (kind === 'branch') {
@@ -242,7 +260,7 @@ async function resolveMentions(
           out.push({
             kind: 'project',
             id: data.id,
-            block: `<context-block kind="project" id="${data.id}">\n  name: ${data.name}\n</context-block>`,
+            block: `<context-block kind="project" id="${data.id}">\n  name: ${escapeBlockText(data.name)}\n</context-block>`,
           });
         }
       }
@@ -1182,7 +1200,9 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
   app.get('/v1/admin/ask-mushi/threads', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const route = c.req.query('route');
-    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20), 1), 100);
+    // Number('abc') is NaN, which would reach .limit(limit * 6).
+    const limitRaw = Number.parseInt(c.req.query('limit') ?? '20', 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 20;
     const db = getServiceClient();
 
     // We need (thread_id, latest_at, first_user_text, route, count). PostgREST
@@ -1324,6 +1344,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const q = (c.req.query('q') ?? '').trim();
     if (q.length < 1) return c.json({ ok: true, data: { mentions: [] } });
+    const term = orFilterTerm(q);
     const db = getServiceClient();
     // Scope every search to the projects the user can access so RLS stays
     // honest (Teams v1: owner OR org-member OR project-member).
@@ -1348,7 +1369,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         .from('projects')
         .select('id, name')
         .in('id', projectIds)
-        .or(`name.ilike.%${q}%,id.ilike.${q}%`)
+        .or(`name.ilike.%${term}%,id.ilike.${term}%`)
         .order('created_at', { ascending: false })
         .limit(4);
       for (const p of projects ?? []) {
@@ -1372,7 +1393,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         .from('reports')
         .select('id, description, severity, status')
         .in('project_id', projectIds)
-        .or(`id.ilike.${q}%,description.ilike.%${q}%`)
+        .or(`id.ilike.${term}%,description.ilike.%${term}%`)
         .order('created_at', { ascending: false })
         .limit(6);
       for (const r of reports ?? []) {
@@ -1394,7 +1415,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         .from('fix_attempts')
         .select('id, branch_name, status, pr_url')
         .in('project_id', projectIds)
-        .or(`id.ilike.${q}%,branch_name.ilike.%${q}%`)
+        .or(`id.ilike.${term}%,branch_name.ilike.%${term}%`)
         .order('created_at', { ascending: false })
         .limit(4);
       for (const f of fixes ?? []) {

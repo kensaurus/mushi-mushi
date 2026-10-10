@@ -410,8 +410,10 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       if (service === 'all' || service === 'fix-worker') {
         let q = db
           .from('fix_events')
-          .select('id, kind, status, label, detail, at, fix_attempt_id, fix_attempts!inner(project_id)')
-          .eq('fix_attempts.project_id', targetProjectId)
+          // fix_events carries its own NOT NULL, indexed project_id: filter on
+          // it directly instead of joining fix_attempts for the scope.
+          .select('id, kind, status, label, detail, at, fix_attempt_id')
+          .eq('project_id', targetProjectId)
           .order('at', { ascending: false })
           .limit(Math.min(limit, 50))
 

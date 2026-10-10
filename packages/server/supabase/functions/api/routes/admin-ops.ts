@@ -1443,7 +1443,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       { step: 'total', ok: probeResult.ok, ms: totalMs },
     ];
 
-    await db
+    const { error: persistErr } = await db
       .from('project_storage_settings')
       .update({
         health_status: probeResult.ok ? 'healthy' : 'failing',
@@ -1452,6 +1452,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         last_health_debug: fullDebug,
       })
       .eq('project_id', projectId);
+    // The probe result still goes back, but a reload would show the stale
+    // stored health, so the failed write must be visible.
+    if (persistErr) {
+      log.error('storage health result not persisted', { projectId, code: persistErr.code, err: persistErr.message });
+    }
 
     // Outer `ok` reflects the probe outcome — callers check `res.ok` to know
     // whether the bucket is reachable, not just whether the HTTP request succeeded.

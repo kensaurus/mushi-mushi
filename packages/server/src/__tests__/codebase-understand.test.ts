@@ -95,6 +95,18 @@ describe('computeImportImpact', () => {
   })
 })
 
+describe('buildImportEdges with symbol rows', () => {
+  it('derives edges from file rows only', () => {
+    const edges = buildImportEdges([
+      { id: 'lib', file_path: 'lib/util.ts', symbol_name: null, content_preview: 'export function util() {}' },
+      { id: 'page', file_path: 'app/page.tsx', symbol_name: null, content_preview: "import '../lib/util'" },
+      // A symbol chunk of page.tsx whose preview repeats the import line.
+      { id: 'page#Page', file_path: 'app/page.tsx', symbol_name: 'Page', content_preview: "import '../lib/util'" },
+    ])
+    expect(edges.map((e) => e.source_node_id)).toEqual(['page'])
+  })
+})
+
 describe('buildCodebaseChatSystemPrompt', () => {
   it('includes project name and citations', () => {
     const prompt = buildCodebaseChatSystemPrompt({

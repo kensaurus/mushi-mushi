@@ -62,6 +62,14 @@ export function parseFrontmatter(raw: string): { frontmatter: Record<string, str
   return { frontmatter, body }
 }
 
+/** Agent Skills spec: a description is at most 1024 characters. */
+export const SKILL_DESCRIPTION_MAX = 1024
+
+/** The description as skill-sync stores it, cut to {@link SKILL_DESCRIPTION_MAX}. */
+export function capSkillDescription(description: string): string {
+  return description.slice(0, SKILL_DESCRIPTION_MAX)
+}
+
 /** Catalog category from the slug prefix (`workflow-fix-and-ship` → workflow). */
 export function categoryFromSlug(slug: string): string {
   const dash = slug.indexOf('-')

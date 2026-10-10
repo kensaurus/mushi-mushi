@@ -4,9 +4,9 @@
  *          119: the issuer and client ID were posted but never saved).
  *
  * Supabase registers OIDC providers by hand, so Mushi only keeps a record the
- * admin can quote in a support ticket. `enterprise_sso_configs` has no OIDC
- * columns, and adding them would need a migration, so the row reuses the two
- * SAML columns with the same role:
+ * admin can quote in a support ticket. The row reuses the two SAML columns
+ * with the same role (the unused `oidc_client_id` / `oidc_issuer_url` columns
+ * from 20260527110000 are not written):
  *   - `metadata_url` holds the issuer (its `/.well-known/openid-configuration`
  *     is the OIDC metadata document);
  *   - `entity_id` holds the client ID (the relying party's identifier).

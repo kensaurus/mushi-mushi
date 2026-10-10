@@ -175,8 +175,11 @@ export function formatCodeContext(
   const kept: string[] = []
   let used = 0
   for (const block of blocks) {
-    if (used + block.length > maxChars && kept.length > 0) {
-      kept.push(`... ${blocks.length - kept.length} more file(s) omitted (context budget ${maxChars} chars)`)
+    if (used + block.length > maxChars) {
+      // A first block that alone exceeds the budget is cut, not sent whole.
+      if (kept.length === 0) kept.push(`${block.slice(0, maxChars)}\n... truncated (context budget ${maxChars} chars)`)
+      const omitted = blocks.length - kept.length
+      if (omitted > 0) kept.push(`... ${omitted} more file(s) omitted (context budget ${maxChars} chars)`)
       break
     }
     kept.push(block)

@@ -282,11 +282,14 @@ function makeUnsupportedAdapter(name: VendorName, message: string): VendorAdapte
 
 const BEDROCK_REGION = Deno.env.get('AWS_REGION') ?? Deno.env.get('BEDROCK_REGION') ?? 'us-east-1'
 const BEDROCK_ENDPOINT = `https://bedrock.${BEDROCK_REGION}.amazonaws.com`
+/** InvokeModel lives on the runtime host; the signing service is still `bedrock`. */
+const BEDROCK_RUNTIME_ENDPOINT = `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com`
 
 async function bedrockFetch(
   path: string,
   method: string,
   body?: unknown,
+  endpoint: string = BEDROCK_ENDPOINT,
 ): Promise<Response> {
   const accessKeyId = Deno.env.get('AWS_ACCESS_KEY_ID') ?? ''
   const secretKey = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? ''
@@ -299,7 +302,7 @@ async function bedrockFetch(
     )
   }
 
-  const url = `${BEDROCK_ENDPOINT}${path}`
+  const url = `${endpoint}${path}`
   const bodyStr = body ? JSON.stringify(body) : ''
   const now = new Date()
   const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 15) + 'Z'
@@ -322,7 +325,7 @@ async function bedrockFetch(
 
   const payloadHash = await hash(bodyStr)
   const headers: Record<string, string> = {
-    host: new URL(BEDROCK_ENDPOINT).host,
+    host: new URL(endpoint).host,
     'x-amz-date': amzDate,
     'content-type': 'application/json',
     'x-amz-content-sha256': payloadHash,
@@ -361,7 +364,7 @@ async function bedrockFetch(
 }
 
 const bedrockAdapter: VendorAdapter = {
-  async submit(_db, job) {
+  async submit(db, job) {
     const roleArn = Deno.env.get('BEDROCK_ROLE_ARN')
     const outputS3 = Deno.env.get('BEDROCK_OUTPUT_S3_URI')
     if (!roleArn) throw new Error('[bedrock] BEDROCK_ROLE_ARN not set — Bedrock needs an IAM role to access your S3 data')
@@ -383,8 +386,16 @@ const bedrockAdapter: VendorAdapter = {
       hyperParameters: { epochCount: '1', batchSize: '8', learningRateMultiplier: '1.0' },
     })
     const json = await res.json() as { jobArn?: string }
-    const jobArn = json.jobArn ?? ''
-    return { vendor: 'bedrock', vendorJobId: jobArn, status: 'training' }
+    if (!json.jobArn) throw new Error('[bedrock] CreateModelCustomizationJob returned no jobArn')
+
+    // poll() reads metrics.vendor_job_id; persist it the way the OpenAI adapter does.
+    await db.from('fine_tuning_jobs').update({
+      status: 'training',
+      metrics: { ...(job.metrics ?? {}), vendor: 'bedrock', vendor_job_id: json.jobArn },
+      started_at: new Date().toISOString(),
+    }).eq('id', job.id)
+
+    return { vendor: 'bedrock', vendorJobId: json.jobArn, status: 'training' }
   },
 
   async poll(_db, job) {
@@ -411,7 +422,7 @@ const bedrockAdapter: VendorAdapter = {
     const res = await bedrockFetch(`/model/${modelId}/invoke`, 'POST', {
       prompt: `\n\nHuman: Classify this issue: ${input.description}\n\nAssistant:`,
       max_tokens_to_sample: 256,
-    })
+    }, BEDROCK_RUNTIME_ENDPOINT)
     const json = await res.json() as { completion?: string }
     try {
       const parsed = JSON.parse(json.completion ?? '{}')

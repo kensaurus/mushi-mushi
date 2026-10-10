@@ -21,6 +21,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { minimalTremendousPayload, scrubEmails } from '../_shared/tremendous-payload.ts'
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void
@@ -54,6 +55,7 @@ interface TremendousOrderPayload {
 }
 
 async function callTremendous(
+  baseUrl: string,
   path: string,
   method: 'GET' | 'POST',
   body?: unknown,
@@ -61,7 +63,6 @@ async function callTremendous(
   const apiKey = Deno.env.get('TREMENDOUS_API_KEY')
   if (!apiKey) return { ok: false, error: 'TREMENDOUS_API_KEY not set' }
 
-  const baseUrl = Deno.env.get('TREMENDOUS_API_URL') ?? 'https://testflight.tremendous.com/api/v2'
   const url = `${baseUrl}${path}`
 
   const res = await fetch(url, {
@@ -115,6 +116,19 @@ Deno.serve(
         is_sentinel: fundingSourceId === SENTINEL_FUNDING_SOURCE,
       })
       return new Response(JSON.stringify({ error: 'funding_source_not_configured' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // No default host. Defaulting to the sandbox would accept real
+    // redemptions and never pay them; defaulting to production would spend
+    // real money from a test deploy. The operator sets it explicitly:
+    // https://testflight.tremendous.com/api/v2 or https://www.tremendous.com/api/v2.
+    const tremendousApiUrl = Deno.env.get('TREMENDOUS_API_URL')
+    if (!tremendousApiUrl) {
+      wlog.error('TREMENDOUS_API_URL is not set')
+      return new Response(JSON.stringify({ error: 'tremendous_api_url_not_configured' }), {
         status: 503,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -178,7 +192,7 @@ Deno.serve(
         ],
       }
 
-      const result = await callTremendous('/orders', 'POST', payload)
+      const result = await callTremendous(tremendousApiUrl, '/orders', 'POST', payload)
 
       if (result.ok) {
         const extData = result.data as Record<string, unknown>
@@ -190,7 +204,9 @@ Deno.serve(
           .update({
             status: 'processing',
             external_id: extId,
-            raw_payload: extData,
+            // Ids, status and amounts only: the response echoes the
+            // recipient's email and the gift card's redeem link.
+            raw_payload: minimalTremendousPayload(extData),
             last_synced_at: new Date().toISOString(),
           })
           .eq('id', order.id)
@@ -203,7 +219,9 @@ Deno.serve(
         wlog.info('Order sent to Tremendous', { orderId: order.id, externalId: extId })
         processed++
       } else {
-        wlog.error('Tremendous order failed', { orderId: order.id, error: result.error })
+        // The error body can echo the request, recipient email included.
+        const lastError = scrubEmails(result.error ?? 'unknown error')
+        wlog.error('Tremendous order failed', { orderId: order.id, error: lastError })
 
         // Keep status='pending' so the next cron tick retries automatically —
         // Tremendous outages are usually transient. Persistent failures are
@@ -213,7 +231,7 @@ Deno.serve(
           .from('tremendous_orders')
           .update({
             status: 'pending',
-            raw_payload: { last_error: result.error },
+            raw_payload: { last_error: lastError },
             last_synced_at: new Date().toISOString(),
           })
           .eq('id', order.id)

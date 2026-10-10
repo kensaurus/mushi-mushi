@@ -4,8 +4,15 @@
  * paths, and the skills now hand off with "Read the `x` skill". The chain is
  * declared in the spec's `metadata` map; body mentions are the fallback.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseChainSlugs, parseFrontmatter } from '../../supabase/functions/_shared/skill-frontmatter.ts'
+import {
+  capSkillDescription,
+  parseChainSlugs,
+  parseFrontmatter,
+  SKILL_DESCRIPTION_MAX,
+} from '../../supabase/functions/_shared/skill-frontmatter.ts'
 
 const known = new Set(['debug-error', 'test-playwright', 'workflow-pr', 'deploy-verify', 'workflow-fix-and-ship'])
 
@@ -62,5 +69,20 @@ describe('parseChainSlugs body fallback', () => {
     expect(parseChainSlugs(body, {}, { selfSlug: 'enhance-readme', knownSlugs: known })).toEqual([])
     expect(parseChainSlugs(body, {}, { selfSlug: 'workflow-x', knownSlugs: known })).toEqual(['debug-error'])
     expect(parseChainSlugs(body, { 'metadata.chain': 'debug-error' }, { selfSlug: 'enhance-readme', knownSlugs: known })).toEqual(['debug-error'])
+  })
+})
+
+// The Deno test used to slice inside the test itself, so dropping the cap in
+// skill-sync could not fail anything. The cap is now one helper skill-sync calls.
+describe('capSkillDescription', () => {
+  it('cuts a description to the spec maximum and leaves a short one alone', () => {
+    expect(SKILL_DESCRIPTION_MAX).toBe(1024)
+    expect(capSkillDescription('b'.repeat(2000))).toBe('b'.repeat(1024))
+    expect(capSkillDescription('short')).toBe('short')
+  })
+
+  it('is what skill-sync stores', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/skill-sync/index.ts'), 'utf8')
+    expect(src).toMatch(/const description = capSkillDescription\(frontmatter\.description\)/)
   })
 })

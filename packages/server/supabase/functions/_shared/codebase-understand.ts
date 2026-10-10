@@ -119,7 +119,9 @@ export function buildImportEdges(
   const seen = new Set<string>()
 
   for (const row of rows) {
-    if (!row.content_preview) continue
+    // Edges are file to file: a symbol chunk's preview may repeat the file's
+    // imports, and scanning it would add work and symbol-sourced edges.
+    if (row.symbol_name || !row.content_preview) continue
     for (const imp of extractRelativeImports(row.content_preview)) {
       const resolved = resolveRelative(row.file_path, imp)
       const targetId =

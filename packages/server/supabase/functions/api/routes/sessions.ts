@@ -17,16 +17,25 @@
  * and its page views are not recorded, so the activity RPCs can leave it out
  * of every count. Until 2026-09-21 a local Playwright run against a
  * production key made up 203 of one project's 212 weekly sessions.
+ *
+ * Identity: when the SDK forwards a signed X-Mushi-User-Token, the token is
+ * verified (_shared/end-user-identity.ts) and end_user_id stored, which the
+ * activity RPCs count as identified. Verifying reads Vault and upserts
+ * end_users, so it runs at most once per session: on session_start, or on a
+ * page_view whose session row has no end_user_id yet (identification can
+ * arrive mid-session). Heartbeats and session_end never verify. An
+ * unverified or failed token never blocks the write.
  */
 
 import type { Hono } from 'npm:hono@4';
-import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
+import { z } from 'npm:zod@3';
 import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
+import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts';
 import { claimIngestBudget, clientIp } from './ingest-budget.ts';
 
 /**
@@ -39,6 +48,8 @@ const SESSION_EVENTS_PER_IP_PER_MINUTE = 600;
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
 const sessionEventSchema = z.object({
   kind: z.enum(['session_start', 'session_heartbeat', 'session_end', 'page_view']),
   session_id: z.string().min(1).max(128),
@@ -47,7 +58,15 @@ const sessionEventSchema = z.object({
   referrer: z.string().max(1024).optional().nullable(),
   page_view_count: z.number().int().min(0).max(100_000).optional(),
   reporter_token_hash: z.string().max(128).optional().nullable(),
-  user_id_hash: z.string().max(256).optional().nullable(),
+  // Not stored. The web SDK sends the identity token's raw `sub` here, so
+  // anything that is not a SHA-256 hex digest becomes null instead of a 422
+  // (which would drop the whole event) and can never be persisted by mistake.
+  user_id_hash: z
+    .string()
+    .max(256)
+    .optional()
+    .nullable()
+    .transform((v) => (v && SHA256_HEX.test(v) ? v : null)),
   user_agent: z.string().max(512).optional().nullable(),
   sdk_version: z.string().max(32).optional(),
 });
@@ -110,7 +129,22 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
     // in URL parameters (mirrors the discovery_events route sanitisation).
     const sanitisedRoute = sanitiseRoute(event.route);
 
+    // page_view_count is optional: a client that omits it must not reset the
+    // stored count. Only the session_start insert defaults it to 1.
+    const pageViews = event.page_view_count !== undefined ? { page_view_count: event.page_view_count } : {};
+
+    const userToken = c.req.header(MUSHI_USER_TOKEN_HEADER);
+    const verifiedEndUserId = async (): Promise<string | null> => {
+      if (!userToken) return null;
+      const verified = await verifyEndUserToken(db, projectId, userToken).catch((err: unknown) => {
+        log.warn('sessions: verifyEndUserToken threw (fail-open)', { projectId, err: String(err) });
+        return null;
+      });
+      return verified?.endUserId ?? null;
+    };
+
     if (event.kind === 'session_start') {
+      const endUserId = await verifiedEndUserId();
       const { error } = await db.from('end_user_sessions').upsert(
         {
           project_id: projectId,
@@ -121,6 +155,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
           page_view_count: event.page_view_count ?? 1,
           started_at: ts,
           last_seen_at: ts,
+          ...(endUserId ? { end_user_id: endUserId } : {}),
           // Only sent when true: the column defaults to false, so human
           // sessions keep writing even before migration 20260921000010 lands.
           ...(automated ? { is_bot: true } : {}),
@@ -131,7 +166,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
     } else if (event.kind === 'session_heartbeat') {
       const { error } = await db
         .from('end_user_sessions')
-        .update({ last_seen_at: ts, page_view_count: event.page_view_count ?? 1 })
+        .update({ last_seen_at: ts, ...pageViews })
         .eq('project_id', projectId)
         .eq('session_id', event.session_id);
       if (error) log.warn('session_heartbeat update failed', { err: error.message, projectId });
@@ -141,7 +176,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
         .update({
           last_seen_at: ts,
           ended_at: ts,
-          page_view_count: event.page_view_count ?? 1,
+          ...pageViews,
         })
         .eq('project_id', projectId)
         .eq('session_id', event.session_id);
@@ -150,9 +185,10 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
       const [updateRes, insertRes] = await Promise.all([
         db
           .from('end_user_sessions')
-          .update({ last_seen_at: ts, page_view_count: event.page_view_count ?? 1 })
+          .update({ last_seen_at: ts, ...pageViews })
           .eq('project_id', projectId)
-          .eq('session_id', event.session_id),
+          .eq('session_id', event.session_id)
+          .select('end_user_id'),
         sanitisedRoute && !automated
           ? db.from('session_page_views').insert({
               project_id: projectId,
@@ -163,6 +199,21 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
           : Promise.resolve({ error: null }),
       ]);
       if (updateRes.error) log.warn('page_view session update failed', { err: updateRes.error.message });
+      // Link identity once: only a session row that has none yet pays for
+      // verification, so an identified session does not hit Vault per page.
+      const row = (updateRes.data as Array<{ end_user_id: string | null }> | null)?.[0];
+      if (userToken && row && !row.end_user_id) {
+        const endUserId = await verifiedEndUserId();
+        if (endUserId) {
+          const { error: linkErr } = await db
+            .from('end_user_sessions')
+            .update({ end_user_id: endUserId })
+            .eq('project_id', projectId)
+            .eq('session_id', event.session_id)
+            .is('end_user_id', null);
+          if (linkErr) log.warn('page_view identity link failed', { err: linkErr.message, projectId });
+        }
+      }
       const pgvErr = (insertRes as { error?: { message: string } | null }).error;
       if (pgvErr) log.warn('page_view insert failed', { err: pgvErr.message });
     }

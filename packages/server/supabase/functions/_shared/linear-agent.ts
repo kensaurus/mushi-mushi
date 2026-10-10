@@ -18,6 +18,15 @@ const log = rootLog.child('linear-agent')
 
 const LINEAR_GRAPHQL = 'https://api.linear.app/graphql'
 
+/**
+ * The actor token and its fallback are both OAuth access tokens, which Linear
+ * only accepts as `Bearer <token>` (personal API keys are the raw-value case;
+ * see getLinearAuthHeader in linear.ts).
+ */
+function linearBearer(token: string): string {
+  return token.startsWith('Bearer ') ? token : `Bearer ${token}`
+}
+
 // ── Activity types as per Linear Agents API ───────────────────────────────────
 
 export type LinearAgentActivityType =
@@ -99,7 +108,7 @@ export async function postAgentActivity(
   const res = await fetch(LINEAR_GRAPHQL, {
     method: 'POST',
     headers: {
-      Authorization: actorToken,
+      Authorization: linearBearer(actorToken),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -176,7 +185,7 @@ export async function getAgentSessionContext(
     const res = await fetch(LINEAR_GRAPHQL, {
       method: 'POST',
       headers: {
-        Authorization: actorToken,
+        Authorization: linearBearer(actorToken),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query: QUERY, variables: { id: agentSessionId } }),

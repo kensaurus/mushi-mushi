@@ -854,7 +854,12 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         error?: unknown
       }
       if (!resp.ok) {
-        return c.json({ ok: false, error: json.error ?? { code: 'PROPOSE_FAILED' } }, 500)
+        // 402 = the hosted-LLM wallet refused the call; keep it so the
+        // console can prompt a top-up instead of showing a server error.
+        return c.json(
+          { ok: false, error: json.error ?? { code: 'PROPOSE_FAILED' } },
+          resp.status === 402 ? 402 : 500,
+        )
       }
       return c.json({ ok: true, data: json.data })
     },
@@ -1629,10 +1634,14 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       // Clamp requested pages to a sane finite range. A NaN / negative / huge
       // body.max_pages must not bypass the quota math (pagesToday + requested)
       // or get persisted / passed to the crawler as-is.
-      const rawRequested = typeof body.max_pages === 'number' ? body.max_pages : 20
+      // The default is clamped too: a project whose daily cap is under 20
+      // must not fail QUOTA_EXCEEDED on a request that names no page count
+      // (or a non-finite one such as 1e309).
+      const defaultPages = Math.min(20, maxPages)
+      const rawRequested = typeof body.max_pages === 'number' ? body.max_pages : defaultPages
       const requestedPages = Number.isFinite(rawRequested)
         ? Math.min(Math.max(Math.floor(rawRequested), 1), maxPages)
-        : 20
+        : defaultPages
 
       if (runsToday >= maxRuns) {
         return c.json({
