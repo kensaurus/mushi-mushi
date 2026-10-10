@@ -128,7 +128,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 | Provider | Where it runs | When to use |
 |----------|---------------|-------------|
 | `firecrawl_actions` | Firecrawl cloud (Deno-compatible, HTTP) | Default. No setup. Works for content verification and basic navigation. |
-| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → AI keys** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
+| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → Web tools** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
 | `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi qa run <story-id>`. |
 
 ### Story lifecycle
@@ -194,17 +194,27 @@ Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
 `byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
 columns for backwards compatibility, then falls back to the environment variable.
 
-Keys are managed self-service via **Settings → AI keys** in the admin console
-(a single table listing all four providers). Set via Settings UI, rotated by
-calling `PUT /v1/admin/byok/:provider` with a new key value.
+Keys are managed self-service in the admin console. **Settings → AI keys**
+(`ByokPanel`) lists the key pool for every slug below and adds keys through
+`POST /v1/admin/byok/keys`. **Settings → Web tools** holds the Firecrawl and
+Browserbase panels, which also carry their crawl settings, through
+`/v1/admin/byok/firecrawl` and `/v1/admin/byok/browserbase`. The legacy
+single-key route `PUT /v1/admin/byok/:provider` still accepts `anthropic`,
+`openai`, `firecrawl` and `browserbase`.
 
-| Slug | Settings UI label | Used by |
-|------|-------------------|---------|
-| `firecrawl` | Firecrawl API Key | `qa-story-runner` (firecrawl_actions provider) |
-| `browserbase` | Browserbase API Key | `qa-story-runner` (browserbase provider) |
-| `openai` | OpenAI API Key | `test-gen-from-report`, `inventory-propose`, fine-tune jobs |
-| `anthropic` | Anthropic API Key | `test-gen-from-report`, `fix-worker`, `judge-batch` |
-| `aws-bedrock` | AWS Bedrock (Access Key ID + Secret) | Fine-tune jobs via `bedrockAdapter` (requires `MUSHI_BEDROCK_FINETUNE_ENABLED=1`) |
+| Slug | Settings UI | Used by |
+|------|-------------|---------|
+| `anthropic` | AI keys | `test-gen-from-report`, `fix-worker`, `judge-batch` |
+| `openai` | AI keys | `test-gen-from-report`, `inventory-propose`, fine-tune jobs |
+| `openrouter` | AI keys | OpenAI-compatible LLM calls routed through OpenRouter |
+| `cursor` | AI keys | Cursor Cloud agent dispatch (`_shared/agent-adapters.ts`, `story-mapper`) |
+| `supabase` | AI keys | Personal access token for `backend-drift-scanner` and the schema-repair diagnostic |
+| `firecrawl` | AI keys or Web tools | `qa-story-runner` (firecrawl_actions provider), `story-mapper` |
+| `browserbase` | AI keys or Web tools | `qa-story-runner` (browserbase provider), `story-mapper` |
+
+Bedrock fine-tuning is not a BYOK slug: it reads `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY` and `BEDROCK_ROLE_ARN` from the edge environment and
+needs `MUSHI_BEDROCK_FINETUNE_ENABLED=1`.
 
 ---
 
