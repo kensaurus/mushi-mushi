@@ -16,6 +16,7 @@ import { reportHeading } from '../../lib/clipText'
 import { reporterLabel } from '../../lib/reporterLabel'
 import { reporterReportsHref } from '../../lib/reportsListFilters'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
+import { routePathname } from '../reports/reportRowAttribution'
 import type { ReportDeployLive, ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
@@ -26,9 +27,11 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const [headingExpanded, setHeadingExpanded] = useState(false)
   // Breadcrumb still uses a compact technical summary (shorter context)
   const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
-  // Provenance: page route where the bug was felt
-  const pageRoute = (report.environment as { route?: string } | null)?.route
-    ?? (report.environment as { url?: string } | null)?.url
+  // Provenance: page route where the bug was felt, path only (no query/fragment)
+  const pageRoute = routePathname(
+    (report.environment as { route?: string } | null)?.route
+      ?? (report.environment as { url?: string } | null)?.url,
+  )
   const glow = severityGlowClass(report.severity)
   const reporter = reporterLabel(report, reporterShort)
   return (

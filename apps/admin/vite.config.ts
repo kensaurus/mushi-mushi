@@ -199,8 +199,10 @@ export default defineConfig({
             release: sentryRelease ? { name: sentryRelease } : undefined,
             // Generated maps are uploaded then deleted so the public S3 bucket
             // never serves them — only the upload-side Sentry copy survives.
+            // Anchored to this file: the build runs with cwd apps/admin, where
+            // a repo-root-relative glob matched nothing and the maps shipped.
             sourcemaps: {
-              filesToDeleteAfterUpload: ['./apps/admin/dist/**/*.map'],
+              filesToDeleteAfterUpload: [`${path.resolve(__dirname, 'dist').replace(/\\/g, '/')}/**/*.map`],
             },
             telemetry: false,
           }),
@@ -226,8 +228,10 @@ export default defineConfig({
   },
   build: {
     // Required for Sentry to symbolicate stack traces. Maps are deleted from
-    // dist after upload (see filesToDeleteAfterUpload above).
-    sourcemap: true,
+    // dist after upload (see filesToDeleteAfterUpload above); without an
+    // upload there is nothing to symbolicate, so none are emitted. 'hidden'
+    // drops the sourceMappingURL comment from the shipped bundles.
+    sourcemap: sentryEnabled ? 'hidden' : false,
     rollupOptions: {
       output: {
         // PERF-3 (audit 2026-04-21): every route is already React.lazy()'d,
