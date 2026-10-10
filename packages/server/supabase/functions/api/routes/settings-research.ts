@@ -1638,11 +1638,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
   /**
    * Is `candidate` already saved for this project and provider? Checks every
-   * pooled key (any status) and the legacy credential.
+   * pooled key (any status), including its organization's shared keys, and
+   * the legacy credential.
    */
   async function findDuplicateByokKey(
     db: ReturnType<typeof getServiceClient>,
-    projectId: string,
+    owner: KeyOwner,
     provider: string,
     candidate: string,
     baseUrl: string | null,
@@ -1653,9 +1654,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const { data: rows, error } = await db
       .from('byok_keys')
       .select('id, vault_secret_id, key_hint, label')
-      .eq('project_id', projectId)
+      .or(keyOwnerFilter(owner))
       .eq('provider_slug', provider);
     if (error) return { error };
+    const projectId = owner.projectId;
     for (const row of (rows ?? []) as Array<{
       vault_secret_id: string | null;
       key_hint: string | null;
@@ -2766,7 +2768,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       db
         .from('byok_keys')
         .select('key_hint, test_status, status, cooldown_until, priority')
-        .eq('project_id', pid)
+        // The project's own keys or its organization's shared ones (ADR 0023).
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .eq('provider_slug', 'firecrawl')
         .order('priority', { ascending: true })
         .order('created_at', { ascending: true }),
@@ -3294,7 +3297,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Refuse a key that is already pooled; remember whether it is the legacy
       // credential, which a validated pooled copy retires below. Runs before
       // the Vault write so a 409 leaves no orphaned secret.
-      const duplicate = await findDuplicateByokKey(db, project.id, provider, keyVal, baseUrl ?? null);
+      const duplicate = await findDuplicateByokKey(db, keyOwnerOf(project), provider, keyVal, baseUrl ?? null);
       if ('error' in duplicate) return dbError(c, duplicate.error);
       if (duplicate.pool) {
         return c.json(
