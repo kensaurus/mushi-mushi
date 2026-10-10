@@ -29,9 +29,11 @@ export async function writeProjectBootstrapFiles(opts: {
 
   // Merge — never clobber. A vibe-coder running `mushi project create` inside an
   // existing app must keep every other var (DATABASE_URL, NEXT_PUBLIC_*, Stripe
-  // keys, …). Read the existing file in a single attempt and treat a read error
-  // as "no file yet" — deliberately no `existsSync` precheck, which would open a
-  // TOCTOU race between the check and the read/write. Then strip only prior
+  // keys, …). Read the existing file in a single attempt and treat ENOENT as
+  // "no file yet" — deliberately no `existsSync` precheck, which would open a
+  // TOCTOU race between the check and the read/write. Any other read error
+  // (EACCES, EISDIR, EIO, EMFILE) is rethrown: writing after a failed read would
+  // replace the user's file with only the Mushi block. Then strip only prior
   // MUSHI_* lines (bare and framework-prefixed) plus our own comment and append
   // a fresh Mushi block. Mirrors the strip logic in init.ts so re-runs are
   // idempotent.
@@ -40,8 +42,9 @@ export async function writeProjectBootstrapFiles(opts: {
   try {
     existing = await readFile(envPath, 'utf8')
     envUpdated = true
-  } catch {
+  } catch (err) {
     // No existing .env.local (ENOENT) — this is a fresh create.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
   }
   const MUSHI_LINE_RE = /^(NEXT_PUBLIC_|NUXT_PUBLIC_|VITE_|EXPO_PUBLIC_)?MUSHI_[A-Z_]+=.*/gm
   const MUSHI_COMMENT_RE = /^# Mushi MCP\b.*/gm
