@@ -17,7 +17,7 @@
 
 import { scanForSecrets } from '../_shared/secret-scan.ts'
 
-import { categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
+import { capSkillDescription, categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -252,13 +252,14 @@ test('parseFrontmatter: description at exactly 1024 chars is valid', () => {
   if (result.frontmatter.description.length !== 1024) throw new Error(`expected 1024, got ${result.frontmatter.description.length}`)
 })
 
-test('parseFrontmatter: description beyond 1024 chars is parsed (caller must truncate)', () => {
-  // parseFrontmatter returns the raw value; skill-sync callers apply the cap.
+test('parseFrontmatter: description beyond 1024 chars is parsed; capSkillDescription cuts it', () => {
+  // parseFrontmatter returns the raw value; skill-sync stores capSkillDescription(desc).
   const desc2000 = 'b'.repeat(2000)
   const raw = `---\nname: test-skill\ndescription: ${desc2000}\n---\nBody.`
   const result = parseFrontmatter(raw)
   if (!result) throw new Error('parseFrontmatter returned null')
-  // Caller (skill-sync) must slice to 1024 before upsert.
-  const capped = result.frontmatter.description.slice(0, 1024)
-  if (capped.length !== 1024) throw new Error(`expected 1024 after cap, got ${capped.length}`)
+  if (result.frontmatter.description.length !== 2000) throw new Error('parseFrontmatter should not truncate')
+  const capped = capSkillDescription(result.frontmatter.description)
+  if (capped !== desc2000.slice(0, 1024)) throw new Error(`expected the first 1024 chars, got ${capped.length}`)
+  if (capSkillDescription('short') !== 'short') throw new Error('a short description must pass through')
 })

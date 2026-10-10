@@ -30,7 +30,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { createEmbedding } from '../_shared/embeddings.ts'
 import { scanForSecrets } from '../_shared/secret-scan.ts'
-import { categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
+import { capSkillDescription, categoryFromSlug, parseChainSlugs, parseFrontmatter } from '../_shared/skill-frontmatter.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -201,7 +201,7 @@ async function parseSkillFile(
   const canonicalSlug = slug
 
   // Enforce description length (≤ 1024 chars per spec)
-  const description = frontmatter.description.slice(0, 1024)
+  const description = capSkillDescription(frontmatter.description)
 
   const contentHash = await sha256(rawContent)
   const chainSlugs = parseChainSlugs(body, frontmatter, { selfSlug: canonicalSlug, knownSlugs })

@@ -182,6 +182,7 @@ Deno.serve(
       if (!reportId || !projectId) {
         return new Response(JSON.stringify({ error: 'reportId and projectId required' }), {
           status: 400,
+          headers: { 'Content-Type': 'application/json' },
         });
       }
       const log = rootLog.child('classify-report', { reportId, projectId });
@@ -214,7 +215,10 @@ Deno.serve(
         .single();
 
       if (fetchError || !report) {
-        return new Response(JSON.stringify({ error: 'Report not found' }), { status: 404 });
+        return new Response(JSON.stringify({ error: 'Report not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // ── Dedup short-circuit (signature cache) ──────────────────────────────
@@ -228,7 +232,7 @@ Deno.serve(
       if (report.report_group_id && report.status !== 'classified') {
         const { data: groupHead } = await db
           .from('reports')
-          .select('id, stage2_analysis, category, severity, summary, component, reproduction_steps, confidence, stage2_model, stage2_prompt_version')
+          .select('id, stage2_analysis, category, severity, summary, title, area_tag, component, reproduction_steps, confidence, stage2_model, stage2_prompt_version')
           .eq('report_group_id', report.report_group_id)
           .eq('status', 'classified')
           .neq('id', reportId)
@@ -253,8 +257,8 @@ Deno.serve(
             category: isFeatureRequest(report) ? 'other' : groupHead.category,
             severity: groupHead.severity,
             summary: groupHead.summary,
-            title: (groupHead as Record<string, unknown>).title ?? null,
-            area_tag: (groupHead as Record<string, unknown>).area_tag ?? null,
+            title: groupHead.title ?? null,
+            area_tag: groupHead.area_tag ?? null,
             component: groupHead.component,
             reproduction_steps: groupHead.reproduction_steps,
             confidence: groupHead.confidence,
@@ -1504,7 +1508,10 @@ CRITICAL SECURITY RULES (immutable):
         // best-effort
       }
 
-      return new Response(JSON.stringify({ error: GENERIC_ERROR_MESSAGE }), { status: 500 });
+      return new Response(JSON.stringify({ error: GENERIC_ERROR_MESSAGE }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   }),
 );
