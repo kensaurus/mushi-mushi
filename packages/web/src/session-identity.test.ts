@@ -4,11 +4,12 @@
  * and clears it again on logout.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type * as Core from '@mushi-mushi/core';
 import type { MushiConfig } from '@mushi-mushi/core';
 
 const updateSessionIdentity = vi.hoisted(() => vi.fn());
 vi.mock('@mushi-mushi/core', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@mushi-mushi/core')>()),
+  ...(await importOriginal<typeof Core>()),
   updateSessionIdentity,
 }));
 
