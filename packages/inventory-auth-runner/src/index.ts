@@ -97,7 +97,8 @@ async function api<T>(opts: {
 }
 
 async function loadInventory(opts: RunnerOptions): Promise<InventorySnapshot> {
-  const r = await api<InventorySnapshot>({
+  // The route wraps the current inventory row: `{ snapshot, summary, updatedAt }`.
+  const r = await api<{ snapshot: InventorySnapshot | null }>({
     endpoint: opts.apiEndpoint,
     apiKey: opts.apiKey,
     projectId: opts.projectId,
@@ -106,7 +107,10 @@ async function loadInventory(opts: RunnerOptions): Promise<InventorySnapshot> {
   if (!r.ok || !r.data) {
     throw new Error(`Could not load inventory: ${r.error?.message ?? 'unknown'}`)
   }
-  return r.data
+  if (!r.data.snapshot) {
+    throw new Error('Project has no current inventory.yaml; ingest one before running auth-bootstrap.')
+  }
+  return r.data.snapshot
 }
 
 /**
@@ -365,6 +369,7 @@ export async function refresh(opts: RunnerOptions): Promise<{ cookieName: string
  * any consumer importing these is on their own across versions.
  */
 export const __test = {
+  loadInventory,
   pickSessionCookie,
   validateInlineAuthScript,
   isAnalyticsCookie,

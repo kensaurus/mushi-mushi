@@ -7,7 +7,7 @@
  * in the hardened behaviour so we don't regress.
  */
 
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { __test } from './index.js'
 
 const { pickSessionCookie, validateInlineAuthScript, isAnalyticsCookie } = __test
@@ -184,5 +184,30 @@ describe('validateInlineAuthScript', () => {
     expect(() => validateInlineAuthScript('await page.fill("a", process.env.TOKEN)')).toThrow(
       /forbidden token/,
     )
+  })
+})
+
+// ----------------------------------------------------------------------------
+// loadInventory
+// ----------------------------------------------------------------------------
+
+describe('loadInventory', () => {
+  const opts = { apiEndpoint: 'https://api.test', apiKey: 'k', projectId: 'p1' }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  function stubBody(body: unknown) {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body), { status: 200 }))
+  }
+
+  it('unwraps the snapshot from the { snapshot, summary } envelope', async () => {
+    const parsed = { app: { id: 'a', base_url: 'https://app.test' } }
+    stubBody({ ok: true, data: { snapshot: { parsed }, summary: null, updatedAt: null } })
+    await expect(__test.loadInventory(opts)).resolves.toEqual({ parsed })
+  })
+
+  it('throws a clear error when the project has no current inventory', async () => {
+    stubBody({ ok: true, data: { snapshot: null, summary: null, updatedAt: null } })
+    await expect(__test.loadInventory(opts)).rejects.toThrow(/no current inventory/)
   })
 })
