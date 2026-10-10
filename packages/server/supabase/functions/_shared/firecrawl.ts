@@ -249,6 +249,13 @@ export async function firecrawlSearch(
 
 export interface FirecrawlScrapeOptions {
   bypassCache?: boolean;
+  /**
+   * Hosts the caller itself built this URL on (a package registry for a
+   * changelog). The project allow-list limits URLs a person or a model
+   * chose; with an empty list production refuses every URL, which silently
+   * stopped the library modernizer from reading any changelog.
+   */
+  trustedHosts?: readonly string[];
 }
 
 export async function firecrawlScrape(
@@ -260,7 +267,8 @@ export async function firecrawlScrape(
   const resolved = await resolveFirecrawl(db, projectId);
   if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
 
-  if (!isHostAllowed(url, resolved.allowedDomains)) {
+  const trusted = (opts.trustedHosts?.length ?? 0) > 0 && isHostAllowed(url, [...opts.trustedHosts!]);
+  if (!trusted && !isHostAllowed(url, resolved.allowedDomains)) {
     throw new Error('FIRECRAWL_DOMAIN_NOT_ALLOWED');
   }
 
