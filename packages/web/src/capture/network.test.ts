@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { MUSHI_INTERNAL_HEADER, MUSHI_INTERNAL_INIT_MARKER } from '@mushi-mushi/core';
-import { createNetworkCapture } from './network';
+import { createNetworkCapture, getActiveCorrelationId } from './network';
 
 describe('createNetworkCapture', () => {
   let capture: ReturnType<typeof createNetworkCapture>;
@@ -173,6 +173,23 @@ describe('createNetworkCapture', () => {
     expect(entries.every((e) => !e.url.includes('/v1/sdk/'))).toBe(true);
     expect(entries.every((e) => !e.url.includes('/v1/reports'))).toBe(true);
     expect(entries.some((e) => e.captureMethod === 'xhr')).toBe(true);
+  });
+
+  it('a synchronous XHR send() throw leaves no correlation ID behind', () => {
+    const sendBefore = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function throwingSend() {
+      throw new DOMException('send() already called', 'InvalidStateError');
+    };
+    try {
+      capture = createNetworkCapture();
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://api.example.com/x');
+      expect(() => xhr.send()).toThrow('send() already called');
+      expect(getActiveCorrelationId()).toBeUndefined();
+    } finally {
+      capture.destroy();
+      XMLHttpRequest.prototype.send = sendBefore;
+    }
   });
 
   it('destroy does not clobber a later XHR wrapper (Sentry-style)', () => {
