@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.30.3
+
+### Patch Changes
+
+- b1bcc44: `mushi selfhost up` now runs the Supabase CLI without a shell, so each flag value (including the keys you pass) reaches it as one argument and is never interpreted by the shell. A failed step now reports the CLI's own error output instead of a message that embedded the full command line.
+
 ## 0.30.2
 
 ### Patch Changes
