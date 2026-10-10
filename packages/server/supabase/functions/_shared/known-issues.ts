@@ -93,9 +93,50 @@ function knownIssueQuery(source: KnownIssueSource): string | null {
   if (!EXCEPTION_NAME.test(raw)) return null;
   const text = normalizeErrorText(raw);
   if (text.length < 12 || text.split(' ').length < 3) return null;
+
+  // A short message ("Error: Request was aborted.") says nothing about the
+  // runtime, and the search returns pages about the same words in other
+  // stacks (Shopify, Aurelia, .NET). Add the runtime the event came from.
+  const runtime = typeof meta.platform === 'string' ? PLATFORM_TERMS[meta.platform] : undefined;
+  if (runtime && errorMessage(text).split(' ').length <= 6) return `${text} ${runtime}`;
+
   if (text.length <= MAX_QUERY_CHARS) return text;
   const cut = text.slice(0, MAX_QUERY_CHARS);
   return cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : MAX_QUERY_CHARS);
+}
+
+/** Sentry event platforms, as words a page about that stack would use. */
+const PLATFORM_TERMS: Record<string, string> = {
+  node: 'node',
+  javascript: 'javascript',
+  cocoa: 'ios',
+  java: 'android',
+  python: 'python',
+  dart: 'flutter',
+};
+
+/** "TypeError: x is not a function" → "x is not a function". */
+function errorMessage(text: string): string {
+  return text.replace(/^[\w$.]*(?:Error|Exception)\s*:\s*/, '').trim();
+}
+
+/** Lowercase words only, so punctuation and case never decide a match. */
+function wordsOf(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+}
+
+/**
+ * The first three words of the error message, or null when it is shorter.
+ * A result whose title and excerpt do not contain them is about something
+ * else that shares a word or two.
+ */
+function relevancePhrase(query: string): string | null {
+  const words = wordsOf(errorMessage(query)).trim().split(' ').filter(Boolean);
+  return words.length >= 3 ? ` ${words.slice(0, 3).join(' ')} ` : null;
+}
+
+function isAboutTheError(result: { title: string; snippet: string }, phrase: string | null): boolean {
+  return phrase === null || wordsOf(`${result.title} ${result.snippet}`).includes(phrase);
 }
 
 /**
@@ -159,7 +200,9 @@ export async function lookupKnownIssues(
       results = [...results, ...web];
     }
     const seen = new Set(alreadyAttached);
+    const phrase = relevancePhrase(query);
     results = results
+      .filter((r) => isAboutTheError(r, phrase))
       .filter((r) => {
         if (seen.has(r.url)) return false;
         seen.add(r.url);

@@ -130,9 +130,10 @@ function makeDb(state: DbState) {
 
 describe('lookupKnownIssues', () => {
   let state: DbState
-  const PR = { url: 'https://github.com/vellum-ai/vellum-assistant/pull/26676', title: 'honor streamTimeoutMs', snippet: 'request was aborted' }
-  const ISSUE = { url: 'https://github.com/supabase/realtime-js/issues/1', title: 'cannot add callbacks', snippet: 'reuse of channel' }
-  const SO = { url: 'https://stackoverflow.com/q/1', title: 'same error', snippet: 'answer' }
+  // Each mentions the error's first words, as a real result about it does.
+  const PR = { url: 'https://github.com/o/r/pull/9', title: 'Fix: cannot add postgres_changes callbacks', snippet: 'resubscribe' }
+  const ISSUE = { url: 'https://github.com/supabase/realtime-js/issues/1', title: 'Cannot add `postgres_changes` callbacks after subscribe()', snippet: 'reuse of channel' }
+  const SO = { url: 'https://stackoverflow.com/q/1', title: 'Supabase realtime', snippet: 'Error: cannot add postgres_changes callbacks for realtime' }
   /** Developer-index results first, then web results. */
   function searches(developer: unknown[], web: unknown[] = []) {
     firecrawl.firecrawlSearch.mockReset().mockImplementation(async (_db: unknown, _p: string, _q: string, opts: { category?: string }) =>
@@ -199,6 +200,34 @@ describe('lookupKnownIssues', () => {
       .mockResolvedValueOnce([SO])
     expect(await mod.lookupKnownIssues(makeDb(state), input)).toMatchObject({ attached: 1 })
     expect(snippetUrls()).toEqual([SO.url])
+  })
+
+  it('drops results about something else that shares a word or two', async () => {
+    // The solo-boss "Request was aborted" lookup (2026-10-10) attached these.
+    const abortReport = {
+      description: 'Error: Request was aborted. in POST /api/file-uploads/:file_id/analyze (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', culprit: 'POST /api/file-uploads/:file_id/analyze', platform: 'node' },
+      consoleLogs: [],
+    }
+    const shopify = { url: 'https://community.shopify.dev/t/15054', title: 'AbortError: The user aborted a request', snippet: 'a request timeout or cancellation' }
+    const aurelia = { url: 'https://github.com/aurelia/aurelia/blob/x/abort-controller.md', title: 'Request Cancellation with AbortController', snippet: 'aborted requests' }
+    const vellum = { url: 'https://github.com/vellum-ai/vellum-assistant/pull/26676', title: 'vellum-ai/vellum-assistant#26676', snippet: 'remove /request was aborted/i from RETRYABLE_NETWORK_MESSAGE_PATTERNS' }
+    searches([shopify, vellum], [aurelia])
+    const res = await mod.lookupKnownIssues(makeDb(state), { projectId: 'p1', reportId: 'r1', ...abortReport })
+    expect(res).toMatchObject({ attached: 1 })
+    expect(snippetUrls()).toEqual([vellum.url])
+  })
+
+  it('adds the runtime to a short error, not to a long one', async () => {
+    const short = {
+      description: 'Error: Request was aborted. (captured by Sentry — no user description)',
+      customMetadata: { source: 'sentry_webhook', platform: 'node' },
+      consoleLogs: [],
+    }
+    expect(await queryFor(short)).toBe('Error: Request was aborted. node')
+    expect(await queryFor({ ...sentryReport, customMetadata: { ...sentryReport.customMetadata, platform: 'javascript' } })).not.toMatch(
+      /javascript$/,
+    )
   })
 
   it('never throws: a failed search is reported as skipped', async () => {
