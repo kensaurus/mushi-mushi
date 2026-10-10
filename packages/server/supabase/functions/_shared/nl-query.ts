@@ -147,6 +147,16 @@ export function sanitizeSql(
   let cleaned = scanned.sql.replace(/;\s*$/, '').trim() // trailing semicolon breaks the RPC wrapper
   const code = scanned.code.replace(/;\s*$/, '')
 
+  // The raw-text checks above miss a name split by a comment:
+  // `vault/**/.decrypted_secrets` becomes `vault .decrypted_secrets`, which
+  // Postgres reads as a qualified name. Run them again on what will execute.
+  if (DANGEROUS_PATTERNS.test(code)) {
+    throw new Error('Query contains disallowed operations. Only SELECT queries are permitted.')
+  }
+  if (FORBIDDEN_SCHEMAS.test(code)) {
+    throw new Error('Query references a restricted schema. Only the curated `public` tables are queryable.')
+  }
+
   // SEC: this MUST run on code with comments AND literals removed, not on
   // the raw `sql`. Otherwise a user can satisfy the check by hiding `$1`
   // inside a comment (`SELECT * FROM reports /* $1 */ WHERE ...`) or a

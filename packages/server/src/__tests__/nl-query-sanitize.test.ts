@@ -47,4 +47,13 @@ describe('sanitizeSql literals and comments', () => {
     expect(() => sanitizeSql('SELECT $$;$$ FROM reports WHERE project_id = $1')).toThrow(/Dollar-quoted/)
     expect(() => sanitizeSql("SELECT id FROM reports WHERE project_id = $1 AND title = E'\\';' ")).toThrow(/Escape strings/)
   })
+
+  it('runs the schema and keyword checks on the SQL with comments removed', () => {
+    // Each passes the raw-text regex; Postgres reads `vault .decrypted_secrets`
+    // as a qualified name once the comment is gone.
+    expect(() => sanitizeSql('SELECT * FROM vault/**/.decrypted_secrets WHERE project_id = $1')).toThrow(/restricted schema/)
+    expect(() => sanitizeSql('SELECT * FROM vault--x\n.decrypted_secrets WHERE project_id = $1')).toThrow(/restricted schema/)
+    expect(() => sanitizeSql('SELECT pgsodium/**/.crypto_aead_det_decrypt(id) FROM reports WHERE project_id = $1')).toThrow(/restricted schema/)
+    expect(() => sanitizeSql('SELECT id FROM reports WHERE project_id = $1 AND set/**/role IS NULL')).toThrow(/disallowed operations/)
+  })
 })
