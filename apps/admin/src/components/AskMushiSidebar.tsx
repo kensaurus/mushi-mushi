@@ -116,12 +116,9 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
     if (seedMessage?.trim()) {
       setInput(seedMessage.trim())
     }
-    const t = setTimeout(() => {
-      const ta = document.querySelector<HTMLTextAreaElement>(
-        'form textarea:not([readonly])',
-      )
-      ta?.focus()
-    }, 120)
+    // Focus the composer's own textarea. A document-wide query found the
+    // page's first form textarea instead (the report triage note).
+    const t = setTimeout(() => inputRef.current?.focus(), 120)
     return () => clearTimeout(t)
   }, [open, seedMessage, seedThreadId])
 
@@ -572,6 +569,7 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
             }}
           >
             <AskMushiComposer
+              ref={inputRef}
               value={input}
               onChange={setInput}
               onSubmit={onSubmit}
@@ -580,9 +578,6 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
               placeholder={`Ask about ${title}…  /commands · @mention · Enter to send`}
               mentionables={activeCtx?.mentionables}
             />
-            <div className="hidden">
-              <textarea ref={inputRef} data-ask-mushi-textarea readOnly />
-            </div>
             <div className="flex justify-end gap-2 px-3 pb-2">
               {intentOverride && intentOverride !== 'default' && (
                 <span className="text-2xs text-brand">intent: {intentOverride}</span>
