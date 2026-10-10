@@ -16,6 +16,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { deriveRecommendation, formatElapsed } from './deriveRecommendation'
 import type { ReportDetail, FixAttemptFailureCategory } from './types'
 import type { DispatchState } from '../../lib/dispatchFix'
+import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 
 // ── Minimal factories ────────────────────────────────────────────────────────
 
@@ -198,6 +199,29 @@ describe('deriveRecommendation', () => {
       const actions = rec.actions ?? []
       const indexAction = actions.find((a) => a.to === '/integrations/config#integrations-codebase')
       expect(indexAction).toBeDefined()
+    })
+
+    it('links to the web search setting when the worker says it is off', () => {
+      const report = makeReport({
+        fix_attempts: [
+          makeFixAttempt({
+            status: 'skipped_no_context',
+            error:
+              'No code context. Turning on "Search the web for known fixes" in Settings → Web tools can help: the agent then also reads how others fixed this error.',
+          }),
+        ],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.actions?.some((a) => a.to === KNOWN_ISSUES_SEARCH_HREF)).toBe(true)
+      expect(rec.description).toContain('web search')
+      // Without the hint, no link: the setting may already be on.
+      const plain = deriveRecommendation(
+        makeReport({ fix_attempts: [makeFixAttempt({ status: 'skipped_no_context', error: 'No code context.' })] }),
+        makeDispatchState(),
+        0,
+        noOp,
+      )
+      expect(plain.actions?.some((a) => a.to === KNOWN_ISSUES_SEARCH_HREF)).toBe(false)
     })
 
     it('no_relevant_code failure_category triggers the same branch', () => {
