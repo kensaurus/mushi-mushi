@@ -51,7 +51,10 @@ a normal page with status 404.
   - a page that failed to load;
   - a changed page the judge calls broken under a fixed goal (error message,
     blank page, lost main content; normal edits ignored).
-  - A page removed from the crawl is not reported.
+  - Not reported: a page removed from the crawl, and a page Firecrawl chose
+    not to fetch (already scraped under another address, or disallowed by
+    the site's robots.txt). The first checks had 9 duplicate skips on
+    glot.it and a robots.txt block on yen-yen's /feedback; none was broken.
 - **One report per broken page.**
   - Each newly broken page becomes a report with `source = 'site_watch'`,
     queued for diagnosis like store reviews (the user opted in by turning on
