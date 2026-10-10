@@ -23,6 +23,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { userCanAccessProject } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
+import { isUuid } from '../ids.ts'
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -126,6 +127,10 @@ async function requirePublishedAppsAccess(
   | { ok: true; orgId: string; role: 'owner' | 'admin' | 'member' | 'viewer' | null }
   | { ok: false; error: string }
 > {
+  // A non-uuid id would fail the uuid column read below with a 500.
+  if (!isUuid(projectId)) {
+    return { ok: false, error: 'forbidden' }
+  }
   // The service-role client bypasses RLS, so membership is checked here.
   const access = await userCanAccessProject(supabase, userId, projectId)
   if (!access.allowed) {
