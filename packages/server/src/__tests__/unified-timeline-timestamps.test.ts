@@ -31,3 +31,29 @@ describe('commentTimelineTitle', () => {
     expect(commentTimelineTitle({ author_kind: 'reporter', visible_to_reporter: true })).toBe('Reporter reply')
   })
 })
+
+describe('buildUnifiedReportTimeline ids', () => {
+  it('keeps breadcrumb and console ids unique when entries share a millisecond', async () => {
+    const { buildUnifiedReportTimeline } = await import('../../supabase/functions/_shared/unified-timeline.ts')
+    const { makeFakeDb } = await import('./__stubs__/fake-supabase.ts')
+    const ts = Date.UTC(2026, 9, 1)
+    const db = makeFakeDb({
+      reports: [{
+        id: 'r1', project_id: 'p1', status: 'new', description: 'd', category: 'bug', created_at: '2026-10-01T00:00:00Z',
+        breadcrumbs: [
+          { timestamp: ts, category: 'ui.click', level: 'info', message: 'a' },
+          { timestamp: ts, category: 'ui.click', level: 'info', message: 'b' },
+        ],
+        console_logs: [
+          { timestamp: ts, level: 'error', message: 'x' },
+          { timestamp: ts, level: 'error', message: 'y' },
+        ],
+        custom_metadata: null, sentry_trace_id: null,
+      }],
+    })
+    const entries = await buildUnifiedReportTimeline(db as never, 'p1', 'r1')
+    const ids = entries.filter((e) => e.lane === 'breadcrumb' || e.lane === 'console').map((e) => e.id)
+    expect(ids).toHaveLength(4)
+    expect(new Set(ids).size).toBe(4)
+  })
+})

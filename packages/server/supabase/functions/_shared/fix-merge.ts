@@ -137,6 +137,11 @@ export async function finalizeFixMerge(
     actorUserId?: string | null;
     /** GitHub's `merged_at` for the PR, when the caller read it. */
     mergedAt?: string | null;
+    /**
+     * Which path saw the merge, recorded on the usage event. Defaults to
+     * console_merge when an admin acted (actorUserId), otherwise system.
+     */
+    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile';
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
   const nowDate = new Date();
@@ -308,7 +313,7 @@ export async function finalizeFixMerge(
           pr_url: meta.prUrl,
           pr_number: meta.prNumber ?? attempt.pr_number,
           repository: meta.repository,
-          source: 'console_merge',
+          source: meta.source ?? (meta.actorUserId ? 'console_merge' : 'system'),
         },
       });
       if (usageErr) {
@@ -507,7 +512,7 @@ async function reconcileFixingPage(
     if (verdict.action === 'finalize_merged') {
       const attempt = attempts.find((a) => a.id === verdict.attemptId);
       if (!attempt?.pr_url) continue;
-      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number });
+      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number, source: 'fixing_reconcile' });
       summary.finalized++;
       acted++;
     } else if (verdict.action === 'flag_unreadable') {

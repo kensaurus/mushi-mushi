@@ -106,6 +106,7 @@ async function syncPrLifecycle(
         prNumber,
         repository: `${ref.owner}/${ref.repo}`,
         mergedAt: pr.mergedAt ?? null,
+        source: 'ci_sync',
       })
     }
   } else if (state === 'closed') {

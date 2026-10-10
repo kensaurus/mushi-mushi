@@ -10,6 +10,8 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   CURSOR_AGENT_ID_RE,
   CursorApiError,
@@ -96,6 +98,15 @@ describe('createCursorAgentV1', () => {
     await expect(
       createCursorAgentV1({ apiKey: 'k', fetchImpl }, { prompt: 'p', repoUrl: 'https://github.com/o/r', agentId: AGENT_ID }),
     ).rejects.toMatchObject({ name: 'CursorApiError', status: 409, code: 'agent_id_conflict' })
+  })
+
+  it('returns the real 2xx status so the dispatch log records 201, not a fixed 200', async () => {
+    const fetchImpl = fetchMockReturning({
+      agent: { id: AGENT_ID, status: 'ACTIVE', url: 'https://cursor.com/agents/x', latestRunId: 'run_1' },
+      run: { id: 'run_1', agentId: AGENT_ID, status: 'CREATING', git: { branches: [] } },
+    }, 201)
+    const res = await createCursorAgentV1({ apiKey: 'k', fetchImpl }, { prompt: 'p', repoUrl: 'https://github.com/o/r', agentId: AGENT_ID })
+    expect(res.httpStatus).toBe(201)
   })
 
   it('maps 401 to unauthorized and keeps the "Cursor API" prefix for failure categorisation', async () => {
@@ -254,5 +265,14 @@ describe('parseCursorModelSpec + model params on POST /v1/agents', () => {
     expect(plain.model).toEqual({ id: 'composer-2.5' })
     const bad = buildCreateAgentV1Body({ prompt: 'p', repoUrl: 'https://github.com/o/r', model: 'bad model' })
     expect(bad.model).toBeUndefined()
+  })
+})
+
+describe('plugin dispatch log http_status', () => {
+  it('records the Cursor response status instead of a fixed 200', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/plugins.ts'), 'utf8')
+    expect(src).not.toMatch(/httpStatus = 200\b/)
+    expect(src).not.toMatch(/http_status: agentId \? 200/)
+    expect(src.match(/httpStatus = created\.httpStatus/g)).toHaveLength(2)
   })
 })

@@ -127,3 +127,27 @@ describe('every merge-detection path passes GitHub\'s merge time', () => {
     expect(read('api/routes/query-fixes-repo.ts')).toMatch(/mergedAt: mergeResult\.alreadyMerged \? mergeResult\.mergedAt \?\? null : null,/)
   })
 })
+
+describe('fixes_succeeded usage event source', () => {
+  function sourceRecorded(queries: ReturnType<typeof scripted>['queries']): unknown {
+    const insert = findQueries(queries, 'usage_events', 'insert')[0]
+    return (insert?.payload as { metadata?: { source?: unknown } } | undefined)?.metadata?.source
+  }
+
+  it('records the path that saw the merge instead of always console_merge', async () => {
+    for (const [meta, expected] of [
+      [{ source: 'github_webhook' as const }, 'github_webhook'],
+      [{ actorUserId: 'u-1' }, 'console_merge'],
+      [{}, 'system'],
+    ] as const) {
+      const { db, queries } = scripted()
+      await finalizeFixMerge(db as never, ATTEMPT, { prUrl: ATTEMPT.pr_url, prNumber: 12, ...meta })
+      expect(sourceRecorded(queries)).toBe(expected)
+    }
+  })
+
+  it('ci-sync and the pull_request webhook name themselves', () => {
+    expect(read('ci-sync/index.ts')).toMatch(/finalizeFixMerge\(db, attempt, \{[\s\S]{0,240}?source: 'ci_sync',/)
+    expect(read('webhooks-github-indexer/index.ts')).toMatch(/finalizeFixMerge\(db, attempt, \{[\s\S]{0,240}?source: 'github_webhook',/)
+  })
+})

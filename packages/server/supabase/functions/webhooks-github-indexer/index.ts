@@ -646,6 +646,7 @@ async function handleFixPrMerged(payload: {
     prNumber: payload.pull_request?.number,
     repository: payload.repository?.full_name,
     mergedAt: payload.pull_request?.merged_at ?? null,
+    source: 'github_webhook',
   });
 
   if (justMerged) {
