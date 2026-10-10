@@ -16,6 +16,15 @@ describe('fix-worker web results', () => {
     expect(src).not.toMatch(/webSnippets\.map\(\(s, i\) => `### \[\$\{i \+ 1\}\] \$\{s\.title\}/)
   })
 
+  it('a context skip names the web search setting only when the opt-in is off, and never searches then', () => {
+    expect(src).toContain('webSearchOff = symptom.length > 0 && !searchEnabled;')
+    // The search call sits behind the opt-in.
+    expect(src).toMatch(/if \(searchEnabled\) \{\s*const augSpan = trace\.span\('fix\.augment\.firecrawl'\);\s*webSnippets = await firecrawlSearch\(/)
+    expect(src).toContain('const reason = webSearchOff ? `${codeReason} ${WEB_SEARCH_OFF_HINT}` : codeReason;')
+    // The console links to the setting by this quoted name (deriveRecommendation.ts).
+    expect(src).toMatch(/const WEB_SEARCH_OFF_HINT =\s*'Turning on "Search the web for known fixes" in Settings → Web tools/)
+  })
+
   it('the block says the content is data and strips fence markers from each field', () => {
     const fn = src.slice(src.indexOf('function webResultsBlock('))
     const body = fn.slice(0, fn.indexOf('\n}\n'))

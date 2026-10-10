@@ -3,6 +3,10 @@ import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
+import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
+
+/** The opt-in's name as the fix worker quotes it in a skip reason. */
+const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
 
 export interface RecommendationMeta {
   label: string
@@ -273,14 +277,19 @@ function recommendationFor(
       latest.status === 'skipped_no_context' ||
       latest.failure_category === 'no_relevant_code'
     ) {
+      // The worker appends WEB_SEARCH_OFF_HINT when a web search could have
+      // filled the gap but the project has not turned it on.
+      const webSearchOff = (latest.error ?? '').includes(WEB_SEARCH_SETTING_NAME)
       return {
         title: 'Fix skipped — no relevant code found in the index',
         description:
-          'The agent searched the indexed codebase but found no files that match this bug. Enable codebase indexing on the correct repo, or expand path_globs to include the affected source files.',
+          'The agent searched the indexed codebase but found no files that match this bug. Enable codebase indexing on the correct repo, or expand path_globs to include the affected source files.' +
+          (webSearchOff ? ' Turning on web search also helps: the agent then reads how others fixed this error.' : ''),
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
           { label: 'Configure codebase indexing \u2192', to: '/integrations/config#integrations-codebase', tone: 'primary' },
+          ...(webSearchOff ? [{ label: 'Turn on web search \u2192', to: KNOWN_ISSUES_SEARCH_HREF, tone: 'ghost' as const }] : []),
           { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],
       }
