@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_115 configuration knobs across 19 sections · last regenerated 2026-10-09._
+_116 configuration knobs across 19 sections · last regenerated 2026-10-10._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -11,7 +11,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 - [Settings → General](#settings-general) (13)
 - [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
-- [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (3)
+- [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (4)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
 - [Projects](#projects) (8)
 - [Integrations](#integrations) (26)
@@ -372,6 +372,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.firecrawl_max_pages_per_call` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl.ts firecrawlSearch (api Research search, fix-worker)`, `fix-worker edge function`
 
 **When to change** — Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.
+
+### Search the web for known fixes
+
+<a id="settings-firecrawl-known-issues-search"></a>
+
+`settings.firecrawl.known_issues_search`
+
+**Summary** — Off by default. When on, Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.
+
+**How it works** — After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left to Firecrawl's search, limited to github.com and stackoverflow.com. The top 3 results appear on the report as "Others who hit this". It runs once per report, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). About 5 Firecrawl credits per error report.
+
+**Default** — `false (nothing is sent)`
+
+**Where it lives** — table `project_settings.known_issues_search_enabled` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function (_shared/known-issues.ts)`
+
+**When to change** — Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi for a third party.
 
 ## Settings → SDK & connection (debug logging)
 
