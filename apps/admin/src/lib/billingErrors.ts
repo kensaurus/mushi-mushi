@@ -16,7 +16,7 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   STRIPE_NOT_CONFIGURED: 'Payments are not set up on this Mushi server yet, so plans cannot be bought here.',
   PLAN_NOT_CONFIGURED: 'That plan is not ready to buy yet. Try another plan, or email support.',
   PLAN_NOT_PURCHASABLE: 'That plan is free, so there is nothing to buy.',
-  PLAN_SALES_LED: 'That plan is arranged with our team. Use "Email sales" on the Plans tab.',
+  PLAN_SALES_LED: 'That plan is arranged with our team, not bought online. Email kensaurus@gmail.com and we will set it up with you.',
   COMPLIMENTARY_ACCOUNT: 'This account is on a free complimentary plan, so there is nothing to pay.',
   ALREADY_SUBSCRIBED:
     'This project already has a paid plan. To switch plans, cancel it in Manage billing, or email support and we will switch it for you.',
