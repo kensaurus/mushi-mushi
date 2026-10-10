@@ -109,24 +109,30 @@ export async function loadReportFixTruths(
   const healthyByProject = new Map<string, Set<string>>()
   const checkedByProject = new Map<string, Set<string>>()
   if (projectIds.length > 0) {
-    const { data: keyRows } = await db
-      .from('byok_keys')
-      .select('project_id, provider_slug, status, test_status')
-      .in('project_id', projectIds)
-    for (const k of (keyRows ?? []) as Array<{
-      project_id: string
-      provider_slug: string
-      status?: string | null
-      test_status?: string | null
-    }>) {
-      const checked = checkedByProject.get(k.project_id) ?? new Set<string>()
+    // A project's own keys and its organization's shared keys (ADR 0023).
+    const { data: projRows } = await db.from('projects').select('id, organization_id').in('id', projectIds)
+    const orgOf = new Map(((projRows ?? []) as Array<{ id: string; organization_id: string | null }>).map((p) => [p.id, p.organization_id]))
+    const orgIds = [...new Set([...orgOf.values()].filter((v): v is string => Boolean(v)))]
+    const [{ data: keyRows }, { data: orgKeyRows }] = await Promise.all([
+      db.from('byok_keys').select('project_id, provider_slug, status, test_status').in('project_id', projectIds),
+      orgIds.length
+        ? db.from('byok_keys').select('organization_id, provider_slug, status, test_status').in('organization_id', orgIds)
+        : Promise.resolve({ data: [] }),
+    ])
+    type KeyRow = { project_id?: string | null; organization_id?: string | null; provider_slug: string; status?: string | null; test_status?: string | null }
+    const note = (pid: string, k: KeyRow) => {
+      const checked = checkedByProject.get(pid) ?? new Set<string>()
       checked.add(k.provider_slug)
-      checkedByProject.set(k.project_id, checked)
+      checkedByProject.set(pid, checked)
       if (k.status === 'active' && k.test_status === 'ok') {
-        const healthy = healthyByProject.get(k.project_id) ?? new Set<string>()
+        const healthy = healthyByProject.get(pid) ?? new Set<string>()
         healthy.add(k.provider_slug)
-        healthyByProject.set(k.project_id, healthy)
+        healthyByProject.set(pid, healthy)
       }
+    }
+    for (const k of (keyRows ?? []) as KeyRow[]) if (k.project_id) note(k.project_id, k)
+    for (const k of (orgKeyRows ?? []) as KeyRow[]) {
+      for (const pid of projectIds) if (k.organization_id && orgOf.get(pid) === k.organization_id) note(pid, k)
     }
   }
 
