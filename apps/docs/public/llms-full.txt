@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-09
+Generated: 2026-10-10
 Pages: 209
 
 This file contains the full prose of every documentation page, stripped of
@@ -2012,7 +2012,7 @@ the situations people actually search for.
 - **[AI code bug fixing](/use-cases/ai-code-bug-fixing)** — the full pipeline
   from user report to merged fix, including lessons that prevent repeats.
 - **[MCP server for bug fixing](/use-cases/mcp-bug-fixing-server)** — what a
-  bug-fixing MCP server is and the tools Mushi's exposes.
+  bug-fixing MCP server is and the tools Mushi exposes.
 
 Ready to try it? One command installs the SDK and walks you through your
 first report:
@@ -4542,7 +4542,7 @@ flowchart TB
 Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@latest`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.24.5`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -6891,7 +6891,15 @@ Patterns and their placeholders (all matched case-sensitively unless noted):
 | US SSN | `[REDACTED_SSN]` | on |
 | Credit-card PAN | `[REDACTED_CC]` | on |
 | JWT (`eyJ….….…`) | `[REDACTED_JWT]` | on |
-| AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Google keys | `[REDACTED_*_KEY]` (per vendor) | on |
+| AWS access key | `[REDACTED_AWS_KEY]` | on |
+| AWS secret access key (case-insensitive key name) | `aws_secret_access_key=[REDACTED_AWS_SECRET]` | on |
+| Stripe secret / restricted key | `[REDACTED_STRIPE_KEY]` | on |
+| Stripe publishable key | `[REDACTED_STRIPE_PK]` | on |
+| Slack token | `[REDACTED_SLACK_TOKEN]` | on |
+| GitHub personal access token | `[REDACTED_GITHUB_PAT]` | on |
+| OpenAI key | `[REDACTED_OPENAI_KEY]` | on |
+| Anthropic key | `[REDACTED_ANTHROPIC_KEY]` | on |
+| Google API key | `[REDACTED_GOOGLE_KEY]` | on |
 | IPv4 address | `[REDACTED_IP]` | **off** |
 | IPv6 address | `[REDACTED_IPV6]` | **off** |
 
@@ -6995,7 +7003,7 @@ For legacy `.eslintrc`:
 ```json
 {
   "plugins": ["mushi-mushi"],
-  "extends": ["plugin:mushi-mushi/recommended"]
+  "extends": ["plugin:mushi-mushi/legacy"]
 }
 ```
 
@@ -7523,7 +7531,7 @@ into your IDE.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@latest`. The default for
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.24.5`. The default for
   Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
   Windsurf. Your client launches the server as a subprocess and pipes
   JSON-RPC over stdio.
@@ -12830,10 +12838,10 @@ From the repo root:
 VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
 VITE_SUPABASE_ANON_KEY=eyJ… \
 VITE_API_URL=https://YOUR-REF.supabase.co/functions/v1/api \
-pnpm --filter @mushi-mushi/admin build
+pnpm --filter "@mushi-mushi/admin..." build
 ```
 
-The output lands in `apps/admin/dist/`.
+The trailing `...` also builds the workspace packages the console imports (`@mushi-mushi/web`, `@mushi-mushi/mcp` and others) first; a fresh clone has none of their `dist/` folders yet. The output lands in `apps/admin/dist/`.
 
   `VITE_API_URL` must point to the `api` edge function (`…/functions/v1/api`), **not** your database URL. All console API calls are proxied through that function.
 
@@ -12967,7 +12975,7 @@ description: Deploy Mushi's Supabase Edge Functions for a self-hosted install �
 
 # Edge Functions deploy
 
-Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count — currently **55**). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -13151,7 +13159,7 @@ npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 The Vite SPA also ships a Sentry integration. Pass the DSN at build time:
 
 ```bash
-VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter @mushi-mushi/admin build
+VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter "@mushi-mushi/admin..." build
 ```
 
 ## OpenTelemetry
@@ -13218,7 +13226,7 @@ The migration sequence creates the following custom Postgres functions:
 | --- | --- |
 | `mushi_rls_coverage_snapshot()` | Verifies every public table has ≥1 RLS policy |
 
-DSARs are handled via the `data_subject_requests` table + the `api` edge function (`POST /v1/admin/dsar`), not a stored procedure. SOC 2 evidence is generated by the `soc2-evidence` edge function triggered from the admin console — no `soc2_evidence_snapshot()` RPC exists. Both routes are documented in the [Security & Compliance](/security/soc2) section.
+DSARs are handled via the `data_subject_requests` table + the `api` edge function (`POST /v1/admin/compliance/dsars`), not a stored procedure. SOC 2 evidence is generated by the `soc2-evidence` edge function triggered from the admin console — no `soc2_evidence_snapshot()` RPC exists. Both routes are documented in the [Security & Compliance](/security/soc2) section.
 
 ## RLS pattern
 
@@ -13522,7 +13530,7 @@ If you self-host on your own Supabase project, you control the region entirely �
 ## GDPR notes
 
 - All PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) are encrypted at rest via `pgsodium`.
-- DSAR (data subject access requests) are handled via `request_dsar()` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
+- DSAR (data subject access requests) are tracked in the `data_subject_requests` table via `POST /v1/admin/compliance/dsars` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
 - When the EU region cluster ships, AI model calls from EU projects will be routed to Anthropic's EU endpoints where available.
 
 ---
@@ -13714,7 +13722,7 @@ Mushi ships a SOC 2 Type 1 readiness module. It is not a third-party certificati
 | Access — who / what / when | `audit_log` table, append-only, RLS per user | Real-time |
 | RLS policy coverage | `mushi_rls_coverage_snapshot()` — verifies every public table has at least one policy | Daily cron |
 | Data retention | `data_retention_policies` per project; nightly hard-delete cron | Nightly |
-| DSAR (data subject access) | `request_dsar()` SQL fn → signed tarball URL | On-demand |
+| DSAR (data subject access) | `data_subject_requests` audit trail via `POST /v1/admin/compliance/dsars` | On-demand |
 | Evidence pack | `soc2-evidence` Edge Function → quarterly snapshot in `soc2_evidence` | Quarterly + on-demand |
 | Encryption-in-transit | TLS 1.2+ enforced by Supabase edge | Always |
 | Encryption-at-rest | `pgsodium` for PII columns; Supabase disk encryption for all storage | Always |
@@ -13757,17 +13765,17 @@ The nightly cron hard-deletes rows older than the configured window and logs the
 
 ## DSAR (Data Subject Access Request)
 
-Submit a DSAR via the admin API:
+File a DSAR in the admin console (**Compliance → DSARs**) or through the admin API with a signed-in user's access token:
 
 ```bash
-curl -X POST https://<your-project>.supabase.co/functions/v1/api/v1/admin/dsar \
-  -H "Authorization: Bearer <admin-api-key>" \
+curl -X POST https://<your-project>.supabase.co/functions/v1/api/v1/admin/compliance/dsars \
+  -H "Authorization: Bearer <user-access-token>" \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com"}'
-# Returns a signed URL to a tarball of all rows referencing that email.
+  -d '{"projectId": "<project-id>", "request_type": "access", "subject_email": "user@example.com"}'
+# Returns the new data_subject_requests row (status: pending).
 ```
 
-The tarball includes: `reports`, `reporter_identities`, `activity_events`, `audit_log` rows where `actor_email = ?`. PII columns are decrypted in the export (the tarball itself is signed and expires in 48 hours).
+`request_type` is one of `access`, `export`, `deletion` or `rectification`. The row is the audit trail, not the export: you fulfil the request, then `PATCH /v1/admin/compliance/dsars/:id` with `status: "completed"` (and an optional `evidence_url`) records who completed it and when.
 
 ---
 
@@ -15811,8 +15819,8 @@ POST  /v1/admin/compliance/evidence/refresh
 GET   /v1/admin/compliance/retention
 PUT   /v1/admin/compliance/retention/:projectId    { reports_days, audit_days, llm_days, byok_days, legal_hold }
 GET   /v1/admin/compliance/dsars
-POST  /v1/admin/compliance/dsars                   { type, subject_email, subject_id, notes }
-PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason }
+POST  /v1/admin/compliance/dsars                   { projectId, request_type, subject_email, subject_id, notes }
+PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason, evidence_url, notes }
 GET   /v1/admin/residency
 PUT   /v1/admin/residency/:projectId               { region }
 ```
@@ -18706,7 +18714,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@latest"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",

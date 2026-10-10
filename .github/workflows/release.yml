@@ -320,7 +320,6 @@ jobs:
         # echoed verbatim so the release log isn't misleading.
         run: |
           set -euo pipefail
-          mkdir -p /tmp/audit-sigs && cd /tmp/audit-sigs
 
           install_with_retry() {
             local pkg="$1"
@@ -354,12 +353,19 @@ jobs:
             done
           }
 
+          # One directory per package: a shared node_modules lets npm hoist
+          # and dedupe across packages, so the audited graph would differ
+          # from what a user gets installing any one package on its own.
           for pkg in $(echo "$PUBLISHED" | jq -r '.[].name'); do
             ver=$(echo "$PUBLISHED" | jq -r --arg n "$pkg" '.[] | select(.name == $n) | .version')
+            audit_dir=$(mktemp -d /tmp/audit-sigs-XXXXXX)
             echo "Auditing signatures for ${pkg}@${ver}"
-            install_with_retry "$pkg" "$ver"
+            (
+              cd "$audit_dir"
+              install_with_retry "$pkg" "$ver"
+              npm audit signatures --audit-level=high
+            )
           done
-          npm audit signatures --audit-level=high
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
 
@@ -393,6 +399,12 @@ jobs:
             # setting upstream tracking on the local ref. A bare `git push`
             # therefore fails with "no upstream branch", aborting the release.
             current_branch=$(git rev-parse --abbrev-ref HEAD)
+            # Detached HEAD (e.g. a dispatch on a tag) prints "HEAD", and the
+            # push would create a remote branch literally named HEAD.
+            if [ -z "$current_branch" ] || [ "$current_branch" = "HEAD" ]; then
+              echo "::error::Not on a branch (detached HEAD); refusing to push the changelog commit."
+              exit 1
+            fi
             git push origin "HEAD:${current_branch}"
           else
             echo "changelog: no drift to commit"

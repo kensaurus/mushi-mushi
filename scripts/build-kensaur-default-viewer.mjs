@@ -10,9 +10,12 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
 
-function renameHandler(source, name) {
+// Each source runs in its own function scope and hands back its `handler`.
+// Pasting them side by side at top level let a later helper declaration
+// (both declare serializeQuerystring) silently replace the earlier one.
+function scopeHandler(source, name) {
   const withoutHeader = source.replace(/^\/\*\*[\s\S]*?\*\/\s*/, '')
-  return withoutHeader.replace(/function handler\s*\(/, `function ${name}(`)
+  return `var ${name} = (function () {\n${withoutHeader}\nreturn handler;\n})();`
 }
 
 const mushi = readFileSync(join(ROOT, 'cloudfront-mushi-apex-redirect.js'), 'utf8')
@@ -25,8 +28,8 @@ const combined = `/**
  * RUNTIME: cloudfront-js-2.0
  */
 
-${renameHandler(mushi, 'mushiApexHandler')}
-${renameHandler(glot, 'glotSpaHandler')}
+${scopeHandler(mushi, 'mushiApexHandler')}
+${scopeHandler(glot, 'glotSpaHandler')}
 
 function handler(event) {
   var out = mushiApexHandler(event);

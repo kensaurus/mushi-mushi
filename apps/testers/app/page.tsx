@@ -3,6 +3,7 @@
  * Fetches from the public API, renders cards with SEO-friendly metadata.
  */
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { TestersPageShell } from './components/TestersPageShell'
 
 export const metadata: Metadata = {
@@ -67,9 +68,9 @@ export default async function MarketplacePage() {
           <a href={`${adminUrl}/login?as=tester`} className="testers-cta px-8 py-3 text-base">
             Start testing →
           </a>
-          <a href="/mushi-mushi/testers/apps/" className="testers-cta-secondary px-8 py-3 text-base">
+          <Link href="/apps/" className="testers-cta-secondary px-8 py-3 text-base">
             Browse apps
-          </a>
+          </Link>
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">
@@ -112,9 +113,9 @@ export default async function MarketplacePage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {apps.map(app => (
-              <a
+              <Link
                 key={app.id}
-                href={`/mushi-mushi/testers/apps/${app.slug}/`}
+                href={`/apps/${app.slug}/`}
                 className="testers-panel testers-panel-hover group flex gap-4 p-5"
               >
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--mushi-paper-wash)] text-2xl">
@@ -133,7 +134,7 @@ export default async function MarketplacePage() {
                     ))}
                   </div>
                 </div>
-              </a>
+              </Link>
             ))}
           </div>
         )}

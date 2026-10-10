@@ -1555,11 +1555,13 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     if (reopenErr) return withheldWriteFailed(c, 'approve', id, reopenErr.message)
 
     // If gift_card, make sure a tremendous_orders row exists (it may have been
-    // created already but with status='withheld' — re-open it).
+    // created already but with status='withheld' or 'failed' — re-open it).
+    // Clearing raw_payload resets the worker's attempt count, so an order
+    // that gave up gets a fresh set of retries (_shared/tremendous-retry.ts).
     if (redemption.kind === 'gift_card') {
       const { error: orderErr } = await supabase
         .from('tremendous_orders')
-        .update({ status: 'pending', external_id: null })
+        .update({ status: 'pending', external_id: null, raw_payload: null })
         .eq('redemption_id', id)
       if (orderErr) return withheldWriteFailed(c, 'approve', id, orderErr.message)
     } else {

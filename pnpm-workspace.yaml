@@ -223,9 +223,19 @@ minimumReleaseAgeExclude:
   # patch and keep the `npm audit --audit-level=high` CI gate green. Vercel-
   # maintained; provenance + audit signatures run as compensating controls.
   - 'next'
-  # next's version-locked platform binaries/compiler packages must move in
-  # lockstep with the next override above.
-  - '@next/*'
+  # next's version-locked runtime env and platform SWC binaries must move in
+  # lockstep with the next override above. Named one by one (the lockfile's
+  # full @next/* set) rather than '@next/*', so a new @next package still
+  # waits out the cooldown.
+  - '@next/env'
+  - '@next/swc-darwin-arm64'
+  - '@next/swc-darwin-x64'
+  - '@next/swc-linux-arm64-gnu'
+  - '@next/swc-linux-arm64-musl'
+  - '@next/swc-linux-x64-gnu'
+  - '@next/swc-linux-x64-musl'
+  - '@next/swc-win32-arm64-msvc'
+  - '@next/swc-win32-x64-msvc'
   # nanoid pinned exactly to 3.3.18 (2026-08-16): a new HIGH advisory
   # (custom generators loop indefinitely when size is 0) hits every
   # <3.3.18 release, on top of the earlier GHSA-2v37-7h3g-55p8 /

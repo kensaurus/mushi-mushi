@@ -24,3 +24,12 @@ describe('feedbackBodyBudget', () => {
     expect(feedbackBodyBudget('bug', ctx)).toBeGreaterThan(4600)
   })
 })
+
+describe('feedbackPageContextLine', () => {
+  it('keeps view-state params and masks every other value (tokens, auth codes)', () => {
+    expect(feedbackPageContextLine('/invite', '?token=s3cret&status=new&code=abc')).toBe(
+      'Page: /invite?token=…&status=new&code=…',
+    )
+    expect(feedbackPageContextLine('/reports', '')).toBe('Page: /reports')
+  })
+})

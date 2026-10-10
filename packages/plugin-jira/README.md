@@ -6,9 +6,8 @@ Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe co
 
 
 Bidirectional sync between Mushi Mushi reports and Jira Cloud issues.
-Creates issues on `report.created`, updates them on `report.classified`,
-transitions status on `report.status_changed`, and comments fix summaries on
-`fix.applied`.
+Creates issues on `report.created`, transitions status on
+`report.status_changed`, and comments fix summaries on `fix.applied`.
 
 ## Install
 
@@ -42,7 +41,14 @@ const tokens = await exchangeCode(config, code, codeVerifier)
 ```
 
 Tokens are short-lived — call `refreshTokens(config, tokens.refreshToken)`
-before expiry, or persist the mapping and refresh lazily on 401.
+before expiry, or persist the mapping and refresh lazily on 401. The refresh
+result leaves `cloudId` and `cloudUrl` empty (they never change), so merge it
+onto the stored record instead of replacing it:
+
+```ts
+const refreshed = await refreshTokens(config, stored.refreshToken)
+const tokens = { ...stored, ...refreshed, cloudId: stored.cloudId, cloudUrl: stored.cloudUrl }
+```
 
 ## Wire up the webhook handler
 

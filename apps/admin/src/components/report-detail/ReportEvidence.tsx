@@ -548,7 +548,13 @@ export function NetworkLogs({
               {/* Phase 4c: capture method provenance badge ("fetch" | "xhr" | "SDK") */}
               <span
                 className="shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
-                title={captureMethod === 'xhr' ? 'Captured via XMLHttpRequest patch' : 'Captured via fetch patch'}
+                title={
+                  captureMethod === 'xhr'
+                    ? 'Captured via XMLHttpRequest patch'
+                    : captureMethod === 'fetch'
+                      ? 'Captured via fetch patch'
+                      : 'Captured by an older SDK that did not record the method'
+                }
               >
                 {captureMethod ?? 'SDK'}
               </span>

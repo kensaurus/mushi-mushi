@@ -1002,6 +1002,7 @@ export function FixesPage() {
                 onRefreshed={loadFixes}
                 selectedIds={selectedIds}
                 onSelectFix={toggleSelectFix}
+                selectionDisabled={bulkBusy}
                 compactTable={ux.compactTable}
                 hideTableChrome={ux.hideTableChrome}
               />

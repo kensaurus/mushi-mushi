@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
-import { compactSource, functionUploadFiles, parseFingerprint, stripCommentsAndIndent } from './deploy-edge-function.mjs'
+import { compactSource, functionUploadFiles, parseFingerprint, readVerifyJwtFromConfig, stripCommentsAndIndent } from './deploy-edge-function.mjs'
 
 const ts = createRequire(join(fileURLToPath(new URL('../packages/server/', import.meta.url)), 'package.json'))('typescript')
 const compact = (src, rel = 'supabase/functions/x/index.ts') => compactSource(ts, rel, Buffer.from(src, 'utf8')).toString('utf8')
@@ -94,5 +94,23 @@ describe('compactSource', () => {
     const src = '// lead\nconst q = `\n  keep\n    this\n`\n'
     const out = stripCommentsAndIndent(ts, parse(src), src)
     assert.ok(out.includes('`\n  keep\n    this\n`'))
+  })
+})
+
+describe('readVerifyJwtFromConfig', () => {
+  it('reads the slug block, returns null for a missing file, and throws on any other read error', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'verify-jwt-'))
+    try {
+      const cfg = join(dir, 'config.toml')
+      writeFileSync(cfg, '[functions.api]\nverify_jwt = false\n\n[functions.other]\nverify_jwt = true\n')
+      assert.equal(readVerifyJwtFromConfig('api', cfg), false)
+      assert.equal(readVerifyJwtFromConfig('other', cfg), true)
+      assert.equal(readVerifyJwtFromConfig('absent', cfg), null)
+      assert.equal(readVerifyJwtFromConfig('api', join(dir, 'missing.toml')), null)
+      // A directory is EISDIR, not ENOENT: it must not fall back to the default.
+      assert.throws(() => readVerifyJwtFromConfig('api', dir))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

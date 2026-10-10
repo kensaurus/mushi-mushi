@@ -55,7 +55,9 @@ async function waitForRecorder(page) {
       { timeout: 45000 },
     )
     .catch(() => {
-      warn('  __mushiRecorder not ready — rebuild @mushi-mushi/web with debug:true and restart react-demo')
+      // Every later step drives the tour through __mushiRecorder, so carrying
+      // on would only fail later with a vaguer timeout.
+      throw new Error('__mushiRecorder not ready — rebuild @mushi-mushi/web with debug:true and restart react-demo')
     })
 }
 
@@ -105,7 +107,10 @@ const page = await context.newPage()
 
 step('1/7  Land on checkout — show Report bug edge tab…')
 await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 })
-await waitForRecorder(page)
+await waitForRecorder(page).catch(async (e) => {
+  await browser.close()
+  throw e
+})
 await pause(page, 3800)
 
 step('2/7  Click Report bug edge tab…')

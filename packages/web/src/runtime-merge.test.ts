@@ -82,9 +82,9 @@ describe('mergeRuntimeConfig — launcher / trigger precedence', () => {
   });
 
   it('ignores null widget fields from older edge functions', () => {
-    const runtime = {
+    const runtime: MushiRuntimeSdkConfig & { widget: { launcher: string } } = {
       widget: { triggerText: null, launcher: 'auto' },
-    } as MushiRuntimeSdkConfig;
+    };
     const merged = mergeRuntimeConfig(
       { ...BASE, widget: { ...BASE.widget, triggerText: 'Report bug' } },
       runtime,

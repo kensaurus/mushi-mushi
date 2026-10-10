@@ -8,6 +8,9 @@ import { expect, test, type Browser, type Page, type APIRequestContext } from '@
 
 const ADMIN_URL = process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464'
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? ''
+// supabase-js stores the session under sb-<first host label>-auth-token
+// (the admin client sets no storageKey), so derive it from the URL.
+const AUTH_STORAGE_KEY = `sb-${SUPABASE_URL ? new URL(SUPABASE_URL).hostname.split('.')[0] : 'unset'}-auth-token`
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 const SQL_RPC_ENABLED = process.env.E2E_TEAMS_SQL_RPC === '1'
@@ -91,10 +94,10 @@ async function loginViaRest(request: APIRequestContext, email: string, password:
 async function installSession(page: Page, tokens: LoginResult): Promise<void> {
   await page.addInitScript((input) => {
     window.localStorage.setItem(
-      'sb-mushi-auth-token',
+      input.storageKey,
       JSON.stringify({ access_token: input.access_token, refresh_token: input.refresh_token }),
     )
-  }, { access_token: tokens.access_token, refresh_token: tokens.refresh_token })
+  }, { access_token: tokens.access_token, refresh_token: tokens.refresh_token, storageKey: AUTH_STORAGE_KEY })
 }
 
 async function newAuthedPage(browser: Browser, tokens: LoginResult): Promise<Page> {

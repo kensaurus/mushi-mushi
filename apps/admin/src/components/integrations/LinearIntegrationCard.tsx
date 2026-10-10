@@ -99,7 +99,7 @@ export function LinearIntegrationCard({
     // the Authorization header and would 401 before reaching Linear.
     setConnecting(true)
     try {
-      const res = await apiFetch<{ url: string }>('/v1/admin/linear-oauth/authorize')
+      const res = await apiFetch<{ url: string }>('/v1/admin/linear-oauth/authorize', { cache: 'no-store' })
       if (res.ok && res.data?.url) {
         window.location.href = res.data.url
       } else {

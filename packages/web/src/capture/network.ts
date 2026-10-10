@@ -63,24 +63,24 @@ export interface NetworkCaptureOptions {
 /**
  * Active-request correlation tracker (Phase 3b).
  *
- * When a network request is in-flight we push its correlationId onto this stack.
- * Any console.error/warn or addBreadcrumb() that fires synchronously during the
- * request's lifetime (e.g. inside a catch block that immediately calls console.error)
- * can read the current active ID via `getActiveCorrelationId()`.
+ * When a network request is in-flight we push its correlationId onto this stack,
+ * and pop it when the request settles. Any console.error/warn or addBreadcrumb()
+ * that fires while it is on the stack reads it via `getActiveCorrelationId()`.
  *
- * This is intentionally best-effort.  The correlationId is stamped on the
- * network entry itself (always reliable) — prefer correlating via that field.
- * `getActiveCorrelationId()` is also available synchronously, but coverage is
- * limited:
- *   - ✗ Does NOT work in the caller's own catch block.  JavaScript runs the
+ * This is a module-level stack, not an async context, so it is best-effort.
+ * The correlationId is stamped on the network entry itself (always reliable) —
+ * prefer correlating via that field. What `getActiveCorrelationId()` returns:
+ *   - ✗ Nothing in the caller's own catch block.  JavaScript runs the
  *     wrapper's `finally` (which pops the ID) before the outer `catch` block
  *     executes, so `getActiveCorrelationId()` returns `undefined` there.
- *   - ✗ Does NOT track log lines emitted in other async microtasks scheduled
- *     while a request is in-flight.
- *   - ✓ Works for synchronous console calls made within the mushi wrapper's
- *     own catch/finally (the network entry is already stamped at that point).
+ *   - ✗ A possibly WRONG ID for logs from unrelated work: anything that logs
+ *     while a request is in flight (timers, other promises, UI handlers) is
+ *     stamped with the innermost in-flight request's ID, and with several
+ *     overlapping requests that is simply the most recently started one.
+ *   - ✓ The right ID for console calls made inside the mushi wrapper itself or
+ *     from a fetch/XHR interceptor running while that request is in flight.
  * The ID is exposed as a module-level export so the console capturer and
- * breadcrumb module can read it for cases where it IS available.
+ * breadcrumb module can read it.
  */
 const _activeCorrelationStack: string[] = [];
 
@@ -247,14 +247,20 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         storedTraceparent = generated.traceparent;
       }
 
-      // On XHR reuse (open → send → open → send), remove the stale
-      // readystatechange listener from the previous send() before overwriting
-      // state.  Without this, both the old and the new listener fire on the
-      // second request's completion, producing a garbled duplicate entry
-      // (old url/method with the new response's status code).
+      // On XHR reuse (open → send → open → send), the handler detaches itself
+      // at DONE. A listener still attached here means the previous request is
+      // in flight: open() aborts it without a DONE event. Remove that listener
+      // before overwriting state, or both the old and the new one fire on the
+      // second request's completion (a garbled duplicate entry: old url/method,
+      // new status), and pop its correlation ID, or every later log is
+      // stamped with it.
       const _prevXhrState = xhrStateMap.get(this);
       if (_prevXhrState?._listener) {
         this.removeEventListener('readystatechange', _prevXhrState._listener);
+        if (_prevXhrState.correlationId) {
+          const idx = _activeCorrelationStack.lastIndexOf(_prevXhrState.correlationId);
+          if (idx !== -1) _activeCorrelationStack.splice(idx, 1);
+        }
       }
 
       xhrStateMap.set(this, {
@@ -293,6 +299,10 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         // XHR reuse (see the cleanup block in the open() override above).
         const _readystateHandler = () => {
           if (this.readyState !== 4) return; // DONE
+          // Settled (load, error, abort and timeout all reach DONE): detach so
+          // a later open() knows there is nothing left to pop.
+          this.removeEventListener('readystatechange', _readystateHandler);
+          state._listener = undefined;
 
           // Mirror fetch: skip SDK-internal / ignoreUrls traffic so it does not
           // pollute the MAX_ENTRIES ring buffer.
@@ -324,7 +334,22 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         this.addEventListener('readystatechange', _readystateHandler);
       }
 
-      originalXhrSend!.call(this, body);
+      try {
+        originalXhrSend!.call(this, body);
+      } catch (err) {
+        // send() threw synchronously (e.g. InvalidStateError): no
+        // readystatechange will ever pop this ID, so undo the push and the
+        // listener here or every later log is stamped with it.
+        if (state?.correlationId) {
+          const idx = _activeCorrelationStack.lastIndexOf(state.correlationId);
+          if (idx !== -1) _activeCorrelationStack.splice(idx, 1);
+        }
+        if (state?._listener) {
+          this.removeEventListener('readystatechange', state._listener);
+          state._listener = undefined;
+        }
+        throw err;
+      }
     };
   }
 

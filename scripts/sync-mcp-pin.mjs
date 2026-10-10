@@ -35,6 +35,14 @@ const PINNED_FILES = [
   'packages/vscode-extension/src/extension.ts',
   'apps/docs/public/integrations/claude-hooks.json',
   'apps/docs/content/quickstart/mcp.mdx',
+  // Docs that show an MCP config or the stdio command. The console warns users
+  // whose config says @latest, so the docs must not tell them to write it.
+  'apps/docs/content/admin/mcp.mdx',
+  'apps/docs/content/sdks/mcp.mdx',
+  'apps/docs/content/concepts/orchestrator-interop.mdx',
+  'docs/operators/mcp-multi-project.md',
+  'docs/operators/reporter-comms-and-mcp-setup.md',
+  'packages/mcp/README.md',
 ]
 
 // The hosted MCP's generated catalog copy reports this version in serverInfo

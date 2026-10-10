@@ -2,7 +2,8 @@ name: PR guard
 
 # Detects and labels/comments on PRs that violate contribution hygiene:
 #   1. Targets a base branch other than `master`
-#   2. Adds root-level scripts (*.py, *.sh, *.mjs, *.js outside scripts/)
+#   2. Adds root-level scripts (*.py, *.sh, *.rb, *.ps1, *.js, *.mjs, *.cjs
+#      outside scripts/; *.config.{js,mjs,cjs} tool configs are allowed)
 #   3. Comes from a first-time contributor with a very large diff (>500 files)
 #      — a common signal for bounty-farming forks that inflate diff size by
 #      targeting a stale branch.
@@ -65,22 +66,25 @@ jobs:
             }
 
             // ── 2. Root-level scripts ─────────────────────────────────────
+            // Paginate: a root script past the first 100 files would
+            // otherwise slip through on exactly the large PRs this targets.
             let files = [];
             try {
-              const resp = await github.rest.pulls.listFiles({
+              files = await github.paginate(github.rest.pulls.listFiles, {
                 owner, repo, pull_number: prNum, per_page: 100
               });
-              files = resp.data;
             } catch (e) {
               core.warning(`Could not list PR files: ${e.message}`);
             }
 
             const rootScripts = files.filter(f => {
               const p = f.filename;
-              // Root-level *.py / *.sh added by the PR (not in scripts/)
+              // Root-level scripts added by the PR (not in scripts/); tool
+              // configs such as eslint.config.js stay allowed.
               return f.status === 'added' &&
                 !p.includes('/') &&
-                /\.(py|sh|rb|ps1)$/.test(p);
+                /\.(py|sh|rb|ps1|js|mjs|cjs)$/.test(p) &&
+                !/\.config\.(js|mjs|cjs)$/.test(p);
             });
 
             if (rootScripts.length > 0) {
@@ -129,7 +133,11 @@ jobs:
               return;
             }
 
+            // Hidden marker so a new push edits the guard's comment instead
+            // of posting another one.
+            const marker = '<!-- pr-guard -->';
             const body = [
+              marker,
               '## PR guard ⚠️',
               '',
               'The automated PR guard found the following issue(s). ' +
@@ -142,9 +150,21 @@ jobs:
               'See [CONTRIBUTING.md](CONTRIBUTING.md) §"What we don\'t accept" for the full policy.*',
             ].join('\n');
 
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: prNum, body
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNum, per_page: 100
             });
+            const existing = comments.find(
+              c => c.user?.type === 'Bot' && c.body?.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNum, body
+              });
+            }
 
             // Fail the check so the guard status is visible in the PR
             core.setFailed(

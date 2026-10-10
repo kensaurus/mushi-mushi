@@ -38,6 +38,8 @@ interface Props {
   /** Bulk selection by row (console QA 92). */
   selectedIds?: ReadonlySet<string>
   onSelectFix?: (fixId: string, selected: boolean) => void
+  /** True while a bulk merge/retry runs: selection is frozen until it ends. */
+  selectionDisabled?: boolean
   compactTable?: boolean
   hideTableChrome?: boolean
   actionLabels?: {
@@ -62,6 +64,7 @@ export function FixesTable({
   onRefreshed,
   selectedIds,
   onSelectFix,
+  selectionDisabled = false,
   compactTable = false,
   hideTableChrome = false,
   actionLabels,
@@ -148,6 +151,7 @@ export function FixesTable({
                     onRetry={() => onRetry(fix.report_id)}
                     selected={selectedIds?.has(fix.id) ?? false}
                     onSelectChange={onSelectFix ? (on) => onSelectFix(fix.id, on) : undefined}
+                    selectionDisabled={selectionDisabled}
                     compactTable={compactTable}
                     actionLabels={actionLabels}
                   />

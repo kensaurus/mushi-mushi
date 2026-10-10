@@ -50,5 +50,7 @@ function randomSuffix(): string {
   }
   let n = 0;
   for (const b of bytes) n = (n * 256 + b) >>> 0;
-  return n.toString(36).padStart(6, '0').slice(0, 6);
+  // Reduce into 36^6 first: slicing a 7-digit base36 string dropped its
+  // least-significant digit for about half of all values.
+  return (n % 36 ** 6).toString(36).padStart(6, '0');
 }

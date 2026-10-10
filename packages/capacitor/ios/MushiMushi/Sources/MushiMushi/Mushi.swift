@@ -270,10 +270,13 @@ public final class Mushi {
     /// Trigger an immediate offline queue flush. Reports the number of
     /// successfully delivered items via the optional completion handler.
     public func flushOfflineQueueNow(completion: ((Int) -> Void)? = nil) {
-        let client = withLock { _apiClient }
-        DispatchQueue.global().async {
-            client?.flushQueue()
+        guard let client = withLock({ _apiClient }) else {
             completion?(0)
+            return
+        }
+        // Completion fires after the flush finishes, with the real count.
+        DispatchQueue.global().async {
+            client.flushQueue { delivered in completion?(delivered) }
         }
     }
 

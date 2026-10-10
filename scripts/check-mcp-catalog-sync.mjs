@@ -23,4 +23,10 @@ const delegatePath = resolve(__dirname, '../packages/mcp/scripts/check-catalog-s
 
 const args = ['--strict-full-parity']
 const child = spawn(process.execPath, [delegatePath, ...args], { stdio: 'inherit' })
-child.on('exit', (code) => process.exit(code ?? 0))
+// A delegate killed by a signal exits with code null; that must fail the
+// gate, not pass it.
+child.on('error', (err) => {
+  console.error(`catalog sync: could not start the check: ${err.message}`)
+  process.exit(1)
+})
+child.on('exit', (code, signal) => process.exit(signal ? 1 : (code ?? 1)))

@@ -78,10 +78,10 @@ get_pipeline_logs { project_id: "<id>", level: "error", limit: 20 }
 Only after discussing findings and getting confirmation:
 
 ```
-dispatch_fix { reportId: "<id>", autoReadyPr: false }
+dispatch_fix { reportId: "<id>" }
 ```
 
-`autoReadyPr: false` keeps the PR as a draft for review before it can merge.
+`dispatch_fix` always opens a draft PR, so it is reviewed before it can merge. It returns `{ fixId, status }`; poll `get_fix_timeline` for the PR link.
 
 ## Safety rules
 

@@ -65,6 +65,7 @@ import {
   type DeviceProject,
 } from './device-auth.js';
 import {
+  firstEndpoint,
   normalizeEndpoint,
   resolveCloudEndpoint,
   TEST_REPORT_FETCH_TIMEOUT_MS,
@@ -166,7 +167,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   // so existing users aren't silently redirected to Mushi Cloud. Precedence:
   // --endpoint flag → MUSHI_API_ENDPOINT env → saved config → cloud default.
   const endpoint = resolveCloudEndpoint(
-    options.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim() ?? loadConfig().endpoint,
+    firstEndpoint(options.endpoint, process.env.MUSHI_API_ENDPOINT, loadConfig().endpoint),
   );
   // Thread the resolved endpoint through so every downstream step (verify,
   // connect offer, test report) talks to the same backend.

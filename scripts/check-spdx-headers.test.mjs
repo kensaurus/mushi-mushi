@@ -3,7 +3,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { distTargets, parseTsupEntries, resolveSource } from './check-spdx-headers.mjs'
+import { distTargets, leadingSpdx, parseTsupEntries, resolveSource } from './check-spdx-headers.mjs'
 
 test('distTargets collects every JS file the manifest exposes and skips types/css/json', () => {
   const targets = distTargets({
@@ -72,4 +72,13 @@ test('resolveSource maps through tsup, falls back to src/, and flags unbuilt tar
   assert.deepEqual(resolveSource('lib/index.js', entries, exists), { source: null, built: false })
   // No tsup config at all: trust the src/ fallback.
   assert.deepEqual(resolveSource('dist/index.js', new Map(), exists), { source: 'src/index.ts', built: true })
+})
+
+test('leadingSpdx accepts the identifier only on the first line after a BOM, shebang or directives', () => {
+  assert.equal(leadingSpdx('// SPDX-License-Identifier: MIT\nexport {}\n'), 'MIT')
+  assert.equal(leadingSpdx('\uFEFF#!/usr/bin/env node\n// SPDX-License-Identifier: MIT\n'), 'MIT')
+  assert.equal(leadingSpdx("'use client'\n\n// SPDX-License-Identifier: Apache-2.0\n"), 'Apache-2.0')
+  assert.equal(leadingSpdx('import x from "y"\n// SPDX-License-Identifier: MIT\n'), null)
+  assert.equal(leadingSpdx('/** docs */\n// SPDX-License-Identifier: MIT\n'), null)
+  assert.equal(leadingSpdx(''), null)
 })

@@ -46,13 +46,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  ADMIN_CONSOLE_URL as ADMIN_CONSOLE,
   getDocsAuthSession,
   openAdminAuthBridge,
   signOutDocs,
   type DocsAuthSession,
 } from '../lib/migrationProgress'
-
-const ADMIN_CONSOLE = 'https://kensaur.us/mushi-mushi/admin'
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -118,7 +117,7 @@ export function NavbarAuthChrome() {
   // Render anonymous shell while SSR / pre-hydration to avoid layout shift
   if (!hydrated) {
     return (
-      <div className="flex items-center gap-1" aria-hidden>
+      <div className="flex items-center gap-1">
         <ConsoleLink />
       </div>
     )
