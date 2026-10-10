@@ -23,7 +23,7 @@
  *
  *   {
  *     "plugins": ["mushi-mushi"],
- *     "extends": ["plugin:mushi-mushi/recommended"]
+ *     "extends": ["plugin:mushi-mushi/legacy"]
  *   }
  */
 
