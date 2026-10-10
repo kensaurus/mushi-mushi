@@ -21,6 +21,7 @@
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { getPlan, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
+import { diagnosisOverageBillable } from './billing-rules.ts'
 
 const CACHE_TTL_MS = 60_000
 
@@ -315,8 +316,16 @@ export function decideDiagnosisQuota(input: {
   hasSubscription: boolean
   spendCapUsd: number | null
   periodResetsAt: string
+  /**
+   * False when the subscription has no metered overage item (annual plans).
+   * Such a project stops at the included quota even though its plan row has
+   * an overage rate, because nothing on the subscription could bill it.
+   * Defaults to true. See `diagnosisOverageBillable` in billing-rules.ts.
+   */
+  overageBillable?: boolean
 }): DiagnosisQuotaVerdict {
   const { plan, used, hasSubscription, spendCapUsd, periodResetsAt } = input
+  const overageBillable = input.overageBillable ?? true
 
   if (plan.included_diagnoses_per_month === null) {
     return {
@@ -342,7 +351,7 @@ export function decideDiagnosisQuota(input: {
     }
   }
 
-  if (!plan.overage_unit_amount_decimal_diagnoses) {
+  if (!plan.overage_unit_amount_decimal_diagnoses || !overageBillable) {
     return {
       allowed: false,
       overage: false,
@@ -426,7 +435,8 @@ export function invalidateDiagnosisCache(projectId?: string): void {
  * This is the classify-level gate — it counts completed `diagnoses` events
  * (excluding Phase-1 shadow rows) and enforces:
  *  1. Included-quota limits (diagnosis count < plan.included_diagnoses_per_month).
- *  2. Overage-allowed flag (plan.overage_unit_amount_decimal_diagnoses is set).
+ *  2. Overage-allowed flag (plan.overage_unit_amount_decimal_diagnoses is set AND
+ *     the subscription carries the metered overage item; annual plans do not).
  *  3. Hard spend cap (plan default or per-sub override).
  */
 export async function checkDiagnosisQuota(
@@ -456,7 +466,7 @@ export async function checkDiagnosisQuota(
   ] = await Promise.all([
       db
         .from('billing_subscriptions')
-        .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override')
+        .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override, overage_subscription_item_id')
         .eq('project_id', projectId)
         .in('status', ['active', 'trialing', 'past_due'])
         .order('current_period_end', { ascending: false })
@@ -480,8 +490,14 @@ export async function checkDiagnosisQuota(
 
   const plan = await planFromProjectRows(sub, projectRow, COMP_OVERRIDES_FREE)
 
-  const periodResetsActual =
-    (sub as { current_period_end?: string | null } | null)?.current_period_end ?? periodResetsAt
+  // Annual subscriptions (no overage item) stop at the included quota, which
+  // resets with the calendar-month window, not at the yearly renewal date.
+  const overageBillable = diagnosisOverageBillable(
+    sub as { overage_subscription_item_id?: string | null } | null,
+  )
+  const periodResetsActual = overageBillable
+    ? (sub as { current_period_end?: string | null } | null)?.current_period_end ?? periodResetsAt
+    : periodResetsAt
 
   // Resolve effective spend cap: per-sub override wins, then plan default.
   const subCapOverride =
@@ -522,6 +538,7 @@ export async function checkDiagnosisQuota(
       hasSubscription: !!sub,
       spendCapUsd,
       periodResetsAt: periodResetsActual,
+      overageBillable,
     }),
   )
 }

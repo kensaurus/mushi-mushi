@@ -648,7 +648,7 @@ description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. 
 
 ## Plans
 
-  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.
+  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
 
@@ -727,7 +727,9 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 **Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
 
-**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+**Indie / Pro (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+
+**Indie / Pro (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Pro from **Change plan**.
 
 ### When does my quota reset?
 
@@ -747,11 +749,11 @@ By default, the **project owner**. Override the address under **Usage alert emai
 
 ### Can I downgrade mid-cycle?
 
-Downgrades take effect at **period end** via the Stripe portal. Upgrades apply immediately and are pro-rated.
+Change plans in the console with **Change plan** on the Billing page (Indie ↔ Pro, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
-Annual pricing applies to the **base subscription** only. Overage diagnoses are still billed monthly through Stripe Meters at the same per-diagnosis rate.
+No. Annual plans include the plan's diagnoses every month (500 on Indie, 2,000 on Pro) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Pro from **Change plan**.
 
 ### How do I estimate before signing up?
 

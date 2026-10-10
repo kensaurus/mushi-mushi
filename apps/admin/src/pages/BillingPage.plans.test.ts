@@ -13,9 +13,20 @@ const src = readFileSync(join(__dirname, 'BillingPage.tsx'), 'utf8')
 const table = src.slice(src.indexOf('<PlanComparisonTable'), src.indexOf('/>', src.indexOf('<PlanComparisonTable')))
 
 describe('Billing Plans tab', () => {
-  it('passes onSelectPlan into the same checkout the Overview picker uses', () => {
+  it('passes onSelectPlan into the same plan handler the Overview picker uses', () => {
     expect(table).toContain('onSelectPlan={')
-    expect(table).toContain('startCheckout(activeProject.project_id, planId)')
+    expect(table).toContain('pickPlan(activeProject.project_id, planId')
+    expect(src).toMatch(/onPickPlan=\{\(projectId, planId, billingInterval\) => \{[\s\S]*?pickPlan\(projectId, planId, billingInterval\)/)
+  })
+
+  // A paying project switches in-app (a second Checkout would 409
+  // ALREADY_SUBSCRIBED); a free project still goes to Checkout.
+  it('sends free projects to checkout and paying projects to the change-plan dialog', () => {
+    const handler = src.slice(src.indexOf('const pickPlan = useCallback'), src.indexOf('const triggerUpgrade'))
+    expect(handler).toContain('if (!paying) {')
+    expect(handler).toContain('void startCheckout(projectId, planId, billingInterval)')
+    expect(handler).toContain('setChangeTarget(')
+    expect(src).toContain('<ChangePlanDialog target={changeTarget}')
   })
 
   it('offers no checkout to complimentary accounts', () => {

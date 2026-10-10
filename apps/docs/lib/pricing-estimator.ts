@@ -41,8 +41,16 @@ export interface CostEstimate {
   capped: boolean
 }
 
-export function estimateCost(tier: PricingTier, diagnoses: number): CostEstimate {
+/**
+ * Annual paid plans have no pay-as-you-go overage: they stop at the included
+ * diagnoses each month (owner decision 2026-10-10; the server's diagnosis
+ * gate enforces it). Their monthly-equivalent base is the annual discount.
+ */
+export function estimateCost(tier: PricingTier, diagnoses: number, annual = false): CostEstimate {
   const overCount = Math.max(0, diagnoses - tier.included)
+  if (annual && tier.baseUsd > 0) {
+    return { total: displayBaseUsd(tier, true), overage: 0, capped: overCount > 0 }
+  }
   if (tier.overageUsd === null) {
     return { total: tier.baseUsd, overage: 0, capped: overCount > 0 }
   }

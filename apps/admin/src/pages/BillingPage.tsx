@@ -48,6 +48,7 @@ import {
 } from '../components/billing/types'
 import { BillingOverviewPanel } from '../components/billing/BillingOverviewPanel'
 import { BillingSupportPanel } from '../components/billing/BillingSupportPanel'
+import { ChangePlanDialog, type ChangePlanTarget } from '../components/billing/ChangePlanDialog'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -214,6 +215,24 @@ export function BillingPage() {
     }
     window.open(res.data.url, '_blank', 'noopener,noreferrer')
   }, [toast])
+
+  // A paying project changes plan in-app (prorated, Subscriptions API); a
+  // second Checkout would 409 ALREADY_SUBSCRIBED. Free projects go to Checkout.
+  const [changeTarget, setChangeTarget] = useState<ChangePlanTarget | null>(null)
+  const pickPlan = useCallback(
+    (projectId: string, planId: string, billingInterval: 'monthly' | 'annual') => {
+      const project = projects.find((p) => p.project_id === projectId)
+      const sub = project?.subscription
+      const paying = !!sub && !sub.synthetic && ['active', 'trialing', 'past_due'].includes(sub.status ?? '')
+      if (!paying) {
+        void startCheckout(projectId, planId, billingInterval)
+        return
+      }
+      const plan = (billing?.plans ?? []).find((p) => p.id === planId)
+      setChangeTarget({ projectId, planId, planName: plan?.display_name ?? planId, billingInterval })
+    },
+    [projects, billing?.plans, startCheckout],
+  )
 
   const triggerUpgrade = useCallback(() => {
     if (!activeProject) return
@@ -437,7 +456,7 @@ export function BillingPage() {
             }
             onPickPlan={(projectId, planId, billingInterval) => {
               setPickerFor(null)
-              void startCheckout(projectId, planId, billingInterval)
+              pickPlan(projectId, planId, billingInterval)
             }}
             onManage={openPortal}
             onReload={reloadAll}
@@ -454,7 +473,8 @@ export function BillingPage() {
             // accounts have no Stripe checkout, so no buttons there.
             onSelectPlan={
               activeProject && activeProject.billing_mode !== 'complimentary'
-                ? (planId) => void startCheckout(activeProject.project_id, planId)
+                ? (planId) =>
+                    pickPlan(activeProject.project_id, planId, activeProject.subscription?.billing_interval ?? 'monthly')
                 : undefined
             }
             busy={actioning === `checkout:${activeProject?.project_id ?? ''}`}
@@ -479,6 +499,7 @@ export function BillingPage() {
         {activeTab === 'support' && <BillingSupportPanel projects={projects} />}
 
       </div>
+      <ChangePlanDialog target={changeTarget} onClose={() => setChangeTarget(null)} onChanged={reloadAll} />
     </div>
   )
 }

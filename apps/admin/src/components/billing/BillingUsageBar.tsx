@@ -89,6 +89,7 @@ function buildUsageHeadline(
   overQuota: boolean,
   overageRate: number | null,
   tierId: string,
+  diagnoses = false,
 ): UsageHeadline {
   if (limit == null) {
     return { tone: 'muted', chipLabel: 'Unlimited', narrative: 'No monthly cap on this plan.' }
@@ -96,6 +97,16 @@ function buildUsageHeadline(
   const isHobby = tierId === 'hobby'
   if (overQuota || (pct != null && pct >= 100)) {
     const overageReports = Math.max(0, used - limit)
+    if (diagnoses && (overageRate == null || overageRate <= 0)) {
+      // Plans without diagnosis overage (free, annual) pause new diagnoses at
+      // the limit; reports keep arriving.
+      return {
+        tone: 'danger',
+        chipLabel: 'Limit reached',
+        narrative:
+          'New diagnoses are paused until the quota resets. Reports are still captured. Use Change plan or Upgrade for more.',
+      }
+    }
     if (isHobby || overageRate == null || overageRate <= 0) {
       return {
         tone: 'danger',
@@ -233,7 +244,7 @@ export function BillingUsageBar({
   const displayLimit = usingDiagnoses ? diagnosesLimit : limitReports
   const displayLabel = usingDiagnoses ? 'diagnoses this period' : 'reports this period'
 
-  const headline = buildUsageHeadline(displayCount, displayLimit, pct, overQuota, overageRate, tierId)
+  const headline = buildUsageHeadline(displayCount, displayLimit, pct, overQuota, overageRate, tierId, usingDiagnoses)
   const barTone = USAGE_BAR_TONE[headline.tone]
   // Bar fill: clamp at 100% so the visual length stays sane, but the chip +
   // narrative still report the *real* overage above the bar.

@@ -29,6 +29,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log } from '../_shared/logger.ts'
 import { listPlans } from '../_shared/plans.ts'
+import { diagnosisOverageBillable } from '../_shared/billing-rules.ts'
 import { notifyOperator } from '../_shared/operator-notify.ts'
 import { sendTransactionalEmail } from '../_shared/email.ts'
 import { runLlmBudgetAlerts } from '../_shared/llm-budget-alerts.ts'
@@ -61,13 +62,17 @@ function buildAlertEmail(opts: {
   spendCapUsd: number | null
   projectId: string
   alertTier: 50 | 80 | 100
+  /** Annual subscription: no overage item, so diagnoses stop at the limit. */
+  noOverage?: boolean
 }): { subject: string; html: string } {
   const isOver = opts.alertTier >= 100
   const threshold = `${opts.alertTier}%`
   const accentColor = isOver ? '#dc2626' : opts.alertTier >= 80 ? '#d97706' : '#2563eb'
   const used = opts.diagnosesUsed.toLocaleString()
   const limit = opts.diagnosesLimit.toLocaleString()
-  const capNote = opts.spendCapUsd
+  const capNote = opts.noOverage
+    ? `<p>Annual plans include a fixed number of diagnoses each month and have no overage, so nothing is charged above your plan price. For more diagnoses, switch to monthly or to Pro with <strong>Change plan</strong> in <a href="${CONSOLE_URL}/billing">Billing</a>.</p>`
+    : opts.spendCapUsd
     ? `<p>Your spend cap is set to <strong>$${opts.spendCapUsd}</strong>/month. Diagnoses will pause gracefully once you reach the cap — no surprise charges.</p>`
     : `<p><strong>Tip:</strong> Set a hard spend cap in <a href="${CONSOLE_URL}/billing">Billing settings</a> to prevent surprise charges.</p>`
 
@@ -191,7 +196,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   const [{ data: subs }, { data: settings }] = await Promise.all([
     db
       .from('billing_subscriptions')
-      .select('project_id, plan_id, status, monthly_spend_cap_usd_override')
+      .select('project_id, plan_id, status, monthly_spend_cap_usd_override, overage_subscription_item_id')
       .in('project_id', projectIds)
       .in('status', ['active', 'trialing', 'past_due']),
     db
@@ -317,6 +322,8 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
         spendCapUsd: spendCap,
         projectId,
         alertTier,
+        noOverage:
+          !!sub && !diagnosisOverageBillable(sub as { overage_subscription_item_id?: string | null }),
       })
       await sendEmail(toEmail, subject, html)
       aLog.info('usage alert sent', { projectId, pct, toEmail })
