@@ -39,7 +39,8 @@ Below the bar you will see:
 **What happens at 100%?**
 
 - **Free Cloud:** New reports are captured but **not diagnosed** until the period resets.
-- **Indie / Pro:** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Indie / Pro (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Indie / Pro (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
 ### Usage breakdown
 
@@ -74,19 +75,26 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ## Upgrading your plan
 
-1. Click **Upgrade** (or **Change plan**) on the project card.
-2. Browse the plan comparison table — it shows exactly which features each tier includes.
-3. Click **Select** on the plan you want.
-4. Complete payment in **Stripe Checkout**.
-5. The new plan activates when you return to Mushi.
+1. Click **Upgrade** on the project card.
+2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want.
+3. Complete payment in **Stripe Checkout**.
+4. The new plan activates when you return to Mushi.
 
-Annual billing (~two months free) is available after subscribing — open **Manage** in Stripe or contact sales for Enterprise commits.
+## Changing plan
+
+A project that already pays switches in the console, not in Checkout:
+
+1. Click **Change plan** on the project card.
+2. Choose Indie or Pro, monthly or annual. The current choice shows as **Current plan**.
+3. The dialog shows what Stripe charges now (or credits) for the prorated difference. Click **Confirm change**.
+
+The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team — use **Email sales** on the Plans tab.
 
 ---
 
 ## Managing payment and invoices
 
-Click **Manage** to open the **Stripe Billing Portal**. Use the portal for:
+Click **Manage** to open the **Stripe Billing Portal**. Plan changes happen in **Change plan** above; Stripe's portal cannot switch a subscription that has metered usage. Use the portal for:
 
 - Updating your credit card
 - Viewing upcoming invoices

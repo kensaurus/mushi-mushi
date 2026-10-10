@@ -7,6 +7,15 @@ import { countPeriodUsage, llmCostSince } from '../../_shared/billing-usage-coun
 import { log } from '../../_shared/logger.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
 
+/** Stripe price IDs of the annual (flat-rate, no overage) base prices. */
+function annualBasePriceIds(): Set<string> {
+  return new Set(
+    [Deno.env.get('STRIPE_PRICE_INDIE_ANNUAL'), Deno.env.get('STRIPE_PRICE_PRO_ANNUAL')].filter(
+      (v): v is string => !!v,
+    ),
+  );
+}
+
 export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
   // GET /v1/admin/billing/stats
@@ -522,7 +531,18 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             retention_days: plan.retention_days,
             feature_flags: plan.feature_flags,
           },
-          subscription: effectiveSub,
+          // `billing_interval` lets the console offer monthly ↔ annual in
+          // Change plan. Annual base prices are the two *_ANNUAL env prices.
+          subscription: effectiveSub
+            ? {
+                ...effectiveSub,
+                billing_interval: annualBasePriceIds().has(
+                  (effectiveSub as { stripe_price_id?: string | null }).stripe_price_id ?? '',
+                )
+                  ? 'annual'
+                  : 'monthly',
+              }
+            : effectiveSub,
           customer: cust,
           // Surfaces the org-level posture so the FE can render the
           // "Complimentary account" badge and hide checkout/manage CTAs.

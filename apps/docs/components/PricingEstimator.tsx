@@ -21,7 +21,8 @@ export function PricingEstimator() {
   const [annual, setAnnual] = useState(true)
 
   const activeTier = getTierById(activeTierId)
-  const { total, overage, capped } = estimateCost(activeTier, diagnoses)
+  const { total, overage, capped } = estimateCost(activeTier, diagnoses, annual)
+  const annualPaid = annual && activeTier.baseUsd > 0
   const displayBase = displayBaseUsd(activeTier, annual)
   const nextTierId = capped ? getNextTierId(activeTierId) : null
   const nextTier = nextTierId ? getTierById(nextTierId) : null
@@ -179,14 +180,15 @@ export function PricingEstimator() {
             <span>+${overage.toFixed(2)}</span>
           </div>
         )}
-        {capped && activeTier.capUsd !== null && (
+        {capped && activeTier.capUsd !== null && !annualPaid && (
           <div style={{ fontSize: 12, color: VIZ.positive, marginBottom: 6 }}>
             ✓ Spend cap (${activeTier.capUsd}/mo) prevents further charges — diagnoses pause gracefully.
           </div>
         )}
-        {capped && activeTier.overageUsd === null && (
+        {capped && (activeTier.overageUsd === null || annualPaid) && (
           <div style={{ fontSize: 12, color: VIZ.muted, marginBottom: 6 }}>
             Hard stop — diagnoses pause at {activeTier.included.toLocaleString()} / mo. No overage, no charge, no bill shock.
+            {annualPaid && activeTier.overageUsd !== null ? ' Annual plans have no overage; switch to monthly for pay-as-you-go.' : ''}
           </div>
         )}
         {capped && nextTier && (
@@ -223,7 +225,7 @@ export function PricingEstimator() {
       </div>
 
       <p style={{ margin: '12px 0 0', fontSize: 12, color: VIZ.faint }}>
-        Estimates use list pricing. Overage is metered monthly; annual saves {ANNUAL_DISCOUNT_MONTHS} months on base fees.{' '}
+        Estimates use list pricing. Monthly plans meter overage up to the spend cap; annual plans save {ANNUAL_DISCOUNT_MONTHS} months on base fees and stop at the included diagnoses.{' '}
         <a href="/self-hosting" style={{ color: VIZ.selected }}>
           Self-host for free
         </a>{' '}

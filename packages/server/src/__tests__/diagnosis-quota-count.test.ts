@@ -111,12 +111,30 @@ describe('checkDiagnosisQuota — counting works', () => {
   })
 
   it('lets the count drive the spend cap (over-cap usage → SPEND_CAP_REACHED)', async () => {
-    // 2167 used → 1667 overage × $0.03 = $50.01 ≥ $50 cap.
-    const db = makeDb({ sub: { status: 'active' }, count: { count: 2167, error: null } })
+    // 2167 used → 1667 overage × $0.03 = $50.01 ≥ $50 cap. A monthly
+    // subscription carries the metered overage item (the webhook stores it).
+    const db = makeDb({
+      sub: { status: 'active', overage_subscription_item_id: 'si_overage' },
+      count: { count: 2167, error: null },
+    })
     const v = await checkDiagnosisQuota(db, 'proj-count-over-cap')
     expect(v.allowed).toBe(false)
     expect(v.reason).toBe('SPEND_CAP_REACHED')
     expect(v.used).toBe(2167)
+  })
+
+  it('stops an annual subscription (no overage item) at the included quota, resetting monthly', async () => {
+    const db = makeDb({
+      sub: { status: 'active', overage_subscription_item_id: null, current_period_end: '2027-10-10T00:00:00Z' },
+      count: { count: 500, error: null },
+    })
+    const v = await checkDiagnosisQuota(db, 'proj-count-annual')
+    expect(v.allowed).toBe(false)
+    expect(v.overage).toBe(false)
+    expect(v.reason).toBe('OVER_INCLUDED_NO_OVERAGE')
+    // The included quota resets with the calendar month, not the yearly renewal.
+    expect(v.periodResetsAt).not.toBe('2027-10-10T00:00:00Z')
+    expect(Date.parse(v.periodResetsAt) - Date.now()).toBeLessThanOrEqual(32 * 86_400_000)
   })
 })
 

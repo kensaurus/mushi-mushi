@@ -8,7 +8,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'user.logged_in' | 'user.logged_out'
   | 'fix.attempted' | 'fix.reviewed' | 'fix.merge'
   | 'integration.synced' | 'plugin.executed'
-  | 'billing.checkout_started' | 'billing.subscription_changed' | 'billing.payment_failed'
+  | 'billing.checkout_started' | 'billing.plan_changed' | 'billing.subscription_changed' | 'billing.payment_failed'
   | 'support.ticket_created' | 'support.ticket_status_changed' | 'support.ticket_cancelled'
   | 'compliance.retention.updated'
   | 'compliance.dsar.created' | 'compliance.dsar.updated'

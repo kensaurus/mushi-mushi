@@ -8,6 +8,9 @@
 //   4. listInvoices                       — billing UI history
 //   5. recordMeterEvent                   — usage push (Stripe Meter Events)
 //   6. retrieveSubscription               — webhook hydrate w/ items expanded
+//   7. migrate / preview / update          — in-app plan change (Indie ↔ Pro,
+//                                            monthly ↔ annual), see
+//                                            api/routes/billing-change-plan.ts
 //
 // Plus signature verification for the webhook receiver.
 //
@@ -17,6 +20,7 @@
 import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
 import { SUPPORT_EMAIL } from './support.ts'
+import { planChangeItemFields, type PlanChangeItem } from './billing-rules.ts'
 
 const stripeLog = log.child('stripe')
 
@@ -248,7 +252,12 @@ export const listInvoices = (
 // with `expand[]=items.data` and read the period from `items.data[0]`.
 export interface StripeSubscriptionItem {
   id: string
-  price: { id: string; lookup_key?: string | null; metadata?: Record<string, string> }
+  price: {
+    id: string
+    lookup_key?: string | null
+    metadata?: Record<string, string>
+    recurring?: { interval?: string | null; interval_count?: number | null } | null
+  }
   current_period_start: number
   current_period_end: number
   metadata?: Record<string, string>
@@ -262,6 +271,15 @@ export interface StripeSubscription {
   current_period_end?: number
   metadata: Record<string, string>
   items: { data: StripeSubscriptionItem[] }
+  /** `{ type: 'classic' | 'flexible' }` on current API versions; a bare string on some. */
+  billing_mode?: { type?: string } | string | null
+}
+
+/** 'flexible' or 'classic' (the default for subscriptions created before migration). */
+export function subscriptionBillingMode(sub: Pick<StripeSubscription, 'billing_mode'>): string {
+  const bm = sub.billing_mode
+  if (typeof bm === 'string') return bm
+  return bm?.type ?? 'classic'
 }
 
 export const retrieveSubscription = (
@@ -533,3 +551,84 @@ export const createCustomerBalanceCredit = async (
 }
 
 declare const Deno: { env: { get(name: string): string | undefined } }
+
+// ----------------------------------------------------------------
+// In-app plan change (Subscriptions API; the portal cannot update a
+// subscription with a metered item — docs.stripe.com/customer-management)
+// ----------------------------------------------------------------
+
+/**
+ * Move a classic subscription to flexible billing mode. Flexible mode
+ * invoices a removed usage-based item's unbilled usage instead of dropping it
+ * (docs.stripe.com/billing/subscriptions/billing-mode/compare). One-way.
+ * Source: docs.stripe.com/api/subscriptions/migrate
+ */
+export const migrateSubscriptionToFlexible = (
+  cfg: StripeConfig,
+  subscriptionId: string,
+): Promise<StripeSubscription> =>
+  stripeFetch(cfg, `/subscriptions/${encodeURIComponent(subscriptionId)}/migrate`, {
+    method: 'POST',
+    body: form({ 'billing_mode[type]': 'flexible' }),
+  })
+
+export interface PlanChangeRequest {
+  subscriptionId: string
+  customerId: string
+  items: readonly PlanChangeItem[]
+  resetBillingAnchor: boolean
+  planId: string
+}
+
+export interface StripeInvoicePreview {
+  amount_due: number
+  total: number
+  currency: string
+  /** Negative when the customer ends up with credit. */
+  starting_balance?: number
+  ending_balance?: number | null
+  lines?: { data: Array<{ description: string | null; amount: number }> }
+}
+
+/**
+ * What the change would invoice right now, without changing anything.
+ * Source: docs.stripe.com/api/invoices/create_preview
+ */
+export const previewPlanChange = (
+  cfg: StripeConfig,
+  req: PlanChangeRequest,
+  nowSec: number,
+): Promise<StripeInvoicePreview> => {
+  const body = form({
+    customer: req.customerId,
+    subscription: req.subscriptionId,
+    'subscription_details[proration_behavior]': 'always_invoice',
+    'subscription_details[proration_date]': nowSec,
+    'subscription_details[billing_cycle_anchor]': req.resetBillingAnchor ? 'now' : undefined,
+  })
+  for (const [k, v] of planChangeItemFields('subscription_details[items]', req.items)) body.set(k, v)
+  return stripeFetch(cfg, '/invoices/create_preview', { method: 'POST', body })
+}
+
+/**
+ * Apply the change. `always_invoice` bills or credits the proration now;
+ * `error_if_incomplete` makes Stripe refuse the whole update (HTTP 402) when
+ * that invoice cannot be paid, so a declined card never leaves a half-changed
+ * subscription. Source: docs.stripe.com/billing/subscriptions/change-price
+ */
+export const applyPlanChange = (
+  cfg: StripeConfig,
+  req: PlanChangeRequest,
+): Promise<StripeSubscription> => {
+  const body = form({
+    proration_behavior: 'always_invoice',
+    payment_behavior: 'error_if_incomplete',
+    billing_cycle_anchor: req.resetBillingAnchor ? 'now' : undefined,
+    'metadata[plan_id]': req.planId,
+  })
+  for (const [k, v] of planChangeItemFields('items', req.items)) body.set(k, v)
+  return stripeFetch(cfg, `/subscriptions/${encodeURIComponent(req.subscriptionId)}`, {
+    method: 'POST',
+    body,
+  })
+}

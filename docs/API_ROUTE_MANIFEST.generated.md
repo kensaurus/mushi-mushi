@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-08 · **683** routes.
+> Generated: 2026-10-10 · **685** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 171 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 347 |
+| `jwtAuth` | 349 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 104 |
 
@@ -50,6 +50,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/auth/token` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/v1/admin/billing` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/billing.ts` |
 | PUT | `/v1/admin/billing/alert-email` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/billing.ts` |
+| POST | `/v1/admin/billing/change-plan` | `jwtAuth` | `packages/server/supabase/functions/api/routes/billing-change-plan.ts` |
+| POST | `/v1/admin/billing/change-plan/preview` | `jwtAuth` | `packages/server/supabase/functions/api/routes/billing-change-plan.ts` |
 | POST | `/v1/admin/billing/checkout` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/admin/billing/invoices` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/billing/portal` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
