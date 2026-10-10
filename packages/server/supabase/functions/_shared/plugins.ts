@@ -245,8 +245,8 @@ export async function dispatchPluginEvent(
     if (!muted && event === 'report.classified' && severityMin) {
       const severity = (data as { classification?: { severity?: unknown } } | null | undefined)
         ?.classification?.severity
-      const rank = CURSOR_SEVERITY_RANK[String(severity ?? '')] ?? 0
-      const minRank = CURSOR_SEVERITY_RANK[severityMin] ?? 1
+      const rank = cursorSeverityRank(severity) ?? 0
+      const minRank = cursorSeverityRank(severityMin) ?? 1
       muted = rank < minRank
     }
     if (muted) {
@@ -307,6 +307,14 @@ const CURSOR_EVENTS = new Set([
   'skill_pipeline.step.dispatched',
 ])
 const CURSOR_SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 }
+
+/** Rank of a severity name, or undefined. Own keys only: `in` and plain
+ *  indexing also accept "toString" / "constructor" and return a function. */
+export function cursorSeverityRank(severity: unknown): number | undefined {
+  return typeof severity === 'string' && Object.hasOwn(CURSOR_SEVERITY_RANK, severity)
+    ? CURSOR_SEVERITY_RANK[severity]
+    : undefined
+}
 
 async function resolveVaultRef(db: SupabaseClient, ref: string): Promise<string> {
   if (!ref) return ''
@@ -410,17 +418,13 @@ async function deliverCursorAgent(
   }
 
   const cfg = plugin.config ?? {}
-  const severityThreshold =
-    typeof cfg.severity_threshold === 'string' &&
-    cfg.severity_threshold in CURSOR_SEVERITY_RANK
-      ? cfg.severity_threshold
-      : 'critical'
+  // An unknown threshold falls back to critical.
+  const minRank = cursorSeverityRank(cfg.severity_threshold) ?? CURSOR_SEVERITY_RANK.critical!
 
   // Severity gate for report.classified
   if (event === 'report.classified') {
-    const d = data as { classification?: { severity?: string } } | null
-    const rank = CURSOR_SEVERITY_RANK[d?.classification?.severity ?? ''] ?? 0
-    const minRank = CURSOR_SEVERITY_RANK[severityThreshold]!
+    const d = data as { classification?: { severity?: unknown } } | null
+    const rank = cursorSeverityRank(d?.classification?.severity) ?? 0
     if (rank < minRank) return
   }
 
