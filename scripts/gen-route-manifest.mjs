@@ -9,15 +9,19 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const ROUTES_DIR = path.join(ROOT, 'packages/server/supabase/functions/api/routes')
 const OUT = path.join(ROOT, 'docs/API_ROUTE_MANIFEST.generated.md')
 
-const ROUTE_RE =
-  /app\.(get|post|put|patch|delete)\(\s*['"]([^'"]+)['"]\s*,\s*([\s\S]{0,240}?)\)/g
+// Matches up to the comma after the path. The middleware is read separately,
+// up to the inline handler: stopping at the first `)` cut the snippet inside
+// `async (c` or a middleware call such as `rateLimit({...})`.
+const ROUTE_RE = /app\.(get|post|put|patch|delete)\(\s*['"]([^'"]+)['"]\s*,/g
+const NEXT_ROUTE_RE = /\bapp\.(?:get|post|put|patch|delete|use|all|on)\(/
+const HANDLER_RE = /(?:async\s*)?\(\s*c\b[^)]*\)\s*=>/
 
 const AUTH_PATTERNS = [
   ['apiKeyAuth', 'apiKeyAuth'],
@@ -28,13 +32,21 @@ const AUTH_PATTERNS = [
   ['jwtOrApiKey', 'jwtOrApiKey'],
 ]
 
-function inferAuth(handlerSnippet) {
+/**
+ * `rest` is the registration source after the path's comma. The text before
+ * the inline `(c) =>` handler is the middleware list: a known auth name there
+ * labels the route, an empty list means `public`, anything else (custom
+ * middleware, a named handler) stays `unknown`.
+ */
+export function inferAuth(rest) {
+  const next = rest.search(NEXT_ROUTE_RE)
+  const registration = next === -1 ? rest : rest.slice(0, next)
+  const handlerAt = registration.search(HANDLER_RE)
+  const middleware = handlerAt === -1 ? registration : registration.slice(0, handlerAt)
   for (const [needle, label] of AUTH_PATTERNS) {
-    if (handlerSnippet.includes(needle)) return label
+    if (middleware.includes(needle)) return label
   }
-  if (/async\s*\(c\)\s*=>/.test(handlerSnippet) && !handlerSnippet.includes('Auth')) {
-    return 'public'
-  }
+  if (handlerAt !== -1 && middleware.trim() === '') return 'public'
   return 'unknown'
 }
 
@@ -48,7 +60,7 @@ function collectRoutes() {
     while ((match = ROUTE_RE.exec(source)) !== null) {
       const method = match[1].toUpperCase()
       const routePath = match[2]
-      const auth = inferAuth(match[3])
+      const auth = inferAuth(source.slice(ROUTE_RE.lastIndex, ROUTE_RE.lastIndex + 800))
       routes.push({ method, path: routePath, auth, file: rel })
     }
   }
@@ -120,4 +132,4 @@ function main() {
   console.log(`[gen] wrote ${path.relative(ROOT, OUT)} (${routes.length} routes)`)
 }
 
-main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

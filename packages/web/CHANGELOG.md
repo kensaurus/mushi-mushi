@@ -809,8 +809,9 @@
   The `workspace:^` protocol was leaking into published tarballs because
   `changeset publish` does not trigger pnpm's native workspace: rewriting.
   External consumers using npm/yarn were getting `EUNSUPPORTEDPROTOCOL` on
-  every install. This patch pins the dep to the real semver range and tightens
-  the `check-workspace-protocol` guard to block all `workspace:` variants.
+  every install. This patch pins the dep to the real semver range. The
+  `check-workspace-protocol` guard blocks `workspace:*` plus `link:`, `file:`,
+  `portal:` and `catalog:`; `workspace:^` / `workspace:~` stay allowed.
 
 ## 1.7.0
 

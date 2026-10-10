@@ -6,6 +6,7 @@
  */
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
 
 function JoinPageInner() {
@@ -84,9 +85,9 @@ function JoinPageInner() {
             </a>
             . Gift card payouts are subject to OFAC compliance and a $599/yr KYC threshold.
             See{' '}
-            <a href="/mushi-mushi/testers/how-it-works/" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
+            <Link href="/how-it-works/" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
               How it works
-            </a>{' '}
+            </Link>{' '}
             for full details.
           </p>
         </div>

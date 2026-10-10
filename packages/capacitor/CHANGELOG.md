@@ -558,7 +558,7 @@
   `20260418001500_byo_storage`, `20260418001600_byok_key_source`.
 
   ## New packages
-  - `@mushi-mushi/capacitor@0.2.0` — Capacitor plugin published to npm.
+  - `@mushi-mushi/capacitor@0.3.0` — Capacitor plugin published to npm.
   - `MushiMushi` (iOS) — published to CocoaPods + SwiftPM.
   - `dev.mushimushi:sdk` (Android) — published to Maven Central.
   - `mushi_mushi` (Flutter) — published to pub.dev.

@@ -345,20 +345,23 @@ Deploy one Helm chart per region and configure each with `global.region` and
 `MUSHI_PEER_REGIONS` into the API pod so edge functions can tag reports with
 the correct `data_residency_region`.
 
+Helm's `--set` and `--set-string` split on unescaped commas, so escape the
+comma in `peerRegions` and single-quote the argument to keep the backslash.
+
 ```bash
 # Deploy US region
 helm install mushi-us ./deploy/helm \
   --namespace mushi --create-namespace \
   --set global.database.host=postgres-us.internal \
   --set global.region=us \
-  --set global.peerRegions="eu,jp"
+  --set-string 'global.peerRegions=eu\,jp'
 
 # Deploy EU region
 helm install mushi-eu ./deploy/helm \
   --namespace mushi --create-namespace \
   --set global.database.host=postgres-eu.internal \
   --set global.region=eu \
-  --set global.peerRegions="us,jp"
+  --set-string 'global.peerRegions=us\,jp'
 ```
 
 Set up GeoDNS (Route 53 latency routing, Cloudflare load balancer, etc.) to

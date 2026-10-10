@@ -36,6 +36,7 @@ export type { ProactiveTriggerCallbacks, ProactiveTriggerCleanup } from './proac
 // Re-export core types for convenience
 export type {
   MushiConfig,
+  MushiInitConfig,
   MushiReport,
   MushiReportCategory,
   MushiSDKInstance,

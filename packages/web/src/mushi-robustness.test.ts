@@ -119,4 +119,39 @@ describe('Mushi public API error isolation', () => {
     });
     expect(shadow.querySelector('[data-action="screenshot"]')?.textContent).toContain('Try again');
   });
+
+  it('a screenshotProvider that resolves to a file:// URI attaches nothing', async () => {
+    const sdk = Mushi.init({
+      ...CONFIG,
+      capture: { screenshot: 'on-report', screenshotProvider: () => Promise.resolve('file:///data/shot.png') },
+    });
+    sdk.report({ featureRequest: true });
+    const shadow = document.getElementById('mushi-mushi-widget')!.shadowRoot!;
+    (shadow.querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(shadow.querySelector('[data-action="screenshot"]')?.textContent).toContain('Try again');
+    });
+    expect(shadow.querySelector('.mushi-screenshot-preview img')).toBeNull();
+  });
+
+  it('a report the user opened themselves keeps the proactive dismissal streak', async () => {
+    localStorage.setItem('mushi:consecDismiss', '2');
+    const posts: string[] = [];
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (init?.method === 'POST') posts.push(String(input));
+      return new Response(JSON.stringify({ ok: true, data: { reportId: 'r-1' } }), { status: 200 });
+    });
+    const sdk = Mushi.init({ ...CONFIG, proactive: { rageClick: true } });
+    sdk.report({ featureRequest: true });
+    const shadow = document.getElementById('mushi-mushi-widget')!.shadowRoot!;
+    const ta = shadow.querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    ta.value = 'The export button does nothing';
+    ta.dispatchEvent(new Event('input'));
+    (shadow.querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => expect(posts.some((u) => u.endsWith('/v1/reports'))).toBe(true));
+    expect(localStorage.getItem('mushi:consecDismiss')).toBe('2');
+    localStorage.removeItem('mushi:consecDismiss');
+  });
 });

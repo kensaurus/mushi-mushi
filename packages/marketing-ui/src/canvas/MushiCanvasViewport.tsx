@@ -126,108 +126,111 @@ function CanvasInner() {
   return (
     <div className="mushi-canvas-light mushi-canvas-shell grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_min(400px,38%)] lg:items-stretch">
       <div
-      className="mushi-canvas-frame relative h-[min(680px,calc(100vh-8rem))] min-h-[520px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-    >
-      {/* Top-left stage indicator. Vermillion is reserved for the live dot
-          (semantic) and a single ARIA-current pulse — the stage number itself
-          is now ink so it doesn't compete with the active jump pill on the
-          right OR the active card's bottom rail. The kicker is the data
-          carrier; it should read like a caption, not a brand stripe. */}
-      <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-2.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-3 py-1.5 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur sm:left-6 sm:top-6">
-        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]" />
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--mushi-ink-muted)]">
-          <span className="text-[var(--mushi-ink)] font-semibold">
-            Stage {String(focusStage.index + 1).padStart(2, '0')}
-          </span>
-          <span className="mx-2 opacity-40">/</span>
-          {focusStage.kicker}
-        </p>
-      </div>
-
-      {/* Stage jump pills. The previous treatment painted the active pill in
-          solid vermillion AND tinted inactive labels in vermillion-on-hover —
-          all five pills competed for "I am current". The fix is the M3 /
-          Stripe / Vercel pattern: active = micro-pill (solid vermillion
-          wrapping ONLY the digits + label), inactive = neutral ink-muted
-          text on transparent (hover lifts to ink, not brand). The bounding
-          box is identical for every pill (px-2 py-0.5 → no layout shift on
-          state change) — the active *signal* is colour, not size, killing
-          the H1 "active mass mismatch" the user named "weirdly big". */}
-      <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
-        <div className="flex items-center gap-0.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] p-1 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur">
-          {stages.map((stage) => {
-            const isActive = stage.id === focusStage.id
-            const isSelected = stage.id === selectedStageId
-            const lit = isActive || isSelected
-            return (
-              <button
-                key={stage.id}
-                type="button"
-                onClick={() => {
-                  setFocusIndex(stage.index)
-                }}
-                aria-label={`Jump to stage ${stage.index + 1}: ${stage.title}`}
-                aria-current={isActive ? 'step' : undefined}
-                className={`group inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] transition-[transform,opacity] ${
-                  lit
-                    ? 'bg-[var(--mushi-vermillion)] text-white shadow-[inset_0_-1.5px_0_rgba(0,0,0,0.18)]'
-                    : 'text-[var(--mushi-ink-muted)] hover:bg-[color-mix(in_oklch,var(--mushi-ink)_8%,transparent)] hover:text-[var(--mushi-ink)]'
-                }`}
-              >
-                <span className={lit ? 'font-semibold' : 'opacity-70'}>
-                  {String(stage.index + 1).padStart(2, '0')}
-                </span>
-                <span className="hidden sm:inline">{stage.id}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Bottom-left "click any card" hint REMOVED. It said the same thing as
-          the section header at the right ("Click any card to inspect →") in
-          the same viewport fold (enhance-page-ui H14). Keeping it would have
-          paid two sets of pixels for one piece of guidance. The keyboard
-          shortcut hint can come back later as a discoverable affordance. */}
-
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.42}
-        maxZoom={1.05}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        panOnDrag={false}
-        zoomOnPinch={false}
-        zoomOnScroll={false}
-        panOnScroll={false}
-        preventScrolling={false}
-        onNodeClick={(_, node) => {
-          const id = node.id as MushiStageId
-          const idx = stages.findIndex((stage) => stage.id === id)
-          if (idx >= 0) setFocusIndex(idx)
-          setSelectedStageId(id)
-        }}
-        proOptions={{ hideAttribution: true }}
+        className="mushi-canvas-frame relative h-[min(680px,calc(100vh-8rem))] min-h-[520px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
       >
-        <Background color="var(--mushi-rule)" gap={22} size={1} />
-        <Panel position="bottom-center">
-          <LogTicker focusStageId={focusStage.id} />
-        </Panel>
-      </ReactFlow>
+        {/* Top-left stage indicator. Vermillion is reserved for the live dot
+            (semantic) and a single ARIA-current pulse — the stage number itself
+            is now ink so it doesn't compete with the active jump pill on the
+            right OR the active card's bottom rail. The kicker is the data
+            carrier; it should read like a caption, not a brand stripe. */}
+        <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-2.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-3 py-1.5 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur sm:left-6 sm:top-6">
+          <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]" />
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--mushi-ink-muted)]">
+            <span className="text-[var(--mushi-ink)] font-semibold">
+              Stage {String(focusStage.index + 1).padStart(2, '0')}
+            </span>
+            <span className="mx-2 opacity-40">/</span>
+            {focusStage.kicker}
+          </p>
+        </div>
 
-      <StageDrawer
-        stage={selectedStage}
-        sample={reportSample}
-        onClose={() => setSelectedStageId(null)}
-      />
+        {/* Stage jump pills. The previous treatment painted the active pill in
+            solid vermillion AND tinted inactive labels in vermillion-on-hover —
+            all five pills competed for "I am current". The fix is the M3 /
+            Stripe / Vercel pattern: active = micro-pill (solid vermillion
+            wrapping ONLY the digits + label), inactive = neutral ink-muted
+            text on transparent (hover lifts to ink, not brand). The bounding
+            box is identical for every pill (px-2 py-0.5 → no layout shift on
+            state change) — the active *signal* is colour, not size, killing
+            the H1 "active mass mismatch" the user named "weirdly big". */}
+        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+          <div className="flex items-center gap-0.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] p-1 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur">
+            {stages.map((stage) => {
+              const isActive = stage.id === focusStage.id
+              const isSelected = stage.id === selectedStageId
+              const lit = isActive || isSelected
+              return (
+                <button
+                  key={stage.id}
+                  type="button"
+                  onClick={() => {
+                    setFocusIndex(stage.index)
+                    // A pill alone doesn't open the drawer, but when one is
+                    // open it follows the jump so only one stage is lit.
+                    setSelectedStageId((current) => (current ? stage.id : current))
+                  }}
+                  aria-label={`Jump to stage ${stage.index + 1}: ${stage.title}`}
+                  aria-current={isActive ? 'step' : undefined}
+                  className={`group inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] transition-[transform,opacity] ${
+                    lit
+                      ? 'bg-[var(--mushi-vermillion)] text-white shadow-[inset_0_-1.5px_0_rgba(0,0,0,0.18)]'
+                      : 'text-[var(--mushi-ink-muted)] hover:bg-[color-mix(in_oklch,var(--mushi-ink)_8%,transparent)] hover:text-[var(--mushi-ink)]'
+                  }`}
+                >
+                  <span className={lit ? 'font-semibold' : 'opacity-70'}>
+                    {String(stage.index + 1).padStart(2, '0')}
+                  </span>
+                  <span className="hidden sm:inline">{stage.id}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Bottom-left "click any card" hint REMOVED. It said the same thing as
+            the section header at the right ("Click any card to inspect →") in
+            the same viewport fold (enhance-page-ui H14). Keeping it would have
+            paid two sets of pixels for one piece of guidance. The keyboard
+            shortcut hint can come back later as a discoverable affordance. */}
+
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.3 }}
+          minZoom={0.42}
+          maxZoom={1.05}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag={false}
+          zoomOnPinch={false}
+          zoomOnScroll={false}
+          panOnScroll={false}
+          preventScrolling={false}
+          onNodeClick={(_, node) => {
+            const id = node.id as MushiStageId
+            const idx = stages.findIndex((stage) => stage.id === id)
+            if (idx >= 0) setFocusIndex(idx)
+            setSelectedStageId(id)
+          }}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color="var(--mushi-rule)" gap={22} size={1} />
+          <Panel position="bottom-center">
+            <LogTicker focusStageId={focusStage.id} />
+          </Panel>
+        </ReactFlow>
+
+        <StageDrawer
+          stage={selectedStage}
+          sample={reportSample}
+          onClose={() => setSelectedStageId(null)}
+        />
       </div>
 
       <aside

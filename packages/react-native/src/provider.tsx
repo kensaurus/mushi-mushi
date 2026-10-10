@@ -6,7 +6,8 @@
  * - Creates MushiContext with open/close/submitReport/capture accessors
  * - Sets up console + network capture on mount, tears down on unmount
  * - Renders MushiBottomSheet and (optionally) MushiFloatingButton as siblings of children
- * - widget.trigger controls auto-UI: 'button'/'auto' shows FAB, 'manual' shows nothing
+ * - widget.trigger controls auto-UI: 'button'/'both'/'auto'/'edge-tab' show the FAB,
+ *   'banner' shows the banner, 'manual'/'hidden'/'attach' show nothing
  *
  * DEPENDENCIES:
  * - ./capture/* for console, network, device info
@@ -19,7 +20,8 @@
  *
  * TECHNICAL DETAILS:
  * - open() / close() toggle `sheetVisible` state which drives the bottom sheet
- * - MushiRNConfig.widget.trigger: 'button' (default) | 'shake' | 'both' | 'manual' | 'banner'
+ * - MushiRNConfig.widget.trigger: 'button' (default) | 'shake' | 'both' | 'manual' | 'auto'
+ *   | 'banner' | 'edge-tab' | 'hidden' | 'attach'
  * - MushiRNConfig.widget.buttonPosition: 'bottom-right' (default) | 'bottom-left'
  *
  * NOTES:

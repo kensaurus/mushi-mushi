@@ -27,6 +27,7 @@ import {
   lintCursorManifest,
   lintMcpConfig,
   listTrackedJsonFiles,
+  packageEntryFiles,
   placeholderUrlReason,
   repoPathFromRawUrl,
 } from './lib/mcp-configs.mjs'
@@ -164,6 +165,42 @@ describe('repoPathFromRawUrl', () => {
     assert.equal(repoPathFromRawUrl('https://raw.githubusercontent.com/someone/else/master/logo.png'), null)
     assert.equal(repoPathFromRawUrl('https://raw.githubusercontent.com/kensaurus/mushi-mushi/master'), null)
     assert.equal(repoPathFromRawUrl('not a url'), null)
+  })
+})
+
+describe('packageEntryFiles', () => {
+  it('lists main, types, bin and every nested exports leaf once', () => {
+    const pkg = {
+      main: './dist/server.js',
+      types: './dist/server.d.ts',
+      bin: { cli: './dist/index.js' },
+      exports: {
+        '.': { types: './dist/server.d.ts', import: './dist/server.js' },
+        './extra': { node: { types: './dist/extra.d.ts', default: './dist/extra.js' } },
+        './glob/*': './dist/glob/*.js',
+        './blocked': null,
+      },
+    }
+    assert.deepEqual(packageEntryFiles(pkg), [
+      'dist/server.js',
+      'dist/server.d.ts',
+      'dist/index.js',
+      'dist/extra.d.ts',
+      'dist/extra.js',
+    ])
+  })
+
+  it('a string bin counts as an entry', () => {
+    assert.deepEqual(packageEntryFiles({ bin: 'bin/cli.js' }), ['bin/cli.js'])
+  })
+
+  it('covers the .js and .d.ts of every @mushi-mushi/mcp export subpath', () => {
+    const pkg = JSON.parse(readFileSync(resolve(ROOT, 'packages/mcp/package.json'), 'utf8'))
+    const files = packageEntryFiles(pkg)
+    for (const leaf of Object.values(pkg.exports)) {
+      for (const p of Object.values(leaf)) assert.ok(files.includes(p.replace(/^\.\//, '')), p)
+    }
+    assert.ok(files.includes('dist/index.js'), 'the bin is checked')
   })
 })
 

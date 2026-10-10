@@ -1,0 +1,6 @@
+node_modules
+dist
+# Env files hold your Mushi API key; .env.example stays committed.
+.env
+.env.*
+!.env.example

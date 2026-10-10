@@ -39,7 +39,7 @@ export function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): Remo
       theme: config.theme,
       trigger: config.trigger,
       launcher: config.trigger,
-      triggerText: config.triggerText.trim() ? config.triggerText : null,
+      triggerText: config.triggerText.trim() || null,
       attachToSelector: config.attachToSelector.trim() || null,
       bannerVariant: config.bannerVariant,
       bannerPosition: config.bannerPosition,

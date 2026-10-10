@@ -113,7 +113,15 @@ Patterns and their placeholders (all matched case-sensitively unless noted):
 | US SSN | `[REDACTED_SSN]` | on |
 | Credit-card PAN | `[REDACTED_CC]` | on |
 | JWT (`eyJ….….…`) | `[REDACTED_JWT]` | on |
-| AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Google keys | `[REDACTED_*_KEY]` (per vendor) | on |
+| AWS access key | `[REDACTED_AWS_KEY]` | on |
+| AWS secret access key (case-insensitive key name) | `aws_secret_access_key=[REDACTED_AWS_SECRET]` | on |
+| Stripe secret / restricted key | `[REDACTED_STRIPE_KEY]` | on |
+| Stripe publishable key | `[REDACTED_STRIPE_PK]` | on |
+| Slack token | `[REDACTED_SLACK_TOKEN]` | on |
+| GitHub personal access token | `[REDACTED_GITHUB_PAT]` | on |
+| OpenAI key | `[REDACTED_OPENAI_KEY]` | on |
+| Anthropic key | `[REDACTED_ANTHROPIC_KEY]` | on |
+| Google API key | `[REDACTED_GOOGLE_KEY]` | on |
 | IPv4 address | `[REDACTED_IP]` | **off** |
 | IPv6 address | `[REDACTED_IPV6]` | **off** |
 

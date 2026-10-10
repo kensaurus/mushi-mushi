@@ -4,6 +4,11 @@ final class ApiClient {
     private let config: MushiConfig
     private let session: URLSession
     private let queue: OfflineQueue
+    /// One flush at a time: the timer, the network monitor and the JS
+    /// `flushQueue()` can overlap, and two flushes of the same head would send
+    /// it twice and then clear twice as many reports as were delivered.
+    private let flushLock = NSLock()
+    private var flushing = false
 
     init(config: MushiConfig, queue: OfflineQueue) {
         self.config = config
@@ -38,10 +43,67 @@ final class ApiClient {
             payload["breadcrumbs"] = crumbs
         }
 
-        guard let url = URL(string: "\(config.endpoint)/v1/reports") else {
+        guard URL(string: "\(config.endpoint)/v1/reports") != nil else {
             queue.enqueue(payload)
             completion?(.failure(MushiError.invalidEndpoint))
             return
+        }
+
+        // Added: retry+jitter (Phase 2.4)
+        Task { [weak self] in
+            guard let self else { return }
+            if await self.deliver(payload) {
+                completion?(.success(()))
+            } else {
+                self.queue.enqueue(payload)
+                completion?(.failure(MushiError.serverError(-1)))
+            }
+        }
+    }
+
+    /// Flushes the offline queue in order, one report at a time, and stops on
+    /// the first failure to avoid hammering a degraded server. Only the
+    /// delivered head of the queue is cleared, so a failed report keeps its
+    /// place and is never re-enqueued as a duplicate. Mirrors Android.
+    func flushQueue(maxBatch: Int = 25, completion: ((Int) -> Void)? = nil) {
+        flushLock.lock()
+        if flushing {
+            flushLock.unlock()
+            completion?(0)
+            return
+        }
+        flushing = true
+        flushLock.unlock()
+
+        let batch = queue.peek(limit: maxBatch)
+        guard !batch.isEmpty else {
+            endFlush()
+            completion?(0)
+            return
+        }
+        Task {
+            var delivered = 0
+            for payload in batch {
+                guard await self.deliver(payload) else { break }
+                delivered += 1
+            }
+            self.queue.clearDelivered(count: delivered)
+            self.endFlush()
+            completion?(delivered)
+        }
+    }
+
+    private func endFlush() {
+        flushLock.lock()
+        flushing = false
+        flushLock.unlock()
+    }
+
+    /// One POST /v1/reports with retry+jitter. Never touches the queue.
+    private func deliver(_ payload: [String: Any]) async -> Bool {
+        guard let url = URL(string: "\(config.endpoint)/v1/reports"),
+              let data = try? JSONSerialization.data(withJSONObject: payload) else {
+            return false
         }
 
         var request = URLRequest(url: url)
@@ -52,48 +114,15 @@ final class ApiClient {
         request.setValue("@mushi-mushi/ios", forHTTPHeaderField: "X-Mushi-SDK-Package")
         request.setValue(MushiInfo.sdkVersion, forHTTPHeaderField: "X-Mushi-SDK-Version")
 
-        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
-            queue.enqueue(payload)
-            completion?(.failure(MushiError.invalidEndpoint))
-            return
+        let success = await sendWithRetry(request: request, data: data)
+        if success {
+            NotificationCenter.default.post(
+                name: Notification.Name("dev.mushimushi.report.submitted"),
+                object: nil,
+                userInfo: payload
+            )
         }
-
-        // Added: retry+jitter (Phase 2.4)
-        Task { [weak self] in
-            guard let self else { return }
-            let success = await self.sendWithRetry(request: request, data: data)
-            if success {
-                NotificationCenter.default.post(
-                    name: Notification.Name("dev.mushimushi.report.submitted"),
-                    object: nil,
-                    userInfo: payload
-                )
-                completion?(.success(()))
-            } else {
-                self.queue.enqueue(payload)
-                completion?(.failure(MushiError.serverError(-1)))
-            }
-        }
-    }
-
-    /// Flushes the offline queue. Stops on the first failure to avoid
-    /// hammering a degraded server.
-    func flushQueue(maxBatch: Int = 25) {
-        let batch = queue.peek(limit: maxBatch)
-        guard !batch.isEmpty else { return }
-
-        var delivered = 0
-        let group = DispatchGroup()
-        for payload in batch {
-            group.enter()
-            submitReport(payload) { result in
-                if case .success = result { delivered += 1 }
-                group.leave()
-            }
-        }
-        group.notify(queue: .global()) { [weak self] in
-            self?.queue.clearDelivered(count: delivered)
-        }
+        return success
     }
 
     // Added: retry+jitter (Phase 2.4)

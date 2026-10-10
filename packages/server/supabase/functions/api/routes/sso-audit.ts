@@ -669,7 +669,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     let query = db
       .from('audit_logs')
       .select(
-        'id, project_id, actor_id, actor_email, action, resource_type, resource_id, metadata, created_at',
+        'id, project_id, actor_id, actor_email, actor_type, action, resource_type, resource_id, metadata, created_at',
         { count: 'exact' },
       )
       .in('project_id', projectIds)

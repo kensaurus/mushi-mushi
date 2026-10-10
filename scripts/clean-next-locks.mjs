@@ -21,15 +21,11 @@ function pidAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM means the PID exists but is owned by another user — treat as
-    // alive rather than deleting a live lock. ESRCH (or any other error)
-    // means no such process.
-    //
-    // On Windows, process.kill(pid, 0) throws EPERM for PIDs that don't
-    // exist at all (not just permission-denied ones), so this signal is
-    // meaningless there — treat it as "dead" on win32 so stale lock files
-    // still get cleaned up instead of blocking `next dev` forever.
-    if (process.platform === "win32") return false;
+    // EPERM means the PID exists but this user cannot signal it (another
+    // user's or an elevated process) — treat as alive rather than deleting a
+    // live lock. ESRCH (or any other error) means no such process. Windows
+    // behaves the same: libuv reports a missing PID as ESRCH and a live but
+    // inaccessible one (e.g. an elevated `next dev`) as EPERM.
     return err?.code === "EPERM";
   }
 }

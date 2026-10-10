@@ -7,7 +7,7 @@
  * in the hardened behaviour so we don't regress.
  */
 
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { __test } from './index.js'
 
 const { pickSessionCookie, validateInlineAuthScript, isAnalyticsCookie } = __test
@@ -184,5 +184,71 @@ describe('validateInlineAuthScript', () => {
     expect(() => validateInlineAuthScript('await page.fill("a", process.env.TOKEN)')).toThrow(
       /forbidden token/,
     )
+  })
+})
+
+// ----------------------------------------------------------------------------
+// loadInventory
+// ----------------------------------------------------------------------------
+
+describe('loadInventory', () => {
+  const opts = { apiEndpoint: 'https://api.test', apiKey: 'k', projectId: 'p1' }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  function stubBody(body: unknown) {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body), { status: 200 }))
+  }
+
+  it('unwraps the snapshot from the { snapshot, summary } envelope', async () => {
+    const parsed = { app: { id: 'a', base_url: 'https://app.test' } }
+    stubBody({ ok: true, data: { snapshot: { parsed }, summary: null, updatedAt: null } })
+    await expect(__test.loadInventory(opts)).resolves.toEqual({ parsed })
+  })
+
+  it('throws a clear error when the project has no current inventory', async () => {
+    stubBody({ ok: true, data: { snapshot: null, summary: null, updatedAt: null } })
+    await expect(__test.loadInventory(opts)).rejects.toThrow(/no current inventory/)
+  })
+
+  it('surfaces the server message from an ok:false envelope', async () => {
+    stubBody({ ok: false, error: { code: 'FORBIDDEN', message: 'key lacks inventory:read' } })
+    await expect(__test.loadInventory(opts)).rejects.toThrow(
+      'Could not load inventory: key lacks inventory:read',
+    )
+  })
+})
+
+// ----------------------------------------------------------------------------
+// api envelope parsing
+// ----------------------------------------------------------------------------
+
+describe('api', () => {
+  const base = { endpoint: 'https://api.test', apiKey: 'k', projectId: 'p1', path: '/v1/x' }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('turns a non-JSON error body into an HTTP_<status> error envelope', async () => {
+    vi.stubGlobal('fetch', async () => new Response('<html>502 Bad Gateway</html>', { status: 502 }))
+    await expect(__test.api(base)).resolves.toEqual({
+      ok: false,
+      error: { code: 'HTTP_502', message: '<html>502 Bad Gateway</html>' },
+    })
+  })
+
+  it('caps the non-JSON error message at 500 characters', async () => {
+    vi.stubGlobal('fetch', async () => new Response('x'.repeat(2000), { status: 500 }))
+    const r = await __test.api(base)
+    expect(r.error?.message).toHaveLength(500)
+  })
+
+  it('passes a JSON envelope through and sends the project auth headers', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, data: { n: 1 } })))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(__test.api(base)).resolves.toEqual({ ok: true, data: { n: 1 } })
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://api.test/v1/x')
+    expect(init.headers).toMatchObject({ 'X-Mushi-Api-Key': 'k', 'X-Mushi-Project': 'p1' })
   })
 })

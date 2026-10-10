@@ -15,7 +15,7 @@
  *   - Set MUSHI_SKIP_GIT_HOOKS=1 to skip install (CI, Vercel builds, etc.).
  *   - `git commit --no-verify` still works for one-off emergencies.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'

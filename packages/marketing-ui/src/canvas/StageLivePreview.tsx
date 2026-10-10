@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMarketing } from '../context'
 import type { MushiStage } from './data'
@@ -29,11 +29,34 @@ export function StageLivePreview({
   const src = urls.screenshots(media.file)
   const demoHref = resolveDemoHref(media.demoHref, urls.signup)
   const closeLightbox = useCallback(() => setExpanded(false), [])
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!expanded) return
+    // Modal focus: move into the dialog, keep Tab inside it, and hand focus
+    // back to the expand trigger on close.
+    const trigger = triggerRef.current
+    closeRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeLightbox()
+      if (event.key === 'Escape') {
+        closeLightbox()
+        return
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!first || !last) return
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !panelRef.current.contains(active))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !panelRef.current.contains(active))) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -41,6 +64,7 @@ export function StageLivePreview({
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
+      trigger?.focus()
     }
   }, [closeLightbox, expanded])
 
@@ -76,6 +100,7 @@ export function StageLivePreview({
 
         <div className="mushi-stage-preview__viewport">
           <button
+            ref={triggerRef}
             type="button"
             className="mushi-stage-preview__expand-trigger"
             onClick={() => setExpanded(true)}
@@ -135,13 +160,22 @@ export function StageLivePreview({
               aria-label={media.lightboxTitle}
               onClick={closeLightbox}
             >
-              <div className="mushi-stage-lightbox__panel" onClick={(e) => e.stopPropagation()}>
+              <div
+                ref={panelRef}
+                className="mushi-stage-lightbox__panel"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="mushi-stage-lightbox__toolbar">
                   <div>
                     <p className="mushi-stage-lightbox__eyebrow">{media.previewEyebrow}</p>
                     <p className="mushi-stage-lightbox__title">{media.lightboxTitle}</p>
                   </div>
-                  <button type="button" className="mushi-stage-lightbox__close" onClick={closeLightbox}>
+                  <button
+                    ref={closeRef}
+                    type="button"
+                    className="mushi-stage-lightbox__close"
+                    onClick={closeLightbox}
+                  >
                     Close
                   </button>
                 </div>

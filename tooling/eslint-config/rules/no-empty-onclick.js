@@ -1,7 +1,7 @@
 /**
  * Custom ESLint rule: no-empty-onclick
  *
- * closes the "dead button" finding from the static audit: empty
+ * Closes the "dead button" finding from the static audit: empty
  * `onClick={() => {}}`, `onClick={noop}`, or `onClick={()=>null}` handlers
  * silently render an unresponsive button. Users click; nothing happens; we
  * have no telemetry to find it because the handler succeeds.
@@ -10,8 +10,9 @@
  * `onClickCapture`, plus `onSubmit` where the same problem applies on
  * forms). Suggestion: wire the handler, log a TODO, or remove the prop.
  *
- * Exceptions allowed via the `allowedNames` option — identifiers listed there
- * are treated as intentional no-ops (e.g. `noopBecauseHandledByParent`).
+ * Of identifier handlers, only `noop` and `_noop` are flagged; any other name
+ * is assumed to be a real handler. List `noop` or `_noop` in the
+ * `allowedNames` option to exempt it where a no-op is intentional.
  */
 
 const TARGET_PROPS = new Set(['onClick', 'onClickCapture', 'onSubmit'])

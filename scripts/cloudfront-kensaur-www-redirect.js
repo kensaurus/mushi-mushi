@@ -12,12 +12,20 @@ function handler(event) {
   if (host === 'www.kensaur.us') {
     var uri = request.uri || '/';
     var qs = request.querystring;
+    // Keys and values arrive still percent-encoded, so they are re-emitted as
+    // is; empty ones stay as `key=` and a repeated key keeps every value.
     var parts = [];
     if (qs && typeof qs === 'object') {
       var key;
       for (key in qs) {
-        if (Object.prototype.hasOwnProperty.call(qs, key) && qs[key] && qs[key].value !== undefined && qs[key].value !== '') {
-          parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(qs[key].value));
+        var entry = Object.prototype.hasOwnProperty.call(qs, key) ? qs[key] : null;
+        if (!entry) continue;
+        if (entry.multiValue && entry.multiValue.length) {
+          for (var i = 0; i < entry.multiValue.length; i++) {
+            parts.push(key + '=' + (entry.multiValue[i].value || ''));
+          }
+        } else {
+          parts.push(key + '=' + (entry.value || ''));
         }
       }
     }

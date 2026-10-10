@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createTimelineCapture } from './timeline';
 
 describe('createTimelineCapture', () => {
@@ -37,5 +37,18 @@ describe('createTimelineCapture', () => {
     const last = routes[routes.length - 1]!;
     expect(last.payload.route).toContain('#/login?token=[Scrubbed]');
     expect(JSON.stringify(last.payload)).not.toContain('secret99');
+  });
+
+  it('works without a DOM (SSR / headless): no throw on create or destroy', () => {
+    vi.stubGlobal('window', undefined);
+    vi.stubGlobal('document', undefined);
+    try {
+      const ssr = createTimelineCapture();
+      ssr.setScreen({ name: 'Checkout' });
+      expect(ssr.getEntries().some((e) => e.kind === 'screen')).toBe(true);
+      expect(() => ssr.destroy()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

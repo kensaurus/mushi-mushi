@@ -62,6 +62,11 @@ describe('loadConfig', () => {
     expect(config.endpoint).toBe('https://env.example.com')
   })
 
+  it('strips trailing slashes from an env endpoint', () => {
+    process.env['MUSHI_API_ENDPOINT'] = 'https://xyz.supabase.co/functions/v1/api/'
+    expect(loadConfig('/tmp/nonexistent-mushirc').endpoint).toBe('https://xyz.supabase.co/functions/v1/api')
+  })
+
   it('env vars work without a config file', () => {
     process.env['MUSHI_API_KEY'] = 'mushi_envkey123'
     process.env['MUSHI_PROJECT_ID'] = '542b34e0-019e-41fe-b900-7b637717bb86'
@@ -80,6 +85,14 @@ describe('loadConfig', () => {
     const config = loadConfig('/tmp/nonexistent-mushirc')
     expect(config.endpoint).toBe('https://alias.supabase.co/functions/v1/api')
     delete process.env['MUSHI_ENDPOINT']
+  })
+
+  it('a blank MUSHI_API_ENDPOINT does not hide the saved endpoint or the alias', () => {
+    saveConfig({ endpoint: 'https://self.example.com' }, TEST_PATH)
+    process.env['MUSHI_API_ENDPOINT'] = '   '
+    expect(loadConfig(TEST_PATH).endpoint).toBe('https://self.example.com')
+    process.env['MUSHI_ENDPOINT'] = 'https://alias.example.com'
+    expect(loadConfig(TEST_PATH).endpoint).toBe('https://alias.example.com')
   })
 
   it('file values survive when env vars are absent', () => {

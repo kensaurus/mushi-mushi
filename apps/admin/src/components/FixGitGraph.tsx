@@ -254,7 +254,10 @@ export function FixGitGraph({
         viewBox={`0 0 80 ${totalH}`}
         width="80"
         height={totalH}
-        role="img"
+        // group, not img: img makes its children presentational, which would
+        // hide the per-event node buttons (the keyboard / screen-reader path
+        // for the list rows' click action) from assistive tech.
+        role="group"
         aria-label={`Fix branch graph for ${branchName ?? 'unknown branch'}`}
       >
         {/* main lane */}
@@ -409,6 +412,8 @@ export function FixGitGraph({
               style={{ minHeight: `${ROW_H}px` }}
               aria-current={selected ? 'true' : undefined}
               onMouseEnter={() => select(i)}
+              // Pointer shortcut only: the matching graph node above is the
+              // focusable button for the same select / open-diff action.
               onClick={() => {
                 select(i)
                 if (canDiff) setDiffOpen(true)

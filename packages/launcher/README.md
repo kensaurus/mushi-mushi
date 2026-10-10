@@ -246,7 +246,7 @@ npx mushi-mushi --help
 <details>
 <summary><b>Supply-chain & verification (Socket, Bundlephobia, Snyk)</b></summary>
 
-Mushi is a CLI launcher — it spawns one `npm install` and writes one `.env.local` line. Here's what each scanner shows and why:
+Mushi is a CLI launcher — it spawns one `npm install` and appends a small multi-line `MUSHI_*` env block to `.env.local` (or `.env` when `.env.local` does not exist). Here's what each scanner shows and why:
 
 | Scanner            | What it shows                                 | What it actually means                                                                                                                                                                                                           |
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -269,7 +269,7 @@ If something looks off to you, [open an issue](https://github.com/kensaurus/mush
 npm i -g @mushi-mushi/cli
 mushi reports list
 mushi reports show <id>
-mushi reports triage <id> --status acknowledged --severity high
+mushi reports triage <id> --status triaged --severity high
 mushi deploy check          # post-deploy smoke check
 mushi status                # live pipeline health
 ```

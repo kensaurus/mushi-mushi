@@ -10,6 +10,10 @@
 // Completed/failed orders are resolved by the Tremendous webhook
 // receiver at POST /v1/webhooks/tremendous in the main API.
 //
+// A failed POST is retried with backoff; a non-retryable 4xx, or the 10th
+// failure, gives up: the order goes 'failed' and the redemption 'withheld'
+// for ops, with no automatic refund (_shared/tremendous-retry.ts).
+//
 // Idempotent: each order row has a UNIQUE external_id (set on first
 // Tremendous success) so double-runs are safe.
 //
@@ -22,6 +26,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { minimalTremendousPayload, scrubEmails } from '../_shared/tremendous-payload.ts'
+import { attemptsSoFar, isRetryDue, onTremendousFailure } from '../_shared/tremendous-retry.ts'
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void
@@ -38,6 +43,8 @@ interface PendingOrder {
   amount_usd: number
   sku: string
   external_id: string | null
+  raw_payload: unknown
+  last_synced_at: string | null
   mushi_testers: {
     auth_user_id: string
     display_name: string | null
@@ -59,28 +66,35 @@ async function callTremendous(
   path: string,
   method: 'GET' | 'POST',
   body?: unknown,
-): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+): Promise<{ ok: boolean; data?: unknown; error?: string; status: number | null }> {
   const apiKey = Deno.env.get('TREMENDOUS_API_KEY')
-  if (!apiKey) return { ok: false, error: 'TREMENDOUS_API_KEY not set' }
+  // Not a Tremendous answer: retryable once the operator sets the key.
+  if (!apiKey) return { ok: false, error: 'TREMENDOUS_API_KEY not set', status: null }
 
   const url = `${baseUrl}${path}`
 
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (err) {
+    return { ok: false, error: `Tremendous network error: ${String(err)}`, status: null }
+  }
 
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText)
-    return { ok: false, error: `Tremendous ${res.status}: ${errText}` }
+    return { ok: false, error: `Tremendous ${res.status}: ${errText}`, status: res.status }
   }
 
   const data = await res.json().catch(() => null)
-  return { ok: true, data }
+  return { ok: true, data, status: res.status }
 }
 
 async function resolveTesterEmail(
@@ -144,10 +158,14 @@ Deno.serve(
         amount_usd,
         sku,
         external_id,
+        raw_payload,
+        last_synced_at,
         mushi_testers ( auth_user_id, display_name )
       `)
       .eq('status', 'pending')
       .is('external_id', null) // only rows we haven't sent yet
+      // Least recently tried first, so orders in backoff don't starve new ones.
+      .order('last_synced_at', { ascending: true })
       .limit(BATCH_SIZE)
 
     if (fetchErr) {
@@ -157,8 +175,13 @@ Deno.serve(
 
     let processed = 0
     let failed = 0
+    let gaveUp = 0
+    const now = Date.now()
 
     for (const order of (orders ?? []) as unknown as PendingOrder[]) {
+      const previousAttempts = attemptsSoFar(order.raw_payload)
+      if (!isRetryDue(previousAttempts, order.last_synced_at, now)) continue
+
       const tester = order.mushi_testers
       if (!tester) {
         wlog.warn('Order has no tester row', { orderId: order.id })
@@ -172,9 +195,11 @@ Deno.serve(
           .from('tremendous_orders')
           .update({ status: 'failed', raw_payload: { error: 'email_not_found' }, last_synced_at: new Date().toISOString() })
           .eq('id', order.id)
+        // Withheld, not failed: ops sees it in the withheld queue and either
+        // re-sends once the email is fixed or refunds (no automatic refund).
         await db
           .from('tester_redemptions')
-          .update({ status: 'failed', failure_reason: 'tester_email_not_found' })
+          .update({ status: 'withheld', failure_reason: 'tester_email_not_found', withheld_reason: 'gift_card_order_failed' })
           .eq('id', order.redemption_id)
         failed++
         continue
@@ -223,27 +248,50 @@ Deno.serve(
         const lastError = scrubEmails(result.error ?? 'unknown error')
         wlog.error('Tremendous order failed', { orderId: order.id, error: lastError })
 
-        // Keep status='pending' so the next cron tick retries automatically —
-        // Tremendous outages are usually transient. Persistent failures are
-        // surfaced via the last_error payload field for ops triage; the
-        // separate manual-review/withhold workflow lives in the admin UI.
-        await db
-          .from('tremendous_orders')
-          .update({
-            status: 'pending',
-            raw_payload: { last_error: lastError },
-            last_synced_at: new Date().toISOString(),
+        const outcome = onTremendousFailure(result.status, previousAttempts)
+
+        if (outcome.giveUp) {
+          // A non-retryable 4xx or the last attempt: stop re-POSTing. The
+          // redemption goes to the withheld queue with the reason; points
+          // are not refunded automatically (owner decision 2026-10-10).
+          await db
+            .from('tremendous_orders')
+            .update({
+              status: 'failed',
+              raw_payload: { last_error: lastError, attempts: outcome.attempts, gave_up: outcome.reason },
+              last_synced_at: new Date().toISOString(),
+            })
+            .eq('id', order.id)
+          await db
+            .from('tester_redemptions')
+            .update({ status: 'withheld', failure_reason: outcome.reason, withheld_reason: 'gift_card_order_failed' })
+            .eq('id', order.redemption_id)
+          wlog.error('Tremendous order given up; redemption withheld for review', {
+            orderId: order.id,
+            attempts: outcome.attempts,
+            reason: outcome.reason,
           })
-          .eq('id', order.id)
+          gaveUp++
+        } else {
+          // Retryable (5xx, 429, network): stays pending, retried after a backoff.
+          await db
+            .from('tremendous_orders')
+            .update({
+              status: 'pending',
+              raw_payload: { last_error: lastError, attempts: outcome.attempts },
+              last_synced_at: new Date().toISOString(),
+            })
+            .eq('id', order.id)
+        }
 
         failed++
       }
     }
 
-    wlog.info('Tremendous redemption worker run complete', { processed, failed, total: (orders ?? []).length })
+    wlog.info('Tremendous redemption worker run complete', { processed, failed, gaveUp, total: (orders ?? []).length })
 
     return new Response(
-      JSON.stringify({ ok: true, processed, failed }),
+      JSON.stringify({ ok: true, processed, failed, gave_up: gaveUp }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   }),

@@ -159,8 +159,8 @@ POST  /v1/admin/compliance/evidence/refresh
 GET   /v1/admin/compliance/retention
 PUT   /v1/admin/compliance/retention/:projectId    { reports_days, audit_days, llm_days, byok_days, legal_hold }
 GET   /v1/admin/compliance/dsars
-POST  /v1/admin/compliance/dsars                   { type, subject_email, subject_id, notes }
-PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason }
+POST  /v1/admin/compliance/dsars                   { projectId, request_type, subject_email, subject_id, notes }
+PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason, evidence_url, notes }
 GET   /v1/admin/residency
 PUT   /v1/admin/residency/:projectId               { region }
 ```

@@ -55,5 +55,5 @@ If you self-host on your own Supabase project, you control the region entirely �
 ## GDPR notes
 
 - All PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) are encrypted at rest via `pgsodium`.
-- DSAR (data subject access requests) are handled via `request_dsar()` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
+- DSAR (data subject access requests) are tracked in the `data_subject_requests` table via `POST /v1/admin/compliance/dsars` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
 - When the EU region cluster ships, AI model calls from EU projects will be routed to Anthropic's EU endpoints where available.

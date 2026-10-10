@@ -3,6 +3,7 @@
  * Six sections covering the full loop, bounty math, KYC, anti-fraud, and OFAC.
  */
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
 
 export const metadata: Metadata = {
@@ -121,18 +122,18 @@ export default function HowItWorksPage() {
             Create a free tester account and start earning points today.
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <a
-              href="/mushi-mushi/testers/join/"
+            <Link
+              href="/join/"
               className="testers-cta px-8 py-3 text-base"
             >
               Create tester account →
-            </a>
-            <a
-              href="/mushi-mushi/testers/apps/"
+            </Link>
+            <Link
+              href="/apps/"
               className="testers-cta-secondary px-8 py-3 text-base"
             >
               Browse apps first
-            </a>
+            </Link>
           </div>
         </div>
       </div>

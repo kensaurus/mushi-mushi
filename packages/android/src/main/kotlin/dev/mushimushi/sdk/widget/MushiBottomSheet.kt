@@ -67,6 +67,11 @@ class MushiBottomSheet : AppCompatDialogFragment() {
         val surfaceColor = if (resolvedDark) Color.parseColor("#1A1A1A") else Color.WHITE
         val textColor = if (resolvedDark) Color.WHITE else Color.BLACK
         val hintColor = if (resolvedDark) Color.parseColor("#9CA3AF") else Color.parseColor("#6B7280")
+        // Sizes in dp, not raw px. The values keep the look the px numbers had
+        // on a typical 3x (xxhdpi) phone, now the same on every density.
+        val density = ctx.resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+        fun dpf(value: Int): Float = value * density
 
         // Wrap everything in a ScrollView so the keyboard pushes content up
         // and the user can still scroll to the submit button.
@@ -75,10 +80,11 @@ class MushiBottomSheet : AppCompatDialogFragment() {
         }
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 48, 48, 48)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
             background = GradientDrawable().apply {
                 setColor(surfaceColor)
-                cornerRadii = floatArrayOf(32f, 32f, 32f, 32f, 0f, 0f, 0f, 0f)
+                val r = dpf(12)
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
             }
         }
         scroll.addView(root)
@@ -108,17 +114,17 @@ class MushiBottomSheet : AppCompatDialogFragment() {
             setTextColor(textColor)
             minLines = 4
             maxLines = 8
-            setPadding(24, 24, 24, 24)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             background = GradientDrawable().apply {
-                setStroke(2, if (resolvedDark) Color.parseColor("#374151") else Color.LTGRAY)
-                cornerRadius = 16f
+                setStroke(dp(1), if (resolvedDark) Color.parseColor("#374151") else Color.LTGRAY)
+                cornerRadius = dpf(6)
                 setColor(if (resolvedDark) Color.parseColor("#111827") else Color.parseColor("#F9FAFB"))
             }
         }
         root.addView(description, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = 24 })
+        ).apply { topMargin = dp(8) })
 
         val submit = Button(ctx).apply {
             text = "Submit"
@@ -127,14 +133,14 @@ class MushiBottomSheet : AppCompatDialogFragment() {
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 setColor(if (isEnabled) accent else Color.parseColor("#9CA3AF"))
-                cornerRadius = 24f
+                cornerRadius = dpf(8)
             }
             alpha = 0.5f
         }
         root.addView(submit, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = 24 })
+        ).apply { topMargin = dp(8) })
 
         description.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit

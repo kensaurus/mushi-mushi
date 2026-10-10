@@ -35,6 +35,8 @@ interface Props {
   /** Bulk selection (console QA 92): shown when the page passes a handler. */
   selected?: boolean
   onSelectChange?: (selected: boolean) => void
+  /** Locks the checkbox while a bulk action runs against its start-time selection. */
+  selectionDisabled?: boolean
   actionLabels?: {
     openPr?: string
     retry?: string
@@ -53,6 +55,7 @@ function FixRowViewInner({
   compactTable = false,
   selected = false,
   onSelectChange,
+  selectionDisabled = false,
   actionLabels,
 }: Props) {
   const ci = ciBadge(fix)
@@ -125,6 +128,7 @@ function FixRowViewInner({
                 <input
                   type="checkbox"
                   checked={selected}
+                  disabled={selectionDisabled}
                   onChange={(e) => onSelectChange(e.target.checked)}
                   aria-label={`Select the fix for ${fixReportLabel(fix)}`}
                   className="h-3.5 w-3.5 rounded-sm border-edge accent-brand"

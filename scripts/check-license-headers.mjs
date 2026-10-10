@@ -40,8 +40,8 @@ const AGPL_FOLDERS = new Set([
 
 /** Expected LICENSE file header marker per license kind. */
 const LICENSE_MARKERS = {
-  MIT: /^MIT License$/m,
-  AGPL: /^GNU AFFERO GENERAL PUBLIC LICENSE$/m,
+  MIT: /^MIT License$/,
+  AGPL: /^GNU AFFERO GENERAL PUBLIC LICENSE$/,
 }
 
 const violations = []
@@ -101,11 +101,12 @@ for (const pkgPath of walk(join(ROOT, 'packages'))) {
   }
   const licenseText = readFileSync(licensePath, 'utf8')
   const marker = LICENSE_MARKERS[expectedLicense]
-  if (!marker.test(licenseText)) {
+  const firstLine = licenseText.replace(/^\uFEFF/, '').split(/\r?\n/).find((l) => l.trim()) ?? ''
+  if (!marker.test(firstLine.trim())) {
     violations.push({
       pkg: folder,
       rule: 'license-file-header',
-      detail: `LICENSE file does not look like ${expectedLicense} (first marker not found)`,
+      detail: `LICENSE file does not look like ${expectedLicense} (first non-blank line is not the marker)`,
     })
   }
 }

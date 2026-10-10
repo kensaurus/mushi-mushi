@@ -598,7 +598,7 @@ export function LessonsPage() {
         // Always explicit: with no ?tab= the page shows the posture tab.
         next.set('tab', tab)
         return next
-      })
+      }, { replace: true, preventScrollReset: true })
     },
     [setSearchParams],
   )

@@ -23,8 +23,9 @@ interface PlatformResponse {
  * (Langfuse traces, Sentry issues, GitHub commits). Returned values fall back
  * to env defaults when the project hasn't configured the integration yet.
  *
- * Cached in module scope so multiple components on the same screen share one
- * fetch. Re-fetches on mount for freshness — the response is < 1KB.
+ * State is per hook instance and each mount fetches (the response is < 1KB);
+ * components mounting together share one request through apiFetch's
+ * in-flight dedup and short micro-cache, not a module-scope cache here.
  */
 export function usePlatformIntegrations() {
   const [data, setData] = useState<PlatformResponse['platform'] | null>(null)

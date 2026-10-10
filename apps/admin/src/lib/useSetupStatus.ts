@@ -120,7 +120,7 @@ export interface UseSetupStatusResult {
   reload: () => void
   /** True when the current user owns at least one project. */
   hasAnyProject: boolean
-  /** The active project (first one for now; will become URL-driven in ). */
+  /** The active project: the one matching the active project id, else the first. */
   activeProject: SetupProject | null
   /** Convenience selectors keyed off the active project. */
   selectors: SetupSelectors

@@ -7,14 +7,15 @@
 import { chromium } from 'playwright'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const BASE = process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464'
 const YEN_YEN_PROJECT_HINT = process.env.MUSHI_YEN_YEN_PROJECT_ID ?? '6e7e0c3a-a777-4f1e-a699-6515993cf3bd'
 const MUSHI_API_URL = process.env.MUSHI_API_URL_OVERRIDE ?? 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 // Repo-relative default so the script works on any machine / CI runner.
 // Override via PLAYWRIGHT_OUT_DIR env var.
-const OUT = resolve(process.env.PLAYWRIGHT_OUT_DIR ?? new URL('../.playwright-mcp', import.meta.url).pathname)
+const OUT = resolve(process.env.PLAYWRIGHT_OUT_DIR ?? fileURLToPath(new URL('../.playwright-mcp', import.meta.url)))
 const REPO = process.env.MUSHI_TARGET_REPO ?? 'kensaurus/yen-yen'
 
 mkdirSync(OUT, { recursive: true })
@@ -35,7 +36,7 @@ function loadEnv(file) {
   } catch { /* optional */ }
 }
 // Repo-relative .env.local — override via DOTENV_PATH env var.
-loadEnv(resolve(process.env.DOTENV_PATH ?? new URL('../.env.local', import.meta.url).pathname))
+loadEnv(resolve(process.env.DOTENV_PATH ?? fileURLToPath(new URL('../.env.local', import.meta.url))))
 
 const email = process.env.TEST_USER_EMAIL
 const password = process.env.TEST_USER_PASSWORD
@@ -113,8 +114,10 @@ try {
   writeFileSync(resolve(OUT, 'ingest-key.tmp'), ingestKey, { mode: 0o600 })
 
   // Use --body-file (reading from stdin via '-') so secrets are never exposed
-  // in process argv, shell history, or CI logs.
-  execSync(`printf '%s' "${MUSHI_API_URL}" | gh secret set MUSHI_API_URL --body-file - --repo ${REPO}`, {
+  // in process argv, shell history, or CI logs. execFileSync + input needs no
+  // shell, so this also works where printf does not exist (cmd.exe).
+  execFileSync('gh', ['secret', 'set', 'MUSHI_API_URL', '--body-file', '-', '--repo', REPO], {
+    input: MUSHI_API_URL,
     stdio: ['pipe', 'inherit', 'inherit'],
   })
   // The key is already on disk in ingest-key.tmp (mode 0o600); read from there.

@@ -3,6 +3,8 @@ package dev.mushimushi.sdk.capture
 import android.content.Context
 import android.os.Build
 import dev.mushimushi.sdk.MushiInfo
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -22,7 +24,8 @@ object DeviceContext {
             "platform" to "android",
             "sdkName" to MushiInfo.SDK_NAME,
             "sdkVersion" to MushiInfo.SDK_VERSION,
-            "timestamp" to System.currentTimeMillis(),
+            // ISO-8601 UTC string like iOS and the JS SDKs (java.time needs API 26; minSdk is 24).
+            "timestamp" to isoNow(),
             "locale" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().id,
             "app" to mapOf(
@@ -42,4 +45,9 @@ object DeviceContext {
             )
         )
     }
+
+    private fun isoNow(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }
+            .format(Date())
 }

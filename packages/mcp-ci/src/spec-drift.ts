@@ -5,7 +5,7 @@
  * `oasdiff breaking <base> <head>` to find breaking API changes between
  * two OpenAPI spec versions.
  *
- * The binary is cached under ~/.mushi/oasdiff-<version> after first download.
+ * The binary is cached under ~/.mushi/tools/oasdiff-<version> after first download.
  * Version can be pinned via the OASDIFF_VERSION env var; defaults to latest.
  */
 
@@ -38,7 +38,10 @@ function getOasdiffUrl(): string {
 
 async function downloadOasdiff(): Promise<string> {
   const cacheDir = join(homedir(), '.mushi', 'tools')
-  mkdirSync(cacheDir, { recursive: true })
+  // 0700: the download and extract dir stay private to this user. `mode` only
+  // applies to directories mkdir creates, so tighten an existing one too.
+  mkdirSync(cacheDir, { recursive: true, mode: 0o700 })
+  if (process.platform !== 'win32') chmodSync(cacheDir, 0o700)
   const ext = process.platform === 'win32' ? '.exe' : ''
   const binPath = join(cacheDir, `oasdiff-${OASDIFF_VERSION}${ext}`)
   if (existsSync(binPath)) return binPath

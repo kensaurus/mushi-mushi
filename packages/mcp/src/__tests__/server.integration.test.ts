@@ -692,16 +692,24 @@ describe('deprecated-alias backward compatibility', () => {
     expect(texts.some((t) => t.includes('fix_suggest') && t.includes('suggest_fix'))).toBe(true)
   })
 
-  it('calling an alias for a removed tool (setup_check → diagnose_setup) resolves', async () => {
-    // diagnose_setup mode=full calls /health, /v1/sync/ingest-setup
-    fetchStub.enqueue({ status: 200 }) // /health
-    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } }) // ingest-setup
+  it('calling an alias for a removed tool (setup_check → diagnose_setup) keeps its dispatch scope', async () => {
+    // setup_check was the dispatch preflight, so it runs diagnose_setup mode=dispatch
+    fetchStub.enqueue({ ok: true, data: { ready: true, checks: [], repoUrl: null } }) // preflight
     const result = await client.callTool({ name: 'setup_check', arguments: {} })
     expect(result.isError).toBeFalsy()
-    const texts = (result.content as Array<{ type: string; text: string }>)
-      .filter((c) => c.type === 'text')
-      .map((c) => c.text)
-    expect(texts.some((t) => t.includes('setup_check') && t.includes('diagnose_setup'))).toBe(true)
+    expect(fetchStub.calls.map((c) => c.url).some((u) => u.endsWith(`/projects/${PROJECT_ID}/preflight`))).toBe(true)
+    const content = result.content as Array<{ type: string; text: string }>
+    // The tool's JSON stays first; the deprecation notice is appended.
+    expect(JSON.parse(content[0]!.text)).toMatchObject({ mode: 'dispatch', ready: true })
+    const last = content[content.length - 1]!.text
+    expect(last.includes('setup_check') && last.includes('diagnose_setup')).toBe(true)
+  })
+
+  it('an explicit mode on a setup alias wins over its default', async () => {
+    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } }) // ingest-setup
+    const result = await client.callTool({ name: 'setup_check', arguments: { mode: 'ingest' } })
+    expect(result.isError).toBeFalsy()
+    expect(fetchStub.calls.map((c) => c.url).some((u) => u.endsWith('/v1/sync/ingest-setup'))).toBe(true)
   })
 })
 

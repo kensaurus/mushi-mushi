@@ -10,6 +10,7 @@ import {
   LAYER_PILL,
   reporterWho,
   resolveReportPath,
+  routePathname,
   type ReportLayer,
 } from './reportRowAttribution'
 
@@ -22,16 +23,10 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
   const route =
     (row.environment as { route?: string } | null | undefined)?.route
     ?? (row.environment as { url?: string } | null | undefined)?.url
-  // Derive the displayable page path — strip origin, keep path
+  // Derive the displayable page path — strip origin, query and fragment
   const pagePath = (() => {
-    if (!route) return null
-    try {
-      const u = new URL(route)
-      return u.pathname === '/' ? null : u.pathname
-    } catch {
-      // Not a full URL — treat as a path segment
-      return route.startsWith('/') && route !== '/' ? route : null
-    }
+    const path = routePathname(route)
+    return path && path.startsWith('/') && path !== '/' ? path : null
   })()
   // screenshot_url / screenshot_path are not on ReportRow (they live on
   // ReportDetail) but may be present when the row is used in a wider context.
@@ -47,7 +42,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
   return (
     <div className={`flex min-w-0 flex-wrap items-center gap-1 ${className}`}>
       {pagePath && (
-        <Tooltip portal content={`Activity for page: ${route}`}>
+        <Tooltip portal content={`Activity for page: ${pagePath}`}>
           <Link
             to={`/activity?route=${encodeURIComponent(pagePath)}`}
             onClick={(e) => e.stopPropagation()}

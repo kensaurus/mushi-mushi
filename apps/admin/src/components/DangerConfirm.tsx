@@ -14,8 +14,11 @@
  *          call and get into a half-deleted state).
  *
  *          Design notes:
- *          - The "type the slug" input is autofocused; the confirm button is
- *            disabled until the value matches `requiredText` exactly.
+ *          - The "type the slug" input is autofocused (it carries
+ *            `data-primary`, which Modal focuses on open; the confirm button
+ *            starts disabled, so it cannot take focus); the button stays
+ *            disabled until the value matches `requiredText` (surrounding
+ *            whitespace ignored).
  *          - `consequences` renders a compact bullet list so users know what
  *            cascades. Concrete numbers ("65 reports", "3 API keys") work
  *            better than vague warnings ("all related data"). For project
@@ -89,7 +92,6 @@ export function DangerConfirm({
             {cancelLabel}
           </Btn>
           <Btn
-            data-primary
             data-testid="danger-confirm-button"
             variant="danger"
             disabled={!canConfirm}
@@ -127,6 +129,7 @@ export function DangerConfirm({
         </label>
         <input
           id={inputId}
+          data-primary
           data-testid="danger-confirm-input"
           type="text"
           value={typed}

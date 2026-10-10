@@ -17,10 +17,10 @@ From the repo root:
 VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
 VITE_SUPABASE_ANON_KEY=eyJ… \
 VITE_API_URL=https://YOUR-REF.supabase.co/functions/v1/api \
-pnpm --filter @mushi-mushi/admin build
+pnpm --filter "@mushi-mushi/admin..." build
 ```
 
-The output lands in `apps/admin/dist/`.
+The trailing `...` also builds the workspace packages the console imports (`@mushi-mushi/web`, `@mushi-mushi/mcp` and others) first; a fresh clone has none of their `dist/` folders yet. The output lands in `apps/admin/dist/`.
 
 <Callout type="info">
   `VITE_API_URL` must point to the `api` edge function (`…/functions/v1/api`), **not** your database URL. All console API calls are proxied through that function.
