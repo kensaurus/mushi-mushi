@@ -175,6 +175,25 @@ describe('createNetworkCapture', () => {
     expect(entries.some((e) => e.captureMethod === 'xhr')).toBe(true);
   });
 
+  it('re-opening an in-flight XHR pops the aborted request\'s correlation ID', () => {
+    const sendBefore = XMLHttpRequest.prototype.send;
+    // A send that never settles: the request stays in flight.
+    XMLHttpRequest.prototype.send = function inFlightSend() {};
+    try {
+      capture = createNetworkCapture();
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://api.example.com/first');
+      xhr.send();
+      expect(getActiveCorrelationId()).toBeDefined();
+      // open() on an in-flight XHR aborts it without a DONE readystatechange.
+      xhr.open('GET', 'https://api.example.com/second');
+      expect(getActiveCorrelationId()).toBeUndefined();
+    } finally {
+      capture.destroy();
+      XMLHttpRequest.prototype.send = sendBefore;
+    }
+  });
+
   it('a synchronous XHR send() throw leaves no correlation ID behind', () => {
     const sendBefore = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function throwingSend() {

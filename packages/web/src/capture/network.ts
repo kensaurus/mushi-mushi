@@ -247,14 +247,20 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         storedTraceparent = generated.traceparent;
       }
 
-      // On XHR reuse (open → send → open → send), remove the stale
-      // readystatechange listener from the previous send() before overwriting
-      // state.  Without this, both the old and the new listener fire on the
-      // second request's completion, producing a garbled duplicate entry
-      // (old url/method with the new response's status code).
+      // On XHR reuse (open → send → open → send), the handler detaches itself
+      // at DONE. A listener still attached here means the previous request is
+      // in flight: open() aborts it without a DONE event. Remove that listener
+      // before overwriting state, or both the old and the new one fire on the
+      // second request's completion (a garbled duplicate entry: old url/method,
+      // new status), and pop its correlation ID, or every later log is
+      // stamped with it.
       const _prevXhrState = xhrStateMap.get(this);
       if (_prevXhrState?._listener) {
         this.removeEventListener('readystatechange', _prevXhrState._listener);
+        if (_prevXhrState.correlationId) {
+          const idx = _activeCorrelationStack.lastIndexOf(_prevXhrState.correlationId);
+          if (idx !== -1) _activeCorrelationStack.splice(idx, 1);
+        }
       }
 
       xhrStateMap.set(this, {
@@ -293,6 +299,10 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         // XHR reuse (see the cleanup block in the open() override above).
         const _readystateHandler = () => {
           if (this.readyState !== 4) return; // DONE
+          // Settled (load, error, abort and timeout all reach DONE): detach so
+          // a later open() knows there is nothing left to pop.
+          this.removeEventListener('readystatechange', _readystateHandler);
+          state._listener = undefined;
 
           // Mirror fetch: skip SDK-internal / ignoreUrls traffic so it does not
           // pollute the MAX_ENTRIES ring buffer.

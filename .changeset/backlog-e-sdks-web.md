@@ -11,3 +11,4 @@ If the rewards activity listeners fail part-way through setup, the next init ins
 `Mushi.init()` accepts a config without `projectId` / `apiKey` (`MushiInitConfig`) when env vars supply them, and the widget's recorder hooks are tagged `@internal`.
 `avoidSelectors` only moves the widget away from elements in the half of the viewport it is anchored to, so an avoided top header no longer pushes the default bottom-anchored trigger and panel off-screen (and a bottom tab bar no longer does the same to a top-anchored one).
 `createTimelineCapture()` no longer throws without a DOM (SSR or headless); it skips the click and hashchange listeners and still records `setScreen()` entries.
+Calling `open()` again on an `XMLHttpRequest` that is still in flight no longer leaves the aborted request's correlation id stamped on later console entries.
