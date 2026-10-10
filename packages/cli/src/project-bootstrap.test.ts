@@ -1,4 +1,5 @@
 import * as fsp from 'node:fs/promises'
+import type * as FsPromises from 'node:fs/promises'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { writeProjectBootstrapFiles } from './project-bootstrap.js'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  const actual = await importOriginal<typeof FsPromises>()
   return { ...actual, readFile: vi.fn(actual.readFile) }
 })
 
