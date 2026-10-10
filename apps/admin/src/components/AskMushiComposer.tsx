@@ -58,7 +58,7 @@ const MAX_ROWS = 8
 
 /** The forwarded ref is the composer's own `<textarea>`, so the sidebar can
  *  focus it when the drawer opens. */
-export const AskMushiComposer = forwardRef<HTMLTextAreaElement | null, AskMushiComposerProps>(function AskMushiComposer({
+export const AskMushiComposer = forwardRef<HTMLTextAreaElement, AskMushiComposerProps>(function AskMushiComposer({
   value,
   onChange,
   onSubmit,
@@ -68,7 +68,8 @@ export const AskMushiComposer = forwardRef<HTMLTextAreaElement | null, AskMushiC
   mentionables = [],
 }, ref) {
   const taRef = useRef<HTMLTextAreaElement | null>(null)
-  useImperativeHandle(ref, () => taRef.current, [])
+  // The textarea always renders, and the handle is set after it mounts.
+  useImperativeHandle(ref, () => taRef.current as HTMLTextAreaElement, [])
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const [popover, setPopover] = useState<ComposerToken | null>(null)
   const [mentionResults, setMentionResults] = useState<MentionResult[]>([])
