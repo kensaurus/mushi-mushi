@@ -93,4 +93,9 @@ describe('hourly probe cron', () => {
     expect(cron).toContain("if (hasSlack(s)) tasks.push({ projectId: s.project_id, kind: 'slack'")
     expect(cron).toContain('slack_bot_token_ref, slack_channel_id')
   })
+
+  it('looks settings up by project from a map, not a scan per routing row', () => {
+    expect(cron).toContain('settingsByProject.get(r.project_id)')
+    expect(cron).not.toMatch(/allSettings\.find\(\(s\) => s\.project_id === /)
+  })
 })
