@@ -23,7 +23,6 @@ export interface JiraPluginOptions {
  *
  * Inbound (from Mushi → Jira):
  *   report.created       → create Jira issue, stash (reportId, issueKey)
- *   report.classified    → update summary / description / labels
  *   report.status_changed → transition Jira issue
  *   fix.applied          → comment "Fix applied: <pr-url>"
  *
