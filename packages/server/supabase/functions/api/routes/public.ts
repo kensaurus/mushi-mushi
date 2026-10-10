@@ -650,7 +650,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         id: reportId,
         project_id: projectId,
         source: 'sentry',
-        description: (feedback.message as string) ?? '',
+        // Sentry's payload is not type-checked: only a string goes into a
+        // text column.
+        description: typeof feedback.message === 'string' ? feedback.message : '',
         user_category: 'other',
         category: 'other',
         status: 'new',
