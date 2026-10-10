@@ -79,6 +79,14 @@ describe('manual probe route', () => {
     expect(route).toContain('const projectId = requested || accessibleIds[0]')
   })
 
+  it('refuses to guess between several projects when none is named', () => {
+    // accessibleIds is a Set union with no ORDER BY, so [0] is arbitrary.
+    const guard = route.indexOf('if (!requested && accessibleIds.length > 1)')
+    expect(guard).toBeGreaterThan(0)
+    expect(route.slice(guard, guard + 250)).toContain("'PROJECT_REQUIRED'")
+    expect(guard).toBeLessThan(route.indexOf('const projectId = requested || accessibleIds[0]'))
+  })
+
   it('reads the Slack token column the Slack probe needs', () => {
     expect(route).toContain('slack_bot_token_ref')
   })
@@ -92,5 +100,10 @@ describe('hourly probe cron', () => {
   it('probes Slack for projects with a bot token or a channel', () => {
     expect(cron).toContain("if (hasSlack(s)) tasks.push({ projectId: s.project_id, kind: 'slack'")
     expect(cron).toContain('slack_bot_token_ref, slack_channel_id')
+  })
+
+  it('looks settings up by project from a map, not a scan per routing row', () => {
+    expect(cron).toContain('settingsByProject.get(r.project_id)')
+    expect(cron).not.toMatch(/allSettings\.find\(\(s\) => s\.project_id === /)
   })
 })

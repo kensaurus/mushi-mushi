@@ -301,7 +301,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // SDK clients with `discoverInventory: true` POST one event per
   // navigation (throttled per route to ≤1/min client-side). The
   // server validates with a tight Zod schema, soft-throttles per
-  // (project, route) to ≤1/min, and inserts into discovery_events
+  // (project, route, user) to ≤1/min, and inserts into discovery_events
   // for the proposer to consume.
   //
   // No quota gating: discovery events are 1-2 KB each, the table
@@ -318,8 +318,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
 
-    // Light per-(project, IP) rate limit. The per-(project, route) throttle
-    // below only drops DUPLICATE routes — a client walking a synthetic route
+    // Light per-(project, IP) rate limit. The per-(project, route, user)
+    // throttle below only drops DUPLICATE routes — a client walking a synthetic route
     // per request (or a leaked SDK key in a loop) writes an unbounded row per
     // call, and this endpoint is deliberately quota-free. 60/min matches the
     // SDK's own client-side cap of 1 event per route per minute with plenty of
@@ -362,18 +362,24 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
     const event = parsed.data;
 
-    // Soft per-(project, route) throttle: drop if a row already exists
+    // Soft per-(project, route, user) throttle: drop if a row already exists
     // for this minute. Cheap because we have an index on (project_id,
-    // observed_at desc) and we only fetch one column.
+    // observed_at desc) and we only fetch one column. Keyed by user too:
+    // per route alone, the first visitor of a minute dropped every other
+    // user's event, so distinct_users / observation_count in
+    // discovery_observed_inventory undercounted. Anonymous events (no
+    // user_id_hash) still share one slot per route.
     const minuteAgo = new Date(Date.now() - 60_000).toISOString();
-    const { data: recent, error: recentErr } = await db
+    let recentQuery = db
       .from('discovery_events')
       .select('id')
       .eq('project_id', projectId)
       .eq('route', event.route)
-      .gte('observed_at', minuteAgo)
-      .limit(1)
-      .maybeSingle();
+      .gte('observed_at', minuteAgo);
+    recentQuery = event.user_id_hash
+      ? recentQuery.eq('user_id_hash', event.user_id_hash)
+      : recentQuery.is('user_id_hash', null);
+    const { data: recent, error: recentErr } = await recentQuery.limit(1).maybeSingle();
     if (recentErr) {
       log.warn('discovery throttle check failed', { err: recentErr.message });
     }
@@ -650,7 +656,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         id: reportId,
         project_id: projectId,
         source: 'sentry',
-        description: (feedback.message as string) ?? '',
+        // Sentry's payload is not type-checked: only a string goes into a
+        // text column.
+        description: typeof feedback.message === 'string' ? feedback.message : '',
         user_category: 'other',
         category: 'other',
         status: 'new',

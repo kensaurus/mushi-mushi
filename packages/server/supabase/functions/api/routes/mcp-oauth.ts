@@ -23,8 +23,11 @@
  *
  * SECURITY:
  *   - PKCE S256 is mandatory; `plain` and missing challenges are rejected.
- *   - redirect_uri: https or loopback http only (RFC 8252); exact match against
- *     the registered URI, with the RFC 8252 §7.3 loopback-port allowance.
+ *   - redirect_uri: https, loopback http (RFC 8252), or a private-use app
+ *     scheme such as cursor:// that IDE clients register; javascript:, data:,
+ *     file:, blob: and vbscript: are refused (isAllowedRedirectUri). Exact
+ *     match against the registered URI, with the RFC 8252 §7.3 loopback-port
+ *     allowance.
  *   - Authorization codes are 32 random bytes; only the SHA-256 is stored
  *     after issuance. Single-use with a short redelivery grace window
  *     (evaluateTokenDelivery — same semantics as the CLI device flow).
@@ -126,7 +129,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
     for (const uri of redirectUris) {
       if (uri.length > 2000 || !isAllowedRedirectUri(uri)) {
         return c.json(
-          oauthError('invalid_redirect_uri', `Not an acceptable redirect URI (https or loopback http required): ${uri.slice(0, 200)}`),
+          oauthError('invalid_redirect_uri', `Not an acceptable redirect URI (https, loopback http, or a custom app scheme required): ${uri.slice(0, 200)}`),
           400,
         )
       }

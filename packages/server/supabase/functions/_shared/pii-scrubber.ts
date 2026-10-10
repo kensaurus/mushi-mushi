@@ -7,7 +7,7 @@
  *
  * What's redacted:
  *  - SSN (US 9-digit dashed)
- *  - Credit-card PAN (12–18 digits, tolerant of spaces/dashes — Luhn not
+ *  - Credit-card PAN (12–19 digits, tolerant of spaces/dashes — Luhn not
  *    enforced because the LLM doesn't need to see the digits either way)
  *  - Email addresses (GDPR personal data)
  *  - Phone numbers (US / international common formats)
@@ -29,7 +29,8 @@
 const PATTERNS: Array<{ regex: RegExp; replacement: string }> = [
   // --- Financial / government ID (run first — most specific) ---
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },
-  { regex: /\b(?:\d[ -]*){11,17}\d\b/g, replacement: '[REDACTED_CC]' },
+  // 12–19 digits: ISO/IEC 7812 PANs run to 19 (UnionPay, Maestro, some Visa).
+  { regex: /\b(?:\d[ -]*){11,18}\d\b/g, replacement: '[REDACTED_CC]' },
 
   // --- Secret tokens (SEC-4) ---
   // Recognise by shape/prefix. Order: vendor-prefixed first, then generic.

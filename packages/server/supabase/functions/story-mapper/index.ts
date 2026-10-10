@@ -416,7 +416,10 @@ Deno.serve(
       )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      log.error('Story mapper failed', { run_id, error: message })
+      // A wallet refusal is an account state, not a bug: keep it out of
+      // Sentry's error stream.
+      if (err instanceof WalletDeniedError) log.warn('Story mapper refused by the wallet', { run_id, reason: err.reason })
+      else log.error('Story mapper failed', { run_id, error: message })
 
       // PostgREST builders are thenables without `.catch`; await and ignore
       // the resolved error rather than chaining `.catch` (which throws).
@@ -426,6 +429,23 @@ Deno.serve(
         finished_at: new Date().toISOString(),
       }).eq('id', run_id)
       if (failErr) log.warn('failed to mark story_map_run failed', { run_id, error: failErr.message })
+
+      // An empty hosted-LLM wallet is the caller's to fix (top up or add a
+      // key), not a server failure: 402 with what the top-up prompt needs.
+      if (err instanceof WalletDeniedError) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: 'WALLET_INSUFFICIENT',
+              message: 'Not enough wallet balance for this AI call. Top up the wallet or add your own API key.',
+              reason: err.reason,
+              balanceMicro: err.balanceMicro,
+            },
+          }),
+          { status: 402, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
 
       // `message` is recorded server-side (log + story_map_runs.error_message)
       // above; return a generic message so we don't leak internals to the

@@ -171,6 +171,12 @@ async function handler(req: Request): Promise<Response> {
     ])
     if (settingsErr) throw new Error(`project_settings load failed: ${settingsErr.message}`)
     const allSettings = (settingsRows ?? []) as PlatformSettingsRow[]
+    // One pass instead of an allSettings.find per routing / webhook row
+    // (O(rows × projects) per cron tick). First row wins, as find did.
+    const settingsByProject = new Map<string, PlatformSettingsRow>()
+    for (const s of allSettings) {
+      if (!settingsByProject.has(s.project_id)) settingsByProject.set(s.project_id, s)
+    }
 
     // Build lookup maps for org-level defaults
     const projectOrgMap = new Map<string, string>()
@@ -247,7 +253,7 @@ async function handler(req: Request): Promise<Response> {
       const kind = routingTypeToKind(r.integration_type)
       if (!kind) continue
       // Find the matching settings row (or use empty defaults).
-      const settings = allSettings.find((s) => s.project_id === r.project_id) ?? ({} as PlatformSettingsRow)
+      const settings = settingsByProject.get(r.project_id) ?? ({} as PlatformSettingsRow)
       tasks.push({ projectId: r.project_id, kind, settings, routingConfig: r.config })
     }
 
@@ -255,7 +261,7 @@ async function handler(req: Request): Promise<Response> {
     for (const wh of (rewardWebhookRows ?? []) as Array<{ id: string; project_id: string | null; organization_id: string; url: string; secret_hash: string | null; enabled: boolean }>) {
       const projectId = wh.project_id ?? allSettings.find((s) => s.project_id)?.project_id
       if (!projectId) continue
-      const settings = allSettings.find((s) => s.project_id === projectId) ?? ({} as PlatformSettingsRow)
+      const settings = settingsByProject.get(projectId) ?? ({} as PlatformSettingsRow)
       tasks.push({
         projectId,
         kind: 'reward_webhook' as const,
@@ -274,7 +280,7 @@ async function handler(req: Request): Promise<Response> {
     const anchorProjectId =
       operatorProject?.id ?? (projectRows.length === 1 ? projectRows[0].id : null)
     const anchorSettings = anchorProjectId
-      ? allSettings.find((s) => s.project_id === anchorProjectId) ?? null
+      ? settingsByProject.get(anchorProjectId) ?? null
       : null
     if (!anchorSettings && (Deno.env.get('ANTHROPIC_API_KEY') || Deno.env.get('OPENAI_API_KEY'))) {
       plog.warn('env LLM keys not probed: no operator project (set MUSHI_OPERATOR_USER_IDS)')

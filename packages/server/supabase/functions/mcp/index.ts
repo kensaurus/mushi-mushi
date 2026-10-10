@@ -110,6 +110,7 @@ import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.ts'
+import { legacyAliasArgs } from './legacy-alias-args.ts'
 import { normalizeArgAliases } from './arg-aliases.ts'
 import {
   designExcerptQueryOf,
@@ -2360,7 +2361,8 @@ for (const [oldName, newName] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
     description:
       `⚠️ DEPRECATED — use \`${newName}\` instead. This alias will be removed in the next release.\n\n${target.description}`,
     handler: async (args, ctx) => {
-      const data = await target.handler(args, ctx)
+      // Restore the mode the old tool implied (legacy-alias-args.ts).
+      const data = await target.handler(legacyAliasArgs(oldName, args), ctx)
       // If the result is an object, inject a deprecation key so callers notice.
       if (data != null && typeof data === 'object' && !Array.isArray(data)) {
         return {

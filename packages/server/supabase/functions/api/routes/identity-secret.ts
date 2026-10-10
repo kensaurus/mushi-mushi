@@ -16,10 +16,15 @@
  * SECURITY MODEL:
  *   - Raw secret returned exactly ONCE (on POST/rotate). After that only
  *     the creation timestamp and "configured" boolean are readable.
- *   - Secret stored ONLY in Supabase Vault via vault_store_secret().
- *     `project_settings.assistant_identity_secret_ref` holds only the Vault UUID.
+ *   - Secret stored ONLY in Supabase Vault via vault_store_secret(), under
+ *     the name `mushi_<projectId>_identity`.
+ *     `project_settings.assistant_identity_secret_ref` holds only the
+ *     reference `vault://<that name>`, never the secret.
  *   - All endpoints require jwtAuth + projectConfigDenied (owner/admin; 403 for members, 404 for strangers).
- *   - Rotate: new secret under a new Vault ID, old Vault entry orphaned.
+ *   - Rotate: vault_store_secret() overwrites the existing Vault entry of that
+ *     name in place, so the old secret stops verifying at once and nothing is
+ *     orphaned. DELETE only clears the ref; the Vault entry stays until the
+ *     next rotate overwrites it.
  *
  * DEPENDENCIES:
  *   - _shared/auth.ts   : jwtAuth

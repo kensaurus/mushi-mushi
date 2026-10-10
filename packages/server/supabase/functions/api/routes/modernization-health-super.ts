@@ -255,12 +255,19 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     // Any member can probe an integration of a project they can read. The
     // credentials are per project, so probe the one the console names: the
     // first accessible project tested someone else's keys and wrote the
-    // health row there.
+    // health row there. With no project named, only a caller with exactly
+    // one project gets a default; accessibleIds has no stable order.
     const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
     const requested = (c.req.query('project_id') ?? c.req.header('X-Mushi-Project-Id') ?? '').trim();
     if (requested && !accessibleIds.includes(requested)) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'You do not have access to that project.' } }, 403);
+    }
+    if (!requested && accessibleIds.length > 1) {
+      return c.json(
+        { ok: false, error: { code: 'PROJECT_REQUIRED', message: 'Choose a project first: send project_id.' } },
+        400,
+      );
     }
     const projectId = requested || accessibleIds[0];
 

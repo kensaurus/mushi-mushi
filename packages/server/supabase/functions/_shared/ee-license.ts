@@ -107,7 +107,11 @@ export async function verifyEeLicense(
 
   // Expiry is date-granular; the key is valid THROUGH its exp day (UTC).
   const expMs = Date.parse(`${payload.exp}T23:59:59.999Z`)
-  if (Number.isNaN(expMs)) return { mode: 'eval', reason: 'malformed' }
+  // Date.parse rolls an impossible day over (2026-02-31 → 2026-03-03), so the
+  // parsed date must round-trip to the same calendar day.
+  if (Number.isNaN(expMs) || new Date(expMs).toISOString().slice(0, 10) !== payload.exp) {
+    return { mode: 'eval', reason: 'malformed' }
+  }
   if (now.getTime() > expMs) {
     return { mode: 'eval', reason: 'expired' }
   }

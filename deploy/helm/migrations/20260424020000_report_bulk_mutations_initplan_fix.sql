@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 20260424020000_report_bulk_mutations_initplan_fix.sql
--- Wave T post-deploy hot-patch (2026-04-24).
+-- Wave T post-deploy hot-patch (2026-04-23).
 --
 -- The `report_bulk_mutations_log` migration shipped in 20260424000000 used the
 -- raw form `using (admin_id = auth.uid())`. Supabase's performance linter

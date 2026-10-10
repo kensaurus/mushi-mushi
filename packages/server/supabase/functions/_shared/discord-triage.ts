@@ -46,8 +46,8 @@ import { log } from './logger.ts'
 
 const triageLog = log.child('discord-triage')
 
-const DISCORD_HOST = 'discord.com'
-const DISCORDAPP_HOST = 'discordapp.com'
+/** Hosts that serve Discord webhooks (stable, PTB, Canary and the legacy domain). */
+const DISCORD_HOSTS = new Set(['discord.com', 'ptb.discord.com', 'canary.discord.com', 'discordapp.com'])
 
 /** Hard ceiling on the notify round-trip. Classification must not wait longer. */
 const NOTIFY_TIMEOUT_MS = 2000
@@ -156,7 +156,7 @@ async function sha256Hex(input: string): Promise<string> {
  * First 6 hex chars of SHA-256(identifier) — a stable, non-reversible label so
  * "same user hit this twice" is visible in Discord without an email or user id
  * ever leaving the cluster. Already-hashed inputs (reporter_token_hash) are
- * simply shortened.
+ * hashed again, so the label is never a prefix of a stored hash.
  */
 export async function triagePseudonym(identifier: string | null | undefined): Promise<string | null> {
   const raw = (identifier ?? '').trim()
@@ -194,9 +194,11 @@ export async function postTriageNotice(content: string): Promise<boolean> {
   if (webhookUrl) {
     const host = safeHost(webhookUrl)
     // Compare the parsed host, not a substring: `includes('discord.com')` also
-    // matches hostile hosts like `discord.com.evil.test`.
-    if (host !== DISCORD_HOST && host !== DISCORDAPP_HOST) {
+    // matches hostile hosts like `discord.com.evil.test`. Fail closed: the
+    // payload carries report summaries and console links.
+    if (!DISCORD_HOSTS.has(host)) {
       triageLog.warn('discord_url_host_mismatch', { host })
+      return false
     }
     url = threadId
       ? `${webhookUrl}${webhookUrl.includes('?') ? '&' : '?'}thread_id=${encodeURIComponent(threadId)}`
@@ -360,11 +362,12 @@ export async function evaluateTriageDedupe(
   if (!groupId) return { notify: true, occurrenceCount: null, escalation: false }
 
   try {
-    const [{ data, error }, { data: group }] = await Promise.all([
+    const [{ data, error }, { data: group, error: groupError }] = await Promise.all([
       db.rpc('report_group_blast_radius', { p_group_ids: [groupId] }),
       db.from('report_groups').select('canonical_report_id').eq('id', groupId).maybeSingle(),
     ])
     if (error) throw new Error(error.message)
+    if (groupError) throw new Error(groupError.message)
 
     const row = (data as { report_group_id: string; report_count: number }[] | null)?.[0]
     const count = Number(row?.report_count ?? 0)

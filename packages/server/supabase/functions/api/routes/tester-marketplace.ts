@@ -67,6 +67,7 @@ import { checkSanctions } from '../../_shared/sanctions.ts'
 import { hashTesterTin, normalizeTin } from '../../_shared/tin-hash.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
 import { parseSentryDsn, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
+import { minimalTremendousPayload } from '../../_shared/tremendous-payload.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -1698,7 +1699,8 @@ async function handleTremendousEvent(
     .from('tremendous_orders')
     .update({
       status: internalStatus,
-      raw_payload: event,
+      // The event echoes the recipient's email and the redeem link.
+      raw_payload: minimalTremendousPayload(event),
       last_synced_at: new Date().toISOString(),
     })
     .eq('id', ordRow.id)

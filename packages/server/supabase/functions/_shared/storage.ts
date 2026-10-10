@@ -143,9 +143,12 @@ export async function getStorageAdapter(projectId: string): Promise<StorageAdapt
 /**
  * Health-check variant of the factory that also captures vault-ref resolution
  * timing as debug steps, so the admin UI can show a structured trace.
- * Returns null adapter + debug steps if the settings row is missing or if
- * building the external adapter fails (the caller should surface this as a
- * configuration error rather than falling back silently).
+ * Always returns an adapter plus the debug steps: the cluster-default Supabase
+ * adapter when there is no settings row (or the provider is supabase), else
+ * the external adapter. When a vault secret is missing or the external
+ * adapter cannot be built it returns a stub whose healthCheck() fails with
+ * that error (and whose other methods throw it), so the caller surfaces a
+ * configuration error rather than falling back silently. Never null.
  */
 export async function getStorageAdapterForHealthCheck(
   projectId: string,

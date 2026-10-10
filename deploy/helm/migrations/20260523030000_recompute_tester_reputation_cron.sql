@@ -30,7 +30,7 @@ BEGIN
     PERFORM cron.schedule(
       'recompute-tester-reputation',
       '0 2 * * *',
-      $$
+      $cron$
         SELECT net.http_post(
           url    := (SELECT value FROM mushi_runtime_config WHERE key = 'edge_function_base_url')
                    || '/recompute-tester-reputation',
@@ -40,7 +40,7 @@ BEGIN
           ),
           body   := '{}'::jsonb
         ) AS request_id;
-      $$
+      $cron$
     );
   END IF;
 END;
@@ -53,9 +53,9 @@ BEGIN
     PERFORM cron.schedule(
       'tester-leaderboard-refresh',
       '*/15 * * * *',
-      $$
+      $cron$
         SELECT public.refresh_tester_leaderboard();
-      $$
+      $cron$
     );
   END IF;
 END;

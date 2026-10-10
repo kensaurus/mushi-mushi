@@ -198,6 +198,10 @@ export async function getPromptForStage(
  * as version. Prior to this, two projects sharing a version string like "v1"
  * would write to the wrong row, corrupting both projects' running averages.
  * If projectId is omitted, we restrict to global rows (project_id IS NULL).
+ *
+ * The update runs in one statement (record_prompt_judge_score, migration
+ * 20261010180200): judge-batch fires this without awaiting, and a JS
+ * read-then-write let concurrent scores for one version lose increments.
  */
 export async function recordPromptResult(
   db: SupabaseClient,
@@ -208,47 +212,25 @@ export async function recordPromptResult(
 ): Promise<void> {
   if (!promptVersion) return
 
-  let query = db
-    .from('prompt_versions')
-    .select('id, avg_judge_score, total_evaluations')
-    .eq('version', promptVersion)
-  query = scope?.projectId ? query.eq('project_id', scope.projectId) : query.is('project_id', null)
-  if (scope?.stage) query = query.eq('stage', scope.stage)
-
-  const { data: rows, error: fetchErr } = await query
-  if (fetchErr) {
-    log.warn('prompt_versions lookup failed', { promptVersion, error: fetchErr.message })
+  const { data: matched, error } = await db.rpc('record_prompt_judge_score', {
+    p_version: promptVersion,
+    p_score: judgeScore,
+    p_project_id: scope?.projectId ?? null,
+    p_stage: scope?.stage ?? null,
+  })
+  if (error) {
+    log.error('Failed to update prompt version score', { promptVersion, error: error.message })
     return
   }
-  if (!rows || rows.length === 0) {
+  if (matched === 0) {
     log.warn('prompt_versions row not found for scope', { promptVersion, projectId: scope?.projectId, stage: scope?.stage })
-    return
-  }
-  if (rows.length > 1) {
+  } else if (typeof matched === 'number' && matched > 1) {
     // Defensive: the (project_id, stage, version) unique constraint should make
-    // this impossible after migration 20260418000700 — keep the guard so older
-    // databases don't silently corrupt the running average.
+    // this impossible after migration 20260418000700; the RPC refuses to write
+    // so older databases don't silently corrupt the running average.
     log.error('Multiple prompt_versions rows match scope; refusing to update to avoid corruption', {
-      promptVersion, projectId: scope?.projectId, stage: scope?.stage, count: rows.length,
+      promptVersion, projectId: scope?.projectId, stage: scope?.stage, count: matched,
     })
-    return
-  }
-  const row = rows[0]
-
-  const oldAvg = row.avg_judge_score ?? 0
-  const oldCount = row.total_evaluations ?? 0
-  const newAvg = ((oldAvg * oldCount) + judgeScore) / (oldCount + 1)
-
-  const { error: updateErr } = await db
-    .from('prompt_versions')
-    .update({
-      avg_judge_score: newAvg,
-      total_evaluations: oldCount + 1,
-    })
-    .eq('id', row.id)
-
-  if (updateErr) {
-    log.error('Failed to update prompt version score', { promptVersion, error: updateErr.message })
   }
 }
 

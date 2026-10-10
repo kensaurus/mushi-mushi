@@ -75,6 +75,7 @@ WHERE (feature_flags->>'marketplace_publish')::boolean = true;
 - [ ] KYB (Know Your Business) approval from Tremendous received
 - [ ] Production account funded with seed balance
 - [ ] `TREMENDOUS_API_KEY` set in edge function environment (production Supabase dashboard → Functions → Settings)
+- [ ] `TREMENDOUS_API_URL` set beside it: `https://testflight.tremendous.com/api/v2` for the sandbox, `https://www.tremendous.com/api/v2` for production. There is no default; the worker answers 503 until it is set
 - [ ] `TREMENDOUS_WEBHOOK_SECRET` set (register webhook at Tremendous dashboard → Webhooks → `https://your-api-url/v1/webhooks/tremendous`)
 - [ ] `tremendous_funding_source_id` updated in `mushi_runtime_config`:
 
@@ -86,6 +87,12 @@ WHERE key = 'tremendous_funding_source_id';
 
 - [ ] Test order sent in Tremendous sandbox and confirmed received in `tremendous_orders` table
 - [ ] Webhook round-trip verified: order created → status updated to 'processing' → webhook fires → status updated to 'complete'
+- [ ] `tremendous-redemption-worker` cron enabled (it ships inactive):
+
+```sql
+SELECT cron.alter_job(jobid, active := true) FROM cron.job
+ WHERE jobname = 'tremendous-redemption-worker';
+```
 
 ---
 

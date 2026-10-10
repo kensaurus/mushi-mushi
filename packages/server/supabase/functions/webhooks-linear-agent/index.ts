@@ -26,10 +26,10 @@
  *   3. log the REAL result code and post it back to the Linear agent session
  *      (text on success, error on AUTOFIX_DISABLED / DISPATCH_FAILED).
  *
- * Security: signed with Linear-Signature HMAC-SHA256 using the actor token.
- * If no signature is present we fall back to verifying against the
- * webhook secret (same key used for the main webhooks-linear receiver).
- * Every request also goes through `_shared/webhook-middleware.ts` for the
+ * Security: the `Linear-Signature` header must be an HMAC-SHA256 of the raw
+ * body keyed by a project's `linear_webhook_secret_ref` (the same secret the
+ * main webhooks-linear receiver uses). There is no fallback: an unsigned
+ * payload, or one that matches no project's secret, is dropped. Every request also goes through `_shared/webhook-middleware.ts` for the
  * audit log, the per-IP rate limit, and the 24h replay cache keyed on the
  * `Linear-Delivery` header. The replay cache matters most here: this handler
  * dispatches a code-mutating fix job, and Linear retries any delivery it does

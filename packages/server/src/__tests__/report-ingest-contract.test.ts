@@ -144,4 +144,9 @@ describe('report ingest contract (core MushiReport ↔ server reportSubmissionSc
       ).toBe(true);
     }
   });
+
+  it('treats a null userIntent as missing, not the string "null"', () => {
+    expect(reportSubmissionSchema.parse({ ...fullReport, userIntent: null }).userIntent).toBeUndefined();
+    expect(reportSubmissionSchema.parse({ ...fullReport, userIntent: 42 }).userIntent).toBe('42');
+  });
 });

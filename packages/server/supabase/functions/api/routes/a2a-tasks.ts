@@ -248,12 +248,18 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
 
       // For classify_report and judge_fix: verify the report exists and belongs to the project.
       if (skill === 'classify_report' || skill === 'judge_fix') {
-        const { data: report } = await db
+        // maybeSingle: "not found" is data null, so an `error` here is a real
+        // DB failure and must not be reported to the A2A caller as a 404.
+        const { data: report, error: reportErr } = await db
           .from('reports')
           .select('id')
           .eq('id', reportId)
           .eq('project_id', projectId)
-          .single();
+          .maybeSingle();
+        if (reportErr) {
+          log.error('a2a task: report lookup failed', { reportId, err: reportErr.message });
+          return c.json({ error: { code: 'DB_ERROR', message: 'Could not look up the report' } }, 500);
+        }
         if (!report) {
           return c.json(
             { error: { code: 'NOT_FOUND', message: 'Report not found in this project' } },
@@ -263,13 +269,17 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
 
         // For judge_fix, a fix attempt must exist to judge against.
         if (skill === 'judge_fix') {
-          const { data: attempt } = await db
+          const { data: attempt, error: attemptErr } = await db
             .from('fix_attempts')
             .select('id')
             .eq('report_id', reportId)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
+          if (attemptErr) {
+            log.error('a2a task: fix attempt lookup failed', { reportId, err: attemptErr.message });
+            return c.json({ error: { code: 'DB_ERROR', message: 'Could not look up fix attempts' } }, 500);
+          }
           if (!attempt) {
             return c.json(
               {

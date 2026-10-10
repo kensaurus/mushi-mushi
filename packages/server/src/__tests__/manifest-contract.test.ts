@@ -59,10 +59,12 @@ function extractRegisteredRoutes(source: string): RegisteredRoute[] {
 // and strip the prefix back to the path-only form Hono registers under.
 function extractManifestEndpoints(source: string): string[] {
   const manifestStart = source.indexOf("app.get('/v1/admin/auth/manifest'");
-  expect(manifestStart, 'manifest endpoint must exist in index.ts').toBeGreaterThan(0);
-  // Heuristic: read 4 KB of the manifest body — enough for any realistic
-  // schema-list payload without scanning the whole 8 k-line file.
-  const window = source.slice(manifestStart, manifestStart + 4000);
+  expect(manifestStart, 'manifest endpoint must exist in the api sources').toBeGreaterThanOrEqual(0);
+  // Scan the whole manifest handler: from its registration to the next route
+  // registration (or the end of the sources), so a growing manifest never
+  // drops advertised endpoints out of a fixed-size window.
+  const nextRoute = source.slice(manifestStart + 1).search(/\bapp\.(get|post|put|patch|delete|use|route|all)\s*\(/);
+  const window = source.slice(manifestStart, nextRoute < 0 ? undefined : manifestStart + 1 + nextRoute);
   const re = /`\$\{apiBase\}(\/[^`]+)`/g;
   const out = new Set<string>();
   let match: RegExpExecArray | null;

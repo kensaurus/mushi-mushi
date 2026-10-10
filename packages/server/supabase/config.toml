@@ -18,6 +18,8 @@ enabled = true
 site_url = "https://kensaur.us/mushi-mushi/"
 additional_redirect_urls = [
   "http://localhost:5173/mushi-mushi/",
+  # apps/admin dev server (vite.config.ts server.port; base "/" unless VITE_BASE_PATH is set)
+  "http://localhost:6464/**",
   "http://localhost:3000",
   "https://kensaur.us/mushi-mushi/**",
 ]

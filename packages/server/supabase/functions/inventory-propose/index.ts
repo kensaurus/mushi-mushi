@@ -542,6 +542,23 @@ async function handler(req: Request): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err) {
+    // An empty hosted-LLM wallet is the caller's to fix (top up or add a
+    // key), not a server failure: 402 with what the top-up prompt needs.
+    if (err instanceof WalletDeniedError) {
+      rlog.warn('propose refused by the wallet', { project_id: body.project_id, reason: err.reason })
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: 'WALLET_INSUFFICIENT',
+            message: 'Not enough wallet balance for this AI call. Top up the wallet or add your own API key.',
+            reason: err.reason,
+            balanceMicro: err.balanceMicro,
+          },
+        }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
     rlog.error('propose failed', { project_id: body.project_id, err: String(err) })
     return safeErrorResponse({ code: 'PROPOSE_FAILED', status: 500 })
   }

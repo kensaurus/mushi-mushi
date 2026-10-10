@@ -1478,11 +1478,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    // We don't have a dedicated `fix_events` table yet, so we derive a
-    // repo-wide activity stream from the timestamps already stamped on
-    // `fix_attempts` (+ its companion dispatch row). Each fix_attempt can
-    // contribute up to 5 events; cap on row count + per-row synthesis keeps
-    // the response well under a second.
+    // Repo-wide stream: events synthesized from the timestamps stamped on
+    // `fix_attempts`, merged with the append-only `fix_events` rows the
+    // GitHub webhook handler and ci-sync write. A stored row wins per kind
+    // for its attempt (the per-fix timeline's mergeStoredFixTimeline rule),
+    // so nothing appears twice and stages without a stored row still show.
+    // Cap on attempt count + per-row synthesis keeps the response fast.
     const { data: fixes } = await db
       .from('fix_attempts')
       .select(
@@ -1496,10 +1497,13 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       at: string;
       kind:
         | 'dispatched'
+        | 'started'
         | 'branch'
         | 'commit'
         | 'pr_opened'
+        | 'ci_started'
         | 'ci_resolved'
+        | 'pr_state_changed'
         | 'completed'
         | 'failed';
       fix_attempt_id: string;
@@ -1512,8 +1516,34 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       status?: 'ok' | 'fail' | 'pending';
     }
 
+    type StoredEvent = Pick<RepoActivityEvent, 'kind' | 'at' | 'label' | 'detail' | 'status'>;
+    const storedByFix = new Map<string, StoredEvent[]>();
+    const fixIds = (fixes ?? []).map((f) => f.id as string);
+    if (fixIds.length > 0) {
+      const { data: stored, error: storedErr } = await db
+        .from('fix_events')
+        .select('fix_attempt_id, kind, status, label, detail, at')
+        .eq('project_id', projectId)
+        .in('fix_attempt_id', fixIds)
+        .order('at', { ascending: false })
+        .limit(2000);
+      if (storedErr) return dbError(c, storedErr);
+      for (const e of stored ?? []) {
+        const list = storedByFix.get(e.fix_attempt_id) ?? [];
+        list.push({
+          kind: e.kind as RepoActivityEvent['kind'],
+          at: e.at,
+          label: e.label,
+          detail: e.detail ?? null,
+          status: (e.status ?? undefined) as RepoActivityEvent['status'],
+        });
+        storedByFix.set(e.fix_attempt_id, list);
+      }
+    }
+
     const events: RepoActivityEvent[] = [];
     for (const f of fixes ?? []) {
+      const firstOfAttempt = events.length;
       const base = {
         fix_attempt_id: f.id,
         report_id: f.report_id,
@@ -1584,6 +1614,13 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           label: 'Fix failed',
           status: 'fail',
         });
+      }
+
+      const stored = storedByFix.get(f.id);
+      if (stored) {
+        const storedKinds = new Set(stored.map((e) => e.kind));
+        const synthesized = events.splice(firstOfAttempt).filter((e) => !storedKinds.has(e.kind));
+        events.push(...synthesized, ...stored.map((e) => ({ ...base, ...e })));
       }
     }
 

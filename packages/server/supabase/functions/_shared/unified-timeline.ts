@@ -48,8 +48,9 @@ export async function buildUnifiedReportTimeline(
 ): Promise<UnifiedTimelineEntry[]> {
   const entries: UnifiedTimelineEntry[] = []
 
-  // Phase 1c: include telemetry columns in the initial report fetch so we can merge
-  // breadcrumbs, console errors, and backend spans into the timeline without a 2nd round-trip.
+  // Phase 1c: include telemetry columns in the initial report fetch so breadcrumbs,
+  // console errors, and the trace ids need no 2nd round-trip. Backend spans live in
+  // their own table and cost one more query when a trace id is present.
   const { data: report } = await db
     .from('reports')
     .select('id, status, description, category, created_at, breadcrumbs, console_logs, custom_metadata, sentry_trace_id')
@@ -198,7 +199,8 @@ export async function buildUnifiedReportTimeline(
   //   user action → SDK event → network request → backend span → error → report.
   // Only error/warn console entries are included to avoid noise (not all 50 log entries).
   // Breadcrumbs use their wall-clock timestamp; backend_spans use ingested_at.
-  // `report` already contains these columns from the select above — no extra round-trip.
+  // Breadcrumbs and console entries come from the `report` select above; backend
+  // spans need one extra `backend_spans` query, only when the report has a trace id.
 
   // Breadcrumbs: navigation, click, lifecycle, custom — entire ring buffer.
   const breadcrumbs = report.breadcrumbs as Array<{
@@ -208,12 +210,14 @@ export async function buildUnifiedReportTimeline(
     message: string
     data?: Record<string, unknown>
   }> | null
-  for (const b of breadcrumbs ?? []) {
+  // The array index keeps ids unique: several crumbs can share one millisecond
+  // and category, and the console renders entry.id as the React key.
+  for (const [i, b] of (breadcrumbs ?? []).entries()) {
     const isoAt = timelineIso(b.timestamp, report.created_at)
     // Sentry-forwarded crumbs (category starts with 'sentry') get sentry provenance.
     const isSentry = b.category?.startsWith('sentry')
     entries.push({
-      id: `breadcrumb-${b.timestamp}-${b.category}`,
+      id: `breadcrumb-${i}-${b.timestamp}-${b.category}`,
       lane: 'breadcrumb',
       at: isoAt,
       title: `${b.category}: ${b.message}`,
@@ -234,10 +238,10 @@ export async function buildUnifiedReportTimeline(
     timestamp: number
     stack?: string
   }> | null
-  for (const log of consoleLogs ?? []) {
+  for (const [i, log] of (consoleLogs ?? []).entries()) {
     if (log.level !== 'error' && log.level !== 'warn') continue
     entries.push({
-      id: `console-${log.timestamp}-${log.level}`,
+      id: `console-${i}-${log.timestamp}-${log.level}`,
       lane: 'console',
       at: timelineIso(log.timestamp, report.created_at),
       title: `console.${log.level}: ${String(log.message).slice(0, 120)}`,
