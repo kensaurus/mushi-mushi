@@ -15,7 +15,7 @@ fix using the `mushi` MCP tools plus this repo's code.
 ## Workflow
 
 1. **Find the report.** If the user named one, call `get_report_detail`.
-   Otherwise call `get_recent_reports` (filter by status `new`/`triaged`) or
+   Otherwise call `get_recent_reports` (filter by status `new`/`classified`) or
    `triage_issue` for a "what should I fix next" ranking. `search_reports`
    handles fuzzy descriptions ("the checkout crash").
 
