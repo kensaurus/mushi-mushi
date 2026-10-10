@@ -83,13 +83,13 @@ helm install mushi-us ./deploy/helm \
   --namespace mushi --create-namespace \
   --set global.database.host=postgres-us.internal \
   --set global.region=us \
-  --set global.peerRegions="eu,jp"
+  --set-string 'global.peerRegions=eu\,jp'
 
 helm install mushi-eu ./deploy/helm \
   --namespace mushi --create-namespace \
   --set global.database.host=postgres-eu.internal \
   --set global.region=eu \
-  --set global.peerRegions="us,jp"
+  --set-string 'global.peerRegions=us\,jp'
 ```
 
 ## Open work
