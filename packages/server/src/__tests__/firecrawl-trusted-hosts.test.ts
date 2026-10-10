@@ -19,7 +19,7 @@ vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   markKeyUsed: vi.fn(async () => {}),
 }))
 
-const { firecrawlScrape, firecrawlScrapeChangelog, CHANGELOG_HOSTS } = await import(
+const { firecrawlScrape, firecrawlScrapeChangelog, firecrawlScrapeOwnSite, CHANGELOG_HOSTS } = await import(
   '../../supabase/functions/_shared/firecrawl.ts'
 )
 
@@ -85,5 +85,16 @@ describe('trusted changelog hosts', () => {
       firecrawlScrape(makeDb(), 'p1', 'https://github.com/a/b', { trustedHosts: ['github.com'] } as never),
     ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("lets the story mapper read its own site's host and nothing else", async () => {
+    const site = 'https://app.example.com/'
+    await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://app.example.com/pricing', site)).resolves.toBeTruthy()
+    await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://github.com/a/b', site)).rejects.toThrow(
+      'FIRECRAWL_DOMAIN_NOT_ALLOWED',
+    )
+    await expect(
+      firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://app.example.com.evil.example/x', site),
+    ).rejects.toThrow('FIRECRAWL_DOMAIN_NOT_ALLOWED')
   })
 })

@@ -37,10 +37,15 @@ the privacy policy for diagnosis. With your own model key (BYOK), the call runs
 against **your** provider account.
 
 If you turn on **Search the web for known fixes** (Settings → Web tools, off by
-default, per project), the report's error message, with IDs, URLs and long
-numbers removed, is also sent to Firecrawl as a search query against GitHub
-and Stack Overflow. Report text from the reporter, screenshots and the
-reporter key are not sent.
+default, per project), Firecrawl also receives:
+
+- the report's error message, with IDs, URLs and long numbers removed (plus the
+  runtime name, such as `node`), as a search query against its developer index
+  and GitHub/Stack Overflow, after classification and on **Search again**;
+- for a fix dispatch with little code context, the report summary or the first
+  200 characters of the description, to find related fixes.
+
+Screenshots, logs and the reporter key are not sent.
 
 What the reporter is **never** shown: internal severity or category, PR or
 branch names, the coding agent used, LLM output, or other reporters' content

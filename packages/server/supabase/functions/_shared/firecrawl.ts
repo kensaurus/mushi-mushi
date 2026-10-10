@@ -311,6 +311,21 @@ export function firecrawlScrapeChangelog(
   return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, CHANGELOG_HOSTS);
 }
 
+/**
+ * The story mapper's crawl of the project's own app (#471): `siteUrl` is the
+ * base URL the project configured for that crawl, and only its exact host
+ * passes past the allow-list. Report text never reaches this path.
+ */
+export function firecrawlScrapeOwnSite(
+  db: SupabaseClient,
+  projectId: string,
+  url: string,
+  siteUrl: string,
+  opts: FirecrawlScrapeOptions = {},
+): Promise<FirecrawlScrapeResult> {
+  return scrapeAllowed(db, projectId, url, { bypassCache: opts.bypassCache }, [new URL(siteUrl).hostname]);
+}
+
 async function scrapeAllowed(
   db: SupabaseClient,
   projectId: string,

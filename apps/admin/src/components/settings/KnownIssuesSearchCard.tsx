@@ -71,8 +71,10 @@ export function KnownIssuesSearchCard({ projectId, id }: { projectId: string | n
         purpose={
           <>
             Off by default. When on, Mushi sends the error message from each error report to Firecrawl, with IDs,
-            URLs and long numbers removed, to search GitHub and Stack Overflow for known fixes. The top results
-            appear on the report under &ldquo;Others who hit this&rdquo;. Nothing else from the report is sent.
+            URLs and long numbers removed, to search GitHub and Stack Overflow (issues, merged fixes, docs) for
+            known fixes, after classification and when someone presses Search again. The top results appear on the
+            report under &ldquo;Others who hit this&rdquo;. A fix dispatch with little code context also sends the
+            report summary (or the start of its description) to find related fixes.
           </>
         }
         action={

@@ -116,40 +116,55 @@ describe('KnownIssuesSearchCard', () => {
 })
 
 describe('KnownIssuesSection when the search is off', () => {
-  function renderSection(props: Parameters<typeof KnownIssuesSection>[0]) {
+  // A Sentry report with a real exception, so the section renders.
+  const report = {
+    id: 'r1',
+    known_issues: [],
+    description: 'TypeError: cannot add postgres_changes callbacks',
+    console_logs: [],
+    custom_metadata: { source: 'sentry_webhook' },
+  } as unknown as Parameters<typeof KnownIssuesSection>[0]['report']
+  function renderSection(props: Partial<Parameters<typeof KnownIssuesSection>[0]>) {
     act(() => {
-      root.render(createElement(MemoryRouter, null, createElement(KnownIssuesSection, props)))
+      root.render(
+        createElement(MemoryRouter, null, createElement(KnownIssuesSection, { report, onReload: () => {}, ...props })),
+      )
     })
   }
+  const settingLink = () => container.querySelector(`a[href="${KNOWN_ISSUES_SEARCH_HREF}"]`)
 
-  it('says the search is off and links to the setting', () => {
-    renderSection({ issues: [], searchEnabled: false })
-    expect(container.textContent).toContain('Web search for known fixes is off')
-    expect(container.querySelector(`a[href="${KNOWN_ISSUES_SEARCH_HREF}"]`)).not.toBeNull()
+  it('links to the setting instead of offering a search when the search is off', () => {
+    renderSection({ searchEnabled: false })
+    expect(settingLink()).not.toBeNull()
+    expect(container.textContent).not.toContain('Search now')
   })
 
-  it('says nothing when the state is unknown or the search is on', () => {
-    renderSection({ issues: [], searchEnabled: null })
-    expect(container.textContent).toBe('')
-    renderSection({ issues: [], searchEnabled: true })
-    expect(container.textContent).toBe('')
+  it('offers the search when the state is unknown or the search is on', () => {
+    for (const searchEnabled of [null, true]) {
+      renderSection({ searchEnabled })
+      expect(settingLink()).toBeNull()
+      expect(container.textContent).toContain('Search now')
+    }
   })
 
   it('still lists snippets attached by hand while the search is off', () => {
     renderSection({
-      issues: [
-        {
-          id: 'sn-1',
-          url: 'https://github.com/supabase/realtime-js/issues/1',
-          title: 'cannot add callbacks',
-          snippet: null,
-          attached_by: 'u1',
-          attached_at: null,
-        },
-      ],
+      report: {
+        ...report,
+        known_issues: [
+          {
+            id: 'sn-1',
+            url: 'https://github.com/supabase/realtime-js/issues/1',
+            title: 'cannot add callbacks',
+            snippet: null,
+            attached_by: 'u1',
+            attached_at: null,
+          },
+        ],
+      } as typeof report,
       searchEnabled: false,
     })
     expect(container.textContent).toContain('cannot add callbacks')
-    expect(container.textContent).not.toContain('is off')
+    expect(settingLink()).not.toBeNull()
   })
 })

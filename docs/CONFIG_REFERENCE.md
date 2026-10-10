@@ -381,11 +381,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Off by default. When on, Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.
 
-**How it works** — After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left to Firecrawl's search, limited to github.com and stackoverflow.com. The top 3 results appear on the report as "Others who hit this". It runs once per report, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). About 5 Firecrawl credits per error report.
+**How it works** — After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as "Others who hit this". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.
 
 **Default** — `false (nothing is sent)`
 
-**Where it lives** — table `project_settings.known_issues_search_enabled` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function (_shared/known-issues.ts)`
+**Where it lives** — table `project_settings.known_issues_search_enabled` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function (_shared/known-issues.ts)`, `POST /v1/admin/reports/:id/known-issues (Search again)`, `fix-worker edge function (web search for fix context)`
 
 **When to change** — Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi for a third party.
 

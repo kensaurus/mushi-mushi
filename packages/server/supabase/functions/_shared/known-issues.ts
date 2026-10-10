@@ -148,11 +148,11 @@ function isAboutTheError(result: { title: string; snippet: string }, phrase: str
 }
 
 /**
- * The project's opt-in. A missing row, a missing column (migration not yet
+ * The project's opt-in, also checked by fix-worker before its web search. A missing row, a missing column (migration not yet
  * applied) or a failed read all count as off: fail closed, since "on" sends
  * report text to a third party.
  */
-async function searchEnabled(db: SupabaseClient, projectId: string): Promise<boolean> {
+export async function knownIssuesSearchEnabled(db: SupabaseClient, projectId: string): Promise<boolean> {
   const { data, error } = await db
     .from('project_settings')
     .select('known_issues_search_enabled')
@@ -186,7 +186,7 @@ export async function lookupKnownIssues(
   if (!query) return { attached: 0, skipped: 'no_query' };
   try {
     // Nothing leaves Mushi unless the project turned the search on.
-    if (!(await searchEnabled(db, input.projectId))) return { attached: 0, query, skipped: 'disabled' };
+    if (!(await knownIssuesSearchEnabled(db, input.projectId))) return { attached: 0, query, skipped: 'disabled' };
     if (!(await resolveFirecrawl(db, input.projectId))) return { attached: 0, query, skipped: 'no_key' };
 
     const { data: attachedRows } = await db
