@@ -8,7 +8,11 @@ plus the OpenSSF Scorecard upload from
 is **not** infra noise. It surfaces real findings, the large majority of which
 are low-real-risk in tests / build tooling / CLI file-IO.
 
-## Disposition summary (154 alerts)
+## Disposition summary (156 alerts)
+
+The rows sum to 156, two more than the 154 reported above: the PR #245 row
+includes two `js/stack-trace-exposure` sites (#17, #19) that were outside the
+original follow-up list (see section 3).
 
 | Disposition | Count | Notes |
 |---|---|---|
