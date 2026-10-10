@@ -1431,10 +1431,13 @@ async function sweepIndexRepo(
 
   // Phase 1: walk the file tree and collect every chunk. We materialise the
   // whole list before embedding so we can size batches deterministically.
-  // Memory is bounded by `runBudget * avg-chunks-per-file * preview-size` —
-  // at the default 300-file budget with ~5 chunks per file × 600-char
-  // preview, that's ~900 KB worst case; comfortable inside the Edge Function
-  // memory budget.
+  // Each pending chunk holds its FULL body (up to MAX_CHUNK_LINES = 200
+  // lines), twice: `chunk.body` and the `text` sent to the embedder. Only the
+  // stored row is cut to a 600-char preview. Chunks are slices of the file,
+  // so memory is bounded by the bytes fetched this run: at most `runBudget`
+  // files (default 300) × MAX_INDEXED_FILE_BYTES (500 KB) × 2. Typical source
+  // files are a few KB, so a run holds a few MB; a repo of large generated
+  // files is the case that approaches the Edge Function memory limit.
   // Which files: see _shared/sweep-file-priority.ts. Stack-frame files of
   // open Sentry-linked reports first, then application source, unindexed
   // before indexed. A targeted run embeds only the given frame files.
