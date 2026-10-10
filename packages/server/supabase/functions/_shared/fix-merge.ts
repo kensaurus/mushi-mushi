@@ -84,9 +84,17 @@ export async function mergeGithubPullRequest(
   if (res.status === 405 || res.status === 422) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     const msg = body.message ?? `GitHub merge rejected (${res.status})`;
-    if (/already been merged|not mergeable/i.test(msg)) {
+    // "not mergeable" is also GitHub's answer for conflicts and blocked or
+    // failing required checks, so the message cannot say the PR merged. Ask
+    // the PR itself: only `merged === true` lets the caller finalize the fix
+    // (mark the report Fixed, meter fixes_succeeded).
+    const after = await fetchPullRequest(token, ref, pullNumber).catch(() => undefined);
+    const alreadyMerged = after === undefined
+      ? /already been merged/i.test(msg)
+      : after?.merged === true;
+    if (alreadyMerged) {
       // When GitHub actually merged it earlier, keep that time (finalizeFixMerge).
-      return { merged: true, alreadyMerged: true, message: msg, mergedAt: pr?.mergedAt ?? null };
+      return { merged: true, alreadyMerged: true, message: msg, mergedAt: after?.mergedAt ?? pr?.mergedAt ?? null };
     }
     return { merged: false, alreadyMerged: false, message: msg };
   }
@@ -137,6 +145,11 @@ export async function finalizeFixMerge(
     actorUserId?: string | null;
     /** GitHub's `merged_at` for the PR, when the caller read it. */
     mergedAt?: string | null;
+    /**
+     * Which path saw the merge, recorded on the usage event. Defaults to
+     * console_merge when an admin acted (actorUserId), otherwise system.
+     */
+    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile';
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
   const nowDate = new Date();
@@ -308,7 +321,7 @@ export async function finalizeFixMerge(
           pr_url: meta.prUrl,
           pr_number: meta.prNumber ?? attempt.pr_number,
           repository: meta.repository,
-          source: 'console_merge',
+          source: meta.source ?? (meta.actorUserId ? 'console_merge' : 'system'),
         },
       });
       if (usageErr) {
@@ -507,7 +520,7 @@ async function reconcileFixingPage(
     if (verdict.action === 'finalize_merged') {
       const attempt = attempts.find((a) => a.id === verdict.attemptId);
       if (!attempt?.pr_url) continue;
-      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number });
+      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number, source: 'fixing_reconcile' });
       summary.finalized++;
       acted++;
     } else if (verdict.action === 'flag_unreadable') {

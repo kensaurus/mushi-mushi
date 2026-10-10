@@ -3,6 +3,7 @@
 // Mushi Bounties marketplace listing for a project.
 //
 // All routes require JWT auth + marketplace_publish entitlement.
+// Viewers can read the listing; the PUT/POST routes refuse them.
 //
 //   GET  /v1/admin/published-apps/:projectId              — read listing
 //   PUT  /v1/admin/published-apps/:projectId              — upsert listing
@@ -20,7 +21,9 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
-import { accessibleProjectIds } from '../../_shared/project-access.ts'
+import { userCanAccessProject } from '../shared.ts'
+import { denyViewerWrite } from '../viewer-gate.ts'
+import { isUuid } from '../ids.ts'
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -120,9 +123,17 @@ async function requirePublishedAppsAccess(
   supabase: ReturnType<typeof getServiceClient>,
   projectId: string,
   userId: string,
-): Promise<{ ok: true; orgId: string } | { ok: false; error: string }> {
-  const allowed = await accessibleProjectIds(supabase, userId)
-  if (!allowed.includes(projectId)) {
+): Promise<
+  | { ok: true; orgId: string; role: 'owner' | 'admin' | 'member' | 'viewer' | null }
+  | { ok: false; error: string }
+> {
+  // A non-uuid id would fail the uuid column read below with a 500.
+  if (!isUuid(projectId)) {
+    return { ok: false, error: 'forbidden' }
+  }
+  // The service-role client bypasses RLS, so membership is checked here.
+  const access = await userCanAccessProject(supabase, userId, projectId)
+  if (!access.allowed) {
     return { ok: false, error: 'forbidden' }
   }
 
@@ -131,7 +142,7 @@ async function requirePublishedAppsAccess(
     return { ok: false, error: 'not_found_or_not_entitled' }
   }
 
-  return { ok: true, orgId: gate.orgId }
+  return { ok: true, orgId: gate.orgId, role: access.role }
 }
 
 // ─── Route registration ───────────────────────────────────────
@@ -174,6 +185,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'change the marketplace listing')
+    if (viewerDenied) return viewerDenied
 
     const body = await c.req.json()
     const parsed = AppUpsertSchema.safeParse(body)
@@ -250,6 +263,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'publish the marketplace listing')
+    if (viewerDenied) return viewerDenied
 
     const { data, error } = await supabase
       .from('published_apps')
@@ -270,6 +285,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'pause the marketplace listing')
+    if (viewerDenied) return viewerDenied
 
     const { data, error } = await supabase
       .from('published_apps')
@@ -316,6 +333,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'change marketplace targeting')
+    if (viewerDenied) return viewerDenied
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -373,6 +392,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'change marketplace bounties')
+    if (viewerDenied) return viewerDenied
 
     const body = await c.req.json()
     const parsed = BountiesUpsertSchema.safeParse(body)
@@ -447,6 +468,8 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
 
     const access = await requirePublishedAppsAccess(supabase, projectId, userId)
     if (!access.ok) return c.json({ error: access.error }, 403)
+    const viewerDenied = denyViewerWrite(c, access.role, 'change the marketplace budget')
+    if (viewerDenied) return viewerDenied
 
     const body = await c.req.json()
     const parsed = MarketplaceSettingsSchema.safeParse(body)

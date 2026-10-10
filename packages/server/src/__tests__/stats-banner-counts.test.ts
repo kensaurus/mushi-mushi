@@ -143,7 +143,7 @@ describe('costs/stats', () => {
 })
 
 describe('releases/stats', () => {
-  it('counts releases and credits exactly, past the 1,000-row cap', async () => {
+  it('counts releases and credits exactly, past the 1,000-row cap, before release_stats_totals exists', async () => {
     const releases = Array.from({ length: 1200 }, (_, i) => ({
       id: `rel-${i}`,
       project_id: P,
@@ -162,6 +162,11 @@ describe('releases/stats', () => {
       { releases, release_credits: credits, reports: [], support_tickets: [] },
       { maxRows: 1000 },
     )
+    // Migration 20261010180000 not applied yet: PostgREST answers PGRST202.
+    ;(db as unknown as { rpc: unknown }).rpc = async () => ({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function public.release_stats_totals' },
+    })
     const { body } = await get('/v1/admin/releases/stats')
     expect(body.data.totalReleases).toBe(1200)
     expect(body.data.draftCount).toBe(2)
@@ -172,6 +177,36 @@ describe('releases/stats', () => {
     expect(body.data.creditsPending).toBe(550)
     expect(body.data.topPriority).toBe('drafts_pending')
     expect(body.data.topPriorityLabel).toContain('4 contributors credited · 2 fixes linked')
+  })
+})
+
+describe('releases/stats with release_stats_totals', () => {
+  it('takes the array totals and credit counts from the SQL function, without paging releases', async () => {
+    const releases = [
+      { id: 'rel-0', project_id: P, status: 'draft', fixed_report_ids: ['a'], credited_reporter_ids: ['x'], published_at: null, created_at: iso(0) },
+    ]
+    db = makeFakeDb(
+      { releases, release_credits: [], reports: [], support_tickets: [] },
+      {
+        rpc: (fn) =>
+          fn === 'release_stats_totals'
+            ? { total_fixes_linked: 7, total_contributors: 5, draft_fixes: 3, draft_contributors: 2, total_credits: 4, credits_notified: 1 }
+            : null,
+      },
+    )
+    const { body } = await get('/v1/admin/releases/stats')
+    expect(db.rpcCalls.map((c) => c.fn)).toContain('release_stats_totals')
+    expect(body.data.totalFixesLinked).toBe(7)
+    expect(body.data.totalCredits).toBe(4)
+    expect(body.data.creditsNotified).toBe(1)
+    expect(body.data.creditsPending).toBe(3)
+  })
+
+  it('answers a failed SQL read with an error instead of zeros', async () => {
+    db = makeFakeDb({ releases: [], release_credits: [], reports: [], support_tickets: [] })
+    ;(db as unknown as { rpc: unknown }).rpc = async () => ({ data: null, error: { code: '57014', message: 'statement timeout' } })
+    const { status } = await get('/v1/admin/releases/stats')
+    expect(status).toBe(500)
   })
 })
 

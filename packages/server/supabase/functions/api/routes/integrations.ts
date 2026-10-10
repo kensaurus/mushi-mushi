@@ -342,7 +342,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const pid = project.id as string;
     // resolveOwnedProject selects `name` (not `project_name`); reading the
     // wrong key made projectName always null in the integrations widget.
-    const pname = (project.name as string | null) ?? null;
+    const pname = (project.name as string | null)?.trim() || null;
     const scoped = (path: string) =>
       `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
@@ -1176,6 +1176,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     authUrl.searchParams.set('actor', 'app');
     authUrl.searchParams.set('response_type', 'code');
 
+    // The URL carries a fresh one-time nonce: never cache it.
+    c.header('Cache-Control', 'no-store');
     return c.json({ ok: true, data: { url: authUrl.toString() } });
   });
 

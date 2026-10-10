@@ -53,6 +53,61 @@ const APPROVED_TABLES = new Set([
 const TABLE_REF_RE = /(?:from|join|into)\s+([a-z_][a-z0-9_]*)/gi
 
 /**
+ * Remove `--` and block comments outside single-quoted literals. Returns the
+ * SQL without comments (`sql`) and the same text with every literal emptied
+ * to '' (`code`) for checks that must only see SQL tokens. Fails closed on
+ * anything it cannot scan exactly: an unterminated literal or comment,
+ * dollar quoting ($$ / $tag$), and E'...' strings whose backslash escapes
+ * could hide a quote from this scanner.
+ */
+function stripSqlComments(input: string): { sql: string; code: string } {
+  if (/\$[A-Za-z_]*\$/.test(input)) {
+    throw new Error('Dollar-quoted strings are not allowed.')
+  }
+  let sql = ''
+  let code = ''
+  let i = 0
+  while (i < input.length) {
+    const c = input[i]
+    const next = input[i + 1]
+    if (c === '-' && next === '-') {
+      while (i < input.length && input[i] !== '\n') i++
+      continue
+    }
+    if (c === '/' && next === '*') {
+      const end = input.indexOf('*/', i + 2)
+      if (end < 0) throw new Error('Unterminated block comment.')
+      sql += ' '
+      code += ' '
+      i = end + 2
+      continue
+    }
+    if (c === "'") {
+      if (/[eE]/.test(input[i - 1] ?? '') && !/[A-Za-z0-9_]/.test(input[i - 2] ?? '')) {
+        throw new Error("Escape strings (E'...') are not allowed.")
+      }
+      let j = i + 1
+      for (;;) {
+        if (j >= input.length) throw new Error('Unterminated string literal.')
+        if (input[j] === "'") {
+          if (input[j + 1] === "'") { j += 2; continue }
+          break
+        }
+        j++
+      }
+      sql += input.slice(i, j + 1)
+      code += "''"
+      i = j + 1
+      continue
+    }
+    sql += c
+    code += c
+    i++
+  }
+  return { sql, code }
+}
+
+/**
  * Shared SQL sanitization applied to BOTH NL-generated SQL and raw user SQL.
  * Returns the cleaned SQL string or throws with a descriptive message.
  *
@@ -85,26 +140,33 @@ export function sanitizeSql(
   }
 
   // Strip inline SQL comments — they can hide injection payloads from the
-  // regex checks above. Block comments (/* */) and line comments (--).
-  let cleaned = sql
-    .split('\n')
-    .map((line) => line.replace(/--.*$/, ''))
-    .join('\n')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/;\s*$/g, '') // trailing semicolon breaks the RPC wrapper
-    .trim()
+  // regex checks above. Block comments (/* */) and line comments (--). The
+  // scan skips '...' literals, so `LIKE '%--%'` keeps its text and a `;`
+  // inside a string is not a second statement.
+  const scanned = stripSqlComments(sql)
+  let cleaned = scanned.sql.replace(/;\s*$/, '').trim() // trailing semicolon breaks the RPC wrapper
+  const code = scanned.code.replace(/;\s*$/, '')
 
-  // SEC: this MUST run on `cleaned`, not on the raw `sql`. Otherwise a
-  // user can satisfy the check by hiding `$1` inside a comment
-  // (e.g. `SELECT * FROM reports /* $1 */ WHERE severity = 'critical'`)
-  // — comment stripping then removes the only `$1` reference, the RPC
-  // wrapper's `project_id_param` goes unused, and the query returns
-  // rows from every tenant. Cross-project data leak.
-  if (requireProjectIdParam && !cleaned.toLowerCase().includes('$1')) {
+  // The raw-text checks above miss a name split by a comment:
+  // `vault/**/.decrypted_secrets` becomes `vault .decrypted_secrets`, which
+  // Postgres reads as a qualified name. Run them again on what will execute.
+  if (DANGEROUS_PATTERNS.test(code)) {
+    throw new Error('Query contains disallowed operations. Only SELECT queries are permitted.')
+  }
+  if (FORBIDDEN_SCHEMAS.test(code)) {
+    throw new Error('Query references a restricted schema. Only the curated `public` tables are queryable.')
+  }
+
+  // SEC: this MUST run on code with comments AND literals removed, not on
+  // the raw `sql`. Otherwise a user can satisfy the check by hiding `$1`
+  // inside a comment (`SELECT * FROM reports /* $1 */ WHERE ...`) or a
+  // string (`WHERE summary = '$1'`) — the RPC wrapper's `project_id_param`
+  // goes unused and the query returns rows from every tenant.
+  if (requireProjectIdParam && !code.includes('$1')) {
     throw new Error('Query must include project_id = $1 to scope results to your project.')
   }
 
-  if (cleaned.includes(';')) {
+  if (code.includes(';')) {
     throw new Error('Multi-statement queries are not allowed.')
   }
 
@@ -126,7 +188,7 @@ export function sanitizeSql(
 
   // Auto-append LIMIT 100 if the query has no LIMIT clause. The NL prompt
   // always asks for LIMIT, but raw SQL users may forget.
-  if (!/\blimit\b/i.test(cleaned)) {
+  if (!/\blimit\b/i.test(code)) {
     cleaned = `${cleaned}\nLIMIT 100`
   }
 

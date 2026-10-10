@@ -390,7 +390,7 @@ export async function createPrFromFiles(
   }
 
   const pr = await openPullRequestForBranch(
-    { token, owner, repo, base: resolvedBase, branch, title, body, labels, markReady },
+    { token, owner, repo, base: resolvedBase, branch, title, body, labels, markReady, headSha: lastCommitSha },
     log,
   )
 
@@ -414,6 +414,46 @@ export interface OpenPullRequestOptions {
   body: string
   labels?: string[]
   markReady?: boolean
+  /**
+   * Commit the caller just pushed to `branch`. An already-open PR whose head
+   * is exactly this commit is reused even when a user token opened it.
+   */
+  headSha?: string
+}
+
+/**
+ * After a 422 "A pull request already exists" from POST /pulls, the open PR
+ * for `owner:branch` into `base`, or null (rethrow the original error).
+ *
+ * Provenance, as in {@link findOpenPrByHeadPrefix}: reuse it only when a
+ * machine account opened it, or its head is exactly the commit this run just
+ * pushed (`headSha`), so the PR carries nothing this run did not write.
+ */
+async function findReusablePrForBranch(
+  err: unknown,
+  opts: { token: string; owner: string; repo: string; base: string; branch: string; headSha?: string },
+): Promise<{ number: number; html_url: string } | null> {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (!msg.includes('→ 422') || !msg.includes('already exists')) return null
+  const { token, owner, repo, base, branch, headSha } = opts
+  const res = await ghFetchOptional(
+    `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}&base=${encodeURIComponent(base)}`,
+    { headers: ghHeaders(token) },
+  )
+  if (!Array.isArray(res)) return null
+  for (const pr of res as Array<{
+    number: number
+    html_url: string
+    head?: { ref?: string; sha?: string }
+    base?: { ref?: string }
+    user?: { type?: string } | null
+  }>) {
+    if (pr.head?.ref !== branch || pr.base?.ref !== base) continue
+    if (pr.user?.type === 'Bot' || (headSha !== undefined && pr.head?.sha === headSha)) {
+      return { number: pr.number, html_url: pr.html_url }
+    }
+  }
+  return null
 }
 
 /**
@@ -426,15 +466,25 @@ export async function openPullRequestForBranch(
   opts: OpenPullRequestOptions,
   log: SimpleLogger = noopLog,
 ): Promise<{ url: string; number: number }> {
-  const { token, owner, repo, base, branch, title, body, labels = [], markReady = true } = opts
+  const { token, owner, repo, base, branch, title, body, labels = [], markReady = true, headSha } = opts
   const baseHeaders = ghHeaders(token)
 
   // Open the draft PR targeting the resolved base (may differ from stored defaultBranch).
-  const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
-    method: 'POST',
-    headers: baseHeaders,
-    body: JSON.stringify({ title, head: branch, base, draft: true, body }),
-  })) as { number: number; html_url: string }
+  let prRes: { number: number; html_url: string }
+  try {
+    prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+      method: 'POST',
+      headers: baseHeaders,
+      body: JSON.stringify({ title, head: branch, base, draft: true, body }),
+    })) as { number: number; html_url: string }
+  } catch (err) {
+    // A retried run whose PR is already open gets 422 "A pull request already
+    // exists". Reuse that PR instead of failing the attempt.
+    const existing = await findReusablePrForBranch(err, { token, owner, repo, base, branch, headSha })
+    if (!existing) throw err
+    log.info('github-pr: PR already open for branch, reusing it', { branch, prNumber: existing.number })
+    prRes = existing
+  }
 
   // Lift draft gate so CI runs and the console merge API works.
   if (markReady) {
@@ -673,11 +723,12 @@ export function validateFixBranchName(name: string): void {
 }
 
 export function validateFixBranchTemplate(template: string): void {
+  // replaceAll: a template may repeat a token (`{shortId}-{shortId}`).
   const sample = template
-    .replace('{date}', '2026-06-23')
-    .replace('{category}', 'ui-bug')
-    .replace('{shortId}', 'abc12345')
-    .replace('{reportId}', '00000000-0000-4000-8000-000000000001')
+    .replaceAll('{date}', '2026-06-23')
+    .replaceAll('{category}', 'ui-bug')
+    .replaceAll('{shortId}', 'abc12345')
+    .replaceAll('{reportId}', '00000000-0000-4000-8000-000000000001')
   if (!FIX_BRANCH_MUSHI_ID_REGEX.test(sample)) {
     throw new Error(
       `fix_branch_template must compile to <type>/MUSHI-<reportId>-<slug>; got sample "${sample}"`,
@@ -743,12 +794,13 @@ export function generateFixBranchName(
   const date = new Date().toISOString().slice(0, 10)
   const categorySlug = slugifyDescription(category ?? 'fix', 20)
   const shortId = reportId.slice(0, 8)
+  // replaceAll: a template may repeat a token (`{shortId}-{shortId}`).
   const fromTemplate = effectiveTemplate
-    .replace('{date}', date)
-    .replace('{category}', categorySlug)
-    .replace('{shortId}', shortId)
-    .replace('{reportId}', reportId)
-    .replace('{slug}', slug)
+    .replaceAll('{date}', date)
+    .replaceAll('{category}', categorySlug)
+    .replaceAll('{shortId}', shortId)
+    .replaceAll('{reportId}', reportId)
+    .replaceAll('{slug}', slug)
 
   try {
     validateFixBranchName(fromTemplate)

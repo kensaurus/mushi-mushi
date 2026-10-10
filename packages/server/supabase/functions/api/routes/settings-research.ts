@@ -929,7 +929,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           ok: false,
           error: {
             code: 'NOT_CONFIGURED',
-            message: 'SLACK_CLIENT_SECRET is not set on this server.',
+            message: 'Neither SLACK_STATE_SECRET nor SLACK_CLIENT_SECRET is set on this server.',
           },
         },
         500,
@@ -939,6 +939,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    // The state binds the install to this project, so never fall back to the
+    // caller's oldest project: Slack would connect to the wrong app.
+    if (!resolvedProject.explicit) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NO_PROJECT_SELECTED',
+            message: 'Select a project (X-Mushi-Project-Id) before connecting Slack.',
+          },
+        },
+        400,
+      );
+    }
     const projectId = resolvedProject.project.id;
 
     // state = b64url(projectId:nonce:exp).b64url(HMAC) — verified on callback
@@ -954,6 +968,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'users:read',
     ].join(',');
     const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+    // Signed one-time state: never cache it.
+    c.header('Cache-Control', 'no-store');
     return c.json({ ok: true, data: { url } });
   });
 
@@ -1888,8 +1904,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const project = resolvedProject.project;
 
     const secretName = firecrawlSecretName(project.id);
+    // rpc() reports failure in `error`, not by throwing.
     try {
-      await db.rpc('vault_delete_secret', { secret_name: secretName });
+      const { error: vaultError } = await db.rpc('vault_delete_secret', { secret_name: secretName });
+      if (vaultError) {
+        log.warn('vault_delete_secret failed for firecrawl (non-fatal)', { code: vaultError.code });
+      }
     } catch (err) {
       log.warn('vault_delete_secret failed for firecrawl (non-fatal)', { error: String(err) });
     }
@@ -2099,7 +2119,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (error) return dbError(c, error);
 
     try {
-      await db.from('byok_audit_log').insert([
+      const { error: auditError } = await db.from('byok_audit_log').insert([
         {
           project_id: project.id,
           provider: 'browserbase',
@@ -2114,6 +2134,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           meta: { status: probe.status, http_status: probe.httpStatus },
         },
       ]);
+      if (auditError) log.warn('byok_audit_log insert failed for browserbase (non-fatal)', { code: auditError.code });
     } catch {
       /* best-effort */
     }
@@ -2138,8 +2159,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
+    // rpc() reports failure in `error`, not by throwing.
     try {
-      await db.rpc('vault_delete_secret', { secret_name: browserbaseSecretName(project.id) });
+      const { error: vaultError } = await db.rpc('vault_delete_secret', {
+        secret_name: browserbaseSecretName(project.id),
+      });
+      if (vaultError) {
+        log.warn('vault_delete_secret failed for browserbase (non-fatal)', { code: vaultError.code });
+      }
     } catch (error) {
       log.warn('vault_delete_secret failed for browserbase (non-fatal)', {
         error: String(error),
@@ -2160,12 +2187,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (error) return dbError(c, error);
 
     try {
-      await db.from('byok_audit_log').insert({
+      const { error: auditError } = await db.from('byok_audit_log').insert({
         project_id: project.id,
         provider: 'browserbase',
         action: 'removed',
         actor_user_id: userId,
       });
+      if (auditError) log.warn('byok_audit_log insert failed for browserbase (non-fatal)', { code: auditError.code });
     } catch {
       /* best-effort */
     }

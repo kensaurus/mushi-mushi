@@ -113,7 +113,27 @@ function describeEmptyEmbeddingResponse(result: unknown): string {
   }
 }
 
+/**
+ * Indexing embeds one chunk per call, so resolving the key every time meant a
+ * DB + Vault round trip per chunk. Resolved project credentials are kept for
+ * a minute per isolate; a rejected key clears its entry before failover
+ * re-resolves (failOverRejectedKey), so a retired key is never reused.
+ */
+const RESOLVED_TTL_MS = 60_000
+const resolvedByProject = new Map<string, { value: ResolvedOpenAi; expiresAt: number }>()
+
 async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null> {
+  if (projectId) {
+    const cached = resolvedByProject.get(projectId)
+    if (cached && cached.expiresAt > Date.now()) return cached.value
+    resolvedByProject.delete(projectId)
+  }
+  const resolved = await resolveOpenAiUncached(projectId)
+  if (projectId && resolved) resolvedByProject.set(projectId, { value: resolved, expiresAt: Date.now() + RESOLVED_TTL_MS })
+  return resolved
+}
+
+async function resolveOpenAiUncached(projectId?: string): Promise<ResolvedOpenAi | null> {
   if (projectId) {
     try {
       const db = getServiceClient()
@@ -172,6 +192,7 @@ async function failOverRejectedKey(
       .eq('project_id', projectId)
     if (error) embLog.warn('Failed to retire legacy BYOK OpenAI key', { projectId, error: error.message })
   }
+  resolvedByProject.delete(projectId)
   const fallback = await resolveOpenAi(projectId)
   if (!fallback || fallback.key === resolved.key) return null
   embLog.warn('BYOK OpenAI key rejected; retired it and failed over', {

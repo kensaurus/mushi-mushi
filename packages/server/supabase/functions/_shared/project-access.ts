@@ -24,12 +24,14 @@
 // import path doesn't otherwise need the live client.
 import type { getServiceClient } from './db.ts'
 import { fanoutMemo } from './request-memo.ts'
+import { log } from './logger.ts'
 
 /**
  * `strict`: a failed read throws `ProjectAccessReadError` instead of counting
- * as "no access". The default stays fail-closed-and-quiet (an empty list) for
- * the routes that already rely on it; a page that would render an empty list
- * as a fact ("no apps yet") passes `strict: true` (Plan 020 P-1).
+ * as "no access". The default stays fail-closed (an empty list) for the
+ * routes that already rely on it, but logs the read error so an outage is
+ * visible; a page that would render an empty list as a fact ("no apps yet")
+ * passes `strict: true` (Plan 020 P-1).
  */
 export interface AccessReadOptions {
   strict?: boolean
@@ -42,8 +44,18 @@ export class ProjectAccessReadError extends Error {
   }
 }
 
-function failOnReadError(res: { error: { message: string } | null }, what: string): void {
-  if (res.error) throw new ProjectAccessReadError(what, res.error.message)
+function checkRead(
+  res: { error: { message: string; code?: string } | null },
+  what: string,
+  opts: AccessReadOptions,
+): void {
+  if (!res.error) return
+  if (opts.strict) throw new ProjectAccessReadError(what, res.error.message)
+  log.warn('project access read failed; treating as no access', {
+    table: what,
+    code: res.error.code ?? null,
+    err: res.error.message.slice(0, 500),
+  })
 }
 
 /**
@@ -87,11 +99,9 @@ async function readAccessibleProjectIds(
     db.from('project_members').select('project_id').eq('user_id', userId),
     db.from('projects').select('id').eq('owner_id', userId),
   ])
-  if (opts.strict) {
-    failOnReadError(orgRes, 'organization_members')
-    failOnReadError(memberRes, 'project_members')
-    failOnReadError(ownedRes, 'projects')
-  }
+  checkRead(orgRes, 'organization_members', opts)
+  checkRead(memberRes, 'project_members', opts)
+  checkRead(ownedRes, 'projects', opts)
   const orgMemberships = orgRes.data
   const projectMemberships = memberRes.data
   const owned = ownedRes.data
@@ -103,7 +113,7 @@ async function readAccessibleProjectIds(
   const orgIds = (orgMemberships ?? []).map((m) => m.organization_id).filter(Boolean)
   if (orgIds.length > 0) {
     const orgProjectsRes = await db.from('projects').select('id').in('organization_id', orgIds)
-    if (opts.strict) failOnReadError(orgProjectsRes, 'projects')
+    checkRead(orgProjectsRes, 'projects', opts)
     for (const p of orgProjectsRes.data ?? []) ids.add(p.id)
   }
 
@@ -127,7 +137,7 @@ export async function accessibleProjectIdsInOrganization(
     .eq('organization_id', organizationId)
     .eq('user_id', userId)
     .maybeSingle()
-  if (opts.strict) failOnReadError(membershipRes, 'organization_members')
+  checkRead(membershipRes, 'organization_members', opts)
   const membership = membershipRes.data
   if (!membership) return []
 
@@ -139,7 +149,7 @@ export async function accessibleProjectIdsInOrganization(
     .select('id')
     .eq('organization_id', organizationId)
     .in('id', all)
-  if (opts.strict) failOnReadError(orgProjectsRes, 'projects')
+  checkRead(orgProjectsRes, 'projects', opts)
   return (orgProjectsRes.data ?? []).map((p) => p.id)
 }
 
@@ -148,5 +158,8 @@ export async function accessibleProjectIdsInOrganization(
  * code that still says `ownedProjectIds`. New code should use
  * `accessibleProjectIds` directly — the "owned" naming pre-dated Teams
  * v1 / org membership and is misleading.
+ *
+ * @deprecated Use `accessibleProjectIds`. This returns member projects
+ * (viewers included) and is NOT an owner or write check.
  */
 export const ownedProjectIds = accessibleProjectIds

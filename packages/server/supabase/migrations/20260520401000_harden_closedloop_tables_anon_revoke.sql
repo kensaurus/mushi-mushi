@@ -1,4 +1,4 @@
--- FILE: 20260520400000_harden_closedloop_tables_anon_revoke.sql
+-- FILE: 20260520401000_harden_closedloop_tables_anon_revoke.sql
 -- PURPOSE: Revoke direct anon + authenticated SELECT access on all closed-loop
 --   admin tables introduced in the 20260520 migration batch.
 --
