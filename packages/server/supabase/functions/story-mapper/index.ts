@@ -416,7 +416,10 @@ Deno.serve(
       )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      log.error('Story mapper failed', { run_id, error: message })
+      // A wallet refusal is an account state, not a bug: keep it out of
+      // Sentry's error stream.
+      if (err instanceof WalletDeniedError) log.warn('Story mapper refused by the wallet', { run_id, reason: err.reason })
+      else log.error('Story mapper failed', { run_id, error: message })
 
       // PostgREST builders are thenables without `.catch`; await and ignore
       // the resolved error rather than chaining `.catch` (which throws).
