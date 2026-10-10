@@ -1,5 +1,5 @@
 import { isNotificationWebhookField, validateNotificationWebhookUrl } from '../../_shared/notification-webhook-url.ts';
-import type { Hono } from 'npm:hono@4';
+import type { Context, Hono } from 'npm:hono@4';
 import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
@@ -37,6 +37,46 @@ import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-r
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
+import { canManageSharedKeys, keyOwnerFilter, type KeyOwner } from '../../_shared/byok-scope.ts';
+
+/** The rows this project may use: its own keys and its organization's (ADR 0023). */
+function keyOwnerOf(project: { id: string; organization_id?: string | null }): KeyOwner {
+  return { projectId: project.id as string, organizationId: (project.organization_id as string | null | undefined) ?? null };
+}
+
+/**
+ * A shared key is used by every app in the organization, so only an owner or
+ * admin may change, re-test or delete it. Answers 404 when the project cannot
+ * see the key at all.
+ */
+async function sharedKeyWriteGuard(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  project: { id: string; organization_id?: string | null; organization_role?: string | null },
+  keyId: string,
+): Promise<Response | null> {
+  const { data, error } = await db
+    .from('byok_keys')
+    .select('organization_id')
+    .eq('id', keyId)
+    .or(keyOwnerFilter(keyOwnerOf(project)))
+    .maybeSingle();
+  if (error) return dbError(c, error);
+  if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+  if (data.organization_id && !canManageSharedKeys(project.organization_role)) {
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: 'SHARED_KEY_ADMIN_ONLY',
+          message: 'This key is shared by every app in the organization. Only an owner or admin can change it.',
+        },
+      },
+      403,
+    );
+  }
+  return null;
+}
 import {
   countByokKeyHealth,
   legacyKeyStatus,
@@ -343,7 +383,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // select('*') so expires_at (migration 20261004150000) is read when it
       // exists without failing when it doesn't, in this one round trip. This
       // route returns counts only, never the rows.
-      db.from('byok_keys').select('*').eq('project_id', project.id),
+      db.from('byok_keys').select('*').or(keyOwnerFilter(keyOwnerOf(project))),
       loadIntegrationSignals(db, [project.id]),
     ]);
 
@@ -2964,7 +3004,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       db
         .from('byok_keys')
         .select('id, provider_slug, key_hint, label, base_url, vault_secret_id, status')
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .in('status', ['active', 'quota_exhausted']),
       db
         .from('llm_invocations')
@@ -3031,9 +3071,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       db
         .from('byok_keys')
         .select(
-          'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at',
+          'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, organization_id',
         )
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .order('provider_slug', { ascending: true })
         .order('priority', { ascending: true }),
       db
@@ -3052,16 +3092,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const expiryResult = await db
       .from('byok_keys')
       .select('id, expires_at')
-      .eq('project_id', project.id);
+      .or(keyOwnerFilter(keyOwnerOf(project)));
     if (!expiryResult.error) {
       for (const row of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
         expiryById.set(row.id, row.expires_at ?? null);
       }
     }
-    const poolKeys = ((poolResult.data ?? []) as Array<Record<string, unknown>>).map((key) => ({
-      ...key,
-      expires_at: expiryById.get(String(key.id)) ?? null,
-    }));
+    // Own keys first, then the organization's shared keys (ADR 0023).
+    const poolKeys = ((poolResult.data ?? []) as Array<Record<string, unknown>>)
+      .map((key) => ({
+        ...key,
+        scope: key.organization_id ? 'organization' : 'project',
+        expires_at: expiryById.get(String(key.id)) ?? null,
+      }))
+      .sort((a, b) => (a.scope === b.scope ? 0 : a.scope === 'project' ? -1 : 1));
 
     const legacyRow = (legacyResult.data as Record<string, unknown> | null) ?? {};
     const legacyKeys = LEGACY_BYOK_PROVIDERS.flatMap(
@@ -3091,9 +3135,28 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       },
     );
 
+    // What the console needs to offer "use for every app" (ADR 0023): the
+    // organization's name, how many apps share its keys, and whether this
+    // caller may add or move a shared key.
+    let sharing: { organizationName: string; appCount: number; canManage: boolean } | null = null;
+    if (project.organization_id) {
+      const [orgRes, appsRes] = await Promise.all([
+        db.from('organizations').select('name').eq('id', project.organization_id).maybeSingle(),
+        db
+          .from('projects')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', project.organization_id),
+      ]);
+      sharing = {
+        organizationName: (orgRes.data?.name as string | undefined) ?? 'your organization',
+        appCount: appsRes.count ?? 1,
+        canManage: canManageSharedKeys(project.organization_role),
+      };
+    }
+
     return c.json({
       ok: true,
-      data: { projectId: project.id, keys: poolKeys, legacyKeys },
+      data: { projectId: project.id, keys: poolKeys, legacyKeys, sharing },
     });
   });
 
@@ -3144,6 +3207,32 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at);
       if (!expiry.ok) {
         return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: expiry.message } }, 400);
+      }
+      // "organization": one key for every app in the organization (ADR 0023).
+      const rawScope = raw.scope ?? 'project';
+      if (rawScope !== 'project' && rawScope !== 'organization') {
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'scope must be "project" or "organization".' } },
+          400,
+        );
+      }
+      const sharedOrgId = rawScope === 'organization' ? ((project.organization_id as string | null | undefined) ?? null) : null;
+      if (rawScope === 'organization') {
+        if (!sharedOrgId) {
+          return c.json(
+            { ok: false, error: { code: 'NO_ORGANIZATION', message: 'This app is not in an organization, so its key cannot be shared.' } },
+            400,
+          );
+        }
+        if (!canManageSharedKeys(project.organization_role)) {
+          return c.json(
+            {
+              ok: false,
+              error: { code: 'SHARED_KEY_ADMIN_ONLY', message: 'Only an organization owner or admin can add a key for every app.' },
+            },
+            403,
+          );
+        }
       }
       const parsed = createByokKeySchema.safeParse({
         projectId: project.id,
@@ -3243,7 +3332,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const { data: row, error: insertErr } = await db
         .from('byok_keys')
         .insert({
-          project_id: project.id,
+          project_id: sharedOrgId ? null : project.id,
+          organization_id: sharedOrgId,
           provider_slug: provider,
           vault_secret_id: secretData,
           key_hint: hint,
@@ -3290,7 +3380,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           cooldown_until: cooldownUntil,
         })
         .eq('id', row.id)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
         )
@@ -3306,7 +3396,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           .from('byok_keys')
           .update({ expires_at: expiry.value })
           .eq('id', row.id)
-          .eq('project_id', project.id);
+          .or(keyOwnerFilter(keyOwnerOf(project)));
         if (expiryError) {
           log.warn('byok key saved but its expiry date was not', { provider, code: expiryError.code });
           expiryWarning = 'The key was saved, but not its expiry date. Add the date again from the key row.';
@@ -3420,6 +3510,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      if (sharedDenied) return sharedDenied;
 
       const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       const expiry = parseByokExpiry(raw.expiresAt ?? raw.expires_at ?? null);
@@ -3431,7 +3523,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .update({ expires_at: expiry.value })
         .eq('id', keyId)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .select('id, expires_at')
         .maybeSingle();
       if (error) return dbError(c, error);
@@ -3469,6 +3561,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      if (sharedDenied) return sharedDenied;
 
       const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       const parsed = patchByokKeySchema.safeParse({ projectId: project.id, ...raw });
@@ -3491,7 +3585,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           .from('byok_keys')
           .select('test_status')
           .eq('id', keyId)
-          .eq('project_id', project.id)
+          .or(keyOwnerFilter(keyOwnerOf(project)))
           .maybeSingle();
         if (currentError) return dbError(c, currentError);
         if (!current) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3518,7 +3612,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .update(updates)
         .eq('id', keyId)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until',
         )
@@ -3558,12 +3652,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      if (sharedDenied) return sharedDenied;
 
       const { data: keyRow, error: keyError } = await db
         .from('byok_keys')
         .select('id, provider_slug, vault_secret_id, base_url')
         .eq('id', keyId)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .maybeSingle();
       if (keyError) return dbError(c, keyError);
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3629,7 +3725,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           cooldown_until: cooldownUntil,
         })
         .eq('id', keyId)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
         )
@@ -3706,12 +3802,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      if (sharedDenied) return sharedDenied;
 
       const { data: keyRow } = await db
         .from('byok_keys')
         .select('provider_slug, vault_secret_id')
         .eq('id', keyId)
-        .eq('project_id', project.id)
+        .or(keyOwnerFilter(keyOwnerOf(project)))
         .single();
 
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3720,7 +3818,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .delete()
         .eq('id', keyId)
-        .eq('project_id', project.id);
+        .or(keyOwnerFilter(keyOwnerOf(project)));
       if (error) return dbError(c, error);
 
       // vault_delete_secret matches by name; pool rows keep the secret's id.
@@ -3754,6 +3852,74 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
    * GET /v1/admin/byok/health
    * Summarise pool health across all providers.
    */
+  // Share a key with every app in the organization, or bring a shared key back
+  // to this app only (ADR 0023). Moves the row; the Vault secret is unchanged.
+  app.post(
+    '/v1/admin/byok/keys/:keyId/scope',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json({ ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } }, 400);
+      }
+      const body = (await c.req.json().catch(() => ({}))) as { scope?: unknown };
+      if (body.scope !== 'project' && body.scope !== 'organization') {
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'scope must be "project" or "organization".' } },
+          400,
+        );
+      }
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+      const orgId = (project.organization_id as string | null | undefined) ?? null;
+      if (!orgId) {
+        return c.json(
+          { ok: false, error: { code: 'NO_ORGANIZATION', message: 'This app is not in an organization, so its key cannot be shared.' } },
+          400,
+        );
+      }
+      if (!canManageSharedKeys(project.organization_role)) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'SHARED_KEY_ADMIN_ONLY', message: 'Only an organization owner or admin can share a key with every app.' },
+          },
+          403,
+        );
+      }
+
+      // Only this project's own key can be shared, and only this
+      // organization's key can be brought back to this project.
+      const toOrg = body.scope === 'organization';
+      const { data, error } = await db
+        .from('byok_keys')
+        .update(toOrg ? { project_id: null, organization_id: orgId } : { project_id: project.id, organization_id: null })
+        .eq('id', keyId)
+        .eq(toOrg ? 'project_id' : 'organization_id', toOrg ? project.id : orgId)
+        .select('id, provider_slug, organization_id')
+        .maybeSingle();
+      if (error) return dbError(c, error);
+      if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+
+      await logAudit(db, project.id, userId, 'settings.updated', 'byok', keyId, {
+        provider: data.provider_slug,
+        scope: body.scope,
+      }).catch(() => {});
+      return c.json({ ok: true, data: { id: data.id, scope: data.organization_id ? 'organization' : 'project' } });
+    },
+  );
+
   app.get('/v1/admin/byok/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -3769,7 +3935,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const { data } = await db
       .from('byok_keys')
       .select('provider_slug, status, test_status, cooldown_until')
-      .eq('project_id', project.id);
+      .or(keyOwnerFilter(keyOwnerOf(project)));
 
     const rows = data ?? [];
     const byProvider: Record<

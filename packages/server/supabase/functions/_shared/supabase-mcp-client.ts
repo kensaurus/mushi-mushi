@@ -23,6 +23,7 @@
 // `supabaseUrl`), which breaks `deno check` when a npm-typed client is passed
 // to a function typed against the jsr build.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { keyOwnerFilter, projectKeyOwner } from './byok-scope.ts'
 import { mcpCallTool } from './mcp-http-session.ts'
 
 const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
@@ -158,7 +159,7 @@ export async function resolveSupabasePat(
   const { data, error } = await db
     .from('byok_keys')
     .select('vault_secret_id')
-    .eq('project_id', projectId)
+    .or(keyOwnerFilter(await projectKeyOwner(db, projectId)))
     .eq('provider_slug', 'supabase')
     .eq('status', 'active')
     .order('priority', { ascending: true })

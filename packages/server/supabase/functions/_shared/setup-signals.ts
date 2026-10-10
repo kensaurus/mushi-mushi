@@ -155,12 +155,20 @@ export async function loadIntegrationSignals(
 
   const projects = (projectsRes.data ?? []) as Array<{ id: string; organization_id: string | null; owner_id: string | null }>
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((v): v is string => Boolean(v)))]
-  const orgRes = orgIds.length
-    ? await db
-        .from('organization_integration_settings')
-        .select('organization_id, github_repo_url, github_installation_token_ref, sentry_org_slug, sentry_auth_token_ref, slack_bot_token_ref')
-        .in('organization_id', orgIds)
-    : { data: [] }
+  const [orgRes, orgByokRes] = orgIds.length
+    ? await Promise.all([
+        db
+          .from('organization_integration_settings')
+          .select('organization_id, github_repo_url, github_installation_token_ref, sentry_org_slug, sentry_auth_token_ref, slack_bot_token_ref')
+          .in('organization_id', orgIds),
+        // An organization's shared Anthropic key counts for each of its apps (ADR 0023).
+        db
+          .from('byok_keys')
+          .select('organization_id, status, test_status')
+          .in('organization_id', orgIds)
+          .eq('provider_slug', 'anthropic'),
+      ])
+    : [{ data: [] }, { data: [] }]
 
   const settingsBy = new Map<string, ProjectIntegrationRow>()
   for (const r of (settingsRes.data ?? []) as Array<ProjectIntegrationRow & { project_id: string }>) {
@@ -182,6 +190,12 @@ export async function loadIntegrationSignals(
     list.push(r)
     byokBy.set(r.project_id, list)
   }
+  const orgByokBy = new Map<string, Array<{ status: string | null; test_status: string | null }>>()
+  for (const r of (orgByokRes.data ?? []) as Array<{ organization_id: string; status: string | null; test_status: string | null }>) {
+    const list = orgByokBy.get(r.organization_id) ?? []
+    list.push(r)
+    orgByokBy.set(r.organization_id, list)
+  }
   const projectBy = new Map(projects.map((p) => [p.id, p]))
   const env = envFlags()
 
@@ -193,7 +207,10 @@ export async function loadIntegrationSignals(
         settings: settingsBy.get(pid) ?? null,
         org: p?.organization_id ? orgBy.get(p.organization_id) ?? null : null,
         repos: reposBy.get(pid) ?? [],
-        anthropicPoolKeys: byokBy.get(pid) ?? [],
+        anthropicPoolKeys: [
+          ...(byokBy.get(pid) ?? []),
+          ...(p?.organization_id ? orgByokBy.get(p.organization_id) ?? [] : []),
+        ],
         env,
         operatorProject: isOperatorUser(p?.owner_id ?? null),
       }),

@@ -82,6 +82,17 @@ export function describeByokError(
         message: 'That key no longer exists. Reload the page to see the current list.',
         where: 'form',
       };
+    case 'SHARED_KEY_ADMIN_ONLY':
+      return {
+        message:
+          'This key is shared by every app in your organization, so only an owner or admin can change it.',
+        where: 'form',
+      };
+    case 'NO_ORGANIZATION':
+      return {
+        message: 'This app is not in an organization, so the key can only be used here.',
+        where: 'form',
+      };
     case 'FEATURE_NOT_IN_PLAN':
       return { message: 'Your plan does not include your own API keys.', where: 'form' };
     case 'RATE_LIMITED':

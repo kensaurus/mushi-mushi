@@ -11,17 +11,17 @@
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
-import { Input, SecretInput, Btn, ErrorAlert, ResultChip, Tooltip } from '../ui';
+import { Input, SecretInput, Btn, Checkbox, ErrorAlert, ResultChip, Tooltip } from '../ui';
 import { BrandIcon } from '../ui/BrandIcon';
 import { IconPlay, IconTrash } from '../icons';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
-import { LINK_ACCENT } from '../../lib/chipTone';
+import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone';
 import { prepareByokSecret } from '../../lib/byokKeyRules';
 import { describeByokError } from '../../lib/byokErrors';
-import type { PoolKey, PoolTestStatus } from './byokPool';
+import { isSharedKey, type KeySharing, type PoolKey, type PoolTestStatus } from './byokPool';
 import { useByokPool } from './ByokPoolContext';
 import { usePageData } from '../../lib/usePageData';
 import { creditsLine, spendLine, type ByokCreditsResponse } from './byokCredits';
@@ -149,6 +149,17 @@ function quarantinedMessage(data: ValidationReply, fallback: string): string {
   return detail ? `${fallback} ${detail}` : fallback;
 }
 
+/** "all 9 apps in kenji", or "every app in kenji" when there is just this one. */
+function appsPhrase(sharing: KeySharing): string {
+  return sharing.appCount > 1
+    ? `all ${sharing.appCount} apps in ${sharing.organizationName}`
+    : `every app in ${sharing.organizationName}, including ones you add later`;
+}
+
+function sharedWithText(sharing: KeySharing): string {
+  return `It is used by ${appsPhrase(sharing)}.`;
+}
+
 function formatDay(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const at = Date.parse(iso);
@@ -192,8 +203,12 @@ export function ByokPanel() {
   const [testPending, setTestPending] = useState<string | null>(null);
   const [expiryEdit, setExpiryEdit] = useState<{ id: string; value: string } | null>(null);
   const [expirySaving, setExpirySaving] = useState(false);
+  // New keys go to every app in the organization unless the owner unticks it.
+  const [newShared, setNewShared] = useState(true);
+  const [scopePending, setScopePending] = useState<string | null>(null);
 
   const reload = pool.reload;
+  const sharing = pool.data?.sharing ?? null;
 
   function resetAddForm() {
     setNewKeyVal('');
@@ -204,6 +219,7 @@ export function ByokPanel() {
     setKeyError(null);
     setBaseUrlError(null);
     setFormError(null);
+    setNewShared(true);
   }
 
   function openAddForm(provider: string) {
@@ -227,6 +243,7 @@ export function ByokPanel() {
     }
     setKeyError(null);
     setAdding(true);
+    const shared = Boolean(sharing?.canManage && newShared);
     const res = await apiFetch('/v1/admin/byok/keys', {
       method: 'POST',
       body: JSON.stringify({
@@ -235,6 +252,7 @@ export function ByokPanel() {
         label: newKeyLabel.trim() || null,
         baseUrl: provider === 'openai' ? newBaseUrl.trim() || undefined : undefined,
         expiresAt: newExpiry || undefined,
+        scope: shared ? 'organization' : 'project',
       }),
     });
     setAdding(false);
@@ -248,10 +266,11 @@ export function ByokPanel() {
             ? 'Key checked and in use. Your old key is no longer needed; remove it below.'
             : 'Key checked and in use.'
         : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi won't use it yet.");
+      const where = shared && sharing ? ` ${sharedWithText(sharing)}` : '';
       setNotice({
         scope: `provider:${provider}`,
         ok: validated && !data?.expiryWarning,
-        message: data?.expiryWarning ? `${base} ${data.expiryWarning}` : base,
+        message: `${base}${where}${data?.expiryWarning ? ` ${data.expiryWarning}` : ''}`,
       });
       resetAddForm();
       setAddProvider(null);
@@ -306,6 +325,26 @@ export function ByokPanel() {
         message: describeByokError(res.error, 'The key was not updated. Retry in a moment.').message,
       });
     }
+    reload();
+  }
+
+  /** Share a key with every app in the organization, or keep it to this app. */
+  async function moveKey(key: PoolKey, scope: 'project' | 'organization') {
+    setScopePending(key.id);
+    const res = await apiFetch(`/v1/admin/byok/keys/${key.id}/scope`, {
+      method: 'POST',
+      body: JSON.stringify({ scope }),
+    });
+    setScopePending(null);
+    setNotice({
+      scope: key.id,
+      ok: res.ok,
+      message: res.ok
+        ? scope === 'organization' && sharing
+          ? `Done. ${sharedWithText(sharing)}`
+          : 'Done. Only this app uses the key now.'
+        : describeByokError(res.error, 'The key was not moved. Retry in a moment.').message,
+    });
     reload();
   }
 
@@ -422,6 +461,9 @@ export function ByokPanel() {
     const expires = poolKey ? formatDay(poolKey.expires_at) : null;
     const hint = k.key_hint ?? '…****';
     const name = `${legacy ? 'old ' : ''}key ${hint}`;
+    const shared = isSharedKey(poolKey);
+    // A shared key changes every app: only owners and admins manage it.
+    const readOnly = shared && !sharing?.canManage;
     return (
       <li
         key={k.id}
@@ -430,6 +472,11 @@ export function ByokPanel() {
         <div className="min-w-0 space-y-1">
           <p className="flex flex-wrap items-center gap-x-2 text-sm">
             <span className="font-mono text-fg-secondary">{hint}</span>
+            {shared && (
+              <span className={`rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
+                All apps{sharing ? ` in ${sharing.organizationName}` : ''}
+              </span>
+            )}
             {legacy ? (
               <span className="text-fg-muted">legacy credential (saved before key pools)</span>
             ) : k.label ? (
@@ -472,8 +519,14 @@ export function ByokPanel() {
               </Btn>
             </form>
           )}
+          {readOnly && (
+            <p className="text-xs text-fg-muted">
+              Shared by your organization. An owner or admin can change or remove it.
+            </p>
+          )}
           {noticeHere(k.id)}
         </div>
+        {!readOnly && (
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {view.action === 'remove' ? (
             <Btn size="sm" variant="primary" type="button" onClick={() => setRemoveTarget(k)}>
@@ -543,7 +596,27 @@ export function ByokPanel() {
               </Btn>
             </Tooltip>
           )}
+          {poolKey && sharing?.canManage && (
+            <Tooltip
+              content={
+                shared
+                  ? 'Only this app uses the key; the other apps stop using it.'
+                  : `Every app in ${sharing.organizationName} can use this key. An app's own key is still tried first.`
+              }
+            >
+              <Btn
+                size="sm"
+                variant="ghost"
+                type="button"
+                loading={scopePending === poolKey.id}
+                onClick={() => void moveKey(poolKey, shared ? 'project' : 'organization')}
+              >
+                {shared ? 'Use in this app only' : 'Use in all apps'}
+              </Btn>
+            </Tooltip>
+          )}
         </div>
+        )}
       </li>
     );
   }
@@ -552,7 +625,9 @@ export function ByokPanel() {
     <>
       <SettingsList
         title="AI keys"
-        description="Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out."
+        description={`Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out.${
+          sharing ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.` : ''
+        }`}
       >
         {DISPLAY_PROVIDERS.map((provider) => {
           const meta = PROVIDER_META[provider];
@@ -684,6 +759,14 @@ export function ByokPanel() {
                       </div>
                     )}
                   </div>
+                  {sharing?.canManage && (
+                    <Checkbox
+                      label={`Use for ${appsPhrase(sharing)}`}
+                      checked={newShared}
+                      onChange={setNewShared}
+                      tooltip="An app's own key is tried first; this key is used where an app has none, or as its backup. Untick to keep the key to this app."
+                    />
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn type="submit" size="sm" loading={adding}>
                       Save &amp; validate
@@ -704,7 +787,7 @@ export function ByokPanel() {
       {disableTarget && (
         <ConfirmDialog
           title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
-          body={`Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or its shared key where there is one. To turn it back on later, press Test and then Turn on.`}
+          body={`${isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or its shared key where there is one. To turn it back on later, press Test and then Turn on.`}
           confirmLabel="Turn off key"
           cancelLabel="Keep it on"
           tone="danger"
@@ -722,7 +805,7 @@ export function ByokPanel() {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove this ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
-          body={`The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or its shared key where there is one.`}
+          body={`${!isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or its shared key where there is one.`}
           confirmLabel="Remove key"
           cancelLabel="Keep key"
           tone="danger"
