@@ -210,4 +210,45 @@ describe('loadInventory', () => {
     stubBody({ ok: true, data: { snapshot: null, summary: null, updatedAt: null } })
     await expect(__test.loadInventory(opts)).rejects.toThrow(/no current inventory/)
   })
+
+  it('surfaces the server message from an ok:false envelope', async () => {
+    stubBody({ ok: false, error: { code: 'FORBIDDEN', message: 'key lacks inventory:read' } })
+    await expect(__test.loadInventory(opts)).rejects.toThrow(
+      'Could not load inventory: key lacks inventory:read',
+    )
+  })
+})
+
+// ----------------------------------------------------------------------------
+// api envelope parsing
+// ----------------------------------------------------------------------------
+
+describe('api', () => {
+  const base = { endpoint: 'https://api.test', apiKey: 'k', projectId: 'p1', path: '/v1/x' }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('turns a non-JSON error body into an HTTP_<status> error envelope', async () => {
+    vi.stubGlobal('fetch', async () => new Response('<html>502 Bad Gateway</html>', { status: 502 }))
+    await expect(__test.api(base)).resolves.toEqual({
+      ok: false,
+      error: { code: 'HTTP_502', message: '<html>502 Bad Gateway</html>' },
+    })
+  })
+
+  it('caps the non-JSON error message at 500 characters', async () => {
+    vi.stubGlobal('fetch', async () => new Response('x'.repeat(2000), { status: 500 }))
+    const r = await __test.api(base)
+    expect(r.error?.message).toHaveLength(500)
+  })
+
+  it('passes a JSON envelope through and sends the project auth headers', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, data: { n: 1 } })))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(__test.api(base)).resolves.toEqual({ ok: true, data: { n: 1 } })
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://api.test/v1/x')
+    expect(init.headers).toMatchObject({ 'X-Mushi-Api-Key': 'k', 'X-Mushi-Project': 'p1' })
+  })
 })

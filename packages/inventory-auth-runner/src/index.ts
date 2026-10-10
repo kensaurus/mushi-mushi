@@ -369,6 +369,7 @@ export async function refresh(opts: RunnerOptions): Promise<{ cookieName: string
  * any consumer importing these is on their own across versions.
  */
 export const __test = {
+  api,
   loadInventory,
   pickSessionCookie,
   validateInlineAuthScript,
