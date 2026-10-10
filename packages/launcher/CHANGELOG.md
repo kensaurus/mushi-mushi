@@ -1,5 +1,13 @@
 # mushi-mushi
 
+## 0.8.5
+
+### Patch Changes
+
+- 8378a94: - When a forwarded command can't start `@mushi-mushi/cli` (for example a missing install), the launcher now prints the reason instead of exiting 1 silently.
+- Updated dependencies [8378a94]
+  - @mushi-mushi/cli@0.30.4
+
 ## 0.8.4
 
 ### Patch Changes

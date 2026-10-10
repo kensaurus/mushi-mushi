@@ -173,7 +173,7 @@ When multiple host repos (glot.it, yen-yen, the-wanting-mind, help-her-take-phot
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.6"],
+      "args": ["-y", "@mushi-mushi/mcp@0.24.7"],
       "env": { "MUSHI_PROJECT_ID": "<that-repo's uuid>", … }
     }
   }

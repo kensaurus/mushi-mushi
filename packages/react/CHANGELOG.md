@@ -1,5 +1,15 @@
 # @mushi-mushi/react
 
+## 1.32.3
+
+### Patch Changes
+
+- 8378a94: `<MushiProvider config>` is typed `MushiInitConfig`, so it accepts partial config (for example `{ widget: {...} }`) when env vars supply `projectId` and `apiKey`.
+- Updated dependencies [8378a94]
+- Updated dependencies [8378a94]
+  - @mushi-mushi/core@1.32.3
+  - @mushi-mushi/web@1.32.3
+
 ## 1.31.2
 
 ### Patch Changes
