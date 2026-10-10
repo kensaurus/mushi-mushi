@@ -376,6 +376,11 @@ function handler(event) {
   //    /mushi-mushi/login -> /mushi-mushi/admin/login, which the admin React
   //    Router knows how to handle).
   var location = '/mushi-mushi/admin/' + suffix;
+  // Keep ?next= / utm_* like the other redirects above.
+  var adminQs = serializeQuerystring(qs);
+  if (adminQs) {
+    location = location + '?' + adminQs;
+  }
 
   // X-Robots-Tag on the 302 itself so Google drops the source URL on first
   // crawl instead of reporting 47 "Page with redirect" entries (one per

@@ -251,6 +251,12 @@ describe('cloudfront-mushi-spa-router', () => {
     assert.equal(out.headers.location.value, '/mushi-mushi/admin/login');
   });
 
+  it('302 to admin SPA keeps the query string', () => {
+    const out = spa(reqWithQs('/mushi-mushi/login', { next: '/reports', utm_source: 'x' }));
+    assert.equal(out.statusCode, 302);
+    assert.equal(out.headers.location.value, '/mushi-mushi/admin/login?next=%2Freports&utm_source=x');
+  });
+
   it('301 bare /mushi-mushi/testers to trailing-slash form', () => {
     const out = spa(req('/mushi-mushi/testers'));
     assert.equal(out.statusCode, 301);
