@@ -167,11 +167,11 @@ export function DocsBridgePage() {
   //
   // Fix: pin the refresh to AT MOST ONCE per popup mount via
   // `refreshedOnceRef`, and only fire it when the access token is within
-  // the refresh window. The bridge effect above already captures whatever
-  // session is current when it sends — if the refresh completes first,
-  // it sends the refreshed token; if it doesn't, it sends the original
-  // (still-valid for >5min); either way the docs side gets a usable
-  // token without any loop risk.
+  // the refresh window. Nothing is sent from an effect: `allow()` reads
+  // `supabase.auth.getSession()` when the user presses Allow. getSession and
+  // refreshSession take the same auth lock, so a click during this refresh
+  // waits for it and sends the refreshed token; a token with more than 5min
+  // left is never refreshed here and is sent as is.
   const refreshedOnceRef = useRef(false)
   useEffect(() => {
     if (refreshedOnceRef.current) return
