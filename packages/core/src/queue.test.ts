@@ -78,6 +78,23 @@ describe('offline queue give-up gates', () => {
     expect(await queue.size()).toBe(0);
   });
 
+  it.each(['HTTP_401', 'HTTP_403'])(
+    'drops a report immediately on a credential failure (%s)',
+    async (code) => {
+      const queue = createOfflineQueue({ encryptAtRest: false, syncOnReconnect: false });
+      await queue.enqueue(makeReport(`cred-${code}`));
+
+      const { client, calls } = makeClient({
+        ok: false,
+        error: { code, message: 'credentials rejected' },
+      });
+      await queue.flush(client);
+
+      expect(calls()).toBe(1);
+      expect(await queue.size()).toBe(0);
+    },
+  );
+
   it('keeps a report on a transient failure but gives up after MAX_DELIVERY_ATTEMPTS', async () => {
     const queue = createOfflineQueue({ encryptAtRest: false, syncOnReconnect: false });
     await queue.enqueue(makeReport('net-1'));
