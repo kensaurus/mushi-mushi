@@ -854,7 +854,12 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         error?: unknown
       }
       if (!resp.ok) {
-        return c.json({ ok: false, error: json.error ?? { code: 'PROPOSE_FAILED' } }, 500)
+        // 402 = the hosted-LLM wallet refused the call; keep it so the
+        // console can prompt a top-up instead of showing a server error.
+        return c.json(
+          { ok: false, error: json.error ?? { code: 'PROPOSE_FAILED' } },
+          resp.status === 402 ? 402 : 500,
+        )
       }
       return c.json({ ok: true, data: json.data })
     },

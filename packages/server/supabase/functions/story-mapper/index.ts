@@ -427,6 +427,23 @@ Deno.serve(
       }).eq('id', run_id)
       if (failErr) log.warn('failed to mark story_map_run failed', { run_id, error: failErr.message })
 
+      // An empty hosted-LLM wallet is the caller's to fix (top up or add a
+      // key), not a server failure: 402 with what the top-up prompt needs.
+      if (err instanceof WalletDeniedError) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: 'WALLET_INSUFFICIENT',
+              message: 'Not enough wallet balance for this AI call. Top up the wallet or add your own API key.',
+              reason: err.reason,
+              balanceMicro: err.balanceMicro,
+            },
+          }),
+          { status: 402, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+
       // `message` is recorded server-side (log + story_map_runs.error_message)
       // above; return a generic message so we don't leak internals to the
       // client (CodeQL js/stack-trace-exposure).
