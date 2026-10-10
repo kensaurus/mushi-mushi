@@ -1,6 +1,7 @@
 // Host overrides (variables.gradle ext, gradle.properties or -P) all resolve
 // through findProperty; hasProperty + rootProject.ext threw for a property
-// that was not also on the root project's ext.
+// that was not also on the root project's ext. gradle.properties values are
+// Strings, so the SDK levels are coerced to Integer.
 ext {
     junitVersion = project.findProperty('junitVersion') ?: '4.13.2'
     androidxAppCompatVersion = project.findProperty('androidxAppCompatVersion') ?: '1.7.0'
@@ -22,10 +23,10 @@ apply plugin: 'kotlin-android'
 
 android {
     namespace 'dev.mushimushi.capacitor'
-    compileSdk (project.findProperty('compileSdkVersion') ?: 36)
+    compileSdk((project.findProperty('compileSdkVersion') ?: 36) as Integer)
 
     defaultConfig {
-        minSdk (project.findProperty('minSdkVersion') ?: 24)
+        minSdk((project.findProperty('minSdkVersion') ?: 24) as Integer)
         consumerProguardFiles 'mushi-android/consumer-rules.pro'
     }
 
