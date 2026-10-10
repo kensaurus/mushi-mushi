@@ -134,6 +134,9 @@ export function TraceWaterfall({
   const sortedSpans = [...(backendSpans ?? [])].sort(
     (a, b) => new Date(a.ingested_at).getTime() - new Date(b.ingested_at).getTime(),
   )
+  // Rows are keyed by the DB row id (unique); parentSpanId is an OTel span id,
+  // so resolve it to the parent's row id instead of prefixing it.
+  const rowIdBySpanId = new Map(sortedSpans.map((s) => [s.span_json?.spanId ?? s.id, `span-${s.id}`]))
 
   for (const span of sortedSpans) {
     const sj = span.span_json
@@ -150,7 +153,7 @@ export function TraceWaterfall({
       offsetMs: new Date(span.ingested_at).getTime() - originMs,
       source: 'backend',
       status: spanStatus(sj),
-      parentId: parentId ? `span-${parentId}` : undefined,
+      parentId: parentId ? rowIdBySpanId.get(parentId) : undefined,
       depth,
       tooltip: `Backend • ${sj?.name ?? '(span)'} • ${sj?.duration_ms ?? 0}ms • status: ${sj?.status ?? 'unknown'}`,
       traceId: span.trace_id,
