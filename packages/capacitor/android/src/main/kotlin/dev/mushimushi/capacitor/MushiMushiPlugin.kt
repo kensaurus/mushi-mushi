@@ -10,6 +10,7 @@ import dev.mushimushi.sdk.config.MushiConfig
 import dev.mushimushi.sdk.config.Theme
 import dev.mushimushi.sdk.config.TriggerInset
 import dev.mushimushi.sdk.config.TriggerMode
+import org.json.JSONObject
 
 /**
  * Capacitor Android plugin. Delegates to the standalone `mushi-android`
@@ -114,7 +115,10 @@ class MushiMushiPlugin : Plugin() {
     fun setMetadata(call: PluginCall) {
         val key = call.getString("key")
             ?: return call.reject("key is required")
-        Mushi.setMetadata(key, call.data.opt("value"))
+        // A JS `null` arrives as JSONObject.NULL, which is non-null in Kotlin;
+        // map it to null so setMetadata removes the key instead of storing it.
+        val value = call.data.opt("value").takeUnless { it == JSONObject.NULL }
+        Mushi.setMetadata(key, value)
         call.resolve()
     }
 
