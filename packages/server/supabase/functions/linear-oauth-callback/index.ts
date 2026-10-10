@@ -210,6 +210,10 @@ Deno.serve(async (req: Request) => {
   const updates: Record<string, string | null> = {
     linear_access_token_ref: accessTokenRef,
     linear_workspace_name: workspaceName,
+    // webhooks-linear narrows its candidate projects by this before checking
+    // signatures. Written even when null so a failed viewer fetch leaves a
+    // legacy (scanned) row rather than a stale id that hides the project.
+    linear_organization_id: linearOrgId,
   }
   if (refreshTokenRef) updates.linear_refresh_token_ref = refreshTokenRef
   if (defaultTeamId) updates.linear_team_id = defaultTeamId
