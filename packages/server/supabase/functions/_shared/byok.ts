@@ -169,25 +169,32 @@ export async function resolveLlmKeys(
   provider: LlmProvider,
   opts: { openAiOnly?: boolean } = {},
 ): Promise<ResolvedKey[]> {
-  const candidates = await byokPoolCandidates(db, projectId, provider);
+  // The app's own keys always come before its organization's shared ones
+  // (ADR 0023): its pool keys (OpenAI, then OpenRouter), else its legacy
+  // credential; then the shared pool keys; the platform key last.
+  const pool = await byokPoolCandidates(db, projectId, provider);
+  const own = [...pool.own];
+  const shared = [...pool.shared];
   if (provider === 'openai' && !opts.openAiOnly) {
-    for (const c of await byokPoolCandidates(db, projectId, 'openrouter')) {
-      candidates.push({ ...c, provider: 'openrouter' });
-    }
+    const router = await byokPoolCandidates(db, projectId, 'openrouter');
+    own.push(...router.own.map((c) => ({ ...c, provider: 'openrouter' as const })));
+    shared.push(...router.shared.map((c) => ({ ...c, provider: 'openrouter' as const })));
   }
-  if (candidates.length > 0) return candidates;
-  return await legacyOrEnvCandidates(db, projectId, provider);
+  if (own.length > 0) return [...own, ...shared];
+  const legacy = await legacyCandidates(db, projectId, provider);
+  if (legacy.length > 0 || shared.length > 0) return [...legacy, ...shared];
+  return envCandidates(projectId, provider);
 }
 
 /**
- * Step 1: the byok_keys rows the project may use for one provider: its own,
- * then its organization's shared keys (ADR 0023), each by priority.
+ * Step 1: the byok_keys rows the project may use for one provider: its own
+ * and its organization's shared keys (ADR 0023), each by priority.
  */
 async function byokPoolCandidates(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
-): Promise<ResolvedKey[]> {
+): Promise<{ own: ResolvedKey[]; shared: ResolvedKey[] }> {
   const nowMs = Date.now();
 
   // Step 1: byok_keys table — ordered candidates, skip cooled-down entries.
@@ -207,7 +214,8 @@ async function byokPoolCandidates(
     .order('priority', { ascending: true });
   const keyRows = rawRows ? ownKeysFirst(rawRows) : rawRows;
 
-  const candidates: ResolvedKey[] = [];
+  const own: ResolvedKey[] = [];
+  const shared: ResolvedKey[] = [];
 
   if (keyRows && keyRows.length > 0) {
     for (const row of keyRows) {
@@ -245,7 +253,7 @@ async function byokPoolCandidates(
         } else if (provider === 'openrouter') {
           baseUrl = OPENROUTER_BASE_URL;
         }
-        candidates.push({
+        (row.project_id ? own : shared).push({
           keyId: row.id,
           key: dereffed,
           source: 'byok',
@@ -257,11 +265,12 @@ async function byokPoolCandidates(
     }
   }
 
-  return candidates;
+  return { own, shared };
 }
 
 /** Steps 2 and 3: the legacy single-key column, then the platform key. */
-async function legacyOrEnvCandidates(
+/** Step 2: the project's legacy project_settings credential, if it passed validation. */
+async function legacyCandidates(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
@@ -325,8 +334,11 @@ async function legacyOrEnvCandidates(
       log.warn('Skipping legacy BYOK key that has not passed validation', { projectId, provider });
     }
   }
+  return [];
+}
 
-  // Step 3: Platform env-var fallback.
+/** Step 3: the platform env-var key, when the project has no key of its own or shared. */
+function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] {
   const env = Deno.env.get(ENV_VAR[provider]);
   if (env) {
     log.warn('BYOK call using platform env key — BYOK not configured for this project', {

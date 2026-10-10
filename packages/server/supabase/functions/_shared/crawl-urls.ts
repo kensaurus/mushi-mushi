@@ -31,7 +31,10 @@ function candidate(link: string, base: URL, basePath: string): Candidate | null 
     return null;
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-  if (u.host !== base.host) return null;
+  // "www.example.com" and "example.com" are one site: a user who typed the
+  // apex for a site served from www got a 1-page crawl (review 2026-10-10).
+  const sameSite = (h: string) => h.toLowerCase().replace(/^www\./, '');
+  if (sameSite(u.host) !== sameSite(base.host)) return null;
   const path = u.pathname.replace(/\/+$/, '') || '/';
   if (basePath && path !== basePath && !path.startsWith(`${basePath}/`)) return null;
   if (FILE_RE.test(path)) return null;

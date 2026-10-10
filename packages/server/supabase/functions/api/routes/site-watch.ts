@@ -67,6 +67,24 @@ function firecrawlFailure(c: Ctx, err: unknown): Response {
   return c.json({ ok: false, error: { code: 'FIRECRAWL_FAILED', message: 'Firecrawl did not accept the request. Retry in a moment.' } }, 502);
 }
 
+/** assertSafeOutboundUrl's reason codes, as sentences for the console. */
+function unsafeUrlSentence(reason: string | undefined): string {
+  switch (reason) {
+    case 'EMBEDDED_CREDENTIALS':
+      return 'Remove the user name and password from the address.';
+    case 'BLOCKED_PORT':
+      return 'Use the standard https port; this one cannot be crawled.';
+    case 'PRIVATE_HOST':
+    case 'HOST_NOT_ALLOWED':
+      return 'Use the public address of your live site; private and local addresses cannot be crawled.';
+    default:
+      return 'Enter the https:// address of your live site.';
+  }
+}
+
+/** Manual "Check now" runs per app per hour. */
+const RUNS_PER_HOUR = 6;
+
 const NO_KEY = { ok: false, error: { code: 'FIRECRAWL_NOT_CONFIGURED', message: 'Add a Firecrawl key in Settings → AI keys first. A key shared with all your apps works too.' } };
 
 /**
@@ -150,14 +168,15 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
     const body = (await c.req.json().catch(() => ({}))) as { baseUrl?: unknown; pageLimit?: unknown };
     const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
     const pageLimit = typeof body.pageLimit === 'number' ? Math.floor(body.pageLimit) : 25;
-    if (!/^https?:\/\//i.test(baseUrl)) {
+    // https only: assertSafeOutboundUrl refuses http, so say so up front.
+    if (!/^https:\/\//i.test(baseUrl)) {
       return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'Enter the https:// address of your live site.' } }, 400);
     }
     const safe = assertSafeOutboundUrl(baseUrl, {});
     if (!safe.ok) {
-      return c.json({ ok: false, error: { code: 'UNSAFE_URL', message: safe.reason ?? 'This address cannot be crawled.' } }, 400);
+      return c.json({ ok: false, error: { code: 'UNSAFE_URL', message: unsafeUrlSentence(safe.reason) } }, 400);
     }
-    if (pageLimit < 1 || pageLimit > 100) {
+    if (!Number.isFinite(pageLimit) || pageLimit < 1 || pageLimit > 100) {
       return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Pages per check must be between 1 and 100.' } }, 400);
     }
 
@@ -167,7 +186,7 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
     const { data: project } = await db.from('projects').select('name').eq('id', a.projectId).maybeSingle();
     const { data: existing, error: readErr } = await db
       .from('site_watches')
-      .select('id, firecrawl_monitor_id, schedule_cron')
+      .select('id, firecrawl_monitor_id, schedule_cron, base_url')
       .eq('project_id', a.projectId)
       .maybeSingle();
     if (readErr) return dbError(c, readErr);
@@ -214,6 +233,14 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
       ? await db.from('site_watches').update(row).eq('id', existing.id)
       : await db.from('site_watches').insert({ ...row, created_by: c.get('userId') as string });
     if (writeErr) return dbError(c, writeErr);
+    // A new address: the old address's open findings will never be re-checked.
+    if (existing && existing.base_url !== baseUrl) {
+      await db
+        .from('site_watch_pages')
+        .update({ resolved_at: new Date().toISOString() })
+        .eq('watch_id', existing.id)
+        .is('resolved_at', null);
+    }
 
     await logAudit(db, a.projectId, c.get('userId') as string, 'settings.updated', 'site_watch', a.projectId, {
       baseUrl,
@@ -238,6 +265,32 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
     }
     const fc = await resolveFirecrawl(db, a.projectId);
     if (!fc) return c.json(NO_KEY, 412);
+
+    // Each run spends up to page_limit Firecrawl credits on the owner's key,
+    // and any member may press the button: cap runs per app. A limiter error
+    // refuses the run rather than letting it through unmetered.
+    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: a.projectId,
+      p_scope: 'site_watch_run',
+      p_max_per_window: RUNS_PER_HOUR,
+      p_window: '1 hour',
+    });
+    if (rateErr) {
+      const limited = (rateErr.message ?? '').includes('rate_limit_exceeded');
+      if (!limited) slog.warn('site-watch run rate limit check failed', { err: rateErr.message });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: limited ? 'RATE_LIMITED' : 'RATE_LIMIT_UNAVAILABLE',
+            message: limited
+              ? `This app's watch already ran ${RUNS_PER_HOUR} checks in the last hour. The daily check still runs.`
+              : 'The check did not start. Retry in a moment.',
+          },
+        },
+        limited ? 429 : 503,
+      );
+    }
     try {
       const { checkId } = await runMonitor(fc.key, watch.firecrawl_monitor_id as string);
       pollSoon(a.projectId);
@@ -262,14 +315,27 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
 
     if (watch.firecrawl_monitor_id) {
       const fc = await resolveFirecrawl(db, a.projectId);
-      // Without a key the monitor cannot be reached; it stops on its own when
-      // the key's credits run out, and the row goes regardless.
-      if (fc) {
-        try {
-          await deleteMonitor(fc.key, watch.firecrawl_monitor_id as string);
-        } catch (err) {
-          return firecrawlFailure(c, err);
-        }
+      // Without a key Mushi cannot stop the Firecrawl monitor, which would
+      // keep crawling (and billing) daily with nothing reading it: refuse,
+      // and name the monitor so it can be deleted in Firecrawl.
+      if (!fc) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'FIRECRAWL_NOT_CONFIGURED',
+              message:
+                `Mushi needs the Firecrawl key to stop the crawl. Add the key back in Settings → AI keys and turn the watch off again, ` +
+                `or delete monitor ${watch.firecrawl_monitor_id} in your Firecrawl dashboard.`,
+            },
+          },
+          412,
+        );
+      }
+      try {
+        await deleteMonitor(fc.key, watch.firecrawl_monitor_id as string);
+      } catch (err) {
+        return firecrawlFailure(c, err);
       }
     }
     const { error: delErr } = await db.from('site_watches').delete().eq('id', watch.id);
