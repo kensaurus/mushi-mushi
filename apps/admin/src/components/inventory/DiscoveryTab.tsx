@@ -13,6 +13,7 @@ import { DiscoveryLifecycle, type LifecycleStep } from './DiscoveryLifecycle'
 import { DiscoveryMetrics, type DiscoveryMetric } from './DiscoveryMetrics'
 import { ObservedRouteCard, type ObservedRoute } from './ObservedRouteCard'
 import { ProposalReviewModal } from './ProposalReviewModal'
+import { SiteWatchCard } from './SiteWatchCard'
 
 /**
  * Mushi v2.1 Discovery tab — the home for "what has the SDK actually
@@ -319,6 +320,9 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
           proposals.reload()
         }}
       />
+
+      {/* Daily crawl of the live site; broken pages become reports (ADR 0024). */}
+      <SiteWatchCard projectId={projectId} />
 
       {/* (4) Past proposals (if any beyond the current draft) */}
       {proposalRows.length > 0 && (

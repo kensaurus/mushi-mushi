@@ -60,6 +60,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
+  ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'
