@@ -46,6 +46,13 @@ describe('classifyPage', () => {
     expect(sw.classifyPage({ url: 'https://kensaur.us/glot-it/?utm_source=seo', status: 'error', statusCode: null, error })).toBeNull()
   })
 
+  it('a page the site blocks in robots.txt is not breakage', () => {
+    // Verbatim from yen-yen's first check (2026-10-10); /feedback is disallowed on purpose.
+    const error =
+      "This URL is blocked by the website's robots.txt file, which instructs crawlers not to access this page. Firecrawl respects robots.txt by default. To crawl this URL anyway, set ignoreRobotsTxt: true in your crawl request (note: this may violate the website's crawling policies)."
+    expect(sw.classifyPage({ url: 'https://kensaur.us/yen-yen/feedback', status: 'error', statusCode: null, error })).toBeNull()
+  })
+
   it('a page that fails to load, or a change the judge calls broken', () => {
     expect(sw.classifyPage({ url: `${BASE}/x`, status: 'error', statusCode: null, error: 'timeout' })).toMatchObject({
       problem: 'load_error',

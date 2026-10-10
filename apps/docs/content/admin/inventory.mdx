@@ -104,6 +104,8 @@ for inventory drift, `SyntheticTimeline` for the synthetic walks.
 - fails to load;
 - changed in a way Firecrawl's checker calls broken: an error message, a blank page, or missing main content. Normal wording and layout edits are ignored.
 
+Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
+
 Each broken page files one report. While it stays broken, Mushi doesn't file again. When it loads cleanly it's marked fixed, and if it breaks later it files again. **Check now** runs a check straight away, and results show in 1 to 3 minutes.
 
 The watch uses your Firecrawl key, or a key shared with all your apps. It costs about 1 credit per page per day, about 750 a month for 25 pages, plus 1 per changed page that gets checked. **Turn off** deletes the crawl; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).

@@ -43,11 +43,14 @@ export const DEFAULT_SCHEDULE_CRON = '30 1 * * *';
 const NOT_BREAKAGE = new Set([401, 403, 407, 429]);
 
 /**
- * Firecrawl marks a URL 'error' when it skipped it because the same page
- * was already scraped under another address (a redirect, a UTM variant).
- * glot.it's first check had 9 of these (2026-10-10); none was broken.
+ * Firecrawl marks a URL 'error' when it chose not to fetch it. Neither case
+ * is breakage:
+ * - the same page was already scraped under another address (a redirect, a
+ *   UTM variant): glot.it's first check had 9 of these (2026-10-10);
+ * - the site's robots.txt disallows it, as yen-yen does for /feedback on
+ *   purpose (2026-10-10).
  */
-const DUPLICATE_SKIP = /already scraped this url|prevent duplicate scrapes/i;
+const NOT_FETCHED_ON_PURPOSE = /already scraped this url|prevent duplicate scrapes|blocked by the website's robots\.txt/i;
 
 export interface MonitorPage {
   url: string;
@@ -70,7 +73,7 @@ export function classifyPage(page: MonitorPage): PageProblem | null {
   if (page.status === 'removed') return null;
   const code = typeof page.statusCode === 'number' ? page.statusCode : null;
   if (page.status === 'error') {
-    if (DUPLICATE_SKIP.test(page.error ?? '')) return null;
+    if (NOT_FETCHED_ON_PURPOSE.test(page.error ?? '')) return null;
     return { problem: 'load_error', statusCode: code, detail: page.error?.trim() || 'The page did not load.' };
   }
   if (code !== null && code >= 400 && !NOT_BREAKAGE.has(code)) {
