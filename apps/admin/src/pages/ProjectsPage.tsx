@@ -59,7 +59,8 @@ import {
 } from '../components/projects/project-models'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
-  ACTIVE_PROJECT_STORAGE_KEY,
+  clearActiveProject,
+  getActiveProjectIdSnapshot,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -499,13 +500,9 @@ export function ProjectsPage() {
     // the rest of the chrome reads as "no project selected" during the
     // undo window — otherwise the header pill would still claim to be
     // viewing a project the user just deleted.
-    try {
-      if (window.localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY) === project.id) {
-        window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
-      }
-    } catch {
-      // localStorage might be disabled in private browsing — non-fatal.
-    }
+    // clearActiveProject also fires the change event: a bare removeItem
+    // never reaches same-tab subscribers (`storage` only fires cross-tab).
+    if (getActiveProjectIdSnapshot() === project.id) clearActiveProject()
     const nextParams = new URLSearchParams(searchParams)
     if (nextParams.get(ACTIVE_PROJECT_QUERY_PARAM) === project.id) {
       nextParams.delete(ACTIVE_PROJECT_QUERY_PARAM)
