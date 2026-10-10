@@ -41,7 +41,7 @@ import { BILLING_CTA_LINK_CLASS } from '../../lib/tokens'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { Tooltip } from '../ui'
-import { trackUpgradeClicked } from './UpgradePrompt'
+import { trackUpgradeClicked, upgradeCtaCopy } from './UpgradePrompt'
 
 // Re-export here so callers don't have to chase imports across modules
 // — `<UpgradePill flag="teams" />` should just need this file.
@@ -102,12 +102,6 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     tagline: 'Publishing to the Mushi Marketplace requires Pro.',
     pillLabel: 'PRO',
   },
-}
-
-function ctaCopy(upgradeTo: UpgradeTarget | null | undefined): string {
-  return upgradeTo
-    ? `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
-    : 'View plans'
 }
 
 function billingHref(flag: FeatureFlag): string {
@@ -187,7 +181,7 @@ export function UpgradeBanner({
         className={BILLING_CTA_LINK_CLASS}
         onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_banner')}
       >
-        {ctaCopy(upgradeTo)}
+        {upgradeCtaCopy(upgradeTo)}
       </Link>
     </div>
   )
@@ -320,7 +314,7 @@ export function UpgradeLockOverlay({
             className={`mt-1 ${BILLING_CTA_LINK_CLASS}`}
             onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_lock_overlay')}
           >
-            {ctaCopy(upgradeTo)}
+            {upgradeCtaCopy(upgradeTo)}
           </Link>
         </div>
       </div>

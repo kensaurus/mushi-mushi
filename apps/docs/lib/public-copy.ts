@@ -84,8 +84,13 @@ export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
     href: `${ADMIN_DEMO_BASE}/signup?src=pricing-pro`,
     external: true,
   },
-  // docs/adr/0015 — kensaurus@gmail.com is the product inbox.
-  enterprise: { label: 'Email us', href: 'mailto:kensaurus@gmail.com', external: true },
+  // docs/adr/0015 — kensaurus@gmail.com is the product inbox. Enterprise is
+  // sales-led (owner decision 2026-10-10): no self-serve checkout.
+  enterprise: {
+    label: 'Contact us',
+    href: 'mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry',
+    external: true,
+  },
 }
 
 export const CLOUD_INTRO = {

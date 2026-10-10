@@ -28,6 +28,7 @@ import { BILLING_CTA_LINK_CLASS_MD } from '../../lib/tokens'
 import { useToast } from '../../lib/toast'
 import { trackSelf } from '../../lib/track'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
+import { ENTERPRISE_MAILTO, isSalesLedPlan, SALES_EMAIL } from '../../lib/salesContact'
 
 /** Funnel: `upgrade_clicked { plan }` — `plan` is the target plan id, or
  *  `view_plans` when no specific target was resolved. */
@@ -37,6 +38,14 @@ export function trackUpgradeClicked(
   surface: string,
 ): void {
   trackSelf('upgrade_clicked', { plan: upgradeTo?.id ?? 'view_plans', flag, surface })
+}
+
+/** CTA text for an upgrade target. A sales-led plan (Enterprise) has no
+ *  price to quote: it is arranged with our team. */
+export function upgradeCtaCopy(upgradeTo: UpgradeTarget | null | undefined): string {
+  if (!upgradeTo) return 'View plans'
+  if (isSalesLedPlan(upgradeTo)) return `${upgradeTo.display_name} — contact us`
+  return `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
 }
 
 const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullets: string[] }> = {
@@ -179,9 +188,7 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
           className={BILLING_CTA_LINK_CLASS_MD}
           onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_prompt')}
         >
-          {upgradeTo
-            ? `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
-            : 'View plans'}
+          {upgradeCtaCopy(upgradeTo)}
         </Link>
         {currentPlan && (
           <span className="text-xs text-fg-muted">
@@ -223,18 +230,22 @@ export function UpgradePromptHost() {
       if (now - last < UPGRADE_TOAST_COOLDOWN_MS) return
       lastUpgradeToastAt.set(detail.flag, now)
       const copy = FEATURE_COPY[detail.flag]
+      const salesLed = !!detail.upgradeTo && isSalesLedPlan(detail.upgradeTo)
       toast.push({
         tone: 'warn',
         title: `${copy?.title ?? detail.flag} requires a plan upgrade`,
         description: detail.upgradeTo
-          ? `${detail.upgradeTo.display_name} ($${detail.upgradeTo.monthly_price_usd}/mo) unlocks this.`
+          ? salesLed
+            ? `${detail.upgradeTo.display_name} unlocks this. It is arranged with our team: email ${SALES_EMAIL}.`
+            : `${detail.upgradeTo.display_name} ($${detail.upgradeTo.monthly_price_usd}/mo) unlocks this.`
           : 'Pick a plan that includes this feature.',
         duration: 12_000,
         action: {
-          label: 'View plans',
+          label: salesLed ? 'Contact us' : 'View plans',
           onClick: () => {
             trackUpgradeClicked(detail.upgradeTo, detail.flag, 'entitlement_blocked_toast')
-            navigate('/billing')
+            if (salesLed) window.location.href = ENTERPRISE_MAILTO
+            else navigate('/billing')
           },
         },
       })

@@ -2,9 +2,36 @@ import { describe, expect, it } from 'vitest'
 import {
   blocksNewCheckout,
   customerPaymentMethodChanged,
+  isSalesLedPlan,
   meterDayDisposition,
+  SALES_CONTACT_EMAIL,
+  salesLedCheckoutError,
   tierFromBasePrice,
 } from '../../supabase/functions/_shared/billing-rules.ts'
+
+describe('isSalesLedPlan', () => {
+  it('refuses Enterprise checkout even if its row says self-serve', () => {
+    expect(isSalesLedPlan({ id: 'enterprise', is_self_serve: true })).toBe(true)
+    expect(isSalesLedPlan({ id: 'enterprise', is_self_serve: false })).toBe(true)
+  })
+  it('keeps Indie and Pro self-serve', () => {
+    expect(isSalesLedPlan({ id: 'indie', is_self_serve: true })).toBe(false)
+    expect(isSalesLedPlan({ id: 'pro', is_self_serve: true })).toBe(false)
+  })
+  it('honours is_self_serve = false on any other plan', () => {
+    expect(isSalesLedPlan({ id: 'pro', is_self_serve: false })).toBe(true)
+  })
+})
+
+describe('salesLedCheckoutError', () => {
+  it('names the plan and gives the address to write to', () => {
+    const err = salesLedCheckoutError('Enterprise')
+    expect(err.code).toBe('PLAN_SALES_LED')
+    expect(err.message).toContain('Enterprise')
+    expect(err.message).toContain(SALES_CONTACT_EMAIL)
+    expect(err.contact).toBe(`mailto:${SALES_CONTACT_EMAIL}?subject=Mushi%20Enterprise%20inquiry`)
+  })
+})
 
 describe('blocksNewCheckout', () => {
   it('blocks every status that still bills or can start billing', () => {
