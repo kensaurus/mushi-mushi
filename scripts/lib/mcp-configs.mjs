@@ -235,6 +235,34 @@ export function repoPathFromRawUrl(url, repo = 'kensaurus/mushi-mushi') {
 }
 
 /**
+ * Every file a package manifest promises: `main`, `types`, each `bin`, and
+ * every leaf of `exports` (conditions nest, so the walk recurses). Reading the
+ * manifest means a new export subpath is checked without editing a list; a
+ * hardcoded list once skipped the `.js` and `.d.ts` of three subpaths.
+ * Wildcard subpath patterns are skipped because they name no single file.
+ *
+ * @param {Record<string, unknown>} pkg parsed package.json
+ * @returns {string[]} package-relative paths without a leading `./`, in manifest order
+ */
+export function packageEntryFiles(pkg) {
+  const files = new Set()
+  const walk = (node) => {
+    if (typeof node === 'string') {
+      if (!node.includes('*')) files.add(node.replace(/^\.\//, ''))
+    } else if (Array.isArray(node)) {
+      node.forEach(walk)
+    } else if (node && typeof node === 'object') {
+      Object.values(node).forEach(walk)
+    }
+  }
+  walk(pkg.main)
+  walk(pkg.types ?? pkg.typings)
+  walk(pkg.bin)
+  walk(pkg.exports)
+  return [...files]
+}
+
+/**
  * Tracked `*.json` / `*.json.example` files that mention `mcpServers`. Asking
  * git (not walking the disk) means a new committed config is linted without
  * anyone adding it to a list, and ignored local configs never are.

@@ -6,8 +6,8 @@
  *  1. packages/mcp/package.json has correct metadata (name, version, description,
  *     homepage, bugs, repository, license, author, engines)
  *  2. packages/mcp/README.md exists and is non-empty
- *  3. dist/index.js exists (built)
- *  4. dist/catalog.js and dist/server.js exist (sub-path exports built)
+ *  3. every file package.json names in main, types and bin exists (built)
+ *  4. every exports leaf exists: the .js and .d.ts of each sub-path export
  *  5. bin entry points to dist/index.js
  *  6. catalog drift guard passes (re-runs check-mcp-catalog-sync.mjs)
  *  7. Cursor plugin manifest is valid (re-runs check-cursor-plugin.mjs)
@@ -25,7 +25,7 @@ import { resolve, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-import { repoPathFromRawUrl } from './lib/mcp-configs.mjs'
+import { packageEntryFiles, repoPathFromRawUrl } from './lib/mcp-configs.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
@@ -86,15 +86,11 @@ if (!existsSync(readmePath)) {
   }
 }
 
-// 3-4. dist files and declaration files referenced by package exports.
-for (const distFile of [
-  'dist/index.js',
-  'dist/index.d.ts',
-  'dist/catalog.js',
-  'dist/catalog.d.ts',
-  'dist/server.js',
-  'dist/server.d.ts',
-]) {
+// 3-4. Every file package.json promises (main, types, bin, each exports
+// leaf), read from the manifest so a new subpath's .js and .d.ts are checked.
+const entryFiles = packageEntryFiles(pkg)
+if (entryFiles.length === 0) fail('package.json declares no main, types, bin or exports')
+for (const distFile of entryFiles) {
   const abs = resolve(mcpPkg, distFile)
   if (!existsSync(abs)) {
     fail(`${distFile} not found — run pnpm --filter @mushi-mushi/mcp build first`)
