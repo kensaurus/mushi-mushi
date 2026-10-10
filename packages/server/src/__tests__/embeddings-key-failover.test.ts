@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const retiredRows: string[] = []
 const legacyUpdates: unknown[] = []
+let resolveCalls = 0
 let candidates: Array<{ key: string; source: 'byok' | 'env'; keyId?: string }> = []
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({
@@ -31,6 +32,7 @@ vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   // Mirrors the real resolver: a legacy ref is skipped once its test status
   // is no longer 'ok', and resolution falls through to the env key.
   resolveLlmKey: async () => {
+    resolveCalls++
     const live = candidates.filter((c) => c.keyId || legacyUpdates.length === 0)
     return live[0] ?? { key: 'sk-env', source: 'env' }
   },
@@ -68,7 +70,7 @@ describe('createEmbedding key failover', () => {
 
   it('retires a rejected legacy project_settings key and fails over', async () => {
     candidates = [{ key: 'sk-legacy', source: 'byok' }]
-    await expect(createEmbedding('x', { projectId: 'p1' })).resolves.toEqual([0.1, 0.2])
+    await expect(createEmbedding('x', { projectId: 'p2' })).resolves.toEqual([0.1, 0.2])
     expect(legacyUpdates).toEqual([{ byok_openai_test_status: 'error_auth' }])
     expect(usedKeys).toEqual(['sk-legacy', 'sk-env'])
   })
@@ -76,8 +78,17 @@ describe('createEmbedding key failover', () => {
   it('does not fail over when the platform key itself is rejected', async () => {
     candidates = [{ key: 'sk-env', source: 'env' }]
     vi.stubGlobal('fetch', async () => new Response('{"error":"bad"}', { status: 401 }))
-    await expect(createEmbedding('x', { projectId: 'p1' })).rejects.toThrow(/401/)
+    await expect(createEmbedding('x', { projectId: 'p3' })).rejects.toThrow(/401/)
     expect(retiredRows).toEqual([])
     expect(legacyUpdates).toEqual([])
+  })
+
+  it('resolves the project key once for back-to-back chunks, not per call', async () => {
+    candidates = [{ key: 'sk-env', source: 'env' }]
+    resolveCalls = 0
+    await createEmbedding('a', { projectId: 'p4' })
+    await createEmbedding('b', { projectId: 'p4' })
+    await createEmbedding('c', { projectId: 'p4' })
+    expect(resolveCalls).toBe(1)
   })
 })
