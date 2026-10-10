@@ -79,12 +79,32 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [openRes, dismissedRes, snapshotsRes, snapshotCountRes, lastFindingRes, surfacesRes] = await Promise.all([
-      db()
+    // Head counts, not rows counted in JS: a select stops at PostgREST's
+    // max-rows cap, so the banner undercounted past it.
+    const openCount = (severity?: string) => {
+      let q = db()
         .from('drift_findings')
-        .select('severity, surface')
+        .select('id', { count: 'exact', head: true })
         .eq('project_id', pid)
-        .eq('status', 'open'),
+        .eq('status', 'open')
+      if (severity) q = q.eq('severity', severity)
+      return q
+    }
+    const [
+      openRes,
+      criticalRes,
+      warnRes,
+      infoRes,
+      dismissedRes,
+      snapshotsRes,
+      snapshotCountRes,
+      lastFindingRes,
+      surfacesRes,
+    ] = await Promise.all([
+      openCount(),
+      openCount('critical'),
+      openCount('warn'),
+      openCount('info'),
       db()
         .from('drift_findings')
         .select('id', { count: 'exact', head: true })
@@ -117,11 +137,10 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
         .eq('status', 'open'),
     ])
 
-    const openRows = openRes.data ?? []
-    const criticalOpen = openRows.filter((r) => r.severity === 'critical').length
-    const warnOpen = openRows.filter((r) => r.severity === 'warn').length
-    const infoOpen = openRows.filter((r) => r.severity === 'info').length
-    const openFindings = openRows.length
+    const criticalOpen = criticalRes.count ?? 0
+    const warnOpen = warnRes.count ?? 0
+    const infoOpen = infoRes.count ?? 0
+    const openFindings = openRes.count ?? 0
 
     const snapshots = snapshotsRes.data ?? []
     const snapshotCount = snapshotCountRes.count ?? snapshots.length

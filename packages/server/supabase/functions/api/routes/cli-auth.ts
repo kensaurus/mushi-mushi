@@ -690,8 +690,9 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       { onConflict: 'project_id,user_id' },
     )
 
-    // Mint a full CLI key: report:write (SDK ingest) + mcp:read + mcp:write
-    // (CLI admin + MCP tools). mcp:write is required by owner-only admin commands
+    // Mint the CLI key: by default the full set, report:write (SDK ingest) +
+    // mcp:read + mcp:write (CLI admin + MCP tools), or the narrower subset the
+    // caller asked for in body.scopes (validated above). mcp:write is required by owner-only admin commands
     // such as `mushi billing cap`, `mushi billing alert-email`, `mushi pipeline
     // start`, and `mushi fixes merge`. mcp:write implies mcp:read at the gate, but
     // both are listed for explicit auditability. This endpoint is owner-gated, so

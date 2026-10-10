@@ -108,6 +108,34 @@ describe('mergeGithubPullRequest', () => {
     const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
     expect(out).toMatchObject({ merged: true, alreadyMerged: true, mergedAt: '2026-10-02T22:10:00Z' })
   })
+
+  // GitHub also says "not mergeable" for conflicts and failing required
+  // checks. Reading that as merged marked the report Fixed and billed a
+  // fixes_succeeded for a PR that never landed.
+  it('does not report a conflicting or blocked PR as merged', async () => {
+    mocks.fetchPullRequest.mockResolvedValue({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Pull Request is not mergeable' }), { status: 405 })))
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
+    expect(out).toMatchObject({ merged: false, alreadyMerged: false, message: 'Pull Request is not mergeable' })
+  })
+
+  it('trusts the PR state when GitHub says "not mergeable" for a PR that did merge', async () => {
+    mocks.fetchPullRequest
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'closed', merged: true, mergedAt: '2026-10-02T22:10:00Z' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Pull Request is not mergeable' }), { status: 405 })))
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
+    expect(out).toMatchObject({ merged: true, alreadyMerged: true, mergedAt: '2026-10-02T22:10:00Z' })
+  })
+
+  it('falls back to GitHub\'s message only when the PR cannot be re-read', async () => {
+    mocks.fetchPullRequest
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+      .mockRejectedValueOnce(new Error('pull fetch 502'))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Pull Request is not mergeable' }), { status: 405 })))
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
+    expect(out).toMatchObject({ merged: false, alreadyMerged: false })
+  })
 })
 
 describe('every merge-detection path passes GitHub\'s merge time', () => {
@@ -125,5 +153,29 @@ describe('every merge-detection path passes GitHub\'s merge time', () => {
 
   it('the console merge keeps GitHub\'s time for a PR that was already merged', () => {
     expect(read('api/routes/query-fixes-repo.ts')).toMatch(/mergedAt: mergeResult\.alreadyMerged \? mergeResult\.mergedAt \?\? null : null,/)
+  })
+})
+
+describe('fixes_succeeded usage event source', () => {
+  function sourceRecorded(queries: ReturnType<typeof scripted>['queries']): unknown {
+    const insert = findQueries(queries, 'usage_events', 'insert')[0]
+    return (insert?.payload as { metadata?: { source?: unknown } } | undefined)?.metadata?.source
+  }
+
+  it('records the path that saw the merge instead of always console_merge', async () => {
+    for (const [meta, expected] of [
+      [{ source: 'github_webhook' as const }, 'github_webhook'],
+      [{ actorUserId: 'u-1' }, 'console_merge'],
+      [{}, 'system'],
+    ] as const) {
+      const { db, queries } = scripted()
+      await finalizeFixMerge(db as never, ATTEMPT, { prUrl: ATTEMPT.pr_url, prNumber: 12, ...meta })
+      expect(sourceRecorded(queries)).toBe(expected)
+    }
+  })
+
+  it('ci-sync and the pull_request webhook name themselves', () => {
+    expect(read('ci-sync/index.ts')).toMatch(/finalizeFixMerge\(db, attempt, \{[\s\S]{0,240}?source: 'ci_sync',/)
+    expect(read('webhooks-github-indexer/index.ts')).toMatch(/finalizeFixMerge\(db, attempt, \{[\s\S]{0,240}?source: 'github_webhook',/)
   })
 })

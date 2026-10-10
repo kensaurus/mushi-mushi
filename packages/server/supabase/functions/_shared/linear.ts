@@ -131,15 +131,26 @@ export async function refreshLinearToken(
   const accessName = `project:${projectId}:linear_access_token`
   const refreshName = `project:${projectId}:linear_refresh_token`
 
-  await db.rpc('vault_store_secret', {
+  // Fail loudly if either write fails: Linear has already rotated the refresh
+  // token, so a silent miss leaves a dead one in Vault and the next refresh
+  // breaks the integration.
+  const { error: accessErr } = await db.rpc('vault_store_secret', {
     secret_name: accessName,
     secret_value: newAccess,
   })
+  if (accessErr) {
+    log.error('Failed to store refreshed Linear access token', { projectId, error: accessErr.message })
+    throw new Error(`Could not store refreshed Linear access token: ${accessErr.message}`)
+  }
   if (newRefresh) {
-    await db.rpc('vault_store_secret', {
+    const { error: refreshErr } = await db.rpc('vault_store_secret', {
       secret_name: refreshName,
       secret_value: newRefresh,
     })
+    if (refreshErr) {
+      log.error('Failed to store rotated Linear refresh token', { projectId, error: refreshErr.message })
+      throw new Error(`Could not store rotated Linear refresh token: ${refreshErr.message}`)
+    }
   }
 
   log.info('Refreshed Linear access token', { projectId })

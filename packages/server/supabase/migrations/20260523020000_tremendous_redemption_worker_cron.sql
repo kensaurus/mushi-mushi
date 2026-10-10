@@ -12,7 +12,7 @@ BEGIN
     PERFORM cron.schedule(
       'tremendous-redemption-worker',
       '* * * * *',
-      $$
+      $cron$
         SELECT net.http_post(
           url    := (SELECT value FROM mushi_runtime_config WHERE key = 'edge_function_base_url')
                    || '/tremendous-redemption-worker',
@@ -22,7 +22,7 @@ BEGIN
           ),
           body   := '{}'::jsonb
         ) AS request_id;
-      $$
+      $cron$
     );
   END IF;
 END;
