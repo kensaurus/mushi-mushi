@@ -113,8 +113,11 @@ Mushi changes a store or RevenueCat only through `connector_actions` (ADR
 RevenueCat actions run only on a project the connector binds, with the
 separate write key, and only after the connector's **Payment actions** are
 turned on. A support grant is a human-approved promotional entitlement for
-one customer; Mushi keeps only the entitlement id and expiry it granted, not
-the customer record RevenueCat returns.
+one customer. The request row keeps its payload, including the customer's
+`appUserId`, and the Actions list shows it to the team's owners and admins
+(that is what they approve). The result keeps only the entitlement id and
+expiry; the customer record RevenueCat returns (which can carry an email) is
+not stored.
 
 ## 4. What stays outside Mushi
 
