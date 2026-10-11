@@ -138,4 +138,20 @@ describe('firecrawl v2 client', () => {
     await firecrawlSearch(makeDb(), 'p1', 'some error text here', { domains: ['*.example.com', 'docs.example.org:8443'], bypassCache: true })
     expect(sent().body.includeDomains).toEqual(['example.com', 'docs.example.org'])
   })
+
+  it('only the live-site watch identifies as MushiSiteWatch; search, map and own-site scrape do not', async () => {
+    const bodies: string[] = []
+    for (const run of [
+      () => firecrawlSearch(makeDb(), 'p1', 'some error text here', { bypassCache: true }),
+      () => firecrawlMapOwnSite(makeDb(), 'p1', 'https://app.example'),
+      () => firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://app.example/pricing', 'https://app.example'),
+    ]) {
+      reply({ success: true, data: { web: [], markdown: '' }, links: [] })
+      await run()
+      const [, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+      bodies.push(String(init.body) + JSON.stringify(init.headers ?? {}))
+    }
+    expect(bodies).toHaveLength(3)
+    for (const b of bodies) expect(b).not.toContain('MushiSiteWatch')
+  })
 })

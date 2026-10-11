@@ -269,7 +269,10 @@ export async function ingestReport(
 
   const parsed = reportSubmissionSchema.safeParse(normalizedBody);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid payload' };
+    // Name the field: a bare "Required" left SDK and script authors guessing.
+    const issue = parsed.error.issues[0];
+    const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
+    return { ok: false, error: issue ? `${where}${issue.message}` : 'Invalid payload' };
   }
 
   const report = parsed.data;

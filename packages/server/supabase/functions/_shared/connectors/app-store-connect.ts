@@ -3,7 +3,8 @@
  * PURPOSE: The App Store Connect connector (Plan 019 §2b, Plan 020 §5),
  *          read-only. A team API key (.p8) signs a 20-minute ES256 JWT
  *          (iss = issuer id, aud = appstoreconnect-v1, kid = key id).
- *          Snapshot: app versions and their state, the latest build.
+ *          Snapshot: app versions and their state, the latest build, and
+ *          in-app purchase / subscription review states.
  *          No propose, no act (Plan 020 S-1: listings change through the
  *          host's own CI).
  *
@@ -20,6 +21,7 @@
 import { signJwt } from './jwt.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError, type JsonResponse } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type ProbeResult, type RecipeConnector } from './types.ts'
+import type { StoreRead } from '../monetization/rules.ts'
 
 const API = 'https://api.appstoreconnect.apple.com'
 const ASC_READ_SCOPE = 'a team API key with a read role (Developer or App Manager)'
@@ -67,6 +69,27 @@ export async function appStoreConnectGet(ctx: ConnectorContext, path: string): P
   return fetchJson<unknown>(ctx, `${API}${path}`, { headers: { Authorization: `Bearer ${await token(ctx, key)}` } })
 }
 
+/**
+ * In-app purchases and subscriptions with their review state, for
+ * monetization_store_product_unready. Optional: a refusal is `unknown` with
+ * the reason, never "no products" and never a failed snapshot.
+ */
+async function iosProducts(ctx: ConnectorContext, key: AscKey, appleId: string): Promise<StoreRead> {
+  const [iap, groups] = await Promise.all([
+    asc(ctx, key, `/v1/apps/${appleId}/inAppPurchasesV2?limit=200&fields[inAppPurchases]=productId,state`),
+    asc(ctx, key, `/v1/apps/${appleId}/subscriptionGroups?limit=50&include=subscriptions&fields[subscriptions]=productId,state&limit[subscriptions]=50`),
+  ])
+  for (const r of [iap, groups]) {
+    if (isAgreementBlock(r.status, r.body)) return { state: 'unknown', reason: AGREEMENT_BLOCKED_REASON }
+    if (r.status !== 200) return { state: 'unknown', reason: `In-app purchases could not be read: ${statusReason('App Store Connect', r.status)}` }
+  }
+  const rows = [
+    ...((iap.body?.data ?? []) as Array<{ attributes?: Record<string, unknown> }>),
+    ...((groups.body?.included ?? []) as Array<{ type?: string; attributes?: Record<string, unknown> }>).filter((x) => x.type === 'subscriptions'),
+  ]
+  return { state: 'read', items: rows.flatMap((x) => typeof x.attributes?.productId === 'string' ? [{ storeIdentifier: x.attributes.productId, state: String(x.attributes.state ?? 'UNKNOWN') }] : []) }
+}
+
 export const appStoreConnectConnector: RecipeConnector = {
   kind: 'app_store_connect',
   title: 'App Store Connect',
@@ -90,7 +113,7 @@ export const appStoreConnectConnector: RecipeConnector = {
     const key = parseKey(ctx.readCredential)
     if (!key) throw new ConnectorError('App Store Connect is not connected.', 'not_connected')
     const apps = bindings.filter((b) => /^\d{6,12}$/.test(b.externalId)).slice(0, 10)
-    const out: Array<{ projectId: string; appleId: string; versions: Array<{ version: string; state: string; createdDate: string | null }>; latestBuild: { version: string; processingState: string; uploadedDate: string | null } | null }> = []
+    const out: Array<{ projectId: string; appleId: string; versions: Array<{ version: string; state: string; createdDate: string | null }>; latestBuild: { version: string; processingState: string; uploadedDate: string | null } | null; products: StoreRead }> = []
     for (const b of apps) {
       const v = await asc(ctx, key, `/v1/apps/${b.externalId}/appStoreVersions?limit=5&fields[appStoreVersions]=versionString,appVersionState,appStoreState,createdDate`)
       if (isAgreementBlock(v.status, v.body)) throw new ConnectorError(AGREEMENT_BLOCKED_REASON, 'blocked')
@@ -102,6 +125,7 @@ export const appStoreConnectConnector: RecipeConnector = {
         appleId: b.externalId,
         versions: ((v.body?.data ?? []) as Array<{ attributes?: Record<string, string> }>).map((x) => ({ version: x.attributes?.versionString ?? '', state: x.attributes?.appVersionState ?? x.attributes?.appStoreState ?? 'UNKNOWN', createdDate: x.attributes?.createdDate ?? null })),
         latestBuild: lb ? { version: String(lb.version ?? ''), processingState: String(lb.processingState ?? ''), uploadedDate: lb.uploadedDate ?? null } : null,
+        products: await iosProducts(ctx, key, b.externalId),
       })
     }
     // appVersionState (READY_FOR_DISTRIBUTION) replaced the deprecated appStoreState (READY_FOR_SALE).

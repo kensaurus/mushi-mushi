@@ -175,6 +175,7 @@
     "GET /v1/admin/orgs/:orgId/connectors": {"mcp": ["list_connectors"], "cli": ["connectors list", "connectors status"]},
     "GET /v1/admin/orgs/:orgId/digest": {"allow": "parity-debt"},
     "GET /v1/admin/orgs/:orgId/funnel": {"cli": ["funnel show"]},
+    "GET /v1/admin/orgs/:orgId/monetization": {"allow": "editor-equivalent", "note": "The Monetization card's hub view. The same per-app findings (monetization_* rules) reach the editor through get_radar and list_gate_findings, and the attach action through request_connector_action."},
     "GET /v1/admin/orgs/:orgId/portfolio": {"mcp": ["get_portfolio"], "cli": ["portfolio show"]},
     "GET /v1/admin/orgs/:orgId/portfolio/findings": {"mcp": ["list_portfolio_findings"], "cli": ["portfolio findings"]},
     "GET /v1/admin/orgs/:orgId/portfolio/resources": {"cli": ["portfolio resources"]},

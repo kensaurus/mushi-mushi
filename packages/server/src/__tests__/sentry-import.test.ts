@@ -216,6 +216,29 @@ describe('importSentryIssues', () => {
     expect(result.items.map((i) => i.outcome)).toEqual(['error', 'created'])
   })
 
+  it('a database error thrown as a plain object reads as its message, not "[object Object]"', async () => {
+    const { fetchImpl } = fakeSentry({
+      '/organizations/sakuramoto/issues/4501/events/latest/': () => json(EVENT),
+      '/organizations/sakuramoto/issues/4501/': () => json(ISSUE),
+    })
+    const failingDb = {
+      from: () => {
+        throw { message: 'duplicate key value violates unique constraint "reports_pkey"', code: '23505' }
+      },
+    } as never
+    const result = await imp.importSentryIssues(failingDb, {
+      projectId: 'p1',
+      request: { issueIds: ['4501'], limit: 5 },
+      sentry,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(result.items[0]).toMatchObject({
+      outcome: 'error',
+      error: 'duplicate key value violates unique constraint "reports_pkey"',
+    })
+  })
+
   it('searches only the configured Sentry project in query mode', async () => {
     const { fetchImpl, calls } = fakeSentry({
       '/projects/sakuramoto/glot-it/issues/': () => json([ISSUE]),
