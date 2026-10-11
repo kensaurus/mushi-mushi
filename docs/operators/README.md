@@ -28,6 +28,9 @@
 - [Public architecture-diagram pages](./public-diagram-pages.md) — the
   crawlable `/r/<owner>/<repo>` pages: S3 page store setup, who can publish,
   takedowns, and why diagrams are not redrawn on push.
+- [Monetization across apps](./monetization.md) — binding the RevenueCat,
+  App Store Connect and Play connectors, what the payment drift checks mean,
+  and how approved actions work (ADR 0025).
 - [Live-site watch](./site-watch.md) — the `MushiSiteWatch` User-Agent to
   filter from Sentry and analytics, and when older monitors start sending it.
 
