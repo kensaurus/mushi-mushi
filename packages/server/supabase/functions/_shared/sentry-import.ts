@@ -28,6 +28,7 @@ import {
   restEventToWebhookEvent,
   searchSentryIssues,
   SentryApiError,
+  thrownMessage,
   type FetchLike,
   type SentryRestEvent,
   type SentryRestIssue,
@@ -294,5 +295,6 @@ function describe(err: unknown): string {
     if (err.status === 404) return 'Sentry issue not found in this organization.';
     return err.message.slice(0, 200);
   }
-  return (err instanceof Error ? err.message : String(err)).slice(0, 200);
+  // A failed insert throws a plain PostgREST object, not an Error.
+  return thrownMessage(err).slice(0, 200);
 }
