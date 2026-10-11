@@ -4,7 +4,8 @@
  *          A service account signs an RS256 assertion for an OAuth token
  *          (scope androidpublisher). Snapshot: tracks, releases, version
  *          codes and rollout %, read through a temporary edit that is
- *          deleted, never committed.
+ *          deleted, never committed; subscription base plans and one-time
+ *          products with their state.
  *
  * Act (Plan 020 Phase 4, ADR 0017): `set_rollout` and `promote_track` are
  * implemented but run ONLY through executeConnectorAction
@@ -20,6 +21,7 @@ import { sha256Hex, signJwt } from './jwt.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError, type JsonResponse } from './http-util.ts'
 import { canonicalJson } from './canonical.ts'
 import { ConnectorError, notConnected, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type RecipeConnector } from './types.ts'
+import type { StoreProduct, StoreRead } from '../monetization/rules.ts'
 
 const API = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -85,6 +87,29 @@ async function readTracks(ctx: ConnectorContext, tokenValue: string, pkg: string
   }
 }
 
+/**
+ * Subscription base plans and one-time products with their state, for
+ * monetization_store_product_unready, named as RevenueCat names them
+ * (`<subscription>:<basePlan>`, or the product id). Optional: a refusal is
+ * `unknown` with the reason, never "no products" and never a failed snapshot.
+ */
+async function playProducts(ctx: ConnectorContext, tokenValue: string, pkg: string): Promise<StoreRead> {
+  const [subs, otps] = await Promise.all([
+    api(ctx, tokenValue, 'GET', `/${pkg}/subscriptions?pageSize=100`),
+    api(ctx, tokenValue, 'GET', `/${pkg}/oneTimeProducts?pageSize=100`),
+  ])
+  for (const r of [subs, otps]) if (r.status !== 200) return { state: 'unknown', reason: `Products could not be read: ${statusReason('Google Play', r.status)}` }
+  const items: StoreProduct[] = []
+  for (const sub of (subs.body?.subscriptions ?? []) as Array<Record<string, any>>) {
+    for (const bp of (sub.basePlans ?? []) as Array<Record<string, any>>) items.push({ storeIdentifier: `${sub.productId}:${bp.basePlanId}`, state: String(bp.state ?? 'STATE_UNSPECIFIED') })
+  }
+  for (const p of (otps.body?.oneTimeProducts ?? []) as Array<Record<string, any>>) {
+    const options = (p.purchaseOptions ?? []) as Array<Record<string, any>>
+    items.push({ storeIdentifier: String(p.productId), state: options.some((o) => o.state === 'ACTIVE') ? 'ACTIVE' : String(options[0]?.state ?? 'NO_PURCHASE_OPTION') })
+  }
+  return { state: 'read', items }
+}
+
 /** True for an Android package name (com.example.app). */
 export function isPlayPackage(value: unknown): value is string {
   return typeof value === 'string' && PKG.test(value)
@@ -137,9 +162,9 @@ export const playConsoleConnector: RecipeConnector = {
     const sa = parseSa(ctx.readCredential)
     if (!sa) throw new ConnectorError('Google Play is not connected.', 'not_connected')
     const t = await accessToken(ctx, sa)
-    const apps: Array<{ projectId: string; package: string; tracks: PlayTrack[] }> = []
+    const apps: Array<{ projectId: string; package: string; tracks: PlayTrack[]; products: StoreRead }> = []
     for (const b of bindings.filter((x) => PKG.test(x.externalId)).slice(0, 10)) {
-      apps.push({ projectId: b.projectId, package: b.externalId, tracks: await readTracks(ctx, t, b.externalId) })
+      apps.push({ projectId: b.projectId, package: b.externalId, tracks: await readTracks(ctx, t, b.externalId), products: await playProducts(ctx, t, b.externalId) })
     }
     const prod = apps[0]?.tracks.find((x) => x.track === 'production')?.releases[0] ?? null
     return {

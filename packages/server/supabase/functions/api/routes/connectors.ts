@@ -7,6 +7,7 @@
  *   POST   /v1/admin/orgs/:orgId/connectors/:id/probe    jwtAuth, owner/admin     probe now
  *   PATCH  /v1/admin/orgs/:orgId/connectors/:id          jwtAuth, owner/admin     name, config, bindings, capabilities, rotate credentials
  *   DELETE /v1/admin/orgs/:orgId/connectors/:id          jwtAuth, owner/admin
+ *   GET    /v1/admin/orgs/:orgId/monetization            adminOrApiKey(mcp:read)  RevenueCat hubs, per-app drift (ADR 0025)
  *
  * Credentials go straight to Vault and are never returned. Read and write
  * credentials are separate; `act` cannot be enabled without a write
@@ -25,6 +26,8 @@ import { scanForSecrets } from '../../_shared/secret-scan.ts'
 import { getConnector, isConnectorKind, LEGACY_BACKED, listConnectors, plannedKinds, UnknownConnectorKind } from '../../_shared/connectors/index.ts'
 import { resolveCredential, storeCredential } from '../../_shared/connectors/credentials.ts'
 import { CONNECTOR_CAPABILITIES, type ConnectorContext, type ProbeResult } from '../../_shared/connectors/types.ts'
+import { loadMonetizationSources, orgHubs } from '../../_shared/monetization/load.ts'
+import { monetizationResponse } from '../../_shared/monetization/view.ts'
 import { jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
@@ -174,6 +177,17 @@ export function registerConnectorRoutes(app: Hono<{ Variables: Variables }>, dep
         legacy: (legacy ?? []) as unknown[],
       },
     })
+  })
+
+  // The Monetization card: what each app sells and why a purchase would fail, from stored snapshots only.
+  app.get('/v1/admin/orgs/:orgId/monetization', deps.adminOrApiKeyRead, async (c) => {
+    const db = deps.getServiceClient()
+    const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
+    if (!access.ok) return access.response
+    const sources = await loadMonetizationSources(db, access.orgId)
+    // A member who sees only some projects sees only those apps.
+    sources.projects = sources.projects.filter((p) => access.projectIds.includes(p.id))
+    return c.json({ ok: true, data: monetizationResponse(sources, orgHubs(sources)) })
   })
 
   app.post('/v1/admin/orgs/:orgId/connectors', deps.jwtAuth, async (c) => {

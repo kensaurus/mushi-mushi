@@ -158,7 +158,7 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
   let result: ConnectorActionResult
   try {
     result = await connector.act!({
-      db, organizationId: organizationId, projectId: row.project_id ?? instance.project_id, config: instance.config ?? {},
+      db, organizationId: organizationId, projectId: row.project_id ?? instance.project_id, instanceId: row.connector_instance_id, config: instance.config ?? {},
       readCredential: await resolve(db, instance.read_credential_ref),
       writeCredential: await resolve(db, instance.write_credential_ref),
       fetch: deps.fetch, now: deps.now,

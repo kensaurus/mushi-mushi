@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-10 · **691** routes.
+> Generated: 2026-10-11 · **692** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 172 |
+| `adminOrApiKey` | 173 |
 | `apiKeyAuth` | 58 |
 | `jwtAuth` | 354 |
 | `jwtOrApiKey` | 3 |
@@ -260,6 +260,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PATCH | `/v1/admin/orgs/:orgId/domains/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
 | GET | `/v1/admin/orgs/:orgId/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio-funnel.ts` |
 | PUT | `/v1/admin/orgs/:orgId/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio-funnel.ts` |
+| GET | `/v1/admin/orgs/:orgId/monetization` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/connectors.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | POST | `/v1/admin/orgs/:orgId/portfolio/changes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |

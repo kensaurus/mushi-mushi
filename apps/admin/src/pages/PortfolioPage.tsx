@@ -14,6 +14,7 @@
  *       GET|PUT /v1/admin/orgs/:orgId/funnel (FunnelCard)
  *       GET|POST|PATCH|DELETE /v1/admin/orgs/:orgId/accounts (AccountsRegisterCard)
  *       GET /v1/admin/orgs/:orgId/spend + bill imports (SpendLedgerCard)
+ *       GET /v1/admin/orgs/:orgId/monetization (MonetizationCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
  * that was never checked renders as healthy. A read the server could not
  * finish is listed in a callout (`readErrors`) and its cells read "Could not
@@ -49,6 +50,7 @@ import {
 } from '../components/portfolio/portfolioView'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
+import { MonetizationCard } from '../components/portfolio/MonetizationCard'
 import { SharedResourcesCard } from '../components/portfolio/SharedResourcesCard'
 import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
@@ -214,6 +216,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.data && page.data.cards.length > 0 && (
         <PanelErrorBoundary label="Accounts and resilience">
           <AccountsRegisterCard orgId={orgId} />
+        </PanelErrorBoundary>
+      )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Payments across apps">
+          <MonetizationCard orgId={orgId} />
         </PanelErrorBoundary>
       )}
       {page.data && page.data.cards.length > 0 && (

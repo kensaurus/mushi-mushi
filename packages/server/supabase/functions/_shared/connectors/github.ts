@@ -5,12 +5,13 @@
  *          credential is migrated. Snapshot: workflows at the head SHA,
  *          recent default-branch runs, Actions secret and variable NAMES
  *          (never values), and the login settings declared in
- *          supabase/config.toml (non-secret keys only). Drift: ci_drift,
+ *          supabase/config.toml (non-secret keys only), and the billing
+ *          catalog the recipe declares (links.billing.catalog). Drift: ci_drift,
  *          default_branch_red, env_drift.
  *          It is the only connector that proposes file edits; the PR itself
  *          is opened by the recipe-change worker as a draft.
  *
- * config: { owner, repo, defaultBranchHint? }  readCredential: the token.
+ * config: { owner, repo, defaultBranchHint?, migrationsDir?, billingCatalogPath? }  readCredential: the token.
  */
 
 import { ciWorkflowDrift, defaultBranchRed, envDrift } from '../recipe-drift.ts'
@@ -19,6 +20,7 @@ import { presentEnvNames } from '../recipe-detail.ts'
 import { isWritablePath, type RecipeManifest } from '../recipe-schema.ts'
 import { parseSupabaseAuthConfig, type DeclaredAuthSettings } from '../supabase-config-toml.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError } from './http-util.ts'
+import { parseBillingCatalog, type BillingCatalog } from '../monetization/catalog.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
 
 const API = 'https://api.github.com'
@@ -157,6 +159,20 @@ export const githubConnector: RecipeConnector = {
     if (toml.status === 200 && typeof toml.body?.content === 'string') supabaseAuth = { path: `${r.owner}/${r.repo}/${tomlPath}`, settings: parseSupabaseAuthConfig(decode(toml.body.content)) }
     else if (toml.status === 404) supabaseAuth = { path: `${r.owner}/${r.repo}/${tomlPath}`, settings: null }
 
+    // The billing catalog the recipe declares (links.billing.catalog, ADR 0025), parsed; undefined = none declared.
+    let billingCatalog: { path: string; catalog?: BillingCatalog; error?: string } | undefined
+    const catalogPath = typeof ctx.config.billingCatalogPath === 'string' ? ctx.config.billingCatalogPath : null
+    if (catalogPath) {
+      const shown = `${r.owner}/${r.repo}/${catalogPath}`
+      const file = await gh(ctx, `/repos/${r.owner}/${r.repo}/contents/${catalogPath.split('/').map(encodeURIComponent).join('/')}?ref=${headSha}`)
+      if (file.status === 200 && typeof file.body?.content === 'string') {
+        const parsed = parseBillingCatalog(decode(file.body.content))
+        billingCatalog = parsed.ok ? { path: shown, catalog: parsed.catalog } : { path: shown, error: parsed.error }
+      } else {
+        billingCatalog = { path: shown, error: file.status === 404 ? 'No file at that path on the default branch.' : statusReason('GitHub', file.status) }
+      }
+    }
+
     const latest = runs.find((x) => x.status === 'completed') ?? null
     return {
       observedAt: ctx.now().toISOString(),
@@ -165,7 +181,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, actionsNamesComplete, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth },
+      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, actionsNamesComplete, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },

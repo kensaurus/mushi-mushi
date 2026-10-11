@@ -273,6 +273,20 @@ describe('Firecrawl monitor calls', () => {
     expect(body).not.toHaveProperty('webhook')
   })
 
+  it('identifies the crawler as MushiSiteWatch on create and on a full update, and sets nothing else', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: { id: 'mon-1' } }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const spec = { name: 'watch', baseUrl: BASE, pageLimit: 25, scheduleCron: sw.DEFAULT_SCHEDULE_CRON }
+    await sw.createMonitor('fc-key', spec)
+    await sw.updateMonitor('fc-key', 'mon-1', { ...spec, status: 'active' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse(String((call as unknown as [string, RequestInit])[1].body))
+      expect(body.targets[0].scrapeOptions).toEqual({ headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } })
+    }
+    expect(sw.SITE_WATCH_USER_AGENT).toMatch(/^Mozilla\/5\.0 .* Chrome\/[\d.]+ Safari\/537\.36 MushiSiteWatch\/1\.0 \(\+https:\/\/kensaur\.us\/mushi-mushi\)$/)
+  })
+
   it('reads every page of a check but follows only Firecrawl links', async () => {
     const fetchMock = vi
       .fn()
