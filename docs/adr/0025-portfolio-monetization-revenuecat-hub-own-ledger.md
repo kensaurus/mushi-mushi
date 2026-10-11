@@ -55,9 +55,12 @@ Constraints found while researching:
    - `app_user_id` is the KENSAURUS account id, the same in every app. This
      lets a purchase follow the person, and an entitlement can be shared
      when the owner chooses.
-   - The existing `revenuecat_project_split` drift rule already enforces
-     this. It warns when apps that declare shared credits sit in two
-     RevenueCat projects.
+   - The existing `revenuecat_project_split` drift rule catches part of
+     this. It warns when two apps that declare shared credits
+     (`links.billing.sharedCreditsWith`) sit in different RevenueCat
+     projects. An app in a second project that declares no sharing raises
+     no finding, so "every app in one project" is a convention, not
+     something a check enforces.
 2. **Balances (credits) stay in the operator's own ledger** (the KENSAURUS
    wallet). RevenueCat virtual currency is not used.
    - Purchases that grant credits reach the ledger through RevenueCat
