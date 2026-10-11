@@ -12,7 +12,7 @@
  */
 
 /** Largest catalog file read, in characters. */
-export const MAX_CATALOG_CHARS = 256 * 1024
+const MAX_CATALOG_CHARS = 256 * 1024
 
 export type CatalogPlatform = 'app_store' | 'play_store'
 

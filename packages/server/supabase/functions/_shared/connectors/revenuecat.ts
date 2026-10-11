@@ -42,7 +42,7 @@ const ID = /^[\w-]{3,64}$/
 /** Pages read per list before it is marked truncated (100 items a page). */
 const MAX_PAGES = 5
 /** How far ahead a promotional grant may run. */
-export const MAX_GRANT_DAYS = 366
+const MAX_GRANT_DAYS = 366
 const READ_SCOPES = ['project_configuration:*:read']
 const OPTIONAL_READ_SCOPES = ['charts_metrics:overview:read (headline numbers)']
 
