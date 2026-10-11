@@ -19,6 +19,8 @@ import { supabaseRadarResults } from '../connectors/supabase.ts'
 import { llmUsageConnector } from '../connectors/llm-usage.ts'
 import { revenuecatConnector } from '../connectors/revenuecat.ts'
 import type { ConnectorSnapshot } from '../connectors/types.ts'
+import { evaluateMonetization } from '../monetization/rules.ts'
+import { hubForProject, loadMonetizationSources } from '../monetization/load.ts'
 import { operatorRadarResults } from './operator.ts'
 import {
   RADAR_RULE_IDS,
@@ -124,7 +126,8 @@ export async function connectorRadarResults(db: Db, projectId: string, manifest:
   if ((settings as { supabase_project_ref?: string | null } | null)?.supabase_project_ref) connectedKinds.add('supabase')
   const out: DetectorResult[] = []
   for (const kind of kinds) {
-    const rules = RADAR_RULE_IDS.filter((id) => RADAR_RULES[id].connector === kind)
+    // The monetization rules read more than one snapshot; monetizationRadarResults answers them.
+    const rules = RADAR_RULE_IDS.filter((id) => RADAR_RULES[id].connector === kind && !id.startsWith('monetization_'))
     const snap = snaps.find((x) => x.kind === kind)
     if (!snap) {
       const reason = connectedKinds.has(kind)
@@ -155,7 +158,26 @@ export async function connectorRadarResults(db: Db, projectId: string, manifest:
       })
     }
   }
+  out.push(...await monetizationRadarResults(db, projectId))
   return out
+}
+
+/**
+ * The "why nobody can pay" rules (ADR 0025) for one app, from the snapshots
+ * Mushi already holds: its RevenueCat hub, the team's billing catalog and its
+ * store product states. Each rule answers ok, finding, unknown or error.
+ */
+export async function monetizationRadarResults(db: Db, projectId: string): Promise<DetectorResult[]> {
+  const { data: project } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+  const organizationId = (project as { organization_id?: string } | null)?.organization_id
+  if (!organizationId) return []
+  const evaluation = evaluateMonetization(hubForProject(await loadMonetizationSources(db, organizationId), projectId))
+  return (evaluation.byProject[projectId] ?? []).map((r) => ({
+    ruleId: r.ruleId,
+    state: r.state,
+    reason: r.reason,
+    findings: r.findings.map((f) => ({ ruleId: f.ruleId, severity: f.severity, message: f.message, target: f.target, fix: f.fix, ...(f.action ? { evidence: { action: f.action } } : {}) })),
+  }))
 }
 
 // ── scheduled run ────────────────────────────────────────────────────────────

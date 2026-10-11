@@ -10,6 +10,7 @@
  *   - write (resolve): event:write
  */
 
+import { isTransientDbConnectionError } from './error-codes.ts';
 import { fetchWithTimeout } from './http.ts';
 import type { SentryEventPayload } from './sentry-ingest.ts';
 
@@ -27,6 +28,51 @@ export class SentryApiError extends Error {
     super(message);
     this.name = 'SentryApiError';
   }
+}
+
+/**
+ * The text of anything thrown. A PostgREST error is a plain object with a
+ * `message`, which `String(err)` turns into "[object Object]".
+ */
+export function thrownMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message;
+  }
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err) ?? String(err);
+  } catch {
+    return String(err);
+  }
+}
+
+/**
+ * Connection-level failures, matched narrowly: a refused or reset socket,
+ * a DNS miss, an Envoy "upstream connect error". A bare "connection" would
+ * also match config errors, which must keep reaching Sentry.
+ */
+const TRANSIENT_NETWORK =
+  /upstream connect error|delayed connect error|error sending request|tcp connect error|connection refused|connection reset|connection closed before message completed|econnrefused|econnreset|socket hang up|dns error|failed to lookup address/i;
+
+/**
+ * True when a Sentry poll failed for a reason the next poll will retry on its
+ * own: Sentry answered 5xx or 429, the request timed out, or the connection
+ * failed (MUSHI-MUSHI-SERVER-2P: a 503 "upstream connect error ... Connection
+ * refused" from Sentry's own edge). A poll also reads settings from the
+ * database first: a plain error object is a PostgREST error and goes to the
+ * DB classifier, which never silences a coded SQL error. 401/403/404 and
+ * anything else stay real errors.
+ */
+export function isTransientSentryFailure(err: unknown): boolean {
+  if (err instanceof SentryApiError) return err.status >= 500 || err.status === 429;
+  // AbortSignal.timeout() rejects with a DOMException named TimeoutError.
+  const name = err && typeof err === 'object' ? (err as { name?: unknown }).name : undefined;
+  if (name === 'TimeoutError' || name === 'AbortError') return true;
+  if (err && typeof err === 'object' && !(err instanceof Error)) {
+    return isTransientDbConnectionError(err as { message?: string; code?: string | null });
+  }
+  return TRANSIENT_NETWORK.test(thrownMessage(err));
 }
 
 export interface SentryRestIssue {

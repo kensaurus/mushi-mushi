@@ -38,6 +38,7 @@ import {
   sentryAutoImportQuery,
 } from '../_shared/sentry-import.ts'
 import { resolveAndDereferencePlatformSettings } from '../_shared/integration-settings.ts'
+import { isTransientSentryFailure, thrownMessage } from '../_shared/sentry-api.ts'
 
 ensureSentry('sentry-seer-poll')
 
@@ -212,6 +213,23 @@ async function autoImportProject(
   return { created, reopened, seen, skipped: null }
 }
 
+/**
+ * Log a failed per-project poll and return its message. Sentry being down,
+ * rate limiting or refusing connections is retried by the next 15-minute
+ * poll on its own, so it is a warning, not a Sentry issue
+ * (MUSHI-MUSHI-SERVER-2P). Anything else is an error whose title carries the
+ * reason, so two different failures do not share one issue.
+ */
+function logPollFailure(what: string, projectId: string, err: unknown): string {
+  const msg = thrownMessage(err)
+  if (isTransientSentryFailure(err)) {
+    log.warn(`${what}, retrying next poll: ${msg.slice(0, 200)}`, { projectId, err: msg })
+  } else {
+    log.error(`${what}: ${msg.slice(0, 200)}`, { projectId, err: msg })
+  }
+  return msg
+}
+
 app.get('/sentry-seer-poll/health', (c) => c.json({ ok: true }))
 
 app.post('/sentry-seer-poll', async (c) => {
@@ -237,8 +255,7 @@ app.post('/sentry-seer-poll', async (c) => {
       const result = await pollProject(db, r)
       return { projectId: r.project_id, ...result }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      log.error('project poll failed', { projectId: r.project_id, err: msg })
+      const msg = logPollFailure('project poll failed', r.project_id, err)
       return { projectId: r.project_id, matched: 0, updated: 0, skipped: `error:${msg.slice(0, 80)}` }
     }
   })
@@ -253,8 +270,7 @@ app.post('/sentry-seer-poll', async (c) => {
     try {
       return { projectId: r.project_id, ...(await autoImportProject(db, r)) }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      log.error('sentry auto-import failed', { projectId: r.project_id, err: msg })
+      const msg = logPollFailure('sentry auto-import failed', r.project_id, err)
       return { projectId: r.project_id, created: 0, reopened: 0, seen: 0, skipped: `error:${msg.slice(0, 80)}` }
     }
   })

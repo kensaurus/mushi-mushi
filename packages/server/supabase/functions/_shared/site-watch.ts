@@ -36,6 +36,20 @@ export const SITE_WATCH_GOAL =
   'nearly empty, or loses its main content. Ignore normal wording, pricing, layout, date and ' +
   'content edits.';
 
+/**
+ * The User-Agent every site-watch page fetch sends, so a host app can drop
+ * the crawler from its error monitoring and analytics (match
+ * "MushiSiteWatch"). A normal Chrome UA comes first so sites that sniff for
+ * a browser still serve the real page.
+ *
+ * This sets the HTTP request header. Whether the page's own JavaScript sees
+ * it in `navigator.userAgent` depends on Firecrawl's browser engine, so a
+ * client-side filter should not assume it does until that is verified.
+ */
+export const SITE_WATCH_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 ' +
+  'MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)';
+
 /** Default schedule: once a day at 01:30 UTC. */
 export const DEFAULT_SCHEDULE_CRON = '30 1 * * *';
 
@@ -139,6 +153,9 @@ function monitorBody(spec: MonitorSpec): Record<string, unknown> {
         // ignoreQueryParameters: "?utm_source=…" links are the same page;
         // without it they used crawl slots and came back as duplicate skips.
         crawlOptions: { limit: spec.pageLimit, maxDiscoveryDepth: 3, ignoreQueryParameters: true },
+        // Only the header: other scrape options keep Firecrawl's monitor
+        // defaults. Firecrawl does not cache a scrape sent with custom headers.
+        scrapeOptions: { headers: { 'User-Agent': SITE_WATCH_USER_AGENT } },
       },
     ],
   };

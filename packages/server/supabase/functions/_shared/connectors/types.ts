@@ -73,6 +73,8 @@ export interface ConnectorContext {
   db: Db
   organizationId: string
   projectId: string | null
+  /** The connector_instances row this context was built from; null for legacy-backed kinds and probes. */
+  instanceId?: string | null
   /** Resolved read credential (never logged). null = not connected. */
   readCredential: string | null
   /** Resolved write credential; null unless propose/act is enabled. */
