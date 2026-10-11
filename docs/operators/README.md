@@ -28,6 +28,8 @@
 - [Public architecture-diagram pages](./public-diagram-pages.md) — the
   crawlable `/r/<owner>/<repo>` pages: S3 page store setup, who can publish,
   takedowns, and why diagrams are not redrawn on push.
+- [Live-site watch](./site-watch.md) — the `MushiSiteWatch` User-Agent to
+  filter from Sentry and analytics, and when older monitors start sending it.
 
 ## BYOK validation migration gate
 
