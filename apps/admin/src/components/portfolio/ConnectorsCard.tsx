@@ -74,6 +74,12 @@ const FORM: Record<string, { configKey?: string; configLabel?: string; configOpt
   revenuecat: { bindingLabel: 'RevenueCat project id', credentialLabel: 'v2 secret key (read-only)' },
 }
 
+/** How each connector that can act names its actions and its write key. */
+const ACT_COPY: Record<string, { name: string; note: string; label: string; done: string }> = {
+  play_console: { name: 'Release actions', note: 'Releases (rollout %, promote a track) need a separate write key, and each one still needs approval below.', label: 'Write key (JSON)', done: 'Release actions are on. Each one still needs approval.' },
+  revenuecat: { name: 'Payment actions', note: 'Attaching products to a package, or granting a support entitlement, needs a separate RevenueCat v2 secret key with write permissions (project_configuration:packages:read_write, customer_information:customers:read_write). Each one still needs approval below.', label: 'Write key (v2 secret key)', done: 'Payment actions are on. Each one still needs approval.' },
+}
+
 export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: Array<{ projectId: string; name: string }> }) {
   const path = `/v1/admin/orgs/${orgId}/connectors`
   const { data, loading, error, reload } = usePageData<ConnectorsResponse>(path)
@@ -86,6 +92,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
   const [bindProject, setBindProject] = useState('')
   const [externalId, setExternalId] = useState('')
   const [writeKey, setWriteKey] = useState<Record<string, string>>({})
+  const [bindDraft, setBindDraft] = useState<Record<string, { projectId: string; externalId: string }>>({})
   const nameOf = (id: string) => projects.find((p) => p.projectId === id)?.name ?? id.slice(0, 8)
   const form = FORM[kind]
   // Every write here is for owners and admins (QA 177). Remove deletes the
@@ -153,15 +160,45 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                       {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
                       {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}
                     </div>
-                    {canManage !== false && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
+                    {canManage !== false && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (() => {
+                      const copy = ACT_COPY[i.kind] ?? ACT_COPY.play_console
+                      return (
+                        <div className="w-full sm:w-auto">
+                          <DisclosurePanel title={`${copy.name}: ${i.enabled_capabilities.includes('act') ? 'on' : 'off'}`}>
+                            <div className="flex flex-col gap-2 p-3">
+                              <p className="text-2xs text-fg-muted">{copy.note}</p>
+                              <Textarea label={copy.label} rows={2} value={writeKey[i.id] ?? ''} onChange={(e) => setWriteKey({ ...writeKey, [i.id]: e.target.value })} spellCheck={false} />
+                              <div className="flex gap-2">
+                                <Btn size="sm" disabled={busy || !(writeKey[i.id] ?? '').trim()} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: writeKey[i.id], enabledCapabilities: [...new Set([...i.enabled_capabilities, 'act'])] }) }), copy.done)}>Turn on</Btn>
+                                {i.enabled_capabilities.includes('act') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: null }) }), `${copy.name} are off and the write key is deleted.`)}>Turn off</Btn>}
+                              </div>
+                            </div>
+                          </DisclosurePanel>
+                        </div>
+                      )
+                    })()}
+                    {canManage !== false && FORM[i.kind] && (
                       <div className="w-full sm:w-auto">
-                        <DisclosurePanel title={i.enabled_capabilities.includes('act') ? 'Release actions: on' : 'Release actions: off'}>
+                        <DisclosurePanel title="Bind another app">
                           <div className="flex flex-col gap-2 p-3">
-                            <p className="text-2xs text-fg-muted">Releases (rollout %, promote a track) need a separate write key, and each one still needs approval below.</p>
-                            <Textarea label="Write key (JSON)" rows={2} value={writeKey[i.id] ?? ''} onChange={(e) => setWriteKey({ ...writeKey, [i.id]: e.target.value })} spellCheck={false} />
-                            <div className="flex gap-2">
-                              <Btn size="sm" disabled={busy || !(writeKey[i.id] ?? '').trim()} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: writeKey[i.id], enabledCapabilities: [...new Set([...i.enabled_capabilities, 'act'])] }) }), 'Release actions are on. Each one still needs approval.')}>Turn on</Btn>
-                              {i.enabled_capabilities.includes('act') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: null }) }), 'Release actions are off and the write key is deleted.')}>Turn off</Btn>}
+                            <SelectField label="App" value={bindDraft[i.id]?.projectId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: e.target.value, externalId: bindDraft[i.id]?.externalId ?? '' } })}>
+                              <option value="">Choose…</option>
+                              {projects.filter((p) => !i.bindings.some((b) => b.projectId === p.projectId)).map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+                            </SelectField>
+                            <Input label={FORM[i.kind].bindingLabel} value={bindDraft[i.id]?.externalId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: bindDraft[i.id]?.projectId ?? '', externalId: e.target.value } })} />
+                            <div>
+                              <Btn
+                                size="sm"
+                                disabled={busy || !bindDraft[i.id]?.projectId || !bindDraft[i.id]?.externalId.trim()}
+                                onClick={() => act(async () => {
+                                  const draft = bindDraft[i.id]
+                                  const res = await apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ bindings: [...i.bindings, { projectId: draft.projectId, externalId: draft.externalId.trim(), role: 'primary' }] }) })
+                                  if (res.ok) setBindDraft({ ...bindDraft, [i.id]: { projectId: '', externalId: '' } })
+                                  return res
+                                }, 'Bound. It is read with the next daily collection.')}
+                              >
+                                Bind
+                              </Btn>
                             </div>
                           </div>
                         </DisclosurePanel>

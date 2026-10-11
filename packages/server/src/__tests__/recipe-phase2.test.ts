@@ -325,6 +325,35 @@ describe('connector routes', () => {
     expect(db.table('connector_instances')[0]).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
     expect(res.body.data.instance).toMatchObject({ last_probe_failure: 'credential_rejected', missing_scopes: [] })
   })
+
+  it('serves the Monetization card from stored snapshots: per-app drift, the dashboard link, and no credential refs', async () => {
+    const rcFacts = {
+      rcProjectId: 'proj7ff5b439', projectIds: [P1, P2],
+      apps: [{ id: 'appG', name: null, type: 'play_store', storeId: 'com.glotit.app' }],
+      products: { state: 'read', items: [{ id: 'prodG', storeIdentifier: 'glotit_monthly:monthly', type: 'subscription', appId: 'appG', state: 'active', displayName: null }] },
+      entitlements: [{ id: 'e1', lookupKey: 'glot_pro', name: 'Pro', productIds: ['prodG'] }],
+      offerings: [{ id: 'o1', lookupKey: 'glot_default', isCurrent: true, paywallId: 'pw1', packages: [{ id: 'k1', lookupKey: '$rc_monthly', displayName: null, productIds: ['prodG'], truncated: false }] }],
+      webhooks: { state: 'read', items: [] },
+      metrics: { state: 'read', currency: 'USD', items: [{ id: 'mrr', name: 'MRR', value: 0, unit: '$', period: 'P0D' }] },
+    }
+    const db = seed({
+      connector_instances: [{ id: 'inst-rc', organization_id: ORG, kind: 'revenuecat', status: 'connected', enabled_capabilities: ['snapshot', 'drift'], read_credential_ref: 'vault://x' }],
+      connector_bindings: [{ connector_instance_id: 'inst-rc', project_id: P1, external_id: 'proj7ff5b439', role: 'billing' }],
+      connector_snapshots: [{ kind: 'revenuecat', project_id: P1, is_current: true, ok: true, error: null, observed_at: NOW.toISOString(), snapshot: { facts: { projects: [rcFacts] } } }],
+    })
+    const { app } = connectorHarness(db)
+    const res = await app.call('GET', `/v1/admin/orgs/${ORG}/monetization`)
+    expect(res.status).toBe(200)
+    const hub = res.body.data.hubs[0]
+    expect(hub).toMatchObject({ rcProjectId: 'proj7ff5b439', dashboardUrl: 'https://app.revenuecat.com/projects/7ff5b439', connector: { id: 'inst-rc', canAct: false }, read: { state: 'read' } })
+    const glot = hub.apps.find((a: { projectId: string }) => a.projectId === P1)
+    expect(glot.offerings).toEqual([{ lookupKey: 'glot_default', isCurrent: true, hasPaywall: true, packages: [{ id: 'k1', lookupKey: '$rc_monthly', products: [{ id: 'prodG', storeIdentifier: 'glotit_monthly:monthly', platform: 'Android', storeState: null }] }] }])
+    expect(glot.findings.map((f: { ruleId: string }) => f.ruleId)).toContain('monetization_ios_app_missing')
+    expect(glot.rules).toHaveLength(8)
+    expect(res.body.data.planned).toEqual(['monetization_billing_library_outdated'])
+    expect(JSON.stringify(res.body)).not.toContain('vault://')
+    expect((await app.call('GET', `/v1/admin/orgs/${ORG_B}/monetization`)).status).toBe(403)
+  })
 })
 
 describe('recipe ingest routes', () => {

@@ -1,6 +1,6 @@
 /**
- * ActionsCard — store actions waiting for a person (Plan 020 Phase 4,
- * ADR 0017). An editor agent or a teammate can ask; only an owner or admin
+ * ActionsCard — store and RevenueCat actions waiting for a person (Plan 020
+ * Phase 4, ADR 0017, ADR 0025). An editor agent or a teammate can ask; only an owner or admin
  * signed in here can approve, and then run, each one. The approval covers
  * the exact payload shown and expires after an hour; a run happens once.
  *
@@ -39,6 +39,14 @@ const STATUS: Record<ActionRow['status'], { label: string; tone: BadgeTone }> = 
   executed: { label: 'Done', tone: 'okSubtle' },
   failed: { label: 'Failed', tone: 'dangerSubtle' },
   expired: { label: 'Expired', tone: 'neutral' },
+}
+
+/** A starting payload per action, so the asker fills in values instead of guessing field names. */
+const PAYLOAD_TEMPLATE: Record<string, unknown> = {
+  set_rollout: { package: '', track: 'production', userFraction: 0.1, versionCodes: [''] },
+  promote_track: { package: '', track: 'internal', toTrack: 'production', versionCodes: [''] },
+  attach_products_to_package: { rcProjectId: '', packageId: '', products: [{ productId: '', eligibilityCriteria: 'all' }] },
+  grant_promotional_entitlement: { rcProjectId: '', appUserId: '', entitlementId: '', expiresAt: '' },
 }
 
 export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: Array<{ id: string; name: string; actions: string[] }> }) {
@@ -80,9 +88,9 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
 
   if (actable.length === 0 && (data?.actions.length ?? 0) === 0) return null
   return (
-    <Section title="Store actions">
+    <Section title="Store and payment actions">
       <p className="mb-3 text-xs text-fg-muted">Nothing here runs on its own. Each action needs your approval, covers exactly the payload shown, expires after an hour, and runs once.</p>
-      {error && <PageLoadError error={error} resource="store actions" endpoint={path} onRetry={reload} />}
+      {error && <PageLoadError error={error} resource="actions" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading actions…" />}
       {notice && (
         <Callout tone={notice.tone}>
@@ -120,7 +128,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
                 <option value="">Choose…</option>
                 {actable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectField>
-              <SelectField label="Action" value={action} onChange={(e) => setAction(e.target.value)} disabled={!chosen}>
+              <SelectField label="Action" value={action} onChange={(e) => { setAction(e.target.value); if (PAYLOAD_TEMPLATE[e.target.value]) setPayload(JSON.stringify(PAYLOAD_TEMPLATE[e.target.value], null, 2)) }} disabled={!chosen}>
                 <option value="">Choose…</option>
                 {(chosen?.actions ?? []).map((x) => <option key={x} value={x}>{x}</option>)}
               </SelectField>

@@ -551,6 +551,17 @@ export function evaluateMonetization(hub: MonetizationHub): MonetizationEvaluati
   return { byProject, unattributed: [...offer.unattributed, ...ent.unattributed] }
 }
 
+/** Which RevenueCat apps, offerings and entitlements belong to each app — the same attribution the rules use. */
+export function hubOwnership(hub: MonetizationHub): Record<string, { rcAppIds: string[]; offerings: string[]; entitlements: string[] }> {
+  const views = hub.projects.map((p) => appView(hub, p))
+  const byId = productsById(hub.rc)
+  const out: Record<string, { rcAppIds: string[]; offerings: string[]; entitlements: string[] }> = {}
+  for (const v of views) out[v.p.id] = { rcAppIds: v.rcApps.map((a) => a.id), offerings: [], entitlements: [] }
+  for (const off of hub.rc?.offerings ?? []) for (const pid of offeringOwners(hub, views, off, byId)) out[pid]?.offerings.push(off.lookupKey)
+  for (const e of hub.rc?.entitlements ?? []) for (const pid of entitlementOwners(hub, views, e.lookupKey, e.productIds ?? [], byId)) out[pid]?.entitlements.push(e.lookupKey)
+  return out
+}
+
 /**
  * The three rules that predate ADR 0025, as connector drift. `revenuecat_app_missing`
  * now checks Android packages against Play apps only (by type: a bundle id that
