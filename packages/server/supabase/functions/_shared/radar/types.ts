@@ -60,6 +60,16 @@ export const RADAR_RULE_IDS = [
   'revenuecat_project_split',
   'revenuecat_app_missing',
   'revenuecat_offering_missing',
+  // ADR 0025 — "why nobody can pay" (monetization/rules.ts): the RevenueCat
+  // hub, the billing catalog and the store product states.
+  'monetization_app_outside_hub',
+  'monetization_ios_app_missing',
+  'monetization_offering_empty',
+  'monetization_entitlement_unattached',
+  'monetization_product_not_in_offering',
+  'monetization_catalog_drift',
+  'monetization_store_product_unready',
+  'monetization_webhook_unhealthy',
   // Plan 020 Phase 2 — operator detectors (Mushi's own tables, connector
   // probes and snapshots, the recipe manifest, and the host CI's bundle scan).
   'dead_app_live_spend',
@@ -108,6 +118,14 @@ export const RADAR_RULES: Readonly<Record<RadarRuleId, RadarRuleMeta>> = {
   revenuecat_project_split: { id: 'revenuecat_project_split', title: 'Shared purchases in one RevenueCat project', source: 'connector', connector: 'revenuecat', prevents: 'A purchase in one app does not unlock the other app it was sold for.' },
   revenuecat_app_missing: { id: 'revenuecat_app_missing', title: 'Store app registered in RevenueCat', source: 'connector', connector: 'revenuecat', prevents: 'Purchases from an unregistered store app are never seen.' },
   revenuecat_offering_missing: { id: 'revenuecat_offering_missing', title: 'A current RevenueCat offering', source: 'connector', connector: 'revenuecat', prevents: 'The paywall has nothing to show.' },
+  monetization_app_outside_hub: { id: 'monetization_app_outside_hub', title: 'Selling apps are in the RevenueCat hub', source: 'connector', connector: 'revenuecat', prevents: 'An app sells outside the hub project, so its purchases are unseen and a shared pass never unlocks it.' },
+  monetization_ios_app_missing: { id: 'monetization_ios_app_missing', title: 'iOS app registered in RevenueCat', source: 'connector', connector: 'revenuecat', prevents: 'iPhone users pay and nothing unlocks, because RevenueCat never validates iOS purchases.' },
+  monetization_offering_empty: { id: 'monetization_offering_empty', title: 'Offerings have products on every platform', source: 'connector', connector: 'revenuecat', prevents: 'The paywall opens with nothing to buy.' },
+  monetization_entitlement_unattached: { id: 'monetization_entitlement_unattached', title: 'Every entitlement is granted by a product', source: 'connector', connector: 'revenuecat', prevents: 'Someone pays for access that no purchase grants.' },
+  monetization_product_not_in_offering: { id: 'monetization_product_not_in_offering', title: 'Every product is on a paywall', source: 'connector', connector: 'revenuecat', prevents: 'A product you set up in the store can never be bought.' },
+  monetization_catalog_drift: { id: 'monetization_catalog_drift', title: 'RevenueCat matches the billing catalog', source: 'connector', connector: 'revenuecat', prevents: 'What you meant to sell and what the paywall sells drift apart.' },
+  monetization_store_product_unready: { id: 'monetization_store_product_unready', title: 'Store products can be bought', source: 'connector', connector: 'revenuecat', prevents: 'The paywall offers a product the store will not sell yet.' },
+  monetization_webhook_unhealthy: { id: 'monetization_webhook_unhealthy', title: 'Purchases reach your backend', source: 'connector', connector: 'revenuecat', prevents: 'Purchased credits never arrive because no webhook tells your backend.' },
   dead_app_live_spend: { id: 'dead_app_live_spend', title: 'No spend on an app nobody uses', source: 'mushi', prevents: 'An app nobody opens keeps paying for functions, AI calls and keys.' },
   provider_key_invalid: { id: 'provider_key_invalid', title: 'Every connected key still works', source: 'connector', prevents: 'A revoked or rotated key silently stops a feature until a user notices.' },
   store_credential_scope_missing: { id: 'store_credential_scope_missing', title: 'Store keys have the permissions they need', source: 'connector', prevents: 'A store key without a needed permission fails the next read or release.' },
