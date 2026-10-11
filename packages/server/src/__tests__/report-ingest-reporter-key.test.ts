@@ -73,3 +73,13 @@ describe('report ingest stores the reporter key, derived once', () => {
     expect(seen).toEqual([`rk1_${sha256(sha256(token))}`])
   })
 })
+
+describe('report ingest validation errors name the field', () => {
+  it('says which field is missing, not a bare "Required"', async () => {
+    const { ingestReport } = await import('../../supabase/functions/api/helpers.ts')
+    const { createdAt: _drop, ...noCreatedAt } = report('mushi_ingest-field-test')
+    const result = await ingestReport({} as never, '00000000-0000-4000-8000-0000000000aa', noCreatedAt)
+    expect(result).toMatchObject({ ok: false })
+    expect((result as { error: string }).error).toBe('createdAt: Required')
+  })
+})
