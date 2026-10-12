@@ -27,13 +27,15 @@ import {
   lintCursorManifest,
   lintMcpConfig,
   listTrackedJsonFiles,
+  oauthDiscoveryUnreachableReason,
   packageEntryFiles,
   placeholderUrlReason,
   repoPathFromRawUrl,
 } from './lib/mcp-configs.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const HOSTED = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp'
+const HOSTED = 'https://kensaur.us/mushi-mushi/hosted-mcp/'
+const RAW_SUPABASE = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp'
 
 describe('collectMcpServerEntries', () => {
   it('finds entries at the top level and nested inside other objects', () => {
@@ -87,7 +89,8 @@ describe('lintMcpConfig — shipped configs may not point at a template host', (
   })
 
   it('allows placeholders in .example templates', () => {
-    const doc = { mcpServers: { mushi: { type: 'http', url: 'https://your-project.supabase.co/functions/v1/mcp' } } }
+    const url = 'https://your-project.supabase.co/functions/v1/mcp'
+    const doc = { mcpServers: { mushi: { type: 'http', url, headers: { 'X-Mushi-Api-Key': '${MUSHI_API_KEY}' } } } }
     assert.deepEqual(lintMcpConfig(doc, { allowPlaceholderHosts: true }), [])
   })
 
@@ -99,7 +102,32 @@ describe('lintMcpConfig — shipped configs may not point at a template host', (
   it('leaves ${VAR} URLs alone and passes the real hosted URL', () => {
     assert.equal(placeholderUrlReason('${MUSHI_MCP_URL}'), null)
     assert.equal(placeholderUrlReason(HOSTED), null)
-    assert.equal(placeholderUrlReason('https://kensaur.us/mushi-mushi/hosted-mcp'), null)
+    assert.equal(placeholderUrlReason(RAW_SUPABASE), null)
+  })
+})
+
+describe('lintMcpConfig — key-less entries must be able to sign in', () => {
+  it('flags the shipped mushi-debugger shape: an OAuth entry on the raw supabase.co URL', () => {
+    const problems = lintMcpConfig({ mcpServers: { mushi: { type: 'http', url: RAW_SUPABASE } } })
+    assert.equal(problems.length, 1)
+    assert.match(problems[0], /Dynamic Client Registration rejected \(HTTP 404\)/)
+    assert.equal(oauthDiscoveryUnreachableReason({}, `${RAW_SUPABASE}?features=all`) === null, false)
+  })
+
+  it('accepts the raw URL with a key header or a Claude Code metadata override', () => {
+    for (const entry of [
+      { headers: { Authorization: 'Bearer ${MUSHI_API_KEY}' } },
+      { headers: { 'x-mushi-api-key': '${MUSHI_API_KEY}' } },
+      { oauth: { authServerMetadataUrl: `${RAW_SUPABASE}/.well-known/oauth-authorization-server` } },
+    ]) {
+      assert.deepEqual(lintMcpConfig({ mcpServers: { mushi: { type: 'http', url: RAW_SUPABASE, ...entry } } }), [])
+    }
+  })
+
+  it('leaves kensaur.us, other hosts and ${VAR} URLs alone', () => {
+    for (const url of [HOSTED, 'https://mcp.example.org/mcp', '${MUSHI_MCP_URL}']) {
+      assert.equal(oauthDiscoveryUnreachableReason({}, url), null, url)
+    }
   })
 })
 

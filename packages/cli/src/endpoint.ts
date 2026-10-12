@@ -20,6 +20,17 @@ export const CLOUD_API_ENDPOINT =
   'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 
 /**
+ * Mushi Cloud's hosted MCP URL for OAuth sign-in — mirrors `hostedMcp` in
+ * `@mushi-mushi/brand` MUSHI_CANONICAL_URLS. Not the sibling
+ * `…supabase.co/functions/v1/mcp`: a client starting sign-in without the 401
+ * hint (Claude Code's `/mcp` → Authenticate, `claude mcp login`) looks for
+ * OAuth metadata at the host root, which on supabase.co is Supabase's gateway,
+ * so discovery falls through to `POST /register` → 404 "requested path is
+ * invalid". kensaur.us serves those root paths.
+ */
+export const CLOUD_MCP_OAUTH_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/'
+
+/**
  * First non-blank candidate, trimmed. Use instead of `??` when chaining
  * flag → env → saved config: a blank `MUSHI_API_ENDPOINT=` is not nullish,
  * so `??` would stop there and `resolveCloudEndpoint` would fall through to

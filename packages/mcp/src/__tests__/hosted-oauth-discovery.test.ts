@@ -15,8 +15,11 @@
  *            - the Supabase origin serves only /functions/v1/mcp/*, so every
  *              RFC 8414 / RFC 9728 path-inserted URL at its root 404s;
  *            - the CloudFront proxy strips /mushi-mushi/hosted-mcp, forwards to
- *              the same function and stamps X-Amz-Cf-Id + Via, and has no
- *              route for path-inserted well-known URLs.
+ *              the same function and stamps X-Amz-Cf-Id + Via;
+ *            - kensaur.us serves the path-inserted PRM and AS metadata at its
+ *              host root from a CloudFront function whose values are
+ *              scripts/hosted-mcp-oauth-metadata.json (the path-inserted
+ *              openid-configuration 404s).
  *
  *          The SDK lives here (devDependency), the documents live in the
  *          server package; the module is loaded by computed path so this
@@ -24,6 +27,7 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -60,12 +64,22 @@ const env = new Map<string, string>([
 ])
 
 let hosted: HostedOAuthMetadata
+/** Documents the kensaur.us CloudFront function serves at the host root. */
+let rootWellKnown: Map<string, string>
 
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => env.get(k) } }
   const here = dirname(fileURLToPath(import.meta.url))
   const modulePath = resolve(here, '../../../server/supabase/functions/_shared/mcp-oauth-metadata.ts')
   hosted = (await import(/* @vite-ignore */ pathToFileURL(modulePath).href)) as HostedOAuthMetadata
+  const pinned = JSON.parse(readFileSync(resolve(here, '../../../../scripts/hosted-mcp-oauth-metadata.json'), 'utf8')) as {
+    protectedResourceMetadata: unknown
+    authorizationServerMetadata: unknown
+  }
+  rootWellKnown = new Map([
+    ['https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp', JSON.stringify(pinned.protectedResourceMetadata)],
+    ['https://kensaur.us/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp', JSON.stringify(pinned.authorizationServerMetadata)],
+  ])
 })
 
 /** Map a public URL to what the edge function receives, or null when nothing serves it. */
@@ -108,7 +122,9 @@ function fakeNetwork(): FakeNetwork {
       return Response.json({ ...body, client_id: 'fixture-client-id', client_id_issued_at: 0 }, { status: 201 })
     }
     const target = toFunctionRequest(url)
-    const document = target ? hosted.mcpOAuthDiscoveryDocument(target.url, target.headers) : null
+    const document =
+      rootWellKnown.get(url.href.split('?')[0].replace(/\/$/, '')) ??
+      (target ? hosted.mcpOAuthDiscoveryDocument(target.url, target.headers) : null)
     if (document === null) return new Response('not found', { status: 404 })
     return new Response(document, { status: 200, headers: { 'Content-Type': 'application/json' } })
   }
@@ -231,9 +247,14 @@ describe('hosted MCP OAuth discovery under the official SDK', () => {
   // the authorization server. That state is what the SDK derives when it runs
   // discovery WITHOUT the 401's resource_metadata hint: the Supabase origin
   // cannot serve path-inserted or root well-known URLs, so it falls back to
-  // the origin and registers at /register, which 404s. Nothing on the server
-  // can correct a client that skips the hint; the user clears the stored
-  // auth. This pins the mechanism so nobody "fixes" the query instead.
+  // the origin and registers at /register, which 404s.
+  // 2026-10-12: a first sign-in has no hint at all. Claude Code 2.1.296's
+  // `/mcp` → Authenticate and `claude mcp login` pass only a resource_metadata
+  // URL cached from an earlier flow, so they fail with "Dynamic Client
+  // Registration rejected (HTTP 404): {"error":"requested path is invalid"}".
+  // Nothing on the server can correct that; key-less configs use the
+  // kensaur.us URL (next test) or Claude Code's oauth.authServerMetadataUrl.
+  // This pins the mechanism so nobody "fixes" the query instead.
   it('without the resource_metadata hint, discovery on the Supabase origin falls back to its root', async () => {
     const { fetchFn, requests } = fakeNetwork()
     const provider = new RecordingProvider()
@@ -242,6 +263,22 @@ describe('hosted MCP OAuth discovery under the official SDK', () => {
     expect(requests).toContain(`POST ${SUPABASE_URL}/register`)
     expect(provider.client).toBeUndefined()
   })
+
+  it.each([PUBLIC_BASE, `${PUBLIC_BASE}/`, `${PUBLIC_BASE}/?features=triage,fixes,inventory,setup,docs`])(
+    'without the resource_metadata hint, %s still registers and redirects (Claude Code first sign-in)',
+    async (serverUrl) => {
+      const { fetchFn, requests } = fakeNetwork()
+      const provider = new RecordingProvider()
+      expect(await auth(provider, { serverUrl, fetchFn })).toBe('REDIRECT')
+      // The SDK keeps ?features= on the path-inserted URL; the edge serves it either way.
+      expect(
+        requests.some((r) => r.startsWith('GET https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')),
+      ).toBe(true)
+      expect(requests).toContain(`POST ${FN_BASE}/oauth/register`)
+      expect(requests.some((r) => r.startsWith('POST https://kensaur.us/register'))).toBe(false)
+      expect(provider.authorizationUrl?.searchParams.get('resource')).toBe(PUBLIC_BASE)
+    },
+  )
 
   it('every 401 challenge names the protected-resource document, with or without ?features=', () => {
     expect(challengeFor(`${FN_BASE}?features=all`).href).toBe(`${FN_BASE}/.well-known/oauth-protected-resource`)

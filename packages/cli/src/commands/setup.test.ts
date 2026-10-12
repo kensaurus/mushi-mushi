@@ -6,6 +6,7 @@ import {
   resolveLoginEndpoint,
   resolveMcpConfigTarget,
 } from './setup.js'
+import { CLOUD_API_ENDPOINT } from '../endpoint.js'
 
 describe('resolveLoginEndpoint', () => {
   it('prefers an explicit --endpoint flag over everything else', () => {
@@ -78,18 +79,37 @@ describe('buildSetupServerBlock', () => {
     inlineKey: false,
   }
 
-  it('gives Claude Code a typed hosted entry by default', () => {
+  it('gives Claude Code a typed hosted entry that names its OAuth metadata by default', () => {
+    // Without the override, Claude Code's sign-in looks for metadata at the
+    // supabase.co host root and registration 404s ("requested path is invalid").
     expect(buildSetupServerBlock({ ...base, ide: 'claude' })).toEqual({
-      block: { type: 'http', url: 'https://x.supabase.co/functions/v1/mcp' },
+      block: {
+        type: 'http',
+        url: 'https://x.supabase.co/functions/v1/mcp',
+        oauth: {
+          authServerMetadataUrl: 'https://x.supabase.co/functions/v1/mcp/.well-known/oauth-authorization-server',
+        },
+      },
       hosted: true,
     })
   })
 
-  it('gives Cursor the same typed hosted entry', () => {
+  it('gives Cursor a typed hosted entry with no Claude Code oauth block', () => {
     expect(buildSetupServerBlock({ ...base, ide: 'cursor' }).block).toEqual({
       type: 'http',
       url: 'https://x.supabase.co/functions/v1/mcp',
     })
+  })
+
+  it('points Mushi Cloud at the kensaur.us OAuth URL, not the raw supabase.co sibling', () => {
+    for (const ide of ['claude', 'cursor'] as const) {
+      for (const endpoint of [CLOUD_API_ENDPOINT, `${CLOUD_API_ENDPOINT}/`]) {
+        expect(buildSetupServerBlock({ ...base, ide, endpoint })).toEqual({
+          block: { type: 'http', url: 'https://kensaur.us/mushi-mushi/hosted-mcp/' },
+          hosted: true,
+        })
+      }
+    }
   })
 
   it('falls back to stdio with a note when no hosted URL can be derived', () => {

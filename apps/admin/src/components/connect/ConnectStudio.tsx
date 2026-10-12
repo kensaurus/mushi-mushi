@@ -24,7 +24,7 @@ import { CopyButton, Panel } from '../ui'
 import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
-import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL, RESOLVED_MCP_OAUTH_URL } from '../../lib/env'
 import { CONNECT_SKILLS } from '../../lib/public-copy-shared'
 
 const ADMIN_STORAGE_KEY = 'mushi_selected_client'
@@ -186,13 +186,20 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
         )}
 
         <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2">
-          <p className="text-2xs font-medium text-fg-muted mb-1">MCP HTTP endpoint (for manual setup)</p>
+          <p className="text-2xs font-medium text-fg-muted mb-1">MCP endpoint for OAuth sign-in (manual setup)</p>
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg-secondary">
-              {RESOLVED_MCP_HTTP_URL}
+              {RESOLVED_MCP_OAUTH_URL}
             </code>
-            <CopyButton value={RESOLVED_MCP_HTTP_URL} label="Copy endpoint" copiedLabel="Copied" size="sm" />
+            <CopyButton value={RESOLVED_MCP_OAUTH_URL} label="Copy endpoint" copiedLabel="Copied" size="sm" />
           </div>
+          {RESOLVED_MCP_OAUTH_URL === RESOLVED_MCP_HTTP_URL ? (
+            <p className="mt-1 text-2xs text-fg-faint">
+              Send an X-Mushi-Api-Key header, or for Claude Code sign-in add{' '}
+              <code className="font-mono">oauth.authServerMetadataUrl</code> ={' '}
+              <code className="font-mono break-all">{RESOLVED_MCP_HTTP_URL}/.well-known/oauth-authorization-server</code>.
+            </p>
+          ) : null}
         </div>
       </div>
     )
