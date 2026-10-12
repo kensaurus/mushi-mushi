@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { join } from 'node:path';
 import { requireConfig } from '../cli-shared.js';
 import { CONFIG_PATH, loadConfig } from '../config.js';
-import { resolveCloudEndpoint } from '../endpoint.js';
+import { CLOUD_API_ENDPOINT, CLOUD_MCP_OAUTH_URL, resolveCloudEndpoint } from '../endpoint.js';
 import { runLogin } from '../login.js';
 import {
   buildHostedMcpServerBlock,
@@ -119,7 +119,23 @@ export function buildSetupServerBlock(opts: {
   }
   // NO Authorization header here — a static header tells the client OAuth
   // isn't needed and disables the login flow (see mcp-config.ts).
-  return { block: buildHostedMcpServerBlock(hostedUrl), hosted: true }
+  return { block: hostedOAuthBlock(opts.ide, opts.endpoint, hostedUrl), hosted: true }
+}
+
+/**
+ * The URL-only entry a client signs in to. Sign-in that starts without the
+ * server's 401 hint (Claude Code's `/mcp` → Authenticate) discovers OAuth
+ * metadata at the host root; a supabase.co root is Supabase's gateway, so
+ * registration falls through to `POST /register` and 404s. Mushi Cloud gets
+ * its kensaur.us URL, which serves those root paths; a self-hosted Claude
+ * Code entry names the function's own metadata document instead.
+ */
+function hostedOAuthBlock(ide: McpClient, endpoint: string, hostedUrl: string): McpServerEntry {
+  if (endpoint.replace(/\/+$/, '') === CLOUD_API_ENDPOINT) return buildHostedMcpServerBlock(CLOUD_MCP_OAUTH_URL)
+  if (ide !== 'claude') return buildHostedMcpServerBlock(hostedUrl)
+  return buildHostedMcpServerBlock(hostedUrl, {
+    authServerMetadataUrl: `${hostedUrl}/.well-known/oauth-authorization-server`,
+  })
 }
 
 /** Zed nests the stdio spec under `command` inside `context_servers`. */

@@ -27,9 +27,9 @@ beforeAll(async () => {
 })
 beforeEach(() => rpc.mockClear())
 
-async function call(vars: Record<string, unknown>): Promise<{ status: number; body: { ok: boolean; data?: Record<string, unknown>; error?: { code: string } } }> {
+async function call(vars: Record<string, unknown>, headers: Record<string, string> = {}): Promise<{ status: number; body: { ok: boolean; data?: Record<string, unknown>; error?: { code: string } } }> {
   const c = {
-    req: { query: () => undefined, header: () => undefined },
+    req: { query: () => undefined, header: (k: string) => headers[k] },
     get: (k: string) => vars[k],
     json: (body: unknown, status = 200) => ({ body, status }),
   }
@@ -59,6 +59,15 @@ describe('growth funnel access', () => {
     const res = await call({ userId: TENANT, authMethod: 'apiKey', isOrgScopedKey: true })
     expect(res.status).toBe(403)
     expect(res.body.error?.code).toBe('FORBIDDEN')
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('refuses an operator\'s account key narrowed to selected projects or pinned to one (ADR 0026)', async () => {
+    const limited = await call({ userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true, keyAllowedProjectIds: [TENANT] })
+    expect(limited.status).toBe(403)
+    expect(limited.body.error?.code).toBe('KEY_LIMITED_TO_PROJECTS')
+    const pinned = await call({ userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true }, { 'X-Mushi-Project-Id': TENANT })
+    expect(pinned.status).toBe(403)
     expect(rpc).not.toHaveBeenCalled()
   })
 })

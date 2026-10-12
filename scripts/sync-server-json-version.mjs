@@ -25,6 +25,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { oauthDiscoveryUnreachableReason } from './lib/mcp-configs.mjs'
 import { NPM_PITCH } from './normalize-package-metadata.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -80,6 +81,11 @@ function validateRegistryConstraints(manifest) {
         )
       }
     }
+    // Registry remotes are OAuth entries (no key header, per the rule above),
+    // so the URL must be one whose host root serves OAuth metadata.
+    const headers = Object.fromEntries((remote.headers ?? []).map((h) => [String(h.name), '']))
+    const reason = typeof remote.url === 'string' ? oauthDiscoveryUnreachableReason({ headers }, remote.url) : null
+    if (reason) problems.push(`remote ${reason}`)
   }
 
   for (const url of [manifest.websiteUrl, manifest.repository?.url]) {
