@@ -71,7 +71,7 @@ MUSHI_PROJECT_ID=<your-project-uuid>
 
 1. Clone or download this directory.
 2. Prefer **global** `~/.cursor/mcp.json` (Windows: `%USERPROFILE%\.cursor\mcp.json`) — do not duplicate `mushi` in every repo's `.cursor/mcp.json`.
-3. Copy or merge `mcp.json` from this package; set `url` to your Supabase `/functions/v1/mcp` endpoint.
+3. Copy or merge `mcp.json` from this package. Keep the `https://kensaur.us/mushi-mushi/hosted-mcp/` URL for OAuth sign-in; use a Supabase `/functions/v1/mcp` URL only together with an API-key header (its host root cannot serve OAuth metadata, so sign-in there fails with HTTP 404).
 4. Set `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, and (for stdio) `MUSHI_API_ENDPOINT` in your shell profile or Cursor environment variables.
 5. Use forward slashes in Windows paths inside JSON (`C:/Users/...`).
 6. Restart Cursor fully after edits.

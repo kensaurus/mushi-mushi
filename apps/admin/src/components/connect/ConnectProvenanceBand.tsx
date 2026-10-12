@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Section, StatCard } from '../ui'
 import type { McpStats } from '../mcp/types'
-import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL, RESOLVED_MCP_OAUTH_URL } from '../../lib/env'
 import { EndpointCodeRow } from '../readout'
 import { MetricStrip } from '../MetricStrip'
 import { IconChevronDown, IconGlobe } from '../icons'
@@ -125,7 +125,10 @@ export function ConnectProvenanceBand({
         {techOpen ? (
           <div className="space-y-2 border-t border-edge-subtle/60 px-3 py-3">
             <EndpointCodeRow label="Admin API" url={RESOLVED_EXTERNAL_API_URL} />
-            <EndpointCodeRow label="MCP server" url={RESOLVED_MCP_HTTP_URL} />
+            <EndpointCodeRow label="MCP server (with API-key header)" url={RESOLVED_MCP_HTTP_URL} />
+            {RESOLVED_MCP_OAUTH_URL !== RESOLVED_MCP_HTTP_URL ? (
+              <EndpointCodeRow label="MCP OAuth sign-in" url={RESOLVED_MCP_OAUTH_URL} />
+            ) : null}
             {projectId ? (
               <div className="rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
                 <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">

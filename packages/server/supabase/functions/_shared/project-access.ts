@@ -25,6 +25,7 @@
 import type { getServiceClient } from './db.ts'
 import { fanoutMemo } from './request-memo.ts'
 import { log } from './logger.ts'
+import { limitToKeyProjects } from './key-project-scope.ts'
 
 /**
  * `strict`: a failed read throws `ProjectAccessReadError` instead of counting
@@ -86,7 +87,8 @@ export async function accessibleProjectIds(
   const ids = await fanoutMemo(userId, `accessibleProjectIds:${opts.strict ? 'strict' : 'lenient'}`, () =>
     readAccessibleProjectIds(db, userId, opts),
   )
-  return [...ids]
+  // An account key limited to some projects sees only those (ADR 0026).
+  return limitToKeyProjects(userId, [...ids])
 }
 
 async function readAccessibleProjectIds(

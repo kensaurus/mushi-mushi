@@ -18,6 +18,7 @@ import { isUuid } from './ids.ts';
 import { fanoutMemo } from '../_shared/request-memo.ts';
 import { NEW_BUCKET_STATUSES } from '../_shared/report-list-filters.ts';
 import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
+import { keyAllowsProject } from '../_shared/key-project-scope.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
@@ -278,6 +279,8 @@ export async function userCanAccessProject(
   userId: string,
   projectId: string,
 ): Promise<{ allowed: boolean; role: 'owner' | 'admin' | 'member' | 'viewer' | null }> {
+  // An account key limited to some projects reaches only those (ADR 0026).
+  if (!keyAllowsProject(userId, projectId)) return { allowed: false, role: null };
   const { data: project, error: projectErr } = await db
     .from('projects')
     .select('id, owner_id, organization_id')
@@ -623,6 +626,11 @@ export async function canAccessReportProject(
     const bound = c.get('projectId') as string | undefined;
     const isOrgScoped = Boolean(c.get('isOrgScopedKey'));
     if (isOrgScoped && !bound) {
+      // A project the caller pinned (X-Mushi-Project-Id / project_id) is a
+      // limit for an account key: the hosted MCP sends it for a ?project=
+      // connection, and the stdio server for MUSHI_PROJECT_ID.
+      const pinned = requestedProjectId(c);
+      if (pinned && pinned !== reportProjectId) return false;
       const allowed = await accessibleProjectIds(db, userId);
       return allowed.includes(reportProjectId);
     }
@@ -730,6 +738,18 @@ async function resolveAccountKeyOrg(
     if (requested && pinnedOrg && requested !== pinnedOrg) {
       return { ok: false, response: jsonForbidden(c, 'Project is not in the active organization') };
     }
+  }
+  // A key limited to some projects acts on an organization only through one
+  // of its projects: organization-wide reads and settings would otherwise
+  // reach every other project in it (ADR 0026).
+  if (c.get('keyAllowedProjectIds') && (!pinnedProjectId || !keyAllowsProject(userId, pinnedProjectId))) {
+    return {
+      ok: false,
+      response: jsonForbidden(
+        c,
+        'This key is limited to selected projects: name one of them with project_id, or connect with access to all projects for organization-wide actions.',
+      ),
+    };
   }
   const organizationId = requested ?? pinnedOrg;
   if (!organizationId) {

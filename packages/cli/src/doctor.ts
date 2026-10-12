@@ -7,7 +7,7 @@
  * logic can be unit-tested without spawning a child process.
  */
 
-import { CLOUD_API_ENDPOINT } from './endpoint.js';
+import { CLOUD_API_ENDPOINT, CLOUD_MCP_OAUTH_URL } from './endpoint.js';
 import { fetchIngestSetup } from './heartbeat-wait.js';
 import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanitize-config.js';
 
@@ -806,6 +806,27 @@ async function collectMcpSources(
 }
 
 /**
+ * True for a key-less (OAuth) Claude Code entry on a `*.supabase.co` URL with
+ * no `oauth.authServerMetadataUrl`. Claude Code's sign-in can start without
+ * the server's 401 hint and then looks for OAuth metadata at the host root,
+ * which on supabase.co is Supabase's gateway, so client registration falls
+ * through to `POST https://<ref>.supabase.co/register` and 404s.
+ */
+function claudeOAuthCannotDiscover(entry: Record<string, unknown>, url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (!host.endsWith('.supabase.co')) return false;
+  const headers = isJsonObject(entry.headers) ? Object.keys(entry.headers).map((h) => h.toLowerCase()) : [];
+  if (headers.includes('authorization') || headers.includes('x-mushi-api-key')) return false;
+  const oauth = isJsonObject(entry.oauth) ? entry.oauth : {};
+  return typeof oauth.authServerMetadataUrl !== 'string' || oauth.authServerMetadataUrl.length === 0;
+}
+
+/**
  * Whether one mushi entry can start: hosted entries need a `type` in Claude
  * Code files; stdio entries need a key from somewhere — the literal value, or
  * (for a `${…}` placeholder or no key at all) the CLI config the server falls
@@ -826,6 +847,16 @@ function assessMushiEntry(
         usable: false,
         stdio: false,
         detail: `${label}: has a url but no "type": "http" — Claude Code skips it`,
+      };
+    }
+    if (source.claudeCode && claudeOAuthCannotDiscover(entry, entry.url)) {
+      return {
+        usable: false,
+        stdio: false,
+        detail:
+          `${label}: Claude Code sign-in cannot find OAuth metadata on a supabase.co URL ` +
+          `("Dynamic Client Registration rejected (HTTP 404)") — use ${CLOUD_MCP_OAUTH_URL} for Mushi Cloud, ` +
+          `or add "oauth": { "authServerMetadataUrl": "<url>/.well-known/oauth-authorization-server" }`,
       };
     }
     return { usable: true, stdio: false, detail: `${label}: hosted OAuth — sign in from the IDE's MCP panel` };
