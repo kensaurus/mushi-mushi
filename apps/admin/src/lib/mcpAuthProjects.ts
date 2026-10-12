@@ -78,3 +78,35 @@ export function mcpAuthGrantedScopes(scopes: readonly string[], access: McpAuthA
   const agent = scopes.filter((s) => s === 'mcp:read' || s === 'mcp:write')
   return agent.length > 0 ? agent : ['mcp:read']
 }
+
+/**
+ * What the consent page says when the request is no longer pending. An
+ * approval whose token the client never collected means the browser could not
+ * reach the client's local callback (http://localhost:…/callback): the client
+ * stopped waiting, or another window signing in to the same server held the
+ * port. Saying "already handled" left the user stuck (2026-10-12).
+ */
+export function mcpAuthHandledMessage(
+  status: 'approved' | 'denied' | 'expired' | string,
+  tokenDelivered: boolean | undefined,
+): { kind: 'complete' | 'error'; message: string } {
+  if (status === 'expired') {
+    return { kind: 'error', message: 'This authorization request expired (10-minute limit). Restart the connection from your MCP client.' }
+  }
+  if (status === 'denied') {
+    return { kind: 'error', message: 'This connection was denied. Restart the login from your MCP client to try again.' }
+  }
+  if (status === 'approved' && tokenDelivered) {
+    return { kind: 'complete', message: 'This connection is already complete. You can close this tab and go back to your editor.' }
+  }
+  if (status === 'approved') {
+    return {
+      kind: 'error',
+      message:
+        'You approved this connection, but your MCP client has not picked it up: the browser could not reach its local sign-in address (http://localhost:…/callback). ' +
+        'If the terminal still shows "paste the redirect URL", go back one page in this tab, copy the localhost address and paste it there. ' +
+        'Otherwise restart the login from your client (Claude Code: /mcp → Authenticate), with only one window signing in to this server at a time.',
+    }
+  }
+  return { kind: 'error', message: 'This authorization request was already handled. Restart the connection from your MCP client if it did not complete.' }
+}

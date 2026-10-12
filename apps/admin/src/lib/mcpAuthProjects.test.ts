@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mcpAuthAccessPlan, mcpAuthApproveBody, mcpAuthGrantedScopes } from './mcpAuthProjects'
+import { mcpAuthAccessPlan, mcpAuthApproveBody, mcpAuthGrantedScopes, mcpAuthHandledMessage } from './mcpAuthProjects'
 
 describe('mcpAuthAccessPlan (ADR 0026)', () => {
   const rows = {
@@ -52,5 +52,21 @@ describe('mcpAuthGrantedScopes', () => {
   it('an account grant drops report:write; a project grant keeps what was asked', () => {
     expect(mcpAuthGrantedScopes(['report:write', 'mcp:read', 'mcp:write'], 'account')).toEqual(['mcp:read', 'mcp:write'])
     expect(mcpAuthGrantedScopes(['report:write', 'mcp:read', 'mcp:write'], 'project')).toEqual(['report:write', 'mcp:read', 'mcp:write'])
+  })
+})
+
+describe('mcpAuthHandledMessage', () => {
+  it('an approval the client never collected says why and what to do (not a bare "already handled")', () => {
+    const out = mcpAuthHandledMessage('approved', false)
+    expect(out.kind).toBe('error')
+    expect(out.message).toMatch(/has not picked it up/)
+    expect(out.message).toMatch(/localhost/)
+    expect(out.message).toMatch(/paste the redirect URL/)
+  })
+
+  it('a collected approval is complete, and expiry and denial keep their own wording', () => {
+    expect(mcpAuthHandledMessage('approved', true)).toMatchObject({ kind: 'complete' })
+    expect(mcpAuthHandledMessage('expired', undefined).message).toMatch(/expired/)
+    expect(mcpAuthHandledMessage('denied', undefined).message).toMatch(/denied/)
   })
 })

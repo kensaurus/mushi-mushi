@@ -39,6 +39,7 @@ import {
   mcpAuthAccessPlan,
   mcpAuthApproveBody,
   mcpAuthGrantedScopes,
+  mcpAuthHandledMessage,
   type McpAuthAccess,
   type McpAuthAccessPlan,
   type McpAuthProjectRow,
@@ -46,6 +47,8 @@ import {
 
 type TxnInfo = {
   status: 'pending' | 'approved' | 'denied' | 'expired'
+  /** Approved and the client collected its token (absent on older servers). */
+  token_delivered?: boolean
   client_name: string
   granted_key_scopes: string[]
   redirect_host: string
@@ -62,7 +65,7 @@ function assignRedirect(url: string): boolean {
   return true
 }
 
-type PageState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'denied' | 'error'
+type PageState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'denied' | 'complete' | 'error'
 
 function PlugIcon() {
   return (
@@ -124,12 +127,9 @@ export function McpAuthPage() {
         return
       }
       if (txnRes.data.status !== 'pending') {
-        setState('error')
-        setErrorMessage(
-          txnRes.data.status === 'expired'
-            ? 'This authorization request expired (10-minute limit). Restart the connection from your MCP client.'
-            : 'This authorization request was already handled. Restart the connection from your MCP client if it did not complete.',
-        )
+        const handled = mcpAuthHandledMessage(txnRes.data.status, txnRes.data.token_delivered)
+        setState(handled.kind)
+        setErrorMessage(handled.message)
         return
       }
       setTxnInfo(txnRes.data)
@@ -223,6 +223,16 @@ export function McpAuthPage() {
         <p className="max-w-sm text-sm text-fg-muted">
           The MCP client was not connected. You can close this tab. Retry the login from your client if this was a mistake.
         </p>
+      </div>
+    )
+  }
+
+  if (state === 'complete') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <PlugIcon />
+        <h1 className="text-xl font-semibold text-fg">Connection complete</h1>
+        <p className="max-w-sm text-sm text-fg-muted">{errorMessage}</p>
       </div>
     )
   }
