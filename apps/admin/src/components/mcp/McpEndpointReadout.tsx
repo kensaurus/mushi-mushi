@@ -5,7 +5,7 @@
 
 import { DetailRows, type DetailRowItem } from '../ui/fields'
 import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
-import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL, RESOLVED_MCP_OAUTH_URL } from '../../lib/env'
 import type { McpStats } from './types'
 import { IconGlobe, IconIntegrations } from '../icons'
 
@@ -49,7 +49,10 @@ export function McpEndpointReadout({ stats, fetchedAt, validating }: Props) {
     <ReadoutPanel title="MCP readout" freshness={{ at: fetchedAt, isValidating: validating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
-          <EndpointCodeRow label="MCP HTTP transport" url={RESOLVED_MCP_HTTP_URL} />
+          <EndpointCodeRow label="MCP HTTP transport (with API-key header)" url={RESOLVED_MCP_HTTP_URL} />
+          {RESOLVED_MCP_OAUTH_URL !== RESOLVED_MCP_HTTP_URL ? (
+            <EndpointCodeRow label="MCP OAuth sign-in" url={RESOLVED_MCP_OAUTH_URL} />
+          ) : null}
           <div className="mt-2">
             <EndpointCodeRow label="Admin API base" url={RESOLVED_EXTERNAL_API_URL} />
           </div>

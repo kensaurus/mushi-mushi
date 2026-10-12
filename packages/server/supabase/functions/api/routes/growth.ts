@@ -54,6 +54,20 @@ export function registerGrowthRoutes(app: Hono<{ Variables: Variables }>): void 
         403,
       );
     }
+    // Company-wide numbers reach beyond any one project: not for an account
+    // key narrowed to selected projects or pinned to one (ADR 0026).
+    if (c.get('authMethod') === 'apiKey' && (c.get('keyAllowedProjectIds') || c.req.header('X-Mushi-Project-Id'))) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'KEY_LIMITED_TO_PROJECTS',
+            message: 'This connection is limited to some projects. The company funnel needs a key with access to all your projects, or a signed-in session.',
+          },
+        },
+        403,
+      );
+    }
     const denied = requireOperator(c);
     if (denied) return denied;
 

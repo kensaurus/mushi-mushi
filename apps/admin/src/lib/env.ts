@@ -10,6 +10,8 @@
  *   3. Otherwise → cloud (uses hardcoded cloud defaults)
  */
 
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+
 const STORAGE_KEY_MODE = 'mushi_admin_instance_mode'
 const STORAGE_KEY_URL  = 'mushi_admin_supabase_url'
 const STORAGE_KEY_KEY  = 'mushi_admin_supabase_anon_key'
@@ -187,6 +189,22 @@ function resolveApiUrl(): string {
 export const RESOLVED_MCP_HTTP_URL = stripTrailingSlash(
   (import.meta.env.VITE_MCP_HTTP_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/mcp`,
 )
+
+/**
+ * The MCP URL to hand out for key-less OAuth sign-in (`claude mcp add` +
+ * `/mcp` → Authenticate, Cursor remote without headers). Mushi Cloud's
+ * supabase.co URL cannot be signed in to: clients look for OAuth metadata at
+ * the host root, which on supabase.co is Supabase's gateway, so registration
+ * 404s ("requested path is invalid"). kensaur.us serves those root paths. A
+ * self-hosted URL is returned as-is — it needs an API-key header, or Claude
+ * Code's `oauth.authServerMetadataUrl`.
+ * @internal Exported for tests only.
+ */
+export function mcpOAuthSignInUrl(mcpHttpUrl: string): string {
+  return stripTrailingSlash(mcpHttpUrl) === MUSHI_CANONICAL_URLS.mcp ? MUSHI_CANONICAL_URLS.hostedMcp : mcpHttpUrl
+}
+
+export const RESOLVED_MCP_OAUTH_URL = mcpOAuthSignInUrl(RESOLVED_MCP_HTTP_URL)
 
 // Langfuse host used to build click-through URLs from fix attempts and LLM
 // invocation rows. Defaults to the public cloud — self-hosted Langfuse users

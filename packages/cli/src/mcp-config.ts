@@ -44,16 +44,25 @@ export interface StdioMcpServerEntry {
  * accepts the field. Deliberately URL-only: adding a static `Authorization`
  * header tells MCP clients OAuth isn't needed and disables the browser login
  * flow. The client mints and stores its own revocable key via the consent page.
+ *
+ * `oauth.authServerMetadataUrl` is Claude Code's documented override for OAuth
+ * metadata discovery. A self-hosted `<ref>.supabase.co/functions/v1/mcp` needs
+ * it: without it, sign-in looks for metadata at the supabase.co host root
+ * (Supabase's gateway, not the function) and registration 404s.
  */
 export interface HostedMcpServerEntry {
   type: 'http'
   url: string
+  oauth?: { authServerMetadataUrl: string }
 }
 
 export type McpServerEntry = StdioMcpServerEntry | HostedMcpServerEntry
 
-export function buildHostedMcpServerBlock(url: string): HostedMcpServerEntry {
-  return { type: 'http', url }
+export function buildHostedMcpServerBlock(
+  url: string,
+  oauth?: HostedMcpServerEntry['oauth'],
+): HostedMcpServerEntry {
+  return oauth ? { type: 'http', url, oauth } : { type: 'http', url }
 }
 
 export interface WriteMcpOptions {

@@ -105,9 +105,13 @@ describe('mcp http edge function — one parameter spelling', () => {
   // an accepted alias (functions/mcp/arg-aliases.ts, identical to stdio's).
   it('renames aliases from the tool\'s declared schema before anything reads the arguments', () => {
     const call = SOURCE.split('async function handleToolsCall')[1]?.split('\nasync function ')[0] ?? ''
-    const normalize = call.indexOf('const args = normalizeArgAliases(')
-    expect(normalize).toBeGreaterThan(-1)
-    expect(call.slice(normalize)).toMatch(/Object\.keys\(\(def\.inputSchema\.properties/)
+    // Aliases are renamed from the declared schema, then the connection's
+    // ?project= pin is applied, and only then is `args` bound.
+    const declared = call.indexOf('const declared = Object.keys((def.inputSchema.properties')
+    expect(declared).toBeGreaterThan(-1)
+    expect(call.slice(declared)).toMatch(/applyPinnedProject\(\s*normalizeArgAliases\(\(params\.arguments as Record<string, unknown> \| undefined\) \?\? \{\}, declared\)/)
+    const normalize = call.indexOf('const args = pinned.args')
+    expect(normalize).toBeGreaterThan(declared)
     // The voice gate and the handler both see the normalized args.
     expect(call.indexOf('applyVoiceGate(args')).toBeGreaterThan(normalize)
     expect(call.indexOf('invokeToolAsResult(name, args')).toBeGreaterThan(normalize)

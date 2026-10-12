@@ -3,6 +3,10 @@
 // Admin (JWT, project-scoped via X-Mushi-Project-Id):
 //   GET /v1/admin/mcp/stats — key counts, scope coverage, SDK heartbeat
 //
+// Admin (JWT, the signed-in user's own account keys):
+//   GET    /v1/admin/mcp/account-keys        — account keys (all / selected projects)
+//   DELETE /v1/admin/mcp/account-keys/:keyId — revoke one
+//
 // API-key callers (adminOrApiKey mcp:read):
 //   GET /v1/admin/mcp/projects — list projects accessible to this key
 //   GET /v1/admin/mcp/logs/:projectId — recent pipeline events for a project
@@ -11,6 +15,7 @@ import { Hono } from 'npm:hono@4'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import {
+  accessibleProjectIds,
   dbError,
   ownedProjectIds,
   callerProjectIds,
@@ -18,6 +23,8 @@ import {
   resolveOwnedProject,
 } from '../shared.ts'
 import type { Variables } from '../types.ts'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Keep in sync with packages/mcp/src/catalog.ts counts.
 // Update when tools/resources/prompts are added.
@@ -638,6 +645,87 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     if (insertErr) return dbError(c, insertErr)
 
     return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label, is_org_scoped: true } }, 201)
+  })
+
+  // ── Account keys: list + revoke (JWT only) ───────────────────────────────────
+  // Account keys have no project, so no project's Keys page lists them. These
+  // routes show the signed-in user their own account keys — the ones minted
+  // above and by MCP OAuth ("All my projects" / "Selected projects") — and
+  // revoke one. Only the key's owner sees or revokes it (ADR 0026).
+  parent.get('/v1/admin/mcp/account-keys', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+    const { data: keys, error } = await db
+      .from('project_api_keys')
+      .select('id, key_prefix, label, scopes, allowed_project_ids, created_at, last_seen_at')
+      .eq('owner_user_id', userId)
+      .eq('is_org_scoped', true)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    if (error) return dbError(c, error)
+
+    const rows = (keys ?? []) as Array<{
+      id: string
+      key_prefix: string | null
+      label: string | null
+      scopes: string[] | null
+      allowed_project_ids: string[] | null
+      created_at: string
+      last_seen_at: string | null
+    }>
+    // Names for limited keys, only for projects the user can still reach — in
+    // every team, not just the one the console has selected.
+    const reachable = new Set(await accessibleProjectIds(db, userId))
+    const named = [...new Set(rows.flatMap((k) => k.allowed_project_ids ?? []))].filter((id) => reachable.has(id))
+    const names = new Map<string, string>()
+    if (named.length > 0) {
+      const { data: projects, error: projectsErr } = await db.from('projects').select('id, name').in('id', named)
+      if (projectsErr) return dbError(c, projectsErr)
+      for (const p of (projects ?? []) as Array<{ id: string; name: string }>) names.set(p.id, p.name)
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        keys: rows.map((k) => ({
+          id: k.id,
+          prefix: k.key_prefix,
+          label: k.label,
+          scopes: k.scopes ?? [],
+          created_at: k.created_at,
+          last_seen_at: k.last_seen_at,
+          all_projects: k.allowed_project_ids === null,
+          projects: (k.allowed_project_ids ?? [])
+            .filter((id) => names.has(id))
+            .map((id) => ({ id, name: names.get(id)! })),
+        })),
+      },
+    })
+  })
+
+  parent.delete('/v1/admin/mcp/account-keys/:keyId', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const keyId = c.req.param('keyId') ?? ''
+    if (!UUID_RE.test(keyId)) {
+      return c.json({ ok: false, error: { code: 'KEY_NOT_FOUND', message: 'That key does not exist.' } }, 404)
+    }
+    const db = getServiceClient()
+    const { data: revoked, error } = await db
+      .from('project_api_keys')
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq('id', keyId)
+      .eq('owner_user_id', userId)
+      .eq('is_org_scoped', true)
+      .eq('is_active', true)
+      .select('id')
+    if (error) return dbError(c, error)
+    if (!revoked || revoked.length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'KEY_NOT_FOUND', message: 'That key is already revoked or is not yours. Refresh the list.' } },
+        404,
+      )
+    }
+    return c.json({ ok: true, data: { revoked: 1 } })
   })
 
   /** Live probe of hosted MCP — mints a short-lived read key server-side (no browser secret handling). */

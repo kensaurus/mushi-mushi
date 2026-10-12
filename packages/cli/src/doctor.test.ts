@@ -491,11 +491,38 @@ describe('checkMcpConfig', () => {
   it('finds a hosted Claude Code entry in the repo-root .mcp.json and accepts it without a key', async () => {
     await writeFile(
       join(root, '.mcp.json'),
-      JSON.stringify({ mcpServers: { 'mushi-app': { type: 'http', url: 'https://x.supabase.co/functions/v1/mcp' } } }),
+      JSON.stringify({ mcpServers: { 'mushi-app': { type: 'http', url: 'https://kensaur.us/mushi-mushi/hosted-mcp/' } } }),
     );
     const checks = await checkMcpConfig(makeConfig({ apiKey: undefined }), root, noFetch, home);
     expect(checks.every((c) => c.ok)).toBe(true);
     expect(checks.find((c) => c.name === '[mcp] mushi entries usable')?.detail).toContain('hosted OAuth');
+  });
+
+  it('flags a key-less Claude Code entry on a supabase.co URL — sign-in registration 404s', async () => {
+    await writeFile(
+      join(home, '.claude.json'),
+      JSON.stringify({ mcpServers: { 'mushi-mushi': { type: 'http', url: 'https://x.supabase.co/functions/v1/mcp' } } }),
+    );
+    const checks = await checkMcpConfig(makeConfig({ apiKey: undefined }), root, noFetch, home);
+    const usable = checks.find((c) => c.name === '[mcp] mushi entries usable');
+    expect(usable?.ok).toBe(false);
+    expect(usable?.detail).toContain('Dynamic Client Registration rejected');
+    expect(usable?.detail).toContain('https://kensaur.us/mushi-mushi/hosted-mcp/');
+  });
+
+  it('accepts a supabase.co Claude Code entry that names its OAuth metadata or sends a key header', async () => {
+    const url = 'https://x.supabase.co/functions/v1/mcp';
+    await writeFile(
+      join(root, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'mushi-oauth': { type: 'http', url, oauth: { authServerMetadataUrl: `${url}/.well-known/oauth-authorization-server` } },
+          'mushi-key': { type: 'http', url, headers: { 'X-Mushi-Api-Key': '${MUSHI_API_KEY}' } },
+        },
+      }),
+    );
+    const checks = await checkMcpConfig(makeConfig({ apiKey: undefined }), root, noFetch, home);
+    expect(checks.find((c) => c.name === '[mcp] mushi entries usable')?.ok).toBe(true);
   });
 
   it('flags a url entry without "type" in .mcp.json — Claude Code skips it', async () => {

@@ -11,8 +11,11 @@
  * no MCP server at all. `claude plugin validate` passes that file, so nothing
  * caught it. The same audit found the Cursor bundle pointing at a
  * `your-project` host that does not resolve, and the MCP registry icon
- * returning 404 because `*.png` is git-ignored. Each check below is one of
- * those failures turned into a rule.
+ * returning 404 because `*.png` is git-ignored. Later the same plugin config
+ * pointed its key-less (OAuth) entry at the raw `*.supabase.co` function URL,
+ * where Claude Code's sign-in fails with "Dynamic Client Registration
+ * rejected (HTTP 404)". Each check below is one of those failures turned into
+ * a rule.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -118,6 +121,41 @@ export function placeholderUrlReason(url) {
 }
 
 /**
+ * Returns why a key-less (OAuth sign-in) remote `url` cannot complete sign-in,
+ * or null. On `*.supabase.co` the host root belongs to Supabase's gateway, not
+ * the edge function: a client that starts sign-in without the server's 401
+ * hint (Claude Code's `/mcp` → Authenticate, `claude mcp login`) looks for
+ * RFC 9728 / RFC 8414 metadata at that root, finds none, and registers at
+ * `POST https://<ref>.supabase.co/register` → 404 "requested path is invalid".
+ * The kensaur.us URL serves those root paths. Entries that send a key header
+ * never sign in, and ones naming `oauth.authServerMetadataUrl` skip root
+ * discovery, so both are fine.
+ *
+ * @param {Record<string, unknown>} entry
+ * @param {string} url
+ * @returns {string | null}
+ */
+export function oauthDiscoveryUnreachableReason(entry, url) {
+  if (url.includes('${')) return null
+  let host
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+  if (!host.endsWith('.supabase.co')) return null
+  const headers =
+    entry.headers && typeof entry.headers === 'object' ? Object.keys(entry.headers).map((h) => h.toLowerCase()) : []
+  if (headers.includes('authorization') || headers.includes('x-mushi-api-key')) return null
+  if (typeof entry.oauth?.authServerMetadataUrl === 'string' && entry.oauth.authServerMetadataUrl) return null
+  return (
+    `"${url}" is a key-less (OAuth) entry on supabase.co, whose host root cannot serve OAuth metadata — ` +
+    `Claude Code sign-in fails with "Dynamic Client Registration rejected (HTTP 404)"; ` +
+    `use https://kensaur.us/mushi-mushi/hosted-mcp/ or send an API-key header`
+  )
+}
+
+/**
  * Problems with the MCP server entries in one committed config file.
  *
  * @param {unknown} doc parsed JSON
@@ -151,6 +189,8 @@ export function lintMcpConfig(doc, { allowPlaceholderHosts = false } = {}) {
       const reason = placeholderUrlReason(url)
       if (reason) problems.push(`server "${name}": ${reason}`)
     }
+    const oauthReason = oauthDiscoveryUnreachableReason(entry, url)
+    if (oauthReason) problems.push(`server "${name}": ${oauthReason}`)
   }
   return problems
 }

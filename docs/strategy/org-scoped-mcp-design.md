@@ -1,7 +1,10 @@
 # Design: Org-Scoped MCP Access
 
-**Status:** design only — deliberately NOT shipped alongside the hosted-OAuth
-default (Phase 3.1 of the 2026-07 GTM uplift). Written 2026-07-08.
+**Status:** superseded by [ADR 0026](../adr/0026-one-mcp-connection-reaches-all-or-selected-projects.md)
+(2026-10-12). Account keys (`is_org_scoped`, migration `20260617013908`)
+already existed, so the consent page mints one instead of the Option B grant
+table below; `allowed_project_ids` covers "only these projects". Written
+2026-07-08; kept for the options it weighed.
 
 ## Problem
 

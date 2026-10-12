@@ -6,7 +6,20 @@ See also: [`reporter-comms-and-mcp-setup.md`](./reporter-comms-and-mcp-setup.md)
 
 ---
 
-## Recommended — one global entry (account mode)
+## Recommended — one hosted entry with OAuth (account mode)
+
+```bash
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+claude mcp login mushi
+```
+
+On the consent page pick **All my projects** (or **Only the projects I pick**).
+That mints one account key for the connection — no key on disk, revocable
+under **MCP → Account keys**. Tools take `project_id`; the agent finds the ids
+with `list_projects`. Add `?project=<project-id>` to the URL to pin a
+connection to one project (ADR 0026).
+
+## Alternative — one global stdio entry (account mode)
 
 **Best for:** Kenji-style multi-repo workflows (glot.it + yen-yen + the-wanting-mind + mushi-mushi all open in Cursor).
 
@@ -31,7 +44,7 @@ Put **one** `mushi` server in `~/.cursor/mcp.json`:
 ```
 
 - **Omit `MUSHI_PROJECT_ID`** — pass `project_id` on each tool call.
-- Mint the key in Console → Settings → API Keys (org-scoped, `mcp:read` or `mcp:write`).
+- Mint the key in Console → MCP → Account key (org-scoped, `mcp:read` or `mcp:write`); revoke it under MCP → Account keys.
 - For local MCP development, point `command`/`args` at `packages/mcp/dist/index.js` instead of `npx`.
 
 ### 2. Empty workspace files

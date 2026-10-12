@@ -12,7 +12,8 @@
  *   GET  /v1/mcp-oauth/authorize  (public)  — validates + 302 to console consent page
  *   POST /v1/mcp-oauth/token      (public)  — code + PKCE verifier → project API key
  *   GET  /v1/mcp-oauth/request    (jwtAuth) — consent page reads the pending transaction
- *   POST /v1/mcp-oauth/approve    (jwtAuth) — owner/admin approves, mints key, returns redirect
+ *   POST /v1/mcp-oauth/approve    (jwtAuth) — user approves one project, all projects or a
+ *                                             chosen set; mints the key, returns redirect
  *   POST /v1/mcp-oauth/deny       (jwtAuth) — returns error redirect for the client
  *
  * The mcp edge function's `${issuer}/oauth/*` endpoints delegate here (the
@@ -31,8 +32,15 @@
  *   - Authorization codes are 32 random bytes; only the SHA-256 is stored
  *     after issuance. Single-use with a short redelivery grace window
  *     (evaluateTokenDelivery — same semantics as the CLI device flow).
- *   - Approval requires a signed-in console user with owner/admin on the
- *     selected project; the minted key never exceeds the approver's access.
+ *   - Approval requires a signed-in console user. Three kinds of grant
+ *     (ADR 0026):
+ *       access='project'  — a project key; owner/admin on that project only.
+ *       access='account'  — an account key (is_org_scoped) reaching every
+ *                           project the approver can reach, now or later.
+ *       access='selected' — an account key limited to the chosen projects
+ *                           (allowed_project_ids).
+ *     An account key acts with the approver's real role in each project, so
+ *     the minted key never exceeds the approver's access.
  *   - All public endpoints are per-IP rate-limited via scoped_rate_limit_claim.
  *   - Every authorization response (code or error redirect) carries `iss`
  *     (RFC 9207), the issuer of the URL the client discovered — see
@@ -45,7 +53,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { callerCanAccessProject } from '../shared.ts'
+import { accessibleProjectIds, callerCanAccessProject } from '../shared.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
 import { evaluateTokenDelivery } from '../../_shared/cli-auth-helpers.ts'
 import {
@@ -59,6 +67,58 @@ import {
 import { mcpOAuthIssuerForResource } from '../../_shared/mcp-oauth-metadata.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Most projects one "selected projects" grant may name (matches the DB CHECK). */
+export const MAX_SELECTED_PROJECTS = 200
+
+export type McpOAuthAccess = 'project' | 'account' | 'selected'
+
+export type ApproveRequest =
+  | { ok: true; txn: string; access: 'project'; projectId: string }
+  | { ok: true; txn: string; access: 'account' }
+  | { ok: true; txn: string; access: 'selected'; projectIds: string[] }
+  | { ok: false; message: string }
+
+/**
+ * Parse POST /approve. `access` defaults to 'project' when only `project_id`
+ * is sent, so a console built before account grants keeps working.
+ */
+export function parseApproveRequest(body: unknown): ApproveRequest {
+  const b = (body && typeof body === 'object' ? body : {}) as {
+    txn?: unknown
+    access?: unknown
+    project_id?: unknown
+    project_ids?: unknown
+  }
+  const txn = typeof b.txn === 'string' ? b.txn.trim() : ''
+  if (!UUID_RE.test(txn)) return { ok: false, message: 'txn must be a UUID' }
+  const access = b.access === undefined ? 'project' : b.access
+  if (access === 'project') {
+    const projectId = typeof b.project_id === 'string' ? b.project_id.trim() : ''
+    if (!UUID_RE.test(projectId)) return { ok: false, message: 'project_id must be a UUID' }
+    return { ok: true, txn, access, projectId }
+  }
+  if (access === 'account') return { ok: true, txn, access }
+  if (access === 'selected') {
+    const raw: unknown[] = Array.isArray(b.project_ids) ? b.project_ids : []
+    if (raw.length === 0 || raw.some((v) => typeof v !== 'string')) {
+      return { ok: false, message: 'project_ids must be a non-empty list of project UUIDs' }
+    }
+    const ids = [...new Set((raw as string[]).map((v) => v.trim().toLowerCase()))]
+    if (ids.length > MAX_SELECTED_PROJECTS) {
+      return { ok: false, message: `Select at most ${MAX_SELECTED_PROJECTS} projects, or choose all projects` }
+    }
+    if (!ids.every((id) => UUID_RE.test(id))) return { ok: false, message: 'project_ids must all be UUIDs' }
+    return { ok: true, txn, access, projectIds: ids }
+  }
+  return { ok: false, message: "access must be 'project', 'account' or 'selected'" }
+}
+
+/** An account key carries only agent scopes: account keys cannot ingest reports (apiKeyAuth refuses them). */
+export function accountKeyScopes(keyScopes: readonly string[]): string[] {
+  const agent = keyScopes.filter((s) => s === 'mcp:read' || s === 'mcp:write')
+  return agent.length > 0 ? agent : ['mcp:read']
+}
 
 async function sha256hex(value: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -292,12 +352,11 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
   // authorization code, and hands the consent page the client redirect.
   app.post('/v1/mcp-oauth/approve', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const body = (await c.req.json().catch(() => ({}))) as { txn?: string; project_id?: string }
-    const txn = typeof body.txn === 'string' ? body.txn.trim() : ''
-    const projectId = typeof body.project_id === 'string' ? body.project_id.trim() : ''
-    if (!UUID_RE.test(txn) || !UUID_RE.test(projectId)) {
-      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'txn and project_id must be UUIDs' } }, 400)
+    const parsed = parseApproveRequest(await c.req.json().catch(() => ({})))
+    if (!parsed.ok) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.message } }, 400)
     }
+    const txn = parsed.txn
 
     const db = getServiceClient()
     const { data: row } = await db
@@ -323,29 +382,70 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       )
     }
 
-    // Minting keys is owner/admin-only — same gate as POST /v1/admin/projects/:id/keys.
-    const access = await callerCanAccessProject(c, db, userId, projectId)
-    if (!access.allowed) {
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
-    }
-    if (access.role !== 'owner' && access.role !== 'admin') {
-      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required to connect an MCP client to this project' } }, 403)
+    // Which projects the key reaches. A project key acts as that project's
+    // owner, so minting one is owner/admin-only (same gate as POST
+    // /v1/admin/projects/:id/keys). An account key acts with the approver's
+    // real role in each project, so any project they can reach may be granted.
+    let projectId: string | null = null
+    let allowedProjectIds: string[] | null = null
+    let auditProjectIds: string[]
+    if (parsed.access === 'project') {
+      projectId = parsed.projectId
+      const access = await callerCanAccessProject(c, db, userId, projectId)
+      if (!access.allowed) {
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+      }
+      if (access.role !== 'owner' && access.role !== 'admin') {
+        return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required to connect an MCP client to this project' } }, 403)
+      }
+      auditProjectIds = [projectId]
+    } else {
+      const reachable = await accessibleProjectIds(db, userId, { strict: true })
+      if (reachable.length === 0) {
+        return c.json({ ok: false, error: { code: 'NO_PROJECTS', message: 'Create a project before connecting an MCP client.' } }, 400)
+      }
+      if (parsed.access === 'selected') {
+        const reachableSet = new Set(reachable)
+        if (!parsed.projectIds.every((id) => reachableSet.has(id))) {
+          return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'One of the selected projects was not found' } }, 404)
+        }
+        allowedProjectIds = parsed.projectIds
+        auditProjectIds = parsed.projectIds
+      } else {
+        auditProjectIds = reachable
+      }
     }
 
-    const keyScopes = mapOAuthScopeToKeyScopes(row.scope)
+    const oauthKeyScopes = mapOAuthScopeToKeyScopes(row.scope)
+    const keyScopes = projectId ? oauthKeyScopes : accountKeyScopes(oauthKeyScopes)
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const keyHash = await sha256hex(rawKey)
     const keyId = crypto.randomUUID()
-    const { error: keyErr } = await db.from('project_api_keys').insert({
-      id: keyId,
-      project_id: projectId,
-      key_hash: keyHash,
-      key_prefix: prefix,
-      label: 'mcp-oauth',
-      scopes: keyScopes,
-      is_active: true,
-    })
+    const label = parsed.access === 'project' ? 'mcp-oauth' : `mcp-oauth-${parsed.access}`
+    const { error: keyErr } = await db.from('project_api_keys').insert(
+      projectId
+        ? {
+          id: keyId,
+          project_id: projectId,
+          key_hash: keyHash,
+          key_prefix: prefix,
+          label,
+          scopes: keyScopes,
+          is_active: true,
+        }
+        : {
+          id: keyId,
+          key_hash: keyHash,
+          key_prefix: prefix,
+          label,
+          scopes: keyScopes,
+          is_active: true,
+          is_org_scoped: true,
+          owner_user_id: userId,
+          allowed_project_ids: allowedProjectIds,
+        },
+    )
     if (keyErr) {
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: keyErr.message } }, 500)
     }
@@ -379,18 +479,29 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: false, error: { code: 'CONFLICT', message: 'This request was already handled. Retry the connection from your MCP client.' } }, 409)
     }
 
-    void logAudit(
-      db,
-      projectId,
-      userId,
-      'api_key.created',
-      'project_api_key',
-      keyId,
-      { source: 'mcp_oauth_automint', scopes: keyScopes, key_prefix: prefix, oauth_txn: row.id },
-      { actorType: 'console' },
-    )
+    // One audit entry per project the key reaches, so each project's audit
+    // trail shows the connection.
+    for (const auditProjectId of auditProjectIds) {
+      void logAudit(
+        db,
+        auditProjectId,
+        userId,
+        'api_key.created',
+        'project_api_key',
+        keyId,
+        { source: 'mcp_oauth_automint', access: parsed.access, scopes: keyScopes, key_prefix: prefix, oauth_txn: row.id },
+        { actorType: 'console' },
+      )
+    }
     try {
-      log.info('mcp_oauth.approved', { actor_id: userId, txn: row.id, project_id: projectId, key_prefix: prefix })
+      log.info('mcp_oauth.approved', {
+        actor_id: userId,
+        txn: row.id,
+        access: parsed.access,
+        project_id: projectId,
+        project_count: auditProjectIds.length,
+        key_prefix: prefix,
+      })
     } catch { /* logging must never block approval */ }
 
     return c.json({
@@ -474,7 +585,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
     const codeHash = await sha256hex(code)
     const { data: row } = await db
       .from('mcp_oauth_requests')
-      .select('id, client_id, redirect_uri, scope, code_challenge, access_token_raw, token_claimed_at, expires_at, status')
+      .select('id, client_id, redirect_uri, scope, code_challenge, access_token_raw, token_claimed_at, expires_at, status, api_key_id')
       .eq('code_hash', codeHash)
       .eq('status', 'approved')
       .maybeSingle()
@@ -518,12 +629,20 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       }
     }
 
+    // Report the scopes the minted key actually carries: an account key drops
+    // report:write (account keys cannot ingest).
+    let keyScopes = mapOAuthScopeToKeyScopes(row.scope)
+    if (row.api_key_id) {
+      const { data: key } = await db.from('project_api_keys').select('scopes').eq('id', row.api_key_id).maybeSingle()
+      if (Array.isArray(key?.scopes) && key.scopes.length > 0) keyScopes = key.scopes as string[]
+    }
+
     c.header('Cache-Control', 'no-store')
     c.header('Pragma', 'no-cache')
     return c.json({
       access_token: row.access_token_raw,
       token_type: 'Bearer',
-      scope: grantedScopeString(mapOAuthScopeToKeyScopes(row.scope)),
+      scope: grantedScopeString(keyScopes),
     })
   })
 }
