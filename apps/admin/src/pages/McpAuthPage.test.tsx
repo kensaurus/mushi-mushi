@@ -54,6 +54,28 @@ const approveBody = () => JSON.parse(apiFetch.mock.calls.find(([p]) => p === '/v
 const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!
 const radio = (value: string) => host.querySelector<HTMLInputElement>(`input[type=radio][value="${value}"]`)!
 
+describe('McpAuthPage — a request that is no longer pending', () => {
+  async function renderWith(txn: Record<string, unknown>) {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/mcp-oauth/request')) return { ok: true, data: { client_name: 'Claude Code', granted_key_scopes: ['mcp:read'], redirect_host: 'localhost:4567', ...txn } }
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: PROJECTS } }
+      return { ok: false }
+    })
+    await render()
+  }
+
+  it('approved but never collected: explains the localhost hand-back instead of "already handled"', async () => {
+    await renderWith({ status: 'approved', token_delivered: false })
+    expect(host.textContent).toContain('has not picked it up')
+    expect(host.textContent).not.toContain('already handled')
+  })
+
+  it('approved and collected: says the connection is complete', async () => {
+    await renderWith({ status: 'approved', token_delivered: true })
+    expect(host.textContent).toContain('Connection complete')
+  })
+})
+
 describe('McpAuthPage', () => {
   it('offers all, picked and one-project access, defaulting to all projects', async () => {
     await render()

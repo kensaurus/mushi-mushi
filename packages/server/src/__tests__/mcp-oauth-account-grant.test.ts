@@ -199,6 +199,30 @@ describe('POST /v1/mcp-oauth/token after an account grant', () => {
   })
 })
 
+describe('GET /v1/mcp-oauth/request', () => {
+  it('says whether the client collected its token, so the consent page can explain a failed hand-back', async () => {
+    state.db = seed()
+    const a = app()
+    const call = async () => {
+      const route = a.routes.find((r) => r.method === 'GET' && r.path === '/v1/mcp-oauth/request')!
+      const vars: Record<string, unknown> = { userId: USER }
+      const c = {
+        req: { query: (k: string) => (k === 'txn' ? TXN : undefined), header: () => undefined },
+        get: (k: string) => vars[k],
+        set: (k: string, v: unknown) => { vars[k] = v },
+        json: (body: unknown, status = 200) => ({ body, status }),
+      }
+      return (await route.handlers[route.handlers.length - 1](c)) as { body: { data: { status: string; token_delivered: boolean } } }
+    }
+    expect((await call()).body.data).toMatchObject({ status: 'pending', token_delivered: false })
+    const row = (state.db as FakeDb).table('mcp_oauth_requests')[0]
+    row.status = 'approved'
+    expect((await call()).body.data).toMatchObject({ status: 'approved', token_delivered: false })
+    row.token_claimed_at = new Date().toISOString()
+    expect((await call()).body.data.token_delivered).toBe(true)
+  })
+})
+
 describe('parseApproveRequest', () => {
   it('defaults to a project grant and validates each mode', () => {
     expect(routes.parseApproveRequest({ txn: TXN, project_id: P_OWNED })).toMatchObject({ ok: true, access: 'project' })

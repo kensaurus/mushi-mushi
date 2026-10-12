@@ -315,7 +315,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       .is('user_id', null)
     const { data: row } = await db
       .from('mcp_oauth_requests')
-      .select('id, status, scope, redirect_uri, expires_at, user_id, mcp_oauth_clients ( client_name )')
+      .select('id, status, scope, redirect_uri, expires_at, user_id, token_claimed_at, mcp_oauth_clients ( client_name )')
       .eq('id', txn)
       .maybeSingle()
     if (!row) {
@@ -334,6 +334,10 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       ok: true,
       data: {
         status: expired ? 'expired' : row.status,
+        // Approved but never collected: the browser could not hand the code
+        // back to the client (its local callback was not listening). The
+        // consent page says so instead of a bare "already handled".
+        token_delivered: Boolean(row.token_claimed_at),
         client_name: clientName ?? 'Unnamed MCP client',
         scope: row.scope,
         granted_key_scopes: mapOAuthScopeToKeyScopes(row.scope),
