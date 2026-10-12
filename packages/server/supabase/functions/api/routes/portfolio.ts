@@ -91,6 +91,24 @@ export async function portfolioAccess(c: Context, db: Db, rawOrgId: string): Pro
       response: jsonError(c, 'PORTFOLIO_NEEDS_ACCOUNT_KEY', 'This key is bound to one project. The portfolio needs an account-level key (Connect → MCP → account key) or a signed-in session.', 403),
     }
   }
+  // Organization-wide views and changes reach every project in the team, so
+  // an account key narrowed to one project cannot use them (ADR 0026): one
+  // limited to selected projects, or one pinned to a project on this request
+  // (hosted MCP ?project=, stdio MUSHI_PROJECT_ID).
+  if (c.get('authMethod') === 'apiKey' && c.get('isOrgScopedKey')) {
+    if (c.get('keyAllowedProjectIds')) {
+      return {
+        ok: false,
+        response: jsonError(c, 'KEY_LIMITED_TO_PROJECTS', 'This key is limited to selected projects. Organization-wide views and changes need a key with access to all your projects, or a signed-in session.', 403),
+      }
+    }
+    if (c.req.header('X-Mushi-Project-Id')) {
+      return {
+        ok: false,
+        response: jsonError(c, 'CONNECTION_PINNED_TO_PROJECT', 'This connection is pinned to one project. Organization-wide views need a connection without a project pin.', 403),
+      }
+    }
+  }
   const userId = c.get('userId') as string | undefined
   if (!userId) return { ok: false, response: jsonError(c, 'UNAUTHORIZED', 'Sign in or use an account-level key.', 401) }
 

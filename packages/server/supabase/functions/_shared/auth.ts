@@ -5,6 +5,7 @@ import { mergeLogContext, type LogContext } from './log-context.ts'
 import { emitFunnelEvent } from './setup-funnel.ts'
 import type { ApiErrorCode } from './error-codes.ts'
 import { trustedSubRequestUser } from './request-memo.ts'
+import { runWithKeyProjectScope } from './key-project-scope.ts'
 import { log } from './logger.ts'
 
 export interface ProjectContext {
@@ -43,6 +44,8 @@ interface ApiKeyRow {
   key_prefix?: string | null
   project_id: string | null
   is_org_scoped?: boolean
+  /** Account keys only: the projects this key is limited to (NULL = all). ADR 0026. */
+  allowed_project_ids?: string[] | null
   is_active: boolean
   scopes: string[] | null
   owner_user_id: string | null
@@ -414,7 +417,7 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
   const { data, error } = await db
     .from('project_api_keys')
     .select(
-      'id, key_prefix, project_id, is_org_scoped, is_active, scopes, owner_user_id, last_seen_origin, browser_seen_at, projects(name)',
+      'id, key_prefix, project_id, is_org_scoped, allowed_project_ids, is_active, scopes, owner_user_id, last_seen_origin, browser_seen_at, projects(name)',
     )
     .eq('key_hash', keyHash)
     .eq('is_active', true)
@@ -486,6 +489,12 @@ async function authenticateApiKey(
   c.set('apiKeyScopes', scopes)
   c.set('authMethod', 'apiKey')
   c.set('isOrgScopedKey', isOrgScoped)
+  // Read by runAfterApiKey: an account key limited to some projects runs the
+  // rest of the request inside that limit (key-project-scope.ts).
+  c.set(
+    'keyAllowedProjectIds',
+    isOrgScoped && Array.isArray(keyRow.allowed_project_ids) ? keyRow.allowed_project_ids : null,
+  )
   if (keyRow.id) c.set('apiKeyId', keyRow.id)
   if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
   applyLogContext(c, {
@@ -721,6 +730,22 @@ interface AdminOrApiKeyOptions {
  *   - Scope implication (`mcp:write` grants `mcp:read`) is handled in SQL
  *     (`api_key_has_scope`) and mirrored here for fast-path checks.
  */
+/**
+ * Continue an API-key request. An account key limited to some projects
+ * (allowed_project_ids) runs the rest of the request inside that limit, so
+ * accessibleProjectIds and userCanAccessProject only ever answer with those
+ * projects, on every route.
+ */
+async function runAfterApiKey(c: Context, next: Next): Promise<void> {
+  const allowed = c.get('keyAllowedProjectIds') as string[] | null | undefined
+  const ownerId = c.get('userId') as string | undefined
+  if (allowed && ownerId) {
+    await runWithKeyProjectScope(ownerId, allowed, () => next())
+    return
+  }
+  await next()
+}
+
 export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
   const requiredScope: McpScope | readonly McpScope[] = options.scope ?? 'mcp:read'
 
@@ -733,7 +758,7 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
     if (explicitKey) {
       const authErr = await authenticateApiKey(c, explicitKey, requiredScope)
       if (authErr) return authErr
-      await next()
+      await runAfterApiKey(c, next)
       return
     }
 
@@ -746,7 +771,7 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
       // rather than being silently retried as a JWT.
       const authErr = await authenticateApiKey(c, bearer, requiredScope)
       if (authErr) return authErr
-      await next()
+      await runAfterApiKey(c, next)
       return
     }
 

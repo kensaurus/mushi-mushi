@@ -61,7 +61,9 @@ describe('mcp http edge function — 2026-07-28 modern era', () => {
 
   it('implements server/discover and envelopes every result with resultType + serverInfo', () => {
     expect(SOURCE).toMatch(/case 'server\/discover':/)
-    expect(SOURCE).toMatch(/buildServerDiscoverResult\(\{ serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS \}\)/)
+    // Instructions are per connection: an account connection adds the
+    // list_projects step (mcp-connection-scope.ts).
+    expect(SOURCE).toMatch(/buildServerDiscoverResult\(\{ serverInfo: SERVER_INFO, instructions: instructionsForConnection\(SERVER_INSTRUCTIONS, ctx\) \}\)/)
     expect(SOURCE).toMatch(/result: withModernResultEnvelope\(result, SERVER_INFO\)/)
   })
 

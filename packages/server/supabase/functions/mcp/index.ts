@@ -151,6 +151,13 @@ import {
   isSmitheryRedirectUri,
 } from '../_shared/mcp-oauth-smithery-stub.ts'
 import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
+import {
+  applyPinnedProject,
+  instructionsForConnection,
+  parsePinnedProject,
+  toolEnabledForConnection,
+  withAccountModeHint,
+} from '../_shared/mcp-connection-scope.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { CANONICAL_REPORT_STATUSES } from '../_shared/report-status.ts'
 import { emitProductEvent } from '../_shared/product-events.ts'
@@ -1675,6 +1682,16 @@ interface CallContext {
   /** When `?features=` is set, only tools in those groups are listed/callable. */
   features: FeatureFilter
   projectIdHint?: string
+  /**
+   * The connection reaches several projects (an account key or a console JWT,
+   * with no ?project= pin): tools take projectId, and list_projects /
+   * get_account_overview are always listed so the agent can find the ids.
+   */
+  accountMode?: boolean
+  /** `?project=<uuid>` on the URL: every call is limited to this project. */
+  pinnedProjectId?: string
+  /** An account key limited to selected projects (allowed_project_ids). */
+  limitedToProjects?: boolean
   requestId: string
   apiKeyId?: string
   ownerUserId?: string
@@ -1702,7 +1719,7 @@ async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonR
     let result: unknown
     switch (req.method) {
       case 'initialize':
-        result = handleInitialize(req.params ?? {})
+        result = handleInitialize(req.params ?? {}, ctx)
         break
       case 'notifications/initialized':
       case 'initialized':
@@ -1770,7 +1787,7 @@ async function dispatchModernRpc(req: JsonRpcRequest, ctx: CallContext): Promise
     let result: unknown
     switch (req.method) {
       case 'server/discover':
-        result = buildServerDiscoverResult({ serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS })
+        result = buildServerDiscoverResult({ serverInfo: SERVER_INFO, instructions: instructionsForConnection(SERVER_INSTRUCTIONS, ctx) })
         break
       case 'tools/list':
         // The write-capable catalog differs per principal (scope filter), so
@@ -1824,7 +1841,7 @@ async function dispatchModernRpc(req: JsonRpcRequest, ctx: CallContext): Promise
   }
 }
 
-function handleInitialize(params: Record<string, unknown>): unknown {
+function handleInitialize(params: Record<string, unknown>, ctx: CallContext): unknown {
   // Legacy handshake only (2024-11-05 … 2025-11-25). Answer with the client's
   // version when we support it, else the newest legacy version we do; a
   // missing protocolVersion keeps the historic 2025-03-26 default.
@@ -1837,7 +1854,7 @@ function handleInitialize(params: Record<string, unknown>): unknown {
       prompts: { listChanged: false },
     },
     serverInfo: SERVER_INFO,
-    instructions: SERVER_INSTRUCTIONS,
+    instructions: instructionsForConnection(SERVER_INSTRUCTIONS, ctx),
   }
 }
 
@@ -1949,7 +1966,7 @@ function handleToolsList(ctx: CallContext): { tools: Array<Record<string, unknow
   const tools = Object.entries(TOOLS)
     .filter(([, def]) => isToolGrantedToScope(def.scope, scope))
     .filter(([name]) => listLegacy || !Object.prototype.hasOwnProperty.call(DEPRECATED_TOOL_ALIASES, name))
-    .filter(([name]) => toolMatchesFeatures(name, ctx.features))
+    .filter(([name]) => toolEnabledForConnection(name, ctx, (n) => toolMatchesFeatures(n, ctx.features)))
     .map(([name, def]) => ({
       name,
       ...(def.title ? { title: def.title } : {}),
@@ -1982,7 +1999,7 @@ async function handleToolsCall(
   const def = TOOLS[name]
   if (!def) throw new McpError(ERR_METHOD_NOT_FOUND, `tool not found: ${name}`)
   // An alias is callable wherever its successor is, listed or not.
-  if (!toolMatchesFeatures(DEPRECATED_TOOL_ALIASES[name] ?? name, ctx.features)) {
+  if (!toolEnabledForConnection(DEPRECATED_TOOL_ALIASES[name] ?? name, ctx, (n) => toolMatchesFeatures(n, ctx.features))) {
     throw new McpError(
       ERR_METHOD_NOT_FOUND,
       `tool "${name}" is not enabled for this connection — add its feature group to ?features= or use features=all`,
@@ -2018,10 +2035,14 @@ async function handleToolsCall(
   // Canonical camelCase names: `project_id` becomes `projectId` when the
   // tool declares `projectId` (arg-aliases.ts — the stdio server applies the
   // same rule before zod validation). Handlers only read canonical names.
-  const args = normalizeArgAliases(
-    (params.arguments as Record<string, unknown> | undefined) ?? {},
-    Object.keys((def.inputSchema.properties as Record<string, unknown> | undefined) ?? {}),
+  const declared = Object.keys((def.inputSchema.properties as Record<string, unknown> | undefined) ?? {})
+  const pinned = applyPinnedProject(
+    normalizeArgAliases((params.arguments as Record<string, unknown> | undefined) ?? {}, declared),
+    ctx.pinnedProjectId,
+    declared.includes('projectId'),
   )
+  if (!pinned.ok) throw new McpError(ERR_INVALID_PARAMS, pinned.message)
+  const args = pinned.args
 
   const recordOutcome =(status: 'ok' | 'error', errorCode?: string) => {
     void recordMcpToolInvocation({
@@ -2180,7 +2201,10 @@ async function invokeToolAsResult(
     // stdio transport gets this for free from the official MCP SDK's
     // `registerTool`; this hand-rolled hosted dispatcher has to do it
     // explicitly.
-    const message = err instanceof McpError ? err.message : err instanceof Error ? err.message : String(err)
+    const rawMessage = err instanceof McpError ? err.message : err instanceof Error ? err.message : String(err)
+    // On an account connection a missing project needs a next step: the agent
+    // cannot know there is no default project.
+    const message = withAccountModeHint(rawMessage, ctx)
     const errorPayload: Record<string, unknown> = { error: message }
     if (err instanceof McpError) {
       errorPayload.code = err.code
@@ -2382,6 +2406,62 @@ for (const [oldName, newName] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
 // header is present so we can refuse unauth at the MCP edge).
 // ----------------------------------------------------------------------------
 
+/**
+ * A connection URL problem the client cannot fix by signing in again (a bad
+ * or unreachable `?project=`): answered 400/403 without a WWW-Authenticate
+ * challenge, so an OAuth client does not loop through login.
+ */
+class ConnectionConfigError extends McpError {
+  constructor(public readonly status: 400 | 403, message: string) {
+    super(ERR_INVALID_PARAMS, message)
+    this.name = 'ConnectionConfigError'
+  }
+}
+
+/** `?project=<uuid>` (mcp-connection-scope.ts), or a ConnectionConfigError. */
+function pinnedProjectFromUrl(url: URL): string | null {
+  const pin = parsePinnedProject(url)
+  if (!pin.ok) throw new ConnectionConfigError(400, pin.message)
+  return pin.projectId
+}
+
+/** The 401 for an auth failure, or a plain 400/403 for a connection URL problem. */
+function authFailureResponse(req: Request, err: unknown): Response {
+  if (err instanceof ConnectionConfigError) {
+    return new Response(
+      JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: err.code, message: err.message } }),
+      { status: err.status, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    )
+  }
+  const e = err as McpError
+  return unauthorizedJsonRpc(req, e.message, e.code)
+}
+
+const PIN_CHECK_TTL_MS = 60_000
+const pinChecks = new Map<string, number>()
+
+/**
+ * A pinned project must be one the credential reaches: the pin feeds
+ * projectIdHint, which a few code paths (the inventory resource watcher) read
+ * with the service role. Asked of the API's own access rules, remembered for
+ * a minute per credential so each tool call does not pay for it.
+ */
+async function assertPinnedProjectReachable(
+  headers: Record<string, string>,
+  projectId: string,
+  principal: string,
+): Promise<void> {
+  const cacheKey = `${principal}:${projectId}`
+  const until = pinChecks.get(cacheKey)
+  if (until && until > Date.now()) return
+  const data = await apiCall<{ projects?: Array<{ id: string }> }>('/v1/admin/mcp/projects', { headers })
+  if (!(data.projects ?? []).some((p) => p.id === projectId)) {
+    throw new ConnectionConfigError(403, '?project= names a project this connection cannot reach')
+  }
+  if (pinChecks.size > 5000) pinChecks.clear()
+  pinChecks.set(cacheKey, Date.now() + PIN_CHECK_TTL_MS)
+}
+
 async function resolveAuth(
   req: Request,
   requestId: string,
@@ -2395,6 +2475,7 @@ async function resolveAuth(
   const features = url.searchParams.has('features')
     ? parseFeaturesParam(url.searchParams.get('features'))
     : DEFAULT_FEATURE_GROUPS
+  const pinnedProjectId = pinnedProjectFromUrl(url)
   // Project API keys arrive as X-Mushi-Api-Key (legacy configs) OR as an
   // OAuth bearer token — the token minted by the /oauth flow IS a `mushi_`
   // project API key, so both take the same validation path below.
@@ -2417,7 +2498,7 @@ async function resolveAuth(
     // import @supabase/supabase-js here to keep the bundle tiny — the
     // table query is a single REST call.
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/project_api_keys?key_hash=eq.${encodeURIComponent(keyHash)}&is_active=eq.true&select=project_id,scopes,owner_user_id,id`,
+      `${supabaseUrl}/rest/v1/project_api_keys?key_hash=eq.${encodeURIComponent(keyHash)}&is_active=eq.true&select=project_id,scopes,owner_user_id,id,is_org_scoped,allowed_project_ids`,
       {
         headers: {
           apikey: serviceRoleKey,
@@ -2428,10 +2509,12 @@ async function resolveAuth(
     )
     if (!res.ok) throw new McpError(ERR_INVALID_REQUEST, 'API key lookup failed')
     const rows = (await res.json()) as Array<{
-      project_id: string
+      project_id: string | null
       scopes: string[] | null
       owner_user_id: string | null
       id: string
+      is_org_scoped?: boolean
+      allowed_project_ids?: string[] | null
     }>
     const row = rows[0]
     if (!row) throw new McpError(ERR_INVALID_REQUEST, 'Invalid or revoked API key')
@@ -2442,19 +2525,27 @@ async function resolveAuth(
       ? 'mcp:read'
       : null
     if (!scope) throw new McpError(ERR_INVALID_REQUEST, 'API key has no MCP scope')
+    const keyHeaders: Record<string, string> = { 'X-Mushi-Api-Key': apiKey, 'Authorization': `Bearer ${apiKey}` }
+    // A project key is pinned to its project. An account key (project_id NULL)
+    // has no project of its own: sending its NULL as X-Mushi-Project-Id
+    // ("null") made every list route answer with nothing.
+    if (row.project_id && pinnedProjectId && pinnedProjectId !== row.project_id) {
+      throw new ConnectionConfigError(403, 'This API key belongs to another project than ?project= names')
+    }
+    if (!row.project_id && pinnedProjectId) await assertPinnedProjectReachable(keyHeaders, pinnedProjectId, `key:${row.id}`)
+    const projectId = row.project_id ?? pinnedProjectId ?? undefined
     return {
       authHeaders: propagateRequestId(
-        {
-          'X-Mushi-Api-Key': apiKey,
-          'Authorization': `Bearer ${apiKey}`,
-          'X-Mushi-Project-Id': row.project_id,
-        },
+        projectId ? { ...keyHeaders, 'X-Mushi-Project-Id': projectId } : keyHeaders,
         requestId,
       ),
       scope,
       readOnlyMode,
       features,
-      projectIdHint: row.project_id,
+      projectIdHint: projectId,
+      accountMode: !projectId,
+      pinnedProjectId: row.project_id ? undefined : pinnedProjectId ?? undefined,
+      limitedToProjects: Array.isArray(row.allowed_project_ids),
       requestId,
       apiKeyId: row.id,
       ownerUserId: row.owner_user_id ?? undefined,
@@ -2501,11 +2592,18 @@ async function resolveAuth(
     if (!user?.id) {
       throw new McpError(ERR_INVALID_REQUEST, 'Invalid or expired auth token')
     }
+    if (pinnedProjectId) await assertPinnedProjectReachable({ Authorization: auth }, pinnedProjectId, `user:${user.id}`)
     return {
-      authHeaders: propagateRequestId({ Authorization: auth }, requestId),
+      authHeaders: propagateRequestId(
+        pinnedProjectId ? { Authorization: auth, 'X-Mushi-Project-Id': pinnedProjectId } : { Authorization: auth },
+        requestId,
+      ),
       scope: 'mcp:write',
       readOnlyMode,
       features,
+      projectIdHint: pinnedProjectId ?? undefined,
+      accountMode: !pinnedProjectId,
+      pinnedProjectId: pinnedProjectId ?? undefined,
       requestId,
       ownerUserId: user.id,
       era,
@@ -2787,8 +2885,7 @@ async function handler(req: Request): Promise<Response> {
       const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
       ctx = await resolveAuth(req, requestId)
     } catch (err) {
-      const e = err as McpError
-      return unauthorizedJsonRpc(req, e.message, e.code)
+      return authFailureResponse(req, err)
     }
     void ctx
     const stream = new ReadableStream({
@@ -2976,8 +3073,7 @@ async function handler(req: Request): Promise<Response> {
   try {
     ctx = await resolveAuth(req, requestId, era, meta)
   } catch (err) {
-    const e = err as McpError
-    return unauthorizedJsonRpc(req, e.message, e.code)
+    return authFailureResponse(req, err)
   }
 
   // Spec: a POST body MAY be a single request OR a batch (array).

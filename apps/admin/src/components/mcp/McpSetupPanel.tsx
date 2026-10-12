@@ -18,6 +18,7 @@ import { ClientConnectButton } from '../ClientConnectButton'
 import { RevealedKeyCard } from '../RevealedKeyCard'
 import { docsUrl } from '../../lib/docsUrl'
 import { McpAccountKeyCard } from '../McpAccountKeyCard'
+import { McpAccountKeysList } from './McpAccountKeysList'
 import { buildSdkInitSnippet, buildSdkInstallSnippet } from '../../lib/mcpPageHelpers'
 import type { validateMcpJsonSyntax } from '../../lib/mcpPageHelpers'
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
@@ -584,6 +585,14 @@ export function McpSetupPanel({
           </ContainedBlock>
         </div>
         <McpAccountKeyCard compact />
+        <div className="space-y-2" data-testid="mcp-account-keys-section">
+          <h4 className="text-xs font-semibold text-fg">Account keys</h4>
+          <p className="text-2xs text-fg-muted">
+            Keys that reach all your projects, or the ones you picked when you connected an MCP client. They are not on any
+            project's Keys page — revoke them here.
+          </p>
+          <McpAccountKeysList />
+        </div>
       </Card>
 
       {activeProjectId && (

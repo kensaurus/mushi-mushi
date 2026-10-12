@@ -1,32 +1,56 @@
 import { describe, expect, it } from 'vitest'
-import { mcpAuthProjectChoice } from './mcpAuthProjects'
+import { mcpAuthAccessPlan, mcpAuthApproveBody, mcpAuthGrantedScopes } from './mcpAuthProjects'
 
-// QA bug 269: members were offered projects the consent route 403s on, and a
-// failed projects load read as "No projects found".
-describe('mcpAuthProjectChoice', () => {
-  it('a failed load is not an empty account', () => {
-    expect(mcpAuthProjectChoice(null)).toEqual({ kind: 'load-failed' })
-    expect(mcpAuthProjectChoice({ ok: false })).toEqual({ kind: 'load-failed' })
+describe('mcpAuthAccessPlan (ADR 0026)', () => {
+  const rows = {
+    ok: true,
+    data: {
+      projects: [
+        { id: 'a', name: 'Admin one', can_manage: true, organization_role: 'admin' },
+        { id: 'b', name: 'Member one', can_manage: false, organization_role: 'member' },
+      ],
+    },
+  }
+
+  it('offers all, selected and one-project grants, defaulting to all projects when there are several', () => {
+    const plan = mcpAuthAccessPlan(rows)
+    expect(plan.modes).toEqual(['account', 'selected', 'project'])
+    expect(plan.defaultMode).toBe('account')
+    expect(plan.visible.map((p) => p.id)).toEqual(['a', 'b'])
+    expect(plan.connectable).toEqual([{ id: 'a', name: 'Admin one' }])
   })
 
-  it('offers only projects the user can connect', () => {
-    const res = {
-      ok: true,
-      data: {
-        projects: [
-          { id: 'a', name: 'Admin one', can_manage: true },
-          { id: 'b', name: 'Member one', can_manage: false },
-        ],
-      },
-    }
-    expect(mcpAuthProjectChoice(res)).toEqual({ kind: 'ok', projects: [{ id: 'a', name: 'Admin one' }] })
+  // QA bug 269: a project key needs owner/admin, so only those projects are
+  // offered for it — a member still gets account access with their own role.
+  it('a member with no admin project can still grant account access with their own role', () => {
+    const plan = mcpAuthAccessPlan({ ok: true, data: { projects: [{ id: 'b', name: 'B', can_manage: false }] } })
+    expect(plan.modes).toEqual(['account', 'selected'])
+    expect(plan.defaultMode).toBe('account')
   })
 
-  it('says when every visible project needs a higher role', () => {
-    expect(mcpAuthProjectChoice({ ok: true, data: { projects: [{ id: 'b', name: 'B', can_manage: false }] } })).toEqual({
-      kind: 'no-access',
-      visibleCount: 1,
-    })
-    expect(mcpAuthProjectChoice({ ok: true, data: { projects: [] } })).toEqual({ kind: 'none' })
+  it('one manageable project defaults to the narrow one-project grant', () => {
+    expect(mcpAuthAccessPlan({ ok: true, data: { projects: [{ id: 'a', name: 'A', can_manage: true }] } }).defaultMode).toBe('project')
+  })
+
+  it('no projects or a failed load offers nothing', () => {
+    expect(mcpAuthAccessPlan(null)).toMatchObject({ modes: [], defaultMode: null })
+    expect(mcpAuthAccessPlan({ ok: true, data: { projects: [] } })).toMatchObject({ modes: [], defaultMode: null })
+  })
+})
+
+describe('mcpAuthApproveBody', () => {
+  it('builds the body the server expects for each access, or null while incomplete', () => {
+    expect(mcpAuthApproveBody('t', 'account', {})).toEqual({ txn: 't', access: 'account' })
+    expect(mcpAuthApproveBody('t', 'selected', { selectedIds: ['a', 'b', 'a'] })).toEqual({ txn: 't', access: 'selected', project_ids: ['a', 'b'] })
+    expect(mcpAuthApproveBody('t', 'selected', { selectedIds: [] })).toBeNull()
+    expect(mcpAuthApproveBody('t', 'project', { projectId: 'a' })).toEqual({ txn: 't', access: 'project', project_id: 'a' })
+    expect(mcpAuthApproveBody('t', 'project', {})).toBeNull()
+  })
+})
+
+describe('mcpAuthGrantedScopes', () => {
+  it('an account grant drops report:write; a project grant keeps what was asked', () => {
+    expect(mcpAuthGrantedScopes(['report:write', 'mcp:read', 'mcp:write'], 'account')).toEqual(['mcp:read', 'mcp:write'])
+    expect(mcpAuthGrantedScopes(['report:write', 'mcp:read', 'mcp:write'], 'project')).toEqual(['report:write', 'mcp:read', 'mcp:write'])
   })
 })

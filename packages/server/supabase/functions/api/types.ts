@@ -22,6 +22,8 @@ export interface Variables {
   apiKeyId?: string
   apiKeyPrefix?: string
   isOrgScopedKey?: boolean
+  /** Account key limited to these projects (allowed_project_ids); null = all. */
+  keyAllowedProjectIds?: string[] | null
   /** Scopes of the authenticating API key (set by apiKeyAuth / adminOrApiKey). */
   apiKeyScopes?: string[]
   /** Browser-exposure signals of the key, read by requireApiKeyScope for mcp:* scopes. */

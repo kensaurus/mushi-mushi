@@ -76,7 +76,11 @@ describe('hosted MCP tool surface', () => {
     const list = SOURCE.split('function handleToolsList')[1]?.split('\nfunction ')[0] ?? ''
     expect(list).toMatch(/listLegacy \|\| !Object\.prototype\.hasOwnProperty\.call\(DEPRECATED_TOOL_ALIASES, name\)/)
     const call = SOURCE.split('async function handleToolsCall')[1]?.split('\nasync function ')[0] ?? ''
-    expect(call).toMatch(/toolMatchesFeatures\(DEPRECATED_TOOL_ALIASES\[name\] \?\? name, ctx\.features\)/)
+    // The same connection rule as tools/list (account tools on an account
+    // connection, hidden when pinned), over the ?features= filter.
+    expect(call).toMatch(
+      /toolEnabledForConnection\(DEPRECATED_TOOL_ALIASES\[name\] \?\? name, ctx, \(n\) => toolMatchesFeatures\(n, ctx\.features\)\)/,
+    )
   })
 
   it('no longer carries the unreachable linear_* tools', () => {
