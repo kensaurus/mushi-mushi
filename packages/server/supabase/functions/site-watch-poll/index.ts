@@ -22,8 +22,11 @@ import {
   checkPages,
   checksToProcess,
   FirecrawlMonitorError,
+  getMonitor,
   listChecks,
+  monitorNeedsReconcile,
   processCheck,
+  updateMonitor,
   type ProcessDeps,
 } from '../_shared/site-watch.ts'
 
@@ -51,6 +54,8 @@ interface WatchRow {
   id: string
   project_id: string
   base_url: string
+  page_limit: number
+  schedule_cron: string
   firecrawl_monitor_id: string | null
   last_check_id: string | null
 }
@@ -72,7 +77,7 @@ Deno.serve(
 
     let q = db
       .from('site_watches')
-      .select('id, project_id, base_url, firecrawl_monitor_id, last_check_id')
+      .select('id, project_id, base_url, page_limit, schedule_cron, firecrawl_monitor_id, last_check_id')
       .eq('status', 'active')
       .not('firecrawl_monitor_id', 'is', null)
     if (only) q = q.eq('project_id', only)
@@ -91,6 +96,28 @@ Deno.serve(
           await db.from('site_watches').update({ last_error: 'No Firecrawl key for this app.' }).eq('id', w.id)
           results.push({ ...line, status: 'no_key' })
           continue
+        }
+        // Keep the live monitor on the current config (today: the site-watch
+        // User-Agent), so a change to monitorBody reaches watches created
+        // before it without anyone re-saving them. Reading results still
+        // runs if this fails; the next hourly poll retries.
+        try {
+          const live = await getMonitor(fc.key, w.firecrawl_monitor_id!)
+          if (monitorNeedsReconcile(live)) {
+            await updateMonitor(fc.key, w.firecrawl_monitor_id!, {
+              name: live.name ?? `Mushi live-site watch: ${w.base_url}`,
+              baseUrl: w.base_url,
+              pageLimit: w.page_limit,
+              scheduleCron: w.schedule_cron,
+            })
+            line.reconciled = true
+          }
+        } catch (err) {
+          if (err instanceof FirecrawlMonitorError && err.status === 404) throw err
+          plog.warn('site watch reconcile failed', {
+            projectId: w.project_id,
+            err: (err instanceof Error ? err.message : String(err)).slice(0, 300),
+          })
         }
         const checks = await listChecks(fc.key, w.firecrawl_monitor_id!, 10)
         const todo = checksToProcess(checks, w.last_check_id)
