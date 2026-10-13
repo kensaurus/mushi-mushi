@@ -300,6 +300,25 @@ describe('Firecrawl monitor calls', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('flags a live monitor that lacks the current User-Agent for reconcile', async () => {
+    // The six 2026-10-10 monitors came back with scrapeOptions {} and their
+    // crawls reached glot.it unmarked.
+    expect(sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: {} }] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({})).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: { headers: { 'User-Agent': 'MushiSiteWatch/0.9' } } }] })).toBe(true)
+    expect(
+      sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } } }] }),
+    ).toBe(false)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ success: true, data: { name: 'watch', targets: [{ scrapeOptions: {} }] } }))),
+    )
+    const live = await sw.getMonitor('fc-key', 'mon-1')
+    expect(live.name).toBe('watch')
+    expect(sw.monitorNeedsReconcile(live)).toBe(true)
+  })
+
   it('a monitor already gone counts as deleted; a 404 elsewhere is a typed error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })))
     await expect(sw.deleteMonitor('fc-key', 'gone')).resolves.toBeUndefined()
