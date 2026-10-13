@@ -189,6 +189,28 @@ export async function updateMonitor(
   return { estimatedCreditsPerMonth: res.data?.estimatedCreditsPerMonth ?? null };
 }
 
+/** The parts of a live monitor that `monitorNeedsReconcile` reads. */
+export interface LiveMonitor {
+  name?: string;
+  targets?: Array<{ scrapeOptions?: { headers?: Record<string, string> } }>;
+}
+
+export async function getMonitor(key: string, monitorId: string): Promise<LiveMonitor> {
+  const res = await fc<{ data?: LiveMonitor }>(key, 'GET', `/v2/monitor/${encodeURIComponent(monitorId)}`);
+  return res.data ?? {};
+}
+
+/**
+ * True when a live monitor no longer matches `monitorBody`: its crawl target
+ * lacks the current site-watch User-Agent. Monitors created before the header
+ * shipped kept `scrapeOptions: {}` until someone re-saved them, so every crawl
+ * reached host apps unmarked and their error monitoring counted it as users.
+ */
+export function monitorNeedsReconcile(monitor: LiveMonitor): boolean {
+  const headers = monitor.targets?.[0]?.scrapeOptions?.headers ?? {};
+  return headers['User-Agent'] !== SITE_WATCH_USER_AGENT;
+}
+
 export async function deleteMonitor(key: string, monitorId: string): Promise<void> {
   try {
     await fc(key, 'DELETE', `/v2/monitor/${encodeURIComponent(monitorId)}`);
