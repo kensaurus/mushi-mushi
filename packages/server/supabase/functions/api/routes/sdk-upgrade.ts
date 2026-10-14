@@ -35,6 +35,7 @@ import { dbError, callerCanAccessProject } from '../shared.ts'
 import { runSdkUpgradeJob } from '../../_shared/sdk-upgrade-runner.ts'
 import { log } from '../../_shared/logger.ts'
 import { findOpenPrByHeadPrefix } from '../../_shared/github-pr.ts'
+import { sameRepo } from '../../_shared/github-pr-checks.ts'
 import {
   evaluateSdkUpgradePostGate,
   isUpgradePrStillRelevant,
@@ -90,6 +91,20 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       .maybeSingle()
     if (settingsErr) return dbError(c, settingsErr)
 
+    // The repo's GitHub App installation: the runner mints its token from it
+    // (sdk-upgrade-runner), so an App-only project needs no stored token.
+    const repoRef = parseGithubRepoUrl(settings?.github_repo_url ?? null)
+    const { data: repoRows } = await db
+      .from('project_repos')
+      .select('repo_url, is_primary, github_app_installation_id')
+      .eq('project_id', projectId)
+    const repoRow =
+      (repoRows ?? []).find((r) => {
+        const ref = parseGithubRepoUrl(r.repo_url ?? null)
+        return ref !== null && repoRef !== null && sameRepo(ref, repoRef)
+      }) ?? (repoRows ?? []).find((r) => r.is_primary === true)
+    const installationId = Number(repoRow?.github_app_installation_id) > 0 ? Number(repoRow?.github_app_installation_id) : null
+
     // In-flight dedupe: one active job per project (DB unique index is the backstop).
     const { data: existing } = await db
       .from('sdk_upgrade_jobs')
@@ -100,14 +115,13 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Open-PR reuse guard — skip when operator explicitly asked to refresh.
     let openPr = null
-    const token = await resolveProjectGithubToken(db, projectId)
-    const repoRef = parseGithubRepoUrl(settings?.github_repo_url ?? null)
+    const token = await resolveProjectGithubToken(db, projectId, installationId)
     if (token && repoRef) {
       openPr = await findOpenPrByHeadPrefix(token, repoRef.owner, repoRef.repo, UPGRADE_BRANCH_PREFIX)
     }
 
     const decision = evaluateSdkUpgradePostGate(
-      settings ?? null,
+      settings ? { ...settings, github_app_installation_id: installationId } : null,
       existing ?? [],
       openPr,
       body,
