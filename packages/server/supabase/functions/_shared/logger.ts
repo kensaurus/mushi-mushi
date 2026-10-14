@@ -145,10 +145,23 @@ function redactString(value: string): string {
   return value;
 }
 
+/**
+ * An Error's `name`, `message` and `stack` are not enumerable, so walking it
+ * with Object.entries gave `{}` and the log line and Sentry event lost the
+ * cause. Copy them out, keeping any own fields (PostgREST code/details/hint).
+ */
+function errorFields(err: Error): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...err, name: err.name, message: err.message };
+  if (err.stack) out.stack = err.stack;
+  if (err.cause !== undefined) out.cause = err.cause instanceof Error ? errorFields(err.cause) : err.cause;
+  return out;
+}
+
 function redactValue(key: string, value: unknown): unknown {
   if (value === undefined || value === null) return value;
   if (shouldRedactKey(key)) return '[redacted]';
   if (typeof value === 'string') return redactString(value);
+  if (value instanceof Error) return redactMeta(errorFields(value));
   if (Array.isArray(value)) return value.map((item) => redactValue(key, item));
   if (typeof value === 'object') return redactMeta(value as Record<string, unknown>);
   return value;

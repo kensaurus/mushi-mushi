@@ -127,17 +127,15 @@ export async function runCodebaseAnalyzeJob(
       changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
     )
 
-    const { error: graphWriteErr } = await db.from('project_codebase_graph').upsert(
-      {
-        project_id: projectId,
-        index_fingerprint: fingerprint,
-        commit_sha: repo?.commit_sha ?? null,
-        graph: merged,
-        graph_version: 1,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'project_id' },
-    )
+    // Through an RPC with its own 60 s statement timeout: the largest graph is
+    // ~12 MB of JSON and a plain upsert hit the role's 8 s limit (Sentry
+    // MUSHI-MUSHI-SERVER-2Q). See migration 20261014120000.
+    const { error: graphWriteErr } = await db.rpc('write_codebase_graph', {
+      p_project_id: projectId,
+      p_index_fingerprint: fingerprint,
+      p_commit_sha: repo?.commit_sha ?? null,
+      p_graph: merged,
+    })
     if (graphWriteErr) throw new Error(`project_codebase_graph write failed: ${graphWriteErr.message}`)
 
     const fpRows = fileRows.map((r) => ({
