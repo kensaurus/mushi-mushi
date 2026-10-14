@@ -1,7 +1,8 @@
 # 0027. The console sidebar follows the vibe-coding cycle
 
-Status: Accepted (owner, 2026-10-14) for the cycle grouping; two placements
-below are the implementer's and await owner confirmation. Date: 2026-10-14
+Status: Accepted (owner, 2026-10-14); the /recipe placement and keeping
+"Triage grading" were confirmed by the coordinating session the same day.
+Date: 2026-10-14
 
 Related: `apps/admin/src/lib/navRegistry.ts` (`NAV_SECTION_META`,
 `NAV_REGISTRY`, `SIMPLE_NAV_GROUPS`), `apps/admin/src/lib/extendedNavMeta.ts`
@@ -52,8 +53,8 @@ Sources cited in the owner's brief (2026-10-14):
   | `act` | 5 · Ship & watch | All apps, Releases, Reporter updates, Experiments, Research |
   | `workspace` | Account | Settings, Team, Manage apps, Plugins, Processing jobs, Tester rewards, SQL query, All users, Help & support, Feature requests |
 
-  *Pending owner confirmation:* App blueprint (/recipe) was missing from
-  the brief. It stays under Verify → App checks, next to the audits: it is
+  App blueprint (/recipe) was missing from the brief (placement confirmed
+  2026-10-14). It stays under Verify → App checks, next to the audits: it is
   the app's own make-up (ADR 0016), and the Advanced list must keep more
   than twice Beginner's pages.
 - **The six section ids stay.** Only titles, order and membership change,
@@ -70,7 +71,7 @@ Sources cited in the owner's brief (2026-10-14):
   most 12 pages and Beginner at most 20.
 - **One name per page.** Home's apps view is "Overview", so "All apps" means
   /portfolio only. Every former name stays a palette keyword.
-- **/judge keeps "Triage grading"** (*pending owner confirmation*). The
+- **/judge keeps "Triage grading"** (confirmed 2026-10-14). The
   brief asked for "Fix grading" because the palette description said the
   page grades fixes. What the page shows is triage grading: its score axes
   are accuracy, severity, component and repro, its rows come from

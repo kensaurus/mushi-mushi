@@ -46,6 +46,7 @@ import { IconIntelligence, IconShield, IconChevronRight } from '../components/ic
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -650,7 +651,7 @@ export function LessonsPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load lessons stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} resource="lessons stats" onRetry={reloadStats} />
   }
 
   return (

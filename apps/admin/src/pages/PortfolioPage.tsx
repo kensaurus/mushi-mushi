@@ -28,26 +28,12 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, Section, StatCard, StatGrid } from '../components/ui'
-import { RecipeStateChip } from '../components/recipe/RecipeStateChip'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import {
-  budgetText,
-  cardNeedsLook,
-  findingGroupTitle,
-  kindLabel,
-  needsALook,
-  openReportsText,
-  radarLabel,
-  releaseText,
-  sdkLabel,
-  sortPortfolioCards,
-  spendText,
-} from '../components/portfolio/portfolioView'
+import { findingGroupTitle, needsALook, sortPortfolioCards } from '../components/portfolio/portfolioView'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { MonetizationCard } from '../components/portfolio/MonetizationCard'
@@ -56,6 +42,11 @@ import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
 import { AccountsRegisterCard } from '../components/portfolio/AccountsRegisterCard'
 import { SpendLedgerCard } from '../components/portfolio/SpendLedgerCard'
+import { PortfolioCardTile, PortfolioCompactRow } from '../components/portfolio/PortfolioCardTile'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useProjectSnapshots } from '../lib/useProjectSnapshots'
+import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
+import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
 import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
@@ -103,6 +94,19 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
   const needsLook = cards.filter(needsALook).length
+  // Apps that need a look get a full card; the rest collapse to one row each.
+  const attention = useMemo(() => cards.filter(needsALook), [cards])
+  const healthy = useMemo(() => cards.filter((c) => !needsALook(c)), [cards])
+  const appList = useMemo(() => cards.map((c) => ({ projectId: c.projectId, name: c.name })), [cards])
+  // App icons: the team's project list knows each app's SDK origin and repo.
+  const setup = useSetupStatus()
+  const snapshots = useProjectSnapshots()
+  const faviconFor = (card: PortfolioCard): ProjectFaviconSource => {
+    const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
+    return known
+      ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
+      : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
+  }
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
@@ -173,125 +177,100 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           </p>
         </Card>
       )}
-      {cards.length > 0 && (
-        <PanelErrorBoundary label="Portfolio cards">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {cards.map((card) => (
-              <PortfolioCardTile key={card.projectId} card={card} showSpend={isAdvanced} />
-            ))}
-          </div>
-        </PanelErrorBoundary>
-      )}
+      {cards.length > 0 && page.data && (
+        <>
+          <PortfolioSectionNav />
+          <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
+            <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+            <PanelErrorBoundary label="Portfolio cards">
+              {attention.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {attention.map((card) => (
+                    <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
+                  ))}
+                </div>
+              )}
+              {healthy.length > 0 && (
+                <Card className="p-0">
+                  <p className="border-b border-edge px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
+                    Nothing to look at ({healthy.length})
+                  </p>
+                  <ul className="divide-y divide-edge">
+                    {healthy.map((card) => (
+                      <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+                    ))}
+                  </ul>
+                </Card>
+              )}
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="Fix once">
+              <FindingsSections findings={findings} names={names} />
+            </PanelErrorBoundary>
+          </section>
 
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Fix once">
-          <FindingsSections findings={findings} names={names} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Spend per app">
-          <SpendLedgerCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Daily digest">
-          <DigestCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Funnel across apps">
-          <FunnelCard orgId={orgId} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Releases">
-          <ReleasesCard orgId={orgId} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Shared resources">
-          <SharedResourcesCard orgId={orgId} names={names} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Accounts and resilience">
-          <AccountsRegisterCard orgId={orgId} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Payments across apps">
-          <MonetizationCard orgId={orgId} />
-        </PanelErrorBoundary>
-      )}
-      {page.data && page.data.cards.length > 0 && (
-        <PanelErrorBoundary label="Connected sources">
-          <ConnectorsCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
-        </PanelErrorBoundary>
+          <section id="portfolio-releases" aria-labelledby="portfolio-releases-title" className="scroll-mt-20 space-y-3">
+            <h2 id="portfolio-releases-title" className="text-sm font-semibold text-fg">Releases</h2>
+            <PanelErrorBoundary label="Releases">
+              <ReleasesCard orgId={orgId} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="Funnel across apps">
+              <FunnelCard orgId={orgId} />
+            </PanelErrorBoundary>
+          </section>
+
+          <section id="portfolio-payments" aria-labelledby="portfolio-payments-title" className="scroll-mt-20 space-y-3">
+            <h2 id="portfolio-payments-title" className="text-sm font-semibold text-fg">Payments</h2>
+            <PanelErrorBoundary label="Payments across apps">
+              <MonetizationCard orgId={orgId} />
+            </PanelErrorBoundary>
+          </section>
+
+          <section id="portfolio-spend" aria-labelledby="portfolio-spend-title" className="scroll-mt-20 space-y-3">
+            <h2 id="portfolio-spend-title" className="text-sm font-semibold text-fg">Spend & accounts</h2>
+            <PanelErrorBoundary label="Spend per app">
+              <SpendLedgerCard orgId={orgId} projects={appList} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="Accounts and resilience">
+              <AccountsRegisterCard orgId={orgId} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="Shared resources">
+              <SharedResourcesCard orgId={orgId} names={names} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="Connected sources">
+              <ConnectorsCard orgId={orgId} projects={appList} />
+            </PanelErrorBoundary>
+          </section>
+
+          <section id="portfolio-digest" aria-labelledby="portfolio-digest-title" className="scroll-mt-20 space-y-3">
+            <h2 id="portfolio-digest-title" className="text-sm font-semibold text-fg">Digest</h2>
+            <PanelErrorBoundary label="Daily digest">
+              <DigestCard orgId={orgId} projects={appList} />
+            </PanelErrorBoundary>
+          </section>
+        </>
       )}
     </div>
   )
 }
 
-const MAX_NAMED_PROBLEMS = 2
+/** In-page sub-nav: the page is five sections long, so jump instead of scrolling. */
+const PORTFOLIO_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'portfolio-apps', label: 'Apps' },
+  { id: 'portfolio-releases', label: 'Releases' },
+  { id: 'portfolio-payments', label: 'Payments' },
+  { id: 'portfolio-spend', label: 'Spend & accounts' },
+  { id: 'portfolio-digest', label: 'Digest' },
+]
 
-function PortfolioCardTile({ card, showSpend }: { card: PortfolioCard; showSpend: boolean }) {
-  const radar = radarLabel(card.radar, card.unreadable)
-  const sdk = sdkLabel(card.sdk, card.unreadable)
-  const problems = cardNeedsLook(card)
-  const shown = problems.slice(0, MAX_NAMED_PROBLEMS)
-  const open = () => setActiveProjectIdSnapshot(card.projectId)
+function PortfolioSectionNav() {
   return (
-    <Card className="relative flex flex-col gap-3 p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-fg">
-            <Link to="/recipe" onClick={open} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
-              {card.name}
-            </Link>
-          </h3>
-          <p className="mt-0.5 text-xs text-fg-faint">{kindLabel(card)}</p>
-        </div>
-        <RecipeStateChip state={card.worst} className="shrink-0" />
-      </div>
-      {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
-      {shown.length > 0 && (
-        <ul className="flex flex-col gap-1.5" aria-label="What needs attention">
-          {shown.map((p) => (
-            <li key={p.element} className="text-xs leading-snug">
-              <span className="font-medium text-fg">{p.label}:</span> <span className="text-fg-secondary">{p.reason}</span>
-            </li>
-          ))}
-          {problems.length > shown.length && (
-            <li className="text-xs text-fg-muted">
-              +{problems.length - shown.length} more on the{' '}
-              <Link to="/recipe" onClick={open} className="text-brand hover:underline">Recipe page</Link>
-            </li>
-          )}
-        </ul>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        <Badge tone={radar.tone} title={radar.hint}>{radar.text}</Badge>
-        <Badge tone={sdk.tone} title={sdk.hint}>{sdk.text}</Badge>
-      </div>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
-        <dt>Open reports</dt>
-        <dd className="text-right font-medium text-fg">{openReportsText(card)}</dd>
-        <dt>Latest release</dt>
-        <dd className="truncate text-right text-fg">{releaseText(card)}</dd>
-        {showSpend && (
-          <>
-            <dt>Mushi AI spend (30 days)</dt>
-            <dd className="text-right text-fg">{spendText(card)}</dd>
-            <dt>Monthly AI budget</dt>
-            <dd className="text-right text-fg">{budgetText(card)}</dd>
-          </>
-        )}
-      </dl>
-      <div className="mt-auto flex gap-3 border-t border-edge pt-2 text-xs">
-        <Link to="/recipe" onClick={open} className="text-brand hover:underline">Open recipe →</Link>
-        <Link to="/reports" onClick={open} className="text-fg-muted hover:text-fg hover:underline">Reports</Link>
-      </div>
-    </Card>
+    <nav aria-label="On this page" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-x-4 gap-y-1 border-b border-edge bg-surface-root/95 px-1 py-2 text-xs backdrop-blur">
+      {PORTFOLIO_SECTIONS.map((s) => (
+        <a key={s.id} href={`#${s.id}`} className="text-fg-muted hover:text-fg hover:underline">
+          {s.label}
+        </a>
+      ))}
+    </nav>
   )
 }
 

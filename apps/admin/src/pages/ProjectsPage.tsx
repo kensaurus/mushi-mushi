@@ -20,7 +20,6 @@ import { useRealtimeReload } from '../lib/realtime'
 import { pluralizeWithCount } from '../lib/format'
 import {
   Btn,
-  ErrorAlert,
   Badge,
   SegmentedControl,
   FreshnessPill,
@@ -72,6 +71,7 @@ import { BulkSdkUpgradePanel } from '../components/projects/BulkSdkUpgradePanel'
 import { ProjectNextStepsPanel } from '../components/projects/ProjectNextStepsPanel'
 import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
+import { PageLoadError } from '../components/PageLoadError'
 
 const UNDO_WINDOW_MS = 8000
 
@@ -583,7 +583,7 @@ export function ProjectsPage() {
 
   if (loading)
     return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
-  if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reloadAll} />
+  if (error) return <PageLoadError error={error} resource="projects" onRetry={reloadAll} />
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
     stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'

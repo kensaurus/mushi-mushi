@@ -407,14 +407,17 @@ export interface MushiBannerConfig {
   /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
   position?: 'top' | 'bottom';
   /**
-   * Body copy on the strip — the lime "Beta" announcement line users see in
+   * Body copy on the strip — the lime announcement line users see in
    * the Mushi admin console. When set, the banner switches to the rich layout
    * (pill + message + flat text actions) instead of button-only CTAs.
    */
   message?: string;
   /**
-   * Pill label shown before `message` (e.g. "Beta"). Defaults to `"Beta"` when
+   * Pill label shown before `message`. Defaults to `"Feedback"` when
    * `message` is set. Pass `false` to hide the pill.
+   *
+   * Do not set `"Beta"` in a production App Store or Google Play build: Apple
+   * can reject the app under guideline 2.2 (beta testing belongs in TestFlight).
    */
   label?: string | false;
   /** Override the call-to-action text in the banner. Defaults to '🐛 Report a bug'. */

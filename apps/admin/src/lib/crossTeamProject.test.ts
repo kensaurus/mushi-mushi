@@ -4,9 +4,11 @@ const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('./supabase', () => ({ apiFetch }))
 
 import {
+  claimStaleLinkRecovery,
   findProjectTeam,
   knownProjectTeam,
   lastTeamProject,
+  pickRecoveryProject,
   rememberProjectTeams,
   rememberTeamProject,
   resolveTeamForProject,
@@ -74,6 +76,32 @@ describe('resolveTeamForProject', () => {
     apiFetch.mockResolvedValue({ ok: false, error: { code: 'MISSING_AUTH', message: 'no' } })
     await expect(resolveTeamForProject(PROJECT)).resolves.toBe('retry')
   })
+
+  // A stale bookmark or a deleted project: no team of the user has it.
+  it('says a project in none of the user’s teams is unreachable, and switches nothing', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: DIRECTORY })
+    window.localStorage.setItem('mushi:active_org_id', ORG_A)
+    await expect(resolveTeamForProject('55555555-5555-4555-8555-555555555555')).resolves.toBe('unreachable')
+    expect(window.localStorage.getItem('mushi:active_org_id')).toBe(ORG_A)
+    expect(window.localStorage.getItem('mushi:active_project_id')).toBeNull()
+  })
+
+  it('concludes nothing from a failed directory read (never "unreachable" on a guess)', async () => {
+    apiFetch.mockResolvedValue({ ok: false, error: { code: 'INTERNAL', message: 'boom' } })
+    await expect(resolveTeamForProject(PROJECT)).resolves.toBe('unknown')
+  })
+})
+
+describe('pickRecoveryProject', () => {
+  const list = [{ project_id: 'a' }, { project_id: 'b' }]
+  it('prefers the project last used in this team when it is still listed', () => {
+    expect(pickRecoveryProject(list, 'b')).toEqual({ project_id: 'b' })
+  })
+  it('falls back to the first project, and to null for an empty team', () => {
+    expect(pickRecoveryProject(list, 'gone')).toEqual({ project_id: 'a' })
+    expect(pickRecoveryProject(list, null)).toEqual({ project_id: 'a' })
+    expect(pickRecoveryProject([], 'a')).toBeNull()
+  })
 })
 
 describe('urlProjectNeedsTeamCheck', () => {
@@ -104,5 +132,13 @@ describe('team project memory', () => {
     expect(lastTeamProject(ORG_A)).toBeNull()
     rememberTeamProject(ORG_A, PROJECT)
     expect(lastTeamProject(ORG_A)).toBe(PROJECT)
+  })
+})
+
+describe('claimStaleLinkRecovery', () => {
+  it('lets only the first of the two header switchers recover a stale link', () => {
+    const id = '66666666-6666-4666-8666-666666666666'
+    expect(claimStaleLinkRecovery(id)).toBe(true)
+    expect(claimStaleLinkRecovery(id)).toBe(false)
   })
 })

@@ -106,6 +106,34 @@ export function subscribeActiveProject(listener: () => void): () => void {
   }
 }
 
+// ── Project data epoch ──────────────────────────────────────────────────────
+//
+// API calls take the project from `?project=` before localStorage
+// (getActiveProjectIdForApi). When only the URL changes, e.g. a stale link is
+// replaced by a project the user can open while storage already held that
+// project, the stored value does not change, no ACTIVE_PROJECT_EVENT fires,
+// and every panel keeps the error from the stale id. Bumping this epoch makes
+// the data hooks refetch.
+const PROJECT_DATA_EPOCH_EVENT = 'mushi:project-data-epoch'
+let projectDataEpoch = 0
+
+/** Make every project-scoped data hook refetch (after a URL-only project change). */
+export function refetchProjectData(): void {
+  if (typeof window === 'undefined') return
+  projectDataEpoch += 1
+  window.dispatchEvent(new Event(PROJECT_DATA_EPOCH_EVENT))
+}
+
+function subscribeProjectDataEpoch(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  window.addEventListener(PROJECT_DATA_EPOCH_EVENT, listener)
+  return () => window.removeEventListener(PROJECT_DATA_EPOCH_EVENT, listener)
+}
+
+export function useProjectDataEpoch(): number {
+  return useSyncExternalStore(subscribeProjectDataEpoch, () => projectDataEpoch, () => 0)
+}
+
 /**
  * React-friendly signal used by data hooks. The return value changes whenever
  * ProjectSwitcher updates the active project, forcing GET hooks to refetch even

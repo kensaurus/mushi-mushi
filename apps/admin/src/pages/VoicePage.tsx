@@ -32,7 +32,7 @@ import {
   voiceStatusTone,
   type VoiceSession,
 } from '../lib/voiceIntake'
-import { Badge, Btn, Card, DisclosurePanel, ErrorAlert, FreshnessPill, Section } from '../components/ui'
+import { Badge, Btn, Card, DisclosurePanel, FreshnessPill, Section } from '../components/ui'
 import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -44,6 +44,7 @@ import { VoiceRecorderCard, type SubmitStage } from '../components/voice/VoiceRe
 import { VoiceSessionsList } from '../components/voice/VoiceSessionsList'
 import { fixesForReportPath } from '../lib/fixDeepLink'
 import { PushNotifyCard } from '../components/voice/PushNotifyCard'
+import { PageLoadError } from '../components/PageLoadError'
 
 const HELP = {
   title: 'About voice intake',
@@ -258,7 +259,7 @@ export function VoicePage() {
       {loading ? (
         <PanelSkeleton rows={4} label="Loading voice requests" />
       ) : error ? (
-        <ErrorAlert message={`Failed to load voice requests: ${error}`} onRetry={reload} />
+        <PageLoadError error={error} resource="voice requests" onRetry={reload} />
       ) : (
         <VoiceSessionsList sessions={sessions} onConfirm={(s) => void confirm(s)} onCancel={(s) => void cancel(s)} pendingId={pendingId} intakeEnabled={!settingsKnown || intakeEnabled} />
       )}

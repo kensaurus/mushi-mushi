@@ -36,6 +36,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 
@@ -667,7 +668,7 @@ export function StoragePage() {
     return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
   }
   if (statsError) {
-    return <ErrorAlert message={`Failed to load storage stats: ${statsError}`} onRetry={reloadAll} />
+    return <PageLoadError error={statsError} resource="storage stats" onRetry={reloadAll} />
   }
   if (error) {
     return <ErrorAlert message={error} onRetry={reloadAll} />
