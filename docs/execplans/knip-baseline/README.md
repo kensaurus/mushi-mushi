@@ -7,8 +7,17 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **724** | `--max-issues 724` |
-| default | `pnpm exec knip --reporter json` | **579** | `--max-issues 579 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **705** | `--max-issues 705` |
+| default | `pnpm exec knip --reporter json` | **534** | `--max-issues 534 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-14 (housekeep pass), knip 6.34.0: 705 production / 534 default**
+> (704 and 533 fail, 705 and 534 pass; measured after `pnpm build` on `origin/master` `a3224b7d`).
+> Before the pass the true counts were 721 / 550, three and twenty-nine under the old ceilings. Sixteen
+> `apps/admin` files that knip reports unused, that no tracked file outside these JSON baselines names,
+> and that nothing has touched since 2026-09-13 were deleted. Four newer orphans
+> (`DashboardStatusBanner`, `FirecrawlStatusBanner`, `InventoryStatusBanner`, `SkillsReadout`) stay
+> while the console rework is in flight. Both JSON baselines were regenerated with the commands in
+> the table. What remains is registered in `docs/BACKLOG.md`.
 
 > **Re-measured 2026-09-21 (third pass), knip 6.34.0: 724 production / 579 default**
 > (723 and 578 fail, 724 and 579 pass). The root workspace now marks its tooling scripts as

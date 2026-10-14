@@ -6,7 +6,7 @@
  *          CI-skip markers. Shared by UX runs and the Pull requests page.
  */
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { parseGithubRepoUrl, type GithubRepoRef } from './github.ts'
+import { parseGithubRepoUrl, resolveProjectGithubToken, type GithubRepoRef } from './github.ts'
 import type { CheckRunLike } from './ux-runs.ts'
 
 export const githubJsonHeaders = (token: string) => ({
@@ -62,4 +62,27 @@ export async function connectedRepoRefs(db: SupabaseClient, projectId: string): 
     .map((u) => parseGithubRepoUrl(u ?? null))
     .filter((r): r is GithubRepoRef => r !== null)
   return refs.filter((r, i) => refs.findIndex((x) => sameRepo(x, r)) === i)
+}
+
+/**
+ * A token per connected repo, read with that repo's GitHub App installation
+ * (its project_repos row, else the primary row's). resolveProjectGithubToken
+ * mints an App token only when handed an installation id, so a project with
+ * the App installed and no stored token read as "not connected" (lets-talk,
+ * 2026-10-14). Never the platform token. One mint per installation.
+ */
+export async function repoTokenResolver(db: SupabaseClient, projectId: string): Promise<(ref: GithubRepoRef) => Promise<string | null>> {
+  const { data } = await db.from('project_repos').select('repo_url, is_primary, github_app_installation_id').eq('project_id', projectId)
+  const rows = ((data ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>).map((r) => ({
+    ref: parseGithubRepoUrl(r.repo_url ?? null),
+    primary: r.is_primary === true,
+    installationId: Number(r.github_app_installation_id) > 0 ? Number(r.github_app_installation_id) : null,
+  }))
+  const primaryId = rows.find((r) => r.primary)?.installationId ?? null
+  const tokens = new Map<number | null, Promise<string | null>>()
+  return (ref) => {
+    const id = rows.find((r) => r.ref !== null && sameRepo(r.ref, ref))?.installationId ?? primaryId
+    if (!tokens.has(id)) tokens.set(id, resolveProjectGithubToken(db as never, projectId, id, { allowEnvFallback: false }))
+    return tokens.get(id)!
+  }
 }
