@@ -2,13 +2,16 @@
  * FILE: apps/admin/src/components/PageLoadError.tsx
  * PURPOSE: Canonical page/panel load-failure surface. Turns the raw
  *          `usePageData` error string into a human title + hint + recovery
- *          action via humanizeApiError, rendered through ErrorAlert.
+ *          action via humanizeApiError, rendered through ErrorAlert. The
+ *          error code, endpoint, request id and raw server text sit in a
+ *          collapsed "Details" for support (NN/g: hide codes except for
+ *          diagnostics), never in the sentence the user reads.
  */
 
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ErrorAlert } from './ui'
-import { humanizeApiError } from '../lib/humanizeApiError'
+import { humanizeApiError, parsePageDataError } from '../lib/humanizeApiError'
 
 interface PageLoadErrorProps {
   error: string | null | undefined
@@ -68,17 +71,34 @@ export function PageLoadError({
     ? `Couldn't load ${resource}`
     : humanized.title
 
+  // The server's own sentence without the "(CODE)" suffix usePageData adds.
+  const serverText = parsePageDataError(humanized.raw)?.message ?? null
+  const details = [
+    humanized.code ? `Code: ${humanized.code}` : null,
+    endpoint ? `Endpoint: ${endpoint}` : null,
+    requestId ? `Request: ${requestId}` : null,
+    serverText && serverText !== humanized.hint ? `Server said: ${serverText}` : null,
+  ].filter((line): line is string => line != null)
+
   return (
     <div ref={headingRef} tabIndex={-1} className="outline-none">
       <ErrorAlert
         title={title}
         message={humanized.hint}
-        code={humanized.code}
-        endpoint={endpoint ?? undefined}
-        requestId={requestId ?? undefined}
         onRetry={onRetry}
         actions={actions.length > 0 ? actions : undefined}
-      />
+      >
+        {details.length > 0 ? (
+          <details className="text-2xs text-danger/80">
+            <summary className="cursor-pointer select-none">Details</summary>
+            <ul className="mt-1 space-y-0.5 font-mono break-all">
+              {details.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </ErrorAlert>
     </div>
   )
 }

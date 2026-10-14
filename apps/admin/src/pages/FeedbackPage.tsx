@@ -46,6 +46,7 @@ import {
   SegmentedControl,
 } from '../components/ui'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 type ListFilter = 'all' | 'bug' | 'feature'
 
@@ -240,7 +241,7 @@ export function FeedbackPage() {
       </div>
     )
   }
-  if (statsError) return <ErrorAlert message={`Failed to load feedback stats: ${statsError}`} onRetry={reloadAll} />
+  if (statsError) return <PageLoadError error={statsError} resource="feedback stats" onRetry={reloadAll} />
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feedback">

@@ -1088,6 +1088,25 @@ export function buildRouteTitleMatchers(): ReadonlyArray<readonly [RegExp, strin
   return cachedRouteTitleMatchers
 }
 
+/**
+ * The sidebar section a route sits in, for the breadcrumb ("2 · Bugs ›
+ * Bugs"): its title and the section's first sidebar page. Matches the route's
+ * own sidebar entry, or the longest sidebar path it sits under
+ * (`/reports/:id` → Bugs). null for routes outside the sidebar.
+ */
+export function routeSection(pathname: string): { title: string; firstPath: string } | null {
+  let best: NavRegistryEntry | null = null
+  for (const entry of NAV_REGISTRY) {
+    if (entry.inSidebar === false) continue
+    const base = entry.path.split('?')[0]
+    if (pathname !== base && !pathname.startsWith(`${base}/`)) continue
+    if (!best || base.length > best.path.split('?')[0].length) best = entry
+  }
+  if (!best) return null
+  const first = sidebarEntriesForSection(best.sectionId)[0]
+  return { title: NAV_SECTION_META[best.sectionId].title, firstPath: first?.path ?? best.path }
+}
+
 /** Resolve a document/tab title when the page has not published PageContext. */
 export function routeFallbackTitle(pathname: string): string | null {
   for (const [re, label] of buildRouteTitleMatchers()) {

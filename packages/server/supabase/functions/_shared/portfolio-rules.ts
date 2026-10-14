@@ -661,15 +661,15 @@ export interface CompletenessSignals {
 const CHECKLIST: Record<ProjectKindValue, Array<{ key: keyof CompletenessSignals; item: string; fix: string }>> = {
   app: [
     { key: 'hasCrashReporting', item: 'crash reporting', fix: 'Connect Sentry, Crashlytics or the Mushi SDK so crashes become reports.' },
-    { key: 'hasVersionProbe', item: 'a version probe', fix: 'Publish a version.json (version and commit) with each build and add it as a deploy target probe.' },
-    { key: 'hasDeepLinkFile', item: 'a deep-link file', fix: 'Serve apple-app-site-association and assetlinks.json so links open the app.' },
+    { key: 'hasVersionProbe', item: 'version probe', fix: 'Publish a version.json (version and commit) with each build and add it as a deploy target probe.' },
+    { key: 'hasDeepLinkFile', item: 'deep-link file', fix: 'Serve apple-app-site-association and assetlinks.json so links open the app.' },
   ],
   site: [
-    { key: 'hasVersionProbe', item: 'a version probe', fix: 'Publish a version.json (version and commit) with each deploy and add it as a deploy target probe.' },
+    { key: 'hasVersionProbe', item: 'version probe', fix: 'Publish a version.json (version and commit) with each deploy and add it as a deploy target probe.' },
     { key: 'hasSecurityHeaders', item: 'security headers', fix: 'Set HSTS, a Content-Security-Policy with frame-ancestors, X-Content-Type-Options and Referrer-Policy.' },
   ],
   library: [
-    { key: 'hasReleaseWorkflow', item: 'a release workflow', fix: 'Add a release workflow so every published version comes from CI.' },
+    { key: 'hasReleaseWorkflow', item: 'release workflow', fix: 'Add a release workflow so every published version comes from CI.' },
   ],
   service: [],
   other: [],

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { NAV_REGISTRY, SIMPLE_NAV_GROUPS } from './navRegistry'
+import { NAV_REGISTRY, SIMPLE_NAV_GROUPS, routeSection } from './navRegistry'
 import { buildOperatorNav } from './buildNav'
 import { HOME_HUB } from './pageHubs'
 import { paletteRoutesFor, rankPaletteRoutes } from './searchIndex'
@@ -161,5 +161,17 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
   it('uses "All apps" for one page only (Home’s view is Overview)', () => {
     expect(NAV_REGISTRY.filter((e) => e.label === 'All apps').map((e) => e.path)).toEqual(['/portfolio'])
     expect(HOME_HUB.views.map((v) => v.label)).not.toContain('All apps')
+  })
+})
+
+describe('routeSection (breadcrumb)', () => {
+  it('names the section a page sits in and links to its first page', () => {
+    expect(routeSection('/graph')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/reports/abc')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/integrations/config')).toEqual({ title: '1 · Connect', firstPath: '/onboarding' })
+    expect(routeSection('/judge')?.title).toBe('4 · Verify')
+  })
+  it('returns null outside the sidebar', () => {
+    expect(routeSection('/login')).toBeNull()
   })
 })

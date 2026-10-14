@@ -6,7 +6,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
-import { ErrorAlert,
+import {
   EmptyState,
   Btn,
   Badge,
@@ -59,6 +59,7 @@ import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ListPager } from '../components/ListPager'
 import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
+import { PageLoadError } from '../components/PageLoadError'
 
 interface WeekData {
   week_start: string
@@ -525,11 +526,11 @@ export function JudgePage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load judge stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} resource="judge stats" onRetry={reloadStats} />
   }
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
-  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={loadAll} />
+  if (error) return <PageLoadError error={error} resource={merged.failedLabel ?? 'judge data'} onRetry={loadAll} />
 
   const latest = weeks[0]
   const previous = weeks[1]

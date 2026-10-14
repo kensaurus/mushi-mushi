@@ -69,6 +69,7 @@ import { isCliSetupMode, shouldFocusCreateForm, shouldShowOnboardingCreateForm }
 import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
+import { PageLoadError } from '../components/PageLoadError'
 
 const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
 
@@ -470,7 +471,7 @@ export function OnboardingPage() {
       </ErrorAlert>
     )
   }
-  if (statsError) return <ErrorAlert message={`Failed to load setup stats: ${statsError}`} onRetry={reloadAll} />
+  if (statsError) return <PageLoadError error={statsError} resource="setup stats" onRetry={reloadAll} />
 
   // Shared by the Steps tab and first-run S1 — one form, two homes.
   const createProjectForm = (

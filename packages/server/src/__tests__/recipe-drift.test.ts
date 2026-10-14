@@ -121,6 +121,18 @@ describe('ciWorkflowDrift', () => {
     expect(rules({ 'm.yml': yml })).toEqual(['m.yml:macos_unconditional'])
   })
 
+  it('does not flag macOS in a workflow only a person or another workflow can start', () => {
+    const job = `jobs:\n  ios:\n    runs-on: macos-15\n    timeout-minutes: 30\n    steps: [{ run: echo }]\n`
+    // yen-yen ios-simulator-smoke.yml: workflow_dispatch only, plain string form.
+    expect(rules({ 'smoke.yml': `on: workflow_dispatch\n${job}` })).toEqual([])
+    // Map form with inputs, and workflow_dispatch + workflow_call together.
+    expect(rules({ 'smoke.yml': `on:\n  workflow_dispatch:\n    inputs:\n      device: { type: string }\n${job}` })).toEqual([])
+    expect(rules({ 'smoke.yml': `on: [workflow_dispatch, workflow_call]\n${job}` })).toEqual([])
+    // A manual trigger next to an automatic one still runs on every push.
+    expect(rules({ 'smoke.yml': `on: [workflow_dispatch, push]\nconcurrency: x\n${job}` })).toEqual(['smoke.yml:macos_unconditional'])
+    expect(rules({ 'smoke.yml': `on:\n  workflow_dispatch: {}\n  schedule:\n    - cron: '0 3 * * *'\n${job}` })).toEqual(['smoke.yml:macos_unconditional'])
+  })
+
   it('accepts job-level concurrency on every job and ignores retention set by an expression', () => {
     const yml = `on: pull_request\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    concurrency: a\n    steps:\n      - uses: actions/upload-artifact@v4\n        with: { retention-days: '\${{ inputs.days }}' }\n`
     expect(ciWorkflowDrift({ 'a.yml': yml })).toEqual([])

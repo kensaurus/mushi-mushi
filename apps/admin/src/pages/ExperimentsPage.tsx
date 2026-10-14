@@ -431,7 +431,8 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
               <td className="px-3 py-2">
                 <div className="flex gap-1 justify-end">
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
-                    <Btn size="sm" variant="primary" onClick={() => onLaunch(e.id)}>Launch</Btn>
+                    // A row action, not the page's main action: one primary per view (Carbon), green for "start".
+                    <Btn size="sm" variant="success" onClick={() => onLaunch(e.id)}>Launch</Btn>
                   )}
                   {e.status === 'running' && (
                     <Tooltip content="Stop experiment">
@@ -719,7 +720,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                 value={variantDraft.weight}
                 onChange={(e) => setVariantDraft((d) => ({ ...d, weight: e.target.value }))}
               />
-              <Btn size="sm" onClick={addVariant} loading={addingVariant}>Add variant</Btn>
+              <Btn size="sm" variant="ghost" onClick={addVariant} loading={addingVariant}>Add variant</Btn>
             </div>
           </ContainedBlock>
         )}
