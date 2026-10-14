@@ -134,6 +134,23 @@ describe('edge logger', () => {
     expect(logSpy).toHaveBeenCalledOnce()
   })
 
+  // An Error's message and stack are not enumerable, so the redaction walk
+  // used to serialize `{ err }` as `{}` and the Sentry event showed no cause.
+  it('keeps an Error passed in meta readable in the log line and in Sentry', async () => {
+    const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
+    const { createLogger } = await loadLogger()
+    const logger = createLogger({ scope: 'mushi:test', format: 'json' })
+    const err = Object.assign(new TypeError('boom'), { code: '57014' })
+    logger.error('job failed', { err, plain: { message: 'Project not specified.', code: 'PGRST' } })
+
+    const entry = JSON.parse(String(errorSpy.mock.calls[0][0]))
+    expect(entry.err).toMatchObject({ name: 'TypeError', message: 'boom', code: '57014' })
+    expect(entry.plain).toEqual({ message: 'Project not specified.', code: 'PGRST' })
+    const extra = vi.mocked(reportMessage).mock.calls[0][2]?.extra as Record<string, { message?: string }>
+    expect(extra.err.message).toBe('boom')
+    expect(extra.plain.message).toBe('Project not specified.')
+  })
+
   it('skips Sentry when sentry: false is passed', async () => {
     const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
     const { createLogger } = await loadLogger()

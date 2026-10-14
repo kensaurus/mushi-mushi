@@ -11,6 +11,7 @@ import {
   LANDING_HERO,
   LANDING_HERO_CTAS,
   LANDING_SIXTY_SECOND,
+  LANDING_HOW_IT_WORKS,
   LANDING_PILLARS,
   LANDING_OPERATOR,
   LANDING_WHERE_TO_START,
@@ -61,16 +62,30 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
-  it('ships hero CTAs for signup (same tab), live demo, and the terminal path', () => {
-    expect(LANDING_HERO_CTAS.map((c) => c.id)).toEqual(['landing-hero', 'landing-demo', 'landing-terminal'])
+  it('ships hero CTAs for signup (same tab), connecting an editor, and the terminal path', () => {
+    expect(LANDING_HERO_CTAS.map((c) => c.id)).toEqual(['landing-hero', 'landing-connect', 'landing-terminal'])
     expect(LANDING_HERO_CTAS.map((c) => c.kind)).toEqual(['primary', 'secondary', 'ghost'])
 
-    const [signup, demo, terminal] = LANDING_HERO_CTAS
+    const [signup, connect, terminal] = LANDING_HERO_CTAS
     expect(signup?.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
     expect(signup?.external).toBe(true)
     expect(signup?.sameTab).toBe(true)
-    expect(demo?.href).toBe('/connect')
+    // /connect is the editor picker, so the button says so (it used to promise a demo).
+    expect(connect?.href).toBe('/connect')
+    expect(connect?.label).not.toMatch(/demo/i)
     expect(terminal?.href).toBe('/quickstart/incident-loop')
+  })
+
+  it('explains the product in three steps that mirror the console cycle', () => {
+    expect(LANDING_HOW_IT_WORKS.steps.map((s) => s.title)).toEqual([
+      'Install in one click',
+      'Your users report bugs',
+      'Mushi diagnoses it and opens a fix you review',
+    ])
+    const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
+    // Right under the hero, before anything else.
+    expect(landing.indexOf('<LandingInstallStrip')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
+    expect(landing.indexOf('<LandingInstallStrip')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
   })
 
   it('keeps the hero lead on the solo-builder positioning against Sentry', () => {

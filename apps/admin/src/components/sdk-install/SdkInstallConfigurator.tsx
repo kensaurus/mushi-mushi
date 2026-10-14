@@ -1,4 +1,5 @@
 import { ConfigHelp } from '../ConfigHelp'
+import { MUSHI_COPY } from '@mushi-mushi/core'
 import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 import {
   isMobileFramework,
@@ -200,7 +201,8 @@ export function SdkInstallConfigurator({
                   type="text"
                   value={config.bannerLabel}
                   onChange={(e) => onChange({ ...config, bannerLabel: e.target.value })}
-                  placeholder="Beta"
+                  placeholder={MUSHI_COPY.bannerLabel}
+                  title="Avoid “Beta” in a store build: Apple can reject the app under guideline 2.2 (beta testing belongs in TestFlight)."
                   className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
                 />
               </label>

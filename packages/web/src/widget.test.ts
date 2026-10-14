@@ -398,13 +398,13 @@ describe('MushiWidget banner — rich layout', () => {
     w.destroy();
   });
 
-  it('defaults the pill to "Beta" and hides it with label: false', () => {
+  it('defaults the pill to "Feedback" (never "Beta") and hides it with label: false', () => {
     const withDefault = new MushiWidget(
       { trigger: 'banner', bannerConfig: { message: 'Hello' } },
       noopCallbacks,
     );
     withDefault.mount();
-    expect(getShadow(withDefault).querySelector('.mushi-banner-pill')?.textContent).toBe('Beta');
+    expect(getShadow(withDefault).querySelector('.mushi-banner-pill')?.textContent).toBe('Feedback');
     withDefault.destroy();
 
     const noPill = new MushiWidget(

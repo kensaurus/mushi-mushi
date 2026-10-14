@@ -25,6 +25,7 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCa
 
 const COULD_NOT_READ = 'Could not read'
 
+/** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('gate_runs') || unreadable.includes('findings')) {
     return { text: 'Risk checks: not fully read', tone: 'warnSubtle', hint: 'Not every risk check result could be read for this app, so its risks are unknown. This is not a pass. Refresh in a minute.' }
@@ -46,6 +47,7 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
   return { text: 'No risks found', tone: 'okSubtle', hint: `The last risk check found nothing to fix.${extra}` }
 }
 
+/** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function sdkLabel(entries: readonly SdkSkewEntry[], unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('sdk')) {
     return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi SDK versions could not be read. Refresh in a minute.' }
@@ -66,7 +68,7 @@ export function sdkLabel(entries: readonly SdkSkewEntry[], unreadable: readonly 
  * that is not OK always explains itself: when the server sent no list (an
  * older server) the headline stands alone, never with an empty "all fine".
  */
-export function cardNeedsLook(card: Pick<PortfolioCard, 'needsLook'>): PortfolioCardProblem[] {
+function cardNeedsLook(card: Pick<PortfolioCard, 'needsLook'>): PortfolioCardProblem[] {
   return card.needsLook ?? []
 }
 
@@ -108,11 +110,15 @@ export function formatUsd(n: number): string {
 
 type CardCells = Pick<PortfolioCard, 'openReports' | 'latestRelease' | 'spend' | 'unreadable'>
 
-/** Open reports; a count cut short is shown as "at least". */
+/**
+ * Open reports; a count cut short is shown as "at least".
+ * @internal Exported for unit tests only; cards render it through cardStatusChips.
+ */
 export function openReportsText(card: CardCells): string {
   return card.unreadable.includes('reports') ? `${card.openReports}+` : String(card.openReports)
 }
 
+/** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function releaseText(card: CardCells): string {
   if (card.latestRelease) return card.latestRelease.version
   return card.unreadable.includes('releases') ? COULD_NOT_READ : 'None yet'
@@ -166,4 +172,49 @@ export function groupRadarDetectors<T extends { state: string }>(detectors: read
 export function radarErrorSentence(checkedAt: string | null, formatAgo: (iso: string) => string): string {
   const when = checkedAt ? `The last run (${formatAgo(checkedAt)}) could not finish` : 'The last run could not finish'
   return `${when}, so this risk is unknown. Run the checks again; if it keeps failing, the detail below says why.`
+}
+
+/**
+ * One small status chip on a Portfolio card: a short label, a tone that
+ * carries the meaning, the full sentence as a tooltip, and the page that
+ * fixes it. Replaces the prose problem lines (owner, 2026-10-14).
+ */
+export interface CardStatusChip {
+  key: 'bugs' | 'checks' | 'sdk' | 'release'
+  text: string
+  tone: BadgeTone
+  hint: string
+  to: string
+}
+
+export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
+  const bugs = openReportsText(card)
+  const radar = radarLabel(card.radar, card.unreadable)
+  const sdk = sdkLabel(card.sdk, card.unreadable)
+  const release = releaseText(card)
+  return [
+    {
+      key: 'bugs',
+      text: `${bugs} ${card.openReports === 1 ? 'bug' : 'bugs'}`,
+      tone: card.openReports > 0 ? 'warnSubtle' : 'okSubtle',
+      hint: card.openReports > 0 ? `${bugs} open bug ${card.openReports === 1 ? 'report' : 'reports'}. Open Bugs to triage them.` : 'No open bug reports.',
+      to: '/reports',
+    },
+    { key: 'checks', text: radar.text.replace(/^Risk checks: /, 'Checks: '), tone: radar.tone, hint: radar.hint, to: '/recipe' },
+    { key: 'sdk', text: sdk.text, tone: sdk.tone, hint: sdk.hint, to: '/connect' },
+    {
+      key: 'release',
+      text: card.latestRelease ? `v${release.replace(/^v/, '')}` : release === 'None yet' ? 'No release' : release,
+      tone: 'neutral',
+      hint: card.latestRelease ? `Latest release ${card.latestRelease.version}.` : 'No release recorded for this app yet.',
+      to: '/releases',
+    },
+  ]
+}
+
+/** The one "Next step" a card offers: its worst problem, or null when nothing needs a look. */
+export function cardNextStep(card: Pick<PortfolioCard, 'needsLook'>): { label: string; reason: string; more: number } | null {
+  const problems = cardNeedsLook(card)
+  if (problems.length === 0) return null
+  return { label: problems[0].label, reason: problems[0].reason, more: problems.length - 1 }
 }

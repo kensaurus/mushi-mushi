@@ -46,8 +46,12 @@ function handler(event) {
     // integration card icon was blocked (9 console errors per visit).
     // PublicIntegrationsPage already learned this and bundles its marks;
     // ServiceFavicon on the authenticated page still uses the CDN.
+    //
+    // `*.mzstatic.com`: App Store app icons (projects.icon_url, resolved by
+    // _shared/app-icon.ts) on Portfolio cards and the project switcher.
+    // Google Play icons are already covered by *.googleusercontent.com.
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.gstatic.com https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.kensaur.us https://github.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.gstatic.com https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.kensaur.us https://github.com https://*.mzstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
   };
 
   if (status !== 403 && status !== 404) {

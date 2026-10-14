@@ -100,16 +100,20 @@ export interface TeamAutoSwitchDetail {
  * Make the active team the one that owns `projectId`. Writes the team first,
  * then the project, so no request can pair the new project with the old
  * team. `retry` means the user is signed out and the check should run again
- * after sign-in.
+ * after sign-in. `unreachable` means the directory was read and no team of
+ * the user has this project (deleted, or a stale bookmark): the caller picks
+ * another project instead of leaving every panel on PROJECT_NOT_FOUND.
+ * `unknown` means the read failed, so nothing can be concluded.
  */
 export async function resolveTeamForProject(
   projectId: string,
-): Promise<'switched' | 'same' | 'unknown' | 'retry'> {
+): Promise<'switched' | 'same' | 'unknown' | 'retry' | 'unreachable'> {
   const read = await readProjectDirectory()
   if (read.status === 'unauthenticated') return 'retry'
   if (read.status !== 'ok') return 'unknown'
   const project = read.directory.projects.find((p) => p.id === projectId)
-  if (!project?.organizationId) return 'unknown'
+  if (!project) return 'unreachable'
+  if (!project.organizationId) return 'unknown'
   if (project.organizationId === getActiveOrgIdSnapshot()) return 'same'
   const team = read.directory.teams.find((t) => t.id === project.organizationId)
   setActiveOrgIdSnapshot(project.organizationId)
@@ -201,4 +205,27 @@ export function rememberProjectTeams(
 /** The team `projectId` was last seen in, if this browser has seen it. */
 export function knownProjectTeam(projectId: string): string | null {
   return readMap(PROJECT_TEAM_KEY)[projectId] ?? null
+}
+
+/**
+ * The project to show when a link names one the user cannot open: the one
+ * last used in this team if it is still listed, else the team's first.
+ * null when the team has no projects.
+ */
+export function pickRecoveryProject<T extends { project_id: string }>(
+  projects: readonly T[],
+  rememberedId: string | null,
+): T | null {
+  return projects.find((p) => p.project_id === rememberedId) ?? projects[0] ?? null
+}
+
+// The header renders a project switcher for desktop and one for mobile; both
+// see the same stale link. Only the first recovers and speaks.
+const recoveredStaleLinks = new Set<string>()
+
+/** True the first time `projectId` is claimed for recovery in this tab. */
+export function claimStaleLinkRecovery(projectId: string): boolean {
+  if (recoveredStaleLinks.has(projectId)) return false
+  recoveredStaleLinks.add(projectId)
+  return true
 }

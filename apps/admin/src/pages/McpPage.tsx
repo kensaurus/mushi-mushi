@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Section,
   Badge,
   Btn,
-  ErrorAlert,
   SegmentedControl,
   FreshnessPill, } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -50,6 +49,7 @@ import {
   validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 export function McpPage() {
   const activeProjectId = useActiveProjectId()
@@ -307,7 +307,7 @@ export function McpPage() {
   if (loading) return <PanelSkeleton rows={5} label="Loading MCP setup" />
   if (error) {
     return (
-      <ErrorAlert message={`Failed to load MCP setup: ${error}`} onRetry={reloadAll} />
+      <PageLoadError error={error} resource="MCP setup" onRetry={reloadAll} />
     )
   }
 

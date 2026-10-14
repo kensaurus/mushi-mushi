@@ -13,7 +13,7 @@ import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { Link } from 'react-router-dom'
-import { DisclosurePanel, ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
+import { DisclosurePanel, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -56,6 +56,7 @@ import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm
 import { readIntegrationOAuthReturn } from '../lib/integrationOAuthReturn'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { useScrollToHash } from '../lib/useScrollToHash'
+import { PageLoadError } from '../components/PageLoadError'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -427,7 +428,7 @@ export function IntegrationsPage() {
   useScrollToHash(!loading && !error)
 
   if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
-  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'integrations'}: ${error}`} onRetry={merged.retry} />
+  if (error) return <PageLoadError error={error} resource={merged.failedLabel ?? 'integrations'} onRetry={merged.retry} />
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-integrations">

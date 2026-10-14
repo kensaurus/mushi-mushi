@@ -19,7 +19,6 @@ import { Card,
   Badge,
   Btn,
   EmptyState,
-  ErrorAlert,
   StatCard,
   RecommendedAction,
   SelectField,
@@ -72,6 +71,7 @@ import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { CHIP_TONE } from '../lib/chipTone'
 import { PageHubView } from '../components/PageHubView'
 import { HEALTH_HUB } from '../lib/pageHubs'
+import { PageLoadError } from '../components/PageLoadError'
 
 const CodeHealthPage = lazy(() => import('./CodeHealthPage').then((m) => ({ default: m.CodeHealthPage })))
 const DriftPage = lazy(() => import('./DriftPage').then((m) => ({ default: m.DriftPage })))
@@ -421,16 +421,13 @@ function HealthPageContent() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load health stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} resource="health stats" onRetry={reloadStats} />
   }
 
   if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />
   if (llmQuery.error || !llm) {
     return (
-      <ErrorAlert
-        message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`}
-        onRetry={reloadAll}
-      />
+      <PageLoadError error={llmQuery.error ?? 'No data came back.'} resource="health metrics" onRetry={reloadAll} />
     )
   }
 

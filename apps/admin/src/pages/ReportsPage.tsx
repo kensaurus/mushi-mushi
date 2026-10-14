@@ -35,6 +35,7 @@ import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
   EMPTY_REPORTS_STATS,
   type ReportsStats,
@@ -158,6 +159,17 @@ export function ReportsPage() {
     reload()
     reloadReportsStats()
   }, [reload, reloadReportsStats])
+
+  // "Import from Sentry" panel; `?import=sentry` opens it (the Sentry card links here).
+  const [sentryImportOpen, setSentryImportOpen] = useState(() => searchParams.get('import') === 'sentry')
+  const closeSentryImport = useCallback(() => {
+    setSentryImportOpen(false)
+    if (searchParams.has('import')) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('import')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   // Reports opened in the preview drawer this session (the server stamped
   // admin_seen_at on that read; the list was fetched before it).
@@ -745,6 +757,16 @@ export function ReportsPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
+        <Btn
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => (sentryImportOpen ? closeSentryImport() : setSentryImportOpen(true))}
+          aria-expanded={sentryImportOpen}
+          data-testid="mushi-reports-sentry-import-toggle"
+        >
+          Import from Sentry
+        </Btn>
         <span className="text-xs text-fg-muted font-mono tabular-nums">
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
         </span>
@@ -761,6 +783,8 @@ export function ReportsPage() {
           </Btn>
         </Tooltip>
       </PageHeaderBar>
+
+      {sentryImportOpen && <ReportsSentryImport onClose={closeSentryImport} onImported={reloadAll} />}
 
       <PagePosture
         slots={[

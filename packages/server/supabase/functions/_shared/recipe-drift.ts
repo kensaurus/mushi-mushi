@@ -95,6 +95,9 @@ function runsOnText(job: Obj): string {
   return ''
 }
 
+/** Triggers that never fire on their own: a person or another workflow starts the run. */
+const MANUAL_TRIGGERS = new Set(['workflow_dispatch', 'workflow_call'])
+
 function jobUsesMacos(job: Obj): boolean {
   const runsOn = runsOnText(job).toLowerCase()
   if (/\bmacos/.test(runsOn)) return true
@@ -151,7 +154,11 @@ export function ciWorkflowDrift(files: Record<string, string>): DriftFinding[] {
       })
     }
 
-    const macos = jobs.filter(([, j]) => jobUsesMacos(j) && j.if === undefined).map(([id]) => id)
+    // A workflow that only a person (workflow_dispatch) or another workflow
+    // (workflow_call) can start is already conditional. An empty trigger
+    // list is not: it keeps firing.
+    const manualOnly = names.length > 0 && names.every((n) => MANUAL_TRIGGERS.has(n))
+    const macos = manualOnly ? [] : jobs.filter(([, j]) => jobUsesMacos(j) && j.if === undefined).map(([id]) => id)
     if (macos.length > 0) {
       out.push({
         gate: 'ci_drift', ruleId: 'macos_unconditional', severity: 'warn', filePath: path,

@@ -11,7 +11,14 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { MCP_CLIENTS, MCP_PIN_SPEC, getMcpClient, projectServerName } from '../clients.js'
+import {
+  MCP_CLIENTS,
+  MCP_OAUTH_CLIENT_IDS,
+  MCP_PIN_SPEC,
+  buildOAuthInstall,
+  getMcpClient,
+  projectServerName,
+} from '../clients.js'
 
 const SAMPLE_INPUT = {
   projectId: 'abc123-def456-ghi789',
@@ -288,3 +295,57 @@ describe('pinSpec override', () => {
     expect(result.kind === 'config' && result.json).toContain('@mushi-mushi/mcp@9.9.9')
   })
 })
+
+describe('OAuth install variant (public surfaces)', () => {
+  const OAUTH_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/'
+
+  it('never carries a key or a header, so the client runs its own OAuth sign-in', () => {
+    for (const id of MCP_OAUTH_CLIENT_IDS) {
+      const result = buildOAuthInstall(id, { mcpOAuthUrl: OAUTH_URL })
+      const text = JSON.stringify(result) + (result.kind === 'deeplink' ? atobSafe(result.url) : '')
+      expect(text, id).not.toMatch(/Authorization|Bearer|headers|X-Mushi|MUSHI_API_KEY/)
+      expect(text, id).toContain('kensaur.us')
+    }
+  })
+
+  it('Cursor: base64 mcp.json entry with only the URL, name as a query param', () => {
+    const result = buildOAuthInstall('cursor', { mcpOAuthUrl: OAUTH_URL })
+    if (result.kind !== 'deeplink') throw new Error('expected deeplink')
+    expect(result.url.startsWith('cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=')).toBe(true)
+    const config = JSON.parse(atob(decodeURIComponent(new URL(result.url).searchParams.get('config') ?? '')))
+    expect(config).toEqual({ url: OAUTH_URL })
+  })
+
+  it('VS Code: the documented vscode:mcp/install?{json} form with the name inside', () => {
+    for (const id of ['vscode', 'vscode-insiders'] as const) {
+      const result = buildOAuthInstall(id, { mcpOAuthUrl: OAUTH_URL })
+      if (result.kind !== 'deeplink') throw new Error('expected deeplink')
+      const prefix = `${id}:mcp/install?`
+      expect(result.url.startsWith(prefix)).toBe(true)
+      expect(JSON.parse(decodeURIComponent(result.url.slice(prefix.length)))).toEqual({ name: 'mushi', type: 'http', url: OAUTH_URL })
+    }
+  })
+
+  it('Claude Code: claude mcp add with the bare URL', () => {
+    expect(buildOAuthInstall('claude-code', { mcpOAuthUrl: OAUTH_URL })).toEqual({
+      kind: 'command',
+      text: `claude mcp add --transport http mushi ${OAUTH_URL}`,
+    })
+  })
+
+  it('Windsurf keeps its serverUrl key', () => {
+    const result = buildOAuthInstall('windsurf', { mcpOAuthUrl: OAUTH_URL })
+    if (result.kind !== 'config') throw new Error('expected config')
+    expect(JSON.parse(result.json)).toEqual({ mcpServers: { mushi: { serverUrl: OAUTH_URL } } })
+  })
+})
+
+/** Decoded Cursor payload (base64 inside the query), or '' for other links. */
+function atobSafe(url: string): string {
+  try {
+    const config = new URL(url).searchParams.get('config')
+    return config ? atob(decodeURIComponent(config)) : decodeURIComponent(url)
+  } catch {
+    return decodeURIComponent(url)
+  }
+}

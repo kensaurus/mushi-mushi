@@ -52,9 +52,13 @@ const OUTCOME_LABEL: Record<string, string> = {
 interface Props {
   /** The project's Sentry project slugs, primary first (sentryProjectsFromConfig). */
   sentryProjects: string[]
+  /** Called when an import brought at least one new report in (the Bugs page reloads its list). */
+  onImported?: () => void
+  /** False when a host card already titles it (the Bugs page). */
+  showHeading?: boolean
 }
 
-export function SentryImportPanel({ sentryProjects }: Props) {
+export function SentryImportPanel({ sentryProjects, onImported, showHeading = true }: Props) {
   const projectId = useActiveProjectId()
   const [ids, setIds] = useState('')
   const [sentryProject, setSentryProject] = useState('')
@@ -91,6 +95,7 @@ export function SentryImportPanel({ sentryProjects }: Props) {
     setResult(res.data)
     setLastSearch(search)
     setPage(nextPage)
+    if (res.data.created.length > 0) onImported?.()
   }
 
   const runImport = () => {
@@ -112,12 +117,33 @@ export function SentryImportPanel({ sentryProjects }: Props) {
 
   return (
     <div className="border-t border-edge-subtle px-3 py-2 space-y-2">
-      <div className="text-xs font-medium text-fg">Import existing Sentry issues</div>
+      {showHeading ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-medium text-fg">Import existing Sentry issues</div>
+          {/* The same import sits on the Bugs page, where the imported reports land. */}
+          <Link to="/reports?import=sentry" className="text-2xs text-accent hover:underline shrink-0">
+            Import from the Bugs page →
+          </Link>
+        </div>
+      ) : null}
       <p className="text-2xs text-fg-faint leading-snug">
         Alerts only reach Mushi after the webhook is set up. Paste issue ids or short ids (up to 10), or leave it
         empty to search a Sentry project for unresolved issues. A backlog comes in pages of {SENTRY_IMPORT_MAX};
         importing again is safe, issues already in Mushi are linked, not duplicated.
       </p>
+      {sentryProjects.length > 0 ? (
+        // Shown up front: an app often reports to several Sentry projects
+        // (web + server), and the search covers one at a time.
+        <p className="text-2xs text-fg-secondary">
+          Linked Sentry {sentryProjects.length === 1 ? 'project' : 'projects'}:{' '}
+          {sentryProjects.map((slug, i) => (
+            <span key={slug}>
+              {i > 0 ? ', ' : ''}
+              <span className="font-mono">{slug}</span>
+            </span>
+          ))}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-48">
           <Input

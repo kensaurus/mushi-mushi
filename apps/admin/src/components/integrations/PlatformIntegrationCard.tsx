@@ -24,10 +24,11 @@ import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import type { FieldSource, HealthRow, PlatformDef } from './types'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
-import { connectionFromProbe, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
+import { connectionFromProbe, isMissingSentrySecret, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
+import { SentrySecretMissingPanel } from './SentrySecretMissingPanel'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
-import { projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
+import { platformRequiredOk, projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -211,11 +212,7 @@ export function PlatformIntegrationCard({
 
   // A required field is "ok" if config has a non-null value OR the resolver
   // filled it from org defaults or an environment variable.
-  const requiredOk = def.fields.filter((f) => f.required).every((f) => {
-    if (config[f.name] != null) return true
-    const src = sourceByField?.[f.name]
-    return src === 'org' || src === 'env'
-  })
+  const requiredOk = platformRequiredOk(def, config, sourceByField)
 
   // Overflow actions: copying needs a full set of credentials; removing needs
   // a secret this project stores itself (an inherited org/env value is not
@@ -235,6 +232,10 @@ export function PlatformIntegrationCard({
       : null,
   )
   const latestDelivery = deliveries.data?.deliveries?.[0]
+  const secretMissing = def.kind === 'sentry' && isMissingSentrySecret(latestDelivery)
+  // Set when the secret-missing panel turned automatic import on, so the
+  // toggle below agrees without a page reload.
+  const [autoImportTurnedOn, setAutoImportTurnedOn] = useState(false)
   const connection: ConnectionView = def.webhookPath
     ? sentryConnection({
         configured: requiredOk,
@@ -242,6 +243,10 @@ export function PlatformIntegrationCard({
         latestDelivery,
         deliveriesLoaded: deliveries.data != null,
         deliveriesFailed: Boolean(deliveries.error),
+        autoImport: {
+          enabled: config.sentry_auto_import === true,
+          lastRunAt: typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null,
+        },
       })
     : connectionFromProbe({ configured: requiredOk, probe: latestProbe })
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'
@@ -254,6 +259,8 @@ export function PlatformIntegrationCard({
       const credentialProblem = /key|token|credential|auth|revoked|401|403/i.test(latestProbe?.message ?? '')
       return edits(credentialProblem ? 'Replace key' : 'Edit settings')
     }
+    // Alerts are arriving and being dropped: the fix is a saved secret, on this card.
+    if (secretMissing) return edits('Add webhook secret')
     if (connection.state === 'attention' && def.kind === 'sentry') {
       // Alert rules are where Sentry's webhook action lives.
       const org = typeof config.sentry_org_slug === 'string' ? config.sentry_org_slug : null
@@ -585,8 +592,18 @@ export function PlatformIntegrationCard({
 
       {def.kind === 'sentry' && !isEditing && requiredOk && (
         <>
+          {secretMissing && (
+            <SentrySecretMissingPanel
+              orgSlug={typeof config.sentry_org_slug === 'string' ? config.sentry_org_slug : null}
+              autoImportOn={config.sentry_auto_import === true || autoImportTurnedOn}
+              canManage={canManage}
+              onPasteSecret={onStartEdit}
+              onChanged={() => setAutoImportTurnedOn(true)}
+            />
+          )}
           <SentryAutoImportToggle
-            enabled={config.sentry_auto_import === true}
+            key={autoImportTurnedOn ? 'on' : 'saved'}
+            enabled={config.sentry_auto_import === true || autoImportTurnedOn}
             lastRunAt={typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null}
           />
           <SentryImportPanel sentryProjects={sentryProjectsFromConfig(config)} />

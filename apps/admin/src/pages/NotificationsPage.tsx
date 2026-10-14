@@ -24,7 +24,6 @@ import {
   Badge,
   Btn,
   EmptyState,
-  ErrorAlert,
   FilterSelect,
   SelectField,
   LogBlock,
@@ -57,6 +56,7 @@ import {
 } from '../components/notifications/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
+import { PageLoadError } from '../components/PageLoadError'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
   {
@@ -261,7 +261,7 @@ export function NotificationsPage() {
     return <TableSkeleton rows={6} columns={4} showFilters label="Loading notifications" />
   }
   if (error) {
-    return <ErrorAlert message={`Failed to load notifications: ${error}`} onRetry={reloadAll} />
+    return <PageLoadError error={error} resource="notifications" onRetry={reloadAll} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =

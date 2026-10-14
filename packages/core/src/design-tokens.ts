@@ -309,7 +309,7 @@ export function resolveWidgetAccent(
  * label / CTA wording (seen as inconsistent across the four host apps).
  */
 export const MUSHI_COPY = {
-  bannerLabel: 'Beta',
+  bannerLabel: 'Feedback',
   bannerMessage: 'Found a bug? Tap to report it.',
   bugCta: 'Report a bug',
   featureCta: 'Feature request',

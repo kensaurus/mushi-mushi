@@ -6,6 +6,8 @@
  *        badges, links, artifacts gallery and "CI synced" never rendered.
  *   #91  The list stopped at 50 with no way to reach older attempts. It now
  *        takes an offset and returns the exact total.
+ *   IA   A fix of a report imported from Sentry links back to the Sentry
+ *        issue (report_sentry_url), console IA pass 2026-10-14.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -16,6 +18,7 @@ const USER = '2000000b-0000-4000-8000-000000000000'
 
 let db: FakeDb
 let lastColumns = ''
+let reportRows = new Map<string, Row>()
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
@@ -50,7 +53,7 @@ vi.mock('../../supabase/functions/_shared/entitlements.ts', async (importOrigina
 })
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
 vi.mock('../../supabase/functions/_shared/fix-report-truth-load.ts', () => ({
-  loadReportFixTruths: async () => ({ truths: new Map(), reports: new Map() }),
+  loadReportFixTruths: async () => ({ truths: new Map(), reports: reportRows }),
   loadRecentFixTruths: async () => ({ truths: new Map() }),
   reportTitle: () => null,
 }))
@@ -116,5 +119,15 @@ describe('GET /v1/admin/fixes', () => {
     expect(second.json.data.fixes).toHaveLength(25)
     const ids = new Set([...first.json.data.fixes, ...second.json.data.fixes].map((f: Row) => f.id))
     expect(ids.size).toBe(75)
+  })
+
+  it('links a fix to the Sentry issue its report came from', async () => {
+    db = makeFakeDb({ fix_attempts: [attempt(1), attempt(2)] })
+    reportRows = new Map([['r1', { id: 'r1', sentry_issue_url: 'https://acme.sentry.io/issues/4501/' }]])
+    const res = await get('/v1/admin/fixes')
+    const byId = new Map(res.json.data.fixes.map((f: Row) => [f.id, f]))
+    expect(byId.get('f1')).toMatchObject({ report_sentry_url: 'https://acme.sentry.io/issues/4501/' })
+    expect(byId.get('f2')).toMatchObject({ report_sentry_url: null })
+    reportRows = new Map()
   })
 })

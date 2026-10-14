@@ -55,6 +55,7 @@ import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPi
 import { LINK_ACCENT, runStatusChipTone } from '../lib/chipTone'
 import { StorePanel } from '../components/portfolio/StorePanel'
 import { StoreReviewsPanel } from '../components/portfolio/StoreReviewsPanel'
+import { PageLoadError } from '../components/PageLoadError'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
@@ -397,8 +398,8 @@ function ReleaseDrawer({
               Publish + notify
             </Btn>
             <Btn
-              variant="ghost"
-              className="ml-auto text-danger"
+              variant="danger"
+              className="ml-auto"
               onClick={() => setConfirmDelete(true)}
               disabled={!canEdit || saving || publishing}
               title={canEdit ? 'Delete this draft. Nothing is sent to reporters.' : 'Viewers have read-only access and cannot delete drafts.'}
@@ -667,7 +668,7 @@ export function ReleasesPage() {
   }
 
   if (statsError) {
-    return <ErrorAlert message={`Failed to load release stats: ${statsError}`} onRetry={reloadStats} />
+    return <PageLoadError error={statsError} resource="release stats" onRetry={reloadStats} />
   }
 
   return (

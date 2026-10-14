@@ -30,7 +30,6 @@ import {
   Btn,
   FilterSelect,
   Input,
-  ErrorAlert,
   SegmentedControl,
   Tooltip,
 } from '../components/ui'
@@ -51,6 +50,7 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
+import { PageLoadError } from '../components/PageLoadError'
 
 interface ReporterDevice {
   id: string
@@ -566,10 +566,7 @@ export function AntiGamingPage() {
         {loading ? (
           <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading devices" />
         ) : error ? (
-          <ErrorAlert
-            message={`Failed to load ${merged.failedLabel ?? 'data'}: ${error}`}
-            onRetry={merged.retry}
-          />
+          <PageLoadError error={error} resource={merged.failedLabel ?? 'data'} onRetry={merged.retry} />
         ) : devices.length === 0 ? (
           search ? (
             <EmptySectionMessage

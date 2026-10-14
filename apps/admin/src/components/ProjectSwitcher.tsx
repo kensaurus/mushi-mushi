@@ -17,14 +17,18 @@ import {
   clearActiveProject,
   getActiveProjectIdSnapshot,
   isValidProjectId,
+  refetchProjectData,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
+import { invalidateApiCache } from '../lib/supabase'
 import { useCreateProject } from '../lib/useCreateProject'
 import { ACTIVE_ORG_QUERY_PARAM, getActiveOrgIdSnapshot, setActiveOrgIdSnapshot, useActiveOrgSignal } from '../lib/activeOrg'
 import {
   PROJECT_DIRECTORY_PATH,
   TEAM_AUTO_SWITCH_EVENT,
+  claimStaleLinkRecovery,
   lastTeamProject,
+  pickRecoveryProject,
   rememberProjectTeams,
   rememberTeamProject,
   resolveTeamForProject,
@@ -179,8 +183,35 @@ export function ProjectSwitcher() {
       if (probedRef.current === fromUrl) return
       probedRef.current = fromUrl
       // Switches team (org first, then project) and fires the auto-switch
-      // event handled above; does nothing when no team of the user owns it.
-      void resolveTeamForProject(fromUrl)
+      // event handled above. When no team of the user owns it (deleted, or a
+      // stale bookmark), every panel would sit on PROJECT_NOT_FOUND with a
+      // bare Retry, so show a project they can open and say what happened.
+      void resolveTeamForProject(fromUrl).then((outcome) => {
+        if (outcome !== 'unreachable' || !claimStaleLinkRecovery(fromUrl)) return
+        const recovery = pickRecoveryProject(projects, orgId ? lastTeamProject(orgId) : null)
+        if (!recovery) return
+        if (orgId) rememberTeamProject(orgId, recovery.project_id)
+        setActiveProjectIdSnapshot(recovery.project_id)
+        setSearchParams(
+          (prev) => {
+            // Only replace the stale id: the user may have moved on meanwhile.
+            if (prev.get(ACTIVE_PROJECT_QUERY_PARAM) !== fromUrl) return prev
+            const next = new URLSearchParams(prev)
+            next.set(ACTIVE_PROJECT_QUERY_PARAM, recovery.project_id)
+            return next
+          },
+          { replace: true },
+        )
+        // The stored project may already be the recovery one, in which case
+        // no project event fires: make the panels refetch with the new URL.
+        invalidateApiCache()
+        refetchProjectData()
+        toast.info(
+          'That link pointed to a project you can’t open',
+          `It may have been deleted, or you may not be a member. Showing ${recovery.project_name} instead.`,
+          { label: 'Pick another', onClick: () => setOpen(true) },
+        )
+      })
       return
     }
     // No valid candidate: the team's last-used project, else its first.

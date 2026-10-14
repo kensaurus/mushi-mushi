@@ -14,7 +14,7 @@ import { useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Btn, Checkbox, CopyButton, ErrorAlert, Input, ResultChip, SecretInput, Toggle } from '../ui'
+import { Btn, Checkbox, CopyButton, Input, ResultChip, SecretInput, Toggle } from '../ui'
 import { BrandIcon } from '../ui/BrandIcon'
 import { IconBell, IconClock, IconGlobe, IconMic, IconTerminal } from '../icons'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
@@ -26,6 +26,7 @@ import { PushNotifyCard } from '../voice/PushNotifyCard'
 import { describeByokError } from '../../lib/byokErrors'
 import { SettingsList, SettingsRow } from './SettingsRow'
 import { telegramRowStatus } from './telegramStatus'
+import { PageLoadError } from '../PageLoadError'
 
 interface VoiceSettings {
   voice_intake_enabled?: boolean
@@ -166,7 +167,7 @@ export function VoiceIntakePanel() {
   }
 
   if (loading) return <PanelSkeleton rows={4} label="Loading voice settings" inCard={false} />
-  if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
+  if (error) return <PageLoadError error={error} resource="settings" onRetry={reload} />
 
   const telegramConfigured = Boolean(saved.telegram_bot_token_ref) || telegram.data?.configured === true
   const githubConfigured = Boolean(saved.github_user_token_ref)

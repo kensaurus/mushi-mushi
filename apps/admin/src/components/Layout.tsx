@@ -17,7 +17,7 @@ import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBa
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
-import { checkSectionAttention, actSectionAttention, doSectionAttention, startSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
+import { checkSectionAttention, actSectionAttention, doSectionAttention, planSectionAttention, startSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -76,8 +76,8 @@ interface NavItem extends BuiltNavItem {
 }
 
 /**
- * Quick and Beginner sidebars: one always-open list clustered under plain
- * task names (Find & fix bugs / Your apps / Connect your tools / Account)
+ * Quick and Beginner sidebars: one always-open list clustered under the
+ * steps of the cycle (Connect / Bugs / Fix / Verify / Ship & watch / Account)
  * from SIMPLE_NAV_GROUPS. Each item carries its group id; items without one
  * render in a trailing cluster so a page never silently disappears.
  */
@@ -115,7 +115,7 @@ interface NavSection extends Omit<BuiltNavSection, 'id'> {
   id: BuiltNavSection['id'] | 'quick'
 }
 
-// Sidebar is reshaped around the README's PDCA loop — metadata from navRegistry.ts.
+// Sidebar follows the vibe-coding cycle (ADR 0027) — metadata from navRegistry.ts.
 const NAV: NavSection[] = buildOperatorNav()
 
 interface PageHeroFallback {
@@ -492,12 +492,12 @@ function sectionContainingPath(sections: NavSection[], path: string): NavSection
   return sections.find((s) => s.items.some((i) => isActive(path, i.path)))
 }
 
-/** Single-letter / stage glyph for the icon-rail section picker. */
+/** Step number (1–5) / letter glyph for the icon-rail section picker. */
 function railSectionGlyph(section: NavSection): string {
+  if (section.step) return String(section.step)
   if (section.stage) return section.stage
   if (section.id === 'quick') return 'Q'
-  if (section.id === 'start') return 'S'
-  if (section.id === 'workspace') return 'W'
+  // Account (workspace) → "A"; Act is "5" now, so the letters no longer clash.
   return section.title.charAt(0).toUpperCase()
 }
 
@@ -741,8 +741,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const visibleNav = useMemo((): NavSection[] => {
     if (isQuickstart || isBeginner) {
-      // Task-shaped list instead of PDCA sections (B16): what a solo builder
-      // does — find and fix bugs, look after apps, connect tools, account.
+      // The same cycle as the Advanced sections (ADR 0027), fewer pages:
+      // connect, bugs, fix, verify, ship and watch, account.
       // Before the first bug arrives Quick shows only the pages that help
       // get there.
       const activationDone = setupStatus.selectors.done
@@ -760,7 +760,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {
           id: 'quick',
           title: isQuickstart ? 'Quick' : 'Beginner',
-          hint: 'Find and fix bugs, look after your apps, connect your tools. Advanced mode lists every page.',
+          hint: 'Connect, then bugs, fix, verify, ship and watch. Advanced mode lists every page.',
           items,
         },
       ]
@@ -829,7 +829,8 @@ export function Layout({ children }: { children: ReactNode }) {
     selectSection(id, { expandSidebar: true })
   }
 
-  const CHECK_SUB_GROUP_ORDER = ['quality-gates', 'system-health', 'release-intel'] as const
+  // App checks before AI quality: verify the app, then the AI that triaged it.
+  const CHECK_SUB_GROUP_ORDER = ['system-health', 'quality-gates'] as const
 
   function renderFullNavLink(item: NavItem) {
     const { label, path, icon: Icon, requiresFeature } = item
@@ -1373,24 +1374,33 @@ function computeStaleness(
   if (!navCounts.ready) return null
   switch (sectionId) {
     case 'start': {
+      // 1 · Connect: setup, plus integration health (Integrations lives here
+      // since ADR 0027, so its count moved from Act with it).
+      const issues = navCounts.healthIssues
       const extended = startSectionAttention(navCounts.slices)
-      if (!extended) return null
+      if (issues === 0 && !extended) return null
+      const parts: string[] = []
+      if (issues > 0) parts.push(`${issues} integration${issues === 1 ? '' : 's'}`)
+      if (extended) parts.push(extended.label)
       return {
-        count: extended.count,
-        tone: extended.tone,
-        label: extended.label,
+        count: issues + (extended?.count ?? 0),
+        tone: issues > 2 || extended?.tone === 'danger' ? 'danger' : 'warn',
+        label: parts.join(' · '),
       }
     }
     case 'plan': {
-      // Bugs coming in: the untriaged backlog only. Content checks and User stories
-      // moved to Quality & health (2026-10-08), and their counts moved with them.
+      // 2 · Bugs: the untriaged backlog plus Home, which lives here since ADR 0027.
       const backlog = navCounts.untriagedBacklog
-      if (backlog === 0) return null
-      const tone = toneForBacklog(backlog) as SectionStaleness['tone']
+      const home = planSectionAttention(navCounts.slices)
+      if (backlog === 0 && !home) return null
+      const parts: string[] = []
+      if (backlog > 0) parts.push(`${backlog} untriaged report${backlog === 1 ? '' : 's'} waiting`)
+      if (home) parts.push(home.label)
+      const backlogTone = backlog > 0 ? (toneForBacklog(backlog) as SectionStaleness['tone']) : 'warn'
       return {
-        count: backlog,
-        tone,
-        label: `${backlog} untriaged report${backlog === 1 ? '' : 's'} waiting`,
+        count: backlog + (home?.count ?? 0),
+        tone: home?.tone === 'danger' ? 'danger' : backlogTone,
+        label: parts.join(' · '),
       }
     }
     case 'do': {
@@ -1452,21 +1462,13 @@ function computeStaleness(
       return null
     }
     case 'act': {
-      const issues = navCounts.healthIssues
+      // 5 · Ship & watch: releases, research and weekly insights.
       const extended = actSectionAttention(navCounts.slices)
-      if (issues === 0 && !extended) return null
-      const count = issues + (extended?.count ?? 0)
-      const tone =
-        issues > 2 || extended?.tone === 'danger'
-          ? 'danger'
-          : 'warn'
-      const parts: string[] = []
-      if (issues > 0) parts.push(`${issues} integration${issues === 1 ? '' : 's'}`)
-      if (extended) parts.push(extended.label)
+      if (!extended) return null
       return {
-        count,
-        tone,
-        label: parts.join(' · '),
+        count: extended.count,
+        tone: extended.tone,
+        label: extended.label,
       }
     }
     case 'workspace': {
@@ -1527,7 +1529,7 @@ interface SectionRailHeaderProps {
 }
 
 /**
- * Rail section picker (P / D / C / A / S / W). Shares `.nav-rail-item`
+ * Rail section picker (1 – 5 for the cycle steps, A for Account). Shares `.nav-rail-item`
  * geometry with the item rows so the whole rail sits on one 44px rhythm, and
  * shares the flyout so a section explains itself in the same shape an item
  * does — the section `hint` copy already reads as plain English.
@@ -1547,7 +1549,7 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
           title={section.title}
           description={section.hint}
           status={staleness ? { tone: staleness.tone, label: staleness.label } : null}
-          kicker={section.stage ? { label: section.stage, className: stageTone } : null}
+          kicker={section.stage ? { label: glyph, className: stageTone } : null}
           hint={expanded ? undefined : 'Opens this group in the full sidebar'}
         />
       }
@@ -1597,7 +1599,9 @@ function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle
   const showChevron = section.defaultCollapsed !== undefined || section.id === 'workspace'
   const inner = (
     <span className="flex items-center gap-1.5 min-w-0 w-full">
-      {section.stage && (
+      {/* A numbered title ("2 · Bugs") already carries its step; the letter
+          chip is only for sections without one. */}
+      {section.stage && !section.step && (
         <span
           className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-3xs font-bold leading-none shrink-0 ${STAGE_TONE[section.stage]}`}
           aria-hidden="true"
