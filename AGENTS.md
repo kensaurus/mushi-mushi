@@ -40,6 +40,8 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 
 **Decision memory.** Before proposing a change to architecture, dependencies, conventions, positioning, or testing posture, read [`docs/adr/INDEX.md`](./docs/adr/INDEX.md). Do not contradict an Accepted ADR silently — surface it, cite the ADR, and ask. A reversal produces a superseding ADR, by the human, on purpose. New decisions that meet the bar in the index land as an ADR in the same PR.
 
+**Parked work.** Read [`docs/BACKLOG.md`](./docs/BACKLOG.md) before planning. New parked work adds a `BL-` row in the same PR.
+
 ---
 
 ## Agent Inventory
