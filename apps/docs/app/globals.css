@@ -1208,6 +1208,130 @@ main :not(pre) > code {
   padding: 0.25rem 0 1.25rem;
 }
 
+/* "How it works" + one-click installs, right under the hero. */
+.landing-install {
+  margin: 2.25rem 0 2.5rem;
+}
+
+.landing-oneclick {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  background: var(--mushi-paper-wash);
+}
+
+.landing-oneclick__heading {
+  /* !important: Nextra's prose h3 margin otherwise wins (as on .landing-section-title). */
+  margin: 0 0 0.75rem !important;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.landing-oneclick__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+}
+
+.landing-oneclick__badge {
+  display: inline-flex;
+  line-height: 0;
+  border-radius: 0.5rem;
+}
+
+.landing-oneclick__badge:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.landing-oneclick__badge-img {
+  height: 39px;
+  width: auto;
+}
+
+/* Nextra's dark mode is the .dark class, not the media query. */
+.landing-oneclick__badge-img--on-dark,
+.dark .landing-oneclick__badge-img--on-light {
+  display: none;
+}
+
+.dark .landing-oneclick__badge-img--on-dark {
+  display: block;
+}
+
+.landing-oneclick__cmds {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+@media (min-width: 720px) {
+  .landing-oneclick__cmds {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+.landing-oneclick__cmd {
+  min-width: 0;
+}
+
+.landing-oneclick__cmd-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-oneclick__cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.4rem 0.45rem 0.4rem 0.65rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.4rem;
+  background: var(--mushi-paper);
+}
+
+.landing-oneclick__cmd-row code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.8rem;
+  color: var(--mushi-ink);
+  background: transparent;
+}
+
+.landing-oneclick__copy {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--mushi-rule);
+  color: var(--mushi-ink);
+  background: transparent;
+  cursor: pointer;
+}
+
+.landing-oneclick__copy:hover {
+  border-color: var(--mushi-vermillion);
+  color: var(--mushi-vermillion);
+}
+
+.landing-oneclick__note {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
 /* Landing home — paper page bg so the reading column doesn't float on
    Nextra's near-white html. Native scroll (docs/MOTION.md — no Lenis). */
 body:has(.landing-cinematic-hero) {

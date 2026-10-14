@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_116 configuration knobs across 19 sections · last regenerated 2026-10-10._
+_116 configuration knobs across 19 sections · last regenerated 2026-10-14._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1705,7 +1705,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Customise the header-banner launcher: visual variant, position (top / bottom), announcement copy, and button labels.
 
-**How it works** — Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bannerMessage` + `bannerLabel` switch the strip to the rich admin-console layout (Beta pill + announcement line + flat text CTAs). `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.
+**How it works** — Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bannerMessage` + `bannerLabel` switch the strip to the rich admin-console layout (pill + announcement line + flat text CTAs). The pill reads "Feedback" by default; `bannerLabel` changes it. Do not use "Beta" in a production App Store or Google Play build: it can get the app rejected (Apple guideline 2.2: beta testing belongs in TestFlight). `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.
 
 **Default** — `variant: brand · position: top · featureCta: true`
 

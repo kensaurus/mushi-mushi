@@ -245,6 +245,23 @@ describe('completenessChecklist', () => {
     expect(out.map((f) => `${f.projectIds[0]}:${f.evidence.missing}`)).toEqual(['glot:hasVersionProbe', 'glot:hasDeepLinkFile', 'tsu:hasSecurityHeaders'])
     expect(out.every((f) => f.ruleId === 'recipe_incomplete' && f.severity === 'info')).toBe(true)
   })
+
+  it('reads as plain English for every item ("has no version probe", never "has no a")', () => {
+    const out = completenessChecklist([
+      { id: 'a', name: 'glot.it', kind: 'app', signals: { hasCrashReporting: false, hasVersionProbe: false, hasDeepLinkFile: false } },
+      { id: 's', name: 'tsumagoi', kind: 'site', signals: { hasVersionProbe: false, hasSecurityHeaders: false } },
+      { id: 'l', name: 'mushi-lib', kind: 'library', signals: { hasReleaseWorkflow: false } },
+    ])
+    expect(out.map((f) => f.message)).toEqual([
+      'glot.it (app) has no crash reporting.',
+      'glot.it (app) has no version probe.',
+      'glot.it (app) has no deep-link file.',
+      'tsumagoi (site) has no version probe.',
+      'tsumagoi (site) has no security headers.',
+      'mushi-lib (library) has no release workflow.',
+    ])
+    expect(out.some((f) => f.message.includes('no a '))).toBe(false)
+  })
 })
 
 describe('keySharedAcrossApps', () => {

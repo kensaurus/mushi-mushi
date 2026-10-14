@@ -3,19 +3,20 @@
  * PURPOSE: Quickstart / Beginner / Advanced admin mode primitive.
  *
  * Quickstart mode is the default for first-time visitors. It:
- *    1. Shows ONLY 3 sidebar routes — Inbox, Drafts, Setup
- *    2. Pins a "Resolve next bug →" mega-CTA above page content
- *    3. Hides PDCA terminology entirely; uses verb-led labels
- *    4. Pulls quickstart copy from `lib/copy.ts` (verb-first, jargon-free)
+ *    1. Shows about 10 sidebar pages, grouped by the steps of the cycle
+ *       (SIMPLE_NAV_GROUPS in navRegistry.ts: Connect, Bugs, Fix, Ship &
+ *       watch, Account); before the first bug only the setup pages show
+ *    2. Hides PDCA terminology entirely; uses verb-led labels
+ *    3. Pulls quickstart copy from `lib/copy.ts` (verb-first, jargon-free)
  *
  *  Beginner mode is the secondary onboarding tier. It:
- *    1. Filters the sidebar to 9 loop-essential pages
+ *    1. Adds a few next steps to the same groups (and a Verify group)
  *    2. Surfaces a persistent <NextStep> banner on every page
  *    3. Pulls plain-language copy from `lib/copy.ts`
  *    4. Forces full-detail microcopy: KPI tooltips, axis labels, etc.
  *
- *  Advanced mode is the power-user surface — full 23-page console with
- *  jargon-rich copy.
+ *  Advanced mode is the power-user surface — every page, under the six
+ *  numbered cycle sections of NAV_SECTION_META (ADR 0027).
  *
  *  Persisted in `localStorage:'mushi:mode'`. The choice survives reloads,
  *  follows the user across projects, and is exposed as a single hook so

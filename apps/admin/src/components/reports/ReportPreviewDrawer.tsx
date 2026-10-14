@@ -16,7 +16,7 @@ import {
   MetaChip,
 } from '../report-detail/ReportSurface'
 import { ReportCodeText } from './ReportCodeText'
-import type { ReportBreadcrumb, ReportSentryContext } from '../report-detail/types'
+import type { ReportBreadcrumb, ReportSentryContext, ReportSentryLink } from '../report-detail/types'
 import {
   STATUS,
   SEVERITY,
@@ -52,6 +52,7 @@ interface ReportPreview {
   sentry_release?: string | null
   sentry_environment?: string | null
   sentry_issue_url?: string | null
+  sentry_links?: ReportSentryLink[] | null
   custom_metadata?: {
     sentry?: ReportSentryContext
     [k: string]: unknown
@@ -218,6 +219,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
               sentryRelease={report.sentry_release}
               sentryEnvironment={report.sentry_environment}
               sentryIssueUrl={report.sentry_issue_url}
+              sentryLinks={report.sentry_links}
               tags={report.tags}
             />
 

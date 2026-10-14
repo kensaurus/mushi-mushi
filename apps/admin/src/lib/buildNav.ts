@@ -90,6 +90,8 @@ export interface BuiltNavItem {
 export interface BuiltNavSection {
   id: NavSectionId
   title: string
+  /** Step in the vibe-coding cycle (ADR 0027) — the rail glyph. */
+  step?: number
   stage?: 'P' | 'D' | 'C' | 'A'
   hint?: string
   defaultCollapsed?: boolean
@@ -183,6 +185,7 @@ export function buildOperatorNav(): BuiltNavSection[] {
     return {
       id: sectionId,
       title: meta.title,
+      step: meta.step,
       stage: meta.stage,
       hint: meta.hint,
       defaultCollapsed: meta.defaultCollapsed,

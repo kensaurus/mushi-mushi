@@ -693,6 +693,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         ...f,
         report_title: reportTitle(report),
         report_status: report?.status ?? null,
+        // The Sentry issue the report came from, so a fix links back to it.
+        report_sentry_url: report?.sentry_issue_url ?? null,
         report_fix_state: t?.state ?? null,
         report_fixed_by_pr: t?.mergedPrNumber ?? null,
         is_latest_attempt: t ? t.latestAttemptId === f.id : null,

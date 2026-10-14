@@ -15,7 +15,7 @@ import type { PageDataState } from './usePageData'
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('./supabase', () => ({ apiFetch: api.apiFetch }))
-vi.mock('./activeProject', () => ({ useActiveProjectSignal: () => 'p1' }))
+vi.mock('./activeProject', () => ({ useActiveProjectSignal: () => 'p1', useProjectDataEpoch: () => 0 }))
 vi.mock('./activeOrg', () => ({ useActiveOrgSignal: () => 'o1' }))
 
 import { usePageData } from './usePageData'

@@ -39,7 +39,7 @@ export function projectInitialsChipClass(projectId: string): string {
 /** Merge setup checklist + projects snapshot into a favicon source. */
 export function faviconSourceFromProject(
   setup: Pick<SetupProject, 'project_id' | 'project_name' | 'project_slug' | 'steps'>,
-  snapshot?: Pick<ProjectSnapshot, 'primary_repo' | 'api_keys'> | null,
+  snapshot?: Pick<ProjectSnapshot, 'primary_repo' | 'api_keys' | 'icon_url'> | null,
 ): ProjectFaviconSource {
   const sdkFromSetup = sdkOriginFromSetupProject(setup as SetupProject)
   const sdkFromKeys = sdkOriginFromApiKeys(snapshot?.api_keys)
@@ -49,6 +49,7 @@ export function faviconSourceFromProject(
     project_slug: setup.project_slug,
     sdk_origin: sdkFromSetup ?? sdkFromKeys,
     repo_url: snapshot?.primary_repo?.repo_url ?? null,
+    icon_url: snapshot?.icon_url ?? null,
   }
 }
 

@@ -25,7 +25,6 @@ import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
   Btn,
   Badge,
-  ErrorAlert,
   EmptyState,
   Input,
   FilterSelect,
@@ -60,6 +59,7 @@ import {
   INTEGRATIONS_HREF_BY_PLUGIN_SLUG,
 } from '../components/marketplace/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> = [
   {
@@ -504,7 +504,7 @@ export function MarketplacePage() {
 
   if (loading) return <TableSkeleton rows={6} columns={4} showFilters label="Loading marketplace" />
   if (error) {
-    return <ErrorAlert message={`Failed to load marketplace: ${error}`} onRetry={reloadAll} />
+    return <PageLoadError error={error} resource="marketplace" onRetry={reloadAll} />
   }
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =

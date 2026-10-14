@@ -49,6 +49,7 @@ import { ghFetch, ghFetchOptional } from '../../_shared/github-pr.ts'
 import {
   buildCiVars,
   buildGuidedFallback,
+  ciVarTemplateNames,
   inferStack,
   lastHeartbeatAt,
   missingCiVars,
@@ -57,7 +58,9 @@ import {
   sdkDiagnosticVerdict,
   type KeyHeartbeat,
   type SdkDiagnosticsResult,
+  type SdkStack,
 } from '../../_shared/sdk-diagnostics.ts'
+import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { mayRevokePriorCiKeys } from '../../_shared/api-key-rotation.ts'
 
 // ---------------------------------------------------------------------------
@@ -266,7 +269,9 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     if (projErr) return dbError(c, projErr)
 
     const slug = (projectRow as { id: string; slug?: string } | null)?.slug ?? null
-    const stack = inferStack(slug)
+    // The slug is a guess; the repo's package.json replaces it below when readable.
+    let stack: SdkStack = inferStack(slug)
+    let stackSource: 'repo' | 'slug' = 'slug'
 
     const { data: settingsRow } = await db
       .from('project_settings')
@@ -302,7 +307,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const installationId = (repoRow as { github_app_installation_id?: number | null } | null)
       ?.github_app_installation_id ?? null
 
-    const required = requiredCiVarNames(stack)
+    let required = requiredCiVarNames(stack)
     let presentVars: string[] | null = null
     let missingVars: string[] | null = null
     let hasGithubToken = false
@@ -312,10 +317,17 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
         const token = await resolveProjectGithubToken(db, projectId, installationId)
         if (token) {
           hasGithubToken = true
-          const [secretNames, varNames] = await Promise.all([
+          const [secretNames, varNames, detected] = await Promise.all([
             listRepoSecretNames(repoRef.owner, repoRef.repo, token),
             listRepoVariableNames(repoRef.owner, repoRef.repo, token),
+            // An unreadable repo keeps the slug guess instead of failing the diagnostic.
+            detectRepoStack({ ref: repoRef, token, repoUrl: repoUrl!, defaultBranchHint: 'main' }).catch(() => null),
           ])
+          if (detected) {
+            stack = detected
+            stackSource = 'repo'
+            required = requiredCiVarNames(stack)
+          }
           presentVars = [...secretNames, ...varNames]
           missingVars = missingCiVars(required, presentVars)
         }
@@ -345,6 +357,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       lastSeenAt,
       nativeEverSeen,
       stack,
+      stackSource,
       recommendedFix,
     }
 
@@ -380,7 +393,8 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     if (projErr) return dbError(c, projErr)
 
     const slug = (projectRow as { id: string; slug?: string } | null)?.slug ?? null
-    const stack = inferStack(slug)
+    // A guess from the slug; replaced by the repo's own stack once a token can read it (step 6).
+    let stack: SdkStack = inferStack(slug)
 
     // The Mushi cloud endpoint (the canonical ingest URL for this backend).
     const MUSHI_ENDPOINT =
@@ -406,20 +420,12 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const repoSlug = repoRef ? `${repoRef.owner}/${repoRef.repo}` : (slug ?? projectId)
     const { rawKey, prefix, id: newKeyId } = await mintCiApiKey(db, projectId, repoSlug)
 
-    // 4. Build the vars list.
-    const ciVars = buildCiVars({
-      stack,
-      projectId,
-      endpoint: MUSHI_ENDPOINT,
-      mintedKey: rawKey,
-    })
-
-    // 5. If no repo or no token, return guided fallback immediately.
+    // 4. If no repo or no token, return guided fallback immediately.
     if (!repoRef) {
       const fallback = buildGuidedFallback({
         owner: '<your-org>',
         repo: '<your-repo>',
-        ciVarTemplates: requiredCiVarNames(stack),
+        ciVarTemplates: ciVarTemplateNames(stack),
         projectId,
         endpoint: MUSHI_ENDPOINT,
       })
@@ -433,7 +439,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       }, 200) // 200 so the UI can show the key + fallback
     }
 
-    // 6. Resolve token.
+    // 5. Resolve token.
     let token: string | null = null
     try {
       token = await resolveProjectGithubToken(db, projectId, installationId)
@@ -445,7 +451,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
       const fallback = buildGuidedFallback({
         owner: repoRef.owner,
         repo: repoRef.repo,
-        ciVarTemplates: requiredCiVarNames(stack),
+        ciVarTemplates: ciVarTemplateNames(stack),
         projectId,
         endpoint: MUSHI_ENDPOINT,
       })
@@ -458,6 +464,18 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
         },
       }, 200)
     }
+
+    // 6. The names the app's bundler inlines. Sync WRITES these to GitHub, so
+    //    a wrong prefix leaves the app without its key: read the repo's
+    //    package.json; only when nothing is readable keep the slug guess.
+    const detected = await detectRepoStack({ ref: repoRef, token, repoUrl: repoUrl!, defaultBranchHint: 'main' }).catch(() => null)
+    if (detected) stack = detected
+    const ciVars = buildCiVars({
+      stack,
+      projectId,
+      endpoint: MUSHI_ENDPOINT,
+      mintedKey: rawKey,
+    })
 
     // 7. Write secrets and variables to GitHub.
     const written: string[] = []
@@ -516,7 +534,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const fallback = buildGuidedFallback({
       owner: repoRef.owner,
       repo: repoRef.repo,
-      ciVarTemplates: requiredCiVarNames(stack),
+      ciVarTemplates: ciVarTemplateNames(stack),
       projectId,
       endpoint: MUSHI_ENDPOINT,
     })

@@ -789,7 +789,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // merged and a declared production deploy target reported a commit;
     // `unknown` (never `live`) on a failed read or when a merged attempt's PR
     // is in a repo other than the one the deploy heads come from.
-    const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes, knownIssuesOptInRes] = await Promise.all([
+    const [{ fixPacket: fix_packet }, deploy_live, knownIssuesRes, knownIssuesOptInRes, sentryLinksRes] = await Promise.all([
       buildReportFixPacket(
         db,
         data as Record<string, unknown>,
@@ -816,6 +816,17 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .select('known_issues_search_enabled')
         .eq('project_id', data.project_id as string)
         .maybeSingle(),
+      // The Sentry issues this report came from. resolved_at is stamped only
+      // after Sentry answered a resolve (sentry-resolve-back.ts), so the page
+      // can say "resolves when the fix merges" vs "resolved in Sentry".
+      db
+        .from('report_external_issues')
+        .select('external_id, external_url, resolved_at')
+        .eq('report_id', reportId)
+        .eq('project_id', data.project_id as string)
+        .eq('system', 'sentry')
+        .order('created_at', { ascending: true })
+        .limit(10),
     ]);
     // true / false from project_settings; null when unknown (no row, the
     // column not migrated yet, or a failed read), so the page never claims
@@ -861,6 +872,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
           ?? (data as { reporter_user_id?: string | null }).reporter_user_id
           ?? null,
         child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
+        // null on a failed read, so the page never claims "not from Sentry" on a guess.
+        sentry_links: sentryLinksRes.error ? null : (sentryLinksRes.data ?? []),
         tester_submission,
         fix_packet,
         // Phase 1a: backend spans joined by W3C trace_id for trace waterfall display.

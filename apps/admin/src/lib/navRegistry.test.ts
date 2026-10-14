@@ -6,7 +6,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { NAV_REGISTRY, SIMPLE_NAV_GROUPS } from './navRegistry'
+import { NAV_REGISTRY, SIMPLE_NAV_GROUPS, routeSection } from './navRegistry'
+import { buildOperatorNav } from './buildNav'
+import { HOME_HUB } from './pageHubs'
 import { paletteRoutesFor, rankPaletteRoutes } from './searchIndex'
 
 const sidebar = NAV_REGISTRY.filter((e) => e.inSidebar !== false)
@@ -120,5 +122,56 @@ describe('palette role gating (QA #72)', () => {
   it('keeps each page for the role that can open it', () => {
     expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/dashboard?view=growth')
     expect(paths({ isSuperAdmin: true, isOperator: false })).toContain('/users')
+  })
+})
+
+describe('the vibe-coding cycle (ADR 0027)', () => {
+  const sections = buildOperatorNav()
+
+  it('orders the Advanced sections along the cycle', () => {
+    expect(sections.map((s) => s.title)).toEqual([
+      '1 · Connect',
+      '2 · Bugs',
+      '3 · Fix',
+      '4 · Verify',
+      '5 · Ship & watch',
+      'Account',
+    ])
+    expect(sections.map((s) => s.step ?? null)).toEqual([1, 2, 3, 4, 5, null])
+  })
+
+  it('puts each step’s first page where the cycle starts it', () => {
+    const first = (title: string) => sections.find((s) => s.title === title)?.items[0]?.path
+    expect(first('1 · Connect')).toBe('/onboarding')
+    expect(first('2 · Bugs')).toBe('/dashboard')
+    expect(first('3 · Fix')).toBe('/fixes')
+    expect(first('4 · Verify')).toBe('/qa-coverage')
+    expect(first('5 · Ship & watch')).toBe('/portfolio')
+  })
+
+  it('orders the Quick and Beginner groups the same way', () => {
+    expect(SIMPLE_NAV_GROUPS.map((g) => g.title)).toEqual(['Connect', 'Bugs', 'Fix', 'Verify', 'Ship & watch', 'Account'])
+  })
+
+  it('gives a moved page the palette heading of the section it sits in', () => {
+    const group = { start: 'Start', plan: 'Plan', do: 'Do', check: 'Check', act: 'Act', workspace: 'Workspace' } as const
+    for (const e of NAV_REGISTRY) expect(e.paletteGroup, e.path).toBe(group[e.sectionId])
+  })
+
+  it('uses "All apps" for one page only (Home’s view is Overview)', () => {
+    expect(NAV_REGISTRY.filter((e) => e.label === 'All apps').map((e) => e.path)).toEqual(['/portfolio'])
+    expect(HOME_HUB.views.map((v) => v.label)).not.toContain('All apps')
+  })
+})
+
+describe('routeSection (breadcrumb)', () => {
+  it('names the section a page sits in and links to its first page', () => {
+    expect(routeSection('/graph')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/reports/abc')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/integrations/config')).toEqual({ title: '1 · Connect', firstPath: '/onboarding' })
+    expect(routeSection('/judge')?.title).toBe('4 · Verify')
+  })
+  it('returns null outside the sidebar', () => {
+    expect(routeSection('/login')).toBeNull()
   })
 })

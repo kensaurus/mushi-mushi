@@ -35,7 +35,9 @@ function isCspLoadableImageUrl(url: string): boolean {
       host.endsWith('.supabase.co') ||
       host === 'www.google.com' ||
       host.endsWith('.googleusercontent.com') ||
-      host === 'avatars.githubusercontent.com'
+      host === 'avatars.githubusercontent.com' ||
+      // App Store icons (projects.icon_url from _shared/app-icon.ts).
+      host.endsWith('.mzstatic.com')
     )
   } catch {
     return false
@@ -58,7 +60,10 @@ export function ProjectFavicon({
   const chipSize = size + 8
   const label = `${source.project_name} icon`
 
-  const candidates = projectFaviconUrlCandidates({ ...source, icon_url }, Math.max(32, size * 2))
+  // The app's own icon first, then its site favicons: core returns only
+  // icon_url when one is set, so a broken store URL would skip the favicon.
+  const iconFirst = icon_url?.trim() ? [icon_url.trim()] : []
+  const candidates = [...new Set([...iconFirst, ...projectFaviconUrlCandidates(source, Math.max(32, size * 2))])]
     .filter(isCspLoadableImageUrl)
 
   const [candidateIndex, setCandidateIndex] = useState(0)
@@ -104,8 +109,9 @@ export function ProjectFavicon({
       <img
         key={src}
         src={src}
-        width={size}
-        height={size}
+        // An app icon fills its tile; a favicon sits inside it.
+        width={src === iconFirst[0] ? chipSize : size}
+        height={src === iconFirst[0] ? chipSize : size}
         alt={label}
         draggable={false}
         referrerPolicy="no-referrer"

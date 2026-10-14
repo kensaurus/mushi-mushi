@@ -53,7 +53,6 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   Card,
-  ErrorAlert,
   EmptyState,
 } from '../components/ui'
 import { MotionSegmentedControl } from '../components/motion/MotionSegmentedControl'
@@ -65,6 +64,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
+import { PageLoadError } from '../components/PageLoadError'
 
 const BILLING_TABS: Array<{ id: BillingTabId; label: string; description: string }> = [
   {
@@ -250,18 +250,12 @@ export function BillingPage() {
   }
   if (billingQuery.error) {
     return (
-      <ErrorAlert
-        message={`Failed to load billing: ${billingQuery.error}`}
-        onRetry={reloadAll}
-      />
+      <PageLoadError error={billingQuery.error} resource="billing" onRetry={reloadAll} />
     )
   }
   if (statsQuery.error) {
     return (
-      <ErrorAlert
-        message={`Failed to load billing stats: ${statsQuery.error}`}
-        onRetry={reloadAll}
-      />
+      <PageLoadError error={statsQuery.error} resource="billing stats" onRetry={reloadAll} />
     )
   }
 
