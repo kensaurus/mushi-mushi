@@ -19,8 +19,8 @@ import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { mergeGithubPullRequest } from '../../_shared/fix-merge.ts'
-import { resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
-import { checkRuns, connectedRepoRefs, githubJsonHeaders, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
+import type { GithubRepoRef } from '../../_shared/github.ts'
+import { checkRuns, connectedRepoRefs, githubJsonHeaders, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import { summarizeChecks, type PrChecks } from '../../_shared/ux-runs.ts'
 
 const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/
@@ -61,20 +61,23 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const repos = (await connectedRepoRefs(db, projectId)).slice(0, REPOS_READ)
     if (repos.length === 0) return c.json({ ok: true, data: { pullRequests: [], repos: [] } })
-    const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
-    if (!token) return jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see its pull requests.', 409)
+    // Each repo is read with its own App installation; a repo nothing can read is left out.
+    const tokenFor = await repoTokenResolver(db, projectId)
+    const readable = (await Promise.all(repos.map(async (ref) => ({ ref, token: await tokenFor(ref) }))))
+      .filter((r): r is { ref: GithubRepoRef; token: string } => r.token !== null)
+    if (readable.length === 0) return jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see its pull requests.', 409)
     try {
-      const lists = await Promise.all(repos.map((ref) => openPulls(token, ref)))
+      const lists = await Promise.all(readable.map(({ ref, token }) => openPulls(token, ref)))
       const required = new Map<string, Promise<string[]>>()
-      const requiredFor = (ref: GithubRepoRef, base: string) => {
+      const requiredFor = (token: string, ref: GithubRepoRef, base: string) => {
         const key = `${ref.owner}/${ref.repo}#${base}`
         if (!required.has(key)) required.set(key, requiredChecks(token, ref, base))
         return required.get(key)!
       }
       const pullRequests: OpenPullRequest[] = await Promise.all(
-        lists.flatMap(({ ref, pulls }) =>
+        lists.flatMap(({ ref, token, pulls }) =>
           pulls.map(async (p) => {
-            const [req, runs] = await Promise.all([requiredFor(ref, p.base.ref), checkRuns(token, ref, p.head.sha)])
+            const [req, runs] = await Promise.all([requiredFor(token, ref, p.base.ref), checkRuns(token, ref, p.head.sha)])
             return {
               repo: `${ref.owner}/${ref.repo}`,
               number: p.number,
@@ -91,7 +94,7 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
         ),
       )
       pullRequests.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      return c.json({ ok: true, data: { pullRequests, repos: repos.map((r) => `${r.owner}/${r.repo}`) } })
+      return c.json({ ok: true, data: { pullRequests, repos: readable.map(({ ref }) => `${ref.owner}/${ref.repo}`) } })
     } catch (err) {
       return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not answer: ${(err as Error).message.slice(0, 200)}`, 502)
     }
@@ -119,7 +122,7 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     if (!(await connectedRepoRefs(db, projectId)).some((r) => sameRepo(r, ref))) {
       return jsonError(c, 'FORBIDDEN', `${owner}/${repo} is not connected to this project.`, 403)
     }
-    const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
+    const token = await (await repoTokenResolver(db, projectId))(ref)
     if (!token) return jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to merge its pull requests.', 409)
     const pull = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${number}`, { headers: githubJsonHeaders(token), signal: AbortSignal.timeout(10_000) })
       .then(async (r) => (r.ok ? ((await r.json()) as { title?: string; state?: string }) : null))
@@ -150,11 +153,11 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
   })
 }
 
-async function openPulls(token: string, ref: GithubRepoRef): Promise<{ ref: GithubRepoRef; pulls: GithubPull[] }> {
+async function openPulls(token: string, ref: GithubRepoRef): Promise<{ ref: GithubRepoRef; token: string; pulls: GithubPull[] }> {
   const res = await fetch(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls?state=open&sort=updated&direction=desc&per_page=${PRS_PER_REPO}`,
     { headers: githubJsonHeaders(token), signal: AbortSignal.timeout(10_000) },
   )
   if (!res.ok) throw new Error(`${ref.owner}/${ref.repo} pulls ${res.status}`)
-  return { ref, pulls: (await res.json()) as GithubPull[] }
+  return { ref, token, pulls: (await res.json()) as GithubPull[] }
 }
