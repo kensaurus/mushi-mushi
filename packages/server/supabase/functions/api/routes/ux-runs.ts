@@ -23,8 +23,8 @@ import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { mergeGithubPullRequest, parsePrRepoRef } from '../../_shared/fix-merge.ts'
-import { fetchPullRequestDetails, resolveProjectGithubToken, type GithubRepoRef } from '../../_shared/github.ts'
-import { checkRuns, connectedRepoRefs, prTitle, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
+import { fetchPullRequestDetails, type GithubRepoRef } from '../../_shared/github.ts'
+import { checkRuns, connectedRepoRefs, prTitle, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import {
   buildUxLoopReport,
   countStatuses,
@@ -552,7 +552,7 @@ async function prContext(c: Context<{ Variables: Variables }>, opts: { write?: b
   if (!own.some((r) => sameRepo(r, ref))) {
     return { response: jsonError(c, 'FORBIDDEN', `${ref.owner}/${ref.repo} is not connected to this project.`, 403) }
   }
-  const token = await resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
+  const token = await (await repoTokenResolver(db, projectId))(ref)
   if (!token) return { response: jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see and merge its pull requests.', 409) }
   return { userId, projectId, run: row, token, ref, number: row.pr_number }
 }
