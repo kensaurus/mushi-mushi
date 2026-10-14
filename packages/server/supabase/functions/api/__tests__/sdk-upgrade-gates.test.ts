@@ -24,9 +24,9 @@ Deno.test('sdk-upgrade gate — rejects when github_repo_url missing', () => {
   }
 })
 
-Deno.test('sdk-upgrade gate — rejects when github token ref missing', () => {
+Deno.test('sdk-upgrade gate — rejects when neither a token ref nor an App installation exists', () => {
   const result = evaluateSdkUpgradePostGate(
-    { github_repo_url: 'https://github.com/acme/app', github_installation_token_ref: null },
+    { github_repo_url: 'https://github.com/acme/app', github_installation_token_ref: null, github_app_installation_id: null },
     [],
     null,
   )
@@ -35,6 +35,18 @@ Deno.test('sdk-upgrade gate — rejects when github token ref missing', () => {
     assertEquals(result.code, 'GITHUB_TOKEN_MISSING')
     assertEquals(result.status, 400)
   }
+})
+
+// lets-talk on 2026-10-14: the repo has the Mushi GitHub App installed and no
+// stored token. The runner mints from the installation, so the gate must let
+// "Create Upgrade PR" through.
+Deno.test('sdk-upgrade gate — enqueues an App-only project (installation, no stored token)', () => {
+  const result = evaluateSdkUpgradePostGate(
+    { github_repo_url: 'https://github.com/acme/app', github_installation_token_ref: null, github_app_installation_id: 167392430 },
+    [],
+    null,
+  )
+  assertEquals(result.action, 'enqueue')
 })
 
 Deno.test('sdk-upgrade gate — dedupes in-flight queued/running jobs', () => {
