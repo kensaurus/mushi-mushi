@@ -50,8 +50,11 @@ export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
     sameTab: true,
   },
   {
-    id: 'landing-demo',
-    label: 'Try the live demo — no signup',
+    // Was "Try the live demo — no signup" (id landing-demo), but /connect is
+    // the editor picker, not a demo. New id so the funnel counts the new
+    // button on its own.
+    id: 'landing-connect',
+    label: 'Connect your editor',
     href: '/connect',
     kind: 'secondary',
     external: false,
@@ -74,25 +77,49 @@ export const LANDING_SIXTY_SECOND = {
     '50 diagnoses/month on the free tier — no card. Self-host in under five minutes if you want.',
 } as const
 
-/** "Get started in 60 seconds" strip — one command, three steps. */
+/** "Get started in 60 seconds" terminal section (ProofPinSection). The steps moved under the hero. */
 export const LANDING_SIXTY_SECOND_STEPS = {
   heading: 'Get started in 60 seconds',
   cmd: 'npx mushi-mushi',
+} as const
+
+/**
+ * "How it works" strip right under the hero. Three steps, the same cycle the
+ * console sidebar follows (ADR 0027): connect, bugs come in, fix and review.
+ */
+export const LANDING_HOW_IT_WORKS = {
+  heading: 'How it works',
   steps: [
     {
-      title: 'Run one command',
-      desc: 'The wizard detects your framework, installs the SDK, and writes your env vars.',
+      title: 'Install in one click',
+      desc: 'Add Mushi to your editor with a button below, or run npx mushi-mushi in your app. Sign-in happens in your browser; there is no key to paste.',
     },
     {
-      title: 'Send a test report (or ship and wait)',
-      desc: 'When a user hits a bug, the report lands with a plain-English read on the cause.',
+      title: 'Your users report bugs',
+      desc: 'A small widget in your app sends what they saw, with the screenshot, console and network tail. Sentry errors can come in too.',
     },
     {
-      title: 'Pull the fix into your editor',
-      desc: 'Cursor or Claude Code picks it up over MCP — paste the fix, merge, done.',
+      title: 'Mushi diagnoses it and opens a fix you review',
+      desc: 'You get the likely cause in plain English and a ready fix in your editor, or a draft pull request with its checks. You review it and merge.',
     },
   ],
-  footnote: '50 diagnoses/month free — no card. Self-host the whole stack if you prefer.',
+} as const
+
+/**
+ * One-click install row under the steps. Every editor button installs the
+ * hosted server URL only (`buildOAuthInstall`), so the editor runs the Mushi
+ * sign-in on first use; a static key header would switch that sign-in off.
+ */
+export const LANDING_ONE_CLICK = {
+  heading: 'Add Mushi to your editor',
+  note: 'No key to paste. The first time your editor calls Mushi, your browser opens Mushi to sign in (or sign up free), then you choose which apps it can reach.',
+  cursorAlt: 'Add Mushi to Cursor',
+  vscodeLabel: 'Install in VS Code',
+  claudeLabel: 'Claude Code',
+  npxLabel: 'Add the bug widget to your app',
+  npxCmd: 'npx mushi-mushi',
+  moreLabel: 'Windsurf, Zed and more editors',
+  moreHref: '/connect',
 } as const
 
 /** Landing FAQ — visible Q&A doubles as FAQPage JSON-LD (answers stay plain text). */

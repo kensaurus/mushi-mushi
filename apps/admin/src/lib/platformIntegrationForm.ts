@@ -6,7 +6,7 @@
  *          string in the form and a string array on the wire.
  */
 
-import type { PlatformDef } from '../components/integrations/types'
+import type { FieldSource, PlatformDef } from '../components/integrations/types'
 
 /**
  * "a, b  c,,b" → ["a", "b", "c"] (trimmed, deduped, order kept).
@@ -86,4 +86,21 @@ export function sentryProjectsFromConfig(config: Record<string, unknown>): strin
     ? config.sentry_extra_project_slugs.filter((s): s is string => typeof s === 'string')
     : []
   return [...new Set([primary, ...extra].map((s) => s.trim()).filter(Boolean))]
+}
+
+/**
+ * True when every required field is set: on the project, or filled by the
+ * resolver from org defaults or an environment variable. The Sentry card and
+ * the Bugs page's "Import from Sentry" panel share this test.
+ */
+export function platformRequiredOk(
+  def: Pick<PlatformDef, 'fields'>,
+  config: Record<string, unknown>,
+  sourceByField?: Record<string, FieldSource>,
+): boolean {
+  return def.fields.filter((f) => f.required).every((f) => {
+    if (config[f.name] != null) return true
+    const src = sourceByField?.[f.name]
+    return src === 'org' || src === 'env'
+  })
 }

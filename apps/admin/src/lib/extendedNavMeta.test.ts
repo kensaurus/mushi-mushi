@@ -15,6 +15,10 @@ import {
   mcpNavBadge,
   costsNavBadge,
   doSectionAttention,
+  startSectionAttention,
+  planSectionAttention,
+  actSectionAttention,
+  workspaceSlicesAttention,
   usersNavBadge,
 } from './extendedNavMeta'
 import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
@@ -161,7 +165,7 @@ describe('codeHealthNavBadge', () => {
 })
 
 describe('checkSectionAttention, content checks', () => {
-  it('rolls up content QA attention under Quality & health, where Content checks lives', () => {
+  it('rolls up content QA attention under 4 · Verify, where Content checks lives', () => {
     const result = checkSectionAttention({
       ...EMPTY_NAV_STAT_SLICES,
       contentQuality: {
@@ -252,5 +256,41 @@ describe('usersNavBadge', () => {
     const badge = usersNavBadge({ signups7d: 5, churn30d: 0 })
     expect(badge?.mode).toBe('inventory')
     expect(badge?.count).toBe(5)
+  })
+})
+
+// ADR 0027: a section badge counts the pages that sit in that section, so a
+// moved page takes its count with it and nothing is counted twice.
+describe('section rollups follow the cycle', () => {
+  const mcp = {
+    mcpReadKeyCount: 1,
+    neverConnectedCount: 0,
+    endpointMismatch: true,
+    reportOnlyKeyCount: 0,
+    topPriority: 'endpoint_mismatch',
+  }
+
+  it('counts editor agents (MCP) under 1 · Connect, not 5 · Ship & watch', () => {
+    const slices = { ...EMPTY_NAV_STAT_SLICES, mcp }
+    expect(startSectionAttention(slices)).toMatchObject({ tone: 'danger', label: expect.stringMatching(/MCP/) })
+    expect(actSectionAttention(slices)).toBeNull()
+  })
+
+  it('counts Home under 2 · Bugs and no longer under 1 · Connect', () => {
+    const slices = {
+      ...EMPTY_NAV_STAT_SLICES,
+      dashboard: { openBacklog: 0, fixesFailed: 0, fixesInProgress: 0, integrationIssues: 3, topPriority: 'integrations' as const },
+    }
+    expect(planSectionAttention(slices)?.count).toBe(3)
+    expect(startSectionAttention(slices)).toBeNull()
+  })
+
+  it('counts plugins under Account', () => {
+    const slices = {
+      ...EMPTY_NAV_STAT_SLICES,
+      marketplace: { failingPlugins: 2, neverDeliveredPlugins: 0, installedActive: 3, deliveriesFailed: 0, topPriority: 'failing' },
+    }
+    expect(workspaceSlicesAttention(slices)).toMatchObject({ count: 2, tone: 'danger' })
+    expect(actSectionAttention(slices)).toBeNull()
   })
 })

@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Install proof terminal — once-in-view line stagger (native scroll).
+ * Install proof terminal — once-in-view line stagger (native scroll). The
+ * three steps live in LandingInstallStrip under the hero now.
  */
 import { LANDING_SIXTY_SECOND, LANDING_SIXTY_SECOND_STEPS } from '@/lib/landing-copy'
 import { LandingStagger, LandingStaggerItem } from './landing-stagger'
@@ -29,21 +30,6 @@ export function ProofPinSection() {
         <p className="landing-section-lead">
           {LANDING_SIXTY_SECOND.intro} {LANDING_SIXTY_SECOND.afterBreak}
         </p>
-      </LandingStaggerItem>
-
-      <LandingStaggerItem>
-        <ol className="docs-pillars not-prose" aria-label="Get started steps">
-          {LANDING_SIXTY_SECOND_STEPS.steps.map((step, i) => (
-            <li key={step.title} className="docs-pillar">
-              <span className="docs-pillar__step">{`Step ${i + 1}`}</span>
-              <span className="docs-pillar__name">{step.title}</span>
-              <span className="docs-pillar__role">{step.desc}</span>
-              {i < LANDING_SIXTY_SECOND_STEPS.steps.length - 1 ? (
-                <span className="docs-pillar__connector" aria-hidden="true" />
-              ) : null}
-            </li>
-          ))}
-        </ol>
       </LandingStaggerItem>
 
       <div className="landing-proof-terminal">

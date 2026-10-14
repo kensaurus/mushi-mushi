@@ -3,7 +3,7 @@
  * PURPOSE: Pages that did one job from several angles are views of one page
  *          now (Plan 021 Phase 3, owner 2026-10-06), switched with `?view=`:
  *
- *            Home (/dashboard)  — Today, All apps, User activity, Users & funnels, Weekly insights, Growth
+ *            Home (/dashboard)  — Today, Overview, User activity, Users & funnels, Weekly insights, Growth
  *            App health (/health) — AI & jobs, Code size, Schema changes, Unusual spikes
  *            Team (/team)       — Members, Billing, AI spend, Audit log, Single sign-on, Compliance, Storage
  *
@@ -34,7 +34,7 @@ export const HOME_HUB: PageHub = {
   title: 'Home view',
   views: [
     { id: 'today', label: 'Today', legacyPath: null },
-    { id: 'apps', label: 'All apps', legacyPath: '/overview' },
+    { id: 'apps', label: 'Overview', legacyPath: '/overview' },
     { id: 'users', label: 'User activity', legacyPath: '/activity' },
     { id: 'funnels', label: 'Users & funnels', legacyPath: '/analytics' },
     { id: 'insights', label: 'Weekly insights', legacyPath: '/intelligence' },

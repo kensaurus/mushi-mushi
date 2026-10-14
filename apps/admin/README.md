@@ -339,22 +339,20 @@ Pure, dependency-free string utilities. Use these instead of inline `count === 1
 - `pluralize(count, single, plural?)` — picks the right form, falling back to `${single}s` for regular plurals
 - `pluralizeWithCount(count, single, plural?)` — `2 reports`, `1 fix`, `0 attempts`
 
-## Information architecture (PDCA loop)
+## Information architecture (the vibe-coding cycle)
 
-The sidebar (`src/components/Layout.tsx`) groups admin pages into the Plan → Do → Check → Act loop. Navigation metadata is centralized in [`src/lib/navRegistry.ts`](./src/lib/navRegistry.ts) and built via [`src/lib/buildNav.ts`](./src/lib/buildNav.ts) so sidebar labels, PDCA stage chips, and command-palette entries stay in sync.
+The sidebar (`src/components/Layout.tsx`) follows the order a builder works in (ADR 0027, [`docs/adr/0027-console-nav-follows-the-vibe-coding-cycle.md`](../../docs/adr/0027-console-nav-follows-the-vibe-coding-cycle.md)). Navigation metadata is centralized in [`src/lib/navRegistry.ts`](./src/lib/navRegistry.ts) and built via [`src/lib/buildNav.ts`](./src/lib/buildNav.ts), so sidebar labels, stage chips, section badges and command-palette entries stay in sync.
 
-**June 2026** added **Connect & Update** (`/connect`) under **Start here** only — the single hub for GitHub, SDK install, MCP deeplinks, CLI copy, and **Create Upgrade PR** (see [`ConnectPage.tsx`](./src/pages/ConnectPage.tsx), [`SdkUpgradeCTA`](./src/components/SdkUpgradeCTA.tsx), [`McpInstallButtons`](./src/components/McpInstallButtons.tsx)).
+Advanced mode shows every page under five numbered steps, then Account:
 
-The sidebar groups the 24+ admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
+- **1 · Connect** — Set up, Connect (SDK, MCP deeplinks, CLI, Create Upgrade PR), Integrations, Editor agents, Agent skills
+- **2 · Bugs** — Home, To-do, Bugs, Bug clusters, Voice reports, Spam & abuse. To-do is reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere
+- **3 · Fix** — Fixes, Pull requests, Code map, UX runs, Improvement runs
+- **4 · Verify** — two sub-groups: *App checks* (Scheduled tests, User stories, Full-stack audit, App blueprint, App health, Design system, Content checks) and *AI quality* (Triage grading, Lessons, AI prompts). `/health?hub=check` lists the same two groups
+- **5 · Ship & watch** — All apps, Releases, Reporter updates, Experiments, Research
+- **Account** (outside the cycle) — Settings, Team, Manage apps, Plugins, Processing jobs, Tester rewards, SQL query, All users (super-admin), Help & support, Feature requests
 
-- **Start here** — `Get started`, **`Connect & Update`**, `Dashboard`, **`Action Inbox`**, `Support`, `Feature board`. The **Action Inbox** is pinned in Start so Advanced-mode users land on a single "what should I do next?" surface. Reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere (SPA-nav so the toast queue, scroll, and focus survive the jump)
-- **Plan — capture & classify** — `Reports`, `Graph`, `Explore`, `Content QA`, `User stories` (Advanced), `Failed events` (DLQ), `Anti-Gaming`
-- **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
-- **Check — verify quality** — In **Advanced** mode, three collapsible sub-groups: *Quality gates* (Judge, QA Coverage, Full-Stack Audit, Lessons), *System health* (Health, Code Health, Drift, Anomalies), *Release & intel* (Releases, Intelligence, Research, Experiments). **Beginner** mode shows Judge, Health, and QA Coverage plus a link to the verification hub on `/health?hub=check`
-- **Act — integrate & scale** — `Iterate`, `Skill Pipelines`, `Integrations`, `MCP`, `Marketplace`, `Alert routing` (Notifications) — standardise verified fixes back into the upstream tools your team already lives in
-- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `Rewards`, `LLM Cost`, `Billing`, `SSO`, `Compliance`, `Audit Log`, `Storage`, `Query`, `Users` (super-admin)
-
-`SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.
+Quick and Beginner modes show fewer pages under the same steps (Connect, Bugs, Fix, Verify in Beginner only, Ship & watch, Account). The collapsed rail shows each step's number. The six section ids (`start`, `plan`, `do`, `check`, `act`, `workspace`) did not change, so the PDCA stage chips still map Bugs → Plan, Fix → Do, Verify → Check and Ship & watch → Act.
 
 The global header (desktop + mobile) mounts an **`OrgSwitcher`**, **`ProjectSwitcher`**, and **`PlanBadge`**. `OrgSwitcher` persists `mushi:active_org_id` and sends `X-Mushi-Org-Id` through `apiFetch`; `ProjectSwitcher` keeps project focus with `X-Mushi-Project-Id`; `PlanBadge` deep-links to `/billing`. Together they make the team → project → plan context explicit before any page data loads.
 

@@ -59,6 +59,20 @@ describe('sentryConnection (finding B25)', () => {
     expect(v.detail).toMatch(/^Connected — waiting for the first event/)
   })
 
+  it('with automatic import on, says it is importing instead of demanding a webhook', () => {
+    const v = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: null,
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: RECENT },
+      now: NOW,
+    })
+    // Still attention: the server banner counts only alerts, and the two must agree.
+    expect(v.state).toBe('attention')
+    expect(v.detail).toMatch(/^Connected — importing new Sentry issues automatically \(last run/)
+  })
+
   it('an accepted event makes it working; a rejected one needs attention', () => {
     expect(
       sentryConnection({

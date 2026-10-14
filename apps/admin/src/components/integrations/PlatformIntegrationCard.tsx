@@ -27,7 +27,7 @@ import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
-import { projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
+import { platformRequiredOk, projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -211,11 +211,7 @@ export function PlatformIntegrationCard({
 
   // A required field is "ok" if config has a non-null value OR the resolver
   // filled it from org defaults or an environment variable.
-  const requiredOk = def.fields.filter((f) => f.required).every((f) => {
-    if (config[f.name] != null) return true
-    const src = sourceByField?.[f.name]
-    return src === 'org' || src === 'env'
-  })
+  const requiredOk = platformRequiredOk(def, config, sourceByField)
 
   // Overflow actions: copying needs a full set of credentials; removing needs
   // a secret this project stores itself (an inherited org/env value is not
@@ -242,6 +238,10 @@ export function PlatformIntegrationCard({
         latestDelivery,
         deliveriesLoaded: deliveries.data != null,
         deliveriesFailed: Boolean(deliveries.error),
+        autoImport: {
+          enabled: config.sentry_auto_import === true,
+          lastRunAt: typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null,
+        },
       })
     : connectionFromProbe({ configured: requiredOk, probe: latestProbe })
   const probeFailing = latestProbe?.status === 'down' || latestProbe?.status === 'degraded'

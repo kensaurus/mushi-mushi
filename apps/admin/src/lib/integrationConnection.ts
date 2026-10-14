@@ -133,6 +133,13 @@ export function sentryConnection(input: {
   deliveriesLoaded: boolean
   /** True when the deliveries request failed (not just pending). */
   deliveriesFailed?: boolean
+  /**
+   * The card's "Import new Sentry issues automatically" toggle (polling, no
+   * webhook). It changes what the waiting state tells you to do; the state
+   * itself stays "attention" until an alert arrives, as the server's
+   * classifyPlatformConnection counts it, so the banner and card agree.
+   */
+  autoImport?: { enabled: boolean; lastRunAt: string | null }
   now?: number
 }): ConnectionView {
   const api = connectionFromProbe({ configured: input.configured, probe: input.probe, now: input.now })
@@ -144,9 +151,18 @@ export function sentryConnection(input: {
   }
   const d = input.latestDelivery
   if (!d) {
+    const auto = input.autoImport
+    if (auto?.enabled) {
+      return {
+        state: 'attention',
+        detail: auto.lastRunAt
+          ? `Connected — importing new Sentry issues automatically (last run ${formatRelative(auto.lastRunAt)}). For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.`
+          : 'Connected — importing new Sentry issues automatically; the first run is due soon. For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.',
+      }
+    }
     return {
       state: 'attention',
-      detail: 'Connected — waiting for the first event. Add the receive URL below as a webhook in a Sentry alert rule, then send a test alert.',
+      detail: 'Connected — waiting for the first event. Turn on "Import new Sentry issues automatically" below (no webhook needed), or add the receive URL below as a webhook in a Sentry alert rule.',
     }
   }
   if (d.outcome !== 'accepted') {
