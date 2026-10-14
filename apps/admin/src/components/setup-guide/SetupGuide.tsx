@@ -32,6 +32,7 @@ import { useProjectSnapshots } from '../../lib/useProjectSnapshots'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { buildSetupGuideModel } from '../../lib/setupGuideSteps'
 import {
+  isNarrowViewport,
   resolveSetupGuideView,
   shouldSuppressAutoExpand,
   useSetupGuideView,
@@ -69,7 +70,7 @@ export function SetupGuide() {
 
   const view = resolveSetupGuideView(storedView, {
     requiredComplete: model.allRequiredDone,
-    suppressAutoExpand: shouldSuppressAutoExpand(pathname),
+    suppressAutoExpand: shouldSuppressAutoExpand(pathname, isNarrowViewport()),
   })
 
   // While the guide is on screen and the first report is still outstanding,
