@@ -396,3 +396,135 @@ describe('history patch (SPA page views)', () => {
     destroySessionTracker();
   });
 });
+
+// ─── Cadence: how many POSTs a reading session costs ─────────────────────────
+//
+// The Wanting Mind audit (2026-10-15) saw about 10 POST /v1/sdk/session in one
+// minute of reading. The web SDK reports every pushState / popstate as a page
+// view (mushi.ts wires subscribeHistory → trackPageView()), and TWM's sheets
+// push a history entry on open and go back on close, on the same pathname.
+// The server strips query and hash, so those were duplicate page views of the
+// route already being read. Tab switches added a session_end each, and
+// heartbeats kept firing while the tab was hidden.
+
+describe('session cadence while reading', () => {
+  type Sent = { kind: string; ts: string; route?: string | null; page_view_count?: number };
+  const sent = (client: MushiApiClient): Sent[] =>
+    (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls.map(([p]: [Sent]) => p);
+  const byKind = (events: Sent[]) =>
+    events.reduce<Record<string, number>>((acc, e) => ({ ...acc, [e.kind]: (acc[e.kind] ?? 0) + 1 }), {});
+
+  function setVisibility(state: 'visible' | 'hidden') {
+    Object.defineProperty(document, 'visibilityState', { value: state, writable: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-15T09:00:00.000Z'));
+    history.replaceState({}, '', '/en/ch-1');
+  });
+
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true });
+    history.replaceState({}, '', '/');
+    vi.useRealTimers();
+  });
+
+  /** One minute on a chapter: three sheets opened and closed, a footnote jump, one tab switch. */
+  function readOneMinute(trackPageView: (route?: string) => void) {
+    for (const sheet of ['toc', 'search', 'settings']) {
+      vi.advanceTimersByTime(5_000);
+      history.pushState({ sheet }, ''); // sheet opens: same pathname
+      trackPageView();
+      vi.advanceTimersByTime(5_000);
+      trackPageView(); // closes via history.back(): popstate, same pathname
+    }
+    vi.advanceTimersByTime(5_000);
+    history.pushState({}, '', '/en/ch-1#fn-3'); // footnote jump
+    trackPageView();
+    vi.advanceTimersByTime(5_000);
+    setVisibility('hidden');
+    vi.advanceTimersByTime(5_000);
+    setVisibility('visible');
+    vi.advanceTimersByTime(15_000); // t = 60s
+  }
+
+  it('one minute of reading costs at most 3 requests, not 10', async () => {
+    const { initSessionTracker, trackPageView, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    readOneMinute(trackPageView);
+
+    // Before the fix this was { session_start: 1, page_view: 7, session_end: 1, session_heartbeat: 1 } = 10.
+    expect(byKind(sent(client))).toEqual({ session_start: 1, session_end: 1 });
+    destroySessionTracker();
+  });
+
+  it('ten idle minutes send one heartbeat a minute, so last_seen_at never lags by more than 60s', async () => {
+    const { initSessionTracker, trackPageView, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    readOneMinute(trackPageView);
+    vi.advanceTimersByTime(9 * 60_000); // t = 10 min, tab visible throughout
+
+    const events = sent(client);
+    const visibleGaps = events
+      .slice(1)
+      .map((e, i) => ({ gap: Date.parse(e.ts) - Date.parse(events[i].ts), after: events[i].kind }))
+      .filter((g) => g.after !== 'session_end'); // a hidden tab legitimately goes quiet
+    expect(Math.max(...visibleGaps.map((g) => g.gap))).toBeLessThanOrEqual(60_000);
+    expect(byKind(events).session_heartbeat).toBeLessThanOrEqual(10);
+    destroySessionTracker();
+  });
+
+  it('a hidden tab sends no heartbeats, and one session_end however it is left', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    setVisibility('hidden');
+    vi.advanceTimersByTime(10 * 60_000);
+    window.dispatchEvent(new Event('pagehide')); // closing a hidden tab
+
+    expect(byKind(sent(client))).toEqual({ session_start: 1, session_end: 1 });
+    destroySessionTracker();
+  });
+
+  it('a heartbeat follows 60s after the tab comes back, and the next hide ends the session again', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    setVisibility('hidden');
+    vi.advanceTimersByTime(120_000);
+    setVisibility('visible');
+    vi.advanceTimersByTime(60_000);
+    setVisibility('hidden');
+
+    // The server stores the latest session_end as ended_at, so the session's
+    // duration runs to the last hide (09:03:00), not the first.
+    const events = sent(client);
+    expect(events.map((e) => e.kind)).toEqual(['session_start', 'session_end', 'session_heartbeat', 'session_end']);
+    expect(events[3].ts).toBe('2026-10-15T09:03:00.000Z');
+    destroySessionTracker();
+  });
+
+  it('still records every real route change, including a return to an earlier route', async () => {
+    const { initSessionTracker, trackPageView, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    for (const route of ['/en/ch-2', '/en/ch-2', '/en/ch-1']) {
+      history.pushState({}, '', route);
+      trackPageView();
+    }
+
+    const views = sent(client).filter((e) => e.kind === 'page_view');
+    expect(views.map((v) => [v.route, v.page_view_count])).toEqual([['/en/ch-2', 2], ['/en/ch-1', 3]]);
+    destroySessionTracker();
+  });
+});
