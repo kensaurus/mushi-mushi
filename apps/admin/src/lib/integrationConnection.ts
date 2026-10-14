@@ -176,3 +176,13 @@ export function sentryConnection(input: {
   }
   return { state: 'working', detail: `Last event received ${formatRelative(d.created_at)}` }
 }
+
+/**
+ * True when the latest Sentry delivery was rejected because this project has
+ * no webhook secret (sentry-webhook-verify.ts NO_SECRET): Sentry is sending,
+ * and every alert is dropped until a secret is saved or polling takes over.
+ */
+export function isMissingSentrySecret(delivery: InboundDeliveryLike | null | undefined): boolean {
+  if (!delivery || delivery.outcome === 'accepted') return false
+  return /secret not configured/i.test(delivery.error_message ?? '')
+}

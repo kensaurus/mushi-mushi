@@ -45,6 +45,9 @@ import type {
   SdkSkewEntry,
 } from '../../_shared/portfolio-types.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
+import { iconsDue, isStoreIconUrl, refreshAppIcons } from '../../_shared/app-icon.ts'
+import { runInBackground } from '../../_shared/background.ts'
+import { publicFetch } from '../../_shared/safe-fetch.ts'
 import { filterToGroup } from '../../_shared/project-groups.ts'
 import { RECIPE_ELEMENT_KEYS, type ElementState, type RecipeElementKey } from '../../_shared/recipe-types.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
@@ -67,6 +70,12 @@ export interface PortfolioRouteDeps {
   adminOrApiKeyRead: MiddlewareHandler
   compose: ComposeDeps
   composeRecipe: typeof composeRecipe
+  /**
+   * Look up the store icons of projects whose icon is missing or stale. Runs
+   * after the response (never delays the page); the next load shows them.
+   * Optional so tests and callers without network skip it.
+   */
+  refreshIcons?: (db: Db, projectIds: string[], now: Date) => void
 }
 
 export const defaultPortfolioDeps: PortfolioRouteDeps = {
@@ -74,6 +83,11 @@ export const defaultPortfolioDeps: PortfolioRouteDeps = {
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   compose: defaultRecipeDeps,
   composeRecipe,
+  refreshIcons: (db, projectIds, now) =>
+    runInBackground(
+      refreshAppIcons(db as never, projectIds, (url) => publicFetch(url), now),
+      'portfolio-app-icons',
+    ),
 }
 
 type Access =
@@ -159,6 +173,8 @@ interface ProjectRow {
   id: string
   name: string | null
   slug: string | null
+  icon_url: string | null
+  icon_checked_at: string | null
 }
 
 interface RunRow {
@@ -526,7 +542,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
     const read = await readAllPages<ProjectRow>(
       (from, to, count) => db
         .from('projects')
-        .select('id, name, slug', { count })
+        .select('id, name, slug, icon_url, icon_checked_at', { count })
         .in('id', sorted)
         .order('id', { ascending: true })
         .range(from, to),
@@ -564,6 +580,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       projectId: p.id,
       name: p.name ?? p.slug ?? p.id,
       slug: p.slug,
+      iconUrl: isStoreIconUrl(p.icon_url) ? p.icon_url : null,
       kind: kind.kind,
       kindSource: kind.source,
       openReports: openReports.get(p.id) ?? 0,
@@ -583,6 +600,10 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its Recipe page for detail.', needsLook: [] }
     }
   })
+
+  // Icons this page shows that are missing or a week old: refresh after the response.
+  const due = iconsDue(pageProjects, now)
+  if (due.length > 0 && deps.refreshIcons) deps.refreshIcons(db, due, now)
 
   return {
     organizationId: orgId,
