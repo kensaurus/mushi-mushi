@@ -331,6 +331,24 @@ describe('resolveSetupGuideView', () => {
     expect(shouldSuppressAutoExpand('/reports')).toBe(false)
   })
 
+  it('never auto-opens on a phone-width viewport, on any route', () => {
+    expect(shouldSuppressAutoExpand('/dashboard', true)).toBe(true)
+    expect(shouldSuppressAutoExpand('/reports', true)).toBe(true)
+    expect(
+      resolveSetupGuideView(null, {
+        requiredComplete: false,
+        suppressAutoExpand: shouldSuppressAutoExpand('/dashboard', true),
+      }),
+    ).toBe('minimized')
+    // The user's own choice still wins on a phone.
+    expect(
+      resolveSetupGuideView('expanded', {
+        requiredComplete: false,
+        suppressAutoExpand: shouldSuppressAutoExpand('/dashboard', true),
+      }),
+    ).toBe('expanded')
+  })
+
   it('opens on the dashboard for a first-time user with unfinished required setup', () => {
     expect(
       resolveSetupGuideView(null, {
