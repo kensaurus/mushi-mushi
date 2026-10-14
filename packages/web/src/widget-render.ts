@@ -268,16 +268,34 @@ function intentOptions(ctx: WidgetRenderCtx): string[] {
   return list.slice(0, -1).slice(0, 4);
 }
 
+/**
+ * The report-type chip ids, merged by id. Built-ins (and Idea) come first; a
+ * host category whose id matches one of them overrides that slot in place
+ * (chipLabel shows its label), so it is not listed again. The rest are the
+ * host's own types, behind "More…", in first-seen order (the first definition
+ * of an id wins, as resolveCustomCategory's `find` does).
+ */
+function reportTypeIds(config: WidgetRenderCtx['config']): { primary: string[]; more: string[] } {
+  const primary: string[] = [...BUILTIN_CHIPS];
+  if (config.featureRequestCard !== false) primary.push('idea');
+  const seen = new Set(primary);
+  const more: string[] = [];
+  for (const { id } of config.categories ?? []) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    more.push(id);
+  }
+  return { primary, more };
+}
+
 function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const t = ctx.locale;
   const p = t.panel;
   const s3 = t.step3;
-  const ids: string[] = [...BUILTIN_CHIPS];
-  if (ctx.config.featureRequestCard !== false) ids.push('idea');
-  const custom = ctx.config.categories ?? [];
-  if (ctx.showAllCategories) ids.push(...custom.map((c) => c.id));
+  const { primary, more: extra } = reportTypeIds(ctx.config);
+  const ids = ctx.showAllCategories ? [...primary, ...extra] : primary;
   const chips = ids.map((id, i) => chip(ctx, id, i, ids.includes(ctx.chip ?? '') ? ctx.chip : null)).join('');
-  const more = custom.length && !ctx.showAllCategories ? btn('show-all-categories', esc(p.more), 'mushi-chip mushi-chip-more') : '';
+  const more = extra.length && !ctx.showAllCategories ? btn('show-all-categories', esc(p.more), 'mushi-chip mushi-chip-more') : '';
   const intents = intentOptions(ctx);
   const intentRow = intents.length
     ? `<div class="mushi-chips mushi-intents" role="radiogroup" aria-label="${esc(chipLabel(ctx, ctx.chip!))}">${intents

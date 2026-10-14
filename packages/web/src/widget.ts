@@ -757,17 +757,25 @@ export class MushiWidget {
   /* ── Host chrome contract ────────────────────────────────────────────────
      The host element must never create an invisible full-screen touch blocker.
      We own these inline styles; only the shadow internals opt back into
-     pointer events. Idempotent. */
+     pointer events. Idempotent.
+
+     The host must not form a stacking context either. A `position: fixed`
+     element always does, and so does any positioned element with a z-index;
+     either one ranks every surface inside the shadow root at the host's
+     level, so `bannerConfig.zIndex` could never put the banner under the
+     host app's own sheets. The host is an absolute 0×0 box with
+     `z-index: auto`, and the trigger, panel, toast and banner each carry
+     their own z-index, which is then compared directly with the page's. */
   private syncHostChromeState(): void {
     const s = this.host.style;
-    s.setProperty('position', 'fixed');
+    s.setProperty('position', 'absolute');
     s.setProperty('top', '0');
     s.setProperty('left', '0');
     s.setProperty('width', '0');
     s.setProperty('height', '0');
     s.setProperty('overflow', 'visible');
     s.setProperty('pointer-events', 'none');
-    s.setProperty('z-index', String(this.config.zIndex));
+    s.setProperty('z-index', 'auto');
     s.setProperty('margin', '0');
     s.setProperty('padding', '0');
     s.setProperty('border', 'none');

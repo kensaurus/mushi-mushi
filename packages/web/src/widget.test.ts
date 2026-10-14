@@ -227,18 +227,58 @@ describe('MushiWidget host element — pass-through contract', () => {
     expect(() => getHost(w)).not.toThrow();
   });
 
-  it('host z-index matches configured zIndex', () => {
+  // A `position: fixed` element always forms a stacking context, and a
+  // z-indexed positioned one does too. If the host is either, every surface
+  // inside the shadow root ranks inside the host's layer, so a host app's
+  // `bannerConfig.zIndex: 130` can never sit under its own z-200 sheet.
+  function formsStackingContext(el: HTMLElement): boolean {
+    const s = getComputedStyle(el);
+    if (s.position === 'fixed' || s.position === 'sticky') return true;
+    if (s.position !== 'static' && s.position !== '' && s.zIndex !== '' && s.zIndex !== 'auto') return true;
+    return false;
+  }
+
+  it('host does not form a stacking context, so each surface stacks in the page', () => {
     const w = new MushiWidget({ zIndex: 1234 }, noopCallbacks);
     w.mount();
-    expect(getHost(w).style.zIndex).toBe('1234');
+    expect(formsStackingContext(getHost(w))).toBe(false);
     w.destroy();
   });
 
-  it('host z-index updates when updateConfig changes zIndex', () => {
+  it('host stays out of the stacking order after updateConfig changes zIndex', () => {
     const w = new MushiWidget({ zIndex: 1000 }, noopCallbacks);
     w.mount();
     w.updateConfig({ zIndex: 2000 });
-    expect(getHost(w).style.zIndex).toBe('2000');
+    expect(formsStackingContext(getHost(w))).toBe(false);
+    w.destroy();
+  });
+
+  it('banner ranks at the host-provided bannerConfig.zIndex in the page stacking order', () => {
+    // The Wanting Mind sets 130 so its own TOC / Search / Settings sheets
+    // (and their Close buttons) stack above the lime strip.
+    const w = new MushiWidget({ trigger: 'banner', bannerConfig: { zIndex: 130 } }, noopCallbacks);
+    w.mount();
+    const shadow = (w as unknown as { shadow: ShadowRoot }).shadow;
+    const banner = shadow.querySelector('.mushi-banner') as HTMLElement;
+    expect(banner.style.getPropertyValue('--mushi-banner-z')).toBe('130');
+    // Walk up across the shadow boundary to <html>: no ancestor may cap it.
+    let node: Node | null = banner.parentNode;
+    while (node) {
+      const el = node instanceof ShadowRoot ? node.host : node;
+      if (el instanceof HTMLElement && el !== document.documentElement) {
+        expect(formsStackingContext(el), `${el.tagName}#${el.id} caps the banner`).toBe(false);
+      }
+      node = node instanceof ShadowRoot ? node.host.parentNode : el.parentNode;
+    }
+    w.destroy();
+  });
+
+  it('launcher and panel keep their own page-level z-index above content', () => {
+    const w = new MushiWidget({ zIndex: 5000 }, noopCallbacks);
+    w.mount();
+    const shadow = (w as unknown as { shadow: ShadowRoot }).shadow;
+    expect((shadow.querySelector('.mushi-trigger') as HTMLElement).style.zIndex).toBe('5000');
+    expect((shadow.querySelector('.mushi-panel') as HTMLElement).style.zIndex).toBe('5001');
     w.destroy();
   });
 
@@ -597,6 +637,61 @@ describe('MushiWidget progressive disclosure — host categories', () => {
     w.close();
     w.open();
     expect(getShadow(w).querySelector('[data-category="billing"]')).toBeNull();
+    w.destroy();
+  });
+
+  // The Wanting Mind's categories reuse the built-in ids `slow`, `visual` and
+  // `confusing` to relabel them. Appending them after the built-ins showed
+  // "App feels slow", "Visual / layout issue" and "Hard to understand" twice.
+  const TWM_LIKE = [
+    { id: 'broken', label: "Something's broken", baseCategory: 'bug' as const },
+    { id: 'slow', label: 'App feels slow', baseCategory: 'slow' as const },
+    { id: 'visual', label: 'Visual / layout issue', baseCategory: 'visual' as const },
+    { id: 'confusing', label: 'Hard to understand', baseCategory: 'confusing' as const },
+    { id: 'general', label: 'General feedback' },
+  ];
+  const chipLabels = (w: MushiWidget) =>
+    [...getShadow(w).querySelectorAll('.mushi-chip[data-action="chip"]')].map((b) => b.textContent);
+
+  it('a host category with a built-in id relabels that chip in place, never twice', () => {
+    const w = new MushiWidget({ categories: TWM_LIKE }, noopCallbacks);
+    w.mount();
+    w.open();
+    // Before More…: the built-in slots already carry the host labels.
+    expect(getShadow(w).querySelectorAll('[data-category="slow"]')).toHaveLength(1);
+    expect(getShadow(w).querySelector('[data-category="slow"]')?.textContent).toBe('App feels slow');
+    (getShadow(w).querySelector('[data-action="show-all-categories"]') as HTMLElement).click();
+    const labels = chipLabels(w);
+    expect(labels.length).toBe(new Set(labels).size);
+    for (const id of ['slow', 'visual', 'confusing', 'broken', 'general']) {
+      expect(getShadow(w).querySelectorAll(`[data-category="${id}"]`), id).toHaveLength(1);
+    }
+    // Picking one checks exactly one chip.
+    (getShadow(w).querySelector('[data-category="slow"]') as HTMLElement).click();
+    expect(getShadow(w).querySelectorAll('[data-category="slow"][aria-checked="true"]')).toHaveLength(1);
+    w.destroy();
+  });
+
+  it('hides More… when every host category overrides a built-in chip', () => {
+    const w = new MushiWidget({ categories: TWM_LIKE.slice(1, 4) }, noopCallbacks);
+    w.mount();
+    w.open();
+    expect(getShadow(w).querySelector('[data-action="show-all-categories"]')).toBeNull();
+    expect(chipLabels(w)).toContain('Visual / layout issue');
+    w.destroy();
+  });
+
+  it('a category id the host lists twice renders once, with its first definition', () => {
+    const w = new MushiWidget(
+      { categories: [{ id: 'billing', label: 'Billing' }, { id: 'billing', label: 'Billing again' }] },
+      noopCallbacks,
+    );
+    w.mount();
+    w.open();
+    (getShadow(w).querySelector('[data-action="show-all-categories"]') as HTMLElement).click();
+    const billing = getShadow(w).querySelectorAll('[data-category="billing"]');
+    expect(billing).toHaveLength(1);
+    expect(billing[0].textContent).toBe('Billing');
     w.destroy();
   });
 });
