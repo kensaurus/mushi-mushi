@@ -527,4 +527,20 @@ describe('session cadence while reading', () => {
     expect(views.map((v) => [v.route, v.page_view_count])).toEqual([['/en/ch-2', 2], ['/en/ch-1', 3]]);
     destroySessionTracker();
   });
+
+  it('after sign-in, the next navigation goes out even on the same route, so the server can link the user', async () => {
+    // sessions.ts verifies X-Mushi-User-Token on session_start and on a
+    // page_view whose row has no end_user_id; heartbeats never verify. A
+    // reader who signs in and stays on one chapter must still get linked.
+    const { initSessionTracker, trackPageView, updateSessionIdentity, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+    initSessionTracker({ client, patchHistory: false });
+
+    updateSessionIdentity('a'.repeat(64));
+    trackPageView(); // sheet opens on /en/ch-1
+    trackPageView(); // closes: collapsed again
+
+    expect(sent(client).filter((e) => e.kind === 'page_view').map((v) => v.route)).toEqual(['/en/ch-1']);
+    destroySessionTracker();
+  });
 });

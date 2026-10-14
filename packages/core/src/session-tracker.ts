@@ -268,6 +268,10 @@ export function trackPageView(route?: string): void {
 
 /** Set the identity heartbeats carry: a SHA-256 hex of the host user id, never the raw id. */
 export function updateSessionIdentity(userIdHash: string | null): void {
+  // The server links a signed-in user on the first page_view after sign-in
+  // (heartbeats never verify), so let the next navigation through even when
+  // it keeps the pathname.
+  if (userIdHash && userIdHash !== _userIdHash) _lastRoute = null;
   _userIdHash = userIdHash;
 }
 
