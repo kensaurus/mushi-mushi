@@ -35,7 +35,13 @@ import type { MushiAnalyticsConfig, MushiApiClient, MushiSessionEventPayload } f
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Heartbeat interval — keep sessions alive and update page-view count. */
+/**
+ * Longest a visible session goes without a request. The server keeps
+ * `last_seen_at` from every event kind, and an open session's duration is
+ * `last_seen_at - started_at`, so a heartbeat only has to follow 60s of
+ * silence; it is skipped while other events keep `last_seen_at` fresh, and
+ * paused while the tab is hidden (session_end already recorded the hide).
+ */
 const HEARTBEAT_INTERVAL_MS = 60_000; // 1 minute
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -45,7 +51,11 @@ let _sdkVersion: string | undefined;
 let _userIdHash: string | null = null;
 let _reporterToken: string | null = null;
 let _pageViewCount = 0;
-let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let _heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
+/** Pathname of the last page view sent; a navigation that keeps it is not a new page. */
+let _lastRoute: string | null = null;
+/** True once session_end went out for the current hidden period. */
+let _endSent = false;
 let _initialized = false;
 /** True while the gate allows sending; flips with consent. */
 let _active = false;
@@ -99,12 +109,41 @@ function send(payload: MushiSessionEventPayload): void {
   if (!_client || !_active) return;
   // Fire-and-forget — best-effort; errors don't propagate to the host app.
   _client.postSessionEvent(payload).catch(() => { /* intentionally silent */ });
+  scheduleHeartbeat();
+}
+
+function clearHeartbeat(): void {
+  clearTimeout(_heartbeatTimer);
+}
+
+/** (Re)arm the heartbeat 60s after the latest request, only while visible. */
+function scheduleHeartbeat(): void {
+  clearHeartbeat();
+  if (!_active || globalThis.document?.visibilityState === 'hidden') return;
+  _heartbeatTimer = setTimeout(() => {
+    send(buildPayload('session_heartbeat', { route: currentRoute() }));
+  }, HEARTBEAT_INTERVAL_MS);
 }
 
 function recordPageView(route: string): void {
   if (!_active) return;
+  // pushState / popstate that keep the pathname (a sheet that pushes a
+  // history entry for the back button, a query or #fragment change) are not
+  // a new page: the server strips query and hash, so they were duplicate
+  // views of the route being read, one POST each.
+  if (route === _lastRoute) return;
+  _lastRoute = route;
   _pageViewCount += 1;
   send(buildPayload('page_view', { route }));
+}
+
+/** One session_end per hidden period: a hide followed by pagehide is one exit. */
+function sendSessionEnd(): void {
+  if (_endSent || !_active) return;
+  _endSent = true;
+  send(buildPayload('session_end', { route: currentRoute() }));
+  // The page is going away (or hidden): nothing to keep alive until it is back.
+  clearHeartbeat();
 }
 
 /** Begin (or resume after a re-grant) sending: session_start plus heartbeats. */
@@ -114,31 +153,41 @@ function activate(): void {
   if (!_started) {
     _started = true;
     _pageViewCount = 1;
-    send(buildPayload('session_start', { route: currentRoute(), referrer: referrerOrigin() }));
+    _lastRoute = currentRoute();
+    send(buildPayload('session_start', { route: _lastRoute, referrer: referrerOrigin() }));
+  } else {
+    scheduleHeartbeat();
   }
-  _heartbeatTimer = setInterval(() => {
-    send(buildPayload('session_heartbeat', { route: currentRoute() }));
-  }, HEARTBEAT_INTERVAL_MS);
 }
 
 // Module-level so a destroy → re-init on the same page re-adds the SAME
 // functions, which addEventListener ignores: one session_end per hide, not
 // one per init. After destroy they stay attached but send() is a no-op.
 function onHide(): void {
-  if (document.visibilityState === 'hidden') send(buildPayload('session_end', { route: currentRoute() }));
+  if (document.visibilityState === 'hidden') {
+    sendSessionEnd();
+  } else {
+    // Back from hidden: the next hide is a new exit, and the heartbeat resumes.
+    _endSent = false;
+    scheduleHeartbeat();
+  }
 }
 
 function onPagehide(): void {
-  send(buildPayload('session_end', { route: currentRoute() }));
+  sendSessionEnd();
+}
+
+/** Restored from the back/forward cache: the same session carries on. */
+function onPageshow(event: PageTransitionEvent): void {
+  if (!event.persisted) return;
+  _endSent = false;
+  scheduleHeartbeat();
 }
 
 /** Stop sending immediately (consent denied). Listeners stay but go quiet. */
 function deactivate(): void {
   _active = false;
-  if (_heartbeatTimer != null) {
-    clearInterval(_heartbeatTimer);
-    _heartbeatTimer = null;
-  }
+  clearHeartbeat();
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -169,10 +218,11 @@ export interface SessionTrackerOptions {
  * Initialise the session tracker. Call once at SDK init for web environments.
  * Subsequent calls on the same page are no-ops (idempotent).
  *
- * Emits, once the analytics gate allows it: session_start, heartbeats every
- * minute, session_end on visibilitychange/pagehide, and page_view on history
- * API navigation. Under `consent: 'required'` nothing is sent until
- * setConsent('granted').
+ * Emits, once the analytics gate allows it: session_start, a heartbeat after
+ * each minute without another request while the tab is visible, one
+ * session_end per hide (visibilitychange/pagehide), and page_view when a
+ * history API navigation changes the pathname. Under `consent: 'required'`
+ * nothing is sent until setConsent('granted').
  */
 export function initSessionTracker(opts: SessionTrackerOptions): void {
   if (_initialized || typeof window === 'undefined') return;
@@ -190,6 +240,7 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
     document.addEventListener('visibilitychange', onHide, { passive: true });
   }
   window.addEventListener('pagehide', onPagehide, { passive: true });
+  window.addEventListener('pageshow', onPageshow, { passive: true });
 
   // page_view on History API navigation (SPA route changes) — unless the
   // host owns the history patch and reports page views via trackPageView().
@@ -207,7 +258,8 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
 /**
  * Record a page view manually — call from framework router hooks where the
  * history patch may fire too early (e.g. React Router v7 loader transitions),
- * or from a host that initialised with `patchHistory: false`.
+ * or from a host that initialised with `patchHistory: false`. A call whose
+ * pathname matches the last page view is ignored: it is the same page.
  */
 export function trackPageView(route?: string): void {
   if (!_initialized || !_client) return;
@@ -216,6 +268,10 @@ export function trackPageView(route?: string): void {
 
 /** Set the identity heartbeats carry: a SHA-256 hex of the host user id, never the raw id. */
 export function updateSessionIdentity(userIdHash: string | null): void {
+  // The server links a signed-in user on the first page_view after sign-in
+  // (heartbeats never verify), so let the next navigation through even when
+  // it keeps the pathname.
+  if (userIdHash && userIdHash !== _userIdHash) _lastRoute = null;
   _userIdHash = userIdHash;
 }
 
@@ -226,6 +282,8 @@ export function destroySessionTracker(): void {
   _unsubscribeConsent = null;
   _initialized = false;
   _started = false;
+  _lastRoute = null;
+  _endSent = false;
   _client = null;
 }
 
