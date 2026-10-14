@@ -37,7 +37,8 @@ import { contentProblem } from '../../_shared/recipe-change.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignActionSettingsView, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
 import { loadDesignActionSettings } from '../../_shared/design-actions.ts'
-import { requiredCiVarNames, resolveStack, STACK_PACKAGE_PATHS, stackFromPackageJsons } from '../../_shared/sdk-diagnostics.ts'
+import { requiredCiVarNames, resolveStack } from '../../_shared/sdk-diagnostics.ts'
+import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import {
@@ -98,14 +99,8 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => fetchLatestWorkflowRunForSha(repo.token, repo.ref, branch, sha),
   listActionsNames,
   requiredEnvNames: (slug, stack) => requiredCiVarNames(resolveStack(slug, stack)).map((v) => v.name),
-  detectStack: async (repo: RecipeRepo) => {
-    // A file that cannot be read is skipped; no file at all → null → the slug decides.
-    // When every read failed nothing was learned, so it throws and is not cached.
-    const head = await getDefaultHead(repo)
-    const reads = await Promise.allSettled(STACK_PACKAGE_PATHS.map((p) => readRepoFile(repo, head.sha, p, 512 * 1024)))
-    if (reads.every((r) => r.status === 'rejected')) throw new Error('No package.json could be read')
-    return stackFromPackageJsons(reads.flatMap((r) => (r.status === 'fulfilled' && r.value.kind === 'file' ? [r.value.text] : [])))
-  },
+  // No package.json → null → the slug decides; every read failed → throws, not cached.
+  detectStack: detectRepoStack,
   now: () => new Date(),
 }
 

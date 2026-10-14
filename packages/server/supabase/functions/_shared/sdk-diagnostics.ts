@@ -16,6 +16,12 @@ export interface CiVar {
   /** Deterministic value, set before calling sync. The API key slot holds the freshly minted key. */
   value?: string
   ghKind: 'secret' | 'variable'
+  /**
+   * Written by sync, but not required: the SDK already defaults to Mushi
+   * Cloud's endpoint, so an app without it works. A self-hosted backend
+   * still needs it.
+   */
+  optional?: true
 }
 
 /**
@@ -34,12 +40,22 @@ export function buildCiVars(params: {
   return [
     { name: `${prefix}MUSHI_PROJECT_ID`, value: projectId, ghKind: 'variable' },
     { name: `${prefix}MUSHI_API_KEY`, value: mintedKey, ghKind: 'secret' },
-    { name: `${prefix}MUSHI_API_ENDPOINT`, value: endpoint, ghKind: 'variable' },
+    { name: `${prefix}MUSHI_API_ENDPOINT`, value: endpoint, ghKind: 'variable', optional: true },
   ]
 }
 
-/** Required names (no values) for diagnosis and comparison. */
+/**
+ * Required names (no values) for diagnosis and comparison. The endpoint is
+ * left out: its absence is not a fault (see `CiVar.optional`).
+ */
 export function requiredCiVarNames(stack: SdkStack): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
+  return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' })
+    .filter((v) => !v.optional)
+    .map(({ name, ghKind }) => ({ name, ghKind }))
+}
+
+/** Every var sync writes, optional ones included: the guided fallback prints them all. */
+export function ciVarTemplateNames(stack: SdkStack): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
   return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' }).map(({ name, ghKind }) => ({ name, ghKind }))
 }
 
@@ -181,6 +197,8 @@ export interface SdkDiagnosticsResult {
   /** True when any key has been seen from a native origin (capacitor:// / okhttp / CFNetwork). */
   nativeEverSeen: boolean
   stack: SdkStack
+  /** `repo`: read from the repo's package.json. `slug`: guessed from the project slug (no token, or nothing readable). */
+  stackSource?: 'repo' | 'slug'
   recommendedFix: string
 }
 

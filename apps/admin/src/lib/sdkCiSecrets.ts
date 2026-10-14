@@ -34,6 +34,8 @@ export interface SdkDiagnosticsResult {
   lastSeenAt: string | null
   nativeEverSeen: boolean
   stack: 'nextjs' | 'expo' | 'vite'
+  /** `repo`: read from the repo's package.json; `slug`: a guess (older API: absent). */
+  stackSource?: 'repo' | 'slug'
   recommendedFix: string
 }
 

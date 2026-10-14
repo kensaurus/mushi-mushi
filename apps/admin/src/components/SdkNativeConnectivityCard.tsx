@@ -30,7 +30,7 @@ import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { docsUrl } from '../lib/docsUrl'
 import { describeActionError } from '../lib/actionError'
 import { sdkCiStatusMeta, type SdkDiagnosticsResult, type SdkDiagnosticStatus } from '../lib/sdkCiSecrets'
-import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { mushiEnvVarsForBundler, mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,12 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
     }
   }, [syncState.status, projectId])
 
-  const envVars = mushiEnvVarsForProjectSlug(projectSlug)
+  // The server read the repo's package.json: its stack beats the slug guess
+  // (an Expo or Vite app used to be told to add NEXT_PUBLIC_* names).
+  const envVars =
+    diag?.stackSource === 'repo'
+      ? mushiEnvVarsForBundler(diag.stack === 'nextjs' ? 'next' : diag.stack)
+      : mushiEnvVarsForProjectSlug(projectSlug)
   const status: SdkDiagnosticStatus = diag?.status ?? 'unknown'
   const meta = sdkCiStatusMeta(status, diag?.hasGithubToken ?? false, projectSlug, {
     nativeEverSeen: diag?.nativeEverSeen ?? false,
