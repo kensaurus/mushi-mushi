@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { getWidgetPreviewTokens, getLocale } from '@mushi-mushi/web'
 import { reporterCopy, type ReporterCategory } from '@mushi-mushi/core/reporter-ui'
+import { MUSHI_COPY } from '@mushi-mushi/core'
 import type { SdkPreviewConfig, WidgetPosition } from '../../lib/sdkSnippets'
 import type { AssistantPreviewState } from './sdk-install-types'
 
@@ -126,11 +127,10 @@ export function SdkInstallPreview({
         >
           {config.bannerMessage.trim() ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
-              {(config.bannerLabel.trim() || 'Beta') && (
-                <span style={{ flexShrink: 0, padding: '0 4px', borderRadius: 2, border: '1px solid currentColor', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                  {config.bannerLabel.trim() || 'Beta'}
-                </span>
-              )}
+              {/* Same default as the SDK (MUSHI_COPY.bannerLabel), so the preview matches the app. */}
+              <span style={{ flexShrink: 0, padding: '0 4px', borderRadius: 2, border: '1px solid currentColor', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                {config.bannerLabel.trim() || MUSHI_COPY.bannerLabel}
+              </span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.9 }}>{config.bannerMessage.trim()}</span>
             </span>
           ) : null}
