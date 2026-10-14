@@ -77,9 +77,9 @@ export function KensaurusPortfolioTable({ utmSource }: { utmSource: string }) {
   const hub = all.find((app) => app.id === HUB_ID)
 
   return (
-    <section aria-label="More from KENSAURUS" className="mt-6">
-      <h2 className="mb-3 font-serif text-base font-semibold text-[var(--mushi-ink)]">
-        More from KENSAURUS
+    <section aria-labelledby="more-apps-heading" className="mt-6">
+      <h2 id="more-apps-heading" className="mb-3 font-serif text-base font-semibold text-[var(--mushi-ink)]">
+        More apps from the same maker
       </h2>
       <ul className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-3">
         {[...apps, ...(hub ? [hub] : [])].map((app) => {
