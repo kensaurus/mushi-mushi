@@ -43,6 +43,8 @@ export interface PortfolioCard {
   projectId: string
   name: string
   slug: string | null
+  /** The app's store icon (projects.icon_url, _shared/app-icon.ts); null when none is known. */
+  iconUrl: string | null
   kind: ProjectKind | null
   kindSource: KindSource
   /** Worst recipe element state; `error` when the recipe could not be composed. */

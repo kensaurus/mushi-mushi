@@ -290,6 +290,30 @@ describe('portfolio fail-open: a failed read is never $0, "no cap", "none yet" o
   })
 })
 
+describe('portfolio app icons', () => {
+  const APPLE_ICON = 'https://is1-ssl.mzstatic.com/image/thumb/Purple/AppIcon/512x512bb.jpg'
+
+  it('shows a stored store icon, drops an untrusted URL, and refreshes only missing or week-old icons after the read', async () => {
+    const db = seed()
+    const rows = db.table('projects')
+    const fresh = new Date(NOW.getTime() - 3600_000).toISOString()
+    Object.assign(rows.find((r) => r.id === pid(1))!, { icon_url: APPLE_ICON, icon_checked_at: fresh })
+    Object.assign(rows.find((r) => r.id === pid(2))!, { icon_url: 'https://evil.example/x.png', icon_checked_at: fresh })
+    const refreshIcons = vi.fn()
+    const { app } = harness(db, { refreshIcons } as never)
+    const res = await app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(200)
+    const byId = new Map(res.body.data.cards.map((c: { projectId: string; iconUrl: string | null }) => [c.projectId, c.iconUrl]))
+    expect(byId.get(pid(1))).toBe(APPLE_ICON)
+    expect(byId.get(pid(2))).toBeNull()
+    expect(refreshIcons).toHaveBeenCalledTimes(1)
+    const due = refreshIcons.mock.calls[0][1] as string[]
+    expect(due).not.toContain(pid(1))
+    expect(due).not.toContain(pid(2))
+    expect(due).toContain(pid(3))
+  })
+})
+
 describe('portfolio access', () => {
   const urls = [`/v1/admin/orgs/${ORG_B}/portfolio`, `/v1/admin/orgs/${ORG_B}/portfolio/findings`]
 

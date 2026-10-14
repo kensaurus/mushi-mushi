@@ -81,7 +81,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         // ProjectsPage had no way to show "this project is on Pro, EU".
         // Boost shipped 2026-05-07 along with the repo + codebase joins
         // below.
-        .select('id, name, slug, created_at, organization_id, owner_id, plan_tier, data_residency_region')
+        .select('id, name, slug, created_at, organization_id, owner_id, plan_tier, data_residency_region, icon_url')
         .in('id', accessibleIds)
         .order('created_at', { ascending: false }),
       db
@@ -108,6 +108,8 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       plan_tier: (p as { plan_tier?: string | null }).plan_tier ?? null,
       data_residency_region:
         (p as { data_residency_region?: string | null }).data_residency_region ?? null,
+      // The app's store icon for the switcher (_shared/app-icon.ts); null when none is known.
+      icon_url: (p as { icon_url?: string | null }).icon_url ?? null,
       // null for legacy owned-but-not-in-org rows; FE treats that as 'owner'.
       organization_role: p.organization_id ? roleByOrg.get(p.organization_id) ?? null : null,
     }));

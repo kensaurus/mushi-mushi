@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectionFromProbe, humanizeProbeMessage, sentryConnection } from './integrationConnection'
+import { connectionFromProbe, humanizeProbeMessage, sentryConnection, isMissingSentrySecret } from './integrationConnection'
 
 const NOW = Date.parse('2026-10-04T01:00:00Z')
 const RECENT = '2026-10-04T00:49:06Z'
@@ -117,5 +117,16 @@ describe('sentryConnection (finding B25)', () => {
         now: NOW,
       }).detail,
     ).toBe('The credentials were rejected.')
+  })
+})
+
+describe('isMissingSentrySecret', () => {
+  it('spots alerts dropped for want of a webhook secret (glot.it, 2026-10-14)', () => {
+    expect(isMissingSentrySecret({ outcome: 'error', created_at: RECENT, error_message: 'Sentry webhook secret not configured for this project' })).toBe(true)
+  })
+  it('ignores accepted deliveries, other rejections and no delivery', () => {
+    expect(isMissingSentrySecret({ outcome: 'accepted', created_at: RECENT, error_message: null })).toBe(false)
+    expect(isMissingSentrySecret({ outcome: 'rejected_signature', created_at: RECENT, error_message: 'Invalid signature' })).toBe(false)
+    expect(isMissingSentrySecret(null)).toBe(false)
   })
 })

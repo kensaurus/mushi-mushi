@@ -24,7 +24,8 @@ import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import type { FieldSource, HealthRow, PlatformDef } from './types'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
-import { connectionFromProbe, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
+import { connectionFromProbe, isMissingSentrySecret, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
+import { SentrySecretMissingPanel } from './SentrySecretMissingPanel'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
 import { platformRequiredOk, projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
@@ -231,6 +232,10 @@ export function PlatformIntegrationCard({
       : null,
   )
   const latestDelivery = deliveries.data?.deliveries?.[0]
+  const secretMissing = def.kind === 'sentry' && isMissingSentrySecret(latestDelivery)
+  // Set when the secret-missing panel turned automatic import on, so the
+  // toggle below agrees without a page reload.
+  const [autoImportTurnedOn, setAutoImportTurnedOn] = useState(false)
   const connection: ConnectionView = def.webhookPath
     ? sentryConnection({
         configured: requiredOk,
@@ -254,6 +259,8 @@ export function PlatformIntegrationCard({
       const credentialProblem = /key|token|credential|auth|revoked|401|403/i.test(latestProbe?.message ?? '')
       return edits(credentialProblem ? 'Replace key' : 'Edit settings')
     }
+    // Alerts are arriving and being dropped: the fix is a saved secret, on this card.
+    if (secretMissing) return edits('Add webhook secret')
     if (connection.state === 'attention' && def.kind === 'sentry') {
       // Alert rules are where Sentry's webhook action lives.
       const org = typeof config.sentry_org_slug === 'string' ? config.sentry_org_slug : null
@@ -585,8 +592,18 @@ export function PlatformIntegrationCard({
 
       {def.kind === 'sentry' && !isEditing && requiredOk && (
         <>
+          {secretMissing && (
+            <SentrySecretMissingPanel
+              orgSlug={typeof config.sentry_org_slug === 'string' ? config.sentry_org_slug : null}
+              autoImportOn={config.sentry_auto_import === true || autoImportTurnedOn}
+              canManage={canManage}
+              onPasteSecret={onStartEdit}
+              onChanged={() => setAutoImportTurnedOn(true)}
+            />
+          )}
           <SentryAutoImportToggle
-            enabled={config.sentry_auto_import === true}
+            key={autoImportTurnedOn ? 'on' : 'saved'}
+            enabled={config.sentry_auto_import === true || autoImportTurnedOn}
             lastRunAt={typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null}
           />
           <SentryImportPanel sentryProjects={sentryProjectsFromConfig(config)} />

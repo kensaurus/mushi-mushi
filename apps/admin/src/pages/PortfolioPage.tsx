@@ -103,9 +103,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const snapshots = useProjectSnapshots()
   const faviconFor = (card: PortfolioCard): ProjectFaviconSource => {
     const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
-    return known
+    const base = known
       ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
       : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
+    // The store icon from the portfolio read wins; the favicon and initials follow.
+    return card.iconUrl ? { ...base, icon_url: card.iconUrl } : base
   }
 
   return (

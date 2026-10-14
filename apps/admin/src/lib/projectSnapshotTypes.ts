@@ -27,6 +27,8 @@ export interface ProjectSnapshot {
   id: string
   name: string
   slug: string
+  /** The app's store icon (App Store / Google Play); null when none is known. */
+  icon_url?: string | null
   last_report_at: string | null
   pdca_bottleneck: PdcaStageId | null
   pdca_bottleneck_label: string | null
