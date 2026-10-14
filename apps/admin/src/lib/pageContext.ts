@@ -160,15 +160,21 @@ export function usePublishPageContext(ctx: PageContext | null): void {
 
   // Silent closure refresh, every render: snapshot readers pick up the
   // newest action closures on their next read — no emit, no re-renders.
+  // The registry holds its own copy and only its `actions` field is swapped,
+  // so the snapshot keeps its identity. Replacing the snapshot object here,
+  // without an emit, broke useSyncExternalStore's contract: React saw a new
+  // snapshot after every commit and re-rendered every reader, and a component
+  // that both publishes and reads (TesterLayout) looped until React gave up
+  // with error 185, taking the whole tester portal down.
   useEffect(() => {
     ctxRef.current = ctx
-    if (currentOwner === ownerRef.current) currentContext = ctx
+    if (currentOwner === ownerRef.current && currentContext && ctx) currentContext.actions = ctx.actions
   })
 
   useEffect(() => {
     const owner = ownerRef.current
     currentOwner = owner
-    currentContext = ctxRef.current
+    currentContext = ctxRef.current ? { ...ctxRef.current } : null
     emit()
     return () => {
       if (currentOwner === owner) {
