@@ -227,18 +227,58 @@ describe('MushiWidget host element — pass-through contract', () => {
     expect(() => getHost(w)).not.toThrow();
   });
 
-  it('host z-index matches configured zIndex', () => {
+  // A `position: fixed` element always forms a stacking context, and a
+  // z-indexed positioned one does too. If the host is either, every surface
+  // inside the shadow root ranks inside the host's layer, so a host app's
+  // `bannerConfig.zIndex: 130` can never sit under its own z-200 sheet.
+  function formsStackingContext(el: HTMLElement): boolean {
+    const s = getComputedStyle(el);
+    if (s.position === 'fixed' || s.position === 'sticky') return true;
+    if (s.position !== 'static' && s.position !== '' && s.zIndex !== '' && s.zIndex !== 'auto') return true;
+    return false;
+  }
+
+  it('host does not form a stacking context, so each surface stacks in the page', () => {
     const w = new MushiWidget({ zIndex: 1234 }, noopCallbacks);
     w.mount();
-    expect(getHost(w).style.zIndex).toBe('1234');
+    expect(formsStackingContext(getHost(w))).toBe(false);
     w.destroy();
   });
 
-  it('host z-index updates when updateConfig changes zIndex', () => {
+  it('host stays out of the stacking order after updateConfig changes zIndex', () => {
     const w = new MushiWidget({ zIndex: 1000 }, noopCallbacks);
     w.mount();
     w.updateConfig({ zIndex: 2000 });
-    expect(getHost(w).style.zIndex).toBe('2000');
+    expect(formsStackingContext(getHost(w))).toBe(false);
+    w.destroy();
+  });
+
+  it('banner ranks at the host-provided bannerConfig.zIndex in the page stacking order', () => {
+    // The Wanting Mind sets 130 so its own TOC / Search / Settings sheets
+    // (and their Close buttons) stack above the lime strip.
+    const w = new MushiWidget({ trigger: 'banner', bannerConfig: { zIndex: 130 } }, noopCallbacks);
+    w.mount();
+    const shadow = (w as unknown as { shadow: ShadowRoot }).shadow;
+    const banner = shadow.querySelector('.mushi-banner') as HTMLElement;
+    expect(banner.style.getPropertyValue('--mushi-banner-z')).toBe('130');
+    // Walk up across the shadow boundary to <html>: no ancestor may cap it.
+    let node: Node | null = banner.parentNode;
+    while (node) {
+      const el = node instanceof ShadowRoot ? node.host : node;
+      if (el instanceof HTMLElement && el !== document.documentElement) {
+        expect(formsStackingContext(el), `${el.tagName}#${el.id} caps the banner`).toBe(false);
+      }
+      node = node instanceof ShadowRoot ? node.host.parentNode : el.parentNode;
+    }
+    w.destroy();
+  });
+
+  it('launcher and panel keep their own page-level z-index above content', () => {
+    const w = new MushiWidget({ zIndex: 5000 }, noopCallbacks);
+    w.mount();
+    const shadow = (w as unknown as { shadow: ShadowRoot }).shadow;
+    expect((shadow.querySelector('.mushi-trigger') as HTMLElement).style.zIndex).toBe('5000');
+    expect((shadow.querySelector('.mushi-panel') as HTMLElement).style.zIndex).toBe('5001');
     w.destroy();
   });
 
