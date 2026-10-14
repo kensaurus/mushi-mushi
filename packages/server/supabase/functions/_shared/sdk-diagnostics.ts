@@ -16,6 +16,12 @@ export interface CiVar {
   /** Deterministic value, set before calling sync. The API key slot holds the freshly minted key. */
   value?: string
   ghKind: 'secret' | 'variable'
+  /**
+   * Written by sync, but not required: the SDK already defaults to Mushi
+   * Cloud's endpoint, so an app without it works. A self-hosted backend
+   * still needs it.
+   */
+  optional?: true
 }
 
 /**
@@ -34,12 +40,22 @@ export function buildCiVars(params: {
   return [
     { name: `${prefix}MUSHI_PROJECT_ID`, value: projectId, ghKind: 'variable' },
     { name: `${prefix}MUSHI_API_KEY`, value: mintedKey, ghKind: 'secret' },
-    { name: `${prefix}MUSHI_API_ENDPOINT`, value: endpoint, ghKind: 'variable' },
+    { name: `${prefix}MUSHI_API_ENDPOINT`, value: endpoint, ghKind: 'variable', optional: true },
   ]
 }
 
-/** Required names (no values) for diagnosis and comparison. */
+/**
+ * Required names (no values) for diagnosis and comparison. The endpoint is
+ * left out: its absence is not a fault (see `CiVar.optional`).
+ */
 export function requiredCiVarNames(stack: SdkStack): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
+  return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' })
+    .filter((v) => !v.optional)
+    .map(({ name, ghKind }) => ({ name, ghKind }))
+}
+
+/** Every var sync writes, optional ones included: the guided fallback prints them all. */
+export function ciVarTemplateNames(stack: SdkStack): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
   return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' }).map(({ name, ghKind }) => ({ name, ghKind }))
 }
 
@@ -50,6 +66,52 @@ export function inferStack(slug: string | null): SdkStack {
   if (s === 'yen-yen') return 'expo'
   if (s === 'mushi-mushi' || s === 'solo-boss-cloud' || s === 'atpeak') return 'vite'
   return 'nextjs'
+}
+
+/** The package.json files a repo's stack is read from: the root and the usual app folders. */
+export const STACK_PACKAGE_PATHS = [
+  'package.json',
+  'apps/mobile/package.json',
+  'apps/web/package.json',
+  'apps/app/package.json',
+  'apps/admin/package.json',
+  'src/package.json',
+] as const
+
+function dependencyNames(pkgText: string): string[] {
+  let pkg: unknown
+  try {
+    pkg = JSON.parse(pkgText)
+  } catch {
+    return []
+  }
+  if (typeof pkg !== 'object' || pkg === null) return []
+  const p = pkg as { dependencies?: unknown; devDependencies?: unknown }
+  const keys = (v: unknown) => (typeof v === 'object' && v !== null && !Array.isArray(v) ? Object.keys(v) : [])
+  return [...keys(p.dependencies), ...keys(p.devDependencies)]
+}
+
+/**
+ * Stack from the repo's package.json texts, so the env check expects the
+ * names the bundler really inlines (EXPO_PUBLIC_, VITE_, NEXT_PUBLIC_).
+ * Files that depend on a Mushi SDK package are read first: in a monorepo
+ * they are the app the SDK ships in. Expo / React Native wins over Next.js,
+ * and Next.js over Vite (a Next app often has Vite only for its tests).
+ * null when no file names a known bundler; the caller falls back to the slug.
+ */
+export function stackFromPackageJsons(texts: readonly string[]): SdkStack | null {
+  const all = texts.map(dependencyNames).filter((names) => names.length > 0)
+  const withSdk = all.filter((names) => names.some((n) => n.startsWith('@mushi-mushi/')))
+  const names = new Set((withSdk.length > 0 ? withSdk : all).flat())
+  if (names.has('expo') || names.has('react-native')) return 'expo'
+  if (names.has('next')) return 'nextjs'
+  if (names.has('vite')) return 'vite'
+  return null
+}
+
+/** The detected stack when there is one, else the slug heuristic. */
+export function resolveStack(slug: string | null, detected: SdkStack | null | undefined): SdkStack {
+  return detected ?? inferStack(slug)
 }
 
 /** Copy-paste commands for when Mushi cannot write the repo's Actions secrets itself. */
@@ -135,6 +197,8 @@ export interface SdkDiagnosticsResult {
   /** True when any key has been seen from a native origin (capacitor:// / okhttp / CFNetwork). */
   nativeEverSeen: boolean
   stack: SdkStack
+  /** `repo`: read from the repo's package.json. `slug`: guessed from the project slug (no token, or nothing readable). */
+  stackSource?: 'repo' | 'slug'
   recommendedFix: string
 }
 

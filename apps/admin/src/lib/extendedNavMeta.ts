@@ -1106,6 +1106,7 @@ export function startSectionAttention(slices: NavStatSlices): {
   tone: 'warn' | 'danger'
   label: string
 } | null {
+  // 1 · Connect: setup plus the pages that connect your tools (ADR 0027).
   let count = 0
   const parts: string[] = []
   const setup = onboardingNavBadge(slices.onboarding)
@@ -1113,19 +1114,39 @@ export function startSectionAttention(slices: NavStatSlices): {
     count += setup.count
     parts.push(setup.label)
   }
-  const dash = dashboardNavBadge(slices.dashboard)
-  if (dash?.mode === 'attention' && dash.tone !== 'ok') {
-    count += dash.count
-    parts.push(`${dash.count} dashboard`)
+  const integrations = integrationsNavBadge(slices.integrations)
+  if (integrations?.mode === 'attention' && integrations.tone !== 'ok') {
+    count += integrations.count
+    parts.push(`${integrations.count} integrations`)
   }
-  const featureBoard = featureBoardNavBadge(slices.featureBoard)
-  if (featureBoard?.mode === 'attention') {
-    count += featureBoard.count
-    parts.push(`${featureBoard.count} feature board`)
+  const mcp = mcpNavBadge(slices.mcp)
+  if (mcp?.mode === 'attention' && mcp.tone !== 'ok') {
+    count += mcp.count
+    parts.push(`${mcp.count} MCP`)
+  }
+  const skills = skillsNavBadge(slices.skills)
+  if (skills?.mode === 'attention' && skills.tone !== 'ok') {
+    count += skills.count
+    parts.push(`${skills.count} skills`)
   }
   if (count === 0) return null
-  const tone = [setup, dash, featureBoard].some((b) => b?.tone === 'danger') ? 'danger' : 'warn'
+  const tone = [setup, integrations, mcp, skills].some((b) => b?.tone === 'danger') ? 'danger' : 'warn'
   return { count, tone, label: parts.join(' · ') }
+}
+
+/** 2 · Bugs: Home's own attention; the untriaged backlog is added by the sidebar. */
+export function planSectionAttention(slices: NavStatSlices): {
+  count: number
+  tone: 'warn' | 'danger'
+  label: string
+} | null {
+  const dash = dashboardNavBadge(slices.dashboard)
+  if (dash?.mode !== 'attention' || dash.tone === 'ok') return null
+  return {
+    count: dash.count,
+    tone: dash.tone === 'danger' ? 'danger' : 'warn',
+    label: `${dash.count} dashboard`,
+  }
 }
 
 export function checkSectionAttention(slices: NavStatSlices): {
@@ -1165,27 +1186,12 @@ export function checkSectionAttention(slices: NavStatSlices): {
     count += anomalies.count
     parts.push(`${anomalies.count} anomalies`)
   }
-  const intelligence = intelligenceNavBadge(slices.intelligence)
-  if (intelligence?.mode === 'attention' && intelligence.tone !== 'ok') {
-    count += intelligence.count
-    parts.push(`${intelligence.count} intelligence`)
-  }
-  const releases = releasesNavBadge(slices.releases)
-  if (releases?.mode === 'attention') {
-    count += releases.count
-    parts.push(`${releases.count} releases`)
-  }
-  const research = researchNavBadge(slices.research)
-  if (research?.mode === 'attention' && research.tone !== 'ok') {
-    count += research.count
-    parts.push(`${research.count} research`)
-  }
   const health = healthStatsNavBadge(slices.health)
   if (health?.mode === 'attention' && health.tone !== 'ok') {
     count += health.count
     parts.push(`${health.count} health`)
   }
-  // Content checks and AI prompts sit under Quality & health since the 2026-10-08 regroup.
+  // Content checks and AI prompts sit under 4 · Verify (ADR 0027).
   const content = contentQualityNavBadge(slices.contentQuality)
   if (content?.mode === 'attention' && content.tone !== 'ok') {
     count += content.count
@@ -1197,7 +1203,7 @@ export function checkSectionAttention(slices: NavStatSlices): {
     parts.push(`${promptLab.count} prompt lab`)
   }
   if (count === 0) return null
-  const tone = [codeHealth, fullstack, qa, lessons, drift, anomalies, intelligence, releases, research, health, content, promptLab].some(
+  const tone = [codeHealth, fullstack, qa, lessons, drift, anomalies, health, content, promptLab].some(
     (b) => b?.tone === 'danger',
   )
     ? 'danger'
@@ -1243,39 +1249,26 @@ export function actSectionAttention(slices: NavStatSlices): {
   tone: 'warn' | 'danger'
   label: string
 } | null {
+  // 5 · Ship & watch: releases, research and Home's weekly insights (ADR 0027).
   let count = 0
   const parts: string[] = []
-  const rewards = rewardsNavBadge(slices.rewards)
-  if (rewards?.mode === 'attention') {
-    count += rewards.count
-    parts.push(`${rewards.count} rewards`)
+  const releases = releasesNavBadge(slices.releases)
+  if (releases?.mode === 'attention') {
+    count += releases.count
+    parts.push(`${releases.count} releases`)
   }
-  const mcp = mcpNavBadge(slices.mcp)
-  if (mcp?.mode === 'attention' && mcp.tone !== 'ok') {
-    count += mcp.count
-    parts.push(`${mcp.count} MCP`)
+  const research = researchNavBadge(slices.research)
+  if (research?.mode === 'attention' && research.tone !== 'ok') {
+    count += research.count
+    parts.push(`${research.count} research`)
   }
-  const marketplace = marketplaceNavBadge(slices.marketplace)
-  if (marketplace?.mode === 'attention' && marketplace.tone !== 'ok') {
-    count += marketplace.count
-    parts.push(`${marketplace.count} marketplace`)
-  }
-  const integrations = integrationsNavBadge(slices.integrations)
-  if (integrations?.mode === 'attention' && integrations.tone !== 'ok') {
-    count += integrations.count
-    parts.push(`${integrations.count} integrations`)
-  }
-  const skills = skillsNavBadge(slices.skills)
-  if (skills?.mode === 'attention' && skills.tone !== 'ok') {
-    count += skills.count
-    parts.push(`${skills.count} skills`)
+  const intelligence = intelligenceNavBadge(slices.intelligence)
+  if (intelligence?.mode === 'attention' && intelligence.tone !== 'ok') {
+    count += intelligence.count
+    parts.push(`${intelligence.count} intelligence`)
   }
   if (count === 0) return null
-  const tone = [rewards, mcp, marketplace, integrations, skills].some(
-    (b) => b?.tone === 'danger',
-  )
-    ? 'danger'
-    : 'warn'
+  const tone = [releases, research, intelligence].some((b) => b?.tone === 'danger') ? 'danger' : 'warn'
   return { count, tone, label: parts.join(' · ') }
 }
 
@@ -1293,6 +1286,9 @@ export function workspaceSlicesAttention(slices: NavStatSlices): {
     complianceNavBadge(slices.compliance),
     storageNavBadge(slices.storage),
     queryNavBadge(slices.query),
+    // Plugins and Feature requests moved to Account (ADR 0027).
+    marketplaceNavBadge(slices.marketplace),
+    featureBoardNavBadge(slices.featureBoard),
   ]
   for (const badge of badges) {
     if (badge?.mode === 'attention' && badge.tone !== 'ok') {

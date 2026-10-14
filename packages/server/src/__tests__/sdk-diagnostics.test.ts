@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCiVars,
   buildGuidedFallback,
+  ciVarTemplateNames,
   inferStack,
   lastHeartbeatAt,
   missingCiVars,
@@ -15,21 +16,22 @@ import {
 } from '../../supabase/functions/_shared/sdk-diagnostics.ts'
 
 describe('required CI vars per stack', () => {
-  it('names the three vars with the stack prefix, the key as the only secret', () => {
+  it('requires the project id and key with the stack prefix, the key as the only secret', () => {
     expect(requiredCiVarNames('nextjs')).toEqual([
       { name: 'NEXT_PUBLIC_MUSHI_PROJECT_ID', ghKind: 'variable' },
       { name: 'NEXT_PUBLIC_MUSHI_API_KEY', ghKind: 'secret' },
-      { name: 'NEXT_PUBLIC_MUSHI_API_ENDPOINT', ghKind: 'variable' },
     ])
-    expect(requiredCiVarNames('expo').map((v) => v.name)).toEqual([
-      'EXPO_PUBLIC_MUSHI_PROJECT_ID',
-      'EXPO_PUBLIC_MUSHI_API_KEY',
-      'EXPO_PUBLIC_MUSHI_API_ENDPOINT',
-    ])
-    expect(requiredCiVarNames('vite').map((v) => v.name)).toEqual([
-      'VITE_MUSHI_PROJECT_ID',
-      'VITE_MUSHI_API_KEY',
-      'VITE_MUSHI_API_ENDPOINT',
+    expect(requiredCiVarNames('expo').map((v) => v.name)).toEqual(['EXPO_PUBLIC_MUSHI_PROJECT_ID', 'EXPO_PUBLIC_MUSHI_API_KEY'])
+    expect(requiredCiVarNames('vite').map((v) => v.name)).toEqual(['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY'])
+  })
+
+  // The SDK defaults to Mushi Cloud's endpoint, so a missing endpoint var is not a fault.
+  it('treats the endpoint as optional: not required, but still written and printed', () => {
+    expect(requiredCiVarNames('vite').map((v) => v.name)).not.toContain('VITE_MUSHI_API_ENDPOINT')
+    expect(ciVarTemplateNames('vite')).toEqual([
+      { name: 'VITE_MUSHI_PROJECT_ID', ghKind: 'variable' },
+      { name: 'VITE_MUSHI_API_KEY', ghKind: 'secret' },
+      { name: 'VITE_MUSHI_API_ENDPOINT', ghKind: 'variable' },
     ])
   })
 
@@ -55,7 +57,7 @@ describe('guided fallback', () => {
     const out = buildGuidedFallback({
       owner: 'o',
       repo: 'r',
-      ciVarTemplates: requiredCiVarNames('nextjs'),
+      ciVarTemplates: ciVarTemplateNames('nextjs'),
       projectId: 'pid',
       endpoint: 'https://api',
     })
@@ -91,7 +93,7 @@ describe('missingCiVars', () => {
   it('is null when CI could not be read, else the absent names', () => {
     const req = requiredCiVarNames('nextjs')
     expect(missingCiVars(req, null)).toBeNull()
-    expect(missingCiVars(req, ['NEXT_PUBLIC_MUSHI_PROJECT_ID'])).toEqual(['NEXT_PUBLIC_MUSHI_API_KEY', 'NEXT_PUBLIC_MUSHI_API_ENDPOINT'])
+    expect(missingCiVars(req, ['NEXT_PUBLIC_MUSHI_PROJECT_ID'])).toEqual(['NEXT_PUBLIC_MUSHI_API_KEY'])
     expect(missingCiVars(req, req.map((v) => v.name))).toEqual([])
   })
 })

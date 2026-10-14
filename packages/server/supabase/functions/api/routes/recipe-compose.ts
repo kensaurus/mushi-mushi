@@ -18,6 +18,7 @@ import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/desi
 import { DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE } from '../../_shared/design-actions.ts'
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
+import type { SdkStack } from '../../_shared/sdk-diagnostics.ts'
 import { assetMime } from '../../_shared/design-assets.ts'
 import { ciView, declaredTargets as declaredDeployTargets, deployView, envView, MAX_CI_RUNS, presentEnvNames, schemaView, type ObservationRow } from '../../_shared/recipe-detail.ts'
 import { capFixRecipeContext, CONTEXT_BUDGET_BYTES } from '../../_shared/fix-recipe-context.ts'
@@ -50,7 +51,10 @@ export interface ComposeDeps {
   getDefaultHead: (repo: RecipeRepo) => Promise<{ branch: string; sha: string }>
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => Promise<WorkflowRunSnapshot | null>
   listActionsNames: (repo: RecipeRepo) => Promise<string[]>
-  requiredEnvNames: (projectSlug: string | null) => string[]
+  /** Mushi env names the app needs. `stack` is the one read from the repo; null/undefined = use the slug. */
+  requiredEnvNames: (projectSlug: string | null, stack?: SdkStack | null) => string[]
+  /** The app's stack from its package.json files; null when none names a bundler. Optional: absent = slug only. */
+  detectStack?: (repo: RecipeRepo) => Promise<SdkStack | null>
   now: () => Date
 }
 
@@ -74,6 +78,9 @@ interface GateRunRow {
 // Five-minute per-isolate cache for the live GitHub reads (CI + env).
 const ghCache = new Map<string, { at: number; value: unknown }>()
 const GH_CACHE_MS = 5 * 60 * 1000
+// A repo's stack (Expo, Vite, Next.js) rarely changes, so its package.json reads are kept longer.
+const stackCache = new Map<string, { at: number; value: SdkStack | null }>()
+const STACK_CACHE_MS = 6 * 60 * 60 * 1000
 
 async function cached<T>(key: string, now: number, fn: () => Promise<T>): Promise<T> {
   return (await cachedAt(key, now, fn)).value
@@ -457,8 +464,27 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   }
 
   // ── ci + env (live GitHub, cached 5 min)
+  // The env names follow the repo's real stack (Expo, Vite, Next.js), read
+  // from its package.json files. A failed read falls back to the slug and
+  // never fails the recipe.
+  let detectedStack: SdkStack | null = null
+  if (repo.ok && deps.detectStack) {
+    const hit = stackCache.get(projectId)
+    if (hit && now.getTime() - hit.at < STACK_CACHE_MS) {
+      detectedStack = hit.value
+    } else {
+      try {
+        detectedStack = await deps.detectStack(repo.repo)
+        stackCache.set(projectId, { at: now.getTime(), value: detectedStack })
+        if (stackCache.size > 500) stackCache.delete(stackCache.keys().next().value as string)
+      } catch {
+        detectedStack = null
+      }
+    }
+  }
+  const requiredEnv = deps.requiredEnvNames(project?.slug ?? null, detectedStack)
   let ciInput: ElementInput = { key: 'ci', repoConnected: false, tokenAvailable: false, fetchError: null, run: null }
-  let envInput: ElementInput = { key: 'env', repoConnected: false, tokenAvailable: false, fetchError: null, required: deps.requiredEnvNames(project?.slug ?? null), missing: null }
+  let envInput: ElementInput = { key: 'env', repoConnected: false, tokenAvailable: false, fetchError: null, required: requiredEnv, missing: null }
   let ciDetail: Record<string, unknown> = {}
   let presentNames: string[] | null = null
   /** When CI runs and env names were really read from GitHub (the cache keeps the first read time). */
@@ -480,14 +506,13 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
       const namesRead = await cachedAt(`env:${projectId}`, nowMs, () => deps.listActionsNames(repo.repo))
       presentNames = namesRead.value
       envReadAt = namesRead.at
-      const required = deps.requiredEnvNames(project?.slug ?? null)
-      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required, missing: required.filter((n) => !presentNames!.includes(n)), driftFindings: driftOf('env_drift') }
+      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required: requiredEnv, missing: requiredEnv.filter((n) => !presentNames!.includes(n)), driftFindings: driftOf('env_drift') }
     } catch (err) {
-      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: errMessage(err), required: deps.requiredEnvNames(project?.slug ?? null), missing: null }
+      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: errMessage(err), required: requiredEnv, missing: null }
     }
   } else {
     ciInput = { key: 'ci', repoConnected: repo.repoConnected, tokenAvailable: repo.tokenAvailable, fetchError: null, run: null }
-    envInput = { key: 'env', repoConnected: repo.repoConnected, tokenAvailable: repo.tokenAvailable, fetchError: null, required: deps.requiredEnvNames(project?.slug ?? null), missing: null }
+    envInput = { key: 'env', repoConnected: repo.repoConnected, tokenAvailable: repo.tokenAvailable, fetchError: null, required: requiredEnv, missing: null }
   }
   const ciState = deriveElementState(ciInput, now)
   const envState = deriveElementState(envInput, now)
@@ -599,7 +624,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
       releaseVersion: releaseRows[0]?.version ?? null,
       liveHeadSha: typeof ciDetail.headSha === 'string' ? ciDetail.headSha : null,
       liveActionsNames: presentNames,
-      fallbackRequired: deps.requiredEnvNames(project?.slug ?? null),
+      fallbackRequired: requiredEnv,
     })
     Object.assign(details[opts.detailFor], views)
   }

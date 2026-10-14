@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import {
   budgetText,
+  cardNextStep,
+  cardStatusChips,
   findingGroupTitle,
   kindLabel,
   needsALook,
@@ -152,5 +154,41 @@ describe('radarErrorSentence', () => {
     expect(text).toContain('(3 days ago) could not finish')
     expect(text).not.toContain('is not a function')
     expect(radarErrorSentence(null, () => 'x')).toMatch(/^The last run could not finish/)
+  })
+})
+
+describe('cardStatusChips (chips instead of prose)', () => {
+  it('gives each chip a short label, a meaning tone, the full sentence and the page that fixes it', () => {
+    const chips = cardStatusChips(card({ openReports: 3, latestRelease: { version: '1.4.0', publishedAt: null } }))
+    expect(chips.map((c) => [c.key, c.text, c.to])).toEqual([
+      ['bugs', '3 bugs', '/reports'],
+      ['checks', 'Checks: not run yet', '/recipe'],
+      ['sdk', 'SDK unknown', '/connect'],
+      ['release', 'v1.4.0', '/releases'],
+    ])
+    expect(chips[0].tone).toBe('warnSubtle')
+    expect(chips[1].hint).toMatch(/not a pass/)
+  })
+
+  it('reads a healthy app as ok, never as a warning', () => {
+    expect(cardStatusChips(card({ openReports: 0 }))[0]).toMatchObject({ text: '0 bugs', tone: 'okSubtle' })
+  })
+
+  it('never shows a cut-short count as exact', () => {
+    expect(cardStatusChips(card({ openReports: 50, unreadable: ['reports'] }))[0].text).toBe('50+ bugs')
+  })
+})
+
+describe('cardNextStep', () => {
+  it('offers only the worst problem and counts the rest', () => {
+    expect(
+      cardNextStep({
+        needsLook: [
+          { element: 'env', state: 'drift', label: 'Env', reason: 'Missing from GitHub: VITE_MUSHI_API_KEY' },
+          { element: 'ci', state: 'drift', label: 'CI', reason: 'A macOS job runs on every push' },
+        ],
+      } as never),
+    ).toEqual({ label: 'Env', reason: 'Missing from GitHub: VITE_MUSHI_API_KEY', more: 1 })
+    expect(cardNextStep({ needsLook: [] })).toBeNull()
   })
 })

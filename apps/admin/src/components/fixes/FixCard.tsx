@@ -222,6 +222,17 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
           >
             Report: {fix.report_id.slice(0, 8)}…
           </Link>
+          {fix.report_sentry_url && (
+            <a
+              href={fix.report_sentry_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="hover:text-fg-secondary underline-offset-2 hover:underline"
+              title="The Sentry issue this report came from. Mushi resolves it when this fix merges."
+            >
+              Sentry issue ↗
+            </a>
+          )}
           {fix.branch && (
             <span title={fix.branch}>
               Branch: {fix.branch.length > 32 ? `${fix.branch.slice(0, 32)}…` : fix.branch}

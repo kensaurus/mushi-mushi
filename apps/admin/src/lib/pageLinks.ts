@@ -27,6 +27,33 @@ export function flowLinkBlurb(link: PageFlowLink): string {
 
 /** Route-key → related page links. Only the most useful 3–5 per page. */
 export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
+  // 1 · Connect
+  onboarding: [
+    { to: '/connect', label: 'Connect', blurb: 'SDK, editor and CLI' },
+    { to: '/integrations/config', label: 'Integrations', blurb: 'Sentry, GitHub, Slack' },
+    { to: '/reports', label: 'Bugs', blurb: 'Where the first report lands' },
+  ],
+  connect: [
+    { to: '/onboarding', label: 'Set up', blurb: 'The three-step checklist' },
+    { to: '/mcp', label: 'Editor agents', blurb: 'MCP keys and connections' },
+    { to: '/integrations/config', label: 'Integrations', blurb: 'Sentry, GitHub, Slack' },
+  ],
+  // 5 · Ship & watch
+  portfolio: [
+    { to: '/reports', label: 'Bugs', blurb: 'Open reports for the selected app' },
+    { to: '/releases', label: 'Releases', blurb: 'What shipped, with reporter credit' },
+    { to: '/projects', label: 'Manage apps', blurb: 'Create, rename and archive apps' },
+  ],
+  // Account
+  projects: [
+    { to: '/portfolio', label: 'All apps', blurb: 'Every app side by side' },
+    { to: '/settings', label: 'Settings', blurb: 'AI keys and alerts' },
+    { to: '/team', label: 'Team', blurb: 'Members and billing' },
+  ],
+  team: [
+    { to: '/projects', label: 'Manage apps', blurb: 'The apps this team owns' },
+    { to: '/settings', label: 'Settings', blurb: 'AI keys and alerts' },
+  ],
   dashboard: [
     { to: '/inbox', label: 'To-do', blurb: 'What needs a decision now' },
     { to: '/reports', label: 'Bugs', blurb: 'Every report, newest first' },

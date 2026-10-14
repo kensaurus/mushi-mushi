@@ -1,11 +1,11 @@
 /**
  * FILE: apps/admin/src/components/check/CheckVerificationHub.tsx
- * PURPOSE: Verification hub landing at `/health?hub=check` — groups Check-stage
- *          tools into three progressive-disclosure buckets matching the Advanced
- *          sidebar sub-groups.
+ * PURPOSE: Verification hub landing at `/health?hub=check` — groups the
+ *          4 · Verify tools into the two buckets of the Advanced sidebar
+ *          (App checks, AI quality).
  *
  * OVERVIEW:
- * - SegmentedControl switches quality-gates / system-health / release-intel
+ * - SegmentedControl switches system-health / quality-gates
  * - Each segment lists deep links from navRegistry (single source of truth)
  *
  * DEPENDENCIES: navRegistry, PageHeaderBar, ui primitives
@@ -22,14 +22,11 @@ import {
 import { Card, SegmentedControl, Btn } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 
-const SUB_GROUP_ORDER: CheckSubGroupId[] = [
-  'quality-gates',
-  'system-health',
-  'release-intel',
-]
+// Same order as the sidebar: verify the app, then the AI that triaged it.
+const SUB_GROUP_ORDER: CheckSubGroupId[] = ['system-health', 'quality-gates']
 
 export function CheckVerificationHub() {
-  const [activeGroup, setActiveGroup] = useState<CheckSubGroupId>('quality-gates')
+  const [activeGroup, setActiveGroup] = useState<CheckSubGroupId>('system-health')
 
   const tabOptions = useMemo(
     () =>
@@ -51,15 +48,15 @@ export function CheckVerificationHub() {
     <div className="space-y-4" data-testid="mushi-check-verification-hub">
       <PageHeaderBar
         title="Verification hub"
-        description="Pick a verification lane — quality gates, system health, or release intel. Beginner mode shows Judge, Health, and QA Coverage in the sidebar; everything else lives here."
+        description="Pick a lane — App checks or AI quality. Beginner mode shows Scheduled tests and Triage grading in the sidebar; everything else lives here."
         helpTitle="About verification"
-        helpWhatIsIt="A grouped index of Check-stage tools so you can verify fixes before merge without scanning twelve flat sidebar items."
+        helpWhatIsIt="A grouped index of the 4 · Verify tools, so you can prove a fix works before you ship it without scanning a long flat list."
         helpUseCases={[
-          'After a fix PR: run Judge and QA Coverage from Quality gates',
-          'Before release: scan Drift and Anomalies under System health',
-          'Weekly ops: open Intelligence and Releases under Release & intel',
+          'After a fix PR: run Scheduled tests and the Full-stack audit from App checks',
+          'Before release: open App health for schema changes and unusual spikes',
+          'Weekly: check Triage grading and Lessons under AI quality',
         ]}
-        helpHowToUse="Choose a sub-group tab, then open the tool you need. For live LLM + cron telemetry, open System health → Health."
+        helpHowToUse="Choose a tab, then open the tool you need. For live AI-call and job telemetry, open App checks → App health."
       >
         <Btn to="/health" size="sm" variant="ghost">
             Open live health dashboard →

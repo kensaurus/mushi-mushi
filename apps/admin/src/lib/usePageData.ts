@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ZodType } from 'zod'
 import { apiFetch } from './supabase'
-import { useActiveProjectSignal } from './activeProject'
+import { useActiveProjectSignal, useProjectDataEpoch } from './activeProject'
 import { useActiveOrgSignal } from './activeOrg'
 
 export interface PageDataState<T> {
@@ -88,6 +88,7 @@ export function usePageData<T>(
 ): PageDataState<T> {
   const { autoLoad = true, deps = [], schema, scope = 'project' } = opts
   const activeProjectSignal = useActiveProjectSignal()
+  const projectDataEpoch = useProjectDataEpoch()
   // OrgSwitcher updates the active org id in localStorage and apiFetch picks
   // it up for the cache key + X-Mushi-Org-Id header, but without subscribing
   // here every page would keep showing the previous org's data until the
@@ -209,7 +210,7 @@ export function usePageData<T>(
     }
     // depKey is the JSON-serialised version of `deps`, so we intentionally
     // depend on it instead of `deps` itself to avoid array-identity churn.
-  }, [path, autoLoad, tick, depKey, schema, scope, activeProjectSignal, activeOrgSignal])
+  }, [path, autoLoad, tick, depKey, schema, scope, activeProjectSignal, activeOrgSignal, projectDataEpoch])
 
   return {
     data,

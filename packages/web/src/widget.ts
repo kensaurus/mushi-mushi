@@ -14,7 +14,7 @@ import { getLocale, type MushiLocale } from './i18n';
 import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
-import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
+import { readPageFaviconHref, MUSHI_COPY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
 import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
 import type {
   AssistantTurn,
@@ -969,7 +969,7 @@ export class MushiWidget {
     if (richLayout) {
       const body = document.createElement('div');
       body.className = 'mushi-banner-body';
-      const labelText = bc.label === false ? null : (bc.label ?? 'Beta');
+      const labelText = bc.label === false ? null : (bc.label ?? MUSHI_COPY.bannerLabel);
       if (labelText) {
         const pill = document.createElement('span');
         pill.className = 'mushi-banner-pill';

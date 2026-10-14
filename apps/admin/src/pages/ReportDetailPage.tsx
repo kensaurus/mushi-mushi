@@ -746,6 +746,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           sentryRelease={report.sentry_release}
           sentryEnvironment={report.sentry_environment}
           sentryIssueUrl={report.sentry_issue_url}
+          sentryLinks={report.sentry_links}
           tags={report.tags}
         />
       </div>

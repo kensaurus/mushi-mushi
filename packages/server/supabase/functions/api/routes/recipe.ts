@@ -37,7 +37,8 @@ import { contentProblem } from '../../_shared/recipe-change.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignActionSettingsView, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
 import { loadDesignActionSettings } from '../../_shared/design-actions.ts'
-import { inferStack, requiredCiVarNames } from '../../_shared/sdk-diagnostics.ts'
+import { requiredCiVarNames, resolveStack } from '../../_shared/sdk-diagnostics.ts'
+import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import {
@@ -97,7 +98,9 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
   getDefaultHead,
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => fetchLatestWorkflowRunForSha(repo.token, repo.ref, branch, sha),
   listActionsNames,
-  requiredEnvNames: (slug) => requiredCiVarNames(inferStack(slug)).map((v) => v.name),
+  requiredEnvNames: (slug, stack) => requiredCiVarNames(resolveStack(slug, stack)).map((v) => v.name),
+  // No package.json → null → the slug decides; every read failed → throws, not cached.
+  detectStack: detectRepoStack,
   now: () => new Date(),
 }
 

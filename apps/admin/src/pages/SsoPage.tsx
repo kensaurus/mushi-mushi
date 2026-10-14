@@ -12,7 +12,6 @@ import {
   Btn,
   Input,
   SelectField,
-  ErrorAlert,
   EmptyState,
   CodeValue,
 } from '../components/ui';
@@ -27,6 +26,7 @@ import { SsoSnapshotStrip } from '../components/sso/SsoSnapshotStrip';
 import { SsoReadout } from '../components/sso/SsoReadout';
 import { EMPTY_SSO_STATS, type SsoStats } from '../components/sso/types';
 import { CHIP_TONE } from '../lib/chipTone'
+import { PageLoadError } from '../components/PageLoadError'
 
 interface SsoConfig {
   id: string;
@@ -357,7 +357,7 @@ export function SsoPage() {
           {loading ? (
             <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading SSO providers" />
           ) : error ? (
-            <ErrorAlert message={`Failed to load SSO configs: ${error}`} onRetry={reload} />
+            <PageLoadError error={error} resource="SSO configs" onRetry={reload} />
           ) : configs.length === 0 ? (
             <EmptyState
               title="No identity providers configured"

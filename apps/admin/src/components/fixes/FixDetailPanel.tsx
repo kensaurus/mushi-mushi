@@ -155,6 +155,17 @@ export function FixDetailPanel({
         <Link to={`/reports/${fix.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Source report →
         </Link>
+        {fix.report_sentry_url && (
+          <a
+            href={fix.report_sentry_url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+            title="Mushi resolves this Sentry issue when the fix merges."
+          >
+            Sentry issue ↗
+          </a>
+        )}
         {fix.failure_category && (
           <Link to="/judge" className="text-fg-muted hover:text-fg underline">
             Judge scores →

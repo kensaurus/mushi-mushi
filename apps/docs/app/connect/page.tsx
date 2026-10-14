@@ -4,7 +4,16 @@
 
 import { useState } from 'react'
 import { CONNECT_SKILLS } from '@/lib/public-copy'
-import { MCP_CLIENTS, type McpClientDef, type McpBuildInput } from '@mushi-mushi/mcp/clients'
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+import {
+  MCP_CLIENTS,
+  MCP_OAUTH_CLIENT_IDS,
+  buildOAuthInstall,
+  type McpBuildResult,
+  type McpClientDef,
+  type McpBuildInput,
+  type McpOAuthClientId,
+} from '@mushi-mushi/mcp/clients'
 import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG } from '@mushi-mushi/mcp/catalog'
 import {
   ConnectLanePicker,
@@ -93,10 +102,20 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
   )
 }
 
+function isOAuthClient(id: string): id is McpOAuthClientId {
+  return (MCP_OAUTH_CLIENT_IDS as readonly string[]).includes(id)
+}
+
 function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBuildInput; isDemo: boolean }) {
-  let result
+  // Your own project: clients that speak remote MCP get the URL-only install,
+  // so their OAuth sign-in runs on first use (a static key header turns it
+  // off). Stdio-only clients (Cline, Claude Desktop, Zed) still need a key.
+  const oauth = !isDemo && isOAuthClient(client.id)
+  let result: McpBuildResult
   try {
-    result = client.build(input)
+    result = oauth
+      ? buildOAuthInstall(client.id as McpOAuthClientId, { mcpOAuthUrl: MUSHI_CANONICAL_URLS.hostedMcp })
+      : client.build(input)
   } catch {
     return <p className="text-sm text-[var(--mushi-vermillion)]">Failed to build config for this client.</p>
   }
@@ -111,13 +130,16 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
             Connect your own project →
           </a>
         </div>
+      ) : oauth ? (
+        <div className="mushi-connect-callout">
+          <strong>No keys to paste.</strong> This installs only the Mushi URL. The first time{' '}
+          {client.label} uses it, your browser opens the Mushi sign-in; approve all your apps or pick
+          some, and a revocable key is made for you. Revoke it any time under Editor agents in the console.
+        </div>
       ) : (
         <div className="mushi-connect-callout">
-          <strong>No keys to paste:</strong> the hosted server speaks real OAuth — run your
-          client&apos;s MCP login (e.g.{' '}
-          <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">claude mcp login mushi</code>
-          ) and approve in the console; a revocable project key is minted for you. Prefer a static
-          key? Replace{' '}
+          <strong>{client.label} needs a key.</strong> It runs Mushi as a local process, which has no
+          browser sign-in. Replace{' '}
           <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
           with your real key, or{' '}
           <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
@@ -143,7 +165,9 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
           <p className="text-xs text-[var(--mushi-ink-muted)]">
             {isDemo
               ? 'Installs the read-only demo — no signup. Connect your own project to use your data and write tools.'
-              : 'This deeplink uses a placeholder key. Sign in to inject your real key automatically.'}
+              : oauth
+                ? 'Installs the hosted Mushi URL. Sign-in runs in your browser the first time the editor calls it.'
+                : 'This deeplink uses a placeholder key. Sign in to inject your real key automatically.'}
           </p>
           <details className="group">
             <summary className="cursor-pointer text-xs text-[var(--mushi-ink-muted)] hover:text-[var(--mushi-ink)]">
@@ -167,7 +191,13 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
       {result.kind === 'remote-url' && (
         <div className="space-y-3">
           <CopyBlock label="MCP endpoint URL" text={result.url} />
-          <CopyBlock label="Required headers" text={result.headerSnippet} />
+          {result.headerSnippet ? (
+            <CopyBlock label="Required headers" text={result.headerSnippet} />
+          ) : (
+            <p className="text-xs text-[var(--mushi-ink-muted)]">
+              No headers: your client signs in with OAuth the first time it connects.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -287,7 +317,9 @@ export default function ConnectPage() {
             Connect your editor
           </h1>
           <p className="mt-2 text-base text-[var(--mushi-ink-muted)]">
-            Pick a client below. Demo needs no signup; sign in when you want your own project.
+            {DEMO_INPUT
+              ? 'Pick a client below. Demo needs no signup; sign in when you want your own project.'
+              : 'Pick your editor. Most install in one click and sign in through your browser, with no key to paste.'}
           </p>
           <p className="mt-3 text-xs text-[var(--mushi-ink-muted)]">
             {MCP_CLIENTS.length} clients · {MCP_TOOL_COUNT} MCP tools · usually under 2 minutes

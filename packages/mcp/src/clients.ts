@@ -31,6 +31,9 @@
  * - claude-desktop                     — copy-config to claude_desktop_config.json
  * - zed                                — copy-config to ~/.config/zed/settings.json
  * - any                                — hosted Streamable HTTP URL + Bearer key
+ * - buildOAuthInstall()                — keyless variant of cursor / vscode(-insiders) /
+ *                                        claude-code / windsurf / any for public pages
+ *                                        (URL only, the client's OAuth sign-in runs)
  *
  * NOTES:
  * - All builders are pure functions — no side-effects, no DOM, no React.
@@ -214,7 +217,7 @@ function buildHttpConfigObj(
 }
 
 /** Cursor one-click deeplink — base64-encodes config, no `name` in the payload. */
-function encodeCursorDeeplink(name: string, config: StdioConfig | HttpConfig): string {
+function encodeCursorDeeplink(name: string, config: StdioConfig | HttpConfig | { url: string }): string {
   const encoded = btoa(JSON.stringify(config))
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(encoded)}`
 }
@@ -461,6 +464,69 @@ export const MCP_CLIENTS: McpClientDef[] = [
     },
   },
 ]
+
+// ─── OAuth install variant (public surfaces) ──────────────────────────────────
+//
+// The landing page and the public /connect page cannot hold a key, and a
+// static `Authorization` header tells an MCP client that OAuth is not needed,
+// so its sign-in never runs. These installs are URL-only: on first use the
+// client opens the Mushi consent page, which mints a revocable account key
+// for all, selected or one project (ADR 0026). Same entry shape the CLI writes
+// (packages/cli/src/mcp-config.ts `buildHostedMcpServerBlock`). The URL must be
+// the kensaur.us hosted-mcp URL (MUSHI_CANONICAL_URLS.hostedMcp): its host
+// root serves the OAuth metadata, a supabase.co one does not.
+
+/** Clients with a URL-only (OAuth) install. */
+export type McpOAuthClientId = 'cursor' | 'vscode' | 'vscode-insiders' | 'windsurf' | 'claude-code' | 'any'
+
+export const MCP_OAUTH_CLIENT_IDS: readonly McpOAuthClientId[] = [
+  'cursor',
+  'vscode',
+  'vscode-insiders',
+  'claude-code',
+  'windsurf',
+  'any',
+]
+
+/** Server name written into the client's config by an OAuth install. */
+export const MCP_OAUTH_SERVER_NAME = 'mushi'
+
+export interface McpOAuthInstallInput {
+  /** Hosted MCP URL that runs the client's own OAuth sign-in. */
+  mcpOAuthUrl: string
+  /** Defaults to MCP_OAUTH_SERVER_NAME. */
+  serverName?: string
+}
+
+/**
+ * Keyless install artifact for one client. Nothing it returns carries a key
+ * or a header; the client's OAuth sign-in supplies the credential.
+ */
+export function buildOAuthInstall(id: McpOAuthClientId, input: McpOAuthInstallInput): McpBuildResult {
+  const name = input.serverName ?? MCP_OAUTH_SERVER_NAME
+  const url = input.mcpOAuthUrl
+  switch (id) {
+    case 'cursor':
+      // mcp.json remote entry; the payload is the entry itself, no name.
+      return { kind: 'deeplink', url: encodeCursorDeeplink(name, { url }) }
+    case 'vscode':
+    case 'vscode-insiders':
+      // Documented form: vscode:mcp/install?{url-encoded JSON with name}
+      // (code.visualstudio.com/api/extension-guides/ai/mcp, read 2026-10-14).
+      return { kind: 'deeplink', url: `${id}:mcp/install?${encodeURIComponent(JSON.stringify({ name, type: 'http', url }))}` }
+    case 'claude-code':
+      return { kind: 'command', text: `claude mcp add --transport http ${name} ${url}` }
+    case 'windsurf':
+      return {
+        kind: 'config',
+        filePath: '~/.codeium/windsurf/mcp_config.json',
+        // Windsurf reads `serverUrl`, not `url`.
+        json: JSON.stringify({ mcpServers: { [name]: { serverUrl: url } } }, null, 2),
+      }
+    case 'any':
+      return { kind: 'remote-url', url, headerSnippet: '' }
+  }
+}
 
 /** Look up a client by id — throws if not found. */
 export function getMcpClient(id: McpClientId): McpClientDef {
