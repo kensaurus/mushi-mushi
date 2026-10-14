@@ -53,6 +53,31 @@ describe('runCodebaseAnalyzeJob claim', () => {
     expect(wikiIngest).not.toHaveBeenCalled()
   })
 
+  // Sentry MUSHI-MUSHI-SERVER-2Q: a 12 MB graph upsert hit PostgREST's 8 s
+  // role timeout. The write now goes through an RPC that carries its own.
+  it('writes the graph through write_codebase_graph, not a table upsert', async () => {
+    const db = makeFakeDb({
+      codebase_analyze_jobs: [job('job-1', { trigger: 'push' })],
+      projects: [{ id: P, name: 'glot.it' }],
+      project_repos: [{ project_id: P, is_primary: true, commit_sha: 'abc123' }],
+      project_codebase_files: [
+        { id: 'f1', project_id: P, file_path: 'src/a.ts', symbol_name: null, language: 'typescript', tombstoned_at: null, indexed_at: '2026-10-07T00:00:00Z', imports: [] },
+      ],
+      project_codebase_graph: [],
+    })
+    const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1')
+    expect(result).toMatchObject({ ok: true, status: 'completed' })
+    const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
+    expect(write?.args).toMatchObject({ p_project_id: P, p_commit_sha: 'abc123', p_index_fingerprint: '1:2026-10-07T00:00:00Z' })
+    expect((write?.args.p_graph as { nodes: unknown[] }).nodes.length).toBeGreaterThan(0)
+    expect(db.tables.project_codebase_graph).toHaveLength(0)
+
+    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261014120000_write_codebase_graph_rpc.sql'), 'utf8')
+    expect(sql).toMatch(/set statement_timeout = '60s'/)
+    expect(sql).toMatch(/revoke all on function public\.write_codebase_graph\(uuid, text, text, jsonb\) from public, anon, authenticated/)
+    expect(sql).toMatch(/grant execute on function public\.write_codebase_graph\(uuid, text, text, jsonb\) to service_role/)
+  })
+
   it('reports a missing job as failed', async () => {
     const db = makeFakeDb({ codebase_analyze_jobs: [] })
     expect(await runner.runCodebaseAnalyzeJob(db as never, 'nope')).toMatchObject({ ok: false, error: 'job not found' })
