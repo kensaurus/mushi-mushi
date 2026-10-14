@@ -15,11 +15,14 @@
 
 import { useMemo } from 'react'
 import { Section, Badge, CodeValue } from '../ui'
+import { formatRelative as formatAgo } from '../ui/metrics'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { IconBolt, IconExternalLink, IconClock, IconLink, IconAlertTriangle } from '../icons'
 import type {
   ReportBreadcrumb,
   ReportSentryBreadcrumb,
   ReportSentryContext,
+  ReportSentryLink,
 } from './types'
 
 interface Props {
@@ -35,6 +38,8 @@ interface Props {
   sentryEnvironment?: string | null
   /** Pre-built deeplink to the Sentry issue page; used as the CTA. */
   sentryIssueUrl?: string | null
+  /** The Sentry issues this report came from, with their resolve state. */
+  sentryLinks?: ReportSentryLink[] | null
   /** Tags surface — also rendered as filter chips. */
   tags?: Record<string, string | number | boolean> | null
 }
@@ -125,6 +130,7 @@ export function SentryContextPanel({
   sentryRelease,
   sentryEnvironment,
   sentryIssueUrl,
+  sentryLinks,
   tags,
 }: Props) {
   const unified = useMemo(
@@ -142,7 +148,8 @@ export function SentryContextPanel({
   const environment = sentryEnvironment ?? sentryContext?.environment ?? null
   const transactionName = sentryContext?.transactionName ?? null
   const sentryUser = sentryContext?.user ?? null
-  const issueUrl = sentryIssueUrl ?? sentryContext?.issueUrl ?? null
+  const links = sentryLinks ?? []
+  const issueUrl = sentryIssueUrl ?? sentryContext?.issueUrl ?? links.find((l) => l.external_url)?.external_url ?? null
 
   const hasSentry =
     Boolean(eventId || replayId || traceId || release || environment || transactionName)
@@ -153,7 +160,9 @@ export function SentryContextPanel({
     [tags],
   )
 
-  if (!hasSentry && unified.length === 0 && !hasTags) {
+  // A report imported from Sentry often carries only the issue link: it still
+  // needs this card, for the link and for "resolves when the fix merges".
+  if (!hasSentry && unified.length === 0 && !hasTags && !issueUrl && links.length === 0) {
     // Don't render an empty card — the report didn't carry any
     // observability extras. The detail page already has enough chrome.
     return null
@@ -178,6 +187,35 @@ export function SentryContextPanel({
         ) : undefined
       }
     >
+      {links.length > 0 && (
+        <ul className="mb-3 space-y-1 text-2xs" aria-label="Sentry issues">
+          {links.map((link) => (
+            <li key={link.external_id} className="flex flex-wrap items-center gap-1.5 min-w-0">
+              <span className="text-fg-muted shrink-0">Sentry issue</span>
+              {link.external_url ? (
+                <a
+                  href={link.external_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-mono text-fg-secondary hover:text-fg hover:underline"
+                >
+                  {link.external_id}
+                </a>
+              ) : (
+                <span className="font-mono text-fg-secondary">{link.external_id}</span>
+              )}
+              {link.resolved_at ? (
+                <Badge className={CHIP_TONE.okSubtle} title={new Date(link.resolved_at).toLocaleString()}>
+                  Resolved in Sentry {formatAgo(link.resolved_at)}
+                </Badge>
+              ) : (
+                <Badge className={CHIP_TONE.neutral}>Resolves in Sentry when the fix merges</Badge>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {hasSentry && (
         <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-2xs">
           {eventId && (

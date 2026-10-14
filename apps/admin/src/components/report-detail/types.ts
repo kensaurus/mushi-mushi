@@ -261,6 +261,11 @@ export interface ReportDetail {
   sentry_environment?: string | null
   sentry_issue_url?: string | null
   /**
+   * The Sentry issues this report came from (report_external_issues).
+   * null when the read failed; absent on an older API.
+   */
+  sentry_links?: ReportSentryLink[] | null
+  /**
    * Snapshot of the rich Sentry context the SDK captured at report
    * time. Lives under `custom_metadata.sentry` on the row; surfaced
    * to the detail page so it can render Sentry breadcrumbs alongside
@@ -333,4 +338,11 @@ export interface ReportDetail {
   known_issues_search_enabled?: boolean | null
   // ── Project metadata needed by CodeFramePanel (available when page fetches project) ──
   project?: { repo_url?: string | null } | null
+}
+
+/** One Sentry issue linked to a report. `resolved_at` is set only after Sentry accepted the resolve. */
+export interface ReportSentryLink {
+  external_id: string
+  external_url: string | null
+  resolved_at: string | null
 }

@@ -7,8 +7,10 @@
  *
  * OVERVIEW:
  * - NAV_REGISTRY: every sidebar + palette route with IA flags
- * - SIMPLE_NAV_GROUPS: the Quick and Beginner sidebars, built around what a
- *   solo builder does (find and fix bugs, look after apps, connect tools)
+ * - NAV_SECTION_META: the Advanced sections, one per step of the vibe-coding
+ *   cycle (ADR 0027): 1 Connect, 2 Bugs, 3 Fix, 4 Verify, 5 Ship & watch,
+ *   then Account
+ * - SIMPLE_NAV_GROUPS: the Quick and Beginner sidebars, the same cycle
  * - CHECK_SUB_GROUPS: progressive-disclosure buckets inside Check (Advanced)
  * - buildStageRoutes / buildStaticRoutes: derived exports for pdca + palette
  *
@@ -24,7 +26,7 @@ import type { FeatureFlag } from './useEntitlements'
 
 export type NavSectionId = 'start' | 'plan' | 'do' | 'check' | 'act' | 'workspace'
 
-export type CheckSubGroupId = 'quality-gates' | 'system-health' | 'release-intel'
+export type CheckSubGroupId = 'quality-gates' | 'system-health'
 
 export type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspace'
 
@@ -115,26 +117,23 @@ export const CHECK_SUB_GROUPS: Record<
   CheckSubGroupId,
   { title: string; hint: string }
 > = {
-  'quality-gates': {
-    title: 'AI quality',
-    hint: 'How good the AI’s triage and fixes are: grading, lessons learned and the prompts behind them.',
-  },
   'system-health': {
     title: 'App checks',
-    hint: 'Is the app itself sound: its blueprint, audits, scheduled tests, design tokens, user stories, content and AI health.',
+    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, app health, design tokens and content.',
   },
-  'release-intel': {
-    title: 'Ship & learn',
-    hint: 'What shipped, what you are testing, and what you looked up.',
+  'quality-gates': {
+    title: 'AI quality',
+    hint: 'How good the AI’s triage is: grading, lessons learned and the prompts behind it.',
   },
 }
 
 /**
- * Quick and Beginner sidebars (Oct 2026 navigation pass). The PDCA sections
- * read as an internal process; a solo builder thinks "find and fix bugs, look
- * after my apps, connect my tools". Quick lists the core pages; Beginner adds
- * a few next steps. Advanced keeps every page under NAV_SECTION_META.
- * Paths not in the registry, or hidden by role/plan, are skipped.
+ * Quick and Beginner sidebars. They follow the same cycle as the Advanced
+ * sections (ADR 0027): connect, bugs come in, fix, verify, ship and watch,
+ * then account. Quick lists the core pages; Beginner adds a few next steps.
+ * Advanced keeps every page under NAV_SECTION_META. Paths not in the
+ * registry, or hidden by role/plan, are skipped; a group with no visible page
+ * is not rendered (Quick has no Verify page).
  */
 export interface SimpleNavGroup {
   id: string
@@ -147,28 +146,40 @@ export interface SimpleNavGroup {
 
 export const SIMPLE_NAV_GROUPS: readonly SimpleNavGroup[] = [
   {
-    id: 'simple-fix',
-    title: 'Find & fix bugs',
-    quick: ['/dashboard', '/reports', '/inbox', '/fixes'],
-    beginner: ['/dashboard', '/reports', '/inbox', '/fixes', '/repo', '/judge'],
-  },
-  {
-    id: 'simple-apps',
-    title: 'Your apps',
-    quick: ['/portfolio', '/projects'],
-    beginner: ['/portfolio', '/ux-runs', '/projects'],
-  },
-  {
     id: 'simple-connect',
-    title: 'Connect your tools',
+    title: 'Connect',
     quick: ['/onboarding', '/connect', '/integrations/config'],
-    beginner: ['/onboarding', '/connect', '/integrations/config', '/mcp', '/notifications'],
+    beginner: ['/onboarding', '/connect', '/integrations/config', '/mcp'],
+  },
+  {
+    id: 'simple-bugs',
+    title: 'Bugs',
+    quick: ['/dashboard', '/inbox', '/reports'],
+    beginner: ['/dashboard', '/inbox', '/reports'],
+  },
+  {
+    id: 'simple-fix',
+    title: 'Fix',
+    quick: ['/fixes'],
+    beginner: ['/fixes', '/repo', '/ux-runs'],
+  },
+  {
+    id: 'simple-verify',
+    title: 'Verify',
+    quick: [],
+    beginner: ['/qa-coverage', '/judge'],
+  },
+  {
+    id: 'simple-ship',
+    title: 'Ship & watch',
+    quick: ['/portfolio'],
+    beginner: ['/portfolio', '/notifications'],
   },
   {
     id: 'simple-account',
     title: 'Account',
-    quick: ['/settings'],
-    beginner: ['/settings', '/team', '/feedback'],
+    quick: ['/settings', '/projects'],
+    beginner: ['/settings', '/projects', '/team', '/feedback'],
   },
 ]
 
@@ -187,6 +198,10 @@ export const NAV_SECTION_META: Record<
   NavSectionId,
   {
     title: string
+    /** Position in the vibe-coding cycle (ADR 0027); the rail shows it as the
+     *  section glyph. Account has none: it sits outside the cycle. */
+    step?: number
+    /** PDCA stage: colours the glyph and maps the section to its stage chip. */
     stage?: 'P' | 'D' | 'C' | 'A'
     /** Required: the collapsed rail has no room for a section label, so this
      *  is the only explanation a user gets. A missing hint yields a
@@ -197,40 +212,45 @@ export const NAV_SECTION_META: Record<
   }
 > = {
   start: {
-    title: 'Start here',
-    hint: 'Setup, your home page, your to-do list and all your apps — where you land each day.',
+    title: '1 · Connect',
+    step: 1,
+    hint: 'Install Mushi in your app and connect your editor, your tools and your coding agents.',
     defaultCollapsed: true,
   },
   plan: {
-    title: 'Bugs coming in',
+    title: '2 · Bugs',
+    step: 2,
     stage: 'P',
-    hint: 'Bug reports from your users land here, get sorted, grouped and ranked.',
+    hint: 'Your home page, your to-do list and the bugs your users and monitoring send in, sorted and grouped.',
   },
   do: {
-    title: 'Fixing',
+    title: '3 · Fix',
+    step: 3,
     stage: 'D',
-    hint: 'Turn bug reports into draft pull requests, and tune how that is done.',
+    hint: 'Turn a bug into a draft pull request with its checks, and see what changed in your code.',
   },
   check: {
-    title: 'Quality & health',
+    title: '4 · Verify',
+    step: 4,
     stage: 'C',
-    hint: 'Check the automatic fixes and the health of your apps.',
+    hint: 'Prove the app works before you ship: scheduled tests, audits, app health, and how good the AI’s triage is.',
   },
   act: {
-    title: 'Connect & automate',
+    title: '5 · Ship & watch',
+    step: 5,
     stage: 'A',
-    hint: 'Send verified fixes and alerts to the tools you already use.',
+    hint: 'Ship it and keep watching: all your apps, releases, what reporters hear back, experiments and research.',
   },
   workspace: {
-    title: 'Account & admin',
-    hint: 'Apps, team, settings, billing and admin tools — outside the bug-fix loop.',
+    title: 'Account',
+    hint: 'Settings, team, apps, plugins, billing and admin tools — outside the bug-fix cycle.',
     defaultCollapsed: true,
   },
 }
 
 /** Canonical registry — keep lock-step with App.tsx routes. */
 export const NAV_REGISTRY: NavRegistryEntry[] = [
-  // ── Start here ───────────────────────────────────────────────────────────
+  // ── 1 · Connect ───────────────────────────────────────────────────────────
   {
     id: 'nav:onboarding',
     path: '/onboarding',
@@ -239,38 +259,6 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'bolt',
     paletteDescription: 'Three-step setup: create a project, install the widget, send a test bug.',
     paletteKeywords: ['get started', 'setup', 'install', 'quickstart', 'first run', 'widget', 'snippet', 'project'],
-    paletteGroup: 'Start',
-  },
-  {
-    id: 'nav:dashboard',
-    path: '/dashboard',
-    label: 'Home',
-    sectionId: 'start',
-    iconKey: 'dashboard',
-    paletteDescription: 'Summary for the selected app: open bugs, fixes in progress, setup and recent activity.',
-    paletteKeywords: ['dashboard', 'home', 'overview', 'kpi', 'metrics', 'loop', 'landing', 'summary'],
-    paletteGroup: 'Start',
-  },
-  {
-    id: 'nav:inbox',
-    path: '/inbox',
-    label: 'To-do',
-    sectionId: 'start',
-    pdcaStage: 'plan',
-    iconKey: 'inbox',
-    paletteDescription: 'One card for each decision waiting on you — bugs to triage, fixes to review, setup to finish.',
-    paletteKeywords: ['action inbox', 'inbox', 'action', 'todo', 'to do', 'pending', 'decision', 'next'],
-    paletteGroup: 'Start',
-  },
-  {
-    id: 'nav:portfolio',
-    path: '/portfolio',
-    label: 'All apps',
-    sectionId: 'start',
-    pdcaStage: 'check',
-    iconKey: 'overview',
-    paletteDescription: 'Every app in this team side by side: setup state, open bugs, SDK version and problems to fix once across apps.',
-    paletteKeywords: ['portfolio', 'all apps', 'apps', 'fix once', 'sdk skew', 'sdk version', 'radar', 'holes', 'team', 'organization'],
     paletteGroup: 'Start',
   },
   {
@@ -284,26 +272,57 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Start',
   },
   {
-    id: 'nav:feedback',
-    path: '/feedback',
-    label: 'Help & support',
+    id: 'nav:integrations',
+    path: '/integrations/config',
+    label: 'Integrations',
     sectionId: 'start',
-    iconKey: 'chat',
-    paletteDescription: 'Ask the Mushi team for help and read their replies to feedback you sent.',
-    paletteKeywords: ['support', 'feedback', 'help', 'contact', 'bug', 'request'],
+    iconKey: 'integrations',
+    paletteDescription: 'Connect services: Slack, Sentry, GitHub, Linear, Discord — tokens, webhooks, health.',
+    paletteKeywords: ['slack', 'discord', 'github', 'sentry', 'linear', 'stripe', 'webhook', 'connect', 'plug', 'integrations', 'services'],
     paletteGroup: 'Start',
   },
   {
-    id: 'nav:feature-board',
-    path: '/feature-board',
-    label: 'Feature requests',
+    id: 'nav:mcp',
+    path: '/mcp',
+    label: 'Editor agents',
     sectionId: 'start',
-    iconKey: 'feature-board',
-    paletteDescription: 'Community feature requests and votes.',
-    paletteKeywords: ['feature board', 'features', 'roadmap', 'votes', 'board'],
+    iconKey: 'mcp',
+    paletteDescription: 'Connect Cursor, Claude and other coding agents to this app through MCP.',
+    paletteKeywords: ['mcp', 'agent help', 'claude', 'cursor', 'agent', 'tools', 'context', 'windsurf', 'editor'],
     paletteGroup: 'Start',
   },
-  // ── Bugs coming in ───────────────────────────────────────────────────────
+  {
+    id: 'nav:skills',
+    path: '/skills',
+    label: 'Agent skills',
+    sectionId: 'start',
+    iconKey: 'skills',
+    paletteDescription: 'Browse agent skills, track the runs that use them, and sync skill sources.',
+    paletteKeywords: ['skills', 'skill pipelines', 'skill catalog', 'kenji skills', 'handoff', 'catalog', 'cursor-kenji'],
+    paletteGroup: 'Start',
+  },
+  // ── 2 · Bugs ──────────────────────────────────────────────────────────────
+  {
+    id: 'nav:dashboard',
+    path: '/dashboard',
+    label: 'Home',
+    sectionId: 'plan',
+    iconKey: 'dashboard',
+    paletteDescription: 'Summary for the selected app: open bugs, fixes in progress, setup and recent activity.',
+    paletteKeywords: ['dashboard', 'home', 'overview', 'kpi', 'metrics', 'loop', 'landing', 'summary'],
+    paletteGroup: 'Plan',
+  },
+  {
+    id: 'nav:inbox',
+    path: '/inbox',
+    label: 'To-do',
+    sectionId: 'plan',
+    pdcaStage: 'plan',
+    iconKey: 'inbox',
+    paletteDescription: 'One card for each decision waiting on you — bugs to triage, fixes to review, setup to finish.',
+    paletteKeywords: ['action inbox', 'inbox', 'action', 'todo', 'to do', 'pending', 'decision', 'next'],
+    paletteGroup: 'Plan',
+  },
   {
     id: 'nav:reports',
     path: '/reports',
@@ -348,7 +367,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteKeywords: ['anti-gaming', 'anti gaming', 'spam', 'abuse', 'collusion', 'rate limit', 'fraud', 'dupes'],
     paletteGroup: 'Plan',
   },
-  // ── Fixing ───────────────────────────────────────────────────────────────
+  // ── 3 · Fix ───────────────────────────────────────────────────────────────
   {
     id: 'nav:fixes',
     path: '/fixes',
@@ -369,6 +388,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'git',
     paletteDescription: 'Every fix branch and pull request in your connected GitHub repo, with CI status.',
     paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'pull request', 'ci', 'checks', 'merge', 'activity'],
+    paletteGroup: 'Do',
+  },
+  {
+    id: 'nav:explore',
+    path: '/explore',
+    label: 'Code map',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'explore',
+    paletteDescription: 'Map, ask questions about, and tour your indexed repository.',
+    paletteKeywords: ['explore', 'codebase', 'atlas', 'understand', 'architecture', 'ask', 'tour', 'domains', 'codebase map'],
     paletteGroup: 'Do',
   },
   {
@@ -393,18 +423,93 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteKeywords: ['iterate', 'pdca', 'improve', 'loop', 'producer critic', 'runs'],
     paletteGroup: 'Do',
   },
+  // ── 4 · Verify (sub-grouped in Advanced sidebar) ──────────────────────────
   {
-    id: 'nav:explore',
-    path: '/explore',
-    label: 'Code map',
-    sectionId: 'do',
-    pdcaStage: 'do',
-    iconKey: 'explore',
-    paletteDescription: 'Map, ask questions about, and tour your indexed repository.',
-    paletteKeywords: ['explore', 'codebase', 'atlas', 'understand', 'architecture', 'ask', 'tour', 'domains', 'codebase map'],
-    paletteGroup: 'Do',
+    id: 'nav:qa-coverage',
+    path: '/qa-coverage',
+    label: 'Scheduled tests',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'qa-coverage',
+    paletteDescription: 'Browser tests of your user stories that run on a schedule and alert when one breaks.',
+    paletteKeywords: ['qa coverage', 'qa', 'playwright', 'stories', 'coverage', 'test', 'tests'],
+    paletteGroup: 'Check',
   },
-  // ── Quality & health (sub-grouped in Advanced sidebar) ───────────────────
+  {
+    id: 'nav:inventory',
+    path: '/inventory',
+    label: 'User stories',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'story',
+    requiresFeature: 'inventory_v2',
+    requiresAdvancedMode: true,
+    paletteDescription: 'The things users can do in your app, found by crawling it, and which ones broke.',
+    paletteKeywords: ['stories', 'inventory', 'discovery', 'crawl', 'user stories'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:fullstack-audit',
+    path: '/fullstack-audit',
+    label: 'Full-stack audit',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'shield-check',
+    paletteDescription: 'End-to-end audit across frontend, API, and database.',
+    paletteKeywords: ['full-stack audit', 'audit', 'fullstack', 'fe', 'be', 'schema'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:recipe',
+    path: '/recipe',
+    label: 'App blueprint',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'pipeline',
+    paletteDescription: 'What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed.',
+    paletteKeywords: ['recipe', 'app recipe', 'blueprint', 'stack', 'design system', 'tokens', 'gates', 'ci', 'deploy', 'env', 'integrations', 'manifest', 'mushi.recipe.json'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:health',
+    path: '/health',
+    label: 'App health',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'health',
+    paletteDescription: 'Are your integrations and background jobs working: uptime, errors and failed checks.',
+    paletteKeywords: ['health', 'status', 'uptime', 'availability', 'sentry', 'slo', 'monitoring', 'incidents', 'verification hub'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:design',
+    path: '/design',
+    label: 'Design system',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'sliders',
+    paletteDescription: 'Design tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.',
+    paletteKeywords: ['design', 'design system', 'tokens', 'dtcg', 'colors', 'contrast', 'typography', 'spacing', 'radius', 'deviance', 'off-token', 'rules'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:content',
+    path: '/content',
+    label: 'Content checks',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'content',
+    paletteDescription: 'Review AI-generated and user-submitted content flagged as wrong or low quality.',
+    paletteKeywords: ['content qa', 'content', 'qa', 'quality', 'moderation'],
+    paletteGroup: 'Check',
+  },
   {
     id: 'nav:judge',
     path: '/judge',
@@ -413,7 +518,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'check',
     checkSubGroup: 'quality-gates',
     iconKey: 'judge',
-    paletteDescription: 'A second AI grades each automatic fix and flags where it disagrees with the first.',
+    paletteDescription: 'A second AI grades how well each bug was triaged (severity, category, diagnosis) and flags where it disagrees with the first.',
     paletteKeywords: ['fix grading', 'judge', 'score', 'eval', 'quality', 'grade', 'grading', 'verification', 'llm-as-judge'],
     paletteGroup: 'Check',
   },
@@ -441,160 +546,27 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteKeywords: ['prompt lab', 'prompt', 'llm', 'model', 'ai', 'tuning', 'evals', 'template', 'system prompt'],
     paletteGroup: 'Check',
   },
+  // ── 5 · Ship & watch ──────────────────────────────────────────────────────
   {
-    id: 'nav:recipe',
-    path: '/recipe',
-    label: 'App blueprint',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'pipeline',
-    paletteDescription: 'What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed.',
-    paletteKeywords: ['recipe', 'app recipe', 'blueprint', 'stack', 'design system', 'tokens', 'gates', 'ci', 'deploy', 'env', 'integrations', 'manifest', 'mushi.recipe.json'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:fullstack-audit',
-    path: '/fullstack-audit',
-    label: 'Full-stack audit',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'shield-check',
-    paletteDescription: 'End-to-end audit across frontend, API, and database.',
-    paletteKeywords: ['full-stack audit', 'audit', 'fullstack', 'fe', 'be', 'schema'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:qa-coverage',
-    path: '/qa-coverage',
-    label: 'Scheduled tests',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'qa-coverage',
-    paletteDescription: 'Browser tests of your user stories that run on a schedule and alert when one breaks.',
-    paletteKeywords: ['qa coverage', 'qa', 'playwright', 'stories', 'coverage', 'test', 'tests'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:design',
-    path: '/design',
-    label: 'Design system',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'sliders',
-    paletteDescription: 'Design tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.',
-    paletteKeywords: ['design', 'design system', 'tokens', 'dtcg', 'colors', 'contrast', 'typography', 'spacing', 'radius', 'deviance', 'off-token', 'rules'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:inventory',
-    path: '/inventory',
-    label: 'User stories',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'story',
-    requiresFeature: 'inventory_v2',
-    requiresAdvancedMode: true,
-    paletteDescription: 'The things users can do in your app, found by crawling it, and which ones broke.',
-    paletteKeywords: ['stories', 'inventory', 'discovery', 'crawl', 'user stories'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:content',
-    path: '/content',
-    label: 'Content checks',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'content',
-    paletteDescription: 'Review AI-generated and user-submitted content flagged as wrong or low quality.',
-    paletteKeywords: ['content qa', 'content', 'qa', 'quality', 'moderation'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:health',
-    path: '/health',
-    label: 'App health',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'system-health',
-    iconKey: 'health',
-    paletteDescription: 'Are your integrations and background jobs working: uptime, errors and failed checks.',
-    paletteKeywords: ['health', 'status', 'uptime', 'availability', 'sentry', 'slo', 'monitoring', 'incidents', 'verification hub'],
-    paletteGroup: 'Check',
+    id: 'nav:portfolio',
+    path: '/portfolio',
+    label: 'All apps',
+    sectionId: 'act',
+    pdcaStage: 'act',
+    iconKey: 'overview',
+    paletteDescription: 'Every app in this team side by side: setup state, open bugs, SDK version and problems to fix once across apps.',
+    paletteKeywords: ['portfolio', 'all apps', 'apps', 'fix once', 'sdk skew', 'sdk version', 'radar', 'holes', 'team', 'organization'],
+    paletteGroup: 'Act',
   },
   {
     id: 'nav:releases',
     path: '/releases',
     label: 'Releases',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'releases',
     paletteDescription: 'Shipped releases with reporter credit.',
     paletteKeywords: ['releases', 'changelog', 'ship', 'deploy'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:experiments',
-    path: '/experiments',
-    label: 'Experiments',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
-    iconKey: 'experiments',
-    paletteDescription: 'A/B experiments and feature flags.',
-    paletteKeywords: ['experiments', 'ab', 'a/b', 'flags', 'variants'],
-    paletteGroup: 'Check',
-  },
-  {
-    id: 'nav:research',
-    path: '/research',
-    label: 'Research',
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
-    iconKey: 'globe',
-    paletteDescription: 'Pull web pages and docs (via Firecrawl) into a fix so it uses current information.',
-    paletteKeywords: ['research', 'firecrawl', 'web search', 'docs', 'scrape', 'crawl', 'knowledge'],
-    paletteGroup: 'Check',
-  },
-  // ── Connect & automate ───────────────────────────────────────────────────
-  {
-    id: 'nav:integrations',
-    path: '/integrations/config',
-    label: 'Integrations',
-    sectionId: 'act',
-    pdcaStage: 'act',
-    iconKey: 'integrations',
-    paletteDescription: 'Connect services: Slack, Sentry, GitHub, Linear, Discord — tokens, webhooks, health.',
-    paletteKeywords: ['slack', 'discord', 'github', 'sentry', 'linear', 'stripe', 'webhook', 'connect', 'plug', 'integrations', 'services'],
-    paletteGroup: 'Act',
-  },
-  {
-    id: 'nav:mcp',
-    path: '/mcp',
-    label: 'Editor agents',
-    sectionId: 'act',
-    pdcaStage: 'act',
-    iconKey: 'mcp',
-    paletteDescription: 'Connect Cursor, Claude and other coding agents to this app through MCP.',
-    paletteKeywords: ['mcp', 'agent help', 'claude', 'cursor', 'agent', 'tools', 'context', 'windsurf', 'editor'],
-    paletteGroup: 'Act',
-  },
-  {
-    id: 'nav:skills',
-    path: '/skills',
-    label: 'Agent skills',
-    sectionId: 'act',
-    pdcaStage: 'act',
-    iconKey: 'skills',
-    paletteDescription: 'Browse agent skills, track the runs that use them, and sync skill sources.',
-    paletteKeywords: ['skills', 'skill pipelines', 'skill catalog', 'kenji skills', 'handoff', 'catalog', 'cursor-kenji'],
     paletteGroup: 'Act',
   },
   {
@@ -609,35 +581,36 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Act',
   },
   {
-    id: 'nav:marketplace',
-    path: '/marketplace',
-    label: 'Plugins',
+    id: 'nav:experiments',
+    path: '/experiments',
+    label: 'Experiments',
     sectionId: 'act',
     pdcaStage: 'act',
-    iconKey: 'marketplace',
-    paletteDescription: 'Install plugins and ready-made templates for common flows.',
-    paletteKeywords: ['marketplace', 'recipes', 'templates', 'install', 'plugins'],
+    iconKey: 'experiments',
+    paletteDescription: 'A/B experiments and feature flags.',
+    paletteKeywords: ['experiments', 'ab', 'a/b', 'flags', 'variants'],
     paletteGroup: 'Act',
   },
-  // ── Account & admin ──────────────────────────────────────────────────────
   {
-    id: 'nav:queue',
-    path: '/queue',
-    label: 'Processing jobs',
-    sectionId: 'workspace',
-    iconKey: 'queue',
-    paletteDescription: 'Background jobs that read and sort new reports; retry the ones that failed.',
-    paletteKeywords: ['failed events', 'queue', 'dlq', 'dead letter', 'retry', 'failures', 'pipeline', 'jobs'],
-    paletteGroup: 'Workspace',
+    id: 'nav:research',
+    path: '/research',
+    label: 'Research',
+    sectionId: 'act',
+    pdcaStage: 'act',
+    iconKey: 'globe',
+    paletteDescription: 'Pull web pages and docs (via Firecrawl) into a fix so it uses current information.',
+    paletteKeywords: ['research', 'firecrawl', 'web search', 'docs', 'scrape', 'crawl', 'knowledge'],
+    paletteGroup: 'Act',
   },
+  // ── Account ───────────────────────────────────────────────────────────────
   {
-    id: 'nav:projects',
-    path: '/projects',
-    label: 'Manage apps',
+    id: 'nav:settings',
+    path: '/settings',
+    label: 'Settings',
     sectionId: 'workspace',
-    iconKey: 'projects',
-    paletteDescription: 'Create, rename and archive apps (projects), and see their keys and setup.',
-    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'team', 'members', 'organisation', 'workspace'],
+    iconKey: 'settings',
+    paletteDescription: 'Project settings: your AI keys, alerts, web research, voice and health check.',
+    paletteKeywords: ['settings', 'config', 'api key', 'api keys', 'ai keys', 'your ai keys', 'byok', 'bring your own key', 'anthropic', 'openai', 'keys', 'preferences', 'firecrawl', 'web tools', 'web research', 'browserbase', 'cloud browser', 'voice', 'voice reports', 'sdk', 'sdk & connection', 'install widget', 'test bug', 'debug logging', 'health check', 'theme', 'branding'],
     paletteGroup: 'Workspace',
   },
   {
@@ -651,13 +624,33 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Workspace',
   },
   {
-    id: 'nav:settings',
-    path: '/settings',
-    label: 'Settings',
+    id: 'nav:projects',
+    path: '/projects',
+    label: 'Manage apps',
     sectionId: 'workspace',
-    iconKey: 'settings',
-    paletteDescription: 'Project settings: your AI keys, alerts, web research, voice and health check.',
-    paletteKeywords: ['settings', 'config', 'api key', 'api keys', 'ai keys', 'your ai keys', 'byok', 'bring your own key', 'anthropic', 'openai', 'keys', 'preferences', 'firecrawl', 'web tools', 'web research', 'browserbase', 'cloud browser', 'voice', 'voice reports', 'sdk', 'sdk & connection', 'install widget', 'test bug', 'debug logging', 'health check', 'theme', 'branding'],
+    iconKey: 'projects',
+    paletteDescription: 'Create, rename and archive apps (projects), and see their keys and setup.',
+    paletteKeywords: ['projects', 'apps', 'create project', 'new app', 'team', 'members', 'organisation', 'workspace'],
+    paletteGroup: 'Workspace',
+  },
+  {
+    id: 'nav:marketplace',
+    path: '/marketplace',
+    label: 'Plugins',
+    sectionId: 'workspace',
+    iconKey: 'marketplace',
+    paletteDescription: 'Install plugins and ready-made templates for common flows.',
+    paletteKeywords: ['marketplace', 'recipes', 'templates', 'install', 'plugins'],
+    paletteGroup: 'Workspace',
+  },
+  {
+    id: 'nav:queue',
+    path: '/queue',
+    label: 'Processing jobs',
+    sectionId: 'workspace',
+    iconKey: 'queue',
+    paletteDescription: 'Background jobs that read and sort new reports; retry the ones that failed.',
+    paletteKeywords: ['failed events', 'queue', 'dlq', 'dead letter', 'retry', 'failures', 'pipeline', 'jobs'],
     paletteGroup: 'Workspace',
   },
   {
@@ -691,18 +684,40 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteKeywords: ['users', 'operators', 'directory'],
     paletteGroup: 'Workspace',
   },
-  // ── Palette-only utility routes ──────────────────────────────────────────
+  {
+    id: 'nav:feedback',
+    path: '/feedback',
+    label: 'Help & support',
+    sectionId: 'workspace',
+    iconKey: 'chat',
+    paletteDescription: 'Ask the Mushi team for help and read their replies to feedback you sent.',
+    paletteKeywords: ['support', 'feedback', 'help', 'contact', 'bug', 'request'],
+    paletteGroup: 'Workspace',
+  },
+  {
+    id: 'nav:feature-board',
+    path: '/feature-board',
+    label: 'Feature requests',
+    sectionId: 'workspace',
+    iconKey: 'feature-board',
+    paletteDescription: 'Community feature requests and votes.',
+    paletteKeywords: ['feature board', 'features', 'roadmap', 'votes', 'board'],
+    paletteGroup: 'Workspace',
+  },
+  // ── Palette-only utility routes ───────────────────────────────────────────
   {
     id: 'nav:overview',
     path: '/dashboard?view=apps',
-    label: 'App activity',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    label: 'Overview',
+    // A view of Home now (Plan 021): searchable, not a sidebar entry. Named
+    // Overview so "All apps" means only /portfolio (ADR 0027).
     inSidebar: false,
-    sectionId: 'start',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'overview',
     paletteDescription: 'Last 7 days for every app in this team: sessions, users and open bugs, with links into each app.',
-    paletteKeywords: ['overview', 'portfolio view', 'all projects', 'activity', 'sessions', 'consolidated'],
-    paletteGroup: 'Start',
+    paletteKeywords: ['overview', 'app activity', 'portfolio view', 'all projects', 'activity', 'sessions', 'consolidated'],
+    paletteGroup: 'Act',
   },
   {
     id: 'nav:code-health',
@@ -752,13 +767,12 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'User activity',
     // A view of Home now (Plan 021): searchable, not a sidebar entry.
     inSidebar: false,
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'activity',
     paletteDescription: 'Per-app activity — sessions, page views, identified vs. anonymous users, top routes.',
     paletteKeywords: ['activity', 'sessions', 'users', 'page views', 'analytics', 'dau', 'engagement'],
-    paletteGroup: 'Check',
+    paletteGroup: 'Act',
   },
   {
     // `/users` + `nav:users` are the operator-only signup directory below
@@ -769,13 +783,12 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Users & funnels',
     // A view of Home now (Plan 021): searchable, not a sidebar entry.
     inSidebar: false,
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'gauge',
     paletteDescription: 'Product analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.',
     paletteKeywords: ['users & funnels', 'funnel', 'funnels', 'events', 'track', 'analytics', 'retention', 'paths', 'people', 'conversion', 'cohort'],
-    paletteGroup: 'Check',
+    paletteGroup: 'Act',
   },
   {
     id: 'nav:intelligence',
@@ -783,13 +796,12 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Weekly insights',
     // A view of Home now (Plan 021): searchable, not a sidebar entry.
     inSidebar: false,
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'intelligence',
     paletteDescription: 'A weekly plain-English report across your apps: what breaks most and who it hits.',
     paletteKeywords: ['intelligence', 'insights', 'analytics', 'trends', 'heatmap', 'cohort', 'weekly report'],
-    paletteGroup: 'Check',
+    paletteGroup: 'Act',
   },
   {
     id: 'nav:growth',
@@ -797,14 +809,13 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Growth',
     // A view of Home now (Plan 021): searchable, not a sidebar entry.
     inSidebar: false,
-    sectionId: 'check',
-    pdcaStage: 'check',
-    checkSubGroup: 'release-intel',
+    sectionId: 'act',
+    pdcaStage: 'act',
     iconKey: 'gauge',
     operatorOnly: true,
     paletteDescription: 'Operator-only company funnel — activated external projects per week, by signup source.',
     paletteKeywords: ['growth', 'funnel', 'signups', 'activation', 'activated', 'paid', 'source', 'operator'],
-    paletteGroup: 'Check',
+    paletteGroup: 'Act',
   },
   {
     id: 'nav:members',
@@ -910,12 +921,12 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     id: 'nav:cli-auth',
     path: '/cli-auth',
     label: 'CLI sign-in',
-    sectionId: 'act',
+    sectionId: 'start',
     iconKey: 'key',
     inSidebar: false,
     paletteDescription: 'Approve the Mushi CLI sign-in from your terminal.',
     paletteKeywords: ['cli auth', 'cli', 'oauth', 'auth', 'terminal', 'login'],
-    paletteGroup: 'Act',
+    paletteGroup: 'Start',
   },
   {
     id: 'nav:docs-bridge',
@@ -932,34 +943,34 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     id: 'nav:skills-catalog',
     path: '/skills?tab=catalog',
     label: 'Skill catalog',
-    sectionId: 'act',
+    sectionId: 'start',
     iconKey: 'catalog',
     inSidebar: false,
     paletteDescription: 'Browse 70+ agent skills from kenji skills by category.',
     paletteKeywords: ['catalog', 'skill catalog', 'cursor-kenji', 'kenji skills'],
-    paletteGroup: 'Act',
+    paletteGroup: 'Start',
   },
   {
     id: 'nav:skills-pipelines',
     path: '/skills?tab=pipelines',
     label: 'Skill runs',
-    sectionId: 'act',
+    sectionId: 'start',
     iconKey: 'pipeline',
     inSidebar: false,
     paletteDescription: 'Track live skill pipeline runs and check in each step.',
     paletteKeywords: ['skill pipelines', 'pipeline runs', 'handoff', 'context packet', 'checkin'],
-    paletteGroup: 'Act',
+    paletteGroup: 'Start',
   },
   {
     id: 'nav:skills-sources',
     path: '/skills?tab=sources',
     label: 'Skill sources',
-    sectionId: 'act',
+    sectionId: 'start',
     iconKey: 'source',
     inSidebar: false,
     paletteDescription: 'Add GitHub repos (e.g. kensaurus/skills) and sync SKILL.md files.',
     paletteKeywords: ['skill sources', 'skill sync', 'skills.sh', 'kenji skills', 'cursor-kenji'],
-    paletteGroup: 'Act',
+    paletteGroup: 'Start',
   },
 ]
 
@@ -1093,10 +1104,14 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   stay separate but are named for what they do: Home (/dashboard, summary)
  *   vs To-do (/inbox, decisions) vs Improvement runs (/iterate); Bugs
  *   (/reports) vs Processing jobs (/queue); All apps (/portfolio, setup and
- *   holes) vs App activity (/overview, 7-day usage).
+ *   holes) vs Overview (/dashboard?view=apps, 7-day usage).
  * - Plan 021 (owner, 2026-10-06) supersedes the "stay separate" part for three
  *   families: Home (/dashboard), App health (/health) and Team (/team) each
  *   host their former pages as `?view=` views (lib/pageHubs.ts); the old
  *   routes redirect. Palette entries stay so every former label still finds
  *   its page.
+ * - ADR 0027 (owner, 2026-10-14): the sections follow the vibe-coding cycle
+ *   in order (Connect → Bugs → Fix → Verify → Ship & watch, then Account).
+ *   The six section ids stay, so only titles, order and membership moved; a
+ *   moved page takes its stage, palette group and badge with it.
  */

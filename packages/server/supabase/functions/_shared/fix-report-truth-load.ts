@@ -67,6 +67,8 @@ export interface ReportTitleRow {
   status?: string | null
   summary?: string | null
   description?: string | null
+  /** Set when the report came from a Sentry issue; the Fixes page links to it. */
+  sentry_issue_url?: string | null
 }
 
 /** Plain-English title for a report: its summary, else the start of its description. */
@@ -97,7 +99,7 @@ export async function loadReportFixTruths(
   await Promise.all(
     chunk(ids, ID_CHUNK).map(async (part) => {
       const [repRes, attRes] = await Promise.all([
-        db.from('reports').select('id, project_id, status, summary, description').in('id', part),
+        db.from('reports').select('id, project_id, status, summary, description, sentry_issue_url').in('id', part),
         db.from('fix_attempts').select(TRUTH_ATTEMPT_COLUMNS).in('report_id', part).limit(2000),
       ])
       for (const r of (repRes.data ?? []) as ReportTitleRow[]) reports.set(r.id, r)
