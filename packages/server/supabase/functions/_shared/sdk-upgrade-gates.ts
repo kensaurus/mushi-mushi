@@ -56,6 +56,12 @@ export function isUpgradePrStillRelevant(job: {
 export interface SdkUpgradeProjectSettings {
   github_repo_url: string | null
   github_installation_token_ref: string | null
+  /**
+   * The repo's GitHub App installation (project_repos). The runner mints a
+   * token from it (`resolveProjectGithubToken(…, choice.installationId)`), so
+   * an App-only project needs no stored token.
+   */
+  github_app_installation_id?: number | null
 }
 
 export interface SdkUpgradeInFlightJob {
@@ -95,7 +101,8 @@ export function evaluateSdkUpgradePostGate(
       message: 'Connect a GitHub repository in Settings → Integrations first.',
     }
   }
-  if (!settings.github_installation_token_ref) {
+  const hasAppInstallation = Number(settings.github_app_installation_id ?? 0) > 0
+  if (!settings.github_installation_token_ref && !hasAppInstallation) {
     return {
       action: 'reject',
       code: 'GITHUB_TOKEN_MISSING',
