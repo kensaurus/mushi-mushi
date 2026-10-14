@@ -194,6 +194,13 @@ export interface MushiWidgetConfig {
   expandedTitle?: string;
   mode?: 'simple' | 'conversational';
   locale?: string;
+  /**
+   * Page-level z-index of the launcher (default `99999`). The panel and toasts
+   * sit at `zIndex + 1`. Each surface carries its own z-index and the widget's
+   * host element forms no stacking context, so these numbers compare directly
+   * with the host page's own layers. The banner has its own setting,
+   * `bannerConfig.zIndex`.
+   */
   zIndex?: number;
   /**
    * Controls how, or whether, the default trigger is injected.
@@ -428,7 +435,11 @@ export interface MushiBannerConfig {
   featureCtaLabel?: string;
   /** Extra flat links after the bug/feature CTAs (e.g. "My submissions"). */
   links?: MushiBannerLink[];
-  /** CSS z-index of the banner element. Defaults to the widget's configured zIndex. */
+  /**
+   * Page-level z-index of the banner strip. Defaults to the widget's `zIndex`
+   * minus one, just under the launcher. Set it below your own overlays (sheets,
+   * drawers, dialogs) so they cover the banner, e.g. `130` under a `200` sheet.
+   */
   zIndex?: number;
 }
 
