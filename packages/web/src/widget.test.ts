@@ -639,6 +639,61 @@ describe('MushiWidget progressive disclosure — host categories', () => {
     expect(getShadow(w).querySelector('[data-category="billing"]')).toBeNull();
     w.destroy();
   });
+
+  // The Wanting Mind's categories reuse the built-in ids `slow`, `visual` and
+  // `confusing` to relabel them. Appending them after the built-ins showed
+  // "App feels slow", "Visual / layout issue" and "Hard to understand" twice.
+  const TWM_LIKE = [
+    { id: 'broken', label: "Something's broken", baseCategory: 'bug' as const },
+    { id: 'slow', label: 'App feels slow', baseCategory: 'slow' as const },
+    { id: 'visual', label: 'Visual / layout issue', baseCategory: 'visual' as const },
+    { id: 'confusing', label: 'Hard to understand', baseCategory: 'confusing' as const },
+    { id: 'general', label: 'General feedback' },
+  ];
+  const chipLabels = (w: MushiWidget) =>
+    [...getShadow(w).querySelectorAll('.mushi-chip[data-action="chip"]')].map((b) => b.textContent);
+
+  it('a host category with a built-in id relabels that chip in place, never twice', () => {
+    const w = new MushiWidget({ categories: TWM_LIKE }, noopCallbacks);
+    w.mount();
+    w.open();
+    // Before More…: the built-in slots already carry the host labels.
+    expect(getShadow(w).querySelectorAll('[data-category="slow"]')).toHaveLength(1);
+    expect(getShadow(w).querySelector('[data-category="slow"]')?.textContent).toBe('App feels slow');
+    (getShadow(w).querySelector('[data-action="show-all-categories"]') as HTMLElement).click();
+    const labels = chipLabels(w);
+    expect(labels.length).toBe(new Set(labels).size);
+    for (const id of ['slow', 'visual', 'confusing', 'broken', 'general']) {
+      expect(getShadow(w).querySelectorAll(`[data-category="${id}"]`), id).toHaveLength(1);
+    }
+    // Picking one checks exactly one chip.
+    (getShadow(w).querySelector('[data-category="slow"]') as HTMLElement).click();
+    expect(getShadow(w).querySelectorAll('[data-category="slow"][aria-checked="true"]')).toHaveLength(1);
+    w.destroy();
+  });
+
+  it('hides More… when every host category overrides a built-in chip', () => {
+    const w = new MushiWidget({ categories: TWM_LIKE.slice(1, 4) }, noopCallbacks);
+    w.mount();
+    w.open();
+    expect(getShadow(w).querySelector('[data-action="show-all-categories"]')).toBeNull();
+    expect(chipLabels(w)).toContain('Visual / layout issue');
+    w.destroy();
+  });
+
+  it('a category id the host lists twice renders once, with its first definition', () => {
+    const w = new MushiWidget(
+      { categories: [{ id: 'billing', label: 'Billing' }, { id: 'billing', label: 'Billing again' }] },
+      noopCallbacks,
+    );
+    w.mount();
+    w.open();
+    (getShadow(w).querySelector('[data-action="show-all-categories"]') as HTMLElement).click();
+    const billing = getShadow(w).querySelectorAll('[data-category="billing"]');
+    expect(billing).toHaveLength(1);
+    expect(billing[0].textContent).toBe('Billing');
+    w.destroy();
+  });
 });
 
 // ── screenshot preview + sensitive-info hint ──────────────────────────────────
