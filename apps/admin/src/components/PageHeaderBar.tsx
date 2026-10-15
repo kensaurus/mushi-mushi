@@ -161,8 +161,12 @@ export function PageHeaderBar({
   return (
     <div className="mb-4 w-full min-w-0">
       {/* ── Primary row ──────────────────────────────────────────────── */}
-      <div className="flex min-w-0 items-start gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+      {/* flex-wrap: on a phone the actions drop under the title instead of
+          pushing past the column edge (they used to scroll <main> sideways
+          on /explore and /mcp at 390px and squeeze the title to one word
+          per line). */}
+      <div className="flex min-w-0 flex-wrap items-start gap-2">
+        <div className="flex min-w-0 flex-1 basis-48 flex-wrap items-center gap-x-2 gap-y-1">
           {/* PDCA chip */}
           {contextChip === undefined && chipKey ? (
             <HeaderPdcaChip chip={chipKey} />
@@ -196,7 +200,7 @@ export function PageHeaderBar({
 
         {/* Right-side slot */}
         {(children || showCopyLink) && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5">
             {children}
             {showCopyLink && <CopyViewLinkButton />}
           </div>

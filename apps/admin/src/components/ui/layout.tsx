@@ -184,7 +184,10 @@ export function PanelHeader({
     : 'text-xs font-semibold text-fg-secondary'
   return (
     <div className={`mb-2 pb-2 ${PANEL_HEADER_SEPARATOR} ${className}`}>
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      {/* flex-wrap + max-w-full: a wide action (a segmented control plus a
+          search field on Spam & abuse) drops under the title on a phone
+          instead of scrolling <main> sideways. */}
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <TitleTag className={`flex min-w-0 items-center gap-1.5 ${titleCls}`}>
           {icon && (
             <span className="shrink-0 text-fg-muted [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>
@@ -194,7 +197,7 @@ export function PanelHeader({
         {/* Header links ("All reports →") were 16px-tall text; give a bare
             link child a 24px target without restyling every caller. */}
         {action != null && (
-          <div className="flex shrink-0 items-center gap-2 [&>a]:inline-flex [&>a]:min-h-6 [&>a]:items-center">
+          <div className="ml-auto flex max-w-full shrink-0 items-center gap-2 [&>a]:inline-flex [&>a]:min-h-6 [&>a]:items-center">
             {action}
           </div>
         )}

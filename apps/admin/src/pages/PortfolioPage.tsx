@@ -88,8 +88,12 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const base = `/v1/admin/orgs/${orgId}/portfolio`
   const query = group ? `?group=${encodeURIComponent(group)}` : ''
   const path = `${base}${query}`
-  const page = usePageData<PortfolioResponse>(groups.loading && !groups.data ? null : path)
-  const findings = usePageData<PortfolioFindingsResponse>(groups.loading && !groups.data ? null : `${base}/findings${query}`)
+  // Only a requested group needs the group list first (a remembered group may
+  // have been deleted). Without one the path is already final, so the
+  // portfolio reads start at once instead of queuing behind project-groups.
+  const waitForGroups = requested != null && groups.loading && !groups.data
+  const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
+  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])

@@ -77,7 +77,21 @@ export function openSetupGuide() {
  */
 const AUTO_EXPAND_SUPPRESSED_ROUTES = ['/onboarding']
 
-export function shouldSuppressAutoExpand(pathname: string): boolean {
+/**
+ * Phones (below Tailwind's `sm`) never get the automatic open either. The
+ * open panel is about 23rem wide and up to 26rem tall, so on a 390px screen it
+ * covers most of every page until the user finds the minimize chevron. They
+ * still get the progress pill, and tapping it opens the panel.
+ */
+const SETUP_GUIDE_NARROW_QUERY = '(max-width: 639px)'
+
+export function isNarrowViewport(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia(SETUP_GUIDE_NARROW_QUERY).matches
+}
+
+export function shouldSuppressAutoExpand(pathname: string, narrowViewport = false): boolean {
+  if (narrowViewport) return true
   return AUTO_EXPAND_SUPPRESSED_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   )
@@ -137,6 +151,7 @@ export function isSetupGuideOpen(
   stored: StoredSetupGuideView,
   requiredComplete: boolean,
   pathname: string,
+  narrowViewport: boolean = isNarrowViewport(),
 ): boolean {
-  return resolveSetupGuideView(stored, { requiredComplete, suppressAutoExpand: shouldSuppressAutoExpand(pathname) }) === 'expanded'
+  return resolveSetupGuideView(stored, { requiredComplete, suppressAutoExpand: shouldSuppressAutoExpand(pathname, narrowViewport) }) === 'expanded'
 }

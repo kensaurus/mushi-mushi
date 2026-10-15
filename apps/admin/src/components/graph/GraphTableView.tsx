@@ -44,7 +44,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
   const edgeOverflow = edges.length - visibleEdges.length
 
   return (
-    <div className="grid gap-3 md:grid-cols-2" role="region" aria-label="Knowledge graph table view">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2" role="region" aria-label="Knowledge graph table view">
       <Card className="p-2">
         <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
           Nodes ({nodes.length}
