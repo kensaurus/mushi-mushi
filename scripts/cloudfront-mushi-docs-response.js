@@ -31,8 +31,8 @@ function buildSecurityHeaders() {
     'permissions-policy': { value: 'camera=(), microphone=(), geolocation=()' },
     'strict-transport-security': { value: 'max-age=63072000; includeSubDomains; preload' },
     'content-security-policy': {
-      // img-src carries the KENSAURUS sibling-app icons rendered by the
-      // "More from KENSAURUS" footer (packages/marketing-ui). Those icons are
+      // img-src carries the sibling-app icons rendered by the
+      // "More apps from the same maker" footer (packages/marketing-ui). Those icons are
       // hosted on each app's own origin, so without them the footer showed
       // four broken-image placeholders (Cooler Heads, Solo Boss, Tsumagoi,
       // kenji skills) while the kensaur.us-hosted ones rendered fine.
@@ -40,7 +40,12 @@ function buildSecurityHeaders() {
       // to come back here; github.com AND avatars.githubusercontent.com are
       // both listed because github.com/<org>.png redirects to the avatars
       // host and CSP checks every URL in the redirect chain.
-      value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.kensaur.us https://github.com https://avatars.githubusercontent.com; connect-src 'self' https://*.supabase.co; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+      //
+      // 'wasm-unsafe-eval' lets the Pagefind search index (a WebAssembly
+      // module from /_pagefind/) compile. Without it every search sat on
+      // "Loading..." forever. It allows WebAssembly compilation only, not
+      // eval() of JavaScript.
+      value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.kensaur.us https://github.com https://avatars.githubusercontent.com; connect-src 'self' https://*.supabase.co; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
     },
   };
 }
