@@ -151,6 +151,7 @@ export function isSetupGuideOpen(
   stored: StoredSetupGuideView,
   requiredComplete: boolean,
   pathname: string,
+  narrowViewport: boolean = isNarrowViewport(),
 ): boolean {
-  return resolveSetupGuideView(stored, { requiredComplete, suppressAutoExpand: shouldSuppressAutoExpand(pathname) }) === 'expanded'
+  return resolveSetupGuideView(stored, { requiredComplete, suppressAutoExpand: shouldSuppressAutoExpand(pathname, narrowViewport) }) === 'expanded'
 }
