@@ -1,5 +1,17 @@
 # @mushi-mushi/cli
 
+## 0.30.4
+
+### Patch Changes
+
+- 8378a94: - `mushi project create` no longer overwrites `.env.local` when the existing file can't be read (permissions, I/O errors); it now stops with the error and leaves your other variables untouched.
+  - `mushi doctor --host-app` now recognises hash route templates written as `'/#/…'` and stops warning that none are configured.
+  - `mushi nudge --max` now rejects a fractional value instead of writing it into the generated snippet.
+  - A trailing slash on `MUSHI_API_ENDPOINT` no longer produces double-slash API URLs that miss their routes.
+  - A blank `MUSHI_API_ENDPOINT` no longer sends `mushi project create` and `mushi init` to Mushi Cloud; they fall through to the endpoint saved with `mushi config endpoint`.
+- 0829cc6: `mushi setup --ide claude` / `--ide cursor` no longer writes a hosted MCP entry that Claude Code cannot sign in to. For Mushi Cloud it writes `https://kensaur.us/mushi-mushi/hosted-mcp/` instead of the raw `…supabase.co/functions/v1/mcp` URL, where sign-in failed with "Dynamic Client Registration rejected (HTTP 404): {"error":"requested path is invalid"}". A self-hosted Claude Code entry names the function's OAuth metadata through Claude Code's `oauth.authServerMetadataUrl`.
+  `mushi doctor` flags an existing key-less Claude Code entry on a `supabase.co` URL and says how to fix it.
+
 ## 0.30.3
 
 ### Patch Changes

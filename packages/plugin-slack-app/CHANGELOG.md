@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-slack-app
 
+## 0.2.11
+
+### Patch Changes
+
+- 8378a94: - The README and package description no longer call this the full bidirectional app: card buttons are handled by the hosted backend, and standalone `handleSlackInteraction` only verifies and acknowledges a click.
+
 ## 0.2.10
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @mushi-mushi/mcp
 
+## 0.25.0
+
+### Minor Changes
+
+- a3224b7: `@mushi-mushi/mcp/clients` adds `buildOAuthInstall(id, { mcpOAuthUrl })`, a keyless install for Cursor, VS Code, VS Code Insiders, Claude Code, Windsurf and any MCP client. It writes only the hosted URL, with no key and no header, so the client runs its own OAuth sign-in on first use (a static `Authorization` header turns that sign-in off). The public landing page and `/connect` use it; the signed-in console keeps the keyed builders. Its VS Code links use the documented `vscode:mcp/install?{json}` form with the name inside the JSON (the keyed builders are unchanged).
+
+### Patch Changes
+
+- 8378a94: - The deprecated `setup_check`, `ingest_setup_check` and `diagnose_connection` aliases now run `diagnose_setup` in their original scope (dispatch, ingest and full) unless you pass a `mode`, so `ingest_setup_check` no longer reports dispatch blockers.
+  - The deprecation notice on an alias call now comes after the tool's own output, so configs that parse the first content block as JSON keep working.
+- Updated dependencies [8378a94]
+- Updated dependencies [a3224b7]
+- Updated dependencies [11e2176]
+  - @mushi-mushi/core@1.32.3
+
 ## 0.24.6
 
 ### Patch Changes
