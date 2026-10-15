@@ -103,8 +103,9 @@ const banner = latestRelease ? (
 const navbar = (
   <Navbar
     logo={
-      <span className="font-semibold tracking-tight">
-        Mushi Mushi <span className="opacity-60">— docs</span>
+      <span className="whitespace-nowrap font-semibold tracking-tight">
+        {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px. */}
+        Mushi Mushi <span className="hidden opacity-60 sm:inline">— docs</span>
       </span>
     }
     projectLink="https://github.com/kensaurus/mushi-mushi"
