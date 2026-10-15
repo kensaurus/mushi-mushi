@@ -65,9 +65,23 @@ function runVersion() {
     let stdout = ''
     let stderr = ''
     let error = null
+    let settled = false
+    const finish = (status) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.stdout.destroy()
+      child.stderr.destroy()
+      resolve({ status: error ? null : status, stdout, stderr, error })
+    }
+    // Own process group off Windows, so the timeout can kill pnpm AND the git
+    // processes changesets spawns. Killing pnpm alone left a git child holding
+    // the pipes open: 'close' never fired, the guard never reported, and the
+    // step ran into its 8-minute job timeout with no trace (2026-10-15, #489).
     const child = spawn('pnpm', ['exec', 'changeset', 'version'], {
       cwd: ROOT,
       shell: process.platform === 'win32',
+      detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
       env: CI ? { ...process.env, GIT_TRACE: GIT_TRACE_FILE } : process.env,
     })
@@ -82,13 +96,19 @@ function runVersion() {
     })
     const timer = setTimeout(() => {
       error = new Error(`timed out after ${VERSION_TIMEOUT_MS / 1000}s (the last lines above show where it stopped)`)
-      child.kill('SIGKILL')
+      try {
+        if (process.platform === 'win32') child.kill('SIGKILL')
+        else process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        child.kill('SIGKILL')
+      }
+      finish(null)
     }, VERSION_TIMEOUT_MS)
-    child.on('error', (err) => { error = err })
-    child.on('close', (status) => {
-      clearTimeout(timer)
-      resolve({ status: error ? null : status, stdout, stderr, error })
-    })
+    child.on('error', (err) => { error = err; finish(null) })
+    child.on('close', (status) => finish(status))
+    // A surviving grandchild can keep the pipes open so 'close' never comes;
+    // give the output a second to drain after 'exit', then stop waiting.
+    child.on('exit', (status) => setTimeout(() => finish(status), 1000))
   })
 }
 

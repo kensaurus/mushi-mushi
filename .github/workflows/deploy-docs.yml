@@ -189,7 +189,8 @@ jobs:
             --content-type "application/javascript" \
             --no-guess-mime-type \
             --exclude "*" \
-            --include "*.js"
+            --include "*.js" \
+            --exclude "_pagefind/*"
 
       - name: Sync immutable assets to S3 (CSS)
         run: |
@@ -214,7 +215,18 @@ jobs:
             --exclude "*.txt" \
             --exclude "*.xml" \
             --exclude "*.md" \
-            --exclude "version.json"
+            --exclude "version.json" \
+            --exclude "_pagefind/*"
+
+      - name: Sync Pagefind search bundle to S3 (short cache)
+        # pagefind.js, pagefind-worker.js and pagefind-entry.json keep the same
+        # names on every build. Cached as immutable for a year, a browser kept
+        # a stale search index after each deploy, and kept the old worker
+        # response with its old CSP (search stuck on "Loading…" after the CSP
+        # gained wasm-unsafe-eval on 2026-10-15). Five minutes, like the HTML.
+        run: |
+          aws s3 sync apps/docs/out/_pagefind/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/_pagefind/ \
+            --cache-control "public, max-age=300, must-revalidate"
 
       - name: Sync text, feeds and Markdown to S3 (short cache)
         # Same 5-minute policy as the HTML they mirror. Content-Type is left
