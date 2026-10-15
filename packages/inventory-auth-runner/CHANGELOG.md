@@ -1,5 +1,11 @@
 # @mushi-mushi/inventory-auth-runner
 
+## 0.1.5
+
+### Patch Changes
+
+- 8378a94: - `auth-bootstrap` now reads the inventory from the API's `{ snapshot }` envelope, so it no longer always fails with "no `auth.scripted` block"; a project without a current inventory gets a clear error instead.
+
 ## 0.1.4
 
 ### Patch Changes
