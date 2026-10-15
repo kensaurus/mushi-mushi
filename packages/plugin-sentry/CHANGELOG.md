@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-sentry
 
+## 0.2.13
+
+### Patch Changes
+
+- 8378a94: - The stand-alone server's docs now say it speaks plain HTTP, so put TLS in front of it with a reverse proxy or load balancer.
+
 ## 0.2.12
 
 ### Patch Changes

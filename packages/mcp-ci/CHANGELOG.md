@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp-ci
 
+## 0.6.5
+
+### Patch Changes
+
+- 8378a94: - The oasdiff cache directory `~/.mushi/tools` is now created (or tightened) with mode 0700, so other local users can't read the downloaded tool.
+
 ## 0.6.4
 
 ### Patch Changes
