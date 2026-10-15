@@ -166,7 +166,7 @@ export function PageHeaderBar({
           on /explore and /mcp at 390px and squeeze the title to one word
           per line). */}
       <div className="flex min-w-0 flex-wrap items-start gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-1 basis-48 flex-wrap items-center gap-x-2 gap-y-1">
           {/* PDCA chip */}
           {contextChip === undefined && chipKey ? (
             <HeaderPdcaChip chip={chipKey} />
