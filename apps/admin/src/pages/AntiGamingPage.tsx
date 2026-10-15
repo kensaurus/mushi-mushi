@@ -688,7 +688,7 @@ export function AntiGamingPage() {
                     onClick={() => isRecurring && setExpandedEventGroup(isOpen ? null : g.key)}
                     aria-expanded={isOpen}
                     disabled={!isRecurring}
-                    className="w-full flex items-center gap-2 justify-start px-2 py-1 text-left border-0 bg-transparent shadow-none hover:bg-transparent disabled:cursor-default"
+                    className="w-full min-w-0 flex flex-wrap items-center gap-2 justify-start px-2 py-1 text-left border-0 bg-transparent shadow-none hover:bg-transparent disabled:cursor-default"
                   >
                     <span title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
                       <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">

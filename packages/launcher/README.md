@@ -306,7 +306,7 @@ Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`
 
 MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) — copyleft; modified SaaS publishes changes or takes a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
 
-## More from KENSAURUS
+## More apps from the same maker
 
 | | App | What it is |
 |---|---|---|
