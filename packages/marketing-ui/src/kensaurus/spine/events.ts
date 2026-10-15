@@ -14,8 +14,10 @@
  *
  * Wire contract (kensaurus-events-ingest, kenji project; unauthenticated by
  * design, validated server-side): POST { app, anon_id?, user_id?, utm,
- * events: [{ event, props, ts }] } — at most 20 events and 32 KB per
- * request, 4 KB per props object. This client batches to those limits.
+ * events: [{ event, props, ts }] }. The server accepts at most 20 events and
+ * 32 KB per request, and 4 KB per props object. This client caps a request
+ * at 20 events and 24 KB, and a props object at 4000 bytes, leaving headroom
+ * under the server limits.
  *
  * Preserved from the four per-app clients it replaces: first-touch UTM +
  * referrer attribution stored once under `kensaurus_attribution`, a stable
@@ -34,7 +36,11 @@ export const KENSAURUS_ATTRIBUTION_STORAGE_KEY = 'kensaurus_attribution'
 export const KENSAURUS_VISIT_DAY_STORAGE_KEY = 'kensaurus_visit_day'
 export const KENSAURUS_ONCE_STORAGE_PREFIX = 'kensaurus_once:'
 
-/** Ingest limits, mirrored so a batch is never rejected for size. */
+/**
+ * Client caps, kept under the ingest limits (20 events, 32 KB body, 4 KB props)
+ * so a batch is never rejected for size. The 24 KB body cap is deliberate
+ * headroom under the server's 32 KB.
+ */
 export const KENSAURUS_EVENTS_MAX_BATCH = 20
 export const KENSAURUS_EVENTS_MAX_PROPS_BYTES = 4000
 export const KENSAURUS_EVENTS_MAX_BODY_BYTES = 24 * 1024
