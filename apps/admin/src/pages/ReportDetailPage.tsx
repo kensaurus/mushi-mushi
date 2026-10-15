@@ -763,7 +763,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         />
       </div>
 
-      <div className="mt-3 grid gap-3 ff-medium:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 ff-medium:grid-cols-2">
         <ReportReplayPlayer
           events={(report.custom_metadata?.replayEvents as unknown[] | undefined) ?? null}
           reportId={report.id}
