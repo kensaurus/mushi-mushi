@@ -92,12 +92,19 @@ import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
 
+// Same shape the API accepts (api/ids.ts isUuid): RFC 4122, version 1-5.
+const REPORT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useReactSearchParams()
   const activeProjectId = useActiveProjectId()
   const toast = useToast()
-  const path = id ? `/v1/admin/reports/${id}` : null
+  // A report id is always a UUID. Anything else (a typo, a truncated paste)
+  // can never resolve, and the API answers it with a 400 that used to render
+  // as "console / API version mismatch". Treat it as the not-found it is.
+  const idIsValid = !!id && REPORT_ID_RE.test(id)
+  const path = idIsValid ? `/v1/admin/reports/${id}` : null
   const { data: serverReport, loading, error, reload } = usePageData<ReportDetail>(path)
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [saving, setSaving] = useState(false)
@@ -241,6 +248,8 @@ export function ReportDetailPage() {
     )
   }
 
+  if (!idIsValid) return <ReportNotFound id={id} />
+
   if (loading) return <DetailSkeleton label="Loading report" />
 
   if (error) {
@@ -252,38 +261,41 @@ export function ReportDetailPage() {
     // (`${status}: ${body}`), so the regex matches both `404:` from the
     // status line and any `not_found` / `not found` token in a JSON body.
     const isNotFound = /\b404\b|not[\s_-]?found/i.test(error)
-    if (isNotFound) {
-      return (
-        <EditorialErrorState
-          eyebrow="404 · report"
-          headline={
-            <>
-              We can't find <em>that report</em>.
-            </>
-          }
-          lead="It may have been deleted, retention-swept, or it never existed under this id. If you use multiple projects, switch the ProjectSwitcher to the report's project (or add ?project=<uuid> to the URL) — a mismatched active project is the most common cause of this 404."
-          detail={
-            <code className="break-all rounded bg-editorial-paper-wash px-2 py-0.5">
-              {id}
-            </code>
-          }
-          primary={{ href: '/reports', label: 'Back to reports' }}
-          secondary={{
-            // The Reports docs explain projects and report links; the old
-            // target (judge-loop) had nothing to do with a missing report.
-            href: 'https://kensaur.us/mushi-mushi/docs/admin/reports',
-            label: 'Reports docs',
-            external: true,
-          }}
-        />
-      )
-    }
+    if (isNotFound) return <ReportNotFound id={id} />
     return <PageLoadError error={error} resource="this report" onRetry={reload} />
   }
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
   return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
+}
+
+/** The editorial 404 for a report id that does not resolve (missing, swept or malformed). */
+function ReportNotFound({ id }: { id: string }) {
+  return (
+    <EditorialErrorState
+      eyebrow="404 · report"
+      headline={
+        <>
+          We can't find <em>that report</em>.
+        </>
+      }
+      lead="It may have been deleted, retention-swept, or it never existed under this id. If you use multiple projects, switch the project switcher at the top to the report's project (or add ?project=<uuid> to the URL) — a mismatched active project is the most common cause of this 404."
+      detail={
+        <code className="break-all rounded bg-editorial-paper-wash px-2 py-0.5">
+          {id}
+        </code>
+      }
+      primary={{ href: '/reports', label: 'Back to reports' }}
+      secondary={{
+        // The Reports docs explain projects and report links; the old
+        // target (judge-loop) had nothing to do with a missing report.
+        href: 'https://kensaur.us/mushi-mushi/docs/admin/reports',
+        label: 'Reports docs',
+        external: true,
+      }}
+    />
+  )
 }
 
 interface ReportDetailViewProps {
