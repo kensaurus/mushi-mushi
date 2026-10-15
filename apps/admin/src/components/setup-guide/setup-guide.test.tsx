@@ -30,7 +30,7 @@ import {
   setupGuideSummary,
   NO_PROJECT_MODEL,
 } from '../../lib/setupGuideSteps'
-import { resolveSetupGuideView, shouldSuppressAutoExpand } from '../../lib/setupGuidePrefs'
+import { isSetupGuideOpen, resolveSetupGuideView, shouldSuppressAutoExpand } from '../../lib/setupGuidePrefs'
 import type { SetupProject, SetupStep, SetupStepId } from '../../lib/useSetupStatus'
 import type { ProjectSnapshot } from '../../lib/projectSnapshotTypes'
 
@@ -340,6 +340,9 @@ describe('resolveSetupGuideView', () => {
         suppressAutoExpand: shouldSuppressAutoExpand('/dashboard', true),
       }),
     ).toBe('minimized')
+    // Surfaces that stand down while the guide is open read the same answer.
+    expect(isSetupGuideOpen(null, false, '/dashboard', true)).toBe(false)
+    expect(isSetupGuideOpen(null, false, '/dashboard', false)).toBe(true)
     // The user's own choice still wins on a phone.
     expect(
       resolveSetupGuideView('expanded', {
