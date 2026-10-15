@@ -166,7 +166,7 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 
 Third-party notices: [NOTICE](./NOTICE).
 
-## More from KENSAURUS
+## More apps from the same maker
 
 | | App | What it is |
 |---|---|---|

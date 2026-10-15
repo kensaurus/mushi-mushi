@@ -183,7 +183,7 @@ export function NavbarAuthChrome() {
           onClick={handleSignIn}
           disabled={signingIn}
           aria-label="Sign in to sync checklist progress and open the console"
-          className="rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-ink-muted)] hover:bg-[var(--mushi-paper-wash)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+          className="whitespace-nowrap rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-2.5 py-1 font-mono text-2xs font-medium uppercase tracking-[0.16em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-ink-muted)] hover:bg-[var(--mushi-paper-wash)] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
         >
           {signingIn ? 'Opening…' : 'Sign in'}
         </button>
@@ -203,11 +203,14 @@ export function NavbarAuthChrome() {
 }
 
 /** Static "Console" link — used in both signed-in and signed-out states. */
+// Hidden below sm: at 390px the logo, GitHub icon, this link, Sign in and the
+// menu button did not fit one row, so "Sign in" wrapped onto two lines. Sign in
+// opens the console too, so phones lose no destination.
 function ConsoleLink() {
   return (
     <a
       href={`${ADMIN_CONSOLE}/`}
-      className="rounded-full px-2.5 py-1 font-mono text-2xs uppercase tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+      className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase sm:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
     >
       Console
     </a>
