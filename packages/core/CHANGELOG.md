@@ -1,5 +1,23 @@
 # @mushi-mushi/core
 
+## 1.32.3
+
+### Patch Changes
+
+- 8378a94: Destroying and re-initialising the session tracker on the same page no longer sends two `session_end` events for each page hide.
+  Session ids keep the full entropy of their random suffix; about half used to lose their last digit.
+  New `MushiInitConfig` type: a `MushiConfig` whose `projectId` / `apiKey` may come from env vars.
+  New `MushiRuntimeWidgetConfig` type: the runtime config's widget block allows `triggerText: null`, which older edge functions send.
+  The `screenshotProvider` docs now say the provider must resolve to a `data:image/` URL, and the session payload docs say `user_id_hash` is a hash of the host user id.
+  A queued report rejected with HTTP 401 or 403 (revoked or mis-scoped key) is dropped on the first rejection instead of being retried on later flushes.
+  The `avoidSelectors` docs now say the widget clears avoided elements on its anchored half of the viewport only.
+- a3224b7: The banner pill now reads "Feedback" by default, not "Beta" (`MUSHI_COPY.bannerLabel`, and the web banner's rich layout).
+  Apple rejected an app under guideline 2.2 partly because of a "Beta" pill in a production build: beta testing belongs in TestFlight.
+  Pass `bannerConfig.label` to set your own text, or `label: false` to hide the pill. React Native's `MushiBanner` reads the same default from core.
+- 11e2176: `bannerConfig.zIndex` now works. The widget's host element used to sit at z-index 99999 and capped everything inside it, so the banner covered your own sheets and dialogs whatever number you gave it. Set it below your overlays (for example `130` under a `200` sheet) and they cover the banner. The launcher and panel keep their own `zIndex` (default 99999, panel one above).
+  Report types you pass in `categories` with a built-in id (`slow`, `visual`, `confusing`) now relabel that chip instead of showing a second copy of it after "More…". "More…" only appears when there are other types to show.
+  The session tracker sends far fewer requests. Opening and closing a sheet that pushes a history entry on the same page no longer counts as a page view, closing a tab sends one `session_end` instead of two, and heartbeats pause while the tab is hidden. One minute of reading went from about 10 requests to 2. Session durations are measured the same way as before.
+
 ## 1.32.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-jira
 
+## 0.2.9
+
+### Patch Changes
+
+- 8378a94: - The README and handler docs no longer promise a `report.classified` update that the plugin doesn't perform, and the README now shows merging `refreshTokens` output onto the stored record so `cloudId` and `cloudUrl` survive a refresh.
+
 ## 0.2.8
 
 ### Patch Changes
