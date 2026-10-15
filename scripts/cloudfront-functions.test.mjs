@@ -647,6 +647,16 @@ describe('cloudfront-mushi-docs-response', () => {
     assert.equal(out.headers['x-robots-tag'], undefined);
   });
 
+  it('lets the Pagefind search WebAssembly compile, and nothing broader', () => {
+    const out = respond({
+      request: { uri: '/mushi-mushi/docs/quickstart.html' },
+      response: { statusCode: 200, headers: {} },
+    });
+    const scriptSrc = /script-src ([^;]*)/.exec(out.headers['content-security-policy'].value)[1];
+    assert.match(scriptSrc, /'wasm-unsafe-eval'/);
+    assert.doesNotMatch(scriptSrc, /'unsafe-eval'/);
+  });
+
   it('tags the .txt RSC payloads noindex', () => {
     const out = respond({
       request: { uri: '/mushi-mushi/docs/admin.txt' },
