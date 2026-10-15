@@ -32,10 +32,10 @@
       <pubDate>Wed, 17 Jun 2026 00:00:00 GMT</pubDate>
     </item>
     <item>
-      <title>60 seconds from &quot;this is broken&quot; to a draft PR — building Mushi Mushi</title>
+      <title>From &quot;this is broken&quot; to a fix PR I merge by hand</title>
       <link>https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop</link>
       <guid isPermaLink="true">https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop</guid>
-      <description>How Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR, and why the human stays in the loop the whole way.</description>
+      <description>How Mushi Mushi turns a one-sentence bug report into a diagnosis and a fix PR, and why I still click merge myself.</description>
       <dc:creator>Kenji Sakuramoto</dc:creator>
     </item>
   </channel>
