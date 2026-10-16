@@ -53,12 +53,6 @@ export interface SyncCiSecretsResult {
   revokeError?: string | null
 }
 
-export interface SyncCiSecretsResponse {
-  ok: boolean
-  error?: { code: string; message: string }
-  data?: SyncCiSecretsResult
-}
-
 // ---------------------------------------------------------------------------
 // Guided fallback command generator (runs in the browser — no sensitive data)
 // ---------------------------------------------------------------------------
@@ -134,14 +128,6 @@ export interface SdkCiStatusMeta {
   cta: string
   /** Numbered fix steps for collapsible playbook (technical detail lives here). */
   playbookSteps: string[]
-}
-
-export interface SdkCiStatusMetaArgs {
-  status: SdkDiagnosticStatus
-  hasGithubToken: boolean
-  slug?: string | null
-  nativeEverSeen?: boolean
-  launcherMode?: string | null
 }
 
 export function sdkCiStatusMeta(

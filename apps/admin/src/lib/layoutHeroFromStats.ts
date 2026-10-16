@@ -9,7 +9,6 @@ import type { PageAction } from '../components/PageActionBar'
 import type { HeroSeverity } from '../components/hero-flow/heroFlow.data'
 import type { NavCounts } from './useNavCounts'
 import { computeNextBestAction } from './useNextBestAction'
-import type { PageHeroSnapshot } from './pageHeroSnapshot'
 
 export interface HeroActIdle {
   label: string
@@ -801,13 +800,4 @@ function enrichByPath(pathname: string, counts: NavCounts): {
 /** Live hero enrichment for a route, for pages that publish a hero snapshot. */
 export function buildHeroEnrichment(pathname: string, counts: NavCounts) {
   return enrichByPath(pathname, counts)
-}
-
-export function buildHeroSnapshotFromCounts(
-  pathname: string,
-  counts: NavCounts,
-): PageHeroSnapshot | null {
-  const enrichment = enrichByPath(pathname, counts)
-  if (Object.keys(enrichment).length === 0) return null
-  return { route: pathname, ...enrichment }
 }

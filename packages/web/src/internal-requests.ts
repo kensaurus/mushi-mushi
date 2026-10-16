@@ -10,7 +10,7 @@ export interface InternalRequestOptions {
   ignoreUrls?: MushiUrlMatcher[];
 }
 
-export const DEFAULT_INTERNAL_URL_MATCHERS: MushiUrlMatcher[] = [
+const DEFAULT_INTERNAL_URL_MATCHERS: MushiUrlMatcher[] = [
   /\/v1\/sdk(?:\/|$)/,
   /\/v1\/reports(?:\/|$)/,
   /\/v1\/notifications(?:\/|$)/,
@@ -50,7 +50,7 @@ export function shouldIgnoreMushiUrl(url: string, options: InternalRequestOption
   return endpoint ? normalizeComparableUrl(url).startsWith(endpoint) : false;
 }
 
-export function matchesUrl(url: string, matcher: MushiUrlMatcher): boolean {
+function matchesUrl(url: string, matcher: MushiUrlMatcher): boolean {
   if (typeof matcher === 'string') {
     return normalizeComparableUrl(url).includes(matcher);
   }
@@ -58,7 +58,7 @@ export function matchesUrl(url: string, matcher: MushiUrlMatcher): boolean {
   return matcher.test(url);
 }
 
-export function normalizeUrlPrefix(url?: string): string | null {
+function normalizeUrlPrefix(url?: string): string | null {
   if (!url) return null;
   // Strip trailing slashes with a linear scan instead of /\/+$/ — the anchored
   // one-or-more regex is a polynomial-ReDoS vector on library-supplied URLs.
@@ -66,19 +66,6 @@ export function normalizeUrlPrefix(url?: string): string | null {
   let end = normalized.length;
   while (end > 0 && normalized.charCodeAt(end - 1) === 47 /* '/' */) end--;
   return normalized.slice(0, end);
-}
-
-export function isLocalhostEndpoint(url?: string): boolean {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname === 'localhost'
-      || parsed.hostname === '127.0.0.1'
-      || parsed.hostname === '::1'
-      || parsed.hostname.endsWith('.localhost');
-  } catch {
-    return /\blocalhost\b|127\.0\.0\.1/.test(url);
-  }
 }
 
 function normalizeComparableUrl(url: string): string {

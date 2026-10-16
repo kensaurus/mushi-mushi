@@ -5,7 +5,7 @@
 
 export type ResearchTabId = 'overview' | 'search' | 'history'
 
-export type ResearchTopPriority =
+type ResearchTopPriority =
   | 'no_project'
   | 'firecrawl_not_configured'
   | 'firecrawl_auth_failed'

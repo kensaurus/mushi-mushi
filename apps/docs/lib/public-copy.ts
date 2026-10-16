@@ -2,7 +2,6 @@
  * Visitor-facing copy shared across docs routes (FAQ, pricing, connect, login).
  * Hero/category strings live in @mushi-mushi/brand and landing-copy.ts.
  */
-import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 export interface PublicFaqItem {
@@ -109,11 +108,6 @@ export const CONNECT_SKILLS = {
     'SKILL.md playbooks live in GitHub repos and sync into Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
   learnMoreHref: 'https://kensaur.us/mushi-mushi/docs/sdks/skills',
   learnMoreLabel: 'Learn about skills →',
-} as const
-
-export const LOGIN_HERO = {
-  cloudTagline: MUSHI_TAGLINE_V2.oneLiner,
-  selfHostTagline: 'Sign in to your self-hosted Mushi console.',
 } as const
 
 export const QUICKSTART_HUB_LEDE =

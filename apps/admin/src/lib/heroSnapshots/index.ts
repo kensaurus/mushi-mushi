@@ -23,5 +23,3 @@ export function usePublishPageHeroStats(route: string, stats: unknown | null | u
   )
   usePublishHeroSnapshot(snapshot)
 }
-
-export { syntheticNavCountsForRoute, READY_NAV_COUNTS_SEED } from './syntheticNavCounts'

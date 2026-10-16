@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Storage snapshot strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { StorageStats } from '../../components/storage/types'
 import { metricTip } from '../metricTooltipBuilder'

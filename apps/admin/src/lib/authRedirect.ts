@@ -26,7 +26,7 @@ export function sanitizeNextPath(next: string | null | undefined): string {
   return normalized
 }
 
-export function pathFromLocationLike(location: {
+function pathFromLocationLike(location: {
   pathname?: string
   search?: string
   hash?: string

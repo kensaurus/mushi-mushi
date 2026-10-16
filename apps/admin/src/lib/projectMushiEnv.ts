@@ -7,7 +7,7 @@
  *          integrators during setup.
  */
 
-export interface ProjectMushiCiVar {
+interface ProjectMushiCiVar {
   name: string
   /** GitHub Actions storage — vars are visible in logs; secrets are masked. */
   ghKind: 'variable' | 'secret'
@@ -40,7 +40,7 @@ function normalizeSlug(slug: string): string {
 }
 
 /** Normalise a project slug for comparisons (exported for UI call sites). */
-export function normalizeProjectSlug(slug: string | null | undefined): string {
+function normalizeProjectSlug(slug: string | null | undefined): string {
   return normalizeSlug(slug ?? '')
 }
 
@@ -125,7 +125,7 @@ export type MushiBundlerKind =
   | 'webpack'
   | 'none'
 
-export interface MushiEnvPrefixInfo {
+interface MushiEnvPrefixInfo {
   /** The env-var prefix the bundler inlines, e.g. `VITE_`. Empty for `none`. */
   prefix: string
   /** Whether this stack needs build-time inlining at all. */
@@ -201,8 +201,4 @@ export function mushiEnvVarsForBundler(kind: MushiBundlerKind): ProjectMushiEnvV
     envFileHint: kind === 'expo' ? 'apps/mobile/.env.local' : '.env.local',
     stackLabel: info.bundlerLabel,
   }
-}
-
-export function bundlerPrefixInfo(kind: MushiBundlerKind): MushiEnvPrefixInfo {
-  return BUNDLER_PREFIX[kind]
 }

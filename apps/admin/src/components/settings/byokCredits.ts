@@ -18,7 +18,7 @@ export type ProviderCredits =
   | { kind: 'unavailable'; reason: string }
   | { kind: 'error'; message: string }
 
-export interface KeyCredits {
+interface KeyCredits {
   id: string
   provider: string
   hint: string | null

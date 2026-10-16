@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { publicAssetPath } from '../lib/public-asset-path'
 
-export type DocScreenshotVariant = 'preview' | 'showcase'
+type DocScreenshotVariant = 'preview' | 'showcase'
 
 export interface DocScreenshotProps {
   /** Filename only — e.g. "dashboard-dark.png" */

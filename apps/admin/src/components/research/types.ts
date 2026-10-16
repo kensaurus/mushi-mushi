@@ -28,17 +28,6 @@ export interface SearchResponse {
   results: Snippet[]
 }
 
-export interface FirecrawlConfig {
-  configured: boolean
-  keyHint: string | null
-  addedAt: string | null
-  lastUsedAt: string | null
-  testStatus: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null
-  testedAt: string | null
-  allowedDomains: string[]
-  maxPagesPerCall: number
-}
-
 export const MODE_TONE: Record<SessionRow['mode'], string> = {
   search: CHIP_TONE.infoSubtle,
   scrape: 'bg-brand/12 text-brand border border-brand/28',

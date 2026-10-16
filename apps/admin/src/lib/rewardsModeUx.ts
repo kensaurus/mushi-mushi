@@ -65,19 +65,3 @@ export function resolveQuickRewardsTab(stats: RewardsStats): RewardsTabId {
   if (stats.topPriority === 'project_disabled') return 'settings'
   return 'overview'
 }
-
-/** Beginner mode: primary tabs only; advanced tabs live behind overflow. */
-export const REWARDS_PRIMARY_TABS: RewardsTabId[] = [
-  'overview',
-  'publishing',
-  'rules',
-  'tiers',
-  'contributors',
-]
-
-export const REWARDS_OVERFLOW_TABS: RewardsTabId[] = [
-  'quests',
-  'analytics',
-  'sandbox',
-  'settings',
-]

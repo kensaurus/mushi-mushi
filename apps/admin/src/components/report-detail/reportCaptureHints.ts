@@ -12,12 +12,12 @@ import type { ReportDetail } from './types'
 
 const NATIVE_SDK_RE = /(react-native|capacitor|expo|ios|android|flutter|swift|kotlin)/i
 
-export function isNativeSdk(report: Pick<ReportDetail, 'sdk_package'>): boolean {
+function isNativeSdk(report: Pick<ReportDetail, 'sdk_package'>): boolean {
   return !!report.sdk_package && NATIVE_SDK_RE.test(report.sdk_package)
 }
 
 /** True when the report carries any SDK telemetry stamp (modern SDK). */
-export function hasSdkStamp(report: Pick<ReportDetail, 'sdk_package' | 'sdk_version'>): boolean {
+function hasSdkStamp(report: Pick<ReportDetail, 'sdk_package' | 'sdk_version'>): boolean {
   return !!(report.sdk_package || report.sdk_version)
 }
 

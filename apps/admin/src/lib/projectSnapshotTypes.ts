@@ -7,7 +7,7 @@
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import type { PdcaStageId } from './pdca'
 
-export interface SeverityBreakdown30d {
+interface SeverityBreakdown30d {
   critical: number
   major: number
   minor: number
@@ -16,7 +16,7 @@ export interface SeverityBreakdown30d {
   total: number
 }
 
-export interface Trend7d {
+interface Trend7d {
   last7d: number
   prev7d: number
   delta: number

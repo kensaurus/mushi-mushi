@@ -186,20 +186,6 @@ export function connectLaneOverlay(
   return { posture: 'clear' }
 }
 
-/** Dashboard PDCA stage overlay from live counts. */
-export function dashboardStageOverlay(
-  _stageId: string,
-  count: number,
-): WorkflowStageOverlay {
-  if (count <= 0) {
-    return { posture: 'clear', metric: 'Clear' }
-  }
-  return {
-    posture: count >= 5 ? 'warn' : 'open',
-    metric: `${count} open`,
-  }
-}
-
 /** Health probe tab overlay from live stats. */
 export function healthProbeOverlay(
   tabId: string,
@@ -531,4 +517,3 @@ export function promptLabStageOverlay(
   }
   return { posture: 'clear', metric: '—' }
 }
-

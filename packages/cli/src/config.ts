@@ -71,7 +71,7 @@ export interface CliConfig {
  * shape the first time a profile-scoped save happens — so existing single-
  * profile users never see their file change.
  */
-export interface MultiProfileConfigFile {
+interface MultiProfileConfigFile {
   version: 2
   /** Which profile is used when no `--profile` / `MUSHI_PROFILE` is given. */
   activeProfile: string

@@ -6,7 +6,7 @@
  *          `AskMushiIntent` union without dragging in React.
  */
 
-export type Role = 'user' | 'assistant' | 'system'
+type Role = 'user' | 'assistant' | 'system'
 
 export type AskMushiIntent =
   | 'default'
@@ -17,7 +17,7 @@ export type AskMushiIntent =
   | 'cite'
   | 'why-failed'
 
-export type AskMushiMode = 'chat' | 'navigate'
+type AskMushiMode = 'chat' | 'navigate'
 
 export interface NavStep {
   text: string
@@ -33,7 +33,7 @@ export interface NavTarget {
 /** Structured backend reply. The clarify branch is rendered as chips
  *  instead of prose — clicking a chip is the same as typing the option as
  *  the next user message. */
-export type AskMushiReply =
+type AskMushiReply =
   | { kind: 'answer'; text: string; steps?: NavStep[]; navTargets?: NavTarget[] }
   | { kind: 'clarify'; question: string; options: string[] }
 

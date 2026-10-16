@@ -21,7 +21,7 @@ import {
   type HeartbeatState,
 } from '../../lib/heartbeat'
 
-export interface ProjectFolderTabItem {
+interface ProjectFolderTabItem {
   id: string
   name: string
   slug: string

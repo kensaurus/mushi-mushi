@@ -6,7 +6,7 @@
 
 import { shortDay } from '../charts/chartAxis'
 
-export const DAILY_SPEND_WINDOW_DAYS = 14
+const DAILY_SPEND_WINDOW_DAYS = 14
 
 export interface DailySpendSeries {
   /** ISO dates (YYYY-MM-DD), oldest → newest */

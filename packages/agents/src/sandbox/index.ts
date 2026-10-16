@@ -97,8 +97,6 @@ export function resolveSandboxProvider(opts: ResolveProviderOptions): SandboxPro
 
 export { LocalNoopSandboxProvider } from './local-noop.js'
 export { createE2BProvider } from './e2b.js'
-export { createModalProvider } from './modal.js'
-export { createCloudflareProvider } from './cloudflare.js'
 export { buildSandboxConfig } from './policy.js'
 export type { BuildSandboxConfigOptions } from './policy.js'
 export {

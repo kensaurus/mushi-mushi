@@ -85,7 +85,7 @@ export function buildHttpConfig(
 }
 
 /** Build the org-scoped (account-level) stdio config — no MUSHI_PROJECT_ID set. */
-export function buildOrgStdioConfig(
+function buildOrgStdioConfig(
   apiKey: string,
   apiEndpoint: string,
   options?: { features?: readonly string[] },
@@ -143,17 +143,6 @@ export function buildCursorDeeplink(
   return encodeCursorInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
 }
 
-/** One-click Cursor MCP install URL (hosted HTTP transport). */
-export function buildCursorHttpDeeplink(
-  projectId: string,
-  projectName: string,
-  apiKey: string,
-  mcpHttpUrl: string,
-): string {
-  const name = projectServerName(projectId, projectName)
-  return encodeCursorInstallDeeplink(name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
-}
-
 /** VS Code deeplink — stdio transport. */
 export function buildVsCodeDeeplink(
   projectId: string,
@@ -163,15 +152,4 @@ export function buildVsCodeDeeplink(
 ): string {
   const name = projectServerName(projectId, projectName)
   return encodeVsCodeInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
-}
-
-/** VS Code deeplink — hosted HTTP transport. */
-export function buildVsCodeHttpDeeplink(
-  projectId: string,
-  projectName: string,
-  apiKey: string,
-  mcpHttpUrl: string,
-): string {
-  const name = projectServerName(projectId, projectName)
-  return encodeVsCodeInstallDeeplink(name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
 }
