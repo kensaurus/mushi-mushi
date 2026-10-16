@@ -18,9 +18,6 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { z } from 'npm:zod@3'
-import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { openAiProvider } from './openai-compat.ts'
 import { withAnthropicOrOpenAi } from './llm-failover.ts'
 import { ANTHROPIC_HAIKU, OPENAI_MINI } from './models.ts'
 import { createTrace } from './observability.ts'
@@ -140,11 +137,13 @@ export async function classifyVoiceIntent(
   let keySource: 'byok' | 'env' | undefined
 
   try {
+    // The AI SDK loads on the first model call, not at boot (ai-sdk.ts).
     const { result, usedProvider } = await withAnthropicOrOpenAi(
       db,
       projectId,
       async (key) => {
         keySource = key.source
+        const { createAnthropic, generateObject } = await import('./ai-sdk.ts')
         const anthropic = createAnthropic({ apiKey: key.key })
         const { object, usage } = await generateObject({
           model: anthropic(ANTHROPIC_HAIKU),
@@ -157,6 +156,10 @@ export async function classifyVoiceIntent(
       },
       async (key) => {
         keySource = key.source
+        const [{ generateObject }, { openAiProvider }] = await Promise.all([
+          import('./ai-sdk.ts'),
+          import('./openai-compat.ts'),
+        ])
         const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
         // structuredOutputs:false — voiceIntentSchema has an optional field
         // (ADR 0002 / MUSHI-MUSHI-SERVER-1V); tool-mode JSON is still

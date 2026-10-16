@@ -12,9 +12,11 @@
  * red, so a `down` probe (what the prober actually writes) never counted.
  *
  * Now the latest row per (project, kind) and the ok/total counts come from
- * the `integration_health_rollup` SQL function (DISTINCT ON over the
- * (project_id, kind, checked_at desc) index), and every route classifies
- * the status with `healthSeverity`.
+ * the `integration_health_rollup` SQL function, and every route classifies
+ * the status with `healthSeverity`. Its window read needs the
+ * (project_id, checked_at desc) include (kind, status) index from migration
+ * 20261016100000: until 2026-10-16 only (project_id) existed, so the rollup
+ * read every row of the table and hit statement timeouts on inbox/stats.
  *
  * Pure apart from the structural db type, so the Deno CI test runs without
  * permissions and the vitest suite imports it directly.

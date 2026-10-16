@@ -156,6 +156,21 @@ describe('inbox/stats', () => {
     expect(body.data.criticalUntriaged).toBe(1)
     expect(body.data.openPlan).toBe(true)
   })
+
+  it('keeps Plan open for classified critical/high reports nobody has fixed (no false "All clear")', async () => {
+    // glot.it 2026-10-16: Sentry imports the classifier had tagged sat at
+    // `classified`, so the triage-only flag said all clear over them.
+    seed([
+      report(1, { severity: 'high', status: 'classified' }),
+      report(2, { severity: 'critical', status: 'classified' }),
+      report(3, { severity: 'low', status: 'classified' }),
+    ])
+    const { body } = await get('/v1/admin/inbox/stats')
+    expect(body.data.criticalUntriaged).toBe(0)
+    expect(body.data.urgentOpenReports).toBe(2)
+    expect(body.data.openPlan).toBe(true)
+    expect(body.data.openActions).toBeGreaterThanOrEqual(1)
+  })
 })
 
 describe('/v1/admin/dashboard', () => {
@@ -179,6 +194,68 @@ describe('/v1/admin/dashboard', () => {
     ])
     const act = body.data.pdcaStages.find((s: { id: string }) => s.id === 'act')
     expect(act.tone).toBe('urgent')
+  })
+
+  it('draws the 14-day charts from the SQL rollup, past the 1,000-row cap', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    db = makeFakeDb(
+      { reports: [], fix_attempts: [], llm_invocations: [], classification_evaluations: [], projects: [{ id: P, name: 'glot.it' }] },
+      {
+        maxRows: 1000,
+        rpc: (fn) =>
+          fn === 'dashboard_chart_rollup'
+            ? {
+                report_days: [{ day: today, total: 3, critical: 1, high: 0, medium: 2, low: 0, unscored: 0 }],
+                llm_days: [{ day: today, calls: 1716, tokens: 9000, latency_ms: 120, failures: 4 }],
+                components: [{ component: 'checkout', count: 3 }],
+              }
+            : fn === 'integration_health_rollup'
+              ? []
+              : null,
+      },
+    )
+    const { body } = await get('/v1/admin/dashboard')
+    const day = (rows: Array<{ day: string }>) => rows.find((r) => r.day === today)
+    expect(day(body.data.reportsByDay)).toMatchObject({ total: 3, critical: 1, medium: 2 })
+    expect(day(body.data.llmByDay)).toMatchObject({ calls: 1716, tokens: 9000, latencyMs: 120, failures: 4 })
+    expect(body.data.counts.llmTokens14d).toBe(9000)
+    expect(body.data.topComponents).toEqual([{ component: 'checkout', count: 3 }])
+    expect(body.data.chartsSampled).toBe(false)
+    const plan = body.data.pdcaStages.find((s: { id: string }) => s.id === 'plan')
+    expect(plan.series[6]).toBe(3)
+  })
+
+  it('says the charts are a sample when the rollup is missing and the row read hits the cap', async () => {
+    seed([], [], {
+      llm_invocations: Array.from({ length: 1200 }, (_, i) => ({
+        id: `l-${i}`,
+        project_id: P,
+        status: 'success',
+        latency_ms: 10,
+        input_tokens: 1,
+        output_tokens: 1,
+        created_at: iso(i * 1000),
+      })),
+    })
+    const realRpc = db.rpc.bind(db)
+    ;(db as unknown as { rpc: unknown }).rpc = async (fn: string, args: Record<string, unknown>) =>
+      fn === 'dashboard_chart_rollup'
+        ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }
+        : realRpc(fn, args)
+    const { body } = await get('/v1/admin/dashboard')
+    expect(body.ok).toBe(true)
+    expect(body.data.chartsSampled).toBe(true)
+  })
+
+  it('answers a failed chart rollup with an error, not with an empty chart', async () => {
+    const realRpc = db.rpc.bind(db)
+    ;(db as unknown as { rpc: unknown }).rpc = async (fn: string, args: Record<string, unknown>) =>
+      fn === 'dashboard_chart_rollup'
+        ? { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }
+        : realRpc(fn, args)
+    const { status, body } = await get('/v1/admin/dashboard')
+    expect(status).toBeGreaterThanOrEqual(500)
+    expect(body.ok).toBe(false)
   })
 
   it('counts the Check stage with the judge-eligible definition the inbox uses', async () => {
