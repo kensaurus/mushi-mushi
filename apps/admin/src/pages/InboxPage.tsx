@@ -102,8 +102,16 @@ export function InboxPage() {
       buildInboxCards(data ?? undefined, {
         judgeStale: stats.judgeStale,
         judgeStaleHours: stats.judgeStaleHours,
+        // Only once stats have loaded; the empty defaults would tick every card.
+        ...(statsData
+          ? {
+              urgentOpenReports: stats.urgentOpenReports,
+              integrationRed: stats.integrationRed,
+              integrationAmber: stats.integrationAmber,
+            }
+          : {}),
       }),
-    [data, stats.judgeStale, stats.judgeStaleHours],
+    [data, statsData, stats.judgeStale, stats.judgeStaleHours, stats.urgentOpenReports, stats.integrationRed, stats.integrationAmber],
   )
   const [filter, setFilter] = useState<FilterValue>('all')
 
