@@ -894,7 +894,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/trigger-modes",
     markdown: "concepts/trigger-modes.md",
     keywords: ["concepts", "trigger-modes", "trigger", "modes", "where", "report", "button", "lives"],
-    headings: ["Choosing a Mode", "Bring Your Own Button", "Smart Hide", "Native SDKs"],
+    headings: ["Choosing a Mode", "Bring Your Own Button", "Staying out of the way", "Smart Hide", "Native SDKs"],
     excerpt: "Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.",
   },
   {
