@@ -117,3 +117,52 @@ describe('sentry-seer-poll routes both per-project catches through logPollFailur
     expect(src).not.toMatch(/err instanceof Error \? err\.message : String\(err\)/)
   })
 })
+
+describe('Sentry 429 retry (2026-10-16: 91 rate-limit warnings a day)', () => {
+  const RATE_LIMITED = '{"detail":"You are attempting to use this endpoint too frequently. Limit is 5 requests in 1 seconds"}'
+
+  it('waits as Retry-After asks and returns the retried answer', async () => {
+    const calls: string[] = []
+    const fetchImpl = async (url: string) => {
+      calls.push(url)
+      return calls.length === 1
+        ? new Response(RATE_LIMITED, { status: 429, headers: { 'Retry-After': '0' } })
+        : new Response('[{"id":"1"}]', { status: 200 })
+    }
+    const page = await api.searchSentryIssues('t', 'sakuramoto', 'glot-it', { query: 'is:unresolved', limit: 10 }, fetchImpl)
+    expect(page.issues.map((i) => i.id)).toEqual(['1'])
+    expect(calls).toHaveLength(2)
+  })
+
+  it('gives up after two retries and still classifies the 429 as transient', async () => {
+    let n = 0
+    const fetchImpl = async () => {
+      n++
+      return new Response(RATE_LIMITED, { status: 429, headers: { 'Retry-After': '0' } })
+    }
+    const err = await api
+      .searchSentryIssues('t', 'sakuramoto', 'glot-it', { query: 'is:unresolved', limit: 10 }, fetchImpl)
+      .catch((e: unknown) => e)
+    expect(n).toBe(3)
+    expect(api.isTransientSentryFailure(err)).toBe(true)
+  })
+
+  it('leaves a long Retry-After to the next poll instead of waiting inside the request', async () => {
+    let n = 0
+    const fetchImpl = async () => {
+      n++
+      return new Response(RATE_LIMITED, { status: 429, headers: { 'Retry-After': '60' } })
+    }
+    await api.searchSentryIssues('t', 'o', 'p', { query: 'q', limit: 1 }, fetchImpl).catch(() => {})
+    expect(n).toBe(1)
+  })
+
+  it('reads Retry-After as seconds or an HTTP date, and defaults to 1 s', () => {
+    const now = Date.parse('2026-10-16T11:00:00Z')
+    const at = (v?: string) => new Response(null, { status: 429, headers: v ? { 'Retry-After': v } : {} })
+    expect(api.sentryRetryAfterMs(at('2'), now)).toBe(2_000)
+    expect(api.sentryRetryAfterMs(at('Fri, 16 Oct 2026 11:00:03 GMT'), now)).toBe(3_000)
+    expect(api.sentryRetryAfterMs(at(), now)).toBe(1_000)
+    expect(api.sentryRetryAfterMs(at('soon'), now)).toBe(1_000)
+  })
+})

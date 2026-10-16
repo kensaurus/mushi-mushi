@@ -109,20 +109,52 @@ export interface SentryRestEvent {
   context?: Record<string, unknown> | null;
 }
 
+/** Retries after a 429 before the caller sees it. */
+const SENTRY_429_RETRIES = 2;
+/** Longest Retry-After we wait inside one request; a longer one is left to the next poll. */
+const SENTRY_429_MAX_WAIT_MS = 5_000;
+
+/**
+ * Milliseconds to wait before retrying a 429, from its Retry-After header
+ * (seconds or an HTTP date). Sentry's org limit is "5 requests in 1 second",
+ * so a missing header waits 1 s.
+ */
+export function sentryRetryAfterMs(res: Response, now = Date.now()): number {
+  const raw = res.headers.get('Retry-After');
+  if (!raw) return 1_000;
+  const seconds = Number(raw);
+  const ms = Number.isFinite(seconds) ? seconds * 1_000 : Date.parse(raw) - now;
+  return Number.isFinite(ms) ? Math.max(0, ms) : 1_000;
+}
+
 async function sentryFetch(
   fetchImpl: FetchLike,
   token: string,
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  return await fetchImpl(`${SENTRY_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-  });
+  const request = () =>
+    fetchImpl(`${SENTRY_API_BASE}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+    });
+  // The auto-import polls several projects at once against one org rate
+  // limit, so a 429 is routine: wait as Sentry asks and try again, instead of
+  // failing the project's whole run (2026-10-16: 91 such warnings a day).
+  // A 429 means the request was not processed, so retrying a write is safe.
+  let res = await request();
+  for (let attempt = 0; attempt < SENTRY_429_RETRIES && res.status === 429; attempt++) {
+    const waitMs = sentryRetryAfterMs(res);
+    if (waitMs > SENTRY_429_MAX_WAIT_MS) break;
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, waitMs));
+    res = await request();
+  }
+  return res;
 }
 
 async function sentryJson<T>(fetchImpl: FetchLike, token: string, path: string, init?: RequestInit): Promise<T> {
