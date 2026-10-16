@@ -7,8 +7,17 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **705** | `--max-issues 705` |
-| default | `pnpm exec knip --reporter json` | **534** | `--max-issues 534 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **282** | `--max-issues 282` |
+| default | `pnpm exec knip --reporter json` | **95** | `--max-issues 95 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-16 (dead-code pass), knip 6.34.0: 282 production / 95 default**
+> (281 and 94 fail, 282 and 95 pass; measured after `pnpm build` on branch
+> `housekeep/2026-10-16-deadcode`). Before the pass the true counts were 702 / 534. 33 unused
+> files were deleted (one of them a cascade). Unused exports and types were un-exported, along with
+> the declarations that left dead, and 11 dependencies nothing imports were dropped. The
+> keep/kill table, including everything kept on purpose and still counted, is in
+> [`docs/plan-dead-code-2026-10-16.md`](../../plan-dead-code-2026-10-16.md). Both JSON
+> baselines and the two tables below were regenerated from this run.
 
 > **Re-measured 2026-10-14 (housekeep pass), knip 6.34.0: 705 production / 534 default**
 > (704 and 533 fail, 705 and 534 pass; measured after `pnpm build` on `origin/master` `a3224b7d`).
@@ -83,26 +92,26 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 64 |  |  |  | 293 | 160 | 5 | 522 |
-| apps/docs |  | 2 |  |  | 16 | 7 | 1 | 26 |
+| apps/admin | 19 |  |  |  | 135 | 15 | 4 | 173 |
+| apps/docs |  |  |  |  | 2 |  | 1 | 3 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
-| packages/agents | 8 |  |  | 1 | 3 | 2 |  | 14 |
+| packages/agents | 3 |  |  | 1 | 1 | 1 |  | 6 |
 | packages/brand | 1 |  |  |  |  |  |  | 1 |
 | packages/capacitor | 1 |  |  |  |  |  |  | 1 |
-| packages/cli |  |  |  |  | 46 | 16 |  | 62 |
-| packages/core |  |  |  |  | 4 | 4 |  | 8 |
+| packages/cli |  |  |  |  | 33 | 8 |  | 41 |
+| packages/core |  |  |  |  | 3 |  |  | 3 |
 | packages/marketing-ui |  | 1 |  |  | 1 |  |  | 2 |
 | packages/mcp | 9 | 1 |  |  | 5 |  |  | 15 |
-| packages/mcp-ci |  |  |  |  | 3 |  |  | 3 |
-| packages/node |  |  |  |  | 1 | 2 |  | 3 |
+| packages/mcp-ci |  |  |  |  | 2 |  |  | 2 |
+| packages/node |  |  |  |  |  | 2 |  | 2 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  | 1 |
-| packages/react-native | 1 |  |  |  | 3 | 2 |  | 6 |
-| packages/server | 2 | 1 |  |  |  |  |  | 3 |
+| packages/react-native | 1 |  |  |  | 1 |  |  | 2 |
+| packages/server | 3 | 1 |  |  |  |  |  | 4 |
+| packages/ux |  |  |  |  | 11 | 1 |  | 12 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| packages/wasm-classifier |  |  |  |  |  | 1 |  | 1 |
-| packages/web |  |  |  |  | 39 | 12 |  | 51 |
-| **total** | **91** | **5** | **1** | **1** | **414** | **206** | **6** | **724** |
+| packages/web |  |  |  |  | 8 | 1 |  | 9 |
+| **total** | **42** | **3** | **1** | **1** | **202** | **28** | **5** | **282** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -111,27 +120,20 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| apps/admin | 51 |  |  |  |  | 216 | 160 | 5 | 432 |
-| apps/docs |  | 2 | 1 |  |  | 14 | 7 | 1 | 25 |
-| examples/e2e-dogfood |  |  | 3 |  |  | 2 |  |  | 5 |
+| apps/admin | 8 |  |  |  |  | 50 | 11 | 4 | 73 |
+| apps/docs |  |  | 1 |  |  |  |  | 1 | 2 |
+| examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
-| packages/adapters |  |  |  |  |  | 1 |  |  | 1 |
-| packages/agents | 8 |  | 7 | 1 |  | 2 | 1 |  | 19 |
-| packages/cli |  |  |  |  |  | 17 | 8 |  | 25 |
-| packages/core |  |  |  |  |  | 1 | 4 |  | 5 |
-| packages/eslint-plugin-mushi-mushi |  |  | 2 |  |  |  |  |  | 2 |
+| packages/agents | 1 |  |  | 1 |  |  |  |  | 2 |
+| packages/cli |  |  |  |  |  | 2 |  |  | 2 |
 | packages/marketing-ui |  | 1 |  |  |  | 1 |  |  | 2 |
-| packages/mcp | 3 | 1 |  |  |  | 1 |  |  | 5 |
-| packages/mcp-ci |  |  |  |  |  | 1 |  |  | 1 |
-| packages/node |  |  | 1 |  |  | 1 |  |  | 2 |
+| packages/mcp | 3 | 1 |  |  |  |  |  |  | 4 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
-| packages/react |  |  | 1 |  |  |  |  |  | 1 |
-| packages/react-native | 1 |  |  |  |  | 2 | 2 |  | 5 |
+| packages/react-native | 1 |  |  |  |  |  |  |  | 1 |
 | packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
-| packages/wasm-classifier |  |  |  |  |  |  | 1 |  | 1 |
-| packages/web |  |  |  |  |  | 32 | 11 |  | 43 |
-| **total** | **64** | **4** | **18** | **1** | **1** | **291** | **194** | **6** | **579** |
+| packages/web |  |  |  | 1 |  | 1 |  |  | 2 |
+| **total** | **14** | **2** | **6** | **2** | **1** | **54** | **11** | **5** | **95** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
