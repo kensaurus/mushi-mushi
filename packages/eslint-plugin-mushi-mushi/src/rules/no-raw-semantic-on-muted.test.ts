@@ -28,7 +28,7 @@ describe('no-raw-semantic-on-muted', () => {
       },
       {
         filename: 'apps/admin/src/pages/HealthPage.tsx',
-        code: `<span className="bg-warn-muted text-warning-foreground" />`,
+        code: `<span className="bg-warn-muted text-warn-foreground" />`,
       },
       {
         filename: 'apps/admin/src/pages/HealthPage.tsx',

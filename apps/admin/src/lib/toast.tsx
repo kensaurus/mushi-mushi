@@ -92,7 +92,7 @@ const TONE_DESC_CLS: Record<ToastTone, string> = {
   success: 'text-ok-foreground',
   error: 'text-danger-foreground',
   info: 'text-info-foreground',
-  warn: 'text-warning-foreground',
+  warn: 'text-warn-foreground',
 }
 
 const TOAST_ACTION_CLASS =
@@ -218,7 +218,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {toasts.length > 0 ? (
       <div
         // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-        className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]"
+        className="pointer-events-none fixed bottom-4 right-4 z-(--z-toast) flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]"
         role="region"
         aria-label="Notifications"
       >

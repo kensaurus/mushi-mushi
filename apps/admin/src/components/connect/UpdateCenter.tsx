@@ -125,7 +125,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         <HelpBanner
           tone="warn"
           title="GitHub not ready for upgrade PRs"
-          icon={<IconAlertTriangle className="h-4 w-4 text-warning-foreground" />}
+          icon={<IconAlertTriangle className="h-4 w-4 text-warn-foreground" />}
         >
           {githubHint ?? (
             <>

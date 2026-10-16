@@ -569,7 +569,7 @@ export function Tooltip({
       className={
         portal
           ? `${TOOLTIP_SURFACE} ${layoutClass}`
-          : `absolute ${positions[resolvedSide]} z-[100] ${TOOLTIP_SURFACE} ${layoutClass}`
+          : `absolute ${positions[resolvedSide]} z-(--z-top) ${TOOLTIP_SURFACE} ${layoutClass}`
       }
     >
       {content}

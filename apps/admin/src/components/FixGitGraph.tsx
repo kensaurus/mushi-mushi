@@ -29,7 +29,7 @@ import type { KeyboardEvent } from 'react'
 import { Modal } from './Modal'
 import { Badge, CodeValue } from './ui'
 import { SignalChip } from './report-detail/ReportSurface'
-import { CHIP_TONE } from '../lib/chipTone'
+import { prStateChipTone } from '../lib/chipTone'
 import { readVizToken } from '../lib/vizTokens'
 
 export interface FixTimelineEvent {
@@ -91,14 +91,6 @@ function statusColor(key: 'ok' | 'fail' | 'pending' | 'default'): string {
     default:
       return readVizToken('viz-graph-muted')
   }
-}
-
-/** PR lifecycle chips — accent carries the purple “merged” GitHub tone. */
-const PR_STATE_TONE: Record<PrState, string> = {
-  open: CHIP_TONE.okSubtle,
-  merged: CHIP_TONE.accent,
-  closed: CHIP_TONE.dangerSubtle,
-  draft: CHIP_TONE.neutral,
 }
 
 const EVENT_KIND_TONE: Record<FixTimelineEvent['kind'], 'brand' | 'info' | 'ok' | 'danger' | 'warn' | 'neutral'> = {
@@ -392,7 +384,7 @@ export function FixGitGraph({
             </span>
           )}
           {prState && (
-            <Badge className={`${PR_STATE_TONE[prState]} text-3xs uppercase tracking-wider`}>
+            <Badge className={`${prStateChipTone(prState)} text-3xs uppercase tracking-wider`}>
               {prState}
             </Badge>
           )}
