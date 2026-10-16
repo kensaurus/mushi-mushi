@@ -59,8 +59,10 @@ Selecting a report opens the full detail view:
 - **Comments + presence** — Supabase Realtime tracks who else is on the
   same report (badge in the header). Comments stream live with relative
   timestamps that expose the full ISO time on hover.
-- **Actions**: change status, dispatch a fix, dedupe into a parent group,
-  flag as anti-gaming.
+- **Actions**: change status, dispatch a fix, close as "Not a code bug",
+  dedupe into a parent group, flag as anti-gaming. When the report has no
+  stack trace, source file or failed request, "Not a code bug" is the main
+  button and dispatch moves to "Dispatch anyway".
 - **Fix card + pipeline flow** — when a fix is dispatched, the detail page shows
   the active attempt, CI badge, and merge controls.
 - **Related cross-links** — jump to other reports from the same component
