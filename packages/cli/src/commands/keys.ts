@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
-import { loadConfig, saveConfig } from '../config.js';
+import { loadConfig, resolveProfileName, saveConfig } from '../config.js';
+import { syncKeychainAfterKeyChange } from '../keychain.js';
 import { apiCall, printResult } from '../cli-shared.js';
 import {
   startDeviceAuth,
@@ -148,6 +149,9 @@ export function registerKeysCommands(program: Command): void {
       const oldPrefix = oldKey?.slice(0, 12) ?? '(none)';
       config.apiKey = newKey;
       saveConfig(config);
+      // The keychain wins over the file on read; leave the old key there and
+      // every command after the revoke below fails with it.
+      syncKeychainAfterKeyChange(newKey, resolveProfileName());
 
       // Auto-revoke the predecessor on the server so the old key cannot be used
       // after rotation. Uses the same CLI token that minted the new key.

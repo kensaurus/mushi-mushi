@@ -27,6 +27,8 @@
  *   entry.deletePassword(): void
  */
 
+import { createRequire } from 'node:module'
+
 // Service label shown in OS Keychain / Credential Manager.
 const KEYCHAIN_SERVICE = 'mushi-cli'
 
@@ -45,10 +47,15 @@ let _EntryClass: (new (service: string, account: string) => any) | null | undefi
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getEntryClass(): (new (service: string, account: string) => any) | null {
+  // The opt-out covers every keychain call, not only isKeychainEnabled().
+  if (process.env['MUSHI_NO_KEYCHAIN']) return null
   if (_EntryClass === undefined) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
-      const mod = require('@napi-rs/keyring') as any
+      // The CLI ships as an ES module, where a bare `require` does not exist:
+      // it threw, the catch below swallowed it, and the keychain was silently
+      // off for everyone (found 2026-10-16). createRequire works in both.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mod = createRequire(import.meta.url)('@napi-rs/keyring') as any
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       _EntryClass = mod.Entry ?? null
     } catch {
@@ -123,4 +130,24 @@ export function tryDeleteKeyFromKeychain(profile = 'default'): void {
   } catch {
     // not present — ignore
   }
+}
+
+/**
+ * Keep the keychain in step after a command replaced the saved API key
+ * (`mushi keys rotate`, `mushi config apiKey <key>`).
+ *
+ * loadConfig() prefers the keychain over the file, so a new key written only
+ * to the file lost to the old key still in the keychain: right after a
+ * rotation revoked it, every command failed with the old key. When the
+ * keychain holds an entry for this profile it gets the new key; if that write
+ * fails, the stale entry is removed so the file's key is used. A profile with
+ * no keychain entry is left without one.
+ *
+ * @returns 'updated' | 'removed' | 'none' (no entry, or keychain unavailable)
+ */
+export function syncKeychainAfterKeyChange(apiKey: string, profile = 'default'): 'updated' | 'removed' | 'none' {
+  if (tryLoadKeyFromKeychain(profile) === null) return 'none'
+  if (trySaveKeyToKeychain(apiKey, profile) && tryLoadKeyFromKeychain(profile) === apiKey) return 'updated'
+  tryDeleteKeyFromKeychain(profile)
+  return 'removed'
 }
