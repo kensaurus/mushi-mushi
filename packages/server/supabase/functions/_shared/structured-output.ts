@@ -1,4 +1,3 @@
-import { generateObject } from 'npm:ai@4'
 import type { ZodType } from 'npm:zod@3'
 
 export interface StructuredObjectUsage {
@@ -25,12 +24,13 @@ type GenerateObjectCompat = (
 // instantiation depth when a large Edge Function graph is checked. Keep the
 // provider boundary shallow, then restore stronger safety by parsing the
 // returned object through the caller's Zod schema before it can be consumed.
-const generateObjectCompat = generateObject as unknown as GenerateObjectCompat
-
+// ai@4 loads on the first call, not at boot (ai-sdk.ts).
 export async function generateValidatedObject<T>(
   schema: ZodType<T>,
   options: Record<string, unknown>,
 ): Promise<ValidatedObjectResult<T>> {
+  const { generateObject } = await import('./ai-sdk.ts')
+  const generateObjectCompat = generateObject as unknown as GenerateObjectCompat
   const result = await generateObjectCompat({ ...options, schema })
   return {
     ...result,

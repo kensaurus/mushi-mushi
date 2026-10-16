@@ -79,7 +79,15 @@ function project(steps: SetupStep[], extra: Partial<SetupProject> = {}): SetupPr
 }
 
 const SET_UP = project([step('project_created', true), step('api_key_generated', true), step('sdk_installed', true), step('github_connected', true, false)])
-const QUIET: NbaWork = { ready: true, urgentOpenReports: 0, fixesFailed: 0, fixesRetryable: 0, prsOpen: 0 }
+const QUIET: NbaWork = {
+  ready: true,
+  urgentOpenReports: 0,
+  untriagedBacklog: 0,
+  fixesFailed: 0,
+  fixesRetryable: 0,
+  prsOpen: 0,
+  judgeDisagreements: 0,
+}
 
 function Tour({ running }: { running: boolean }) {
   useClaimNextStep('overlay', running)

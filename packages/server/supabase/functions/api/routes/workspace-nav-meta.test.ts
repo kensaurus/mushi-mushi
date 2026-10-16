@@ -163,6 +163,45 @@ Deno.test('nav-meta folds the sidebar counters in when asked, keeping null for a
   })
 })
 
+Deno.test('nav-meta accepts include=inventory from a caller whose plan lacks it, and omits the counter', async () => {
+  clearNavMetaCache()
+  await withRuntimeTraceLimit(async () => {
+    const app = buildAuthedApp({ drift: 0 })
+    // requireFeature('inventory_v2') answers a plan without it with 402.
+    app.get('/v1/admin/inventory/:projectId', (c) =>
+      c.json({ ok: false, error: { code: 'feature_not_in_plan', flag: 'inventory_v2' } }, 402),
+    )
+    const res = await app.fetch(
+      new Request('http://edge-runtime.internal/api/v1/admin/workspace/nav-meta?include=counts,inventory', {
+        headers: { Authorization: 'Bearer user-jwt', 'X-Mushi-Org-Id': 'org-1', 'X-Mushi-Project-Id': 'p1' },
+      }),
+    )
+    assertEquals(res.status, 200)
+    const { counts, failedSlices } = (await res.json()).data as {
+      counts: Record<string, unknown>
+      failedSlices: Array<{ path: string; error: string }>
+    }
+    assertEquals(counts.regressedActions, null)
+    assertEquals(counts.inboxOpenActions, 6)
+    assert(!failedSlices.some((f) => f.path === '/v1/admin/inventory/p1'))
+  })
+})
+
+Deno.test('nav-meta still reports an inventory counter that failed for another reason', async () => {
+  clearNavMetaCache()
+  await withRuntimeTraceLimit(async () => {
+    const app = buildAuthedApp({ drift: 0 })
+    app.get('/v1/admin/inventory/:projectId', (c) => c.json({ ok: false, error: { code: 'DB_ERROR' } }, 500))
+    const res = await app.fetch(
+      new Request('http://edge-runtime.internal/api/v1/admin/workspace/nav-meta?include=counts,inventory', {
+        headers: { Authorization: 'Bearer user-jwt', 'X-Mushi-Org-Id': 'org-1', 'X-Mushi-Project-Id': 'p1' },
+      }),
+    )
+    const { failedSlices } = (await res.json()).data as { failedSlices: Array<{ path: string; error: string }> }
+    assert(failedSlices.some((f) => f.path === '/v1/admin/inventory/p1' && f.error === 'HTTP 500'))
+  })
+})
+
 Deno.test('nav-meta without include keeps the old shape (counts: null)', async () => {
   clearNavMetaCache()
   await withRuntimeTraceLimit(async () => {

@@ -314,6 +314,18 @@ export function humanizeFixError(
       raw,
     };
   }
+  // The review gate refused a patch that only touched comments: the report
+  // gave the agent nothing to change (no stack trace, no failing line), so a
+  // retry reads the same report and stops the same way. Say so, and point at
+  // the two things that help: the editor, or closing a non-code bug.
+  if (m.startsWith('review_failed') && m.includes('only adds or removes comments')) {
+    return {
+      title: 'Mushi found no code change to make from this report.',
+      hint: 'There is no stack trace or failing line to work from. Copy the fix prompt into your editor to dig in with the app running, or close the report if it is not a code bug.',
+      severity: 'hard',
+      raw,
+    };
+  }
   if (m.startsWith('review_failed') || category === 'review_failed') {
     return {
       title: 'The fix agent was not confident in its own patch.',

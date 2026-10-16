@@ -34,7 +34,6 @@
 import { useLayoutEffect, useSyncExternalStore } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { useAdminMode } from './mode'
 import { computeNextAction, type NbaAction, type NbaTone } from './nextBestAction'
 import { usePostureHasStatusBanner } from './postureChromeStore'
 import { isSetupGuideOpen, useSetupGuideView } from './setupGuidePrefs'
@@ -159,7 +158,6 @@ function setupListStep(project: SetupProject | null): { step: NextStepModel | nu
  */
 export function useNextStep(source: NextStepSource): UseNextStepResult {
   const { pathname } = useLocation()
-  const { isBeginner, isQuickstart } = useAdminMode()
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const claims = useSyncExternalStore(subscribeClaims, getClaims, getClaims)
   const activeProjectId = useActiveProjectId()
@@ -180,9 +178,9 @@ export function useNextStep(source: NextStepSource): UseNextStepResult {
     return { ...none, step: prerequisiteStep(setup, source.requires) }
   }
 
-  // Loop: Quick and Beginner only. Advanced keeps PageHero and the pipeline
-  // ribbon (lib/chromePosture.ts: the posture strips never co-render).
-  if (!isBeginner && !isQuickstart) return none
+  // Every mode gets the one "do this next" line. Advanced used to show a
+  // Plan/Do/Check/Act ribbon instead, which owners could not act on
+  // (2026-10-16): it named stages, not the next thing to do.
   if (SIGNED_OUT_PREFIXES.some((p) => pathname.startsWith(p))) return none
   // A status banner on PagePosture already carries this route's next step.
   if (postureHasStatusBanner) return none

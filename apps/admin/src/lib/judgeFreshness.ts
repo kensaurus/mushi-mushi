@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/judgeFreshness.ts
- * PURPOSE: Shared judge-batch freshness read/write for PipelineStatusRibbon
- *          and sidebar Check-stage staleness badges.
+ * PURPOSE: Shared judge-batch freshness read/write for the Health page and
+ *          the sidebar Check-stage staleness badge.
  */
 
 export const JUDGE_FRESHNESS_KEY = 'mushi:health:judge-freshness-ts'

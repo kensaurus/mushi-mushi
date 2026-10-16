@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ZodType } from 'zod'
 import { apiFetch } from './supabase'
+import { peekLastGood } from './lastGoodCache'
 import { useActiveProjectSignal, useProjectDataEpoch } from './activeProject'
 import { useActiveOrgSignal } from './activeOrg'
 
@@ -94,15 +95,21 @@ export function usePageData<T>(
   // here every page would keep showing the previous org's data until the
   // user navigated or hard-refreshed. Mirrors the project-signal wiring.
   const activeOrgSignal = useActiveOrgSignal()
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
+  // Last good answer for this path in the current team/project (kept by
+  // apiFetch). When present the page paints it on the first render and the
+  // fetch below refreshes it, so a revisit never opens on a skeleton.
+  const [seed] = useState(() => (autoLoad && path ? peekLastGood<T>(path, scope) : null))
+  const [data, setData] = useState<T | null>(seed?.data ?? null)
+  const [loading, setLoading] = useState<boolean>(autoLoad && path != null && !seed)
   const [isValidating, setIsValidating] = useState<boolean>(autoLoad && path != null)
   const [error, setError] = useState<string | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
   const [errorEndpoint, setErrorEndpoint] = useState<string | null>(null)
-  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(
+    seed ? new Date(seed.at).toISOString() : null,
+  )
 
   // We keep the abort flag in a ref so that a second StrictMode invocation
   // of the effect can flip the previous run's flag before it commits state.
@@ -114,11 +121,13 @@ export function usePageData<T>(
   // Health, page/filter change on Reports) keeps `loading=false` and leaves
   // the previous resource's `data` visible, briefly rendering stale rows
   // that belong to a different query.
-  const hasLoadedOnce = useRef(false)
+  const hasLoadedOnce = useRef(seed != null)
   // Tracks the `path` we last fetched from so we can detect a resource swap
   // and reset skeleton + data state. A distinct ref (not state) avoids an
   // extra render and keeps the comparison synchronous with the effect.
-  const lastPath = useRef<string | null>(null)
+  const lastPath = useRef<string | null>(seed ? path : null)
+  // Team/project the current `data` belongs to, to spot a context switch.
+  const lastContext = useRef(`${activeOrgSignal}|${activeProjectSignal}`)
   // Bumping `tick` forces a refetch from `reload()` without changing path.
   const [tick, setTick] = useState(0)
 
@@ -146,7 +155,17 @@ export function usePageData<T>(
     // the consumer's `if (loading) return <Skeleton />` guard fires
     // instead of rendering the prior path's rows against the new URL.
     const pathChanged = lastPath.current !== path
-    if (pathChanged) {
+    const context = `${activeOrgSignal}|${activeProjectSignal}`
+    const contextChanged = lastContext.current !== context
+    lastContext.current = context
+    // A resource or team/project swap shows that resource's last good answer
+    // straight away when apiFetch has one; the fetch below refreshes it.
+    const cached = pathChanged || contextChanged ? peekLastGood<T>(path, scope) : null
+    if (cached) {
+      hasLoadedOnce.current = true
+      setData(cached.data)
+      setLastFetchedAt(new Date(cached.at).toISOString())
+    } else if (pathChanged) {
       hasLoadedOnce.current = false
       setData(null)
       // Freshness belongs to the resource: don't show the old path's time.
