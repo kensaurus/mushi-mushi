@@ -12,7 +12,6 @@ import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
@@ -204,7 +203,6 @@ export function ExplorePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExploreStats>('/v1/admin/explore/stats')
-  usePublishPageHeroStats('/explore', statsData)
   const stats = { ...EMPTY_EXPLORE_STATS, ...statsData }
 
   const { resolved: theme } = useTheme()

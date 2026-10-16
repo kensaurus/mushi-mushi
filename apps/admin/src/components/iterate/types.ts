@@ -38,17 +38,6 @@ export interface PdcaIteration {
   created_at: string
 }
 
-export interface PdcaStats {
-  total: number
-  queued: number
-  running: number
-  succeeded: number
-  failed: number
-  aborted: number
-  avgFinalScore: number | null
-  lastRunAt: string | null
-}
-
 export const STATUS_CLS: Record<PdcaRun['status'], string> = {
   queued: runStatusChipTone('queued'),
   running: runStatusChipTone('running'),
@@ -94,7 +83,7 @@ export const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' },
 ] as const
 
-export function scoreTone(pct: number): 'ok' | 'warn' | 'danger' {
+function scoreTone(pct: number): 'ok' | 'warn' | 'danger' {
   if (pct >= 70) return 'ok'
   if (pct >= 50) return 'warn'
   return 'danger'

@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_RECORDING_MS, pickRecorderMimeType, recordingFileName } from '../../lib/voiceRecorder'
 
-export type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopping'
+type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopping'
 
 export interface VoiceRecorder {
   state: RecorderState

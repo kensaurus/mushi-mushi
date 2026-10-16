@@ -11,14 +11,6 @@ export const TESTER_API_OPTS: Pick<UsePageDataOptions<unknown>, 'scope'> = {
   scope: 'none',
 }
 
-export function normalizeNestedData<T>(raw: unknown): T | null {
-  if (raw == null) return null
-  if (typeof raw === 'object' && raw !== null && 'data' in raw) {
-    return (raw as { data: T }).data ?? null
-  }
-  return raw as T
-}
-
 export function normalizeListItems<T>(raw: unknown): T[] {
   if (raw == null) return []
   if (Array.isArray(raw)) return raw as T[]

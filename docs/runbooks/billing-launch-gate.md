@@ -62,7 +62,7 @@ Repeat on Indie with spend cap forced to minimum and overage usage pushed to cap
 | ---- | ------------- |
 | Hard stop | 402 before LLM when at free limit or spend cap |
 | Alerts | Email at thresholds; independent of stop |
-| Docs | [pricing.mdx](../apps/docs/content/pricing.mdx) matches `VISION.md` §2.2 |
+| Docs | [pricing.mdx](../../apps/docs/content/pricing.mdx) matches `VISION.md` §2.2 |
 | CI | `pnpm check:narrative` green including `check:license` |
 
 **Sign-off:** Kenji · date: ___________

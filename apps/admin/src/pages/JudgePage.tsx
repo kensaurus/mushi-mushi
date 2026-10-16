@@ -3,7 +3,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
 import {
@@ -298,7 +297,6 @@ export function JudgePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<JudgeStats>('/v1/admin/judge/stats')
-  usePublishPageHeroStats('/judge', statsData)
   const stats = { ...EMPTY_JUDGE_STATS, ...statsData }
 
   const setActiveTab = useCallback(

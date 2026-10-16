@@ -92,17 +92,3 @@ export const stageMedia: Record<MushiStageId, StageMediaEntry> = {
   },
 }
 
-/** Full-loop animated tour — shown in the canvas header as an overview clip. */
-export const loopOverviewMedia: StageMediaEntry = {
-  file: 'tour-pdca-loop.gif',
-  animated: true,
-  surface: 'admin',
-  previewEyebrow: 'Full loop',
-  previewTitle: 'Dashboard through graph in one pass',
-  chromeLabel: 'Admin tour',
-  alt: 'Animated admin console tour through dashboard, reports, fixes, judge, and graph',
-  caption: 'Watch the full PDCA loop — triage, fix, judge, and graph in one pass.',
-  lightboxTitle: 'Full loop tour',
-  linkLabel: 'Open Dashboard',
-  demoHref: '/dashboard',
-}

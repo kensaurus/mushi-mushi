@@ -3,7 +3,7 @@
  * PURPOSE: Fixes shell stats — banner + FIXES SNAPSHOT strip.
  */
 
-export type FixesTopPriority =
+type FixesTopPriority =
   | 'no_project'
   | 'no_github'
   | 'no_index'

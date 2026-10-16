@@ -6,7 +6,7 @@
 import { formatConfiguredKeyHint, maskSecret } from '../components/ConfiguredSecretField'
 
 /** Known prefix when the server only returns vault:// or no hint. */
-export const SECRET_FIELD_PREFIX: Record<string, string> = {
+const SECRET_FIELD_PREFIX: Record<string, string> = {
   sentry_auth_token_ref: 'sntrys_',
   sentry_webhook_secret: 'whsec_',
   langfuse_public_key_ref: 'pk-lf-',

@@ -155,7 +155,7 @@ export interface UxProbe {
   cls: number
 }
 
-export interface UxJudge {
+interface UxJudge {
   viewport: string
   model: string
   preferred: 'before' | 'after' | 'tie'
@@ -273,7 +273,7 @@ export const UX_STATUS_META: Record<UxSurfaceStatus, { label: string; tone: Tone
 }
 
 /** Order for the burndown: what needs a human first. */
-export const UX_STATUS_ORDER: UxSurfaceStatus[] = [
+const UX_STATUS_ORDER: UxSurfaceStatus[] = [
   'regressed',
   'reverted',
   'blocked',

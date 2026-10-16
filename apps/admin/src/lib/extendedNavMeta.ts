@@ -43,7 +43,7 @@ import type {
 import type { HealthTone } from './useNavCounts'
 import type { WorkspaceNavBadge } from './workspaceNavMeta'
 
-export interface AuditNavSlice {
+interface AuditNavSlice {
   warnCount24h: number
   failCount24h: number
   events24h: number

@@ -25,7 +25,7 @@
 
 import { useEffect, useRef } from 'react'
 
-export type HotkeyHandler = (e: KeyboardEvent) => void
+type HotkeyHandler = (e: KeyboardEvent) => void
 
 export interface HotkeyBinding {
   key: string

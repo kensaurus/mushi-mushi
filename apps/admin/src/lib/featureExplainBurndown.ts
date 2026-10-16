@@ -6,8 +6,8 @@
  * pending = static copy without live metrics.
  */
 
-export type FeatureExplainStatus = 'done' | 'partial' | 'pending'
-export type FeatureExplainLiveDataStatus = 'done' | 'partial' | 'pending'
+type FeatureExplainStatus = 'done' | 'partial' | 'pending'
+type FeatureExplainLiveDataStatus = 'done' | 'partial' | 'pending'
 
 export interface FeatureExplainBurndownItem {
   route: string

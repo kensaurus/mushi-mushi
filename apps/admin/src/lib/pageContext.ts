@@ -40,7 +40,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 
 /** Declarative action the page contributes. Consumers render these inline
  *  (e.g. command palette at the top, or Ask Mushi as a quick button). */
-export interface PageAction {
+interface PageAction {
   id: string
   label: string
   hint?: string
@@ -53,7 +53,7 @@ export interface PageAction {
 /** What the page knows about the currently-focused entity (a report, a
  *  fix, a prompt version, ...). Used by Ask Mushi so it can answer
  *  "why did *this one* fail?" without guessing. */
-export interface PageSelection {
+interface PageSelection {
   kind: string
   id: string
   label: string

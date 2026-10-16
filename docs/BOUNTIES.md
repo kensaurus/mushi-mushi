@@ -201,5 +201,5 @@ Checked by `get_org_feature_flags(p_organization_id)` RPC called from the `requi
 - [Launch runbook](runbooks/tester-marketplace-launch.md) — pre-launch checklist, Tremendous sandbox setup, smoke test queries
 - [Rewards program](REWARDS.md) — the developer-side rewards infrastructure Bounties is built on top of
 - [Evolution loop manifesto](EVOLUTION-LOOP.md) — the product thesis; Bounties is one manifestation of "cumulative selection"
-- [Tester marketplace — public](../../apps/testers/README.md) — the `apps/testers` Next.js workspace
-- [AGENTS.md](../../AGENTS.md) — `tremendous-redemption-worker` and `recompute-tester-reputation` edge functions
+- [Tester marketplace — public](../apps/testers/README.md) — the `apps/testers` Next.js workspace
+- [AGENTS.md](../AGENTS.md) — `tremendous-redemption-worker` and `recompute-tester-reputation` edge functions

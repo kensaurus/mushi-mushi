@@ -4,7 +4,6 @@
 
 import { apiFetch } from './supabase'
 import type { NavStatSlices } from './extendedNavMeta'
-import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
 import { normalizeNavSlices } from './workspaceNavMetaResponse'
 import type { QaCoverageStats } from '../components/qa-coverage/QaCoverageStatsTypes'
 import type { LessonsStats } from '../components/lessons/LessonsStatsTypes'
@@ -376,5 +375,3 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
     skills: skillsStats,
   })
 }
-
-export { EMPTY_NAV_STAT_SLICES }

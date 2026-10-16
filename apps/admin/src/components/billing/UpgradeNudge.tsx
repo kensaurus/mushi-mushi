@@ -45,7 +45,6 @@ import { trackUpgradeClicked, upgradeCtaCopy } from './UpgradePrompt'
 
 // Re-export here so callers don't have to chase imports across modules
 // — `<UpgradePill flag="teams" />` should just need this file.
-export type { FeatureFlag, UpgradeTarget }
 
 /**
  * Per-feature short copy for the lighter nudges. Keeping it separate

@@ -143,11 +143,3 @@ export function buildInboxCards(
     },
   ]
 }
-
-/** Count of inbox cards with a non-null next action — matches InboxPage "Open". */
-export function inboxOpenActionCount(
-  data: DashboardData | undefined,
-  ctx?: InboxCardBuildContext,
-): number {
-  return buildInboxCards(data, ctx).filter((c) => c.action !== null).length
-}

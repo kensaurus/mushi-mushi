@@ -1,4 +1,4 @@
-export interface ReportEnvironment {
+interface ReportEnvironment {
   url?: string
   userAgent?: string
   platform?: string
@@ -147,7 +147,7 @@ export interface ReportSentryContext {
   issueUrl?: string
 }
 
-export interface ReportJudgeEval {
+interface ReportJudgeEval {
   id: string
   judge_score: number | null
   classification_agreed: boolean | null

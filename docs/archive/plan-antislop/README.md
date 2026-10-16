@@ -5,7 +5,7 @@ These files are **executed** audit plans — not active work.
 Current guardrails:
 
 - `pnpm check:public-voice` and `pnpm check:narrative` — marketing and positioning voice
-- [`docs/marketing/VOICE.md`](../marketing/VOICE.md) — banned phrase list
+- [`docs/marketing/VOICE.md`](../../marketing/VOICE.md) — banned phrase list
 - Docs drift guards (`check:onboarding-drift`, `check:env-docs`, `check:docs-stats`) — operator/setup truth
 
 | File | Scope |

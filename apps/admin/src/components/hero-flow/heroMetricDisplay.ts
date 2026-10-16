@@ -39,7 +39,7 @@ export function parseDecideMetric(label: string, metric?: string): ParsedHeroMet
 }
 
 /** Deep-link patterns per scope slug (matches Layout route fallbacks). */
-export function heroChipLinksForScope(scope: string): ReadonlyArray<{ match: RegExp; to: string }> {
+function heroChipLinksForScope(scope: string): ReadonlyArray<{ match: RegExp; to: string }> {
   switch (scope) {
     case 'members':
     case 'organization-members':

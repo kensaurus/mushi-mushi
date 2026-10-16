@@ -25,11 +25,11 @@ and what still needs you.
 
 When you land on the dashboard, scan these three things in order:
 
-1. **Flow canvas** (centre) — are reports stuck at one stage? A pile-up at "Plan"
-   means the inbox is backed up. A pile-up at "Do" means fix drafts are failing or
-   waiting. Click the glowing stage to jump straight there.
+1. **The "do this next" line** (top of every page) — one sentence and one button for
+   the most important thing right now: unfixed critical or high bugs, new bugs waiting
+   for a look (Sentry imports land here), stopped fixes, or fix PRs to review.
 
-2. **KPI tiles** (below the canvas) — if "Fixes failed" is non-zero, open
+2. **KPI tiles** — if "Fixes failed" is non-zero, open
    [Fix drafts & PRs](/admin/fixes) immediately. If "LLM cost" spiked overnight, check
    the cost chart for the culprit pipeline.
 
@@ -38,9 +38,10 @@ When you land on the dashboard, scan these three things in order:
 
 ---
 
-## Flow canvas
+## Flow canvas (Beginner mode)
 
-The animated graph in the centre shows live report counts at each stage:
+In Beginner mode an animated graph shows live report counts at each stage. Quick and
+Advanced modes skip it and lead with the "do this next" line instead:
 
 | Stage | What it counts |
 |-------|---------------|

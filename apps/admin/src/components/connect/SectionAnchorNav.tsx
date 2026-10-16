@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { SegmentedControl } from '../ui'
 import { BETA_BANNER_OFFSET_VAR } from '../../lib/appChrome'
 
-export interface SectionAnchor {
+interface SectionAnchor {
   id: string
   label: string
 }

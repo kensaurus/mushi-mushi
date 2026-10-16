@@ -35,7 +35,7 @@ export interface SkillCategoryMeta {
   accentClass: string
 }
 
-export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
+const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
   workflow: {
     label: 'Workflows',
     hint: 'Multi-step bundles that chain skills end-to-end',

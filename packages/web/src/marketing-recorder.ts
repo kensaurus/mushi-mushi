@@ -7,12 +7,12 @@
 import type { MushiReportCategory } from '@mushi-mushi/core';
 import type { MushiWidget } from './widget';
 
-export interface MushiRecorderCenter {
+interface MushiRecorderCenter {
   x: number;
   y: number;
 }
 
-export interface MushiMarketingRecorder {
+interface MushiMarketingRecorder {
   ready(): boolean;
   getStep(): string;
   getCategoryStepIA(): {

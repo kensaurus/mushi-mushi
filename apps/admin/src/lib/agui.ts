@@ -11,9 +11,9 @@
 
 import type { SseEvent } from './sseClient'
 
-export const AGUI_PROTOCOL_VERSION = '0.4'
+const AGUI_PROTOCOL_VERSION = '0.4'
 
-export type AguiEventType =
+type AguiEventType =
   | 'run.started'
   | 'run.status'
   | 'run.tool_call'
@@ -23,7 +23,7 @@ export type AguiEventType =
   | 'run.failed'
   | 'run.heartbeat'
 
-export interface AguiEnvelope<T = unknown> {
+interface AguiEnvelope<T = unknown> {
   type: AguiEventType
   id: string
   ts: string
@@ -45,7 +45,7 @@ const AGUI_TYPES = new Set<AguiEventType>([
   'run.heartbeat',
 ])
 
-export function parseAguiEvent(e: SseEvent): AguiEnvelope | null {
+function parseAguiEvent(e: SseEvent): AguiEnvelope | null {
   if (!AGUI_TYPES.has(e.event as AguiEventType)) return null
   try {
     const env = JSON.parse(e.data) as AguiEnvelope

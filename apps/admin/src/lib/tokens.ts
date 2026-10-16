@@ -192,7 +192,7 @@ export const SEVERITY_LABELS: Record<string, string> = {
   low:      'Low',
 }
 
-export const PIPELINE_STATUS_LABELS: Record<string, string> = {
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
   pending:     'Pending',
   running:     'Running',
   exporting:   'Exporting',
@@ -237,7 +237,7 @@ export const FILTER_OPTIONS = {
 /** WCAG-safe copy on tinted semantic banner surfaces — use *-foreground, not raw hue tokens. */
 export type SemanticBannerTone = 'ok' | 'warn' | 'danger'
 
-export const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
+const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
   ok: 'border-ok/25 bg-ok-muted/40 text-ok-foreground',
   warn: 'border-warn/30 bg-warn-muted/40 text-warning-foreground',
   danger: 'border-danger/30 bg-danger-muted/40 text-danger-foreground',
@@ -285,4 +285,4 @@ export const SCORE_COLORS: Record<string, string> = {
   repro:     'oklch(0.80 0.15 80)',
 }
 
-export { CHIP_TONE, LINK_ACCENT, LINK_BRAND, META_CHIP_TONE } from './chipTone'
+export { META_CHIP_TONE } from './chipTone'

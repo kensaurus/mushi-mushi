@@ -204,12 +204,41 @@ export interface MushiWidgetConfig {
   zIndex?: number;
   /**
    * Controls how, or whether, the default trigger is injected.
-   * `auto`   — historical floating stamp FAB.
-   * `banner` — slim full-width header strip (recommended default; less obtrusive
-   *            than a FAB and visible even when the SDK launcher is `hide()`'d).
-   *            Pair with `bannerConfig` to customise appearance.
+   * `auto`     — floating stamp FAB; on phones it becomes an edge tab (see `mobileTrigger`).
+   * `edge-tab` — a slim tab flush with the screen edge: 22×48px drawn, 44×48px to tap.
+   * `banner`   — slim full-width header strip (recommended default; less obtrusive
+   *              than a FAB and visible even when the SDK launcher is `hide()`'d).
+   *              Pair with `bannerConfig` to customise appearance.
    */
   trigger?: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden';
+  /**
+   * What `trigger: 'auto'` draws at phone widths (≤ 768px). `'edge-tab'`
+   * draws the slim edge tab; `'auto'` keeps the round FAB. Default
+   * `'edge-tab'`, or `'auto'` when the host shaped the FAB itself (a left or
+   * right `anchor` / `inset`, `draggable`, or a word `triggerText`).
+   */
+  mobileTrigger?: 'edge-tab' | 'auto';
+  /**
+   * Lift the launcher, panel and toast above fixed or sticky host bars that
+   * touch the bottom of the viewport (tab bars, cookie strips, chat composers).
+   * Default `true`. The lift is a floor: an explicit `inset.bottom` or
+   * `anchor.bottom` that is already higher wins. Set `false` to keep the
+   * launcher exactly where `inset` / `anchor` puts it.
+   */
+  avoidFixedBars?: boolean;
+  /**
+   * Tuck the launcher toward its edge and fade it while the page scrolls,
+   * then bring it back when scrolling stops. Default `true`. Never tucks while
+   * the launcher has focus or the panel is open. Ignored when
+   * `smartHide.onScroll` is set.
+   */
+  tuckOnScroll?: boolean;
+  /**
+   * Show a "Hide the bug button for this visit" action in the report panel.
+   * The choice lasts until the tab closes (sessionStorage), including through
+   * `Mushi.show()`; `Mushi.open()` still opens the panel. Default `true`.
+   */
+  dismissible?: boolean;
   /**
    * Configuration for the header-banner launcher mode.
    * Only applies when `trigger === 'banner'`.
@@ -233,7 +262,9 @@ export interface MushiWidgetConfig {
   /**
    * Allow the FAB to be dragged and repositioned by the user.
    * - `true`  — drag enabled, persisted to localStorage, snaps to nearest edge on release.
-   * - `false` — fixed position (default).
+   * - `false` — fixed position (default for the FAB).
+   * - Unset   — the edge tab can still be dragged up and down its edge (persisted per site).
+   * The edge tab always moves along its edge only (`axis: 'y'`).
    * - Object — fine-grained control:
    *   - `persist`     save position per projectId (default true when draggable).
    *   - `snapToEdge`  snap to the nearest left/right edge on release (default true).
@@ -470,7 +501,7 @@ export interface MushiBetaChangelogEntry {
   items: string[];
 }
 
-export interface MushiWidgetInset {
+interface MushiWidgetInset {
   top?: number | 'auto';
   right?: number | 'auto';
   bottom?: number | 'auto';
@@ -496,7 +527,7 @@ export type MushiPreset =
   | 'standard'
   | 'full';
 
-export interface MushiWidgetSmartHideConfig {
+interface MushiWidgetSmartHideConfig {
   onMobile?: 'edge-tab' | 'hide' | false;
   onScroll?: 'shrink' | 'hide' | false;
   onIdleMs?: number;
@@ -697,7 +728,7 @@ export interface MushiProactiveConfig {
   firstSession?: boolean | MushiFirstSessionConfig;
 }
 
-export interface MushiPageDwellConfig {
+interface MushiPageDwellConfig {
   /** Continuous dwell time before firing. Defaults to 5 minutes. */
   thresholdMs?: number;
   /**
@@ -710,7 +741,7 @@ export interface MushiPageDwellConfig {
   excludeRoutes?: string[];
 }
 
-export interface MushiFirstSessionConfig {
+interface MushiFirstSessionConfig {
   /** Delay before firing the welcome nudge. Defaults to 45 seconds. */
   delayMs?: number;
   /** Override the localStorage key used to mark the user as welcomed. */

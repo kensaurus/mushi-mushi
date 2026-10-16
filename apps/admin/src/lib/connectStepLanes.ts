@@ -5,10 +5,10 @@
 
 import { CONNECT_SETUP_LANES } from './connectExplainer'
 import { connectLaneOverlay, type WorkflowPosture } from './guideLiveOverlay'
-import { attachConnectLaneMetadata, type ConnectLaneContext, type ConnectLaneFlags } from './connectLaneMetadata'
+import { attachConnectLaneMetadata, type ConnectLaneContext } from './connectLaneMetadata'
 import type { StepNodeData } from '../components/connect/ConnectStepFlow'
 
-export type { ConnectLaneFlags, ConnectLaneContext }
+export type { ConnectLaneContext }
 
 const LANE_SHORT: Record<string, string> = {
   github: 'GitHub',

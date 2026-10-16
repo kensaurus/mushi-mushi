@@ -11,7 +11,7 @@ import { PAGE_STACK } from '../lib/pageLayout'
 import { usePublishPostureHasStatusBanner } from '../lib/postureChromeStore'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
-export interface PagePostureSlot {
+interface PagePostureSlot {
   /**
    * Stable identity for React's key. Prefer this when two slots could share a
    * priority. Falls back to `priority` (unique per page in practice) so React

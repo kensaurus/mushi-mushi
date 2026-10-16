@@ -8,7 +8,7 @@
 
 export type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
 
-export interface ExploreNodeMeta {
+interface ExploreNodeMeta {
   file_path: string
   symbol_name: string | null
   signature: string | null

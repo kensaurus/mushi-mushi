@@ -44,13 +44,3 @@ export async function signInWithPasskey(): Promise<{ error?: string }> {
     return { error: error instanceof Error ? error.message : unavailable().error }
   }
 }
-
-export async function registerPasskey(): Promise<{ error?: string }> {
-  if (!canUsePasskeys() || !passkeyAuth.registerPasskey) return unavailable()
-  try {
-    const { error } = await passkeyAuth.registerPasskey()
-    return { error: error?.message }
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : unavailable().error }
-  }
-}

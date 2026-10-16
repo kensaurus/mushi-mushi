@@ -200,7 +200,7 @@ export function diagnoseKey(
   }
 }
 
-export function summarizeCardStatus(
+function summarizeCardStatus(
   apiKeys: SdkHealthApiKey[],
   adminHost: string | null,
   env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
@@ -232,7 +232,7 @@ export function summarizeCardStatus(
 // ---------------------------------------------------------------------------
 
 /** Short pill text — one or two words; long copy lives in `description` / tooltips. */
-export const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
+const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
   healthy: 'Connected',
   'endpoint-mismatch': 'Mismatch',
   stale: 'Stale',
@@ -904,26 +904,6 @@ export function SdkHealthSummary({
   }
 
   return <Card className="overflow-hidden p-0">{inner}</Card>
-}
-
-/**
- * Empty-state wrapper — used by /reports and /billing when the project
- * has zero reports. Shows the diagnostic UI inside an editorial card so
- * the user gets the *answer* to "why am I seeing 0 reports?" instead of
- * the generic "install the SDK and trigger a test report" copy that
- * assumes the SDK isn't there at all (which is wrong for the common
- * mismatch / stale / wrong-endpoint cases).
- */
-export function SdkHealthEmptyState(props: SdkHealthSummaryProps) {
-  return (
-    <Card className="p-5 space-y-4 border-dashed">
-      <div className="flex items-center gap-2 text-2xs font-mono text-fg-faint uppercase tracking-wide">
-        <Badge tone="infoSubtle">Connectivity check</Badge>
-        <span>Why this is empty</span>
-      </div>
-      <SdkHealthSummary {...props} compact />
-    </Card>
-  )
 }
 
 // ---------------------------------------------------------------------------

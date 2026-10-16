@@ -13,7 +13,7 @@ export const MAX_RECORDING_MS = 120_000
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 /** Probe order: best-supported first. Safari only speaks audio/mp4. */
-export const RECORDER_MIME_CANDIDATES = [
+const RECORDER_MIME_CANDIDATES = [
   'audio/webm;codecs=opus',
   'audio/webm',
   'audio/mp4;codecs=mp4a.40.2',

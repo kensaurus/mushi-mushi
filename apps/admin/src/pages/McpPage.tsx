@@ -14,7 +14,6 @@ import { Section,
   FreshnessPill, } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -93,7 +92,6 @@ export function McpPage() {
   }, [projectsQuery.data, activeProjectId])
 
   const stats = { ...EMPTY_MCP_STATS, ...statsQuery.data }
-  usePublishPageHeroStats('/mcp', statsQuery.data)
 
   const loading = projectsQuery.loading || statsQuery.loading
   const error = projectsQuery.error ?? statsQuery.error

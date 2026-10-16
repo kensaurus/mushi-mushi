@@ -112,7 +112,7 @@ export async function parseOpenApiFile(filePath: string): Promise<DiscoveredRout
  * Fetch the Supabase Postgrest OpenAPI doc — every Supabase project
  * exposes one at `/rest/v1/?apikey=…`.
  */
-export async function fetchSupabaseOpenApi(
+async function fetchSupabaseOpenApi(
   supabaseUrl: string,
   apiKey: string,
 ): Promise<DiscoveredRoute[]> {

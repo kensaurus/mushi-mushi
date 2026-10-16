@@ -22,7 +22,6 @@ import type { MushiSentryConfig, MushiSentryContext } from '@mushi-mushi/core';
  * on v8.0.0. We accept partial captures by design; the goal is "as much
  * context as we can get" rather than "all or nothing".
  */
-export type { MushiSentryContext as SentryContext };
 
 // ---- Detection layer --------------------------------------------------------
 
@@ -376,55 +375,4 @@ export function tagSentryScope(reportId: string, options: { reportUrl?: string }
   } catch {
     // Swallow.
   }
-}
-
-// ---- Feedback interceptor (kept from prior revision) -----------------------
-
-export interface SentryFeedbackInterceptor {
-  start(): void;
-  stop(): void;
-}
-
-export function createSentryFeedbackInterceptor(
-  _config: MushiSentryConfig,
-  onFeedback: (feedback: { eventId?: string; message: string; email?: string; name?: string }) => void,
-): SentryFeedbackInterceptor {
-  let observer: MutationObserver | null = null;
-
-  function start() {
-    if (typeof MutationObserver === 'undefined') return;
-
-    observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement && node.getAttribute('data-sentry-feedback')) {
-            interceptFeedbackForm(node);
-          }
-        }
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-
-  function interceptFeedbackForm(container: HTMLElement) {
-    const form = container.querySelector('form');
-    if (!form) return;
-
-    form.addEventListener('submit', () => {
-      const formData = new FormData(form);
-      onFeedback({
-        message: (formData.get('message') as string) ?? '',
-        email: (formData.get('email') as string) ?? undefined,
-        name: (formData.get('name') as string) ?? undefined,
-      });
-    });
-  }
-
-  function stop() {
-    observer?.disconnect();
-    observer = null;
-  }
-
-  return { start, stop };
 }
