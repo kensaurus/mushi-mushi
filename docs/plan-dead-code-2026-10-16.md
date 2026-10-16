@@ -46,6 +46,8 @@ commit), pnpm 10.33.0, Node 22.23.2, knip 6.34.0, after `pnpm build`.
 | 10 | C2 + C3, round 3 | the released design files (23) and `updateRewardsUser` | `loopOverviewMedia` became unused | full typecheck (53), lint, admin + web + docs tests, build (45), `check:design`, `check:spine`, `check:nav-registry`, `check:console-knowledge`, `check:residue`, dead buttons, `check:sdk-api-surface`, `check:docs-stats` | `ffd9b371` |
 | 11 | C2 + C3, round 4 | `loopOverviewMedia` (its gif is still used by apps/docs) | counts stopped moving | marketing-ui, admin, docs typecheck; build | `109d183e` |
 | 12 | ratchet | `ci.yml` 282 → 232, 95 → 39; baselines regenerated | — | 232/39 pass, 231/38 fail | `07050cee` |
+| 13 | notes | rounds 3–4, the hero store, BACKLOG renumbered to BL-040..042 | — | — | `0a80fed0` |
+| 14 | C2 correction | `@public` tags on `MIGRATE_CATALOG` and `MIGRATIONS_CATALOG` removed and both un-exported, because they have no outside consumer (see Exports and types). Counts are unchanged, since a tagged export was not counted | — | cli + admin typecheck, lint, tests (702 + 2058); `check:migration-catalog` | `60d9f25a` |
 
 C2 and C3 share one commit on purpose. With `noUnusedLocals` on, a commit that only removes
 `export` from a symbol nothing uses fails typecheck, so it could not be bisected through.
@@ -76,7 +78,8 @@ C2 and C3 share one commit on purpose. With `noUnusedLocals` on, a commit that o
 | `JARGON` (`lib/copy.ts`) | KEEP. Imported by the kept `Jargon.tsx`, which knip ignores as an importer because it is itself unused |
 | `isKeychainEnabled`, `tryDeleteKeyFromKeychain` (`packages/cli/src/keychain.ts`) | KEEP. No caller on this branch, but `release/2026-10-16-console-followups` (`b15de71e`) fixes the keychain loading and calls `tryDeleteKeyFromKeychain` from the key-change path |
 | `ChartEventSchema`, `PROJECT_GROUP_COLORS` | KEEP. Only a type reads these values, and the lint rule forbids a module-private value that is used only as a type |
-| `STATIC_ROUTES`, `MIGRATE_CATALOG`, `MIGRATIONS_CATALOG` | KEEP, tagged `@public`. `build-console-knowledge.mjs` loads the first through jiti, and `check-migration-catalog-sync.mjs` regexes `export const` for the other two. Knip cannot see either |
+| `STATIC_ROUTES` (`apps/admin/src/lib/searchIndex.ts`) | KEEP, tagged `@public`; see False positives |
+| `MIGRATE_CATALOG`, `MIGRATIONS_CATALOG` | **KILL the export** (commit 14). Commit 2 tagged them `@public` because `check-migration-catalog-sync.mjs` reads both files as text, but that script reads the `slug: '…'` properties (`extractPropertySlugs`, lines 116–126), not the `export`. Only `KNOWN_GUIDE_SLUGS` goes through its `export const` regex (line 125). With no outside consumer, the tags were removed and the two constants made module-private. `check:migration-catalog` still passes |
 | 5 duplicate exports (`bannerEnterSpring`/`chromeEnterSpring`, `PAGE_CONTENT_STACK`/`PAGE_STACK`, `CONFIDENCE_SEGMENT_COUNT`/`confidenceSegmentCount`, `DIAGNOSIS_PLAIN`/`PRICING_LEDE`, `DocsBridgePage` named + default) | KEEP. Merging an alias means renaming its importers, which is refactor work. Two of them sit in design files (BL-042) |
 
 **Page hero snapshots.** Commit 2 removed `usePageHeroSnapshot()`, the store's only reader, because
@@ -86,6 +89,14 @@ writing a module variable nobody read. With the coordinator's go-ahead, commit 9
 the store and every call site. `heroSnapshotFromPageStats` and the helpers it uses
 (`syntheticNavCountsForRoute`, `buildHeroEnrichment`) are now reached only from their tests. Knip's
 default mode counts tests and so does not flag them; production mode does (BL-042).
+
+## False positives
+
+Only one knip tag was added in this pass. Every other kept finding still counts against the ceiling.
+
+| Item | Consumer knip cannot see | Written back |
+|---|---|---|
+| `STATIC_ROUTES` | `scripts/build-console-knowledge.mjs:58`-`59`: `jiti.import(SEARCH_INDEX)`, then `mod?.STATIC_ROUTES`. It runs as `pnpm check:console-knowledge` (`package.json:36`, a `ci.yml` step) | `/** @public */` with that reason, at `apps/admin/src/lib/searchIndex.ts:20` |
 
 ## Dependencies (4 + 15 + 2 unlisted at baseline)
 
@@ -119,9 +130,26 @@ default mode counts tests and so does not flag them; production mode does (BL-04
   DTS step finished last and deleted pass 2's `clients.d.ts`, so the docs build failed. Three
   standalone mcp builds and the rerun of the full build were green. This is a pre-existing,
   timing-dependent race. Setting `clean: false` on pass 1 and cleaning in the build script would remove it.
-- C5 residue: `check:residue` ratchets it; no `.only` or `debugger` was found. C6 duplication beyond
-  knip's alias findings, C7 orphan assets and C8 suppressions were not examined.
+- C5 residue: `check:residue` ratchets it; no `.only` or `debugger` was found.
+- C6 duplication was measured but not ratcheted: `npx jscpd@4 apps/admin/src packages/*/src
+  --min-tokens 50`, ignoring tests, `dist` and `packages/server`, found 397 exact clones, which is
+  5,689 lines or 1.7% of 2,238 files. A gate would need jscpd as a new devDependency and a new CI
+  step, which belongs to `housekeep-gates`, not to this deletion-only pass. Fixing the clones is
+  `workflow-refactor` work.
+- C7 orphan assets and C8 suppressions were not examined.
 - C9 schema: not examined (human gate).
+
+## Probes
+
+- **Fresh clone.** `git clone` of this branch into a scratch directory, then
+  `pnpm install --frozen-lockfile`, `pnpm build` (45/45), `pnpm typecheck` (53/53) and
+  `pnpm test` (87/87). Both knip commands passed with the exact `ci.yml` flags. On Windows, clone
+  into a short path or with `core.longpaths=true`. Nine glot fixture files under
+  `packages/server/src/__tests__/fixtures/recipe/glot/…/directions/` are 257–258 characters deep
+  from a long parent path. Without that, the checkout fails silently, and three server test files
+  fail on ENOENT.
+- **Deliberate violation.** `export const zz = 1` appended to `apps/admin/src/lib/mergeFix.ts`
+  made both knip commands exit 1 at the new ceilings. It was then reverted.
 
 ## Baseline vs after
 
@@ -133,4 +161,4 @@ default mode counts tests and so does not flag them; production mode does (BL-04
 | — dependencies / devDependencies | 4 / 15 | 2 / 6 |
 | — unlisted / unresolved / duplicates | 2 / 1 / 6 | 2 / 1 / 5 |
 | knip production (error-level) | 702 (ceiling 705) | **232**, ceiling 232 (231 fails) |
-| Diff vs `76592f11`, excluding the lockfile and the baseline JSON | — | 341 files, +454 / −6,299 lines (the + side is mostly these notes) |
+| Diff vs `76592f11`, without the lockfile, the baseline JSON and the three notes files | — | 338 files, +293 / −6,265 lines |
