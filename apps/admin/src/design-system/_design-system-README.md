@@ -6,7 +6,7 @@ Authoritative catalog for Design System v2 primitives used in the operator conso
 
 | Layer | Source | Consumed by |
 |-------|--------|-------------|
-| **Primitives (DTCG)** | [`packages/brand/tokens/brand.tokens.json`](../../../packages/brand/tokens/brand.tokens.json) → `pnpm build:brand-tokens` → [`packages/brand/src/editorial.css`](../../../packages/brand/src/editorial.css) + `tokens.generated.ts` | Public/marketing (`--mushi-*`), docs, editorial pages |
+| **Primitives (DTCG)** | [`packages/brand/tokens/brand.tokens.json`](../../../../packages/brand/tokens/brand.tokens.json) → `pnpm build:brand-tokens` → [`packages/brand/src/editorial.css`](../../../../packages/brand/src/editorial.css) + `tokens.generated.ts` | Public/marketing (`--mushi-*`), docs, editorial pages |
 | **Semantic (`@theme`)** | [`apps/admin/src/index.css`](../index.css) → [`styles/theme-tokens.css`](../styles/theme-tokens.css) (+ modes / ask-mushi / components partials) — oklch color roots, spacing, type scale | Operator console Tailwind utilities (`bg-surface`, `text-fg-muted`, …) |
 | **Component recipes** | [`lib/chipTone.ts`](../lib/chipTone.ts), [`lib/tokens.ts`](../lib/tokens.ts), [`lib/motion-tokens.ts`](../lib/motion-tokens.ts) | Badges, banners, posture chips, viz runtime |
 
@@ -26,7 +26,7 @@ Reusable cards that split into columns must respond to **their own width**, not 
 - Prefer named containers when nesting.
 - Ban nesting a viewport `md:/lg:/xl:grid-cols-*` inside another at an equal-or-smaller breakpoint.
 
-Editorial (`data-mushi-theme`) and operator (`data-theme`) stacks stay intentionally separate. The SDK widget uses [`packages/core/src/design-tokens.ts`](../../../packages/core/src/design-tokens.ts).
+Editorial (`data-mushi-theme`) and operator (`data-theme`) stacks stay intentionally separate. The SDK widget uses [`packages/core/src/design-tokens.ts`](../../../../packages/core/src/design-tokens.ts).
 
 Regenerate editorial primitives:
 
@@ -63,10 +63,10 @@ Primary work UI
 - ESLint `mushi-mushi/no-allowlist-jsx-textnode` — error (`// mushi-mushi-allowlist` as JSX child text; use `{/* … */}` or attribute-line `//`)
 - `node scripts/audit-chip-contrast.mjs --strict` — CI gate for muted **and** opacity chip contrast drift
 - `node scripts/check-design-tokens.mjs` — unknown roots, hex, raw `var(--mushi-*)` in operator TSX, theme pairs, and retired aliases (`err`, `warning`, `*-subtle`, `surface-2/3`, `fg-primary`, `duration-micro`; decision log in [`docs/design/housekeep-design-state-2026-10-16.md`](../../../../docs/design/housekeep-design-state-2026-10-16.md))- `node scripts/audit-admin-hint-duplication.mjs` — PageHeaderBar hint dedupe audit
-- Playwright [`examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`](../../../examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts) — posture row budget + contrast spot-checks (`/health`, `/reports`, `/marketplace`)
-- Playwright [`examples/e2e-dogfood/tests/admin-visual-regression.spec.ts`](../../../examples/e2e-dogfood/tests/admin-visual-regression.spec.ts) — visual baseline (extend before adding Storybook/Chromatic)
-- Cross-surface governance: [`docs/DESIGN-SYSTEM.md`](../../../docs/DESIGN-SYSTEM.md)
-- Open burndown: [`docs/plan-uiux-unification.md`](../../../docs/plan-uiux-unification.md)
-- Wave 2 Connect/chrome: [`docs/admin/CONSOLE-UIUX-UNIFICATION-WAVE2.md`](../../../docs/admin/CONSOLE-UIUX-UNIFICATION-WAVE2.md)
+- Playwright [`examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`](../../../../examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts) — posture row budget + contrast spot-checks (`/health`, `/reports`, `/marketplace`)
+- Playwright [`examples/e2e-dogfood/tests/admin-visual-regression.spec.ts`](../../../../examples/e2e-dogfood/tests/admin-visual-regression.spec.ts) — visual baseline (extend before adding Storybook/Chromatic)
+- Cross-surface governance: [`docs/DESIGN-SYSTEM.md`](../../../../docs/DESIGN-SYSTEM.md)
+- Open burndown: [`docs/plan-uiux-unification.md`](../../../../docs/plan-uiux-unification.md)
+- Wave 2 Connect/chrome: [`docs/admin/CONSOLE-UIUX-UNIFICATION-WAVE2.md`](../../../../docs/admin/CONSOLE-UIUX-UNIFICATION-WAVE2.md)
 
 See also: `docs/admin/UX-UNIFICATION-BURNDOWN.md` (chrome wave — closed); this token/CSS debt pass is the follow-on.
