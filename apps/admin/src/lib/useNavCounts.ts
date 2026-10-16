@@ -228,9 +228,9 @@ function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
 }
 
 // ── Shared store ────────────────────────────────────────────────────────────
-// Layout and PipelineStatusRibbon both read these counters. As two hook
-// instances they each fired the whole request set; now every instance reads
-// one module-level snapshot and loads are deduplicated by context key.
+// Layout, the next-step line and page badges all read these counters. Every
+// instance reads one module-level snapshot and loads are deduplicated by
+// context key, so a second reader never starts a second request.
 
 interface LoadContext {
   key: string

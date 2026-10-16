@@ -43,7 +43,7 @@ describe('deriveDashboardInsight', () => {
 })
 
 describe('shouldShowPdcaFlow (QA 169)', () => {
-  const base = { isAdvanced: true, renderFullDashboard: true, hasPdcaStages: true, showFirstReportHero: false, pipelineStripVisible: false }
+  const base = { isAdvanced: true, renderFullDashboard: true, hasPdcaStages: true, showFirstReportHero: false, loopVisualsHidden: false }
   it('shows the live canvas in advanced mode even though the insight banner always has a verdict', () => {
     expect(deriveDashboardInsight(QUIET)).not.toBeNull()
     expect(shouldShowPdcaFlow(base)).toBe(true)
@@ -54,7 +54,7 @@ describe('shouldShowPdcaFlow (QA 169)', () => {
     expect(shouldShowPdcaFlow({ ...base, hasPdcaStages: false })).toBe(false)
     expect(shouldShowPdcaFlow({ ...base, showFirstReportHero: true })).toBe(false)
   })
-  it('hides it while the global pipeline strip shows the same stages', () => {
-    expect(shouldShowPdcaFlow({ ...base, pipelineStripVisible: true })).toBe(false)
+  it('hides it while the loop visuals are hidden (Advanced opens on the next step)', () => {
+    expect(shouldShowPdcaFlow({ ...base, loopVisualsHidden: true })).toBe(false)
   })
 })

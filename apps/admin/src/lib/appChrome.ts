@@ -20,7 +20,7 @@ export const topBelowAppChromeClass = [
  * Stacking order for the authenticated shell.
  *
  * Without `appChromeMainClass` (`isolate` + `z-0`), descendants inside
- * `<main>` that set z-20/z-30 (e.g. PipelineStatusRibbon arrow pills)
+ * `<main>` that set z-20/z-30 (e.g. sticky table headers, popovers)
  * participate in the *layout column's* root stacking context — same
  * level as the sub-header — and paint over header dropdowns because
  * `<main>` follows the header in DOM order.

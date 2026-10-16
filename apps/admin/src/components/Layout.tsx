@@ -32,8 +32,6 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip, Btn } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextStep } from './NextStep'
-import { DavChromeCoachmark } from './DavChromeCoachmark'
-import { GlobalStatusStrip } from './GlobalStatusStrip'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
 import { FirstRunTour } from './FirstRunTour'
@@ -49,16 +47,11 @@ import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
 import { AskMushiLauncherButton } from './AskMushiLauncherButton'
-import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { AskMushiSidebar } from './AskMushiSidebar'
 import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
-import { shouldShowLayoutPageHero } from '../lib/chromeLayers'
-import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
-import { resolveLayoutHero } from '../lib/layoutHeroFromStats'
-import { usePageHeroSnapshot } from '../lib/pageHeroSnapshot'
 import { useFaviconBadge } from '../lib/favicon'
 import { isConsentFocusPath, useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
@@ -117,357 +110,6 @@ interface NavSection extends Omit<BuiltNavSection, 'id'> {
 
 // Sidebar follows the vibe-coding cycle (ADR 0027) — metadata from navRegistry.ts.
 const NAV: NavSection[] = buildOperatorNav()
-
-interface PageHeroFallback {
-  title: string
-  kicker: string
-  scope: string
-  decide: PageHeroDecide
-  verify: PageHeroVerify
-}
-
-// Ownership rule: a route gets a layout fallback hero OR a page-owned
-// <PageHero>, never both. Routes in pageHeroOwnership.ts must NOT appear
-// here. Worklist routes in PAGE_ROUTES_SKIP_LAYOUT_HERO skip this too.
-const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
-  '/dashboard': {
-    title: 'Dashboard',
-    kicker: 'Start',
-    scope: 'dashboard',
-    decide: {
-      label: 'Loop snapshot',
-      summary: 'Status banner and KPI strip show backlog, in-flight fixes, and integration health before you pick a tab.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Refresh source',
-      detail: 'Stats reload on report/fix webhooks — use Refresh if you just dispatched a fix manually.',
-    },
-  },
-  '/repo': {
-    title: 'Repo',
-    kicker: 'Do',
-    scope: 'repo',
-    decide: {
-      label: 'Branch health',
-      summary: 'Review generated branches, open PRs, and CI state before landing fixes.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'GitHub evidence',
-      detail: 'Branch cards link back to commits, PRs, and recent repo activity.',
-    },
-  },
-  '/prompt-lab': {
-    title: 'Prompt Lab',
-    kicker: 'Do',
-    scope: 'prompt-lab',
-    decide: {
-      label: 'Prompt quality',
-      summary: 'Compare active and candidate prompts before changing traffic or fine-tuning inputs.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Evaluation data',
-      detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
-    },
-  },
-  '/code-health': {
-    title: 'Code Health',
-    kicker: 'Operate',
-    scope: 'code-health',
-    decide: {
-      label: 'Bundle size + god-file LOC',
-      summary: 'Bundle-size trends and per-file LOC findings pushed from CI. Flags files over the 2000-LOC budget.',
-      severity: 'warn',
-    },
-    verify: {
-      label: 'Trend chart',
-      detail: 'Check the bundle trend line after a refactor to confirm sizes moved in the right direction.',
-    },
-  },
-  '/qa-coverage': {
-    title: 'QA Coverage',
-    kicker: 'Check',
-    scope: 'qa-coverage',
-    decide: {
-      label: 'Story pass rate',
-      summary: 'Banner + QA SNAPSHOT — scheduled user-story tests with 24h pass rate and run evidence.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Run evidence',
-      detail: 'Open a story drawer for screenshots, assertion diffs, and Browserbase replay links.',
-    },
-  },
-  '/lessons': {
-    title: 'Lessons',
-    kicker: 'Check',
-    scope: 'lessons',
-    decide: {
-      label: 'Mistake memory',
-      summary: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Promotion proof',
-      detail: 'Clusters tab shows coherence scores; Query Sim previews which rules fire on a diff.',
-    },
-  },
-  '/drift': {
-    title: 'Drift',
-    kicker: 'Check',
-    scope: 'drift',
-    decide: {
-      label: 'Contract sync',
-      summary: 'Banner + DRIFT SNAPSHOT — OpenAPI vs inventory vs DB schema gaps before users hit them.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Walker evidence',
-      detail: 'Snapshots tab shows edge counts; Findings drawer shows expected vs actual JSON.',
-    },
-  },
-  '/experiments': {
-    title: 'Experiments',
-    kicker: 'Check',
-    scope: 'experiments',
-    decide: {
-      label: 'Variant tests',
-      summary: 'Banner + EXPERIMENTS SNAPSHOT — draft, launch, and analyze A/B tests with mSPRT significance.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Analysis proof',
-      detail: 'Experiment drawer shows SRM check, p-value, and per-variant conversion rates.',
-    },
-  },
-  '/anomalies': {
-    title: 'Anomalies',
-    kicker: 'Check',
-    scope: 'anomalies',
-    decide: {
-      label: 'Metric regressions',
-      summary: 'Banner + ANOMALIES SNAPSHOT — ingest timeseries, run detectors, triage release regressions.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Detection evidence',
-      detail: 'Anomalies tab shows method, score vs baseline, and auto-report links.',
-    },
-  },
-  '/releases': {
-    title: 'Releases',
-    kicker: 'Check',
-    scope: 'releases',
-    decide: {
-      label: 'Changelog pipeline',
-      summary: 'Banner + RELEASES SNAPSHOT — AI draft from fixed reports, credit reporters, publish attribution toasts.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Credit audit',
-      detail: 'Release drawer shows fix count, contributor credits, and notified-at stamps per reporter.',
-    },
-  },
-  '/intelligence': {
-    title: 'Intelligence',
-    kicker: 'Check',
-    scope: 'intelligence',
-    decide: {
-      label: 'Weekly digest',
-      summary: 'Banner + INTELLIGENCE SNAPSHOT — LLM narrative, job pipeline, modernization findings, benchmarking.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Digest proof',
-      detail: 'Reports tab shows week_start, stats JSON, and exportable HTML — Pipeline shows job errors for debugging.',
-    },
-  },
-  '/mcp': {
-    title: 'MCP',
-    kicker: 'Act',
-    scope: 'mcp',
-    decide: {
-      label: 'MCP SNAPSHOT',
-      summary: 'Key scopes, connection heartbeats, and endpoint match — banner shows SDK-only vs agent-ready.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Handshake check',
-      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on Overview.',
-    },
-  },
-  '/marketplace': {
-    title: 'Marketplace',
-    kicker: 'Act',
-    scope: 'marketplace',
-    decide: {
-      label: 'MARKETPLACE SNAPSHOT',
-      summary: 'Catalog, installed count, delivery success rate, and failing plugins — banner shows EMPTY vs DELIVERING.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Delivery log',
-      detail: 'Every signed POST includes HTTP status, latency, and response excerpt for webhook debugging.',
-    },
-  },
-  '/notifications': {
-    title: 'Notifications',
-    kicker: 'Act',
-    scope: 'notifications',
-    decide: {
-      label: 'NOTIFICATIONS SNAPSHOT',
-      summary: 'Total, unread, 24h volume, and enabled state — banner shows DISABLED vs ACTIVE vs UNREAD backlog.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Payload audit',
-      detail: 'Inbox tab expands JSON payloads — unread rows may mean the reporter SDK stopped polling.',
-    },
-  },
-  '/billing': {
-    title: 'Billing',
-    kicker: 'Workspace',
-    scope: 'billing',
-    decide: {
-      label: 'Plan and usage',
-      summary: 'Compare current usage against plan limits before changing seats, retention, or billing.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Stripe source',
-      detail: 'Overview card shows usage + invoices inline. Manage opens Stripe portal; Upgrade starts Checkout.',
-    },
-  },
-  '/projects': {
-    title: 'Projects',
-    kicker: 'Workspace',
-    scope: 'projects',
-    decide: {
-      label: 'PROJECTS SNAPSHOT',
-      summary: 'Project count, ingest coverage, SDK heartbeats, and active keys — banner shows EMPTY vs INGESTING.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Active context',
-      detail: 'The selected project drives filters and setup state across the console — switch on Your projects tab.',
-    },
-  },
-  '/organization/members': {
-    title: 'Members',
-    kicker: 'Workspace',
-    scope: 'members',
-    decide: {
-      label: 'Team roster',
-      summary: 'Audit who has access, which seats are inactive, and whether pending invites need a resend.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Invite deliverability',
-      detail: 'Pending invites show opened / not-opened and expiry — resend or copy the accept link if email failed.',
-    },
-  },
-  '/settings': {
-    title: 'Settings',
-    kicker: 'Workspace',
-    scope: 'settings',
-    decide: {
-      label: 'Runtime controls',
-      summary: 'Tune capture, routing, LLM, and developer settings that affect future reports.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Saved state',
-      detail: 'Health tab runs a test report against the active project — BYOK Test buttons confirm keys before save.',
-    },
-  },
-  '/rewards': {
-    title: 'Rewards',
-    kicker: 'Act',
-    scope: 'rewards',
-    decide: {
-      label: 'REWARDS SNAPSHOT',
-      summary: 'Contributors, rejection rate, webhooks, and payouts — banner shows what blocks the loop.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'SDK activity feed',
-      detail: 'Overview shows 24h accept/reject breakdown — Simulator previews rule changes without live data.',
-    },
-  },
-  '/cost': {
-    title: 'LLM Cost',
-    kicker: 'Workspace',
-    scope: 'cost',
-    decide: {
-      label: 'Spend discipline',
-      summary: 'Check 24h spend, top operations, and BYOK vs platform keys before tuning pipelines.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Invocation log',
-      detail: 'Raw log lists every llm_invocations row — search by operation or model to audit individual calls.',
-    },
-  },
-  '/sso': {
-    title: 'SSO',
-    kicker: 'Workspace',
-    scope: 'sso',
-    decide: {
-      label: 'Identity setup',
-      summary: 'Configure team sign-in through SAML or OIDC before inviting more users.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Provider metadata',
-      detail: 'Overview shows ACS URL — paste into Okta/Azure AD, then verify login on Providers tab.',
-    },
-  },
-  '/research': {
-    title: 'Research',
-    kicker: 'Check',
-    scope: 'research',
-    decide: {
-      label: 'Firecrawl search',
-      summary: 'Banner + RESEARCH SNAPSHOT — BYOK web search during triage, attach snippets as report evidence.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Session history',
-      detail: 'History tab lists past queries; attached snippets link back to report UUIDs for audit.',
-    },
-  },
-  '/iterate': {
-    title: 'Iterate',
-    kicker: 'Act',
-    scope: 'iterate',
-    decide: {
-      label: 'PDCA SNAPSHOT',
-      summary: 'Overview shows queued/running/failed posture — Runs tab needs Trigger on each queued row.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Run detail',
-      detail: 'Open a run for the score timeline, per-iteration critique, and clipboard export.',
-    },
-  },
-  '/skills': {
-    title: 'Skill Pipelines',
-    kicker: 'Act',
-    scope: 'skills',
-    decide: {
-      label: 'Pipeline status',
-      summary: 'Attach a skill from kenji skills to a report, run it as a pipeline, and track each step live.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Step check-in',
-      detail: 'Dev checks in each step via CLI or MCP. Console React Flow updates in realtime.',
-    },
-  },
-}
-
 
 const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
   plan: 'plan',
@@ -547,8 +189,6 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
   const whatsNew = useWhatsNew()
-  const pageHeroSnapshot = usePageHeroSnapshot()
-  const postureHasStatusBanner = usePostureHasStatusBanner()
   const projectSnapshots = useProjectSnapshots()
   const activeProjectId = useActiveProjectId()
   const setupStatus = useSetupStatus(activeProjectId)
@@ -557,9 +197,6 @@ export function Layout({ children }: { children: ReactNode }) {
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
   const { isSuperAdmin, isOperator, has } = useEntitlements()
-  const fallbackHero = shouldShowLayoutPageHero(pathname, postureHasStatusBanner)
-    ? PAGE_HERO_FALLBACKS[pathname]
-    : null
   const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusModePreference, setFocusMode] = useFocusMode()
   /** Consent routes always hide chrome; preference still drives the toggle. */
@@ -641,7 +278,7 @@ export function Layout({ children }: { children: ReactNode }) {
       // in-memory state (toast queue, scroll, focus) survives the jump.
       {
         key: 'i',
-        description: 'Open the Action Inbox',
+        description: 'Open your To-do list',
         handler: (e) => {
           e.preventDefault()
           navigate('/inbox')
@@ -652,7 +289,7 @@ export function Layout({ children }: { children: ReactNode }) {
       },
       {
         key: 'i',
-        description: 'Open the Action Inbox',
+        description: 'Open your To-do list',
         handler: (e) => {
           e.preventDefault()
           navigate('/inbox')
@@ -792,10 +429,6 @@ export function Layout({ children }: { children: ReactNode }) {
     [isAdvanced, visibleNav, pathname],
   )
   const navCounts = useNavCounts({ live: true, slices: navSlices })
-  const resolvedHero = useMemo(
-    () => resolveLayoutHero(pathname, fallbackHero, navCounts, pageHeroSnapshot),
-    [pathname, fallbackHero, navCounts, pageHeroSnapshot],
-  )
 
   // Keep the open category aligned with the current route when navigating.
   useEffect(() => {
@@ -1295,24 +928,9 @@ export function Layout({ children }: { children: ReactNode }) {
               className={`${PAGE_SHELL_CLASS[pageShellWidth]} pb-20 motion-safe:transition-[transform,opacity] motion-safe:duration-base`}
               data-page-width={pageShellWidth}
             >
-              {!focusMode && <GlobalStatusStrip />}
-              {!focusMode && <DavChromeCoachmark />}
               {!focusMode && <NextStep variant="banner" />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
-              {/* Beginner mode uses the NextStep banner — skip layout PageHero to avoid
-                  duplicating the same guidance (NN/g #8 Aesthetic & Minimalist). */}
-              {resolvedHero && !isBeginner && (
-                <PageHero
-                  scope={resolvedHero.scope}
-                  title={resolvedHero.title}
-                  kicker={resolvedHero.kicker}
-                  decide={resolvedHero.decide}
-                  act={resolvedHero.act}
-                  actIdle={resolvedHero.actIdle}
-                  verify={resolvedHero.verify}
-                />
-              )}
               {children}
               {/* Developer details (components/readout/ReadoutPanel) portal here, so they close every page. */}
               <div id={PAGE_FOOT_SLOT_ID} className="mt-4 empty:hidden" />

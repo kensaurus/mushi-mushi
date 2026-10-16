@@ -8,10 +8,12 @@
  * failed fixes, and its "Watch the demo" CTA linked to "/". Real work now
  * comes first, in this order:
  *   1. unfixed critical or high reports;
- *   2. reports whose last auto-fix stopped;
- *   3. fix PRs waiting on review or merge;
- *   4. setup gaps;
- *   5. only then "all clear".
+ *   2. new reports nobody has looked at (user reports and Sentry imports);
+ *   3. reports whose last auto-fix stopped;
+ *   4. fix PRs waiting on review or merge;
+ *   5. setup gaps;
+ *   6. judge disagreements;
+ *   7. only then "all clear".
  * Until the work counts have loaded, it never claims "all clear".
  * There is no demo route in the console, so no demo CTA is offered.
  */
@@ -35,9 +37,13 @@ export interface NbaAction {
 export interface NbaWork {
   ready: boolean
   urgentOpenReports: number
+  /** Reports still at status `new` (user reports and Sentry imports alike). */
+  untriagedBacklog: number
   fixesFailed: number
   fixesRetryable: number
   prsOpen: number
+  /** Classifier vs judge disagreements, 14-day window. */
+  judgeDisagreements: number
 }
 
 export interface NbaSetup {
@@ -79,6 +85,15 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
         title: `${n} critical or high ${plural(n, 'report is', 'reports are')} still unfixed`,
         why: 'These hurt the most users. Read the diagnosis, then dispatch a fix or dismiss.',
         cta: { kind: 'link', to: '/reports?status=open', label: 'Open unfixed reports' },
+      }
+    }
+    if (work.untriagedBacklog > 0) {
+      const n = work.untriagedBacklog
+      return {
+        tone: 'plan',
+        title: `${n} new ${plural(n, 'bug is', 'bugs are')} waiting for a look`,
+        why: 'Read each diagnosis, then fix it, or close it as not a code bug.',
+        cta: { kind: 'link', to: '/reports?status=new', label: 'Review new bugs' },
       }
     }
     if (work.fixesFailed > 0) {
@@ -144,6 +159,16 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
 
   // Not "all clear" until the work counts have actually been read.
   if (!work.ready) return null
+
+  if (work.judgeDisagreements > 0) {
+    const n = work.judgeDisagreements
+    return {
+      tone: 'check',
+      title: `The judge disagreed with ${n} ${plural(n, 'diagnosis', 'diagnoses')}`,
+      why: 'A second model graded these differently. Check them so the next diagnoses get better.',
+      cta: { kind: 'link', to: '/judge?tab=evaluations&filter=disagreement', label: 'Check them' },
+    }
+  }
 
   return {
     tone: 'idle',
