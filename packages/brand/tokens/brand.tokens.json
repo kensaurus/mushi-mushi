@@ -97,7 +97,10 @@
   "elevation": {
     "card": { "$type": "shadow", "$value": "0 1px 2px rgba(14, 13, 11, 0.12)" },
     "raised": { "$type": "shadow", "$value": "0 2px 8px rgba(14, 13, 11, 0.16)" },
-    "overlay": { "$type": "shadow", "$value": "0 24px 80px -48px rgba(14, 13, 11, 0.45)" }
+    "overlay": { "$type": "shadow", "$value": "0 24px 80px -48px rgba(14, 13, 11, 0.45)" },
+    "key": { "$type": "shadow", "$value": "inset 0 -2px 0 rgba(0, 0, 0, 0.18)", "$description": "Keycap bottom edge on paper chips and tiles" },
+    "key-fill": { "$type": "shadow", "$value": "inset 0 -2px 0 rgba(0, 0, 0, 0.25)", "$description": "Keycap bottom edge on a vermillion fill" },
+    "key-ink": { "$type": "shadow", "$value": "inset 0 -2px 0 rgba(255, 255, 255, 0.18)", "$description": "Light keycap edge on an ink fill" }
   },
   "zIndex": {
     "base": { "$type": "number", "$value": 99999 },

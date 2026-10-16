@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Btn, Callout, Card, SelectField } from '../ui'
 import { IconExternalLink } from '../icons'
-import type { CHIP_TONE } from '../../lib/chipTone'
+import { PR_STATE_TONE_KEY } from '../../lib/chipTone'
 import { apiFetchMutate } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { uxMergeBlocker, uxRequiredChecks, type UxCheckResult, type UxPullRequest, type UxRunListItem } from '../../lib/uxRuns'
@@ -23,11 +23,11 @@ type PrState = UxPullRequest['state']
 
 const POLL_MS = 30_000
 
-const STATE_META: Record<PrState, { label: string; tone: keyof typeof CHIP_TONE }> = {
-  draft: { label: 'Draft', tone: 'neutral' },
-  open: { label: 'Open', tone: 'infoSubtle' },
-  merged: { label: 'Merged', tone: 'okSubtle' },
-  closed: { label: 'Closed', tone: 'dangerSubtle' },
+const STATE_META: Record<PrState, { label: string; tone: (typeof PR_STATE_TONE_KEY)[PrState] }> = {
+  draft: { label: 'Draft', tone: PR_STATE_TONE_KEY.draft },
+  open: { label: 'Open', tone: PR_STATE_TONE_KEY.open },
+  merged: { label: 'Merged', tone: PR_STATE_TONE_KEY.merged },
+  closed: { label: 'Closed', tone: PR_STATE_TONE_KEY.closed },
 }
 
 const CHECK_META: Record<UxCheckResult, { mark: string; label: string; className: string }> = {

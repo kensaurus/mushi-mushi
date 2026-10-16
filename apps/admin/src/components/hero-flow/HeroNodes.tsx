@@ -248,7 +248,7 @@ function NodeShell({
         'hero-node-shell group/hero relative flex h-full w-full flex-col overflow-hidden pl-3.5 pr-2.5 py-2 text-xs pointer-events-auto cursor-pointer',
         'motion-safe:transition-[transform,opacity] motion-safe:duration-200',
         SEVERITY_GLOW[severity],
-        active ? 'hero-node-shell--active z-[2]' : 'z-[1]',
+        active ? 'hero-node-shell--active z-2' : 'z-1',
         expanded ? 'hero-node-shell--expanded' : '',
         isDimmed ? 'opacity-88' : '',
         isHovered ? 'hero-node-shell--hover' : '',
@@ -266,7 +266,7 @@ function NodeShell({
       <Handle type="target" position={Position.Left} id="in" className="!bg-transparent !border-none !w-1 !h-1 !left-0 !opacity-0" />
       <Handle type="source" position={Position.Right} id="out" className="!bg-transparent !border-none !w-1 !h-1 !right-0 !opacity-0" />
 
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
+      <div className="relative z-1 flex min-h-0 flex-1 flex-col">
         <header className="flex items-center gap-1.5 mb-1.5 shrink-0">
           <span className="inline-flex items-center gap-1 rounded-sm border border-edge bg-surface-overlay px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-fg-secondary">
             <span className="inline-flex shrink-0" style={{ color: accentHex }} aria-hidden>

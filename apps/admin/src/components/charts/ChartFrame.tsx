@@ -100,7 +100,7 @@ export function ChartFrame({
                 />
               ))}
             </div>
-            <div className="relative z-[1] h-full w-full overflow-visible px-0.5 pt-1 pb-px">{children}</div>
+            <div className="relative z-1 h-full w-full overflow-visible px-0.5 pt-1 pb-px">{children}</div>
           </div>
 
           {xLabels && xLabels.length > 0 && (

@@ -143,7 +143,7 @@ function BannerChecklist({
       <div className="flex items-center justify-between gap-3 border-b border-edge-subtle px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warning-foreground'}`}>
+            <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warn-foreground'}`}>
               {requiredDone ? 'Setup complete' : 'Finish setting up Mushi Mushi'}
             </span>
             <span className="text-2xs font-mono text-fg-muted">

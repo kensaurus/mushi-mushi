@@ -15,18 +15,11 @@
 import { RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { ReportDetail, ReportFixAttempt } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
 
 interface Props {
   report: ReportDetail
   className?: string
-}
-
-const PR_STATE_TONE: Record<string, string> = {
-  merged: CHIP_TONE.okSubtle,
-  open: CHIP_TONE.brandSubtle,
-  draft: CHIP_TONE.neutral,
-  closed: CHIP_TONE.dangerSubtle,
 }
 
 function Chip({ tone, children }: { tone?: string; children: React.ReactNode }) {
@@ -116,7 +109,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Chip tone={PR_STATE_TONE[prState] ?? undefined}>PR {prState}</Chip>
+            <Chip tone={prStateChipTone(prState)}>PR {prState}</Chip>
             {ci && (
               <Chip tone={ci === 'success' ? CHIP_TONE.okSubtle : CHIP_TONE.dangerSubtle}>
                 CI {ci.replace(/_/g, ' ')}

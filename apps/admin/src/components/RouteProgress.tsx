@@ -81,7 +81,7 @@ export function RouteProgress() {
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
-      className="pointer-events-none fixed left-0 right-0 top-0 z-[60] h-0.5 motion-reduce:hidden"
+      className="pointer-events-none fixed left-0 right-0 top-0 z-(--z-toast) h-0.5 motion-reduce:hidden"
     >
       <div
         className="h-full bg-brand shadow-[0_0_8px_var(--color-brand)] motion-safe:transition-[width,opacity] motion-safe:duration-150 motion-safe:ease-out"

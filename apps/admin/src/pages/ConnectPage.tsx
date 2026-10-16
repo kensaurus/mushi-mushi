@@ -360,7 +360,7 @@ export function ConnectPage() {
                 <HelpBanner
                   tone="warn"
                   title="No SDK heartbeat from store builds yet"
-                  icon={<IconAlertTriangle className="h-5 w-5 text-warning-foreground" />}
+                  icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
                   className="mb-3"
                 >
                   <p className="text-xs leading-relaxed">

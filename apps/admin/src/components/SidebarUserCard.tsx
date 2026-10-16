@@ -216,7 +216,7 @@ function AccountRow({ account, isActive, busy, onSwitch, onRemove }: AccountRowP
           <span className="mt-0.5 flex items-center gap-1.5">
             <ProviderChip provider={account.provider} />
             {account.needsReauth && (
-              <span className="text-2xs font-medium text-warning-foreground">⚠ Re-auth</span>
+              <span className="text-2xs font-medium text-warn-foreground">⚠ Re-auth</span>
             )}
           </span>
         </span>

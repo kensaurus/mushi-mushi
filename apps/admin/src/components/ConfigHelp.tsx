@@ -242,9 +242,9 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
   const summary = doc.summary
 
   return (
-    // z-[1] + shrink-0: next to a scrollable SegmentedControl the trigger was
+    // z-1 + shrink-0: next to a scrollable SegmentedControl the trigger was
     // covered and could not be clicked (/connect "Framework" help).
-    <span className="relative z-[1] inline-flex shrink-0">
+    <span className="relative z-1 inline-flex shrink-0">
       <button
         ref={triggerRef}
         type="button"
@@ -311,7 +311,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
             display: 'flex',
             flexDirection: 'column',
           }}
-          className={`z-[100] rounded-md border text-2xs text-fg-secondary text-pretty tooltip-enter outline-none ${CONFIG_HELP_POPOVER_SHELL}`}
+          className={`z-(--z-top) rounded-md border text-2xs text-fg-secondary text-pretty tooltip-enter outline-none ${CONFIG_HELP_POPOVER_SHELL}`}
           onClick={(e) => e.stopPropagation()}
           data-side={pos?.side ?? 'bottom'}
         >
