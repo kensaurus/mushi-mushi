@@ -696,7 +696,77 @@ if (ellipsisHits.length > 0) {
   console.error(`\nFix: "Loading…" not "Loading...". See Web Interface Guidelines typography.\n`)
 }
 
+// ── Retired alias tokens (2026-10-16 design housekeep) ───────────────────
+// Same-value aliases merged into their canonical token. Matched as an exact
+// root (so text-warning-foreground stays legal), because the unknown-root
+// check above falls back to the longest defined prefix: text-fg-primary
+// (prefix fg) and bg-surface-2 (prefix surface) would pass it and render
+// nothing. Also catches var(--color-<alias>) and the arbitrary values that
+// duplicate an existing token. Decision log:
+// docs/design/housekeep-design-state-2026-10-16.md
+const RETIRED_ALIAS_ROOTS = new Map([
+  ['err', 'danger'],
+  ['err-muted', 'danger-muted'],
+  ['warning', 'warn'],
+  ['warning-subtle', 'warn-muted'],
+  ['danger-subtle', 'danger-muted'],
+  ['info-subtle', 'info-muted'],
+  ['ok-subtle', 'ok-muted'],
+  ['surface-2', 'surface-raised'],
+  ['surface-3', 'surface-overlay'],
+  ['fg-primary', 'fg'],
+])
+const RETIRED_CUSTOM_PROPS = new Map([
+  ...[...RETIRED_ALIAS_ROOTS].map(([from, to]) => [`--color-${from}`, `--color-${to}`]),
+  ['--duration-micro', '--duration-instant'],
+])
+const DEPRECATED_ARBITRARY = [
+  { re: /ease-\[var\(--ease-stamp\)\]/g, fix: 'ease-stamp' },
+  {
+    re: /bg-\[color-mix\(in_oklch,var\(--color-editorial-ink\)_82%,var\(--color-editorial-vermillion\)\)\]/g,
+    fix: 'bg-editorial-ink-emphasis',
+  },
+]
+const retiredAliasHits = []
+const retiredClassRe = new RegExp(
+  `(?<=[\\s"'\`{}\\[\\]=>:;(!])(${COLOR_PREFIXES.join('|')})-([a-z][a-z0-9-]*?)(?:\\/\\d+)?(?=[\\s"'\`{}\\[\\]=>:;),])`,
+  'g',
+)
+const retiredPropRe = /--(?:color-[a-z0-9-]+|duration-micro)(?![a-z0-9-])/g
+
+for (const file of files) {
+  const src = readFileSync(file, 'utf8')
+  const lines = src.split('\n')
+  const allowlisted = (index) => /mushi-mushi-allowlist:/i.test(lines[extractLineNumber(src, index) - 1] ?? '')
+  for (const m of src.matchAll(retiredClassRe)) {
+    const to = RETIRED_ALIAS_ROOTS.get(m[2])
+    if (!to || allowlisted(m.index ?? 0)) continue
+    retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[1]}-${m[2]} → ${m[1]}-${to}` })
+  }
+  for (const m of src.matchAll(retiredPropRe)) {
+    const to = RETIRED_CUSTOM_PROPS.get(m[0])
+    if (!to || allowlisted(m.index ?? 0)) continue
+    retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → ${to}` })
+  }
+  for (const { re, fix } of DEPRECATED_ARBITRARY) {
+    for (const m of src.matchAll(re)) {
+      if (allowlisted(m.index ?? 0)) continue
+      retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → ${fix}` })
+    }
+  }
+}
+
+if (retiredAliasHits.length > 0) {
+  console.error(`\n[retired-alias] Retired alias tokens or token-duplicating arbitrary values:\n`)
+  for (const hit of retiredAliasHits) console.error(fmt(hit))
+  console.error(
+    `\nFix: use the canonical token shown after the arrow. A new name belongs in\n` +
+      `apps/admin/src/styles/theme-tokens.css only when it has its own value.\n`,
+  )
+}
+
 const lintFailures =
+  retiredAliasHits.length > 0 ||
   denied.length > 0 ||
   unknown.length > 0 ||
   subFloorHits.length > 0 ||
@@ -717,5 +787,6 @@ if (lintFailures) process.exit(1)
 const totalTypeFloorFiles = typeFloorFiles.length
 console.log(
   `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
-    `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean.`,
+    `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean. ` +
+    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses.`,
 )

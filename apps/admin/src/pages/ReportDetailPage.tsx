@@ -387,7 +387,7 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
               'flex items-start gap-3 p-2.5 rounded-lg border',
               preselectedSlug === skill.slug
                 ? 'border-brand bg-brand/5'
-                : 'border-edge-subtle bg-surface-3',
+                : 'border-edge-subtle bg-surface-overlay',
             ].join(' ')}
           >
             <div className="flex-1 min-w-0">

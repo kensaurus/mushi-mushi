@@ -38,7 +38,7 @@ const SEVERITY_TEXT: Record<HeroSeverity, string> = {
   ok: 'text-ok',
   info: 'text-info',
   warn: 'text-warn',
-  crit: 'text-err',
+  crit: 'text-danger',
   neutral: 'text-fg-muted',
 }
 
