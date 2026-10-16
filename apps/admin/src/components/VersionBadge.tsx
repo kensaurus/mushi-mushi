@@ -71,7 +71,7 @@ const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
     chip: CHIP_TONE.warnSubtle,
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
-    text: 'text-warning-foreground',
+    text: 'text-warn-foreground',
     pill: 'tool',
   },
   ok: {

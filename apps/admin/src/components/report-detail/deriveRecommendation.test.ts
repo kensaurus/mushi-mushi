@@ -483,3 +483,64 @@ describe('dispatch controls go through the page request and gate', () => {
     expect(rec.meta).toBeUndefined()
   })
 })
+
+// BL-061: with no code location the card stops leading with "Dispatch fix".
+describe('a report with no code location', () => {
+  const triageable = [
+    ['new + critical', { status: 'new', severity: 'critical', stage1_classification: { category: 'bug' } }],
+    ['classified, no comments', { status: 'classified', stage1_classification: { category: 'bug' } }],
+    ['new + low', { status: 'new', severity: 'low', stage1_classification: { category: 'bug' } }],
+  ] as const
+
+  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (_, overrides) => {
+    const request = vi.fn()
+    const rec = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, false)
+    expect(rec.cta).toBeUndefined()
+    expect(rec.description).toContain("This report has no stack trace or file to change, so a fix agent usually can't act on it.")
+    expect(rec.description).toContain('Not a code bug')
+    const anyway = rec.actions?.find((a) => a.label === 'Dispatch anyway')
+    expect(anyway?.tone).toBe('ghost')
+    anyway?.onClick?.()
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Dispatch anyway" is disabled while the gate blocks', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'classified', stage1_classification: { category: 'bug' } }),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+      Date.now(),
+      { blocked: true, reason: 'Set up first: Autofix enabled.' },
+      false,
+    )
+    expect(rec.actions?.find((a) => a.label === 'Dispatch anyway')?.disabled).toBe(true)
+  })
+
+  it('a refused attempt does not offer "Retry dispatch" as the primary', () => {
+    const rec = deriveRecommendation(
+      makeReport({ fix_attempts: [makeFixAttempt({ status: 'failed', failure_category: null, error: 'review_failed: comments only' })] }),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+      Date.now(),
+      undefined,
+      false,
+    )
+    expect(rec.actions?.find((a) => a.label === 'Retry dispatch')?.tone).toBe('ghost')
+  })
+
+  it('with a code location the CTA is unchanged', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'classified', stage1_classification: { category: 'bug' } }),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+      Date.now(),
+      undefined,
+      true,
+    )
+    expect(rec.cta?.label).toBe('Dispatch fix')
+    expect(rec.actions).toBeUndefined()
+  })
+})

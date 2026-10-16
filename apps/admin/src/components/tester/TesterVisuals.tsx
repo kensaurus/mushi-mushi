@@ -29,7 +29,7 @@ export function TesterHowItWorksFlow({ className = '' }: { className?: string })
                 aria-hidden
               />
             )}
-            <span className="relative z-[1] flex h-10 w-10 items-center justify-center rounded-full border border-brand/25 bg-brand-subtle text-lg">
+            <span className="relative z-1 flex h-10 w-10 items-center justify-center rounded-full border border-brand/25 bg-brand-subtle text-lg">
               {step.icon}
             </span>
             <p className="mt-2 text-xs font-semibold text-fg">{step.label}</p>

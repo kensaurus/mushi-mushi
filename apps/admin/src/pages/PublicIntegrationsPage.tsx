@@ -90,7 +90,7 @@ function IntegrationLogo({ mark }: { name: string; mark?: string }) {
   return (
     <div
       aria-hidden
-      className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-editorial-rule bg-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.06)]"
+      className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-editorial-rule bg-editorial-paper shadow-editorial-key"
     >
       {url ? (
         // Masked rather than <img> so the monochrome CC0 mark inherits the
@@ -341,7 +341,7 @@ export function PublicIntegrationsPage() {
             >
               <span
                 aria-hidden
-                className="grid h-7 w-7 place-items-center rounded-sm bg-editorial-vermillion font-mono text-xs text-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]"
+                className="grid h-7 w-7 place-items-center rounded-sm bg-editorial-vermillion font-mono text-xs text-editorial-paper shadow-editorial-key-fill"
               >
                 虫
               </span>
@@ -364,7 +364,7 @@ export function PublicIntegrationsPage() {
               </Link>
               <Link
                 to="/dashboard"
-                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-editorial-key-ink transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Get started
               </Link>
@@ -559,7 +559,7 @@ export function PublicIntegrationsPage() {
                 href={PLUGIN_SDK_DOCS_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-editorial-key-ink transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 <IconExternalLink size={12} />
                 Read the SDK docs

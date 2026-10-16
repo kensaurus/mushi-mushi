@@ -117,6 +117,9 @@ PR is trusted and the fix timeline says the contents were not checked.
 You can dispatch a fix from four places:
 
 1. **Report detail** → "Dispatch fix" button (single-repo or auto multi-repo).
+   A report with no stack trace, source file or failed request (most web
+   vitals and native crashes) leads with "Not a code bug" instead, and the
+   button reads "Dispatch anyway": a fix agent usually has nothing to change.
 2. **Reports list** → kebab menu → "Send to Cursor agent" (dispatches `cursor_cloud` directly).
 3. **Fixes list** → "New fix" button with a report picker.
 4. **MCP / A2A / CLI** — `dispatch_fix` tool (`agent=cursor_cloud`), `POST /v1/a2a/tasks`, or `mushi fix  --agent cursor_cloud`.

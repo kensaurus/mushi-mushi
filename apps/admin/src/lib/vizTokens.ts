@@ -13,7 +13,7 @@ const VIZ_FALLBACKS: Record<string, string> = {
   'viz-flow-brand': 'oklch(0.78 0.14 80)',
   'viz-flow-danger': 'oklch(0.63 0.22 25)',
   'viz-score-ok': 'oklch(0.72 0.19 155)',
-  'viz-score-warn': 'oklch(0.75 0.15 80)',
+  'viz-score-warn': 'oklch(0.75 0.15 55)',
   'viz-score-danger': 'oklch(0.63 0.22 25)',
   'viz-lang-default': 'oklch(0.55 0.01 285)',
   'viz-terminal-bg': 'oklch(0.12 0.01 285)',

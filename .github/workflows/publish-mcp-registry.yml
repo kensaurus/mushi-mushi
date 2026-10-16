@@ -64,12 +64,16 @@ jobs:
           expected=$(node -p "require('./packages/mcp/package.json').version")
           echo "Expecting registry version ${expected}"
           sleep 5
-          body=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi")
-          echo "$body" | grep -q "io.github.kensaurus/mushi-mushi"
+          # version=latest returns only the current record. The registry
+          # answers compact JSON ("version":"x", no space), and under pipefail
+          # `echo | head -c` dies on SIGPIPE, so print with printf instead
+          # (2026-10-16: 0.26.0 published but this step failed).
+          body=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi&version=latest")
+          grep -q "io.github.kensaurus/mushi-mushi" <<<"$body"
           # -F: the dots in a semver are regex wildcards otherwise.
-          if echo "$body" | grep -qF "\"version\": \"${expected}\""; then
+          if grep -qF "\"version\":\"${expected}\"" <<<"$body"; then
             echo "✓ Mushi MCP server ${expected} is live in the official registry"
           else
             echo "::warning::Registry may still be propagating ${expected}; record exists but exact version string not yet visible."
-            echo "$body" | head -c 2000
+            printf '%.2000s\n' "$body"
           fi

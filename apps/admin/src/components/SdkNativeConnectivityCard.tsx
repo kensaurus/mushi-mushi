@@ -243,13 +243,13 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 : 'Sync complete (all vars already present or written).'}
             </p>
             {syncState.failed && syncState.failed.length > 0 && (
-              <p className="text-warning-foreground">
+              <p className="text-warn-foreground">
                 Partial: {syncState.failed.map((f) => f.name).join(', ')} could not be written.
                 Use the copy commands below.
               </p>
             )}
             {syncState.priorKeysRevoked === null ? (
-              <p className="text-warning-foreground">
+              <p className="text-warn-foreground">
                 The previous CI key could not be revoked and still works. Revoke it under Projects → Your
                 projects → Keys once your new store build ships.
               </p>
