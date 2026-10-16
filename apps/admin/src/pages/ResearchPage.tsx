@@ -8,7 +8,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -110,7 +109,6 @@ export function ResearchPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ResearchStats>('/v1/admin/research/stats')
-  usePublishPageHeroStats('/research', statsData)
   const stats = { ...EMPTY_RESEARCH_STATS, ...statsData }
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickResearchTab(stats)

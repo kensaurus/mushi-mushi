@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMarketing } from '../context'
 import type { MushiStage } from './data'
-import { stageMedia, loopOverviewMedia } from './stageMedia'
+import { stageMedia } from './stageMedia'
 
 interface StageLivePreviewProps {
   stage: MushiStage
@@ -223,33 +223,4 @@ function resolveDemoHref(href: string | undefined, consoleHref: string): string 
     }
   }
   return href
-}
-
-export function LoopOverviewPreview({ className = '' }: { className?: string }) {
-  const { urls } = useMarketing()
-  const media = loopOverviewMedia
-  const src = urls.screenshots(media.file)
-
-  return (
-    <figure className={['mushi-loop-overview', className].filter(Boolean).join(' ')}>
-      <div className="mushi-stage-preview__frame mushi-loop-overview__frame">
-        <div className="mushi-stage-preview__chrome" aria-hidden="true">
-          <span className="mushi-stage-preview__dot" />
-          <span className="mushi-stage-preview__dot" />
-          <span className="mushi-stage-preview__dot" />
-          <span className="mushi-stage-preview__chrome-label">Full loop · animated</span>
-        </div>
-        <div className="mushi-stage-preview__viewport mushi-loop-overview__viewport">
-          <img
-            src={src}
-            alt={media.alt}
-            loading="lazy"
-            decoding="async"
-            className="mushi-stage-preview__img mushi-stage-preview__img--animated"
-          />
-        </div>
-      </div>
-      <figcaption className="mushi-stage-preview__caption">{media.caption}</figcaption>
-    </figure>
-  )
 }

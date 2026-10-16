@@ -15,7 +15,7 @@
 
 import { run } from './proc.js'
 
-export interface ModelParam {
+interface ModelParam {
   id: string
   label: string
   values: Array<{ value: string; label: string }>

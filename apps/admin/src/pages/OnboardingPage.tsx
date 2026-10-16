@@ -16,7 +16,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner, Loading } from '../components/ui'
@@ -151,7 +150,6 @@ export function OnboardingPage() {
   )
 
   const statsData = activationEnabled ? activation.stats : legacyStatsData
-  usePublishPageHeroStats('/onboarding', statsData)
   const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
   const statsError = activationEnabled ? activation.error : legacyStatsError
   const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt

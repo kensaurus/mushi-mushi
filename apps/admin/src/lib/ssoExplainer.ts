@@ -2,7 +2,7 @@
  * Plain-language SSO protocol guide for the admin console.
  */
 
-export type SsoProtocolId = 'saml' | 'oidc'
+type SsoProtocolId = 'saml' | 'oidc'
 
 export interface SsoProtocolDefinition {
   id: SsoProtocolId

@@ -28,9 +28,9 @@
  *            - the unit-test file at `validators.test.ts`
  */
 
-export type ValidationSeverity = 'error' | 'warn'
+type ValidationSeverity = 'error' | 'warn'
 
-export interface ValidationResult {
+interface ValidationResult {
   message: string
   /** 'error' renders red and (when wired) blocks Save. 'warn' renders amber
    *  and is informational only — useful for "this looks like a *test* DSN,

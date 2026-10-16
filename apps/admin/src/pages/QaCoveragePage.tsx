@@ -26,7 +26,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import {
@@ -902,7 +901,6 @@ export function QaCoveragePage() {
     projectId ? `/v1/admin/projects/${projectId}/qa-coverage/stats` : null,
     { deps: [projectId] },
   )
-  usePublishPageHeroStats('/qa-coverage', qaStatsData)
   const qaStats = qaStatsData ?? EMPTY_QA_COVERAGE_STATS
 
   const { data: pendingData, reload: reloadPending } = usePageData<{ stories: PendingReviewStory[] }>(

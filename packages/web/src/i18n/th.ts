@@ -10,6 +10,7 @@ export const th: MushiLocale = {
     submitting: 'กำลังส่ง…',
     submitted: 'ขอบคุณครับ/ค่ะ! รายงานของคุณถูกส่งแล้ว',
     error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+    hideLauncher: 'ซ่อนปุ่มแจ้งบั๊กระหว่างการเข้าชมครั้งนี้',
   },
   step1: {
     moreNav: {

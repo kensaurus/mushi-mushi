@@ -234,5 +234,3 @@ export function PricingEstimator() {
     </div>
   )
 }
-
-export { estimateCost, TIERS, MAX_SLIDER } from '../lib/pricing-estimator'

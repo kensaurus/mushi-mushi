@@ -28,7 +28,7 @@ import {
   IconCheck,
 } from '../icons'
 
-export interface UpdateCenterProject {
+interface UpdateCenterProject {
   id: string
   sdk_package?: string | null
   sdk_version?: string | null

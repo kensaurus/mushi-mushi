@@ -79,7 +79,6 @@ vi.mock('../lib/iterateModeUx', () => ({
 }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => undefined }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
-vi.mock('../lib/heroSnapshots', () => ({ usePublishPageHeroStats: () => undefined }))
 vi.mock('../components/PageHeaderBar', () => ({ PageHeaderBar: () => null }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
 

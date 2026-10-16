@@ -55,7 +55,7 @@ export interface FixTimelineEvent {
   status?: 'ok' | 'fail' | 'pending' | null
 }
 
-export type PrState = 'open' | 'closed' | 'merged' | 'draft'
+type PrState = 'open' | 'closed' | 'merged' | 'draft'
 
 interface FixGitGraphProps {
   events: FixTimelineEvent[]

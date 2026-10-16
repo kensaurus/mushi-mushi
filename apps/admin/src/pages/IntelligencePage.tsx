@@ -9,7 +9,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -116,7 +115,6 @@ export function IntelligencePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<IntelligenceStats>('/v1/admin/intelligence/stats')
-  usePublishPageHeroStats('/intelligence', statsData)
   const stats = { ...EMPTY_INTELLIGENCE_STATS, ...statsData }
 
   const reportsPath = activeProjectId && (activeTab === 'reports' || activeTab === 'overview') ? '/v1/admin/intelligence' : null

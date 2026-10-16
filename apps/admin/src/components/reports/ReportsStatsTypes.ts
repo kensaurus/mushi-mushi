@@ -5,7 +5,7 @@
 
 export type ReportsTabId = 'overview' | 'queue' | 'severity'
 
-export type ReportsTopPriority = 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest'
+type ReportsTopPriority = 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest'
 
 export interface ReportsStats {
   hasAnyProject: boolean

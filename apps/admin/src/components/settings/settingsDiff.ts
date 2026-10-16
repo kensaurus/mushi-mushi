@@ -11,7 +11,7 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
   return String(a ?? '') === String(b ?? '')
 }
 
-export function maskSecret(value: string | null | undefined): string {
+function maskSecret(value: string | null | undefined): string {
   const v = (value ?? '').trim()
   if (!v) return '(empty)'
   if (v.length <= 8) return '••••••••'

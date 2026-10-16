@@ -15,9 +15,9 @@ import { useMemo } from 'react'
 import { usePageData } from './usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 
-export type PlanId = 'hobby' | 'starter' | 'pro' | 'enterprise' | (string & {})
+type PlanId = 'hobby' | 'starter' | 'pro' | 'enterprise' | (string & {})
 
-export interface PlanFeatureFlags {
+interface PlanFeatureFlags {
   sso?: boolean
   byok?: boolean
   plugins?: boolean
@@ -29,7 +29,7 @@ export interface PlanFeatureFlags {
   sla_hours?: number | null
 }
 
-export interface ActivePlanSummary {
+interface ActivePlanSummary {
   /** `hobby` | `starter` | `pro` | `enterprise`. Always present. */
   planId: PlanId
   /** Human-readable plan name from the catalog. */

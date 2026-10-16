@@ -47,9 +47,6 @@ export const HEADER_BADGE_TONE = {
 export const LINK_ACCENT =
   'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity'
 
-export const LINK_BRAND =
-  'text-brand hover:text-brand-hover underline underline-offset-2 motion-safe:transition-opacity'
-
 /** Inline meta chip tones for RecommendedAction / dashboards. */
 export const META_CHIP_TONE = {
   neutral: CHIP_TONE.neutral,
@@ -128,16 +125,12 @@ export const SEVERITY_SURFACE: Record<
   ok: { ring: 'border-ok/40', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
   info: { ring: 'border-info/40', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
   warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warning-foreground', dot: 'bg-warn' },
-  crit: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
-  danger: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
+  crit: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
+  danger: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
   neutral: {
     ring: 'border-edge',
     bg: 'bg-surface-raised',
     text: 'text-fg',
     dot: 'bg-fg-muted',
   },
-}
-
-export function severitySurfaceTone(severity: SurfaceSeverity) {
-  return SEVERITY_SURFACE[severity] ?? SEVERITY_SURFACE.neutral
 }

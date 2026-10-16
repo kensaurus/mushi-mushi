@@ -95,14 +95,3 @@ export async function getDeviceFingerprintHash(): Promise<string | null> {
   }
   return hash;
 }
-
-/** Test/diagnostic helper — never include in shipped reports. */
-export function _resetFingerprintCacheForTests(): void {
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.removeItem(CACHE_KEY);
-    } catch {
-      // ignore
-    }
-  }
-}

@@ -17,9 +17,9 @@
 
 import { POSTURE_PRIORITY } from '../components/PagePosture'
 
-export type PostureRecipeId = 'status-only' | 'status-snapshot' | 'status-snapshot-guide'
+type PostureRecipeId = 'status-only' | 'status-snapshot' | 'status-snapshot-guide'
 
-export interface PostureRecipeSlot {
+interface PostureRecipeSlot {
   id: string
   priority: number
   label: string
@@ -111,7 +111,3 @@ export const PAGE_POSTURE_RECIPES: readonly PostureRecipe[] = [
       'Hide guide when banner covers the same story via shouldHideGuideWhenBannerActive(). Advanced mode may show all three rows.',
   },
 ] as const
-
-export function recipeById(id: PostureRecipeId): PostureRecipe | undefined {
-  return PAGE_POSTURE_RECIPES.find((r) => r.id === id)
-}

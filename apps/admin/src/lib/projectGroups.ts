@@ -27,7 +27,7 @@ export function groupTone(color: ProjectGroupColor | null): keyof typeof CHIP_TO
   return `${color}Subtle` as keyof typeof CHIP_TONE
 }
 
-export const ACTIVE_GROUP_STORAGE_KEY = 'mushi:active_project_group'
+const ACTIVE_GROUP_STORAGE_KEY = 'mushi:active_project_group'
 
 export function readActiveGroup(): string | null {
   try {

@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Anomalies ANOMALIES SNAPSHOT strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { AnomaliesStats } from '../../components/anomalies/AnomaliesStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

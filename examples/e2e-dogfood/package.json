@@ -19,7 +19,6 @@
     "@playwright/test": "^1.61.1",
     "@supabase/supabase-js": "^2.108.2",
     "@types/node": "^22.20.0",
-    "msw": "^2.14.6",
     "typescript": "^6.0.3"
   }
 }

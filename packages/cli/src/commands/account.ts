@@ -4,7 +4,8 @@
  */
 
 import type { Command } from 'commander';
-import { CONFIG_PATH, loadConfig, saveConfig, type CliConfig } from '../config.js';
+import { CONFIG_PATH, loadConfig, resolveProfileName, saveConfig, type CliConfig } from '../config.js';
+import { syncKeychainAfterKeyChange } from '../keychain.js';
 import { runInit } from '../init.js';
 import { runLogin } from '../login.js';
 import { runMigrate } from '../migrate.js';
@@ -202,6 +203,8 @@ Examples:
       const safeValue = key === 'endpoint' ? assertEndpoint(value) : value
       ;(config as Record<string, unknown>)[key] = safeValue
       saveConfig(config)
+      // A key set here must reach the keychain too, or the stored one wins.
+      if (key === 'apiKey') syncKeychainAfterKeyChange(safeValue, resolveProfileName())
       console.log(`✓ Set ${key}`)
     } else {
       // Never print the full API key value to the terminal

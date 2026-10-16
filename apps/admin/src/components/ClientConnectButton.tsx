@@ -11,7 +11,7 @@
  *   optional read-only choice (lib/mcpConnect.ts, REPORT A7).
  * - Writes the published @mushi-mushi/mcp version (sdk_versions catalog) into
  *   stdio configs, not the version this console was built with.
- * - Used by McpInstallButtons (back-compat wrapper), ConnectStudio client grid, and
+ * - Used by the ConnectStudio client grid and
  *   the public docs /connect landing (pass apiKey directly; no minting).
  *
  * DEPENDENCIES:

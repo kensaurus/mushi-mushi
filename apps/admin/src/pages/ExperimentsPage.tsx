@@ -9,7 +9,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -140,7 +139,6 @@ export function ExperimentsPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
-  usePublishPageHeroStats('/experiments', statsData)
   const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
   // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
   const rawTab = searchParams.get('tab')
@@ -417,7 +415,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
           {experiments.map((e) => (
             <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
               <td className="px-3 py-2">
-                <div className="font-medium text-fg-primary">{e.name}</div>
+                <div className="font-medium text-fg">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
               </td>
               <td className="px-3 py-2">{statusBadge(e.status)}</td>
@@ -538,27 +536,27 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
 
   return (
     <Card className="max-w-2xl p-6 space-y-5">
-      <h2 className="text-base font-semibold text-fg-primary">New experiment</h2>
+      <h2 className="text-base font-semibold text-fg">New experiment</h2>
       {!projectId && (
         <p className="text-xs text-warn">Select a project from the switcher before creating an experiment.</p>
       )}
       <div className="grid gap-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-fg-primary">Name *</span>
+          <span className="text-sm font-medium text-fg">Name *</span>
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Button colour CTA test" />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-fg-primary">Hypothesis</span>
+          <span className="text-sm font-medium text-fg">Hypothesis</span>
           <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="Changing CTA to orange will increase clicks by 5%" />
         </label>
-        <label className="flex items-center gap-2 text-sm text-fg-primary">
+        <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
           Enable Thompson Sampling bandit (auto-shifts traffic to winning variant)
         </label>
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-fg-primary">Variants</h3>
+        <h3 className="text-sm font-medium text-fg">Variants</h3>
         {variants.map((v, i) => (
           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
@@ -726,7 +724,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         )}
 
         {experiment.hypothesis && (
-          <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm italic text-fg-primary">{experiment.hypothesis}</div>
+          <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm italic text-fg">{experiment.hypothesis}</div>
         )}
 
         <div>
@@ -735,7 +733,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             {variants.map((v) => (
               <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
                 <div className="flex-1">
-                  <div className="font-medium text-sm text-fg-primary">{v.name}</div>
+                  <div className="font-medium text-sm text-fg">{v.name}</div>
                   <div className="text-xs text-fg-muted">
                     Weight: {(v.traffic_weight * 100).toFixed(0)}%
                     {experiment.bandit_enabled && ` · α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}`}
@@ -754,7 +752,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
-              <div className="font-medium text-fg-primary">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
+              <div className="font-medium text-fg">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
               <div className="text-xs mt-0.5 text-fg-muted">chi-square p = {analysis.srm_p.toFixed(4)}</div>
             </div>
 
@@ -764,7 +762,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                 <div><span className="text-fg-muted text-xs">mSPRT log-LR</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
                 <div><span className="text-fg-muted text-xs">Relative lift</span><div className="font-mono font-medium">{(analysis.relative_lift * 100).toFixed(1)}%</div></div>
               </div>
-              <p className="text-sm mt-2 border-t border-edge-subtle pt-2 text-fg-primary">{analysis.recommendation}</p>
+              <p className="text-sm mt-2 border-t border-edge-subtle pt-2 text-fg">{analysis.recommendation}</p>
             </Card>
 
             <table className="w-full text-xs">

@@ -24,7 +24,7 @@ const MUSHI_PACKAGES = [
   '@mushi-mushi/cli',
 ] as const
 
-export interface UpgradePlanEntry {
+interface UpgradePlanEntry {
   name: string
   current: string
   latest: string | null
@@ -40,7 +40,7 @@ export interface UpgradePlan {
   installCmd: string | null
 }
 
-export async function planUpgrade(cwd: string): Promise<UpgradePlan> {
+async function planUpgrade(cwd: string): Promise<UpgradePlan> {
   const root = resolve(cwd)
   const pkg = readPackageJson(root)
   const pm = detectPackageManager(root)

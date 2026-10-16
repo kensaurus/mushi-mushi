@@ -153,7 +153,7 @@ function RegenImprovedCard({ result }: { result: Record<string, unknown> }) {
 
         {/* New score */}
         <div className="text-center">
-          <div className={`text-2xl font-bold tabular-nums ${improved ? 'text-ok' : 'text-fg-primary'}`}>
+          <div className={`text-2xl font-bold tabular-nums ${improved ? 'text-ok' : 'text-fg'}`}>
             {newPct}%
           </div>
           <div className="text-2xs text-fg-muted mt-0.5">after</div>

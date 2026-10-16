@@ -7,7 +7,7 @@ import type { ReportRow } from './types'
 
 export type ReportLayer = 'frontend' | 'backend' | 'server' | 'mobile'
 
-export function locationLabel(env: ReportRow['environment']): string | null {
+function locationLabel(env: ReportRow['environment']): string | null {
   if (!env) return null
   if (env.route) return env.route
   if (env.url) {

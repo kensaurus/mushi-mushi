@@ -42,7 +42,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "pnpm run clean:types && tsup",
     "clean:types": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "tsup --watch",
     "lint": "eslint src/",

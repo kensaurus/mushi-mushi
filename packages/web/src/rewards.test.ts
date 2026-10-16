@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { enqueue, flush, initRewards, teardown, type RewardsContext } from './rewards';
+import { enqueue, flush, getTier, initRewards, teardown, type RewardsContext } from './rewards';
 
 describe('rewards flush — 4xx backoff', () => {
   const ctx: RewardsContext = {
@@ -178,3 +178,32 @@ describe('rewards pushState — idempotent install', () => {
     expect(routes).toEqual(['/via-push']);
   });
 });
+
+describe('rewards tier cache — per user', () => {
+  function ctxFor(userId: string, getMyTier: ReturnType<typeof vi.fn>): RewardsContext {
+    return {
+      client: { submitActivity: vi.fn(), getMyTier } as unknown as RewardsContext['client'],
+      config: { enabled: true, consentMode: 'explicit' },
+      projectId: 'proj_tier',
+      userId,
+    };
+  }
+
+  beforeEach(() => {
+    teardown();
+    localStorage.setItem('mushi_rewards_consent_proj_tier', '1');
+  });
+
+  it("never answers one user's tier for another user who signs in on the same page", async () => {
+    const getMyTier = vi.fn(async (userId: string) => ({ ok: true, data: { tier: { slug: `tier-of-${userId}` } } }));
+    initRewards(ctxFor('alice', getMyTier));
+    const alice = await getTier('alice');
+    expect((alice as { tier: { slug: string } }).tier.slug).toBe('tier-of-alice');
+
+    // Same tab, inside the 5 min TTL: alice signs out, bob signs in.
+    initRewards(ctxFor('bob', getMyTier));
+    const bob = await getTier('bob');
+    expect((bob as { tier: { slug: string } }).tier.slug).toBe('tier-of-bob');
+    expect(getMyTier).toHaveBeenCalledWith('bob');
+  })
+})

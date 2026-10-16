@@ -92,20 +92,6 @@ export function MiniInlineBar({
   )
 }
 
-/** Elapsed wall time between two ISO timestamps (e.g. fix dispatch → complete). */
-export function formatDurationBetween(start: string | Date, end: string | Date): string {
-  const a = typeof start === 'string' ? new Date(start) : start
-  const b = typeof end === 'string' ? new Date(end) : end
-  const ms = Math.max(0, b.getTime() - a.getTime())
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return `${sec}s`
-  const min = Math.round(sec / 60)
-  if (min < 60) return `${min}m`
-  const hr = Math.round(min / 60)
-  if (hr < 48) return `${hr}h`
-  const days = Math.round(hr / 24)
-  return `${days}d`
-}
 
 export type PipelineStageState = 'pending' | 'active' | 'done' | 'failed'
 
@@ -178,7 +164,7 @@ interface RecommendedActionCta {
 /** Compact key/value chip rendered under the recommendation title. Used by
  *  the "A fix is in progress" path to surface when/elapsed/model/files
  *  without forcing the user to scroll to FixProgressStream below. */
-export interface RecommendedActionMeta {
+interface RecommendedActionMeta {
   label: string
   value: string
   tone?: 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
@@ -187,7 +173,7 @@ export interface RecommendedActionMeta {
 /** Inline recovery action — used by skipped/failed fix paths to deep-link
  *  the user to /integrations or /settings with a single click. Distinct
  *  from the primary `cta` so we can render multiple (Enable + Retry). */
-export interface RecommendedActionInlineAction {
+interface RecommendedActionInlineAction {
   label: string
   to?: string
   href?: string
@@ -503,9 +489,9 @@ export function Sparkline({
 
 export type MetricTooltipCalloutTone = 'info' | 'warn' | 'ok'
 
-export type MetricTooltipSectionKind = 'shows' | 'counted' | 'takeaway'
+type MetricTooltipSectionKind = 'shows' | 'counted' | 'takeaway'
 
-export interface MetricTooltipSection {
+interface MetricTooltipSection {
   label: string
   body: string
   /** Visual grouping — defaults from label when omitted. */

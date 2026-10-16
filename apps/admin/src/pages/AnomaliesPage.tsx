@@ -9,7 +9,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -130,7 +129,6 @@ export function AnomaliesPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<AnomaliesStats>('/v1/admin/anomalies/stats')
-  usePublishPageHeroStats('/anomalies', statsData)
   const stats = { ...EMPTY_ANOMALIES_STATS, ...statsData }
 
   const {

@@ -3,8 +3,6 @@
  * PURPOSE: Dashboard shell stats — banner + KPI strip (separate from full payload).
  */
 
-export type DashboardTabId = 'overview' | 'loop' | 'metrics' | 'health'
-
 export interface DashboardStats {
   hasAnyProject: boolean
   projectId: string | null
@@ -44,31 +42,3 @@ export interface DashboardStats {
     report_title: string | null
   }>
 }
-
-export const EMPTY_DASHBOARD_STATS: DashboardStats = {
-  hasAnyProject: false,
-  projectId: null,
-  projectName: null,
-  projectCount: 0,
-  hasData: false,
-  setupDone: false,
-  requiredComplete: 0,
-  requiredTotal: 4,
-  openBacklog: 0,
-  reports14d: 0,
-  fixesInProgress: 0,
-  fixesFailed: 0,
-  openPrs: 0,
-  llmFailures14d: 0,
-  llmCalls14d: 0,
-  focusStage: null,
-  focusLabel: null,
-  bottleneck: null,
-  integrationIssues: 0,
-  lastActivityAt: null,
-  lastActivityKind: null,
-  topPriority: 'no_project',
-  topPriorityLabel: null,
-  topPriorityTo: '/onboarding',
-}
-

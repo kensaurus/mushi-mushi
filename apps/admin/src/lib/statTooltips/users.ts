@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Users operator metrics strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import { metricTip } from '../metricTooltipBuilder'
 

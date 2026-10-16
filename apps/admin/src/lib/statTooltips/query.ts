@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Query snapshot strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { QueryStats } from '../../components/query/types'
 import { metricTip } from '../metricTooltipBuilder'

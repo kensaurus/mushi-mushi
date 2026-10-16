@@ -16,8 +16,8 @@ import { apiFetch, apiFetchMutate } from './supabase'
 import { getActiveProjectIdSnapshot } from './activeProject'
 
 /** Must match SHARE_CACHE_NAME / SHARE_CACHE_KEY in src/sw.ts. */
-export const SHARE_CACHE_NAME = 'mushi-share'
-export const SHARE_CACHE_KEY = '/__mushi_shared_audio'
+const SHARE_CACHE_NAME = 'mushi-share'
+const SHARE_CACHE_KEY = '/__mushi_shared_audio'
 
 // ── platform ────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ export function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer
 const SW_READY_TIMEOUT_MS = 8_000
 
 /** Resolves the active registration, or null when the SW never activates. */
-export async function serviceWorkerReady(timeoutMs = SW_READY_TIMEOUT_MS): Promise<ServiceWorkerRegistration | null> {
+async function serviceWorkerReady(timeoutMs = SW_READY_TIMEOUT_MS): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs))
   return Promise.race([navigator.serviceWorker.ready, timeout])

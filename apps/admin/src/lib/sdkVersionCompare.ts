@@ -7,7 +7,7 @@
 
 import type { SdkStatus } from '../components/SdkVersionBadge'
 
-export type SdkDisplayKind =
+type SdkDisplayKind =
   | 'up-to-date'
   | 'upgrade-available'
   | 'catalog-ahead'

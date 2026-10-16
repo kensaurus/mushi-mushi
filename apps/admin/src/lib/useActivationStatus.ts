@@ -11,7 +11,7 @@ import { ActivationResponseSchema } from './apiSchemas'
 import type { OnboardingStats } from '../components/onboarding/types'
 import type { SetupResponse } from './useSetupStatus'
 
-export type ActivationPhase = 'ingest' | 'dispatch' | 'loop'
+type ActivationPhase = 'ingest' | 'dispatch' | 'loop'
 
 interface ActivationTopPriority {
   label: string

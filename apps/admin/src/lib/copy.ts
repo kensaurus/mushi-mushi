@@ -18,7 +18,7 @@
  */
 
 import { useAdminMode, type AdminMode } from './mode'
-import { PAGE_FLOW_LINKS, type PageFlowLink } from './pageLinks'
+import { type PageFlowLink } from './pageLinks'
 
 interface PageCopy {
   /** Page-header title (overrides the in-page title in beginner mode). */
@@ -46,45 +46,13 @@ interface PageCopy {
   relatedLinks?: PageFlowLink[]
 }
 
-/** Props for `<PageHelp>` with copy + flow fallbacks merged. */
-export interface PageHelpFromCopyProps {
-  title: string
-  whatIsIt: string
-  useCases?: string[]
-  howToUse?: string
-  defaultOpen?: boolean
-  relatedLinks?: PageFlowLink[]
-}
-
-/**
- * Merge `usePageCopy()` with page-local fallbacks and default flow links.
- * Keeps beginner help in advanced mode while letting each page keep one
- * inline fallback block for titles the registry doesn't override.
- */
-export function buildPageHelpProps(
-  path: string,
-  copy: PageCopy | null,
-  fallback: PageHelpFromCopyProps,
-) {
-  const flow = copy?.relatedLinks ?? fallback.relatedLinks ?? PAGE_FLOW_LINKS[path] ?? []
-  return {
-    title: copy?.help?.title ?? fallback.title,
-    whatIsIt: copy?.help?.whatIsIt ?? fallback.whatIsIt,
-    useCases: copy?.help?.useCases ?? fallback.useCases,
-    howToUse: copy?.help?.howToUse ?? fallback.howToUse,
-    defaultOpen: fallback.defaultOpen,
-    relatedLinks: flow.length > 0 ? flow : undefined,
-    flowPath: path,
-  }
-}
-
 interface CopyRegistry {
   quickstart: Record<string, PageCopy>
   beginner: Record<string, PageCopy>
   advanced: Record<string, PageCopy>
 }
 
-export const COPY: CopyRegistry = {
+const COPY: CopyRegistry = {
   // Quickstart mode: only 3 routes are surfaced in the sidebar (Inbox /
   // Drafts / Setup), so we override copy on just those plus the dashboard
   // landing. Everything else falls through to beginner copy via
