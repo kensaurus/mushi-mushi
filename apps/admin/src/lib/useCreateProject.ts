@@ -42,7 +42,7 @@ export interface CreatedProject {
  * the backend independently; only the ones the UI branches on are
  * enumerated for documentation / IDE-completion.
  */
-export type CreateProjectErrorCode =
+type CreateProjectErrorCode =
   | 'NO_ORGANIZATION'
   | 'FORBIDDEN'
   | 'INVALID_ORGANIZATION_ID'

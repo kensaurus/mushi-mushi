@@ -15,7 +15,7 @@ export type ExploreTabId =
   | 'domains'
   | 'knowledge'
 
-export type ExploreLayerKey = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
+type ExploreLayerKey = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
 
 export type ExploreTopPriority =
   | 'no_project'

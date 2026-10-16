@@ -27,14 +27,6 @@ export const REPORTS_STICKY_LEAD = {
 
 export const REPORTS_TABLE_MIN_W = 'min-w-[53.5rem]'
 
-/** Reusable cell classes — numeric columns right-align header + body. */
-export const REPORTS_NUMERIC_CELL = TABLE_CELL.numeric
-export const REPORTS_META_CELL = TABLE_CELL.meta
-
-/** Next step — CTA pinned top, age bar pinned bottom of row. */
-export const REPORTS_ACTION_CELL =
-  `${TABLE_CELL.actionStretch} text-right whitespace-nowrap`
-
 /** Max width of the action stack (recency bar + CTA row + in-flow kebab). */
 export const REPORTS_ACTION_STACK_MAX = 'max-w-[9.75rem]' as const
 

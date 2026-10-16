@@ -5,7 +5,7 @@
 
 export type LessonsTabId = 'overview' | 'lessons' | 'clusters' | 'query'
 
-export type LessonsTopPriority =
+type LessonsTopPriority =
   | 'no_project'
   | 'candidates_ready'
   | 'critical_lessons'

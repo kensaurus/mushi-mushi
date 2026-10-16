@@ -19,7 +19,7 @@ import {
   GUIDE_PANEL_SUMMARY_HOVER,
 } from '../lib/guideSurfaces'
 
-export type GuideCategory = 'guide' | 'roles' | 'billing' | 'security' | 'workflow'
+type GuideCategory = 'guide' | 'roles' | 'billing' | 'security' | 'workflow'
 
 const CATEGORY_ICON: Record<GuideCategory, typeof IconInfo> = {
   guide: IconInfo,
@@ -83,4 +83,3 @@ export function FeatureExplainPanel({
     </details>
   )
 }
-

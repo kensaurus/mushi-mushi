@@ -29,7 +29,7 @@ export interface SandboxFsPolicy {
   blocked: string[]
 }
 
-export interface SandboxCredentials {
+interface SandboxCredentials {
   /** Short-lived git token, scoped to push to mushi/fix-* refs only. */
   gitToken?: string
   /** Map of env vars to inject. The adapter MUST scrub these from logs. */

@@ -7,20 +7,14 @@
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
 import {
-  githubRepoDomainHint,
-  originToDomain,
   projectInitials,
   projectInitialsThemeIndex,
-  resolveProjectDomain,
   type ProjectFaviconSource,
 } from '@mushi-mushi/core'
 
 export type { ProjectFaviconSource }
 export {
-  githubRepoDomainHint,
-  originToDomain,
   projectInitials,
-  resolveProjectDomain,
 }
 
 const INITIALS_CHIP_THEMES = [
@@ -58,13 +52,13 @@ export function sdkOriginFromSetupProject(project: SetupProject): string | null 
   return sdkDiagnosticFromSetupProject(project)?.last_sdk_origin ?? null
 }
 
-export function sdkDiagnosticFromSetupProject(project: SetupProject): SetupStepDiagnostic | null {
+function sdkDiagnosticFromSetupProject(project: SetupProject): SetupStepDiagnostic | null {
   const sdkStep = project.steps.find((s) => s.id === 'sdk_installed')
   return sdkStep?.diagnostic ?? null
 }
 
 /** Compact relative time for dense chrome (switcher rows, chips). */
-export function formatHeartbeatAgo(iso: string | null | undefined): string | null {
+function formatHeartbeatAgo(iso: string | null | undefined): string | null {
   if (!iso) return null
   const ts = Date.parse(iso)
   if (!Number.isFinite(ts)) return null

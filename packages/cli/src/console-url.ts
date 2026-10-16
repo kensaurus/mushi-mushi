@@ -34,7 +34,7 @@ export function resolveConsoleUrlFromEnv(): string | undefined {
 }
 
 /** Walk up from cwd looking for the mushi-mushi monorepo root package. */
-export function isInsideMushiMonorepo(cwd: string): boolean {
+function isInsideMushiMonorepo(cwd: string): boolean {
   let dir = cwd
   for (let depth = 0; depth < 14; depth += 1) {
     const pkgPath = join(dir, 'package.json')
@@ -53,7 +53,7 @@ export function isInsideMushiMonorepo(cwd: string): boolean {
   return false
 }
 
-export async function probeLocalAdminConsole(): Promise<string | null> {
+async function probeLocalAdminConsole(): Promise<string | null> {
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), LOCAL_PROBE_MS)
@@ -123,10 +123,6 @@ export function apiKeyHint(base: string): string {
 
 export function cliSetupDeepLink(base: string): string {
   return consoleUrl(base, '/onboarding?tab=steps&setup=cli')
-}
-
-export function signInUrl(base: string): string {
-  return consoleUrl(base, '/login')
 }
 
 export function reportsUrl(base: string, reportId?: string): string {

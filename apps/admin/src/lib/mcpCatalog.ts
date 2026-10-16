@@ -6,10 +6,6 @@ export {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
   PROMPT_CATALOG,
-  ALL_SCOPES,
   type ToolSpec,
   type McpScope,
-  type ToolHints,
-  type ResourceSpec,
-  type PromptSpec,
 } from '@mushi-mushi/mcp/catalog'

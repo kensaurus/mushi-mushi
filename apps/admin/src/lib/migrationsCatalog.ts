@@ -23,6 +23,7 @@ export interface AdminMigrationGuideMeta {
   summary: string
 }
 
+/** @public Parsed as text by scripts/check-migration-catalog-sync.mjs. */
 export const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
   {
     slug: 'capacitor-to-react-native',
@@ -124,5 +125,3 @@ export function docsUrlForGuide(slug: string, projectId?: string | null): string
   // is purely informational — clean URL for shareability.
   return `${base}#project=${encodeURIComponent(projectId)}`
 }
-
-export const MIGRATIONS_CATALOG_SLUGS: readonly string[] = MIGRATIONS_CATALOG.map((g) => g.slug)

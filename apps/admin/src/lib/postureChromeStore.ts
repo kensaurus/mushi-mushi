@@ -23,7 +23,7 @@ function getSnapshot(): boolean {
   return hasStatusBanner
 }
 
-export function publishPostureHasStatusBanner(value: boolean): void {
+function publishPostureHasStatusBanner(value: boolean): void {
   if (hasStatusBanner === value) return
   hasStatusBanner = value
   emit()

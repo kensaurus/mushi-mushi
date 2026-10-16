@@ -5,7 +5,7 @@
 
 export type AnnotationTool = 'highlight' | 'blur' | 'arrow'
 
-export interface AnnotationStroke {
+interface AnnotationStroke {
   tool: AnnotationTool
   points: Array<{ x: number; y: number }>
   color?: string

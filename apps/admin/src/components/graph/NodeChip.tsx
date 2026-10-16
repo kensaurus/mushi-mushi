@@ -23,7 +23,7 @@ function nodeShape(node_type: string): string {
   return 'rounded-full'
 }
 
-export function NodeChip({ node, selected }: Props) {
+function NodeChip({ node, selected }: Props) {
   const occ = nodeMetadataValue(node, 'occurrence_count')
   const color = NODE_COLORS[node.node_type] ?? graphMutedColor()
   const ring = selected ? 'ring-2 ring-fg shadow-raised' : 'ring-1 ring-edge'

@@ -391,7 +391,7 @@ function warnOnce(msg: string): void {
  *
  * Exported for tests; not part of the package's public API.
  */
-export function composeSignals(signals: Array<AbortSignal | undefined>): AbortSignal {
+function composeSignals(signals: Array<AbortSignal | undefined>): AbortSignal {
   const live = signals.filter((s): s is AbortSignal => s !== undefined)
   if (live.length === 0) {
     // Should be unreachable — captureReport always passes its timeout

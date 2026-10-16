@@ -5,7 +5,7 @@
 
 export type ExperimentsTabId = 'overview' | 'experiments' | 'new'
 
-export type ExperimentsTopPriority =
+type ExperimentsTopPriority =
   | 'no_project'
   | 'no_experiments'
   | 'running'

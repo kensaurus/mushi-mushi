@@ -5,7 +5,7 @@
 
 export type IterateTabId = 'runs' | 'new'
 
-export type IterateTopPriority =
+type IterateTopPriority =
   | 'no_project'
   | 'active_runs'
   | 'queued_waiting'

@@ -5,7 +5,7 @@
 
 export type AntiGamingTabId = 'overview' | 'devices' | 'events'
 
-export type AntiGamingTopPriority =
+type AntiGamingTopPriority =
   | 'no_project'
   | 'cross_account'
   | 'flagged'

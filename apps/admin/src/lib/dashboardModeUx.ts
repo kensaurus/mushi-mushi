@@ -4,7 +4,6 @@
  */
 
 import { useAdminMode } from './mode'
-import type { DashboardStats, DashboardTabId } from '../components/dashboard/DashboardStatsTypes'
 
 export interface DashboardUxFlags {
   isQuickstart: boolean
@@ -35,10 +34,4 @@ export function useDashboardUx(): DashboardUxFlags {
     hideOverviewChrome: isQuickstart,
     hideLoopSnapshot: isQuickstart,
   }
-}
-
-/** Quick mode: land on the tab that matches the current bottleneck. */
-export function resolveQuickDashboardTab(stats: DashboardStats): DashboardTabId {
-  if (stats.topPriority === 'integrations') return 'health'
-  return 'overview'
 }

@@ -11,14 +11,14 @@ import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 const STAMP_EASE = [0.22, 1, 0.36, 1] as const
 
-export const landingRevealContainer: Variants = {
+const landingRevealContainer: Variants = {
   hidden: {},
   visible: {
     transition: { staggerChildren: 0.07 },
   },
 }
 
-export const landingRevealItem: Variants = {
+const landingRevealItem: Variants = {
   hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,

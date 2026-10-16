@@ -67,7 +67,7 @@ export const TEAM_HUB: PageHub = {
   ],
 }
 
-export const PAGE_HUBS: readonly PageHub[] = [HOME_HUB, HEALTH_HUB, TEAM_HUB]
+const PAGE_HUBS: readonly PageHub[] = [HOME_HUB, HEALTH_HUB, TEAM_HUB]
 
 export interface HubViewer {
   isOperator: boolean

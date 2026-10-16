@@ -36,8 +36,8 @@ import { readPackageJson } from './detect.js'
 
 const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 
-export type MigrateCategory = 'mobile' | 'web' | 'competitor' | 'sdk-upgrade'
-export type MigrateStatus = 'published' | 'draft'
+type MigrateCategory = 'mobile' | 'web' | 'competitor' | 'sdk-upgrade'
+type MigrateStatus = 'published' | 'draft'
 
 export interface MigrateGuide {
   /** URL slug — `/migrations/<slug>` under the docs site. */
@@ -75,6 +75,7 @@ const COMPETITOR_PACKAGES: Record<string, string[]> = {
 
 /** Internal catalog. Order matters: in-transition shapes come first so we
  *  surface them above one-shot legacy detections. */
+/** @public Parsed as text by scripts/check-migration-catalog-sync.mjs. */
 export const MIGRATE_CATALOG: readonly MigrateGuide[] = [
   // ── In-transition / cross-stack shapes (highest priority) ─────────
   {

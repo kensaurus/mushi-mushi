@@ -254,7 +254,7 @@ export async function checkCliAuthPath(
 
 // ── Check 3: SDK install detection ───────────────────────────────────────────
 
-export async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
+async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
   try {
     const { readFile } = await import('node:fs/promises');
     const { join, resolve } = await import('node:path');
@@ -375,7 +375,7 @@ export async function checkServerPreflight(
 
 // ── Check 5: Ingest setup (API key auth) ─────────────────────────────────────
 
-export async function checkIngestSetup(
+async function checkIngestSetup(
   config: DoctorCliConfig,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck[]> {
@@ -434,7 +434,7 @@ export async function checkIngestSetup(
 
 // ── Check 6: QA story health ─────────────────────────────────────────────────
 
-export async function checkQaStoriesHealth(
+async function checkQaStoriesHealth(
   config: DoctorCliConfig,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck[]> {
@@ -550,7 +550,7 @@ export async function checkQaStoriesHealth(
 
 // ── Check: Host app wiring (Vite/React/Capacitor) ───────────────────────────
 
-export async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
+async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   try {
     const { readFile, access } = await import('node:fs/promises');
@@ -1150,7 +1150,7 @@ export async function checkOnboardingStatus(
  * against `@mushi-mushi/*` SDK versions in the target repo. Never blocks
  * `ready`; a registry timeout silently skips (no network ≠ broken setup).
  */
-export async function checkVersionDrift(
+async function checkVersionDrift(
   cwd: string,
   doFetch: typeof fetch,
 ): Promise<DoctorCheck[]> {

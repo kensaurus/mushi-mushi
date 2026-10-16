@@ -5,7 +5,7 @@
 
 export type QueueTabId = 'overview' | 'backlog' | 'throughput' | 'items'
 
-export type QueueTopPriority =
+type QueueTopPriority =
   | 'no_project'
   | 'dead_letter'
   | 'failed'

@@ -3,7 +3,7 @@
  * and may lag). Layout merges page snapshots over nav-count patches.
  */
 
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { PageHeroDecide, PageHeroVerify } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import type { HeroActIdle } from './layoutHeroFromStats'
@@ -25,15 +25,6 @@ function emit() {
   listeners.forEach((l) => l())
 }
 
-function subscribe(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-function getSnapshot(): PageHeroSnapshot | null {
-  return current
-}
-
 export function usePublishHeroSnapshot(snapshot: PageHeroSnapshot | null): void {
   const stableKey = useMemo(
     () => (snapshot ? JSON.stringify({ ...snapshot, act: snapshot.act ? { ...snapshot.act, primary: snapshot.act.primary, secondary: snapshot.act.secondary } : null }) : ''),
@@ -50,10 +41,6 @@ export function usePublishHeroSnapshot(snapshot: PageHeroSnapshot | null): void 
       }
     }
   }, [stableKey, snapshot])
-}
-
-export function usePageHeroSnapshot(): PageHeroSnapshot | null {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 /** Split "3 members · 2 inactive" into display chips. */

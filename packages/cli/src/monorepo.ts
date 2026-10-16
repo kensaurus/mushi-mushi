@@ -18,7 +18,7 @@ export interface WorkspaceHint {
   source: 'pnpm-workspace' | 'package-json' | 'parent'
 }
 
-export interface WorkspacePackage {
+interface WorkspacePackage {
   name: string
   relativePath: string
   framework?: string

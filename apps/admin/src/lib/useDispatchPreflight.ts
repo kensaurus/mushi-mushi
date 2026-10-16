@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from './supabase'
 import { supabase } from './supabase'
 
-export type PreflightKey = 'github' | 'codebase' | 'anthropic' | 'autofix'
+type PreflightKey = 'github' | 'codebase' | 'anthropic' | 'autofix'
 
 export interface PreflightCheck {
   key: PreflightKey

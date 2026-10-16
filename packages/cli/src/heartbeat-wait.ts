@@ -5,7 +5,7 @@
 
 import { apiKeyHeaders, sanitizeApiKey, sanitizeEndpoint, sanitizeProjectId } from './sanitize-config.js'
 
-export interface IngestSetupStep {
+interface IngestSetupStep {
   id: string
   label: string
   complete: boolean
@@ -48,7 +48,7 @@ export interface HeartbeatWaitResult {
 }
 
 /** Non-retryable HTTP failure (bad key / wrong endpoint) — polling won't fix it. */
-export class IngestSetupHttpError extends Error {
+class IngestSetupHttpError extends Error {
   readonly status: number
   constructor(status: number) {
     super(`ingest-setup HTTP ${status}`)

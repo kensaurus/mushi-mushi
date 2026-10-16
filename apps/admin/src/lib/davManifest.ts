@@ -74,7 +74,7 @@ export interface DavScopeManifest {
 
 // ─── The registry ──────────────────────────────────────────────────────────
 
-export const DAV_MANIFEST: Record<string, DavScopeManifest> = {
+const DAV_MANIFEST: Record<string, DavScopeManifest> = {
   health: {
     decide: {
       configIds: ['settings.byok.anthropic_key', 'settings.general.stage2_model'],

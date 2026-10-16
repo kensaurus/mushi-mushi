@@ -24,8 +24,3 @@ export const GUIDE_EXPAND_HINT = 'Details'
 
 /** Act node when no action is queued. */
 export const HERO_ACT_IDLE = 'Nothing needs your attention on this page right now.'
-
-/** Handoff flash after completing an action. */
-export function heroHandoffDone(label: string): string {
-  return `Done — ${label}`
-}

@@ -137,17 +137,6 @@ export function buildOperatorTrace(input: BuildOperatorTraceInput): OperatorTrac
   return lines
 }
 
-/** One-line preview for collapsed tiles (highest-signal non-debug line). */
-export function tracePreviewLine(lines: OperatorTraceLine[]): string | null {
-  const pick =
-    [...lines].reverse().find((l) => l.level === 'error')
-    ?? [...lines].reverse().find((l) => l.level === 'warn')
-    ?? lines.find((l) => l.level === 'info' && l.source !== 'dav')
-    ?? lines.find((l) => l.source !== 'dav')
-  if (!pick) return null
-  return `${pick.source}: ${pick.message}`
-}
-
 export function traceToClipboardText(lines: OperatorTraceLine[]): string {
   return lines
     .map((l) => {

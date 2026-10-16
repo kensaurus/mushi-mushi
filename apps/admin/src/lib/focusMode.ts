@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 const KEY = 'mushi:focusMode:v1'
 
 /** One-shot auth/consent pages — always render with focus chrome. */
-export const CONSENT_FOCUS_PATHS = ['/cli-auth', '/mcp-auth'] as const
+const CONSENT_FOCUS_PATHS = ['/cli-auth', '/mcp-auth'] as const
 
 export function isConsentFocusPath(pathname: string): boolean {
   return CONSENT_FOCUS_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

@@ -470,7 +470,7 @@ export interface MushiBetaChangelogEntry {
   items: string[];
 }
 
-export interface MushiWidgetInset {
+interface MushiWidgetInset {
   top?: number | 'auto';
   right?: number | 'auto';
   bottom?: number | 'auto';
@@ -496,7 +496,7 @@ export type MushiPreset =
   | 'standard'
   | 'full';
 
-export interface MushiWidgetSmartHideConfig {
+interface MushiWidgetSmartHideConfig {
   onMobile?: 'edge-tab' | 'hide' | false;
   onScroll?: 'shrink' | 'hide' | false;
   onIdleMs?: number;
@@ -697,7 +697,7 @@ export interface MushiProactiveConfig {
   firstSession?: boolean | MushiFirstSessionConfig;
 }
 
-export interface MushiPageDwellConfig {
+interface MushiPageDwellConfig {
   /** Continuous dwell time before firing. Defaults to 5 minutes. */
   thresholdMs?: number;
   /**
@@ -710,7 +710,7 @@ export interface MushiPageDwellConfig {
   excludeRoutes?: string[];
 }
 
-export interface MushiFirstSessionConfig {
+interface MushiFirstSessionConfig {
   /** Delay before firing the welcome nudge. Defaults to 45 seconds. */
   delayMs?: number;
   /** Override the localStorage key used to mark the user as welcomed. */

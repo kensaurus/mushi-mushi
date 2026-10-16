@@ -84,7 +84,7 @@ export interface PlanCatalog {
   feature_flags: Record<string, unknown>
 }
 
-export interface ProjectTier {
+interface ProjectTier {
   id: string
   display_name: string
   monthly_price_usd: number
@@ -182,4 +182,3 @@ export interface SupportTicket {
   resolved_at: string | null
   cancelled_at?: string | null
 }
-

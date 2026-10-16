@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
  * the `/30+` saturation a learning app would use — and we *only*
  * colour the value + the icon chip. The tile body stays neutral.
  */
-export type MetricTone = 'brand' | 'info' | 'ok' | 'warn' | 'neutral'
+type MetricTone = 'brand' | 'info' | 'ok' | 'warn' | 'neutral'
 
 export interface DiscoveryMetric {
   id: string
