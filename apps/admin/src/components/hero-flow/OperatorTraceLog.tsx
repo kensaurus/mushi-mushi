@@ -14,21 +14,21 @@ const LEVEL_CLASS: Record<OperatorTraceLevel, string> = {
   debug: 'text-fg-faint',
   info: 'text-info',
   warn: 'text-warn',
-  error: 'text-err',
+  error: 'text-danger',
 }
 
 const LEVEL_BADGE: Record<OperatorTraceLevel, string> = {
   debug: 'bg-surface-overlay text-fg-faint',
   info: CHIP_TONE.infoSubtle,
   warn: CHIP_TONE.warnSubtle,
-  error: 'bg-err/15 text-err',
+  error: 'bg-danger-muted/50 text-danger-foreground',
 }
 
 const LEVEL_ROW_BG: Record<OperatorTraceLevel, string> = {
   debug: '',
   info: '',
   warn: 'bg-warn/5',
-  error: 'bg-err/8',
+  error: 'bg-danger/8',
 }
 
 type TraceFilter = 'all' | 'signal' | 'error'
@@ -55,7 +55,7 @@ export function OperatorTraceBadge({ lines }: { lines: OperatorTraceLine[] }) {
       : `${summary.warnCount} warn`
   const tone =
     summary.errorCount > 0
-      ? 'bg-err/20 text-err border-err/30'
+      ? CHIP_TONE.danger
       : CHIP_TONE.warnSubtle
   return (
     <span
@@ -140,7 +140,7 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
             Operator trace
           </span>
           {summary.errorCount > 0 && (
-            <span className="rounded bg-err/15 px-1 py-px text-3xs font-bold text-err">
+            <span className="rounded bg-danger-muted/50 px-1 py-px text-3xs font-bold text-danger-foreground">
               {summary.errorCount} error{summary.errorCount === 1 ? '' : 's'}
             </span>
           )}

@@ -204,7 +204,7 @@ function LocTrendChart({ series }: { series: BundleSeries }) {
       <div className="flex flex-wrap items-baseline gap-2">
         <p className="text-2xs uppercase tracking-wider text-fg-muted">{series.label}</p>
         <span
-          className={`text-lg font-semibold tabular-nums ${overBudget ? 'text-danger' : 'text-fg-primary'}`}
+          className={`text-lg font-semibold tabular-nums ${overBudget ? 'text-danger' : 'text-fg'}`}
         >
           {Math.round(latestVal).toLocaleString()} LOC
         </span>
@@ -326,7 +326,7 @@ function GodFileList({ findings }: { findings: GodFileFinding[] }) {
           <div className="flex flex-wrap items-start gap-2">
             <SeverityBadge severity={f.severity} />
             <div className="min-w-0 flex-1">
-              <p className="break-all font-mono text-xs text-fg-primary">
+              <p className="break-all font-mono text-xs text-fg">
                 {f.file_path ?? f.rule_id}
               </p>
               <p className="mt-0.5 text-xs text-fg-secondary">{f.message}</p>

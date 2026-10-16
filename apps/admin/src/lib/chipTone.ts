@@ -128,8 +128,8 @@ export const SEVERITY_SURFACE: Record<
   ok: { ring: 'border-ok/40', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
   info: { ring: 'border-info/40', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
   warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warning-foreground', dot: 'bg-warn' },
-  crit: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
-  danger: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
+  crit: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
+  danger: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
   neutral: {
     ring: 'border-edge',
     bg: 'bg-surface-raised',
