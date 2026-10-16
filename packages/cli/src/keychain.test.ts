@@ -8,6 +8,7 @@
  * every user; and `mushi keys rotate` / `mushi config apiKey` wrote the new
  * key only to the file, which would lose to the old key in the keychain.
  */
+import type * as NodeModule from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // An in-memory stand-in for the OS keychain, served through createRequire.
@@ -17,7 +18,7 @@ const store = vi.hoisted(() => ({
 }))
 
 vi.mock('node:module', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:module')>()
+  const actual = await importOriginal<typeof NodeModule>()
   class FakeEntry {
     constructor(
       private service: string,
