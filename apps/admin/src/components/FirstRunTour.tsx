@@ -278,7 +278,7 @@ export function FirstRunTour() {
   const isLast = stopIdx + 1 >= visibleStops.length
 
   return (
-    <div className="fixed inset-0 z-[100] pointer-events-none" aria-live="polite">
+    <div className="fixed inset-0 z-(--z-top) pointer-events-none" aria-live="polite">
       <SpotlightOverlay rect={rect} padding={PADDING} onSkip={finish} />
       <div
         role="dialog"

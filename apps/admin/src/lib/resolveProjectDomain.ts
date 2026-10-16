@@ -20,7 +20,7 @@ export {
 const INITIALS_CHIP_THEMES = [
   'bg-info-muted/50 text-info-foreground border border-info/25 border-info/35',
   'bg-brand/12 text-brand border border-brand/28 border-brand/35',
-  'bg-warn-muted/50 text-warning-foreground border-warn/35',
+  'bg-warn-muted/50 text-warn-foreground border-warn/35',
   'bg-ok-muted/50 text-ok-foreground border border-ok/25 border-ok/35',
   'bg-accent-muted/55 text-accent-foreground border-accent/35',
 ] as const

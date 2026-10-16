@@ -20,7 +20,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
-  Badge,
+  FindingSeverityBadge,
   Section,
   EmptyState,
   Btn,
@@ -95,16 +95,6 @@ function TrendArrow({ delta, higherIsBad }: { delta: number; higherIsBad: boolea
       {delta > 0 ? '↑' : '↓'}
     </span>
   )
-}
-
-// ── Severity badge ────────────────────────────────────────────────────────────
-
-function SeverityBadge({ severity }: { severity: GodFileFinding['severity'] }) {
-  if (severity === 'error')
-    return <Badge tone="dangerSubtle">Error</Badge>
-  if (severity === 'warn')
-    return <Badge tone="warnSubtle">Warn</Badge>
-  return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
 }
 
 // ── Summary scorecard ─────────────────────────────────────────────────────────
@@ -323,7 +313,7 @@ function GodFileList({ findings }: { findings: GodFileFinding[] }) {
           className="rounded-md border border-edge-subtle bg-surface-overlay px-3 py-2.5"
         >
           <div className="flex flex-wrap items-start gap-2">
-            <SeverityBadge severity={f.severity} />
+            <FindingSeverityBadge severity={f.severity} />
             <div className="min-w-0 flex-1">
               <p className="break-all font-mono text-xs text-fg">
                 {f.file_path ?? f.rule_id}

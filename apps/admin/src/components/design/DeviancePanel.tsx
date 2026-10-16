@@ -8,7 +8,7 @@
 
 import { BarSparkline } from '../charts'
 import { formatChartDayLabel } from '../charts/chartAxis'
-import { Badge, Btn, Callout, DataTableCell, DataTableHead, Section, formatRelative } from '../ui'
+import { Btn, Callout, DataTableCell, DataTableHead, FindingSeverityBadge, Section, formatRelative } from '../ui'
 import type {
   DesignPlaneResponse,
   DevianceBreakdownEntry,
@@ -18,12 +18,6 @@ import type {
 } from '../../lib/recipeTypes'
 import { DevianceScoreCard } from './DevianceScoreCard'
 import { ruleLabel } from './designTokens'
-
-function SeverityBadge({ severity }: { severity: unknown }) {
-  if (severity === 'error') return <Badge tone="dangerSubtle">Error</Badge>
-  if (severity === 'warn') return <Badge tone="warnSubtle">Warn</Badge>
-  return <Badge tone="neutral">Info</Badge>
-}
 
 function Breakdown({ rows }: { rows: DevianceBreakdownEntry[] }) {
   if (rows.length === 0) return <p className="text-xs text-fg-muted">No rule breakdown for this run.</p>
@@ -49,7 +43,7 @@ function Breakdown({ rows }: { rows: DevianceBreakdownEntry[] }) {
               </DataTableCell>
               <DataTableCell>{b.enabled ? 'Yes' : 'No'}</DataTableCell>
               <DataTableCell>
-                <SeverityBadge severity={b.severity} />
+                <FindingSeverityBadge severity={b.severity} />
               </DataTableCell>
               <DataTableCell align="right">
                 <span className="tabular-nums">{b.count.toLocaleString()}</span>
@@ -126,7 +120,7 @@ function Findings({ findings }: { findings: DevianceFinding[] }) {
       {findings.map((f, i) => (
         <li key={f.id ?? `${f.rule_id}:${f.file_path}:${f.line}:${i}`} className="flex flex-col gap-1 border-b border-edge-subtle pb-2 last:border-b-0">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <SeverityBadge severity={f.severity} />
+            <FindingSeverityBadge severity={f.severity} />
             <span className="text-fg">{ruleLabel(f.rule_id)}</span>
             <span className="font-mono text-2xs text-fg-secondary wrap-break-word">
               {f.file_path ?? '(unknown file)'}

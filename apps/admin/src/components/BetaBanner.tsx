@@ -126,7 +126,7 @@ export function BetaBanner() {
         ref={bannerRef}
         role="region"
         aria-label="Beta announcement"
-        className={`shrink-0 z-[100] border-b ${betaBannerTone()}`}
+        className={`shrink-0 z-(--z-top) border-b ${betaBannerTone()}`}
       >
         {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4">

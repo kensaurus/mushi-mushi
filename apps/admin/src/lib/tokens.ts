@@ -9,7 +9,7 @@ export const SEVERITY: Record<string, string> = {
 
 export const STATUS: Record<string, string> = {
   new: CHIP_TONE.warnSubtle,
-  queued: 'bg-warn-muted/60 text-warning-foreground border border-warn/20',
+  queued: 'bg-warn-muted/60 text-warn-foreground border border-warn/20',
   classified: CHIP_TONE.okSubtle,
   fixing: CHIP_TONE.accentSubtle,
   fixed: CHIP_TONE.infoSubtle,
@@ -107,11 +107,11 @@ export function pctToneClass(
   if (value == null || Number.isNaN(value)) return 'text-fg-muted'
   if (direction === 'higher-better') {
     if (value >= 90) return 'text-ok-foreground'
-    if (value >= 70) return 'text-warning-foreground'
+    if (value >= 70) return 'text-warn-foreground'
     return 'text-danger-foreground'
   }
   if (value <= 1) return 'text-ok-foreground'
-  if (value <= 5) return 'text-warning-foreground'
+  if (value <= 5) return 'text-warn-foreground'
   return 'text-danger-foreground'
 }
 
@@ -239,7 +239,7 @@ export type SemanticBannerTone = 'ok' | 'warn' | 'danger'
 
 const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
   ok: 'border-ok/25 bg-ok-muted/40 text-ok-foreground',
-  warn: 'border-warn/30 bg-warn-muted/40 text-warning-foreground',
+  warn: 'border-warn/30 bg-warn-muted/40 text-warn-foreground',
   danger: 'border-danger/30 bg-danger-muted/40 text-danger-foreground',
 }
 

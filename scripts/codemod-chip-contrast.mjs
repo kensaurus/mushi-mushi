@@ -26,13 +26,13 @@ const REPLACEMENTS = [
   ['bg-ok-muted text-ok-foreground', 'CHIP_TONE.okSubtle'],
   ['bg-ok-muted text-ok', 'CHIP_TONE.okSubtle'],
 
-  ['bg-warn-muted/70 text-warning-foreground border border-warn/30', 'CHIP_TONE.warn'],
-  ['bg-warn-muted/50 text-warning-foreground border border-warn/30', 'CHIP_TONE.warnSubtle'],
-  ['bg-warn-muted/50 text-warning-foreground border border-warn/25', 'CHIP_TONE.warnSubtle'],
+  ['bg-warn-muted/70 text-warn-foreground border border-warn/30', 'CHIP_TONE.warn'],
+  ['bg-warn-muted/50 text-warn-foreground border border-warn/30', 'CHIP_TONE.warnSubtle'],
+  ['bg-warn-muted/50 text-warn-foreground border border-warn/25', 'CHIP_TONE.warnSubtle'],
   ['bg-warn-muted text-warn border border-warn/30', 'CHIP_TONE.warnSubtle'],
   ['bg-warn-muted/20 text-warn', 'CHIP_TONE.warnSubtle'],
-  ['bg-warn-muted/50 text-warning-foreground', 'CHIP_TONE.warnSubtle'],
-  ['bg-warn-muted text-warning-foreground', 'CHIP_TONE.warnSubtle'],
+  ['bg-warn-muted/50 text-warn-foreground', 'CHIP_TONE.warnSubtle'],
+  ['bg-warn-muted text-warn-foreground', 'CHIP_TONE.warnSubtle'],
   ['bg-warn-muted text-warn', 'CHIP_TONE.warnSubtle'],
 
   ['bg-danger-muted/70 text-danger-foreground border border-danger/30', 'CHIP_TONE.danger'],

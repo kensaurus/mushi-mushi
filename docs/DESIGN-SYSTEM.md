@@ -51,9 +51,9 @@ packages/brand/src/tokens.generated.ts    ← TS snapshot (+ BRAND_WIDGET_PALETT
 |-------|-----------|---------|-------|
 | Spacing | `--mushi-space-*` | `MUSHI_SPACING` | Tailwind spacing + density |
 | Radius | `--mushi-radius-*` | `MUSHI_RADIUS` | `--radius-*` |
-| Type size | `--mushi-text-*` | `MUSHI_TYPE` | `--text-2xs`…`--text-display` |
-| Elevation | `--mushi-elevation-*` | (widget shadows) | `--shadow-card/raised` |
-| Z-index | `--mushi-z-*` | `MUSHI_Z` | `--z-sticky`…`--z-toast` |
+| Type size | `--mushi-text-*` | `MUSHI_TYPE` | `--text-2xs`, `--text-3xs`, then Tailwind `text-xs`…`text-2xl` |
+| Elevation | `--mushi-elevation-*` (incl. `key`, `key-fill`, `key-ink` keycap edges) | (widget shadows) | `--shadow-card/raised`, `shadow-editorial-key*` |
+| Z-index | `--mushi-z-*` | `MUSHI_Z` | Tailwind `z-0`…`z-50` in the app shell; above it `--z-toast` 60, `--z-alert` 70, `--z-top` 100 |
 | Motion | `--mushi-ease-stamp`, `--mushi-duration-*` | `MUSHI_MOTION` / `MUSHI_DURATION` | `--ease-stamp`, `--duration-*` |
 
 ## Component catalogs

@@ -20,6 +20,15 @@
    emitted in this app's CSS. Path is relative to this file. */
 @source "../../../packages/marketing-ui/src/**/*.{ts,tsx}";
 
+/* Streamdown (Ask Mushi, Explore chat, palette assist) draws its table and
+   code-block borders with border-border / divide-border, which this app's
+   sources never use, so Tailwind never generated them and those borders fell
+   back to currentColor. Only these two are safelisted: Streamdown's README
+   setup (@source on its dist) would also switch on its shiki colours, line
+   numbers and red palette, which would fight the Monokai code-block styling
+   in styles/ask-mushi.css. */
+@source inline("border-border divide-border");
+
 @import "./styles/theme-tokens.css";
 @import "./styles/base-and-density.css";
 @import "./styles/ask-mushi.css";

@@ -265,7 +265,7 @@ export function DispatchFixPreflight({
           )}
 
           {(highBlast || lowConfidence || sevHigh) && (
-            <div className="mt-2 rounded-sm p-2 text-2xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
+            <div className="mt-2 rounded-sm p-2 text-2xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
               <div className="font-medium mb-0.5">Heads up:</div>
               <ul className="space-y-0.5">
                 {highBlast && (

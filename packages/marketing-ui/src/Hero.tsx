@@ -31,7 +31,7 @@ export function Hero() {
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-6 py-8 shadow-[0_24px_80px_-48px_rgba(14,13,11,0.45)] sm:px-10 sm:py-10 lg:px-14">
+    <section className="relative overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-6 py-8 shadow-(--mushi-elevation-overlay) sm:px-10 sm:py-10 lg:px-14">
       <div className="absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_18%_12%,var(--mushi-vermillion-wash),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(14,13,11,0.05),transparent_34%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.95fr] lg:items-center lg:gap-8">
         <div className="max-w-4xl">
@@ -157,7 +157,7 @@ function DataPill({ label, value, tone, suffix }: { label: string; value: string
         {label}
       </dt>
       <dd
-        className="mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[11px] font-semibold uppercase leading-tight tracking-[0.06em] shadow-[inset_0_-2px_0_rgba(0,0,0,0.18)]"
+        className="mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[11px] font-semibold uppercase leading-tight tracking-[0.06em] shadow-(--mushi-elevation-key)"
         style={{ background: colors.bg, color: colors.fg, border: `1px solid ${colors.border}` }}
       >
         <span

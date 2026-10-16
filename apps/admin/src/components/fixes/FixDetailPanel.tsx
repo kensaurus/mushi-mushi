@@ -221,7 +221,7 @@ export function FixDetailPanel({
                 className="rounded border border-warn/40 bg-warn-muted/20 px-2 py-1"
               >
                 <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-warning-foreground">{w.code}</span>
+                  <span className="font-mono text-warn-foreground">{w.code}</span>
                   <span>{w.message}</span>
                 </div>
                 {w.hint && <p className="text-fg-muted mt-0.5">Hint: {w.hint}</p>}
