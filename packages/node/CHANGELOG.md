@@ -1,5 +1,14 @@
 # @mushi-mushi/node
 
+## 1.3.2
+
+### Patch Changes
+
+- 5ad0452: Internal cleanup with no change to what these packages export or do. Helpers and types that nothing imported, including the package's own tests, are now private to their module or removed. None of them was reachable from a package entry point.
+- Updated dependencies [c37eff3]
+- Updated dependencies [5ad0452]
+  - @mushi-mushi/core@1.33.0
+
 ## 1.3.1
 
 ### Patch Changes
