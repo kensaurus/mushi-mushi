@@ -145,6 +145,42 @@ export function formatSentryExtra(extra: Record<string, unknown> | null | undefi
   return block.length > max ? `${block.slice(0, max)}…` : block;
 }
 
+/**
+ * Supabase platform-outage signatures only: the Envoy pooler reset and
+ * PostgREST reloading its schema cache (PGRST002). Deliberately narrower than
+ * isTransientDbConnectionError: a bare ECONNRESET, "socket hang up" or
+ * "connection reset by peer" in a user's own backend is often a real bug (a
+ * crashed upstream, a missing retry) and still gets filed.
+ */
+const PLATFORM_OUTAGE_RE =
+  /upstream connect error or disconnect\/reset before headers|delayed connect error: 111|remote connection failure|\bPGRST002\b|could not query the database for the schema cache/i;
+
+/**
+ * True when the issue is a Supabase platform outage (PLATFORM_OUTAGE_RE) in
+ * its title, culprit, exception or `extra`. That is infrastructure noise, not
+ * a bug in anyone's code; the 2026-10-14 pooler outage reached the queue this
+ * way through the auto-import poll. Message events from `log.error` keep the
+ * cause only in `extra`, so it is searched too. A statement timeout is not
+ * matched and still files a report.
+ */
+function isTransientInfraSentryError(
+  event: SentryEventPayload | null | undefined,
+  issue: SentryIssuePayload | null | undefined,
+): boolean {
+  const parts: string[] = [event?.title, issue?.title, event?.culprit, issue?.culprit].filter(
+    (v): v is string => typeof v === 'string',
+  );
+  for (const v of event?.exception?.values ?? []) parts.push(`${v.type ?? ''}: ${v.value ?? ''}`);
+  if (event?.extra && typeof event.extra === 'object') {
+    try {
+      parts.push(JSON.stringify(event.extra));
+    } catch {
+      /* unserialisable extra: judge on the rest */
+    }
+  }
+  return PLATFORM_OUTAGE_RE.test(parts.join('\n'));
+}
+
 /** Statuses that mean "this was considered done" — a fresh Sentry alert on
  *  one of these is a regression, not a duplicate. */
 const DONE_STATUSES = new Set(['fixed', 'resolved', 'verified', 'dismissed']);
@@ -203,6 +239,12 @@ export async function ingestSentryError(
   const sentryIssueId = String(event?.issue_id ?? issue?.id ?? '') || null;
   const title = event?.title ?? issue?.title ?? null;
   if (!title) return { outcome: 'ignored' };
+  // An operator importing an issue by hand asked for it, so only alerts and
+  // the auto-import poll are filtered.
+  if (intake !== 'import' && isTransientInfraSentryError(event, issue)) {
+    log.info('Sentry issue is a transient database outage — not filed', { sentryIssueId, intake });
+    return { outcome: 'ignored' };
+  }
 
   // ── Dedup / regression on the Sentry issue id ─────────────────────────────
   if (sentryIssueId) {

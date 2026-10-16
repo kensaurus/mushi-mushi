@@ -20,3 +20,23 @@ describe('humanizeFixError: no relevant code', () => {
     expect(h?.action?.target).toEqual({ kind: 'retry' })
   })
 })
+
+describe('humanizeFixError: review gate', () => {
+  // Real error from a 2026-10-16 dispatch on a Sentry web-vital report.
+  const COMMENTS_ONLY =
+    "review_failed: the proposed change only adds or removes comments, which is not a fix. The report is a Sentry 'Poor FCP' event of 8312ms on /chat with no reproduction steps."
+
+  it('says there was nothing to change, and offers no retry', () => {
+    const h = humanizeFixError(COMMENTS_ONLY)
+    expect(h?.title).toBe('Mushi found no code change to make from this report.')
+    expect(h?.hint).toContain('fix prompt')
+    expect(h?.action).toBeUndefined()
+    expect(h?.severity).toBe('hard')
+  })
+
+  it('keeps Retry for a patch the agent was unsure of', () => {
+    const h = humanizeFixError('review_failed: the patch touches unrelated files')
+    expect(h?.title).toBe('The fix agent was not confident in its own patch.')
+    expect(h?.action?.target).toEqual({ kind: 'retry' })
+  })
+})

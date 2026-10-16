@@ -1,5 +1,3 @@
-import { generateText } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
@@ -273,7 +271,9 @@ export async function executeNaturalLanguageQuery(
     if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro)
   }
   // The Sonnet planner goes through claude-messages.ts (Sonnet 5.5 rejects the
-  // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK.
+  // AI SDK v4 call shape); the Haiku summariser stays on the AI SDK, which
+  // loads here rather than at boot (ai-sdk.ts).
+  const { createAnthropic, generateText } = await import('./ai-sdk.ts')
   const anthropic = createAnthropic({ apiKey })
   const trace = createTrace('nl-query', {
     question: question.slice(0, 100),

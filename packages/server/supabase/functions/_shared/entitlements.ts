@@ -73,28 +73,31 @@ export async function resolvePlanForScope(
 ): Promise<PricingPlan> {
   const { organizationId, projectId } = scope
 
-  const { data: org } = organizationId
-    ? await db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
-    : { data: null }
-
   const subQuery = db
     .from('billing_subscriptions')
     .select('status, plan_id')
-  const { data: sub } = organizationId
-    ? await subQuery
-        .eq('organization_id', organizationId)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .order('current_period_end', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : projectId
-      ? await subQuery
-          .eq('project_id', projectId)
+  // Independent reads: run them together (each is one PostgREST round trip
+  // on every /v1/admin/entitlements and every gated route).
+  const [{ data: org }, { data: sub }] = await Promise.all([
+    organizationId
+      ? db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    organizationId
+      ? subQuery
+          .eq('organization_id', organizationId)
           .in('status', ['active', 'trialing', 'past_due'])
           .order('current_period_end', { ascending: false })
           .limit(1)
           .maybeSingle()
-      : { data: null }
+      : projectId
+        ? subQuery
+            .eq('project_id', projectId)
+            .in('status', ['active', 'trialing', 'past_due'])
+            .order('current_period_end', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+  ])
 
   return sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'hobby')
 }

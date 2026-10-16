@@ -122,7 +122,11 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  *      family (class 08) and 57P03 cannot_connect_now. Every other coded error
  *      (42703 undefined_column, P0001 raise_exception, 53300 too_many_connections,
  *      57014 statement_timeout, XX000, …) is a REAL error and always reported.
- *   2. No SQLSTATE (socket-level failures carry none) → match specific transient
+ *   2. PostgREST PGRST002 (it could not load its schema cache from the database
+ *      and is retrying) is transient. Other PGRST codes are not: PGRST202 and
+ *      PGRST204 also mention "the schema cache", but they mean a function or
+ *      column is missing, which is a real bug.
+ *   3. No SQLSTATE (socket-level failures carry none) → match specific transient
  *      transport signatures only.
  *
  * Pattern sources:
@@ -130,6 +134,9 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  *     cold-start or transient reset (Supabase Discussions #26769).
  *   - Cloudflare "Error code 522" origin-timeout page (HTML body leaks into
  *     PostgREST error.message).
+ *   - "Could not query the database for the schema cache. Retrying." — the
+ *     PGRST002 message, matched verbatim for callers that kept only the text
+ *     (MUSHI-MUSHI-SERVER-1M).
  */
 export function isTransientDbConnectionError(
   err:
@@ -154,6 +161,7 @@ export function isTransientDbConnectionError(
     // of what the message text happens to contain.
     return false
   }
+  if (rawCode.toUpperCase() === 'PGRST002') return true
 
   // No SQLSTATE — socket / gateway-level failures. Match NARROW, specific
   // signatures only (each denotes a reset/disconnect/origin-timeout, not a
@@ -170,8 +178,33 @@ export function isTransientDbConnectionError(
     // Cloudflare 522 origin-timeout page — anchored to the Cloudflare markers,
     // not a bare "522" (which would match arbitrary numeric substrings).
     msg.includes('error code 522') ||
-    msg.includes('522: connection timed out')
+    msg.includes('522: connection timed out') ||
+    msg.includes('could not query the database for the schema cache')
   )
+}
+
+type DbFailureLogger = {
+  warn(msg: string, meta?: Record<string, unknown>): void
+  error(msg: string, meta?: Record<string, unknown>): void
+}
+
+/**
+ * Log a failed query. A transient outage (isTransientDbConnectionError) is a
+ * warn with `transient: true`, which the logger does not send to Sentry; any
+ * other failure stays an error. Pass the whole PostgREST error, not its
+ * message, so the code is classified too. Returns whether it was transient,
+ * so a caller can answer 503 and let its trigger retry.
+ */
+export function logDbFailure(
+  logger: DbFailureLogger,
+  msg: string,
+  err: { message?: string; code?: string | null } | null | undefined,
+  meta: Record<string, unknown> = {},
+): boolean {
+  const transient = isTransientDbConnectionError(err)
+  if (transient) logger.warn(msg, { ...meta, db_code: err?.code ?? null, transient: true })
+  else logger.error(msg, meta)
+  return transient
 }
 
 /** Generic, non-leaking message for 5xx / DB failures shown to clients. */

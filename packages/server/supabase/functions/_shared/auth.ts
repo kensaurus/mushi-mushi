@@ -633,6 +633,82 @@ export function requireApiKeyScope(scope: McpScope) {
   }
 }
 
+/** A JSON Web Key Set as `auth.getClaims` takes it. */
+type Jwks = { keys: Array<Record<string, unknown>> }
+
+/** The part of the supabase-js auth client `verifyUserToken` uses. */
+export interface ClaimsVerifier {
+  getClaims(
+    jwt: string,
+    options?: { jwks?: Jwks },
+  ): Promise<{ data: { claims: Record<string, unknown> } | null; error: unknown }>
+}
+
+let platformJwksCache: { raw: string | undefined; jwks: Jwks | null } | null = null
+
+/**
+ * The project's signing keys from the Edge Runtime (`SUPABASE_JWKS`), so a
+ * cold isolate can verify a token without fetching the JWKS first. Null when
+ * unset or unreadable: getClaims then fetches and caches the JWKS itself.
+ * Read lazily: a module-level Deno.env.get aborts permissionless test runs.
+ */
+function platformJwks(): Jwks | null {
+  let raw: string | undefined
+  try {
+    raw = (globalThis as { Deno?: { env: { get(n: string): string | undefined } } }).Deno?.env.get('SUPABASE_JWKS')
+  } catch {
+    raw = undefined
+  }
+  if (platformJwksCache && platformJwksCache.raw === raw) return platformJwksCache.jwks
+  let jwks: Jwks | null = null
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      const keys = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { keys?: unknown })?.keys)
+          ? (parsed as { keys: unknown[] }).keys
+          : null
+      if (keys && keys.length > 0) jwks = { keys: keys as Jwks['keys'] }
+    } catch {
+      jwks = null
+    }
+  }
+  platformJwksCache = { raw, jwks }
+  return jwks
+}
+
+/**
+ * Verify a console user's access token. With the project's asymmetric
+ * signing keys (ES256) `getClaims` checks the signature and expiry locally;
+ * a legacy HS256 token makes it call GoTrue's /user instead, as before.
+ *
+ * It replaced a `getUser(token)` GoTrue round trip on every console request.
+ * The trade-off: a signed-out session, a deleted user or a banned user keeps
+ * working until the token expires (Supabase's default is 1 hour), because
+ * nothing asks GoTrue. Routes that must see fresh account state read it
+ * themselves (entitlements and requireSuperAdmin call `auth.admin.getUserById`).
+ *
+ * Only a user token passes: it must carry a `sub` and the `authenticated`
+ * role. An anon or service-role token has no user, which getUser rejected too.
+ */
+export async function verifyUserToken(
+  auth: ClaimsVerifier,
+  token: string,
+  jwks: Jwks | null = platformJwks(),
+): Promise<{ id: string; email: string | undefined } | null> {
+  try {
+    const { data, error } = await auth.getClaims(token, jwks ? { jwks } : undefined)
+    if (error || !data?.claims) return null
+    const { sub, role, email } = data.claims
+    if (typeof sub !== 'string' || sub.length === 0) return null
+    if (role !== 'authenticated') return null
+    return { id: sub, email: typeof email === 'string' ? email : undefined }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Middleware: validate Supabase JWT for admin endpoints.
  * Requires authenticated user.
@@ -660,21 +736,17 @@ export async function jwtAuth(c: Context, next: Next) {
   const db = getServiceClient()
   const token = authHeader.replace('Bearer ', '')
 
-  // Wave T audit (2026-04-23): `db.auth.getUser(token)` throws — not just
+  // Wave T audit (2026-04-23): token verification throws — not just
   // returns an error — on malformed JWTs, anon-role tokens with no sub
   // claim, and GoTrue timeouts. Pre-fix, every scanner probe and expired
   // admin session turned into a 500 `{"error":"internal"}` via
   // `sentryHonoErrorHandler`, masking real failures and wasting auth
-  // bandwidth. Wrap so unauthenticated / malformed callers get a clean
-  // 401 and the sentry handler only fires for genuine server bugs.
-  let user: Awaited<ReturnType<typeof db.auth.getUser>>['data']['user'] | null = null
-  try {
-    const { data, error } = await db.auth.getUser(token)
-    if (error || !data?.user) {
-      return authError(c, 'INVALID_TOKEN', 'Invalid or expired auth token')
-    }
-    user = data.user
-  } catch {
+  // bandwidth. verifyUserToken never throws, so unauthenticated / malformed
+  // callers get a clean 401 and the sentry handler only fires for genuine
+  // server bugs. It verifies locally (getClaims) instead of a GoTrue
+  // getUser round trip per request (2026-10-16).
+  const user = await verifyUserToken(db.auth as unknown as ClaimsVerifier, token)
+  if (!user) {
     return authError(c, 'INVALID_TOKEN', 'Invalid or expired auth token')
   }
 

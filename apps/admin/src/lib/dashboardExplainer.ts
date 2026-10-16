@@ -121,21 +121,21 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
  * and there are stages to draw; the first-report hero replaces it for a
  * project with no reports yet. The insight banner is NOT a condition: it is
  * one line above the canvas, and gating on it hid the canvas for good (QA 169).
- * The global pipeline strip already shows the same four stage cards, so the
- * canvas stays hidden while that strip is on screen.
+ * `loopVisualsHidden` keeps the stage cards off the page (Advanced opens on
+ * the "do this next" line instead, owner 2026-10-16).
  */
 export function shouldShowPdcaFlow(input: {
   isAdvanced: boolean
   renderFullDashboard: boolean
   hasPdcaStages: boolean
   showFirstReportHero: boolean
-  pipelineStripVisible: boolean
+  loopVisualsHidden: boolean
 }): boolean {
   return (
     input.isAdvanced &&
     input.renderFullDashboard &&
     input.hasPdcaStages &&
     !input.showFirstReportHero &&
-    !input.pipelineStripVisible
+    !input.loopVisualsHidden
   )
 }

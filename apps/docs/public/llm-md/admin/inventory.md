@@ -93,6 +93,25 @@ Drilling into any failing gate from a story card opens the relevant
 finding panel — `GateFindingCard` for the static rules, `DriftDiffPanel`
 for inventory drift, `SyntheticTimeline` for the synthetic walks.
 
+## Watch your live site
+
+**Discovery → Watch your live site** asks Firecrawl to crawl your live site once a day, following your site's own links from the address you enter. Mushi files a bug report, before a user finds the problem, for each page that:
+
+- returns a server error (5xx);
+- returns a 404 or another 4xx from a link on your own site (sign-in walls and rate limits don't count);
+- fails to load;
+- changed in a way Firecrawl's checker calls broken: an error message, a blank page, or missing main content. Normal wording and layout edits are ignored.
+
+Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
+
+Each broken page files one report. When 5 or more pages break in the same check (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it files again.
+
+**Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
+
+The watch uses your Firecrawl key, or a key shared with all your apps. It costs 1 credit per page per day, about 750 a month for 25 pages. Firecrawl's own estimate is up to twice that, because it holds back 1 credit per page for checking changed pages. **Turn off** deletes the crawl in Firecrawl and needs the key to do so; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
+
+The crawler sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)`, after a normal Chrome user agent). Filter that string out of Sentry and your analytics so the daily check doesn't count as visitors or errors, for example by dropping events in Sentry's `beforeSend` when the request's user agent contains `MushiSiteWatch`. The header is on the HTTP request; don't rely on `navigator.userAgent` showing it. A watch turned on before this header was added starts sending it the next time you save it or turn it off and on.
+
 ## Synthetic monitor
 
 Mushi re-walks the inventory's `expected_outcome` checks against your

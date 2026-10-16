@@ -12,6 +12,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFakeDb, findQueries, hasFilter, type FakeQuery } from './__stubs__/fake-query-recorder.ts'
 
 const mocks = vi.hoisted(() => ({
+  logWarn: vi.fn(),
+  logError: vi.fn(),
   notifyTeamFixEvent: vi.fn(async () => undefined),
   dispatchPluginEventDetached: vi.fn(async () => undefined),
   resolveProjectGithubToken: vi.fn(async (): Promise<string | null> => null),
@@ -19,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
+  const noop = { info: () => {}, warn: mocks.logWarn, error: mocks.logError, debug: () => {}, child: () => noop }
   return { log: noop }
 })
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => ({}) }))
@@ -91,6 +93,33 @@ beforeEach(() => {
   mocks.resolveProjectGithubToken.mockResolvedValue(null)
   mocks.fetchPullRequestFiles.mockReset()
   mocks.fetchPullRequestFiles.mockResolvedValue(null)
+  mocks.logWarn.mockClear()
+  mocks.logError.mockClear()
+})
+
+describe('runAgentStatusPoll — open-attempt scan failure', () => {
+  const failingScan = (error: { message: string; code: string | null }) =>
+    createFakeDb((q: FakeQuery) => {
+      if (q.table === 'fix_attempts' && q.op === 'select' && hasFilter(q, 'gte', 'started_at')) return { data: null, error }
+      return { data: [] }
+    })
+  const adapterFor = () => fakeAdapter(async () => ({ status: 'working' }))
+
+  it('a pooler outage is a warn, not a Sentry error (MUSHI-MUSHI-SERVER-22)', async () => {
+    const { db } = failingScan({
+      message: 'upstream connect error or disconnect/reset before headers. transport failure reason: delayed connect error: 111',
+      code: null,
+    })
+    await runAgentStatusPoll(db, { now: NOW, adapterFor })
+    expect(mocks.logError).not.toHaveBeenCalled()
+    expect(mocks.logWarn).toHaveBeenCalledWith('open attempt scan failed', expect.objectContaining({ transient: true }))
+  })
+
+  it('any other scan failure is still an error', async () => {
+    const { db } = failingScan({ message: 'column fix_attempts.foo does not exist', code: '42703' })
+    await runAgentStatusPoll(db, { now: NOW, adapterFor })
+    expect(mocks.logError).toHaveBeenCalledWith('open attempt scan failed', expect.anything())
+  })
 })
 
 describe('runAgentStatusPoll — selection', () => {

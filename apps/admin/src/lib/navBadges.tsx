@@ -468,8 +468,8 @@ export function resolveNavBadge(
         count: navCounts.inboxOpenActions,
         label:
           navCounts.inboxOpenActions > 0
-            ? `${navCounts.inboxOpenActions} open action${navCounts.inboxOpenActions === 1 ? '' : 's'} in Action Inbox`
-            : 'Action Inbox — all clear',
+            ? `${navCounts.inboxOpenActions} open action${navCounts.inboxOpenActions === 1 ? '' : 's'} in To-do`
+            : 'To-do — all clear',
         hideWhenZero: true,
       }
     case '/notifications':

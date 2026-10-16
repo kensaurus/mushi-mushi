@@ -17,6 +17,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { logDbFailure } from '../_shared/error-codes.ts'
 import {
   resolveProjectGithubToken,
   type GithubRepoRef,
@@ -54,8 +55,8 @@ app.post('/sdk-release-sync', async (c) => {
     .limit(50)
 
   if (error) {
-    log.error('failed to load jobs', { err: error.message })
-    return c.json({ ok: false, error: error.message }, 500)
+    const transient = logDbFailure(log, 'failed to load jobs', error, { err: error.message })
+    return c.json({ ok: false, error: error.message }, transient ? 503 : 500)
   }
 
   type SyncJob = {

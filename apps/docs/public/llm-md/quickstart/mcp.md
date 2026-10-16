@@ -11,9 +11,7 @@ description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug
 
 **Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
 
-[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+**[Add to Cursor](https://kensaur.us/mushi-mushi/docs/connect)** · **[Add to VS Code](https://kensaur.us/mushi-mushi/docs/connect)** · **[Try the demo, no signup](https://kensaur.us/mushi-mushi/docs/connect)**
 
   [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
   and install in one click, or try the read-only demo with no signup. Terminal
@@ -31,10 +29,23 @@ claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp
 claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
 ```
 
-Your browser opens the console consent page: sign in, pick the project to
-connect, and click **Approve**. That mints a project API key (label
-`mcp-oauth`) which the client stores for you — revoke it any time from
-**Projects → Keys**. Cursor and VS Code follow the same flow when you add the
+Your browser opens the console consent page. Sign in, choose what the
+connection reaches, and click **Approve**:
+
+| Choice | What the client gets | Revoke it from |
+| --- | --- | --- |
+| **All my projects** (default with several projects) | An account key that reaches every project you can reach, now and later | **MCP → Account keys** |
+| **Only the projects I pick** | An account key limited to the ticked projects | **MCP → Account keys** |
+| **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Projects → Keys** |
+
+An account key does in each project only what your role there allows. The
+agent calls `list_projects` to see your projects and passes `projectId` to
+project tools. To keep one connection on a single project, add
+`?project=<project-id>` to the server URL, for example
+`https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`. A pinned
+connection, or one limited to picked projects, leaves out the
+organization-wide tools (portfolio, connectors, spend, accounts register):
+they reach every project in the team. Cursor and VS Code follow the same flow when you add the
 hosted URL as a remote MCP server; do **not** configure an `Authorization`
 header if you want the login flow — a static header tells the client that
 OAuth isn't needed.
@@ -44,6 +55,24 @@ look for the OAuth metadata at the root of the server's host
 (`/.well-known/oauth-protected-resource/…`), and only that host serves it; on
 the `supabase.co` URL the lookup fails with an HTTP 404. With an API key
 header (below), either URL works.
+
+Self-hosted on your own `.supabase.co`? Point Claude Code at the
+function's own metadata document with its `authServerMetadataUrl` override
+(`mushi setup --ide claude` writes this for you):
+
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "type": "http",
+      "url": "https://<ref>.supabase.co/functions/v1/mcp",
+      "oauth": {
+        "authServerMetadataUrl": "https://<ref>.supabase.co/functions/v1/mcp/.well-known/oauth-authorization-server"
+      }
+    }
+  }
+}
+```
 
 ## One-liner setup (recommended)
 
@@ -79,8 +108,6 @@ Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi
 Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
 `/.well-known/mcp/server-card.json` lists every tool for directory scanners.
 
-[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
-
   Run `npx mushi-mushi project create` on a brand-new machine to sign up,
   mint a project, and write `.env.local` + `.cursor/mcp.json` in one flow.
 
@@ -93,7 +120,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
+      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -119,7 +146,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
+      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -188,7 +215,5 @@ Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
 
 Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
 Tool metadata is also published at `/.well-known/mcp/server-card.json` for directory scanners.
-
-[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
 
 ## Troubleshooting

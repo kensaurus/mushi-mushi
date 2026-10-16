@@ -9,7 +9,9 @@
  * per-item counters (fixes summary, untriaged reports, notifications, queue,
  * flagged devices, support replies, judge disagreements, inbox) that the
  * console used to fetch as ~10 separate requests on every page. The same
- * routes answer them, so each count keeps its meaning.
+ * routes answer them, so each count keeps its meaning. `inventory` may be
+ * sent by any caller: without the inventory_v2 plan feature its counter is
+ * omitted silently (null, not a failed slice).
  *
  * Cost control (it used to take 4-5.5 s on every page):
  *   - the JWT is verified once here; sub-requests are marked trusted so the
@@ -47,6 +49,8 @@ export type SliceDispatcher = (path: string, headers: Headers) => Promise<Respon
 export interface SliceResult {
   data: JsonRecord | null
   error: string | null
+  /** HTTP status of a slice that answered non-2xx. */
+  status?: number
 }
 
 export async function fetchStatsSlice(
@@ -57,8 +61,9 @@ export async function fetchStatsSlice(
   try {
     const res = await dispatch(path, headers)
     if (!res.ok) {
-      nlog.warn('nav_meta_slice_failed', { path, status: res.status })
-      return { data: null, error: `HTTP ${res.status}` }
+      // A 402 is the plan saying no (requireFeature), not a failure.
+      if (res.status !== 402) nlog.warn('nav_meta_slice_failed', { path, status: res.status })
+      return { data: null, error: `HTTP ${res.status}`, status: res.status }
     }
     const body = (await res.json()) as { ok?: boolean; data?: JsonRecord }
     if (!body.ok) return { data: null, error: 'not ok' }
@@ -433,10 +438,18 @@ export function registerWorkspaceNavMetaRoutes(
     const results = userId ? await withFanoutMemo(userId, runAll) : await runAll()
 
     const byPath = Object.fromEntries(paths.map((path, i) => [path, results[i].data]))
+    // `include=inventory` is accepted from every caller, so the console can
+    // send one include list before and after entitlements load. For a caller
+    // whose plan lacks inventory_v2 the inventory route answers 402: that
+    // counter is simply left out (regressedActions stays null), not reported
+    // as a failed slice.
+    const notInPlan = (path: string, r: SliceResult) => path === countPaths.inventory && r.status === 402
     // A missing badge must be explainable: name every slice that failed.
-    const failedSlices = paths
-      .map((path, i) => (results[i].error ? { path, error: results[i].error } : null))
-      .filter((x): x is { path: string; error: string } => x !== null)
+    const failedSlices: Array<{ path: string; error: string }> = []
+    paths.forEach((path, i) => {
+      const r = results[i]
+      if (r.error && !notInPlan(path, r)) failedSlices.push({ path, error: r.error })
+    })
 
     const slices = {
       contentQuality: pick(byPath['/v1/admin/content-quality/stats'], [

@@ -75,7 +75,6 @@ For a repo connected with a Personal Access Token, it shows the webhook URL that
 | **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
 | **Default model** | Agent model (`composer-2.5` or your account default) |
 | **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
-| **Max iterations** | Maximum agent loops per dispatch (default: 1) |
 
 When configured, Mushi can dispatch a Cursor Cloud Agent to fix classified reports — the agent opens a signed draft PR and posts the link back to the [Fixes page](/admin/fixes). Activate via:
 

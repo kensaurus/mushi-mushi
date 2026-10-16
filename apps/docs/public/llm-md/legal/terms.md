@@ -15,8 +15,8 @@ description: The terms for Mushi Cloud, the admin console, the SDKs and the Boun
 
 **Effective date:** 2026-09-21 · **Version:** 1
 
-These terms are between you and **kensaurus** (an individual developer in
-Japan, "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
+These terms are between you and **kensaurus LLC (kensaurus合同会社)** (Japan,
+"Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
 the **admin console**, the **hosted MCP server**, the **docs site**, and the
 **Mushi Bounties** tester marketplace (together, the "Service"). The
 open-source software is licensed separately (section 3).
@@ -240,7 +240,7 @@ your account before that date and we refund any prepaid, unused annual period.
 
 ## 17. Contact
 
-**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+**kensaurus LLC (kensaurus合同会社)** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
 subject `[mushi-legal]`
 
 Related: [Privacy Policy](/legal/privacy) · [Pricing](/pricing) ·

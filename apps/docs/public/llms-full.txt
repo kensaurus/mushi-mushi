@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-10-10
+Generated: 2026-10-16
 Pages: 209
 
 This file contains the full prose of every documentation page, stripped of
@@ -149,9 +149,7 @@ description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug
 
 **Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
 
-[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+**[Add to Cursor](https://kensaur.us/mushi-mushi/docs/connect)** · **[Add to VS Code](https://kensaur.us/mushi-mushi/docs/connect)** · **[Try the demo, no signup](https://kensaur.us/mushi-mushi/docs/connect)**
 
   [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
   and install in one click, or try the read-only demo with no signup. Terminal
@@ -169,10 +167,23 @@ claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp
 claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
 ```
 
-Your browser opens the console consent page: sign in, pick the project to
-connect, and click **Approve**. That mints a project API key (label
-`mcp-oauth`) which the client stores for you — revoke it any time from
-**Projects → Keys**. Cursor and VS Code follow the same flow when you add the
+Your browser opens the console consent page. Sign in, choose what the
+connection reaches, and click **Approve**:
+
+| Choice | What the client gets | Revoke it from |
+| --- | --- | --- |
+| **All my projects** (default with several projects) | An account key that reaches every project you can reach, now and later | **MCP → Account keys** |
+| **Only the projects I pick** | An account key limited to the ticked projects | **MCP → Account keys** |
+| **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Projects → Keys** |
+
+An account key does in each project only what your role there allows. The
+agent calls `list_projects` to see your projects and passes `projectId` to
+project tools. To keep one connection on a single project, add
+`?project=<project-id>` to the server URL, for example
+`https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`. A pinned
+connection, or one limited to picked projects, leaves out the
+organization-wide tools (portfolio, connectors, spend, accounts register):
+they reach every project in the team. Cursor and VS Code follow the same flow when you add the
 hosted URL as a remote MCP server; do **not** configure an `Authorization`
 header if you want the login flow — a static header tells the client that
 OAuth isn't needed.
@@ -182,6 +193,24 @@ look for the OAuth metadata at the root of the server's host
 (`/.well-known/oauth-protected-resource/…`), and only that host serves it; on
 the `supabase.co` URL the lookup fails with an HTTP 404. With an API key
 header (below), either URL works.
+
+Self-hosted on your own `.supabase.co`? Point Claude Code at the
+function's own metadata document with its `authServerMetadataUrl` override
+(`mushi setup --ide claude` writes this for you):
+
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "type": "http",
+      "url": "https://<ref>.supabase.co/functions/v1/mcp",
+      "oauth": {
+        "authServerMetadataUrl": "https://<ref>.supabase.co/functions/v1/mcp/.well-known/oauth-authorization-server"
+      }
+    }
+  }
+}
+```
 
 ## One-liner setup (recommended)
 
@@ -217,8 +246,6 @@ Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi
 Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
 `/.well-known/mcp/server-card.json` lists every tool for directory scanners.
 
-[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
-
   Run `npx mushi-mushi project create` on a brand-new machine to sign up,
   mint a project, and write `.env.local` + `.cursor/mcp.json` in one flow.
 
@@ -231,7 +258,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
+      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -257,7 +284,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
+      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -326,8 +353,6 @@ Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
 
 Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
 Tool metadata is also published at `/.well-known/mcp/server-card.json` for directory scanners.
-
-[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
 
 ## Troubleshooting
 
@@ -1530,7 +1555,7 @@ description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. 
 
 ## Plans
 
-  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.
+  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
 
@@ -1609,7 +1634,9 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 **Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
 
-**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+**Indie / Pro (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+
+**Indie / Pro (annual):** New diagnoses pause at the included amount until the next calendar month. Reports are never dropped. Switch to monthly (pay-as-you-go overage) or to Pro from **Change plan**.
 
 ### When does my quota reset?
 
@@ -1629,11 +1656,11 @@ By default, the **project owner**. Override the address under **Usage alert emai
 
 ### Can I downgrade mid-cycle?
 
-Downgrades take effect at **period end** via the Stripe portal. Upgrades apply immediately and are pro-rated.
+Change plans in the console with **Change plan** on the Billing page (Indie ↔ Pro, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
-Annual pricing applies to the **base subscription** only. Overage diagnoses are still billed monthly through Stripe Meters at the same per-diagnosis rate.
+No. Annual plans include the plan's diagnoses every month (500 on Indie, 2,000 on Pro) and pause new diagnoses at that limit until the next month, so an annual invoice never grows. If you need more, switch to monthly for pay-as-you-go overage or upgrade to Pro from **Change plan**.
 
 ### How do I estimate before signing up?
 
@@ -4542,7 +4569,7 @@ flowchart TB
 Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.24.5`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.25.0`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -5376,10 +5403,10 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 | Package | Version |
 | --- | --- |
 | @mushi-mushi/core, @mushi-mushi/web | 1.32.x |
-| @mushi-mushi/react | 1.31.x |
+| @mushi-mushi/react | 1.32.x |
 | @mushi-mushi/react-native | 0.24.x |
 | @mushi-mushi/cli | 0.30.x |
-| @mushi-mushi/mcp | 0.24.x |
+| @mushi-mushi/mcp | 0.25.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
@@ -7531,7 +7558,7 @@ into your IDE.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.24.5`. The default for
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.25.0`. The default for
   Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
   Windsurf. Your client launches the server as a subprocess and pipes
   JSON-RPC over stdio.
@@ -11770,7 +11797,7 @@ The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-c
 | **Workspace ID** | ✓ | Your Cursor workspace ID (`ws_…`) — find it at cursor.com/settings |
 | **Model** | — | `composer-2.5` (default) or `composer-latest` |
 | **Auto-create PRs** | — | When enabled, Cursor opens a signed draft PR automatically (default: enabled) |
-| **Max iterations** | — | Maximum agent loops per run (default: 1) |
+| **Max iterations** | — | Retired and ignored: one dispatch is one Cursor run |
 
 4. Click **Install**.
 5. Click **Test** to send a test event and confirm delivery.
@@ -13427,6 +13454,15 @@ In the admin console: **Settings → AI keys**.
 2. Click **Save & validate**. Mushi checks the key with the provider first (a free call), then stores it in **Supabase Vault**. The database row keeps only the secret's ID, and the key is never returned to the browser.
 3. Add more than one key for a service and Mushi moves to the next one when a key is rejected or runs out of quota.
 
+## One key for every app
+
+If your apps are in an organization, an owner or admin can add a key once for all of them. In the add form, leave **Use for all N apps in your organization** ticked. To share a key you already added to one app, click **Use in all apps** on its row; **Use in this app only** moves it back.
+
+- An app always tries its own keys first. The shared key is used when the app has none for that service, or as its backup.
+- A shared key is marked **All apps** on every app's **AI keys** tab. Other members can see it and use it, but only owners and admins can test, turn off, change or remove it.
+- Turning off or removing a shared key affects every app in the organization, so the confirmation says so.
+- The CLI and MCP `add` commands still add a key to one app.
+
   Keys take effect on the **next** LLM call. No Edge Function redeploy is required. If you rotate a key, update it here — stale keys return `401` from Anthropic/OpenAI and the key shows as rejected on **Settings → AI keys**.
 
 ## What uses the key
@@ -13441,7 +13477,7 @@ In the admin console: **Settings → AI keys**.
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
-Your own keys are used first; when a project has none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
+Your own keys are used first (the app's, then your organization's shared keys); when there are none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
 
 ## OpenRouter
 
@@ -13809,11 +13845,11 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 # Privacy Policy
 
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-09-21. Treat
+  description of how Mushi Mushi handles personal data as of 2026-10-10. Treat
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-09-21 · **Version:** 1
+**Effective date:** 2026-10-10 · **Version:** 2 (version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -13823,7 +13859,7 @@ and this policy does not apply to your instance.
 
 ## 1. Who is responsible
 
-Mushi Mushi is built and operated by **kensaurus**, an individual developer
+Mushi Mushi is built and operated by **kensaurus LLC (kensaurus合同会社)**,
 based in Japan (the "controller" for the data described in section 3, and the
 "processor" for the data described in section 4).
 
@@ -13904,7 +13940,7 @@ cannot reach them, email us and we will forward the request.
 | **Sentry** | Console error telemetry (section 2) | US | Console only; the SDK in your app never reports to our Sentry |
 | **GitHub** | OAuth sign-in profile; repo metadata, code index and draft PRs when you connect a repository | US | Access is scoped to the repos you pick and revocable in GitHub settings |
 | **Stripe** | Billing name, email, card details (Stripe holds the card, we never see the full number), invoices | US | Paid plans only |
-| **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory or QA-coverage crawls | US | Only pages you ask us to crawl |
+| **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory, QA-coverage or story-mapping crawls; queries you run on the Research page; and, only if a project turns on **Search the web for known fixes**: the error message of a report with IDs, URLs and long numbers removed (plus the runtime name, such as `node`), searched in Firecrawl's developer index (GitHub issues, pull requests, READMEs, docs) and on GitHub and Stack Overflow after classification or when someone presses **Search again**, and, for a fix dispatch with little code context, the report summary or the first 200 characters of its description | US | Only pages you ask us to crawl. The known-fix search is off by default and set per project (Settings → Web tools) |
 | **Tremendous** | Gift-card delivery for Bounties testers: email, amount, and KYC data past the threshold | US | Bounties only |
 
 ## 6. International transfers and residency
@@ -13961,7 +13997,7 @@ or the reporter identity before releasing anything.
 This section applies to personal information handled by Mushi as a
 business operator under the APPI (個人情報の保護に関する法律).
 
-- **Business operator (個人情報取扱事業者):** kensaurus, Japan. Contact:
+- **Business operator (個人情報取扱事業者):** kensaurus LLC (kensaurus合同会社), Japan. Contact:
   [kensaurus@gmail.com](mailto:kensaurus@gmail.com).
 - **Purpose of use (利用目的):** to provide and improve the Mushi service,
   bill for paid plans, answer support requests, keep the service secure, pay
@@ -14031,7 +14067,7 @@ after the effective date means the new version applies.
 
 ## 13. Contact
 
-**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+**kensaurus LLC (kensaurus合同会社)** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
 subject `[mushi-privacy]`
 
 Related: [Terms of Service](/legal/terms) · [Security summary](/security) ·
@@ -14056,8 +14092,8 @@ description: The terms for Mushi Cloud, the admin console, the SDKs and the Boun
 
 **Effective date:** 2026-09-21 · **Version:** 1
 
-These terms are between you and **kensaurus** (an individual developer in
-Japan, "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
+These terms are between you and **kensaurus LLC (kensaurus合同会社)** (Japan,
+"Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
 the **admin console**, the **hosted MCP server**, the **docs site**, and the
 **Mushi Bounties** tester marketplace (together, the "Service"). The
 open-source software is licensed separately (section 3).
@@ -14281,7 +14317,7 @@ your account before that date and we refund any prepaid, unused annual period.
 
 ## 17. Contact
 
-**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+**kensaurus LLC (kensaurus合同会社)** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
 subject `[mushi-legal]`
 
 Related: [Privacy Policy](/legal/privacy) · [Pricing](/pricing) ·
@@ -15476,7 +15512,8 @@ Below the bar you will see:
 **What happens at 100%?**
 
 - **Free Cloud:** New reports are captured but **not diagnosed** until the period resets.
-- **Indie / Pro:** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Indie / Pro (monthly):** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
+- **Indie / Pro (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
 ### Usage breakdown
 
@@ -15509,19 +15546,26 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ## Upgrading your plan
 
-1. Click **Upgrade** (or **Change plan**) on the project card.
-2. Browse the plan comparison table — it shows exactly which features each tier includes.
-3. Click **Select** on the plan you want.
-4. Complete payment in **Stripe Checkout**.
-5. The new plan activates when you return to Mushi.
+1. Click **Upgrade** on the project card.
+2. Pick **Monthly** or **Annual** (about two months free), then **Select** the plan you want.
+3. Complete payment in **Stripe Checkout**.
+4. The new plan activates when you return to Mushi.
 
-Annual billing (~two months free) is available after subscribing — open **Manage** in Stripe or contact sales for Enterprise commits.
+## Changing plan
+
+A project that already pays switches in the console, not in Checkout:
+
+1. Click **Change plan** on the project card.
+2. Choose Indie or Pro, monthly or annual. The current choice shows as **Current plan**.
+3. The dialog shows what Stripe charges now (or credits) for the prorated difference. Click **Confirm change**.
+
+The change applies immediately. Moving between monthly and annual starts a new billing period that day. If the card is declined, nothing changes. Annual plans have no overage and stop at the included diagnoses each month. Enterprise is arranged with our team — use **Contact us** on the Plans tab.
 
 ---
 
 ## Managing payment and invoices
 
-Click **Manage** to open the **Stripe Billing Portal**. Use the portal for:
+Click **Manage** to open the **Stripe Billing Portal**. Plan changes happen in **Change plan** above; Stripe's portal cannot switch a subscription that has metered usage. Use the portal for:
 
 - Updating your credit card
 - Viewing upcoming invoices
@@ -17781,7 +17825,6 @@ For a repo connected with a Personal Access Token, it shows the webhook URL that
 | **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
 | **Default model** | Agent model (`composer-2.5` or your account default) |
 | **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
-| **Max iterations** | Maximum agent loops per dispatch (default: 1) |
 
 When configured, Mushi can dispatch a Cursor Cloud Agent to fix classified reports — the agent opens a signed draft PR and posts the link back to the [Fixes page](/admin/fixes). Activate via:
 
@@ -18086,6 +18129,25 @@ The composite GitHub check is rolled up from:
 Drilling into any failing gate from a story card opens the relevant
 finding panel — `GateFindingCard` for the static rules, `DriftDiffPanel`
 for inventory drift, `SyntheticTimeline` for the synthetic walks.
+
+## Watch your live site
+
+**Discovery → Watch your live site** asks Firecrawl to crawl your live site once a day, following your site's own links from the address you enter. Mushi files a bug report, before a user finds the problem, for each page that:
+
+- returns a server error (5xx);
+- returns a 404 or another 4xx from a link on your own site (sign-in walls and rate limits don't count);
+- fails to load;
+- changed in a way Firecrawl's checker calls broken: an error message, a blank page, or missing main content. Normal wording and layout edits are ignored.
+
+Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
+
+Each broken page files one report. When 5 or more pages break in the same check (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it files again.
+
+**Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
+
+The watch uses your Firecrawl key, or a key shared with all your apps. It costs 1 credit per page per day, about 750 a month for 25 pages. Firecrawl's own estimate is up to twice that, because it holds back 1 credit per page for checking changed pages. **Turn off** deletes the crawl in Firecrawl and needs the key to do so; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
+
+The crawler sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)`, after a normal Chrome user agent). Filter that string out of Sentry and your analytics so the daily check doesn't count as visitors or errors, for example by dropping events in Sentry's `beforeSend` when the request's user agent contains `MushiSiteWatch`. The header is on the HTTP request; don't rely on `navigator.userAgent` showing it. A watch turned on before this header was added starts sending it the next time you save it or turn it off and on.
 
 ## Synthetic monitor
 
@@ -18646,7 +18708,6 @@ The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) is a first-party Mushi 
 | **Workspace ID** | Your Cursor workspace ID (`ws_…`) |
 | **Model** | `composer-2.5` (default) or `composer-latest` |
 | **Auto-create PRs** | Toggle — enabled by default |
-| **Max iterations** | Agent loop budget (default: 1) |
 
 Unlike standard webhook plugins, the Cursor Cloud Agent plugin dispatches **directly to the Cursor REST API** — there's no outbound webhook URL to configure. HMAC verification for inbound events is handled internally by the Mushi platform.
 
@@ -18714,7 +18775,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.24.5"],
+      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
@@ -19234,6 +19295,7 @@ Below the cards:
 | **Daily digest** | One message a day across all apps. Off until an owner picks where it goes: an app's Slack channel, Discord or Teams webhook, or Telegram chats, email, or push. Once a week (Monday by default) it adds each app's signups and activations. When there were more reports, AI calls or findings than it reads, it says which numbers are lower bounds. See [Daily digest](#daily-digest). |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. Owners and admins can import what no recipe or source declares from a CSV with the columns `kind, external_id, project` and an optional `role`; each refused row is listed with its line number, and a file is capped at 500 rows and 256 KB. |
 | **Accounts and resilience** | Every account your apps depend on (Apple, Google Play, AWS, Supabase, Vercel, your registrar, Stripe…): the owner email, whether 2FA is on, how many people can get in, a recovery contact, and auto-renew for the registrar and each domain. See below. |
+| **Payments across apps** | For each RevenueCat project: per app, what it sells (entitlements, offerings, packages, products and their store state) and why a purchase would fail, each with its fix. RevenueCat's headline numbers are shown as context only. A fix with an approved action can be asked for; it runs only after an owner approves it. See the [operator guide](https://github.com/kensaurus/mushi-mushi/blob/master/docs/operators/monetization.md). |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
 
 ---
@@ -20523,9 +20585,19 @@ if you initiated the search from those pages.
 
 ---
 
+## Automatic results on error reports
+
+When a report carries a real error (a Sentry exception or an error-level console line), Mushi searches for it once after diagnosis and shows the results on the report under **Others who hit this**.
+
+- **Where it looks:** Firecrawl's developer index first (GitHub issues, merged pull requests, READMEs and docs), then GitHub and Stack Overflow web results for any remaining slots. The developer index often finds the pull request that fixed the same error.
+- **Search again / Search now:** runs the search from the report page. Only results not already on the report are added. Pressing it twice within 10 minutes searches once.
+- **Cost:** about 2 to 5 Firecrawl credits per search, billed to your own key.
+
+---
+
 ## Prerequisites
 
-A Firecrawl API key must be configured in **Settings → API keys** before Research works.
+A Firecrawl API key must be configured in **Settings → AI keys** before Research works. A key shared with every app in your organization works too.
 Visit [Integration health](/admin/health) to confirm the key is active.
 
 ---

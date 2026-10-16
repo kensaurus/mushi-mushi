@@ -45,7 +45,7 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: [MOD, 'K'], desc: 'Open command palette', hint: 'Jump to any page or action by name. Works inside inputs.', tags: ['navigation', 'palette'] },
       { keys: [MOD, 'J'], desc: 'Open Ask Mushi', hint: 'Scoped to the current page — filters + focus are sent with each question. Use /commands or @mentions in the composer.', tags: ['ai', 'navigation'] },
-      { keys: [MOD, 'Shift', 'I'], desc: 'Open the Action Inbox', hint: 'Jumps straight to /inbox from anywhere — works even while typing in a search field.', tags: ['inbox', 'navigation'] },
+      { keys: [MOD, 'Shift', 'I'], desc: 'Open your To-do list', hint: 'Jumps straight to /inbox from anywhere — works even while typing in a search field.', tags: ['inbox', 'navigation'] },
       { keys: ['?'], desc: 'Toggle this cheatsheet', tags: ['help'] },
     ],
   },

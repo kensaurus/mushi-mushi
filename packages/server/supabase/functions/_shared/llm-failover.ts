@@ -23,7 +23,6 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { NoObjectGeneratedError } from 'npm:ai@4';
 import { isClaudeRefusal } from './claude-request.ts';
 import {
   enforceLlmBudget,
@@ -422,7 +421,8 @@ export async function withAnthropicOrOpenAi<T>(
     ) {
       // No Anthropic keys available — fall through to OpenAI.
       log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code });
-    } else if (NoObjectGeneratedError.isInstance(err)) {
+    } else if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) {
+      // (ai@4 loads here, after a model call, never at boot: ai-sdk.ts.)
       // Anthropic responded but its output didn't match the required schema.
       // OpenAI often handles complex structured-output schemas more reliably —
       // try it as a fallback before giving up.

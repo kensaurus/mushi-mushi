@@ -136,6 +136,9 @@ function bucketFor(at: string, now: Date): Bucket {
   return 'earlier'
 }
 
+/** How long a closed drawer waits before reading the feed for its badge. */
+const CLOSED_FEED_DELAY_MS = 6_000
+
 export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   const activeProjectId = useActiveProjectId()
   const [events, setEvents] = useState<ActivityEvent[]>([])
@@ -192,10 +195,35 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
     setLoading(false)
   }, [activeProjectId])
 
+  // Closed, the feed only feeds the trigger's unread badge, so it waits until
+  // the page's own reads are done instead of joining the cold-start burst
+  // (each API call boots its own isolate; ten at once slow every one).
+  // Opening the drawer loads at once.
+  const openRef = useRef(open)
+  openRef.current = open
+  const loadedForRef = useRef<string | null>(null)
   useEffect(() => {
+    loadedForRef.current = null
     setLoading(true)
-    void load()
-  }, [load])
+    if (openRef.current) {
+      loadedForRef.current = activeProjectId
+      void load()
+      return
+    }
+    const timer = setTimeout(() => {
+      // Opening the drawer meanwhile already loaded this project's feed.
+      if (loadedForRef.current === activeProjectId) return
+      loadedForRef.current = activeProjectId
+      void load()
+    }, CLOSED_FEED_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [load, activeProjectId])
+  useEffect(() => {
+    if (open && loadedForRef.current !== activeProjectId) {
+      loadedForRef.current = activeProjectId
+      void load()
+    }
+  }, [open, load, activeProjectId])
 
   // Realtime: fix_events is the canonical stream; fix_attempts covers
   // legacy fixes that pre-date the events table. Either change triggers
