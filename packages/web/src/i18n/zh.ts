@@ -11,6 +11,7 @@ export const zh: MushiLocale = {
     submitting: '提交中…',
     submitted: '谢谢！你的反馈已提交。',
     error: '出错了，请再试一次。',
+    hideLauncher: '本次访问期间隐藏反馈按钮',
   },
   step1: {
     moreNav: {

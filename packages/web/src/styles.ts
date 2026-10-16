@@ -65,6 +65,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
   const { durationFast } = MUSHI_MOTION;
   const { instant: durInstant, panel: durPanel } = MUSHI_DURATION;
   const { bannerHeight, gutter, panelWidth, panelMaxHeight, panelSheetBreakpoint, edgeTabWidth } = MUSHI_GEOMETRY;
+  // Local, not core tokens: core's dist ships unminified under a tight budget.
+  const edgeTabHeight = 48;
+  const touchTarget = 44;
   const panelLauncherGap = fabSize + MUSHI_SPACING.comfy;
   const controlRadius = MUSHI_RADIUS.control;
 
@@ -190,31 +193,68 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       top: var(--mushi-top, calc(${gutter}px + env(safe-area-inset-top, 0px)));
       left: var(--mushi-left, calc(${gutter}px + env(safe-area-inset-left, 0px)));
     }
+    /* ── Edge tab ───────────────────────────────────────────────────────
+       The button is only the tap area (${touchTarget}px wide, transparent);
+       the face drawn inside it is ${edgeTabWidth}×${edgeTabHeight}px, flush with
+       the screen edge (inside the safe area). A horizontal inset/anchor is
+       ignored on purpose: a tab floating off the edge reads as a card on top
+       of the page. The vertical anchor still applies. */
     .mushi-trigger.edge-tab {
-      width: ${edgeTabWidth}px;
-      height: 88px;
-      border-radius: ${controlRadius}px 0 0 ${controlRadius}px;
-      writing-mode: vertical-rl;
-      text-orientation: upright;
-      font-size: 16px;
-      box-shadow:
-        0 1px 0 var(--_border),
-        0 10px 24px -14px rgba(${shadowInk},0.45),
-        inset -3px 0 0 var(--_accent);
+      width: ${touchTarget}px;
+      height: ${edgeTabHeight}px;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      font-size: 14px;
+      justify-content: flex-end;
     }
+    .mushi-trigger.edge-tab::after { display: none; }
+    .mushi-trigger.edge-tab:hover,
+    .mushi-trigger.edge-tab:active,
+    .mushi-trigger.edge-tab.dragging { transform: none; box-shadow: none; }
+    .mushi-trigger-face {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: ${edgeTabWidth}px;
+      height: 100%;
+      background: var(--_bg);
+      border: 1px solid var(--_border);
+      border-right: 0;
+      border-radius: ${controlRadius}px 0 0 ${controlRadius}px;
+      box-shadow: 0 4px 12px -6px rgba(${shadowInk},0.4), inset -2px 0 0 var(--_accent);
+      transition: width ${durationFast}ms ${easeStamp}, transform ${durationFast}ms ${easeStamp}, opacity ${durationFast}ms ${easeStamp};
+    }
+    .mushi-trigger.edge-tab:hover .mushi-trigger-face,
+    .mushi-trigger.edge-tab:focus-visible .mushi-trigger-face { width: ${edgeTabWidth + 6}px; }
+    .mushi-trigger.edge-tab:focus-visible { outline: none; }
+    .mushi-trigger.edge-tab:focus-visible .mushi-trigger-face { outline: 2px solid var(--_accent); outline-offset: 2px; }
     .mushi-trigger.edge-tab.bottom-right,
     .mushi-trigger.edge-tab.top-right {
-      right: var(--mushi-right, 0);
+      right: calc(var(--mushi-safe-area, 1) * env(safe-area-inset-right, 0px));
     }
     .mushi-trigger.edge-tab.bottom-left,
     .mushi-trigger.edge-tab.top-left {
-      left: var(--mushi-left, 0);
-      border-radius: 0 ${controlRadius}px ${controlRadius}px 0;
-      box-shadow:
-        0 1px 0 var(--_border),
-        0 10px 24px -14px rgba(${shadowInk},0.45),
-        inset 3px 0 0 var(--_accent);
+      left: calc(var(--mushi-safe-area, 1) * env(safe-area-inset-left, 0px));
+      justify-content: flex-start;
     }
+    .mushi-trigger.edge-tab.bottom-left .mushi-trigger-face,
+    .mushi-trigger.edge-tab.top-left .mushi-trigger-face {
+      border-right: 1px solid var(--_border);
+      border-left: 0;
+      border-radius: 0 ${controlRadius}px ${controlRadius}px 0;
+      box-shadow: 0 4px 12px -6px rgba(${shadowInk},0.4), inset 2px 0 0 var(--_accent);
+    }
+    /* Scroll tuck: fade while the page moves; the tab also slides mostly
+       off its edge. Focus always brings it back. */
+    .mushi-trigger.tucked { opacity: 0.3; }
+    .mushi-trigger.edge-tab.tucked { opacity: 1; }
+    .mushi-trigger.edge-tab.tucked .mushi-trigger-face { opacity: 0.55; transform: translateX(${edgeTabWidth - 6}px); }
+    .mushi-trigger.edge-tab.bottom-left.tucked .mushi-trigger-face,
+    .mushi-trigger.edge-tab.top-left.tucked .mushi-trigger-face { transform: translateX(-${edgeTabWidth - 6}px); }
+    .mushi-trigger.tucked:focus-visible,
+    .mushi-trigger.tucked:focus-visible .mushi-trigger-face { opacity: 1; transform: none; }
     .mushi-trigger.shrunk {
       width: ${bannerHeight}px;
       height: ${bannerHeight}px;
@@ -246,7 +286,10 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       opacity: 0.92;
     }
     @media (prefers-reduced-motion: reduce) {
-      .mushi-trigger { transition: none !important; }
+      .mushi-trigger, .mushi-trigger-face { transition: none !important; }
+      .mushi-trigger::after { animation: none; }
+      /* No sliding: the tucked tab only fades. */
+      .mushi-trigger.edge-tab.tucked .mushi-trigger-face { transform: none !important; }
     }
 
     @keyframes mushi-pulse {

@@ -115,8 +115,8 @@ export function SdkInstallConfigurator({
             {([
               { value: 'banner',   label: 'Header banner',          hint: 'A slim strip pinned to the top (or bottom) of the viewport. Less obtrusive than a FAB.' },
               { value: 'attach',   label: 'Attach to my button',    hint: 'Your button opens the reporter. No floating stamp.' },
-              { value: 'auto',     label: 'Floating stamp (FAB)',    hint: 'SDK renders a bug-stamp in the chosen corner.' },
-              { value: 'edge-tab', label: 'Edge tab',               hint: 'A vertical tab on the screen edge.' },
+              { value: 'auto',     label: 'Floating stamp (FAB)',    hint: 'SDK renders a bug-stamp in the chosen corner on desktop, and a slim edge tab on phones.' },
+              { value: 'edge-tab', label: 'Edge tab',               hint: 'A slim tab flush with the screen edge on every screen size. Visitors can drag it along the edge.' },
               { value: 'manual',   label: 'Headless (manual)',       hint: 'Use <MushiTrigger> anywhere in your JSX.' },
               // The server already stores 'hidden'; without an option here a
               // project set to it showed no selected mode (QA bug 121).

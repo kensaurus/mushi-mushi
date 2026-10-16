@@ -14,8 +14,8 @@ import { getLocale, type MushiLocale } from './i18n';
 import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
-import { readPageFaviconHref, MUSHI_COPY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
+import { readPageFaviconHref, MUSHI_COPY, MUSHI_GEOMETRY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
+import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, withDeadline, writeLauncherDismissed } from './widget-helpers';
 import type {
   AssistantTurn,
   PendingReply,
@@ -201,6 +201,25 @@ export class MushiWidget {
   private bannerResizeObserver: ResizeObserver | null = null;
   /** Persisted FAB position when draggable is enabled. */
   private fabPos: { x: number; y: number } | null = null;
+  /** Storage key `fabPos` was loaded for. */
+  private fabPosKey = '';
+  private draggableSet = false;
+  /** px from the viewport bottom that clears fixed host bars. */
+  private barClearance = 0;
+  private clampedForClearance = 0;
+  private tuckCleanup: (() => void) | null = null;
+  private tuckTimer: ReturnType<typeof setTimeout> | null = null;
+  private resizeFrame: number | null = null;
+  private lateMeasureTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly onViewportResize = (): void => {
+    if (this.resizeFrame !== null) return;
+    this.resizeFrame = requestAnimationFrame(() => {
+      this.resizeFrame = null;
+      this.barClearance = this.measureFixedBars();
+      this.render();
+    });
+  };
+  private launcherDismissed = readLauncherDismissed();
   /** Cleanup fn for visualViewport keyboard listener. */
   private vvCleanup: (() => void) | null = null;
   /** Host-app user identity from `identify()` — shown as "Reporting as <name>". */
@@ -246,6 +265,10 @@ export class MushiWidget {
       environments: config.environments ?? {},
       smartHide: config.smartHide ?? false,
       draggable: config.draggable ?? false,
+      mobileTrigger: config.mobileTrigger ?? (placesLauncher(config) ? 'auto' : 'edge-tab'),
+      avoidFixedBars: config.avoidFixedBars ?? true,
+      tuckOnScroll: config.tuckOnScroll ?? true,
+      dismissible: config.dismissible ?? true,
       brandFooter: config.brandFooter ?? false,
       outdatedBanner: config.outdatedBanner ?? 'auto',
       screenshotSensitiveHint: config.screenshotSensitiveHint ?? true,
@@ -263,6 +286,7 @@ export class MushiWidget {
       accentText: config.accentText ?? '',
     };
     this.callbacks = callbacks;
+    this.draggableSet = config.draggable !== undefined;
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     this.rc = this.resolveCopy();
 
@@ -316,8 +340,17 @@ export class MushiWidget {
     window.addEventListener('pointercancel', this.onPointerRelease, true);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
+    this.syncScrollTuck();
     this.bindColorSchemeListener();
+    window.addEventListener('resize', this.onViewportResize);
+    window.visualViewport?.addEventListener('resize', this.onViewportResize);
     this.render();
+    // Host bars often mount late (hydration): measure now and once settled.
+    this.onViewportResize();
+    this.lateMeasureTimer = setTimeout(() => {
+      this.lateMeasureTimer = null;
+      this.onViewportResize();
+    }, 1200);
   }
 
   getIsMounted(): boolean {
@@ -343,9 +376,11 @@ export class MushiWidget {
     if (triggerBecameBanner || bannerConfigChanged) {
       this.bannerDismissed = false;
     }
+    if (config.draggable !== undefined) this.draggableSet = true;
     if (this.host.isConnected) this.syncHostChromeState();
     this.syncAttachedLaunchers();
     this.syncSmartHide();
+    if (this.host.isConnected) this.syncScrollTuck();
     this.render();
   }
 
@@ -390,6 +425,7 @@ export class MushiWidget {
     this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && cat !== 'other' && BUILTIN.includes(cat) ? cat : null;
     this.showAllCategories = Boolean(custom);
     this.removeToast();
+    this.barClearance = this.measureFixedBars();
     this.render();
     this.callbacks.onOpen();
   }
@@ -497,6 +533,10 @@ export class MushiWidget {
 
   showTrigger(): void {
     this.triggerVisible = true;
+    if (this.launcherDismissed) {
+      this.launcherDismissed = false;
+      writeLauncherDismissed(false);
+    }
     this.render();
   }
 
@@ -714,6 +754,18 @@ export class MushiWidget {
     this.unbindColorSchemeListener();
     this.smartHideCleanup?.();
     this.smartHideCleanup = null;
+    this.tuckCleanup?.();
+    this.tuckCleanup = null;
+    window.removeEventListener('resize', this.onViewportResize);
+    window.visualViewport?.removeEventListener('resize', this.onViewportResize);
+    if (this.resizeFrame !== null) {
+      cancelAnimationFrame(this.resizeFrame);
+      this.resizeFrame = null;
+    }
+    if (this.lateMeasureTimer !== null) {
+      clearTimeout(this.lateMeasureTimer);
+      this.lateMeasureTimer = null;
+    }
     this.teardownViewportHandlers();
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
@@ -807,7 +859,7 @@ export class MushiWidget {
     const widgetHostBounds = this.host.isConnected
       ? { width: this.host.offsetWidth, height: this.host.offsetHeight }
       : null;
-    const widgetSuppressed = this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible;
+    const widgetSuppressed = this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible || this.launcherDismissed;
     const bannerRendered =
       this.config.trigger === 'banner' &&
       !this.bannerDismissed &&
@@ -852,8 +904,76 @@ export class MushiWidget {
     this.smartHideCleanup = () => window.removeEventListener('scroll', onScroll);
   }
 
+  /** Tuck the launcher while anything scrolls (capture: inner scrollers count). A class toggle, not a rebuild, so focus and drag survive. */
+  private syncScrollTuck(): void {
+    this.tuckCleanup?.();
+    this.tuckCleanup = null;
+    const smart = this.config.smartHide;
+    const legacyScroll = smart === true || (typeof smart === 'object' && Boolean(smart.onScroll));
+    if (!this.config.tuckOnScroll || legacyScroll || typeof document === 'undefined') return;
+    const IDLE_MS = 700;
+    const onScroll = () => {
+      const t = this.triggerEl;
+      if (!t || this.isOpen || this.shadow.activeElement === t || t.classList.contains('dragging')) return;
+      t.classList.add('tucked');
+      if (this.tuckTimer !== null) clearTimeout(this.tuckTimer);
+      this.tuckTimer = setTimeout(() => {
+        this.tuckTimer = null;
+        this.triggerEl?.classList.remove('tucked');
+        const next = this.measureFixedBars();
+        if (next !== this.barClearance) {
+          this.barClearance = next;
+          this.render();
+        }
+      }, IDLE_MS);
+    };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    this.tuckCleanup = () => {
+      document.removeEventListener('scroll', onScroll, { capture: true });
+      if (this.tuckTimer !== null) clearTimeout(this.tuckTimer);
+      this.tuckTimer = null;
+    };
+  }
+
+  /**
+   * px that clears a bar docked at the viewport bottom, + 8px: a short fixed/sticky
+   * element, or a flow child of a fixed full-height shell. Scroller content never counts.
+   */
+  private measureFixedBars(): number {
+    if (!this.config.avoidFixedBars || typeof document === 'undefined' || typeof document.elementsFromPoint !== 'function') return 0;
+    const H = window.innerHeight;
+    const W = window.innerWidth;
+    if (!H || !W) return 0;
+    const left = this.config.position.endsWith('left');
+    const isBar = (r: DOMRect) => r.height > 0 && r.height <= H * 0.4 && r.top < H && r.bottom >= H - 4 && r.bottom <= H + 4;
+    let barTop = H;
+    for (const x of [left ? 24 : W - 24, W / 2]) {
+      const hit = document.elementsFromPoint(x, H - 2).find((el) => el !== this.host && !this.host.contains(el));
+      let flowBar: DOMRect | null = null;
+      for (let el: Element | null = hit ?? null; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (cs.position === 'fixed' || cs.position === 'sticky') {
+          const bar = isBar(r) ? r : flowBar;
+          if (bar) barTop = Math.min(barTop, bar.top);
+          break;
+        }
+        if (/(auto|scroll)/.test(cs.overflowY)) flowBar = null;
+        else if (isBar(r)) flowBar = r;
+      }
+    }
+    return barTop < H ? Math.ceil(H - barTop + 8) : 0;
+  }
+
+  private dismissLauncherForSession(): void {
+    this.launcherDismissed = true;
+    writeLauncherDismissed(true);
+    this.close();
+  }
+
   private shouldRenderTrigger(): boolean {
     if (!this.triggerVisible) return false;
+    if (this.launcherDismissed) return false;
     if (this.triggerHiddenByScroll) return false;
     if (
       this.config.trigger === 'manual' ||
@@ -1077,11 +1197,22 @@ export class MushiWidget {
   }
 
   private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {
-    if (!this.config.smartHide || typeof window === 'undefined') return this.config.trigger;
-    const smart = this.config.smartHide === true
-      ? { onMobile: 'edge-tab' as const }
-      : this.config.smartHide;
-    if (window.matchMedia('(max-width: 768px)').matches && smart.onMobile === 'edge-tab') {
+    if (typeof window === 'undefined') return this.config.trigger;
+    if (this.config.smartHide) {
+      const smart = this.config.smartHide === true
+        ? { onMobile: 'edge-tab' as const }
+        : this.config.smartHide;
+      if (window.matchMedia('(max-width: 768px)').matches && smart.onMobile === 'edge-tab') {
+        return 'edge-tab';
+      }
+    }
+    // Phones: the 52px FAB covers content; the tab draws 22px.
+    if (
+      this.config.trigger === 'auto' &&
+      this.config.mobileTrigger === 'edge-tab' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 768px)')?.matches
+    ) {
       return 'edge-tab';
     }
     return this.config.trigger;
@@ -1192,21 +1323,36 @@ export class MushiWidget {
     const pos = this.config.position;
     const effective = show ? this.effectiveTrigger() : '';
     const key = JSON.stringify([show, effective, pos, this.triggerShrunk, this.config.triggerText, this.config.zIndex, this.config.draggable, this.lang]);
+    let rebuilt = false;
     if (key !== this.triggerKey || (show && !this.triggerEl?.isConnected)) {
       this.triggerKey = key;
       this.triggerEl?.remove();
       this.triggerEl = show ? this.buildTrigger(effective) : null;
+      rebuilt = true;
     }
     if (this.triggerEl) {
       this.triggerEl.setAttribute('aria-expanded', String(this.isOpen));
       this.applyInsetVars(this.triggerEl);
+      // Re-clamp a saved drag offset when the anchor moved.
+      if ((rebuilt || this.barClearance !== this.clampedForClearance) && this.fabPos && this.dragOptions(this.triggerEl)) {
+        this.restoreFabPos(this.triggerEl);
+      }
+      this.clampedForClearance = this.barClearance;
     }
   }
 
   private buildTrigger(effective: string): HTMLButtonElement {
+    const tab = effective === 'edge-tab';
     const trigger = document.createElement('button');
-    trigger.className = `mushi-trigger ${this.config.position}${effective === 'edge-tab' ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
-    trigger.textContent = this.config.triggerText;
+    trigger.className = `mushi-trigger ${this.config.position}${tab ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
+    if (tab) {
+      const face = document.createElement('span');
+      face.className = 'mushi-trigger-face';
+      face.textContent = this.config.triggerText;
+      trigger.appendChild(face);
+    } else {
+      trigger.textContent = this.config.triggerText;
+    }
     trigger.setAttribute('aria-label', this.locale.widget.trigger);
     trigger.setAttribute('aria-haspopup', 'dialog');
     trigger.style.zIndex = String(this.config.zIndex);
@@ -1214,12 +1360,12 @@ export class MushiWidget {
       if (this.isOpen) this.close();
       else this.open();
     });
-    // Keyboard nudge for a draggable FAB.
+    // Keyboard nudge for a draggable launcher.
     trigger.addEventListener('keydown', (e) => {
-      const draggableConfig = this.config.draggable;
-      if (!draggableConfig) return;
+      const drag = this.dragOptions(trigger);
+      if (!drag) return;
       const STEP = 8;
-      const axis = typeof draggableConfig === 'object' ? (draggableConfig.axis ?? 'both') : 'both';
+      const { axis } = drag;
       let dx = 0, dy = 0;
       if (axis !== 'y') {
         if (e.key === 'ArrowLeft') dx = -STEP;
@@ -1232,19 +1378,29 @@ export class MushiWidget {
       if (dx !== 0 || dy !== 0) {
         e.preventDefault();
         const cur = this.fabPos ?? { x: 0, y: 0 };
-        this.moveFab(trigger, cur.x + dx, cur.y + dy, false);
+        this.moveFab(trigger, cur.x + dx, cur.y + dy, 'end');
       }
     });
-    if (this.config.draggable) this.attachDragHandlers(trigger);
+    if (this.dragOptions(trigger)) this.attachDragHandlers(trigger);
     this.shadow.insertBefore(trigger, this.panel);
-    // Apply a persisted drag position once the trigger is in the DOM, measured
-    // from its natural CSS position (moveFab re-sets fabPos, clamped).
-    if (this.fabPos && this.config.draggable) {
-      const savedPos = this.fabPos;
-      this.fabPos = { x: 0, y: 0 };
-      this.moveFab(trigger, savedPos.x, savedPos.y, false);
-    }
     return trigger;
+  }
+
+  private restoreFabPos(trigger: HTMLElement): void {
+    if (!this.fabPos) return;
+    const savedPos = this.fabPos;
+    this.fabPos = { x: 0, y: 0 };
+    trigger.style.setProperty('--mushi-drag-active', '0');
+    this.moveFab(trigger, savedPos.x, savedPos.y, 'restore');
+  }
+
+  /** Drag options, or null when fixed. The tab drags along its edge unless `draggable: false`. */
+  private dragOptions(trigger: HTMLElement): { axis: 'both' | 'x' | 'y'; persist: boolean; snap: boolean } | null {
+    const tab = trigger.classList.contains('edge-tab');
+    const d = this.config.draggable;
+    if (!d && (this.draggableSet || !tab)) return null;
+    const o = typeof d === 'object' ? d : {};
+    return { axis: tab ? 'y' : (o.axis ?? 'both'), persist: o.persist ?? true, snap: !tab && (o.snapToEdge ?? true) };
   }
 
   // ─── Rendering ─────────────────────────────────────────────────────
@@ -1413,8 +1569,19 @@ export class MushiWidget {
     return maxClearance > 0 ? Math.ceil(maxClearance) : null;
   }
 
+  private hostCssVar(name: string): string {
+    if (!this.host.isConnected) return '';
+    try {
+      return getComputedStyle(this.host).getPropertyValue(name).trim();
+    } catch {
+      return '';
+    }
+  }
+
   private applyInsetVars(el: HTMLElement): void {
     const { anchor } = this.config;
+    // Rebuilt every render: a bar that went away leaves no stale offset.
+    for (const edge of ['top', 'right', 'bottom', 'left'] as const) el.style.removeProperty(`--mushi-${edge}`);
     if (anchor && Object.keys(anchor).length > 0) {
       (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
         const value = anchor[edge];
@@ -1444,26 +1611,36 @@ export class MushiWidget {
     }
     if (isBottomAnchored) {
       const avoidBottomPx = this.computeAvoidBottomPx();
-      if (avoidBottomPx !== null) el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
+      if (avoidBottomPx !== null) {
+        el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
+      } else if (this.barClearance > 0) {
+        // A floor: a host offset that already clears the bar wins.
+        const base = el.style.getPropertyValue('--mushi-bottom').trim()
+          || this.hostCssVar('--mushi-bottom')
+          || `calc(${MUSHI_GEOMETRY.gutter}px + env(safe-area-inset-bottom, 0px))`;
+        if (base !== 'auto') el.style.setProperty('--mushi-bottom', `max(${base}, ${this.barClearance}px)`);
+      }
     }
   }
 
-  // ─── Draggable FAB ──────────────────────────────────────────────────────────
+  // ─── Draggable launcher ─────────────────────────────────────────────────────
 
-  /** Storage key for the FAB position, scoped to projectId when available. */
-  private fabStorageKey(): string {
+  /** Per-site (origin) key; the FAB and the tab measure from different anchors. */
+  private fabStorageKey(trigger: HTMLElement): string {
     const id = (this.config as unknown as Record<string, unknown>)['projectId'] ?? '';
-    return `mushi_fab_pos${id ? `_${id}` : ''}`;
+    const shape = trigger.classList.contains('edge-tab') ? 'mushi_tab_pos' : 'mushi_fab_pos';
+    return `${shape}${id ? `_${id}` : ''}`;
   }
 
   /**
-   * Move the FAB to a translated offset (relative to its CSS anchor), clamped
-   * inside the viewport safe area, optionally snapping to the nearest edge.
+   * Move the launcher to a translated offset (relative to its CSS anchor),
+   * clamped inside the safe area and above host bars. `end` snaps and persists.
    * The base position is derived by subtracting the applied drag offset.
    */
-  private moveFab(trigger: HTMLElement, x: number, y: number, snap: boolean): void {
-    const d = this.config.draggable;
-    const axis = d && typeof d === 'object' ? (d.axis ?? 'both') : 'both';
+  private moveFab(trigger: HTMLElement, x: number, y: number, phase: 'move' | 'end' | 'restore'): void {
+    const drag = this.dragOptions(trigger);
+    if (!drag) return;
+    const { axis } = drag;
     const W = window.innerWidth;
     const H = window.innerHeight;
     const btnW = trigger.offsetWidth || 52;
@@ -1482,16 +1659,13 @@ export class MushiWidget {
     const minX = (safeL + margin) - baseLeft;
     const maxX = (W - safeR - margin - btnW) - baseLeft;
     const minY = (safeT + margin) - baseTop;
-    const maxY = (H - safeB - margin - btnH) - baseTop;
+    const maxY = (H - Math.max(safeB + margin, this.barClearance) - btnH) - baseTop;
     const newY = axis === 'x' ? 0 : Math.max(minY, Math.min(maxY, y));
     let finalX = axis === 'y' ? 0 : Math.max(minX, Math.min(maxX, x));
-    if (snap) {
-      const shouldSnap = d === true || (typeof d === 'object' && (d.snapToEdge ?? true));
-      if (shouldSnap && axis !== 'y') {
-        finalX = rect.left + btnW / 2 < W / 2
-          ? (safeL + margin) - baseLeft
-          : (W - safeR - margin - btnW) - baseLeft;
-      }
+    if (phase === 'end' && drag.snap && axis !== 'y') {
+      finalX = rect.left + btnW / 2 < W / 2
+        ? (safeL + margin) - baseLeft
+        : (W - safeR - margin - btnW) - baseLeft;
     }
 
     this.fabPos = { x: finalX, y: newY };
@@ -1499,32 +1673,31 @@ export class MushiWidget {
     trigger.style.setProperty('--mushi-drag-y', `${newY}px`);
     trigger.style.setProperty('--mushi-drag-active', '1');
 
-    const shouldPersist = d === true || (typeof d === 'object' && (d.persist ?? true));
-    if (shouldPersist) {
+    if (phase === 'end' && drag.persist) {
       try {
-        localStorage.setItem(this.fabStorageKey(), JSON.stringify(this.fabPos));
-      } catch { /* quota — ignore */ }
+        localStorage.setItem(this.fabStorageKey(trigger), JSON.stringify(this.fabPos));
+      } catch { /* storage blocked or full: the position lasts for this page */ }
     }
   }
 
-  /** Load previously persisted FAB position. */
-  private loadFabPos(): void {
-    const d = this.config.draggable;
-    if (!d) return;
-    const shouldPersist = d === true || (typeof d === 'object' && (d.persist ?? true));
-    if (!shouldPersist) return;
+  private loadFabPos(trigger: HTMLElement): void {
+    const key = this.fabStorageKey(trigger);
+    if (key === this.fabPosKey) return;
+    this.fabPosKey = key;
+    this.fabPos = null;
+    if (!this.dragOptions(trigger)?.persist) return;
     try {
-      const raw = localStorage.getItem(this.fabStorageKey());
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') this.fabPos = parsed;
       }
-    } catch { /* ignore */ }
+    } catch { /* storage blocked or corrupt: start from the CSS position */ }
   }
 
   /** Attach Pointer Events-based drag to the trigger element. */
   private attachDragHandlers(trigger: HTMLElement): void {
-    if (this.fabPos === null) this.loadFabPos();
+    this.loadFabPos(trigger);
     let startX = 0, startY = 0;
     let originX = 0, originY = 0;
     let dragging = false;
@@ -1533,7 +1706,7 @@ export class MushiWidget {
 
     trigger.addEventListener('pointerdown', (e: PointerEvent) => {
       if (e.button !== 0 && e.pointerType !== 'touch') return;
-      trigger.setPointerCapture(e.pointerId);
+      trigger.setPointerCapture?.(e.pointerId);
       startX = e.clientX;
       startY = e.clientY;
       const cur = this.fabPos ?? { x: 0, y: 0 };
@@ -1548,11 +1721,12 @@ export class MushiWidget {
       const dy = e.clientY - startY;
       if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
         moved = true;
+        trigger.classList.remove('tucked');
         trigger.classList.add('dragging');
       }
       if (moved) {
         e.preventDefault();
-        this.moveFab(trigger, originX + dx, originY + dy, false);
+        this.moveFab(trigger, originX + dx, originY + dy, 'move');
       }
     });
     const onPointerUp = (e: PointerEvent) => {
@@ -1560,7 +1734,7 @@ export class MushiWidget {
       dragging = false;
       trigger.classList.remove('dragging');
       if (moved) {
-        this.moveFab(trigger, originX + e.clientX - startX, originY + e.clientY - startY, true);
+        this.moveFab(trigger, originX + e.clientX - startX, originY + e.clientY - startY, 'end');
         // Suppress the click that follows a drag.
         const suppressClick = (ev: Event) => {
           ev.stopImmediatePropagation();
@@ -1641,6 +1815,7 @@ export class MushiWidget {
       intent: this.intent,
       showAllCategories: this.showAllCategories,
       draftLength: (this.drafts.description ?? '').length,
+      launcherDismissible: this.config.dismissible && this.triggerEl !== null,
       canSend: this.canSend(),
       submitting: this.submitting,
       screenshotCapturing: this.screenshotCapturing,
@@ -1784,6 +1959,7 @@ export class MushiWidget {
       case 'close': this.close(); return;
       case 'back': this.goBack(); return;
       case 'brand-footer': this.callbacks.onBrandFooterClick?.(); return;
+      case 'hide-launcher': this.dismissLauncherForSession(); return;
       case 'toggle-more-nav': this.showMoreNav = !this.showMoreNav; this.render(); return;
       case 'show-all-categories': this.showAllCategories = true; this.render(); return;
       case 'chip': {
@@ -2384,6 +2560,16 @@ export class MushiWidget {
 }
 
 /** Selector that finds the replacement of a control after a patch. */
+/** A horizontal anchor / inset or `draggable`: the host placed the FAB on purpose. */
+function placesLauncher(config: MushiWidgetConfig): boolean {
+  const { anchor, inset } = config;
+  return Boolean(
+    config.draggable ||
+    anchor?.left !== undefined || anchor?.right !== undefined ||
+    inset?.left !== undefined || inset?.right !== undefined,
+  );
+}
+
 function focusKey(el: HTMLElement): string | null {
   const d = el.dataset;
   if (d.role) return `[data-role="${d.role}"]`;
