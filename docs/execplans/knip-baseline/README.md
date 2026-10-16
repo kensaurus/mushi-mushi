@@ -7,14 +7,15 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **282** | `--max-issues 282` |
-| default | `pnpm exec knip --reporter json` | **95** | `--max-issues 95 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **232** | `--max-issues 232` |
+| default | `pnpm exec knip --reporter json` | **39** | `--max-issues 39 --treat-config-hints-as-errors` |
 
-> **Re-measured 2026-10-16 (dead-code pass), knip 6.34.0: 282 production / 95 default**
-> (281 and 94 fail, 282 and 95 pass; measured after `pnpm build` on branch
+> **Re-measured 2026-10-16 (dead-code pass), knip 6.34.0: 232 production / 39 default**
+> (231 and 38 fail, 232 and 39 pass; measured after `pnpm build` on branch
 > `housekeep/2026-10-16-deadcode`). Before the pass the true counts were 702 / 534. 33 unused
 > files were deleted (one of them a cascade). Unused exports and types were un-exported, along with
-> the declarations that left dead, and 11 dependencies nothing imports were dropped. The
+> the declarations that left dead, the write-only page hero snapshot store was removed, and 11
+> dependencies nothing imports were dropped. The
 > keep/kill table, including everything kept on purpose and still counted, is in
 > [`docs/plan-dead-code-2026-10-16.md`](../../plan-dead-code-2026-10-16.md). Both JSON
 > baselines and the two tables below were regenerated from this run.
@@ -92,7 +93,7 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 19 |  |  |  | 135 | 15 | 4 | 173 |
+| apps/admin | 21 |  |  |  | 92 | 8 | 4 | 125 |
 | apps/docs |  |  |  |  | 2 |  | 1 | 3 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
@@ -101,7 +102,7 @@ Never raise them.
 | packages/capacitor | 1 |  |  |  |  |  |  | 1 |
 | packages/cli |  |  |  |  | 33 | 8 |  | 41 |
 | packages/core |  |  |  |  | 3 |  |  | 3 |
-| packages/marketing-ui |  | 1 |  |  | 1 |  |  | 2 |
+| packages/marketing-ui |  | 1 |  |  |  |  |  | 1 |
 | packages/mcp | 9 | 1 |  |  | 5 |  |  | 15 |
 | packages/mcp-ci |  |  |  |  | 2 |  |  | 2 |
 | packages/node |  |  |  |  |  | 2 |  | 2 |
@@ -110,8 +111,8 @@ Never raise them.
 | packages/server | 3 | 1 |  |  |  |  |  | 4 |
 | packages/ux |  |  |  |  | 11 | 1 |  | 12 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| packages/web |  |  |  |  | 8 | 1 |  | 9 |
-| **total** | **42** | **3** | **1** | **1** | **202** | **28** | **5** | **282** |
+| packages/web |  |  |  |  | 7 | 1 |  | 8 |
+| **total** | **44** | **3** | **1** | **1** | **157** | **21** | **5** | **232** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -120,20 +121,20 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| apps/admin | 8 |  |  |  |  | 50 | 11 | 4 | 73 |
+| apps/admin | 8 |  |  |  |  | 6 | 1 | 4 | 19 |
 | apps/docs |  |  | 1 |  |  |  |  | 1 | 2 |
 | examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
 | packages/agents | 1 |  |  | 1 |  |  |  |  | 2 |
 | packages/cli |  |  |  |  |  | 2 |  |  | 2 |
-| packages/marketing-ui |  | 1 |  |  |  | 1 |  |  | 2 |
+| packages/marketing-ui |  | 1 |  |  |  |  |  |  | 1 |
 | packages/mcp | 3 | 1 |  |  |  |  |  |  | 4 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
 | packages/react-native | 1 |  |  |  |  |  |  |  | 1 |
 | packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
-| packages/web |  |  |  | 1 |  | 1 |  |  | 2 |
-| **total** | **14** | **2** | **6** | **2** | **1** | **54** | **11** | **5** | **95** |
+| packages/web |  |  |  | 1 |  |  |  |  | 1 |
+| **total** | **14** | **2** | **6** | **2** | **1** | **8** | **1** | **5** | **39** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
