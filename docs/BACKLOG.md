@@ -60,6 +60,7 @@ parked work is visible in one place.
 | BL-016 | decision-needed | Seven July audit plans (`docs/plan-antislop.md`, `plan-docs-sync.md`, `plan-error-handling.md`, `plan-input-validation.md`, `plan-uiux-unification.md`, `plan-uplift-sdk-cli-mcp.md`; `plan-gtm.md` from 2026-09-22) carry open items that were never re-verified against today's code. Triage each: close, carry as rows, or archive | relevant | low | `docs/plan-*.md` | — |
 | BL-017 | deferred-plan-phase | Plan 021 Phase 1 recorded the live judge call, the Cursor/Codex adapters and an `apps/admin` run as not yet verified | verify-done | low | `docs/execplans/PLANS.md:643` | — |
 | BL-018 | test-gap | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline". The knip gate (ADR 0007) and the 2026-10-14 pass have since covered it | stale (propose removal) | low | `docs/execplans/PLANS.md:572` | — |
+| BL-023 | decision-needed | Console design housekeep 2026-10-16 left 9 visible-change decisions: z-index model (`--z-*` unused, 59 literals), dark `fg-faint` brighter than `fg-muted`, dark `warn` = `brand` amber, three "merged" PR colours, `warn` vs `warning-foreground` naming, unused type ramp, Streamdown `border-border` never generated, editorial keycap shadow, four `SeverityBadge` copies. Also `packages/mcp/tsup.config.ts` `clean: true` race that deletes library `.d.ts` on a cold build | relevant | low | `docs/design/housekeep-design-state-2026-10-16.md` (Owner decisions; Follow-ups) | — |
 
 ---
 
