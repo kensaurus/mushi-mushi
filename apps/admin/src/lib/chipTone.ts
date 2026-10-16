@@ -10,8 +10,8 @@ export const CHIP_TONE = {
   accentSubtle: 'bg-accent-muted/55 text-accent-foreground border border-accent/30',
   brand: 'bg-brand-subtle/85 text-brand border border-brand/30',
   brandSubtle: 'bg-brand/12 text-brand border border-brand/28',
-  warn: 'bg-warn-muted/70 text-warning-foreground border border-warn/30',
-  warnSubtle: 'bg-warn-muted/50 text-warning-foreground border border-warn/25',
+  warn: 'bg-warn-muted/70 text-warn-foreground border border-warn/30',
+  warnSubtle: 'bg-warn-muted/50 text-warn-foreground border border-warn/25',
   danger: 'bg-danger-muted/70 text-danger-foreground border border-danger/30',
   dangerSubtle: 'bg-danger-muted/50 text-danger-foreground border border-danger/25',
   ok: 'bg-ok-muted/70 text-ok-foreground border border-ok/30',
@@ -55,6 +55,25 @@ export const META_CHIP_TONE = {
   warn: CHIP_TONE.warnSubtle,
   danger: CHIP_TONE.dangerSubtle,
 } as const
+
+/**
+ * Pull-request lifecycle chips, GitHub's convention: open green, merged
+ * violet (the accent hue), closed red, draft grey. One map, so a PR state
+ * reads the same on every page. Job and release status lists, where
+ * "merged" just means done, keep their own ok tone.
+ */
+export const PR_STATE_TONE_KEY = {
+  draft: 'neutral',
+  open: 'okSubtle',
+  merged: 'accent',
+  closed: 'dangerSubtle',
+} as const satisfies Record<string, keyof typeof CHIP_TONE>
+
+/** Chip classes for a PR state; undefined for a state GitHub doesn't define, so callers keep their own fallback. */
+export function prStateChipTone(state: string | null | undefined): string | undefined {
+  const key = state ? PR_STATE_TONE_KEY[state as keyof typeof PR_STATE_TONE_KEY] : undefined
+  return key ? CHIP_TONE[key] : undefined
+}
 
 /** Map IA severity labels to the canonical CHIP_TONE entry (consolidates ad-hoc pill classes). */
 export type StatusSeverity = 'ok' | 'warn' | 'danger' | 'neutral' | 'info'
@@ -124,7 +143,7 @@ export const SEVERITY_SURFACE: Record<
 > = {
   ok: { ring: 'border-ok/40', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
   info: { ring: 'border-info/40', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
-  warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warning-foreground', dot: 'bg-warn' },
+  warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warn-foreground', dot: 'bg-warn' },
   crit: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
   danger: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
   neutral: {

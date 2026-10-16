@@ -42,7 +42,7 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
         {d.finished_at && <> · ended <RelativeTime value={d.finished_at} /></>}
       </p>
       {showReason && d.error && (
-        <p className="text-2xs text-warning-foreground" title={d.error}>
+        <p className="text-2xs text-warn-foreground" title={d.error}>
           {d.error.length > 160 ? `${d.error.slice(0, 160)}…` : d.error}
         </p>
       )}

@@ -90,6 +90,7 @@ import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
 import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
+import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
 
 // Same shape the API accepts (api/ids.ts isUuid): RFC 4122, version 1-5.
@@ -459,10 +460,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatch,
   })
   const { request: requestDispatch, block: dispatchBlockState } = confirmed
+  // One answer for every dispatch control: with no stack, file or failed
+  // request, "Not a code bug" leads and Dispatch is "Dispatch anyway" (BL-061).
+  const hasCodeLocation = useMemo(() => reportHasCodeLocation(report), [report])
 
   const recommendation = useMemo(
-    () => deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState),
-    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState],
+    () =>
+      deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation),
+    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation],
   )
 
   // Bumped when a reply reaches the reporter so the Reporter view refetches
@@ -618,6 +623,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         dispatchBlock={dispatchBlockState}
         isDispatchBusy={isDispatchBusy}
         repoChoice={repoChoice}
+        hasCodeLocation={hasCodeLocation}
       />
       {confirmed.dialog}
 

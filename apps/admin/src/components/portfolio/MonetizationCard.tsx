@@ -238,7 +238,7 @@ function AppBlock({ hub, app, busy, onAsk }: { hub: MonetizationHubView; app: Mo
 
 function Products({ products }: { products: MonetizationAppView['entitlements'][number]['products'] }) {
   if (products === null) return <span className="ml-1 text-fg-faint">products not read yet</span>
-  if (products.length === 0) return <span className="ml-1 text-warning-foreground">no products</span>
+  if (products.length === 0) return <span className="ml-1 text-warn-foreground">no products</span>
   return (
     <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
       {products.map((p) => {

@@ -17,7 +17,7 @@ import { useCallback, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Card, Badge, Btn, Callout, Section, ErrorAlert } from '../components/ui'
+import { Card, Btn, Callout, Section, ErrorAlert, FindingSeverityBadge } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import { describeApiError } from '../lib/humanizeApiError'
@@ -58,12 +58,6 @@ interface AuditResult {
 
 /** Audit findings the per-check list does not hold: the linked backend's own reads. */
 const BACKEND_CATEGORIES = new Set(['advisor', 'rls_gap', 'backend_error'])
-
-function SeverityBadge({ severity }: { severity: AuditFinding['severity'] }) {
-  if (severity === 'error') return <Badge tone="dangerSubtle">Error</Badge>
-  if (severity === 'warn') return <Badge tone="warnSubtle">Warn</Badge>
-  return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
-}
 
 /** Verdict, when, backend link, backend problems and restarted checks, in one card. */
 function AuditResultCard({ result }: { result: AuditResult }) {
@@ -115,7 +109,7 @@ function AuditResultCard({ result }: { result: AuditResult }) {
           {backend.map((f, i) => (
             // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
             <div key={i} className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-              <SeverityBadge severity={f.severity} />
+              <FindingSeverityBadge severity={f.severity} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-fg">{f.title}</p>
                 <p className="mt-0.5 text-xs text-fg-secondary">{f.detail}</p>

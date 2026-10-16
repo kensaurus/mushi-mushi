@@ -16,7 +16,7 @@ import {
   SignalChip,
 } from './ReportSurface'
 import type { ReportFixAttempt } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, prStateChipTone } from '../../lib/chipTone'
 
 interface Props {
   fix: ReportFixAttempt
@@ -169,13 +169,6 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   const ciSignalTone =
     tone === 'ok' ? 'info' : tone === 'danger' ? 'danger' : tone === 'warn' ? 'warn' : 'neutral'
 
-  const prStateTone: Record<string, string> = {
-    merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
-    open: CHIP_TONE.okSubtle,
-    closed: CHIP_TONE.dangerSubtle,
-    draft: 'bg-surface-overlay text-fg-muted',
-  }
-
   const metaRows = [
     fix.branch
       ? {
@@ -196,7 +189,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
       ? {
           label: 'PR state',
           value: (
-            <Badge className={prStateTone[fix.pr_state] ?? 'bg-surface-overlay text-fg-muted'}>
+            <Badge className={prStateChipTone(fix.pr_state) ?? 'bg-surface-overlay text-fg-muted'}>
               {fix.pr_state}
             </Badge>
           ),

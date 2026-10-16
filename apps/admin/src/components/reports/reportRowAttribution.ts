@@ -141,7 +141,7 @@ export function captureMode(
   if (trigger === 'captureException' || trigger === 'captureMessage' || trigger.startsWith('node-')) {
     return {
       label: 'server',
-      tone: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+      tone: 'bg-warn-muted/50 text-warn-foreground border-warn/30',
       tooltip: 'Forwarded from a backend service via the Node SDK.',
     }
   }
@@ -197,12 +197,12 @@ export const LAYER_PILL: Record<
   },
   backend: {
     label: 'BE',
-    tone: 'bg-warn-muted/45 text-warning-foreground border-warn/35',
+    tone: 'bg-warn-muted/45 text-warn-foreground border-warn/35',
     tooltip: 'Backend inventory surface',
   },
   server: {
     label: 'API',
-    tone: 'bg-warn-muted/45 text-warning-foreground border-warn/35',
+    tone: 'bg-warn-muted/45 text-warn-foreground border-warn/35',
     tooltip: 'Server-side SDK capture',
   },
   mobile: {

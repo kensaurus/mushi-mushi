@@ -58,7 +58,7 @@ const TONES: Record<
   warn: {
     wrap: 'ring-1 ring-warn/25 bg-warn-muted/12',
     iconWrap: `${CHIP_TONE.warnSubtle} ring-1 ring-warn/30`,
-    value: 'text-warning-foreground',
+    value: 'text-warn-foreground',
     chip: 'text-fg-muted',
   },
   neutral: {

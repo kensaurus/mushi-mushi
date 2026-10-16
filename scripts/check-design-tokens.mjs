@@ -698,13 +698,14 @@ if (ellipsisHits.length > 0) {
 
 // ── Retired alias tokens (2026-10-16 design housekeep) ───────────────────
 // Same-value aliases merged into their canonical token. Matched as an exact
-// root (so text-warning-foreground stays legal), because the unknown-root
-// check above falls back to the longest defined prefix: text-fg-primary
-// (prefix fg) and bg-surface-2 (prefix surface) would pass it and render
-// nothing. Also catches var(--color-<alias>) and the arbitrary values that
-// duplicate an existing token. Decision log:
+// root, because the unknown-root check above falls back to the longest
+// defined prefix: text-fg-primary (prefix fg) and bg-surface-2 (prefix
+// surface) would pass it and render nothing. Also catches var(--color-<alias>),
+// the retired type-ramp and z-index names, z-index literals, and the
+// arbitrary values that duplicate an existing token. Decision log:
 // docs/design/housekeep-design-state-2026-10-16.md
 const RETIRED_ALIAS_ROOTS = new Map([
+  ['warning-foreground', 'warn-foreground'],
   ['err', 'danger'],
   ['err-muted', 'danger-muted'],
   ['warning', 'warn'],
@@ -716,9 +717,22 @@ const RETIRED_ALIAS_ROOTS = new Map([
   ['surface-3', 'surface-overlay'],
   ['fg-primary', 'fg'],
 ])
+// Unused Jul 2026 ramp that duplicated Tailwind's scale (text-label …).
+const RETIRED_TEXT_ROOTS = new Map([
+  ['label', 'xs'],
+  ['body', 'sm'],
+  ['title', 'base'],
+  ['heading', 'lg'],
+  ['display', '2xl'],
+])
 const RETIRED_CUSTOM_PROPS = new Map([
   ...[...RETIRED_ALIAS_ROOTS].map(([from, to]) => [`--color-${from}`, `--color-${to}`]),
   ['--duration-micro', '--duration-instant'],
+  ...[...RETIRED_TEXT_ROOTS].map(([from, to]) => [`--text-${from}`, `text-${to}`]),
+  ...['base', 'sticky', 'dropdown', 'drawer', 'modal', 'overlay-max'].map((n) => [
+    `--z-${n}`,
+    'z-0 … z-50, or --z-toast / --z-alert / --z-top',
+  ]),
 ])
 const DEPRECATED_ARBITRARY = [
   { re: /ease-\[var\(--ease-stamp\)\]/g, fix: 'ease-stamp' },
@@ -726,22 +740,43 @@ const DEPRECATED_ARBITRARY = [
     re: /bg-\[color-mix\(in_oklch,var\(--color-editorial-ink\)_82%,var\(--color-editorial-vermillion\)\)\]/g,
     fix: 'bg-editorial-ink-emphasis',
   },
+  {
+    re: /shadow-\[inset_0_-2px_0_rgba\([^\]]*\]/g,
+    fix: 'shadow-editorial-key / -key-fill / -key-ink (marketing-ui: shadow-(--mushi-elevation-key*))',
+  },
+  { re: /shadow-\[0_24px_80px_-48px_rgba\(14,13,11,0\.45\)\]/g, fix: 'shadow-(--mushi-elevation-overlay)' },
 ]
+// z-[N] → z-N (Tailwind takes any integer); anything above the app shell's
+// z-50 uses a z-(--z-*) token so the stacking order lives in one place.
+const zArbitraryRe = /(?<=[\s"'`:!])z-\[(-?\d+)\]/g
+const zBareRe = /(?<=[\s"'`:!])z-(\d+)(?=[\s"'`])/g
 const retiredAliasHits = []
 const retiredClassRe = new RegExp(
   `(?<=[\\s"'\`{}\\[\\]=>:;(!])(${COLOR_PREFIXES.join('|')})-([a-z][a-z0-9-]*?)(?:\\/\\d+)?(?=[\\s"'\`{}\\[\\]=>:;),])`,
   'g',
 )
-const retiredPropRe = /--(?:color-[a-z0-9-]+|duration-micro)(?![a-z0-9-])/g
+const retiredPropRe = /--(?:color-[a-z0-9-]+|duration-micro|text-[a-z0-9-]+|z-[a-z0-9-]+)(?![a-z0-9-])/g
 
 for (const file of files) {
   const src = readFileSync(file, 'utf8')
   const lines = src.split('\n')
   const allowlisted = (index) => /mushi-mushi-allowlist:/i.test(lines[extractLineNumber(src, index) - 1] ?? '')
   for (const m of src.matchAll(retiredClassRe)) {
-    const to = RETIRED_ALIAS_ROOTS.get(m[2])
+    const to = RETIRED_ALIAS_ROOTS.get(m[2]) ?? (m[1] === 'text' ? RETIRED_TEXT_ROOTS.get(m[2]) : undefined)
     if (!to || allowlisted(m.index ?? 0)) continue
     retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[1]}-${m[2]} → ${m[1]}-${to}` })
+  }
+  if (/\.tsx?$/.test(file)) {
+    for (const m of src.matchAll(zArbitraryRe)) {
+      if (allowlisted(m.index ?? 0)) continue
+      const n = Number(m[1])
+      const fix = n > 50 ? 'z-(--z-toast | --z-alert | --z-top)' : `z-${n}`
+      retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → ${fix}` })
+    }
+    for (const m of src.matchAll(zBareRe)) {
+      if (Number(m[1]) <= 50 || allowlisted(m.index ?? 0)) continue
+      retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → z-(--z-toast | --z-alert | --z-top)` })
+    }
   }
   for (const m of src.matchAll(retiredPropRe)) {
     const to = RETIRED_CUSTOM_PROPS.get(m[0])
@@ -754,6 +789,22 @@ for (const file of files) {
       retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → ${fix}` })
     }
   }
+}
+
+// marketing-ui shares the editorial keycap / overlay shadows with the admin
+// public pages, so the token-duplicating shadow literals are banned there too.
+try {
+  for (const file of walk(resolve(ROOT, 'packages/marketing-ui/src'))) {
+    if (!/\.tsx?$/.test(file)) continue
+    const src = readFileSync(file, 'utf8')
+    for (const { re, fix } of DEPRECATED_ARBITRARY.filter((d) => d.re.source.startsWith('shadow-'))) {
+      for (const m of src.matchAll(re)) {
+        retiredAliasHits.push({ file, line: extractLineNumber(src, m.index ?? 0), token: `${m[0]} → ${fix}` })
+      }
+    }
+  }
+} catch {
+  /* marketing-ui missing in some checkouts */
 }
 
 if (retiredAliasHits.length > 0) {
