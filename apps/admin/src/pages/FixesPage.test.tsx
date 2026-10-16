@@ -54,7 +54,6 @@ vi.mock('../lib/usePageData', () => ({
 }))
 vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
-vi.mock('../lib/heroSnapshots', () => ({ usePublishPageHeroStats: () => undefined }))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))

@@ -1,9 +1,8 @@
 /**
- * Pages publish fresher hero metrics than layout nav-meta (which loads once
- * and may lag). Layout merges page snapshots over nav-count patches.
+ * Page hero snapshot shape and metric-chip helper. The publish/subscribe store
+ * pages once wrote into had no reader left and was removed on 2026-10-16.
  */
 
-import { useEffect, useMemo } from 'react'
 import type { PageHeroDecide, PageHeroVerify } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import type { HeroActIdle } from './layoutHeroFromStats'
@@ -14,33 +13,6 @@ export interface PageHeroSnapshot {
   verify?: Partial<PageHeroVerify>
   act?: PageAction | null
   actIdle?: HeroActIdle
-}
-
-type Listener = () => void
-
-let current: PageHeroSnapshot | null = null
-const listeners = new Set<Listener>()
-
-function emit() {
-  listeners.forEach((l) => l())
-}
-
-export function usePublishHeroSnapshot(snapshot: PageHeroSnapshot | null): void {
-  const stableKey = useMemo(
-    () => (snapshot ? JSON.stringify({ ...snapshot, act: snapshot.act ? { ...snapshot.act, primary: snapshot.act.primary, secondary: snapshot.act.secondary } : null }) : ''),
-    [snapshot],
-  )
-
-  useEffect(() => {
-    current = snapshot
-    emit()
-    return () => {
-      if (current === snapshot) {
-        current = null
-        emit()
-      }
-    }
-  }, [stableKey, snapshot])
 }
 
 /** Split "3 members · 2 inactive" into display chips. */

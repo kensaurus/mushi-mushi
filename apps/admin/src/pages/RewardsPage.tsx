@@ -8,7 +8,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PublishingTab } from '../components/rewards/PublishingTab'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveOrgSignal } from '../lib/activeOrg'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -49,7 +48,6 @@ export function RewardsPage() {
     isValidating: rewardsStatsValidating,
     lastFetchedAt: rewardsStatsFetchedAt,
   } = usePageData<RewardsStats>('/v1/admin/rewards/stats')
-  usePublishPageHeroStats('/rewards', rewardsStatsData)
   const rewardsStats = rewardsStatsData ?? EMPTY_REWARDS_STATS
   const ux = useRewardsUx(rewardsStats)
   const projectRewards = useProjectRewardsToggle(reloadRewardsStats)

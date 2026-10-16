@@ -53,7 +53,6 @@ import { useFixesUx } from '../lib/fixesModeUx'
 import { countRepoFilters, matchesRepoFilter } from '../lib/repoBranches'
 import { fixRowDomId, readFixDeepLinkId } from '../lib/fixDeepLink'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { trackSelf } from '../lib/track'
 interface InventoryActionNode {
   actionNodeId?: string
@@ -148,7 +147,6 @@ export function FixesPage() {
   } = usePageData<FixesStats>(
     activeProjectId ? '/v1/admin/fixes/stats' : null,
   )
-  usePublishPageHeroStats('/fixes', statsData)
   const fixesStats = statsData ?? EMPTY_FIXES_STATS
 
   // Latest page (refreshed by realtime) plus older pages loaded on request,
