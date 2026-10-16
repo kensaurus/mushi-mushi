@@ -3,8 +3,6 @@
  * PURPOSE: Dashboard shell stats — banner + KPI strip (separate from full payload).
  */
 
-export type DashboardTabId = 'overview' | 'loop' | 'metrics' | 'health'
-
 export interface DashboardStats {
   hasAnyProject: boolean
   projectId: string | null
