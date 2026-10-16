@@ -78,3 +78,39 @@ describe('buildInboxCards reports card', () => {
     expect(card?.action?.primary).toMatchObject({ to: '/reports?status=new&sort=created_at&dir=asc' })
   })
 })
+
+// 2026-10-16 live console: the banner said "3 open actions" (4 urgent reports
+// unfixed, the Claude Code agent probe `down`) while every card was ticked.
+describe('buildInboxCards agrees with /inbox/stats', () => {
+  const ctx = { judgeStale: false, judgeStaleHours: null }
+  const open = (cards: ReturnType<typeof buildInboxCards>) =>
+    cards.filter((c) => c.action !== null).map((c) => c.group).sort()
+
+  it('opens Plan on urgent reports that are triaged but unfixed', () => {
+    const plan = buildInboxCards(emptyDashboard, { ...ctx, urgentOpenReports: 4 }).find((c) => c.id === 'reports-plan')
+    expect(plan?.action?.title).toBe('4 critical or high reports are still unfixed')
+    expect(plan?.action?.primary).toMatchObject({ to: '/reports?status=open' })
+  })
+
+  it('counts a down probe as red without stats', () => {
+    const data = {
+      ...emptyDashboard,
+      integrations: [{ kind: 'claude_code_agent', lastStatus: 'down' }],
+    } as unknown as DashboardData
+    expect(open(buildInboxCards(data, ctx))).toEqual(['act', 'ops'])
+  })
+
+  it('uses the stats counters over the dashboard list when given', () => {
+    const cards = buildInboxCards(emptyDashboard, { ...ctx, urgentOpenReports: 4, integrationRed: 1, integrationAmber: 0 })
+    expect(open(cards)).toEqual(['act', 'ops', 'plan'])
+  })
+
+  it('a critical needing triage still outranks urgent unfixed reports', () => {
+    const data = {
+      ...emptyDashboard,
+      counts: { reports14d: 2, openBacklog: 0, openCritical14d: 2, fixesTotal: 0, openPrs: 0, llmCalls14d: 0, llmTokens14d: 0, llmFailures14d: 0 },
+    } as DashboardData
+    const plan = buildInboxCards(data, { ...ctx, urgentOpenReports: 4 }).find((c) => c.id === 'reports-plan')
+    expect(plan?.action?.title).toBe('2 critical reports need a decision')
+  })
+})
