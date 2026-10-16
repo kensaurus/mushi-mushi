@@ -62,7 +62,10 @@ Primary work UI
 - ESLint `mushi-mushi/no-text-3xs-on-interactive` — error (12px floor on buttons/links)
 - ESLint `mushi-mushi/no-allowlist-jsx-textnode` — error (`// mushi-mushi-allowlist` as JSX child text; use `{/* … */}` or attribute-line `//`)
 - `node scripts/audit-chip-contrast.mjs --strict` — CI gate for muted **and** opacity chip contrast drift
-- `node scripts/check-design-tokens.mjs` — unknown roots, hex, raw `var(--mushi-*)` in operator TSX, theme pairs, and retired aliases (`err`, `warning`, `*-subtle`, `surface-2/3`, `fg-primary`, `duration-micro`; decision log in [`docs/design/housekeep-design-state-2026-10-16.md`](../../../../docs/design/housekeep-design-state-2026-10-16.md))- `node scripts/audit-admin-hint-duplication.mjs` — PageHeaderBar hint dedupe audit
+- `node scripts/check-design-tokens.mjs` — unknown roots, hex, raw `var(--mushi-*)` in operator TSX, theme pairs, and retired forms (`err`, `warning`, `warning-foreground`, `*-subtle`, `surface-2/3`, `fg-primary`, `duration-micro`, `text-label/body/title/heading/display`, the old `--z-*` names, `z-[N]` literals and bare `z-N` above 50, hand-written keycap / overlay shadows; decision log in [`docs/design/housekeep-design-state-2026-10-16.md`](../../../../docs/design/housekeep-design-state-2026-10-16.md))
+- Finding severity chips (error / warn / info) use `FindingSeverityBadge`; PR state chips use `prStateChipTone()` / `PR_STATE_TONE_KEY` from `lib/chipTone.ts`
+- Stacking: Tailwind `z-0`…`z-50` inside the app shell, `z-(--z-toast | --z-alert | --z-top)` above it
+- `node scripts/audit-admin-hint-duplication.mjs` — PageHeaderBar hint dedupe audit
 - Playwright [`examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`](../../../../examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts) — posture row budget + contrast spot-checks (`/health`, `/reports`, `/marketplace`)
 - Playwright [`examples/e2e-dogfood/tests/admin-visual-regression.spec.ts`](../../../../examples/e2e-dogfood/tests/admin-visual-regression.spec.ts) — visual baseline (extend before adding Storybook/Chromatic)
 - Cross-surface governance: [`docs/DESIGN-SYSTEM.md`](../../../../docs/DESIGN-SYSTEM.md)

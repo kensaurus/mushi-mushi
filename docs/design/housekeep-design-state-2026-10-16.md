@@ -53,7 +53,7 @@ values in 3 files), plus 4 contrast chips the alias had hidden, and 11 alias nam
 ## SSOT decisions
 
 - [x] **`err` / `err-muted` → `danger` / `danger-muted`.** Same value in every scope (no nested scope overrides `--color-danger`). 18 class sites.
-- [x] **`warning` / `warning-subtle` → `warn` / `warn-muted`.** 1 site (`HealthSparkline`, mounted on integration cards, never inside the Ask Mushi terminal, which is the only scope that redefines `--color-warn`). `--color-warning-foreground` is a separate token with its own value and stays.
+- [x] **`warning` / `warning-subtle` → `warn` / `warn-muted`.** 1 site (`HealthSparkline`, mounted on integration cards, never inside the Ask Mushi terminal, which is the only scope that redefines `--color-warn`). `--color-warning-foreground` had its own value and stayed; it was renamed `--color-warn-foreground` later the same day (BL-035 item 5).
 - [x] **`danger-subtle` / `info-subtle` / `ok-subtle` → `*-muted`.** Zero usages; deleted.
 - [x] **`surface-2` / `surface-3` → `surface-raised` / `surface-overlay`.** 1 site each. Removed from `@theme` and from the light, high-contrast and Ask Mushi override blocks (each mapped them to the same target as the canonical token).
 - [x] **`fg-primary` → `fg`.** 20 sites. Ask Mushi mapped both to `--am-text`.
@@ -83,7 +83,7 @@ values in 3 files), plus 4 contrast chips the alias had hidden, and 11 alias nam
 `scripts/check-design-tokens.mjs` gains a `[retired-alias]` check, inside the existing
 `pnpm check:design` step:
 
-- exact-root deny list for the removed aliases (exact match, so `text-warning-foreground` stays legal);
+- exact-root deny list for the removed aliases (exact match; `warning-foreground` itself was retired on 2026-10-16, item 5 below);
 - also flags `var(--color-<retired>)` in admin TS/TSX/CSS;
 - flags the two arbitrary forms that duplicate a token (`ease-[var(--ease-stamp)]`, the ink/vermillion `color-mix`).
 
@@ -94,9 +94,28 @@ after the tokens were deleted and render nothing.
 Escape hatch: a new token goes in `styles/theme-tokens.css`. A reviewed exception takes
 `// mushi-mushi-allowlist: <reason>` on the same line.
 
-## Owner decisions (visible changes, not in this diff)
+## BL-035 decisions (2026-10-16, branch `design/2026-10-16-bl035`)
 
-Parked as `BL-035` in [`docs/BACKLOG.md`](../BACKLOG.md).
+The owner asked for all nine to be decided and done. Rule used: most accessible
+(WCAG AA in light and dark), then tokenized, then most used; keep the visible
+change small unless the current state is a bug. One line of rationale each:
+
+1. **Z-index → Tailwind `z-0`…`z-50` inside the app shell; `--z-toast` 60, `--z-alert` 70, `--z-top` 100 above it.** The tokens take the values the overlays already use, so nothing restacks, and the unused 0/20/40/50/60/70/80 scale that contradicted the code is deleted; `z-[1]`/`z-[2]` became `z-1`/`z-2`.
+2. **Dark `fg-muted` 0.62 → 0.67.** A bug: muted sat below faint (0.63), and it measured 4.33:1 on `surface-overlay`, which fails AA; at 0.67 the ramp reads fg > secondary > muted > faint and every step is ≥ 4.5:1 on surface, raised and overlay.
+3. **Dark warn family → hue 55 (orange): `warn` 0.78 0.16 55, `warn-muted` 0.30 0.06 55, `warn-foreground` 0.84 0.12 55.** A bug: warn and brand were ΔE 0.010 apart (below the ~0.02 the eye separates); hue 55 is ΔE 0.072 from brand and 0.16+ from danger and medium yellow, chips stay ≥ 8.6:1; light mode already separated them and is unchanged.
+4. **One PR-lifecycle map, GitHub's convention (`PR_STATE_TONE_KEY` / `prStateChipTone` in `lib/chipTone.ts`): open green, merged violet (accent), closed red, draft grey.** The four PR maps disagreed on every state, and merged-green would have made open and merged identical in two of them; status lists where "merged" just means done (`lib/tokens.ts`, `BulkSdkUpgradePanel`) keep green.
+5. **`warning-foreground` → `warn-foreground`.** Every other member of the family is `warn-*` and every other foreground is `<family>-foreground`; same value, 62 uses in 38 files, gate-blocked.
+6. **Delete `--text-label/body/title/heading/display`.** Zero users and each equals a Tailwind size (`text-xs/sm/base/lg/2xl`), the scale the code already uses; gate-blocked with the matching suggestion.
+7. **Safelist `border-border divide-border` with `@source inline(...)`.** A bug: Streamdown's table and code-block borders fell back to `currentColor`; the full `@source` on its dist (its README setup) would also switch on shiki colours, line numbers and a raw red palette that fight Ask Mushi's Monokai code-block styling.
+8. **Brand tokens `--mushi-elevation-key` (0.18), `-key-fill` (0.25), `-key-ink` (white 0.18); admin bridges `shadow-editorial-key*`.** These are the alphas already used per role at 7 of 8 sites; the integrations icon tile moves from 0.06 to 0.18 (the one visible change, a 2px bottom edge), and Hero's hand-written overlay shadow now uses the identical `--mushi-elevation-overlay`.
+9. **`FindingSeverityBadge` in `components/ui/layout.tsx` replaces the four copies, label "Warning", Info on `Badge tone="neutral"`.** "Warning" is the full word for screen readers ("Warn" reads as a verb), and the neutral recipe gives Info the 1px border its Error/Warning siblings already have; `LessonsPage` keeps its own (it handles `critical` and prints the raw label).
+
+Visible changes, all measured: dark muted copy slightly brighter, dark warn chips/dots orange,
+PR chips (BeforeAfterCard, UxRunPullRequest, ReportBranchGraph merged), "Warn" → "Warning" and
+Info border on 2 pages, Streamdown borders themed, integrations icon-tile edge. Light mode
+changes only in items 4, 7, 8 and 9.
+
+### Original owner list (2026-10-16, before the decisions above)
 
 1. **Z-index scale is unused and disagrees with the code.** `--z-*` (0/20/40/50/60/70/80) has 0 usages; 59 literal z values exist. Toasts sit at `z-[60]` while `--z-toast` is 70; four overlays (`BetaBanner`, `ConfigHelp`, `FirstRunTour`, `ui/misc` tooltip) use `z-[100]`, above `--z-overlay-max` (80). Pick one stacking model, then migrate.
 2. **Dark mode `fg-faint` (L 0.63) is brighter than `fg-muted` (L 0.62).** The hierarchy is inverted in dark only (light is 0.50 vs 0.44, correct).

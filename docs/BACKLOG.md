@@ -9,7 +9,7 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-16 (second run; delta against 2026-10-14 below)
 - **Delta:** 24 new (BL-019..BL-022 repo housekeep, BL-035 design, BL-040..BL-042 dead code, BL-060..BL-075 this scan) · 0 closed · 0 newly stale · 3 rows gained a verify-done note (BL-003, BL-004, BL-035)
-- **Open items:** 42 · **Recently closed:** 0
+- **Open items:** 41 · **Recently closed:** 1 (BL-035)
 
 | Class | Open |
 |---|---|
@@ -17,13 +17,13 @@ parked work is visible in one place.
 | test-gap | 7 |
 | tech-debt | 14 |
 | known-bug | 0 |
-| decision-needed | 9 |
+| decision-needed | 8 |
 | unfinished-feature | 3 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 39 |
+| relevant | 38 |
 | verify-done | 2 |
 | stale (propose removal) | 1 |
 
@@ -75,7 +75,6 @@ parked work is visible in one place.
 | BL-020 | decision-needed | Product screenshots are committed three times: `docs/screenshots/` (88 files, about 204 MB), `apps/docs/public/screenshots/` (the copy `scripts/sync-docs-screenshots.mjs` makes) and `apps/admin/public/screenshots/` (81 files, about 213 MB). Identical files share one git blob, but every checkout and worktree writes about 620 MB to disk. Keep one source and copy at build time, or keep the copies on purpose. Demo GIFs are referenced by a built name (`apps/docs/components/AdminDocHero.tsx:26`), so a grep for a file name does not prove it unused | relevant | low | `scripts/sync-docs-screenshots.mjs`; `scripts/sync-marketing-screenshots.mjs` | — |
 | BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
 | BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | relative-link scan of tracked `*.md`, 2026-10-16 | — |
-| BL-035 | decision-needed | Console design housekeep 2026-10-16 left 9 visible-change decisions: z-index model (`--z-*` unused, 59 literals), dark `fg-faint` brighter than `fg-muted`, dark `warn` = `brand` amber, three "merged" PR colours, `warn` vs `warning-foreground` naming, unused type ramp, Streamdown `border-border` never generated, editorial keycap shadow, four `SeverityBadge` copies. Also `packages/mcp/tsup.config.ts` `clean: true` race that deletes library `.d.ts` on a cold build (2026-10-16: the mcp tsup clean race is fixed in `9c938600`) | relevant | low | `docs/design/housekeep-design-state-2026-10-16.md` (Owner decisions; Follow-ups) | — |
 | BL-040 | decision-needed | Shipped-but-unexported code in published packages. `packages/plugin-jira/src/jira-webhook.ts` is a documented inbound Jira → Mushi bridge that `src/index.ts` never exports. `packages/react-native/src/instance.ts` (`MushiRN.getInstance()`) is announced as exported in the changelog, but nothing exports or registers it. Export each with a test, or delete it | relevant | med | `packages/plugin-jira/src/handler.ts:29`; `packages/react-native/CHANGELOG.md:435` | — |
 | BL-041 | tech-debt | Small dead-code leftovers that need a non-code decision. `apps/admin/src/content/dispatch-prerequisites.mdx`: the console has no MDX loader, so move it into `apps/docs` or delete it. `packages/agents/src/drift-agent.ts`: `_shared/drift-agent.ts` names it the canonical copy; delete it and update that comment on the next edge deploy. `examples/e2e-dogfood`: two comments say msw mocks GitHub, but nothing wires msw (its devDependency was removed) | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-042 | tech-debt | knip findings left for an owner or a refactor. 5 duplicate exports (aliases such as `bannerEnterSpring`/`chromeEnterSpring` and `PAGE_CONTENT_STACK`/`PAGE_STACK`) need their importers renamed. Production mode reports 157 exports and 21 types used only by tests, among them `heroSnapshotFromPageStats` and its helpers now that the hero store is gone: tag each `@internal`, delete it with its test, or give it a caller. `@modelcontextprotocol/core` in `@mushi-mushi/mcp` is imported by neither `src` nor `dist`, since `@modelcontextprotocol/server` depends on it itself, but it was added on purpose in #380 | relevant | low | `pnpm exec knip --production` | — |
@@ -102,6 +101,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-035 | Nine console design decisions from the 2026-10-16 housekeep (z-index model, dark fg-muted and warn, PR state colours, warn-foreground name, type ramp, Streamdown borders, keycap shadow, severity badge) | 2026-10-16 | Decided and implemented on branch `design/2026-10-16-bl035`; one rationale line each in `docs/design/housekeep-design-state-2026-10-16.md` (BL-035 decisions); retired forms blocked by `scripts/check-design-tokens.mjs`. The mcp tsup clean race was fixed in `9c938600` |
 
 ## Keeping this alive
 
