@@ -17238,6 +17238,9 @@ PR is trusted and the fix timeline says the contents were not checked.
 You can dispatch a fix from four places:
 
 1. **Report detail** → "Dispatch fix" button (single-repo or auto multi-repo).
+   A report with no stack trace, source file or failed request (most web
+   vitals and native crashes) leads with "Not a code bug" instead, and the
+   button reads "Dispatch anyway": a fix agent usually has nothing to change.
 2. **Reports list** → kebab menu → "Send to Cursor agent" (dispatches `cursor_cloud` directly).
 3. **Fixes list** → "New fix" button with a report picker.
 4. **MCP / A2A / CLI** — `dispatch_fix` tool (`agent=cursor_cloud`), `POST /v1/a2a/tasks`, or `mushi fix  --agent cursor_cloud`.
@@ -20523,8 +20526,10 @@ Selecting a report opens the full detail view:
 - **Comments + presence** — Supabase Realtime tracks who else is on the
   same report (badge in the header). Comments stream live with relative
   timestamps that expose the full ISO time on hover.
-- **Actions**: change status, dispatch a fix, dedupe into a parent group,
-  flag as anti-gaming.
+- **Actions**: change status, dispatch a fix, close as "Not a code bug",
+  dedupe into a parent group, flag as anti-gaming. When the report has no
+  stack trace, source file or failed request, "Not a code bug" is the main
+  button and dispatch moves to "Dispatch anyway".
 - **Fix card + pipeline flow** — when a fix is dispatched, the detail page shows
   the active attempt, CI badge, and merge controls.
 - **Related cross-links** — jump to other reports from the same component
