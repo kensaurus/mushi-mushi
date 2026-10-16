@@ -86,7 +86,7 @@ export function OnboardingSetupReadout({
               SDK + test report
             </span>
             {stats.sdkHostMismatch ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-muted/40 px-2 py-0.5 text-warning-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-muted/40 px-2 py-0.5 text-warn-foreground">
                 Fix SDK endpoint env
               </span>
             ) : stats.sdkInstalled ? (

@@ -148,7 +148,7 @@ const STATUS_TONE: Record<string, string> = {
   passed:  'text-ok-foreground',
   failed:  'text-danger-foreground',
   error:   'text-danger-foreground',
-  timeout: 'text-warning-foreground',
+  timeout: 'text-warn-foreground',
   skipped: 'text-fg-faint',
   running: 'text-brand',
   pending: 'text-fg-secondary',

@@ -9,7 +9,7 @@
 
 export const SEVERITY_TRAFFIC = {
   critical: { bg: 'bg-danger', text: 'text-danger-foreground', label: 'Critical' },
-  high: { bg: 'bg-warn', text: 'text-warning-foreground', label: 'High' },
+  high: { bg: 'bg-warn', text: 'text-warn-foreground', label: 'High' },
   medium: { bg: 'bg-sev-medium', text: 'text-fg-secondary', label: 'Medium' },
   low: { bg: 'bg-ok', text: 'text-ok-foreground', label: 'Low' },
   unscored: { bg: 'bg-fg-faint/45', text: 'text-fg-muted', label: 'Unscored' },
@@ -40,7 +40,7 @@ export function severityTrafficLabel(severity: string | null | undefined): strin
 /** Badge chrome aligned to traffic-light fills — AA foreground on muted bg. */
 export const SEVERITY_TRAFFIC_BADGE: Record<string, string> = {
   critical: 'bg-danger-muted/70 text-danger-foreground border border-danger/25',
-  high: 'bg-warn-muted/70 text-warning-foreground border border-warn/25',
+  high: 'bg-warn-muted/70 text-warn-foreground border border-warn/25',
   medium: 'bg-sev-medium/20 text-fg-secondary border border-sev-medium/50',
   low: 'bg-ok-muted/70 text-ok-foreground border border-ok/25',
 }

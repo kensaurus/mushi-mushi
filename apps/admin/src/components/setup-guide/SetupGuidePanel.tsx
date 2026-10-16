@@ -51,7 +51,7 @@ const STATE_STYLE: Record<SetupGuideStepState, StateStyle> = {
   blocked: {
     Icon: IconClock,
     chip: CHIP_TONE.warnSubtle,
-    marker: 'border-warn/40 bg-warn-muted/45 text-warning-foreground',
+    marker: 'border-warn/40 bg-warn-muted/45 text-warn-foreground',
   },
   available: {
     Icon: IconArrowRight,
@@ -62,7 +62,7 @@ const STATE_STYLE: Record<SetupGuideStepState, StateStyle> = {
 
 const FACT_TONE: Record<string, string> = {
   ok: 'text-ok-foreground',
-  warn: 'text-warning-foreground',
+  warn: 'text-warn-foreground',
   muted: 'text-fg-muted',
 }
 
@@ -89,7 +89,7 @@ export const SetupGuidePanel = forwardRef<HTMLHeadingElement, SetupGuidePanelPro
         // mushi-ui: docked chrome affordance — not Modal/Drawer (reason: a
         // non-modal, always-available disclosure that must not trap focus).
         // Left-docked and offset past the sidebar because the toast stack owns
-        // `fixed bottom-4 right-4 z-[60]` (lib/toast.tsx); a right-docked
+        // `fixed bottom-4 right-4 z-(--z-toast)` (lib/toast.tsx); a right-docked
         // launcher would sit underneath every toast the console fires.
         className="fixed bottom-4 left-4 z-40 print:hidden md:left-20 [html[data-sidebar=expanded]_&]:md:left-64"
         data-setup-guide={view}

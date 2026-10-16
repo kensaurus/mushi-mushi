@@ -162,7 +162,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
               <div className="flex justify-between">
                 <span>LLM provider</span>
                 <span
-                  className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warning-foreground'}`}
+                  className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warn-foreground'}`}
                 >
                   {data?.llm_provider === 'byok' || isByok ? 'BYOK' : 'platform'}
                 </span>

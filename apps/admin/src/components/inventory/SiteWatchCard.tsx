@@ -218,7 +218,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
                 }`
               : 'No check read yet. The next daily check runs at 01:30 UTC, or press Check now.'}
           </p>
-          {watch.last_error && <p className="text-warning-foreground">{watch.last_error}</p>}
+          {watch.last_error && <p className="text-warn-foreground">{watch.last_error}</p>}
         </div>
       )}
 

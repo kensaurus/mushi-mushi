@@ -31,10 +31,14 @@
      14px+ helper / metadata copy where this token is most often used —
      timestamps, footer hints, "press [" key cues, kbd labels). fg-muted
      also nudged from 0.55 → 0.62 so secondary-rank text is comfortably
-     readable instead of sitting right at the AA threshold. */
+     readable instead of sitting right at the AA threshold.
+     2026-10-16: fg-muted 0.62 → 0.67. It sat below fg-faint (0.63), which
+     inverted the ramp, and was 4.33:1 on surface-overlay (fails AA). Now
+     fg 0.93 > secondary 0.72 > muted 0.67 > faint 0.63, all ≥ 4.5:1 on
+     surface, raised and overlay. */
   --color-fg: oklch(0.93 0.005 285);
   --color-fg-secondary: oklch(0.72 0.005 285);
-  --color-fg-muted: oklch(0.62 0.005 285);
+  --color-fg-muted: oklch(0.67 0.005 285);
   --color-fg-faint: oklch(0.63 0.005 285);
 
   /* ── Brand (amber / beetle-chitin) ─────────────────────────────────── */
@@ -49,7 +53,7 @@
   --color-accent-muted: oklch(0.30 0.08 280);
   /* Readable copy on accent-tinted chips (dark bg uses light violet). */
   --color-accent-foreground: oklch(0.78 0.14 280);
-  --color-warning-foreground: oklch(0.85 0.13 80);
+  --color-warn-foreground: oklch(0.84 0.12 55);
   --color-danger-foreground: oklch(0.78 0.18 25);
   --color-ok-foreground: oklch(0.78 0.16 155);
   --color-info-foreground: oklch(0.78 0.14 240);
@@ -60,11 +64,14 @@
   --color-ok: oklch(0.72 0.19 155);
   --color-ok-fg: oklch(0.16 0.04 155);
   --color-ok-muted: oklch(0.30 0.06 155);
-  --color-warn: oklch(0.80 0.15 80);
-  /* Medium severity: yellow, between high's amber (warn) and low's green. */
+  /* Warn is orange (hue 55), not the brand amber (hue 80): at hue 80 a warn
+     chip and a brand chip were ΔE 0.01 apart in dark mode, below what the
+     eye separates. Hue 55 sits between danger (25) and medium yellow (100). */
+  --color-warn: oklch(0.78 0.16 55);
+  /* Medium severity: yellow, between high's orange (warn) and low's green. */
   --color-sev-medium: oklch(0.88 0.17 100);
-  --color-warn-fg: oklch(0.18 0.04 80);
-  --color-warn-muted: oklch(0.30 0.05 80);
+  --color-warn-fg: oklch(0.18 0.04 55);
+  --color-warn-muted: oklch(0.30 0.06 55);
   --color-danger: oklch(0.65 0.22 25);
   --color-danger-fg: oklch(0.16 0.04 25);
   --color-danger-muted: oklch(0.28 0.06 25);
@@ -244,21 +251,22 @@
      kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
   --text-2xs: 0.75rem;
   --text-3xs: 0.6875rem;
-  /* Extended type ramp (Jul 2026 unification) — prefer these over arbitrary text-[Npx]. */
-  --text-label: 0.75rem;
-  --text-body: 0.875rem;
-  --text-title: 1rem;
-  --text-heading: 1.125rem;
-  --text-display: 1.5rem;
+  /* Above 2xs, use Tailwind's own scale (text-xs … text-2xl). A Jul 2026
+     label/body/title/heading/display ramp duplicated it and had no users;
+     check:design-tokens now rejects those names. */
 
-  /* ── Z-index scale (overlays / chrome) ─────────────────────────────── */
-  --z-base: 0;
-  --z-sticky: 20;
-  --z-dropdown: 40;
-  --z-drawer: 50;
-  --z-modal: 60;
-  --z-toast: 70;
-  --z-overlay-max: 80;
+  /* ── Z-index ──────────────────────────────────────────────────────────
+     z-0 … z-50 (Tailwind's scale) layer things inside the page and the
+     app shell: 10-30 in-page stacking, 40 header / drawer backdrop /
+     mobile nav, 50 modal, drawer, command palette, menus. Anything that
+     must sit above the app shell uses one of these, as z-(--z-*), never a
+     literal (check:design-tokens):
+       toast  — toasts, route progress bar, docked setup guide
+       alert  — offline banner, confetti
+       top    — beta banner, first-run tour, tooltips and help popovers */
+  --z-toast: 60;
+  --z-alert: 70;
+  --z-top: 100;
 
   /* ── Border radius ─────────────────────────────────────────────────── */
   --radius-xs: 0.25rem;
@@ -278,6 +286,12 @@
   /* ── Shadows (for dark UI — subtle inset glow) ─────────────────────── */
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
   --shadow-raised: 0 2px 8px oklch(0 0 0 / 0.5);
+  /* Editorial keycap: a 2px inset bottom edge on paper chips and filled
+     pills (brand elevation-key*). key = on paper, key-fill = on a
+     vermillion fill, key-ink = light edge on an ink fill. */
+  --shadow-editorial-key: var(--mushi-elevation-key);
+  --shadow-editorial-key-fill: var(--mushi-elevation-key-fill);
+  --shadow-editorial-key-ink: var(--mushi-elevation-key-ink);
 
   /* ── Expressive layer (2026-07 expressive pass) ──────────────────────
      Brand-derived gradient + glow tokens for the expressive control set.
