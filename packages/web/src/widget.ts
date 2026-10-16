@@ -532,11 +532,8 @@ export class MushiWidget {
   }
 
   showTrigger(): void {
+    // A visitor's "hide for this visit" outlives this: hosts call show() on routine paths.
     this.triggerVisible = true;
-    if (this.launcherDismissed) {
-      this.launcherDismissed = false;
-      writeLauncherDismissed(false);
-    }
     this.render();
   }
 
@@ -967,7 +964,7 @@ export class MushiWidget {
 
   private dismissLauncherForSession(): void {
     this.launcherDismissed = true;
-    writeLauncherDismissed(true);
+    writeLauncherDismissed();
     this.close();
   }
 
@@ -1344,7 +1341,7 @@ export class MushiWidget {
   private buildTrigger(effective: string): HTMLButtonElement {
     const tab = effective === 'edge-tab';
     const trigger = document.createElement('button');
-    trigger.className = `mushi-trigger ${this.config.position}${tab ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
+    trigger.className = `mushi-trigger ${this.config.position}${tab ? ' edge-tab' : ''}${tab && isTextLabel(this.config.triggerText) ? ' text' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
     if (tab) {
       const face = document.createElement('span');
       face.className = 'mushi-trigger-face';
@@ -1612,7 +1609,7 @@ export class MushiWidget {
     if (isBottomAnchored) {
       const avoidBottomPx = this.computeAvoidBottomPx();
       if (avoidBottomPx !== null) {
-        el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
+        el.style.setProperty('--mushi-bottom', `${Math.max(avoidBottomPx, this.barClearance)}px`);
       } else if (this.barClearance > 0) {
         // A floor: a host offset that already clears the bar wins.
         const base = el.style.getPropertyValue('--mushi-bottom').trim()
@@ -2560,11 +2557,16 @@ export class MushiWidget {
 }
 
 /** Selector that finds the replacement of a control after a patch. */
-/** A horizontal anchor / inset or `draggable`: the host placed the FAB on purpose. */
+/** A label, not a glyph (🐛, 🐞, 🇯🇵): it needs the FAB or a vertical tab face. */
+function isTextLabel(text: string): boolean {
+  return Array.from(text.trim()).length > 2;
+}
+
+/** A horizontal anchor / inset, `draggable` or a text label: the host shaped the FAB on purpose. */
 function placesLauncher(config: MushiWidgetConfig): boolean {
   const { anchor, inset } = config;
   return Boolean(
-    config.draggable ||
+    config.draggable || isTextLabel(config.triggerText ?? '') ||
     anchor?.left !== undefined || anchor?.right !== undefined ||
     inset?.left !== undefined || inset?.right !== undefined,
   );

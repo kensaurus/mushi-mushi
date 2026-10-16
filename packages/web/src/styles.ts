@@ -226,6 +226,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       box-shadow: 0 4px 12px -6px rgba(${shadowInk},0.4), inset -2px 0 0 var(--_accent);
       transition: width ${durationFast}ms ${easeStamp}, transform ${durationFast}ms ${easeStamp}, opacity ${durationFast}ms ${easeStamp};
     }
+    /* A text label reads down the tab; the tab grows to fit it. */
+    .mushi-trigger.edge-tab.text { height: auto; min-height: ${edgeTabHeight}px; }
+    .mushi-trigger.edge-tab.text .mushi-trigger-face { height: auto; min-height: ${edgeTabHeight}px; padding: 10px 0; writing-mode: vertical-rl; font-size: 12px; white-space: nowrap; }
     .mushi-trigger.edge-tab:hover .mushi-trigger-face,
     .mushi-trigger.edge-tab:focus-visible .mushi-trigger-face { width: ${edgeTabWidth + 6}px; }
     .mushi-trigger.edge-tab:focus-visible { outline: none; }

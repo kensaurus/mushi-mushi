@@ -214,8 +214,8 @@ export interface MushiWidgetConfig {
   /**
    * What `trigger: 'auto'` draws at phone widths (≤ 768px). `'edge-tab'`
    * draws the slim edge tab; `'auto'` keeps the round FAB. Default
-   * `'edge-tab'`, or `'auto'` when the host placed the FAB itself (a left or
-   * right `anchor` / `inset`, or `draggable`).
+   * `'edge-tab'`, or `'auto'` when the host shaped the FAB itself (a left or
+   * right `anchor` / `inset`, `draggable`, or a word `triggerText`).
    */
   mobileTrigger?: 'edge-tab' | 'auto';
   /**
@@ -235,8 +235,8 @@ export interface MushiWidgetConfig {
   tuckOnScroll?: boolean;
   /**
    * Show a "Hide the bug button for this visit" action in the report panel.
-   * The choice lasts until the tab closes (sessionStorage); `Mushi.show()`
-   * brings the launcher back. Default `true`.
+   * The choice lasts until the tab closes (sessionStorage), including through
+   * `Mushi.show()`; `Mushi.open()` still opens the panel. Default `true`.
    */
   dismissible?: boolean;
   /**

@@ -40,11 +40,11 @@ The floating launcher does these by default, with no configuration:
 
 | Behaviour | Default | Option |
 | --- | --- | --- |
-| On phones, `trigger: 'auto'` draws the edge tab, not the 52px button. If you placed the button yourself (a left or right `anchor` or `inset`, or `draggable`), it stays a button. | on | `mobileTrigger: 'auto'` or `'edge-tab'` |
+| On phones, `trigger: 'auto'` draws the edge tab, not the 52px button. If you shaped the button yourself (a left or right `anchor` or `inset`, `draggable`, or a word `triggerText`), it stays a button. | on | `mobileTrigger: 'auto'` or `'edge-tab'` |
 | Lifts above fixed or sticky bars that touch the bottom of the screen (tab bars, cookie strips). The panel and toasts lift with it. | on | `avoidFixedBars: false` |
 | Fades while the page scrolls (the edge tab also slides most of the way off its edge) and comes back when scrolling stops | on | `tuckOnScroll: false` |
 | The edge tab can be dragged along its edge. The spot is saved for your site. | on | `draggable: false` |
-| A "Hide the bug button for this visit" link in the report panel. It lasts until the tab closes; `Mushi.show()` brings the button back. | on | `dismissible: false` |
+| A "Hide the bug button for this visit" link in the report panel. It lasts until the tab closes, also through `Mushi.show()` calls; `Mushi.open()` still opens the panel. | on | `dismissible: false` |
 | Safe-area insets (notch, home indicator) | on | `respectSafeArea: false` |
 
 The lift above a bar is a floor. When you already set `inset.bottom` or
