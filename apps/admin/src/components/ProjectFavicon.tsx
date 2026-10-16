@@ -14,7 +14,6 @@ import {
   resolveProjectDomain,
   type ProjectFaviconSource,
 } from '@mushi-mushi/core'
-import { IconProjects } from './icons'
 import { projectInitials, projectInitialsChipClass } from '../lib/resolveProjectDomain'
 
 /**
@@ -122,20 +121,6 @@ export function ProjectFavicon({
         }}
       />
       <span className="sr-only">{label}</span>
-    </span>
-  )
-}
-
-/** Neutral mushi glyph — used when no project is selected yet. */
-export function ProjectFaviconPlaceholder({ size = 16, className = '' }: { size?: number; className?: string }) {
-  const chipSize = size + 8
-  return (
-    <span
-      aria-hidden="true"
-      className={`shrink-0 inline-flex items-center justify-center rounded-md border border-edge-subtle bg-surface-overlay text-fg-muted ${className}`}
-      style={{ width: chipSize, height: chipSize }}
-    >
-      <IconProjects size={size} />
     </span>
   )
 }

@@ -6,7 +6,7 @@
  */
 import { Background, BackgroundVariant } from '@xyflow/react'
 
-export type FlowCanvasDensity = 'hero' | 'pipeline'
+type FlowCanvasDensity = 'hero' | 'pipeline'
 
 interface FlowCanvasBackgroundProps {
   density?: FlowCanvasDensity

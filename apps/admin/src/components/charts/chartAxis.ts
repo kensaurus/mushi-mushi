@@ -4,9 +4,9 @@
  */
 
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
-export const CHART_LOCALE = 'en-US'
+const CHART_LOCALE = 'en-US'
 
-export function utcTodayIso(): string {
+function utcTodayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 

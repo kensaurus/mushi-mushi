@@ -7,7 +7,6 @@ import { navIconForPath } from '../../lib/pageNavIcons';
 import { HelpBulletList, HelpRichText } from '../HelpRichText';
 import { HelpSection } from '../HelpSection';
 import { CopyViewLinkButton } from '../CopyViewLinkButton';
-import { usePageHelpRegister } from '../../lib/pageHelpContext';
 import { isPageHelpRead, markPageHelpRead } from '../../lib/pageHelpRead';
 import { isDevFacingHint } from '../../lib/devHintCopy';
 import {
@@ -126,12 +125,10 @@ export interface PageHelpBannerProps {
   flowPath?: string
 }
 
-/** @deprecated Use PageHelpBannerProps — kept for call-site ergonomics. */
-type PageHelpProps = PageHelpBannerProps
 
 /* ── PageRelatedLinks — "where to go next" chips ───────────────────────── */
 
-export function PageRelatedLinks({ links, className = '' }: { links: PageFlowLink[]; className?: string }) {
+function PageRelatedLinks({ links, className = '' }: { links: PageFlowLink[]; className?: string }) {
   if (links.length === 0) return null
   return (
     <nav
@@ -310,15 +307,3 @@ export function PageHelpBanner({
   )
 }
 
-/** Registers page help with Layout; banner renders at the top via `<RoutePageHelp />`. */
-export function PageHelp(props: PageHelpProps) {
-  const register = usePageHelpRegister()
-  const { title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath } = props
-
-  useEffect(() => {
-    register({ title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath })
-    return () => register(null)
-  }, [register, title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath])
-
-  return null
-}
