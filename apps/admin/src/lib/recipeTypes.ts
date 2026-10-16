@@ -208,20 +208,6 @@ export interface RecipeHistoryEntry {
   validationErrorCount: number
 }
 
-export interface RecipeHistoryResponse {
-  snapshots: RecipeHistoryEntry[]
-  /** Token-level diff between the two newest snapshots (null when < 2). */
-  latestDiff: TokenDiff | null
-}
-
-interface TokenDiff {
-  fromSnapshotId: string
-  toSnapshotId: string
-  added: string[]
-  removed: string[]
-  changed: Array<{ path: string; from: string; to: string }>
-}
-
 // ── Design tokens ────────────────────────────────────────────────────────────
 
 /** DTCG 2025.10 `$type` values Mushi understands; anything else is kept as-is. */
@@ -441,15 +427,6 @@ export interface DesignPlaneResponse {
   lastError: { at: string; message: string } | null
 }
 
-export interface DesignTokensResponse {
-  projectId: string
-  set: string | null
-  tokens: DesignToken[]
-  /** cssVar / ts name → token path, for agents writing code. */
-  nameMap: Record<string, string>
-  total: number
-}
-
 export interface DesignDevianceResponse {
   projectId: string
   latest: DevianceRun | null
@@ -579,64 +556,6 @@ export interface RecipeChangeStreamStatus {
   startedAt: string | null
   finishedAt: string | null
   error: string | null
-}
-
-// ── Excerpt for get_fix_context ──────────────────────────────────────────────
-
-export interface DesignExcerpt {
-  state: ElementState
-  set: string | null
-  /** Most useful tokens first (mapped semantic colours, type, spacing, radius). */
-  tokens: Array<{ path: string; value: string; cssVar: string | null; ts: string | null }>
-  /** Open deviance findings in the requested files. */
-  findings: Array<{ file: string; line: number | null; rule: DesignRuleId; value: string; use: string | null }>
-  score: number | null
-  note: string
-  truncated: boolean
-  /** Backend and release context for the fixer (gap #11); its own ≤ 2 KB share of the 4 KB. */
-  context?: FixRecipeContext
-}
-
-// ── Fixer context: schema, last fix's deploy state, radar ────────────────────
-
-/** Tables the report's stack trace and failed requests name, from the latest schema snapshot. */
-interface FixSchemaContext {
-  /** ok: tables found · drift: a named table is missing from the snapshot · unknown: none named · not_connected: no snapshot · error: read failed. */
-  state: ElementState
-  note: string
-  snapshotAt: string | null
-  /** Columns as `name type`, most useful tables first. */
-  tables: Array<{ name: string; columns: string[] }>
-  /** Tables an error says do not exist and the snapshot does not have either. */
-  missing: string[]
-}
-
-type FixDeployState = 'live' | 'deployed_since_merge' | 'not_live' | 'probe_failed' | 'unknown' | 'no_merged_fix' | 'error'
-
-/** Whether the project's last merged fix is live, from deploy observations and deploy_drift. */
-interface FixDeployContext {
-  state: FixDeployState
-  note: string
-  lastFix: { reportId: string | null; prUrl: string | null; mergedAt: string } | null
-  /** Newest observation per deploy target. */
-  targets: Array<{ id: string; ok: boolean; commit: string | null; observedAt: string }>
-}
-
-/** The project's open hole-check (radar) findings. */
-interface FixRadarContext {
-  /** drift: open findings · ok: checked, none open · unknown: never checked · error: read failed. */
-  state: ElementState
-  note: string
-  checkedAt: string | null
-  findings: Array<{ rule: string; severity: string; message: string; fix: string | null }>
-}
-
-interface FixRecipeContext {
-  schema: FixSchemaContext
-  deploy: FixDeployContext
-  radar: FixRadarContext
-  /** Something was cut to stay inside the budget. */
-  truncated: boolean
 }
 
 // ── Directions board ─────────────────────────────────────────────────────────

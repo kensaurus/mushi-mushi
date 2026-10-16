@@ -16,7 +16,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
  * Shape mirrors `packages/agents/src/review.ts:179` so the FE renders
  * exactly what the gate produced — no shape transformation in the API.
  */
-export interface SpecValidationWarning {
+interface SpecValidationWarning {
   code: string;
   message: string;
   hint?: string;

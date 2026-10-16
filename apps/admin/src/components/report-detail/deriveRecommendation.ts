@@ -8,14 +8,14 @@ import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
 
-export interface RecommendationMeta {
+interface RecommendationMeta {
   label: string
   value: string
   /** Optional tone hint so the surface can colour the chip. */
   tone?: 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
 }
 
-export interface RecommendationAction {
+interface RecommendationAction {
   label: string
   to?: string
   href?: string

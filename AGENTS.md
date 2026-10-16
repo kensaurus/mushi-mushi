@@ -521,7 +521,6 @@ Console "Create Upgrade PR" button
 | Public Connect landing | `apps/docs/app/connect/page.tsx` | Public Higgsfield-style landing at `/connect` on the docs site. Same 3-lane picker but with placeholder keys + "Sign in to mint & one-click install" CTA. Registered in docs nav. |
 | `SdkUpgradeCTA` | `apps/admin/src/components/SdkUpgradeCTA.tsx` | Primary "Create Upgrade PR" button (when `projectId` supplied + GitHub connected); copy-cmd fallback always present |
 | `SdkUpgradeBanner` | `apps/admin/src/components/dashboard/SdkUpgradeBanner.tsx` | Dashboard nudge when active project SDK is outdated/deprecated |
-| `McpInstallButtons` | `apps/admin/src/components/McpInstallButtons.tsx` | Back-compat thin wrapper around `ClientConnectButton` for Cursor + VS Code — keeps `McpPage` working unchanged |
 | `useSdkUpgrade` | `apps/admin/src/lib/useSdkUpgrade.ts` | React hook mirroring `useDispatchFix`: POST → SSE stream with poll fallback |
 
 ### sdk_versions catalog sync

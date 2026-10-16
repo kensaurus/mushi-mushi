@@ -40,7 +40,7 @@ export const GROUP_LONG_LABEL: Record<InboxCardGroup, string> = {
   ops: 'Ops — health + compliance',
 }
 
-export const GROUP_TONE: Record<InboxCardGroup, { chipClass: string; ring: string }> = {
+const GROUP_TONE: Record<InboxCardGroup, { chipClass: string; ring: string }> = {
   plan: { chipClass: CHIP_TONE.infoSubtle, ring: 'border-info/30' },
   do: { chipClass: CHIP_TONE.brandSubtle, ring: 'border-brand/30' },
   check: { chipClass: CHIP_TONE.warnSubtle, ring: 'border-warn/30' },

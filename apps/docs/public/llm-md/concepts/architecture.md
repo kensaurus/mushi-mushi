@@ -116,7 +116,7 @@ Onboarding, and MCP:
 
 1. **GitHub** — prerequisite for upgrade PRs and autofix.
 2. **SDK install** — live snippet + trigger-mode preview (`SdkInstallCard`).
-3. **MCP** — **Add to Cursor** deeplink + hosted/stdio snippets (`McpInstallButtons`).
+3. **MCP** — **Add to Cursor** deeplink + hosted/stdio snippets (`ClientConnectButton`).
 4. **CLI** — `npm i -g @mushi-mushi/cli@latest`.
 5. **Update center** — per-package freshness + **Create Upgrade PR** (`SdkUpgradeCTA`).
 

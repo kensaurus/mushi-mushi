@@ -356,10 +356,10 @@ jobs:
       # docs/execplans/knip-baseline/. Lower them as findings are paid down;
       # never raise them to get a red run green.
       - name: Check dead code (knip, production)
-        run: pnpm exec knip --production --max-issues 705
+        run: pnpm exec knip --production --max-issues 232
 
       - name: Check dead code (knip, default + config hints)
-        run: pnpm exec knip --max-issues 534 --treat-config-hints-as-errors
+        run: pnpm exec knip --max-issues 39 --treat-config-hints-as-errors
 
       - name: Check debug residue and suppression ratchet
         # console.(log|debug|warn), @ts-ignore/@ts-expect-error, eslint-disable

@@ -368,7 +368,3 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
 }
 
 // ─── Factory for edge function ────────────────────────────────
-
-export function createPdcaRunner(config: PdcaConfig): PdcaRunner {
-  return new PdcaRunner(config)
-}

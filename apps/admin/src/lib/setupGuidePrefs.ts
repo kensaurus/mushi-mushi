@@ -35,7 +35,7 @@ function isView(value: unknown): value is SetupGuideView {
   return value === 'expanded' || value === 'minimized' || value === 'dismissed'
 }
 
-export function readSetupGuideView(): StoredSetupGuideView {
+function readSetupGuideView(): StoredSetupGuideView {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(KEY)
@@ -47,7 +47,7 @@ export function readSetupGuideView(): StoredSetupGuideView {
   }
 }
 
-export function writeSetupGuideView(next: SetupGuideView) {
+function writeSetupGuideView(next: SetupGuideView) {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(KEY, next)

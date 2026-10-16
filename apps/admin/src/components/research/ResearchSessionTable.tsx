@@ -27,7 +27,7 @@ interface Props {
   activeSessionId?: string | null
 }
 
-export function filterSessions(
+function filterSessions(
   sessions: SessionRow[],
   modeFilter: SessionMode,
   ageFilter: SessionAge,

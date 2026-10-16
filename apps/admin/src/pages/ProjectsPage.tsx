@@ -13,7 +13,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
@@ -204,7 +203,6 @@ export function ProjectsPage() {
     '/v1/admin/projects/stats',
     { scope: 'enumeration' },
   )
-  usePublishPageHeroStats('/projects', statsData)
   const activeOrgId = useActiveOrgId()
   const { data: orgData, loading: orgLoading } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',

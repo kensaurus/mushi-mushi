@@ -16,7 +16,7 @@ export interface ClassificationInput {
  * - `'heuristic'` / `'heuristic-fallback'`: keyword-based fallback (no ONNX runtime required).
  * - `'phi-3-mini-onnx-int4'`: quantized Phi-3-mini served from a CDN (requires onnxruntime-web).
  */
-export type KnownModelId = 'heuristic' | 'heuristic-fallback' | 'phi-3-mini-onnx-int4';
+type KnownModelId = 'heuristic' | 'heuristic-fallback' | 'phi-3-mini-onnx-int4';
 
 export interface ClassificationResult {
   verdict: ClassificationVerdict;

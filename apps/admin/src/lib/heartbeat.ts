@@ -136,11 +136,6 @@ const HEARTBEAT_RANK: Record<HeartbeatState, number> = {
   unknown: 4,
 }
 
-/** True when the state is a real signal worth rendering a badge for. */
-export function isKnownHeartbeat(state: HeartbeatState): boolean {
-  return state !== 'unknown'
-}
-
 /** Short human labels — shared so the three surfaces use identical wording. */
 export const HEARTBEAT_LABEL: Record<Exclude<HeartbeatState, 'unknown'>, string> = {
   fresh: 'Connected',

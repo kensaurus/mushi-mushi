@@ -23,7 +23,7 @@ import {
   type ReactNode,
 } from 'react'
 
-export type ToastTone = 'success' | 'error' | 'info' | 'warn'
+type ToastTone = 'success' | 'error' | 'info' | 'warn'
 // `warning` is accepted as an alias for `warn` so existing call sites that
 // say `tone: 'warning'` keep working alongside the canonical names.
 type ToastInputTone = ToastTone | 'warning'

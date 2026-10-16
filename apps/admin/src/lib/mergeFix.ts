@@ -3,19 +3,9 @@
  * User-confirmed; same post-merge bookkeeping as the GitHub webhook.
  */
 
-import { useCallback, useState } from 'react'
 import { apiFetch } from './supabase'
 
 export type MergeMethod = 'merge' | 'squash' | 'rebase'
-
-export type MergeStatus = 'idle' | 'merging' | 'merged' | 'failed'
-
-export interface MergeState {
-  status: MergeStatus
-  error?: string
-  reportStatus?: string | null
-  alreadyMerged?: boolean
-}
 
 export interface MergeFixResult {
   ok: boolean
@@ -101,34 +91,4 @@ export function pickPrimaryFixAttempt<
   )
   if (inFlight) return inFlight
   return attempts[0]
-}
-
-export function useMergeFix(fixId: string | undefined) {
-  const [state, setState] = useState<MergeState>({ status: 'idle' })
-
-  const merge = useCallback(
-    async (mergeMethod: MergeMethod = 'squash') => {
-      if (!fixId) {
-        setState({ status: 'failed', error: 'No fix selected' })
-        return false
-      }
-      setState({ status: 'merging' })
-      const result = await mergeFixAttempt(fixId, mergeMethod)
-      if (!result.ok) {
-        setState({ status: 'failed', error: result.error })
-        return false
-      }
-      setState({
-        status: 'merged',
-        reportStatus: result.reportStatus,
-        alreadyMerged: result.alreadyMerged,
-      })
-      return true
-    },
-    [fixId],
-  )
-
-  const reset = useCallback(() => setState({ status: 'idle' }), [])
-
-  return { state, merge, reset }
 }

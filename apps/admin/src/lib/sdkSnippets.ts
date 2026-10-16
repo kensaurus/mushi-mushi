@@ -158,14 +158,14 @@ export function isMobileFramework(fw: Framework): fw is MobileFramework {
  * The widget preview and configurator don't apply to these — only the install
  * command and code snippet are shown.
  */
-export const SERVER_FRAMEWORKS = ['node', 'express', 'fastify', 'hono'] as const
+const SERVER_FRAMEWORKS = ['node', 'express', 'fastify', 'hono'] as const
 export type ServerFramework = (typeof SERVER_FRAMEWORKS)[number]
 
 export function isServerFramework(fw: Framework): fw is ServerFramework {
   return (SERVER_FRAMEWORKS as readonly string[]).includes(fw)
 }
 
-export const API_KEY_PLACEHOLDER = 'mushi_xxx'
+const API_KEY_PLACEHOLDER = 'mushi_xxx'
 
 function isExpoBuildTimeEnv(env: ProjectMushiEnvVars): boolean {
   return env.projectIdVar.startsWith('EXPO_PUBLIC_')

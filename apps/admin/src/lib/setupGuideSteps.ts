@@ -29,9 +29,9 @@ import { latestHeartbeatAt } from './heartbeat'
 
 export type SetupGuideStepState = 'done' | 'next' | 'blocked' | 'available'
 
-export type SetupGuideFactTone = 'ok' | 'warn' | 'muted'
+type SetupGuideFactTone = 'ok' | 'warn' | 'muted'
 
-export interface SetupGuideFact {
+interface SetupGuideFact {
   label: string
   value: string
   tone: SetupGuideFactTone
@@ -353,7 +353,7 @@ export function buildSetupGuideModel(
   }
 }
 
-export function stateLabelFor(
+function stateLabelFor(
   state: SetupGuideStepState,
   required: boolean,
   blockedBy: string | null,

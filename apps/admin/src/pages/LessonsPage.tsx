@@ -16,7 +16,6 @@ import { apiFetch } from '../lib/supabase'
 import { apiErrorText } from '../lib/apiErrorText'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -585,7 +584,6 @@ export function LessonsPage() {
     reloadStats()
     refreshNavCounts()
   }, [reloadStats])
-  usePublishPageHeroStats('/lessons', statsData)
   const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickLessonsTab(stats)

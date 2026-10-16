@@ -28,7 +28,7 @@ export type NavSectionId = 'start' | 'plan' | 'do' | 'check' | 'act' | 'workspac
 
 export type CheckSubGroupId = 'quality-gates' | 'system-health'
 
-export type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspace'
+type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspace'
 
 /** Icon keys resolved to components in Layout.tsx */
 export type NavIconKey =
@@ -1025,7 +1025,7 @@ export function buildStaticRoutes(): StaticRouteFromRegistry[] {
   }))
 }
 
-export function sidebarEntriesForSection(sectionId: NavSectionId): NavRegistryEntry[] {
+function sidebarEntriesForSection(sectionId: NavSectionId): NavRegistryEntry[] {
   return NAV_REGISTRY.filter(
     (e) => e.sectionId === sectionId && e.inSidebar !== false,
   )
@@ -1035,10 +1035,6 @@ export function checkEntriesBySubGroup(subGroup: CheckSubGroupId): NavRegistryEn
   return NAV_REGISTRY.filter(
     (e) => e.sectionId === 'check' && e.checkSubGroup === subGroup && e.inSidebar !== false,
   )
-}
-
-export function registryPathHaystack(entry: NavRegistryEntry): string {
-  return [entry.label, entry.paletteDescription, ...entry.paletteKeywords].join(' ').toLowerCase()
 }
 
 /**

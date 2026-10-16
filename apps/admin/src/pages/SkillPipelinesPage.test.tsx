@@ -50,7 +50,6 @@ vi.mock('../lib/skillsModeUx', () => ({
 }))
 vi.mock('../lib/realtime', () => ({ useRealtime: () => undefined }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
-vi.mock('../lib/heroSnapshots', () => ({ usePublishPageHeroStats: () => undefined }))
 vi.mock('../components/PageHeaderBar', () => ({ PageHeaderBar: () => null }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
 

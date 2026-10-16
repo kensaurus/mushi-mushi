@@ -4,14 +4,6 @@
  *          backend omits topPriorityLabel or for client-side fallbacks.
  */
 
-import type { PdcaStageId } from './pdca'
-import {
-  bottleneckActionLabel,
-  bottleneckHumanHeadline,
-  bottleneckHumanHint,
-  type BottleneckContext,
-} from './pdcaBottleneck'
-
 export function scopedHref(base: string, projectId: string | null | undefined): string {
   if (!projectId) return base
   const [path, qs = ''] = base.split('?')
@@ -129,13 +121,3 @@ export function anomaliesOpenHint(count: number): string {
     ? 'Something changed compared to the usual pattern — open it to confirm or dismiss.'
     : `${count} metric spikes need review — something changed compared to the usual pattern.`
 }
-
-export function bottleneckFromSnapshot(ctx: BottleneckContext & { projectId?: string | null }) {
-  return {
-    headline: bottleneckHumanHeadline(ctx),
-    hint: bottleneckHumanHint(ctx),
-    actionLabel: bottleneckActionLabel(ctx),
-  }
-}
-
-export type { BottleneckContext, PdcaStageId }

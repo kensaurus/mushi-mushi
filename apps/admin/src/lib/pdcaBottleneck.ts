@@ -14,7 +14,7 @@ export const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
   act: CHIP_TONE.dangerSubtle,
 }
 
-export const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
+const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
   plan: '/reports?status=new',
   do: '/fixes',
   check: '/judge',

@@ -14,7 +14,7 @@ import {
 } from '../../lib/pdcaBottleneck'
 import { HumanActionAlert, type HumanActionPreviewItem } from '../HumanActionAlert'
 
-export interface FailedFixPreview {
+interface FailedFixPreview {
   id: string
   report_id: string
   error_head: string | null

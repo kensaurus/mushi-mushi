@@ -2,11 +2,8 @@
 
 import type { ReactNode } from 'react'
 
-export type EffortLevel = 'Hours' | 'Days' | 'Weeks'
-export type RiskLevel = 'Low' | 'Med' | 'High'
-
-export const EFFORT_LEVELS: EffortLevel[] = ['Hours', 'Days', 'Weeks']
-export const RISK_LEVELS: RiskLevel[] = ['Low', 'Med', 'High']
+type EffortLevel = 'Hours' | 'Days' | 'Weeks'
+type RiskLevel = 'Low' | 'Med' | 'High'
 
 const baseChip =
   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-[0.12em] leading-none align-middle'

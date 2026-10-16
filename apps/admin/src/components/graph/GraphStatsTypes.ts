@@ -5,7 +5,7 @@
 
 export type GraphTabId = 'overview' | 'explore' | 'backend'
 
-export type GraphTopPriority = 'waiting_ingest' | 'empty' | 'fragile' | 'regressions' | 'clear'
+type GraphTopPriority = 'waiting_ingest' | 'empty' | 'fragile' | 'regressions' | 'clear'
 
 export interface GraphStats {
   hasAnyProject: boolean

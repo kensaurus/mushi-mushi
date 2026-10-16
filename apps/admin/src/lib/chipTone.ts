@@ -47,9 +47,6 @@ export const HEADER_BADGE_TONE = {
 export const LINK_ACCENT =
   'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity'
 
-export const LINK_BRAND =
-  'text-brand hover:text-brand-hover underline underline-offset-2 motion-safe:transition-opacity'
-
 /** Inline meta chip tones for RecommendedAction / dashboards. */
 export const META_CHIP_TONE = {
   neutral: CHIP_TONE.neutral,
@@ -136,8 +133,4 @@ export const SEVERITY_SURFACE: Record<
     text: 'text-fg',
     dot: 'bg-fg-muted',
   },
-}
-
-export function severitySurfaceTone(severity: SurfaceSeverity) {
-  return SEVERITY_SURFACE[severity] ?? SEVERITY_SURFACE.neutral
 }

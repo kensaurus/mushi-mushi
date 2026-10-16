@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the QA Coverage QA SNAPSHOT strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { QaCoverageStats } from '../../components/qa-coverage/QaCoverageStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'
@@ -72,4 +70,3 @@ export function runs24hTooltip(stats: QaCoverageStats): MetricTooltipData {
 export function runs24hDetail(stats: QaCoverageStats): string {
   return `${stats.pendingRuns} in flight`
 }
-

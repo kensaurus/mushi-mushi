@@ -345,7 +345,7 @@ export function RefreshIconButton({
  *  brand ring at 60% opacity for AAA-friendly contrast on dark surfaces. */
 
 /** Shared focus ring for ad-hoc inputs that bypass `<Input />`. */
-export const FIELD_FOCUS =
+const FIELD_FOCUS =
   'focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:shadow-brand-glow-sm'
 
 const FIELD_BASE =
@@ -714,7 +714,7 @@ interface EmptyStateProps {
  * cards, use the `EmptyState` wrapper below instead — it auto-falls back
  * to a minimal, icon-less, small-text variant when `icon` is omitted.
  */
-export function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
+function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
     <Card className="p-6 text-left border-dashed">
       {icon && (

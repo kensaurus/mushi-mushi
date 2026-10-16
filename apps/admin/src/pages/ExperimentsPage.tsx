@@ -9,7 +9,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -140,7 +139,6 @@ export function ExperimentsPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
-  usePublishPageHeroStats('/experiments', statsData)
   const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
   // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
   const rawTab = searchParams.get('tab')

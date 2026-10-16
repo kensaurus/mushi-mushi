@@ -28,8 +28,6 @@ export const REP_TIERS = [
   { name: 'Bronze',   min: 0,   color: 'text-brand', bg: 'bg-brand-subtle border-brand/30' },
 ] as const
 
-export type TierName = typeof REP_TIERS[number]['name']
-
 export function reputationTier(score: number): typeof REP_TIERS[number] {
   return REP_TIERS.find(t => score >= t.min) ?? REP_TIERS[REP_TIERS.length - 1]
 }

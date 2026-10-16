@@ -8,7 +8,7 @@ import { runStatusChipTone } from '../../lib/chipTone'
 
 export type MarketplaceTabId = 'overview' | 'browse' | 'installed' | 'deliveries'
 
-export type MarketplaceTopPriority =
+type MarketplaceTopPriority =
   | 'no_project'
   | 'delivery_failures'
   | 'plugins_paused'

@@ -47,9 +47,9 @@ export async function handlePreflight(route: Route): Promise<boolean> {
   }
   return false
 }
-export const ADMIN_EMAIL =
+const ADMIN_EMAIL =
   process.env.MUSHI_ADMIN_EMAIL ?? process.env.TEST_USER_EMAIL ?? ''
-export const ADMIN_PASSWORD =
+const ADMIN_PASSWORD =
   process.env.MUSHI_ADMIN_PASSWORD ?? process.env.TEST_USER_PASSWORD ?? ''
 
 /** Single reason string fed to `test.skip()` so operators know what to set. */

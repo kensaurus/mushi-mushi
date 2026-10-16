@@ -34,7 +34,7 @@ export const MCP_PAGE_TABS: Array<{ id: McpTabId; label: string; description: st
   },
 ]
 
-export const MCP_CATALOG_TABS: Array<{ id: CatalogTabId; label: string }> = [
+const MCP_CATALOG_TABS: Array<{ id: CatalogTabId; label: string }> = [
   { id: 'tools', label: 'Tools' },
   { id: 'resources', label: 'Resources' },
   { id: 'prompts', label: 'Prompts' },

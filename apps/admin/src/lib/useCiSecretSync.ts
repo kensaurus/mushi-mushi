@@ -14,7 +14,7 @@ import { useCallback, useRef, useState } from 'react'
 import { apiFetchMutate } from './supabase'
 import type { SyncCiSecretsResult } from './sdkCiSecrets'
 
-export type CiSecretSyncStatus = 'idle' | 'syncing' | 'ok' | 'partial' | 'forbidden' | 'no-repo' | 'failed'
+type CiSecretSyncStatus = 'idle' | 'syncing' | 'ok' | 'partial' | 'forbidden' | 'no-repo' | 'failed'
 
 export interface CiSecretSyncState {
   status: CiSecretSyncStatus

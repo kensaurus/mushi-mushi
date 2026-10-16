@@ -17,6 +17,7 @@ export type PaletteGroup = StaticRouteFromRegistry['group']
 
 export type StaticRoute = StaticRouteFromRegistry
 
+/** @public Read by scripts/build-console-knowledge.mjs through jiti, which knip cannot follow. */
 export const STATIC_ROUTES: StaticRoute[] = buildStaticRoutes()
 
 /**

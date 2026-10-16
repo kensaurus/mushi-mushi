@@ -356,35 +356,7 @@ export function Pct({
   )
 }
 
-/* ── Abbr ─────────────────────────────────────────────────────────────── */
 
-interface AbbrProps {
-  /** Short form shown inline (e.g. "Crit", "BYOK", "p95"). */
-  children: ReactNode
-  /** Full form shown on hover/focus. Keep concise — this is a title, not a
-   *  doc page. Rendered by the browser so it also works on iOS long-press. */
-  title: string
-  className?: string
-}
-
-/**
- * Progressive-disclosure helper: render a short abbreviation and let the
- * browser's native `title` attribute reveal the full form on hover/long-
- * press. Uses the semantic `<abbr>` element so screen readers announce
- * the expansion, and adds a subtle dotted underline as the only reliable
- * "hint that hover does something" across browsers. Keep titles under
- * ~80 chars — longer strings get truncated on mobile.
- */
-export function Abbr({ children, title, className = '' }: AbbrProps) {
-  return (
-    <abbr
-      title={title}
-      className={`underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
-    >
-      {children}
-    </abbr>
-  )
-}
 
 /* ── Tooltip ───────────────────────────────────────────────────────────── */
 
@@ -645,57 +617,8 @@ export function CodeChip({
   )
 }
 
-export function TokenIn({
-  value,
-  className = '',
-}: {
-  value: number | null | undefined
-  className?: string
-}) {
-  const n = value ?? 0
-  return (
-    <span
-      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-ok ${className}`}
-      title="Input tokens"
-    >
-      {n.toLocaleString()}
-    </span>
-  )
-}
 
-export function TokenOut({
-  value,
-  className = '',
-}: {
-  value: number | null | undefined
-  className?: string
-}) {
-  const n = value ?? 0
-  return (
-    <span
-      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-danger ${className}`}
-      title="Output tokens"
-    >
-      {n.toLocaleString()}
-    </span>
-  )
-}
 
-export function UsdAmount({
-  value,
-  digits = 4,
-  className = '',
-}: {
-  value: number
-  digits?: number
-  className?: string
-}) {
-  return (
-    <span className={`tabular-nums text-2xs font-semibold text-fg ${className}`}>
-      ${Number(value).toFixed(digits)}
-    </span>
-  )
-}
 
 export function DataTableHead({
   children,
@@ -846,7 +769,4 @@ export function ErrorAlert({
 
 /* ── Divider ───────────────────────────────────────────────────────────── */
 
-export function Divider({ className = '' }: { className?: string }) {
-  return <hr className={`border-edge-subtle ${className}`} />
-}
 

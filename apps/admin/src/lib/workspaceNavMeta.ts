@@ -8,7 +8,7 @@ import type { ProjectsStats } from '../components/projects/types'
 import type { MembersStats } from '../components/members/types'
 import type { HealthTone } from './useNavCounts'
 
-export type NavBadgeMode = 'inventory' | 'attention'
+type NavBadgeMode = 'inventory' | 'attention'
 
 export interface WorkspaceNavBadge {
   mode: NavBadgeMode

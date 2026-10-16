@@ -17,7 +17,7 @@ const DONE_BLURB: Record<string, string> = {
   native_ci: 'Native build secrets are configured.',
 }
 
-export function resolveLaneOverlayPosture(lane: StepNodeData): WorkflowPosture {
+function resolveLaneOverlayPosture(lane: StepNodeData): WorkflowPosture {
   if (typeof lane.overlayPosture === 'string') return lane.overlayPosture
   if (lane.posture === 'current') return 'open'
   return lane.posture

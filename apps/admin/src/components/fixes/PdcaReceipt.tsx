@@ -212,4 +212,3 @@ function buildReceipts(
  * `lib/pdcaStamp` so all consumers share one type.
  */
 export type { StageReceipt }
-export type { StageStamp } from '../../lib/pdcaStamp'

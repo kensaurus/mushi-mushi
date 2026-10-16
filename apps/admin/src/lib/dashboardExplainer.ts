@@ -4,9 +4,6 @@
 
 import { PDCA_STAGES, type PdcaStageId } from './pdca'
 
-export const DASHBOARD_PDCA_EXPLAINER_SUMMARY =
-  'The dashboard is your loop at a glance: Plan (triage bugs), Do (land fixes), Check (judge quality), Act (wire integrations). Work the highlighted stage first — or open Inbox for the full checklist.'
-
 export function dashboardStagePlain(id: PdcaStageId): string {
   return PDCA_STAGES[id].hint
 }
@@ -32,7 +29,7 @@ export interface DashboardInsightInput {
   reports14d: number
 }
 
-export type InsightTone = 'ok' | 'warn' | 'danger'
+type InsightTone = 'ok' | 'warn' | 'danger'
 
 export interface DashboardInsight {
   tone: InsightTone

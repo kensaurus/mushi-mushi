@@ -2,7 +2,7 @@
  * Plain-language PDCA stage guide for the Action Inbox.
  */
 
-export type InboxStageId = 'plan' | 'do' | 'check' | 'act' | 'ops'
+type InboxStageId = 'plan' | 'do' | 'check' | 'act' | 'ops'
 
 export interface InboxStageDefinition {
   id: InboxStageId

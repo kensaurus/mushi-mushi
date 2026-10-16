@@ -10,7 +10,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime, useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
@@ -221,7 +220,6 @@ function HealthPageContent() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<HealthStats>(`/v1/admin/health/stats?window=${window}`, { deps: [window] })
-  usePublishPageHeroStats('/health', statsData)
   const stats = { ...EMPTY_HEALTH_STATS, ...statsData }
 
   const setActiveTab = useCallback(

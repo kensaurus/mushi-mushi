@@ -4,8 +4,6 @@
 
 import type { ComplianceTopPriority } from '../../lib/complianceExplainer'
 
-export type { ComplianceTopPriority }
-
 export type ComplianceTabId = 'overview' | 'evidence' | 'retention' | 'dsars' | 'residency'
 
 export interface ComplianceStats {
@@ -57,4 +55,3 @@ export const EMPTY_COMPLIANCE_STATS: ComplianceStats = {
   topPriorityLabel: null,
   topPriorityTo: null,
 }
-

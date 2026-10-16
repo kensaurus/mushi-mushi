@@ -29,11 +29,3 @@ export const SKILL_MODE_DEFINITIONS: SkillModeDefinition[] = [
 
 export const SKILLS_EXPLAINER_SUMMARY =
   'Skills are reusable agent workflows (from kenji skills or your own repos). Attach one to a bug report to get a step-by-step pipeline — browse the catalog, start a run, and check in each step as it completes.'
-
-export type SkillsTopPriority =
-  | 'no_project'
-  | 'empty_catalog'
-  | 'failed_runs'
-  | 'awaiting_checkin'
-  | 'active_runs'
-  | 'healthy'

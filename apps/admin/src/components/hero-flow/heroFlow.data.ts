@@ -81,7 +81,7 @@ export interface HeroVerifyData {
   debugLines?: OperatorTraceLine[]
 }
 
-export interface HeroNodeBaseData extends Record<string, unknown> {
+interface HeroNodeBaseData extends Record<string, unknown> {
   scope: string
   expanded: boolean
   onToggle: () => void
@@ -125,37 +125,16 @@ export interface HeroEdgeData extends Record<string, unknown> {
   labelMaxWidth?: number
 }
 
-/** Compact edge-pill copy — breaks on a word boundary when possible. */
-export function formatHeroEdgeLabel(
-  text: string,
-  maxLen = 28,
-): { display: string; full: string; truncated: boolean } {
-  const full = text.trim()
-  if (full.length <= maxLen) {
-    return { display: full, full, truncated: false }
-  }
-  const slice = full.slice(0, maxLen)
-  const lastSpace = slice.lastIndexOf(' ')
-  const cut = lastSpace >= 10 ? lastSpace : maxLen
-  return {
-    display: `${full.slice(0, cut).trimEnd()}…`,
-    full,
-    truncated: true,
-  }
-}
-
 // ─── Layout ────────────────────────────────────────────────────────────
 //
 // Three stations on a single horizontal lane. Positions are derived from
 // the live container width so the hero stretches with the page instead of
 // sitting in a fixed ~910px band with dead margins on wide screens.
 
-const DEFAULT_NODE_WIDTH = 250
 /** Content-sized lane height — every tile (Decide / Act+CTA / Verify+proof)
  *  fits in this band with its action row pinned to the bottom, so the lane
  *  reads as one aligned strip without dead vertical whitespace. */
 const DEFAULT_NODE_HEIGHT = 118
-const DEFAULT_NODE_GAP = 80
 
 export interface HeroLayoutMetrics {
   nodeWidth: number
@@ -218,18 +197,6 @@ export function computeHeroLayout(
     totalWidth: offsetX + totalWidth + padding,
   }
 }
-
-const FALLBACK_LAYOUT = computeHeroLayout(
-  3 * DEFAULT_NODE_WIDTH + 2 * DEFAULT_NODE_GAP + 24,
-)
-
-export const HERO_FLOW_LAYOUT = {
-  nodeWidth: DEFAULT_NODE_WIDTH,
-  nodeHeight: DEFAULT_NODE_HEIGHT,
-  gap: DEFAULT_NODE_GAP,
-  totalWidth: FALLBACK_LAYOUT.totalWidth,
-  totalHeight: DEFAULT_NODE_HEIGHT,
-} as const
 
 interface BuildHeroFlowInput {
   scope: string
@@ -310,7 +277,6 @@ export function buildHeroNodes(input: BuildHeroFlowInput): Node<HeroNodeData>[] 
 }
 
 // Re-export DavEvidence so consumers can import from one hero-flow location.
-export type { DavEvidence }
 
 export function buildHeroEdges(input: {
   decide: HeroDecideData
