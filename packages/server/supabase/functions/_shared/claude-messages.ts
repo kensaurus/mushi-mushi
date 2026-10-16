@@ -18,9 +18,6 @@
 //   • `stop_reason: "refusal"` throws `ClaudeRefusalError` (see that class).
 // =============================================================================
 
-import Anthropic from 'npm:@anthropic-ai/sdk@0.131.0'
-import { NoObjectGeneratedError, zodSchema } from 'npm:ai@4'
-import { parsePartialJson } from 'npm:@ai-sdk/ui-utils@1'
 import type { ZodType } from 'npm:zod@3'
 import {
   buildClaudeRequest,
@@ -35,6 +32,10 @@ import {
 import { log as rootLog } from './logger.ts'
 
 const log = rootLog.child('claude-messages')
+
+// The Anthropic SDK and ai@4 load on the first Claude call, not at boot (ai-sdk.ts).
+type AiSdk = typeof import('./ai-sdk.ts')
+const loadAiSdk = (): Promise<AiSdk> => import('./ai-sdk.ts')
 
 /** Room for adaptive thinking, which counts toward `max_tokens`. */
 const DEFAULT_MAX_TOKENS = 16_000
@@ -64,7 +65,8 @@ interface FinalMessageLike {
   usage: ClaudeUsageLike
 }
 
-function client(opts: ClaudeCallOptions): Anthropic {
+async function client(opts: ClaudeCallOptions): Promise<InstanceType<AiSdk['Anthropic']>> {
+  const { Anthropic } = await loadAiSdk()
   return new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
 }
 
@@ -115,11 +117,11 @@ function assertNotRefused(message: FinalMessageLike, requestedModel: string): vo
   throw new ClaudeRefusalError(message.model, category)
 }
 
-function parseObject<T>(schema: ZodType<T>, message: FinalMessageLike): T {
+function parseObject<T>(ai: AiSdk, schema: ZodType<T>, message: FinalMessageLike): T {
   const text = responseText(message.content)
   const meta = legacyResult(message)
   const fail = (reason: string, cause?: Error): never => {
-    throw new NoObjectGeneratedError({
+    throw new ai.NoObjectGeneratedError({
       message: `No object generated: ${reason}.`,
       cause,
       text,
@@ -140,22 +142,23 @@ function parseObject<T>(schema: ZodType<T>, message: FinalMessageLike): T {
   return (parsed as { data: T }).data
 }
 
-function outputSchemaFor<T>(schema: ZodType<T>): Record<string, unknown> {
-  return toClaudeOutputSchema(zodSchema(schema).jsonSchema)
+function outputSchemaFor<T>(ai: AiSdk, schema: ZodType<T>): Record<string, unknown> {
+  return toClaudeOutputSchema(ai.zodSchema(schema).jsonSchema)
 }
 
 /** Structured output (`generateObject` replacement). */
 export async function claudeGenerateObject<T>(opts: ClaudeCallOptions & { schema: ZodType<T> }) {
-  const body = requestFor(opts, outputSchemaFor(opts.schema))
-  const message = (await client(opts).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
+  const ai = await loadAiSdk()
+  const body = requestFor(opts, outputSchemaFor(ai, opts.schema))
+  const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
   assertNotRefused(message, opts.model)
-  return { object: parseObject(opts.schema, message), ...legacyResult(message) }
+  return { object: parseObject(ai, opts.schema, message), ...legacyResult(message) }
 }
 
 /** Plain text (`generateText` replacement). */
 export async function claudeGenerateText(opts: ClaudeCallOptions) {
   const body = requestFor(opts)
-  const message = (await client(opts).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
+  const message = (await (await client(opts)).beta.messages.create(body as never, requestOptions(opts))) as unknown as FinalMessageLike
   assertNotRefused(message, opts.model)
   return { text: responseText(message.content), ...legacyResult(message) }
 }
@@ -187,11 +190,16 @@ function deferred<T>() {
  * message. Iterating `textStream` drives the request; it throws (after any
  * deltas already yielded) on an HTTP error or a refusal.
  */
-function streamDeltas(opts: ClaudeCallOptions, outputSchema: Record<string, unknown> | undefined) {
+function streamDeltas(
+  opts: ClaudeCallOptions,
+  outputSchema: ((ai: AiSdk) => Record<string, unknown>) | undefined,
+) {
   const final = deferred<FinalMessageLike>()
   async function* deltas(): AsyncGenerator<string> {
     try {
-      const stream = client(opts).beta.messages.stream(requestFor(opts, outputSchema) as never, requestOptions(opts))
+      const ai = await loadAiSdk()
+      const body = requestFor(opts, outputSchema?.(ai))
+      const stream = (await client(opts)).beta.messages.stream(body as never, requestOptions(opts))
       for await (const event of stream as AsyncIterable<{ type: string; delta?: { type: string; text?: string } }>) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
           yield event.delta.text
@@ -226,10 +234,11 @@ export function claudeStreamText(opts: ClaudeCallOptions) {
  * Zod-validated final object once the stream has been consumed.
  */
 export function claudeStreamObject<T>(opts: ClaudeCallOptions & { schema: ZodType<T> }) {
-  const { deltas, final } = streamDeltas(opts, outputSchemaFor(opts.schema))
+  const { deltas, final } = streamDeltas(opts, (ai) => outputSchemaFor(ai, opts.schema))
   async function* partials(): AsyncGenerator<unknown> {
     let text = ''
     let last = ''
+    const { parsePartialJson } = await loadAiSdk()
     for await (const delta of deltas) {
       text += delta
       const { value } = parsePartialJson(text)
@@ -243,7 +252,7 @@ export function claudeStreamObject<T>(opts: ClaudeCallOptions & { schema: ZodTyp
   const meta: Promise<LegacyMeta> = quiet(final.then(legacyResult))
   return {
     partialObjectStream: partials(),
-    object: quiet(final.then((message) => parseObject(opts.schema, message))),
+    object: quiet(final.then(async (message) => parseObject(await loadAiSdk(), opts.schema, message))),
     usage: quiet(meta.then((m) => m.usage)),
     providerMetadata: quiet(meta.then((m) => m.providerMetadata)),
     response: quiet(meta.then((m) => m.response)),

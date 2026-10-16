@@ -369,37 +369,43 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       });
     }
 
-    // Super-admin lookup. We piggyback on `auth.users.raw_app_meta_data.role`
-    // because Supabase exposes that as a JWT claim — promoted by the
-    // 20260427_super_admin_role.sql migration. Fail closed on any read
-    // error so a transient outage can't accidentally elevate a caller.
-    let isSuperAdmin = false;
-    try {
-      const { data: userRow } = await db.auth.admin.getUserById(userId);
-      const role = (userRow?.user?.app_metadata as Record<string, unknown> | null)?.role;
-      isSuperAdmin = role === 'super_admin';
-    } catch (err) {
-      log.warn('entitlements_super_admin_lookup_failed', {
-        userId,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
-
-    // The caller's role on the active project, so the console can hide or
-    // disable write controls the API refuses for viewers. Null = unknown
-    // (lookup failed); the UI then leaves controls on and the API decides.
-    let projectRole: string | null = null;
-    if (entitlement.projectId) {
-      try {
-        const access = await callerCanAccessProject(c, db, userId, entitlement.projectId);
-        projectRole = access.role;
-      } catch (err) {
-        log.warn('entitlements_project_role_lookup_failed', {
-          userId,
-          err: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+    // The two lookups below are independent, so they run together.
+    const [isSuperAdmin, projectRole] = await Promise.all([
+      // Super-admin lookup. We piggyback on `auth.users.raw_app_meta_data.role`
+      // because Supabase exposes that as a JWT claim — promoted by the
+      // 20260427_super_admin_role.sql migration. Read fresh from GoTrue (not
+      // the token) so a demotion applies at once. Fail closed on any read
+      // error so a transient outage can't accidentally elevate a caller.
+      (async (): Promise<boolean> => {
+        try {
+          const { data: userRow } = await db.auth.admin.getUserById(userId);
+          const role = (userRow?.user?.app_metadata as Record<string, unknown> | null)?.role;
+          return role === 'super_admin';
+        } catch (err) {
+          log.warn('entitlements_super_admin_lookup_failed', {
+            userId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+          return false;
+        }
+      })(),
+      // The caller's role on the active project, so the console can hide or
+      // disable write controls the API refuses for viewers. Null = unknown
+      // (lookup failed); the UI then leaves controls on and the API decides.
+      (async (): Promise<string | null> => {
+        if (!entitlement.projectId) return null;
+        try {
+          const access = await callerCanAccessProject(c, db, userId, entitlement.projectId);
+          return access.role;
+        } catch (err) {
+          log.warn('entitlements_project_role_lookup_failed', {
+            userId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+          return null;
+        }
+      })(),
+    ]);
 
     const flags = { ...(entitlement.plan.feature_flags ?? {}) } as Record<string, unknown>;
     const em = (userEmail ?? '').toLowerCase();

@@ -368,7 +368,7 @@ export function useNavCounts(
   opts: { live?: boolean; slices?: readonly string[] | null } = {},
 ): NavCounts {
   const counts = useSyncExternalStore(subscribe, () => snapshot, () => INITIAL)
-  const { isSuperAdmin, has: hasFeature } = useEntitlements()
+  const { isSuperAdmin, has: hasFeature, loading: entitlementsLoading } = useEntitlements()
   const inventoryEnabled = hasFeature('inventory_v2')
   const activeProjectSignal = useActiveProjectSignal()
   const activeOrgSignal = useActiveOrgSignal()
@@ -378,10 +378,13 @@ export function useNavCounts(
   const key = `${activeOrgSignal}|${activeProjectSignal}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}|${slicesKey}`
 
   useEffect(() => {
-    if (!live) return
+    // Wait for entitlements: they decide the include list, and loading before
+    // them sent a second full nav-meta request once they landed (measured on
+    // prod 2026-10-16: nav-meta at 1.8 s and again at 6.8 s, ~5 s each).
+    if (!live || entitlementsLoading) return
     requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, false)
     // `slices` is captured through `key` (slicesKey).
-  }, [live, key, inventoryEnabled, isSuperAdmin])
+  }, [live, key, inventoryEnabled, isSuperAdmin, entitlementsLoading])
 
   useRealtimeReload(
     NAV_COUNT_TABLES,

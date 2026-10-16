@@ -7,7 +7,6 @@
  *          data in the prompt and the answer is schema-validated.
  */
 
-import { openAiProvider } from './openai-compat.ts'
 import { getDefaultHead, listTree, readBlobsGraphql, readRepoBytes, resolveRecipeRepo, type RecipeRepo } from './recipe-github.ts'
 import { publicFetch } from './safe-fetch.ts'
 import { withAnthropicOrOpenAi } from './llm-failover.ts'
@@ -51,7 +50,8 @@ export const liveStoreOpsDeps: StoreOpsDeps = {
       db as never,
       projectId,
       (key) => claudeGenerateObject({ apiKey: key.key, model: STORE_REVIEW_MODEL, schema: claimExtractionSchema, effort: STORE_REVIEW_EFFORT, system, messages: [{ role: 'user', content: user }], maxTokens: 4000 }),
-      (key) => {
+      async (key) => {
+        const { openAiProvider } = await import('./openai-compat.ts')
         const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
         return generateValidatedObject(claimExtractionSchema, { model: openai(STORE_REVIEW_FALLBACK), system, messages: [{ role: 'user', content: user }], maxTokens: 2000 })
       },

@@ -236,18 +236,96 @@ export async function countRowsPerProject(
   db: Db,
   table: 'reports' | 'fix_attempts' | 'project_codebase_files',
   projectIds: string[],
-  opts: { notNullColumn?: string; nullColumns?: string[] } = {},
+  opts: { notNullColumn?: string; nullColumns?: string[]; strict?: boolean } = {},
 ): Promise<Map<string, number>> {
   const counts = await Promise.all(
     projectIds.map(async (pid) => {
       let q = db.from(table).select('id', { count: 'exact', head: true }).eq('project_id', pid)
       if (opts.notNullColumn) q = q.not(opts.notNullColumn, 'is', null)
       for (const col of opts.nullColumns ?? []) q = q.is(col, null)
-      const { count } = await q
+      const { count, error } = await q
+      // strict: a failed count is an error, never a 0 that reads as "none".
+      if (error && opts.strict) throw error
       return [pid, count ?? 0] as const
     }),
   )
   return new Map(counts)
+}
+
+/** The exact per-project counts the setup checklist and /projects show. */
+export interface ProjectCounts {
+  reports: number
+  fixes: number
+  mergedFixes: number
+  indexedFiles: number
+}
+
+/**
+ * Every project's counts in one round trip through `console_project_counts`
+ * (migration 20261016100100). One /v1/admin/setup load used to send four head
+ * counts per project, 52 requests for 13 projects. When the function is not
+ * deployed yet, or the call fails, it falls back to those head counts.
+ * `strict` (the /projects list) throws when a fallback count fails instead of
+ * counting 0; the setup checklist keeps "a failed read only makes a step look
+ * incomplete".
+ */
+export async function loadProjectCounts(
+  db: Db,
+  projectIds: string[],
+  opts: { strict?: boolean } = {},
+): Promise<Map<string, ProjectCounts>> {
+  const out = new Map<string, ProjectCounts>()
+  if (projectIds.length === 0) return out
+
+  let data: unknown = null
+  let error: { code?: string } | null = null
+  try {
+    ;({ data, error } = await db.rpc('console_project_counts', { p_project_ids: projectIds }))
+  } catch (err) {
+    error = { code: err instanceof Error ? err.name : 'THROWN' }
+  }
+  if (!error && Array.isArray(data)) {
+    for (const r of data as Array<{
+      project_id: string
+      report_count: number | string | null
+      fix_count: number | string | null
+      merged_fix_count: number | string | null
+      indexed_file_count: number | string | null
+    }>) {
+      out.set(r.project_id, {
+        reports: Number(r.report_count ?? 0),
+        fixes: Number(r.fix_count ?? 0),
+        mergedFixes: Number(r.merged_fix_count ?? 0),
+        indexedFiles: Number(r.indexed_file_count ?? 0),
+      })
+    }
+    return out
+  }
+
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      msg: 'console_project_counts unavailable — falling back to per-project head counts (apply migration 20261016100100)',
+      code: error?.code ?? null,
+    }),
+  )
+  const strict = opts.strict ?? false
+  const [reports, fixes, mergedFixes, indexedFiles] = await Promise.all([
+    countRowsPerProject(db, 'reports', projectIds, { strict }),
+    countRowsPerProject(db, 'fix_attempts', projectIds, { strict }),
+    countRowsPerProject(db, 'fix_attempts', projectIds, { notNullColumn: 'merged_at', strict }),
+    // Head counts: a plain select is capped at the API's 1000-row limit.
+    countRowsPerProject(db, 'project_codebase_files', projectIds, { nullColumns: INDEXED_FILE_ROW, strict }),
+  ])
+  for (const pid of projectIds) {
+    out.set(pid, {
+      reports: reports.get(pid) ?? 0,
+      fixes: fixes.get(pid) ?? 0,
+      mergedFixes: mergedFixes.get(pid) ?? 0,
+      indexedFiles: indexedFiles.get(pid) ?? 0,
+    })
+  }
+  return out
 }
 
 export interface SdkHeartbeat {
@@ -315,10 +393,7 @@ export async function loadProjectSetupSignals(
     qaRes,
     observationsRes,
     integrationSignals,
-    reportCounts,
-    fixCounts,
-    mergedFixCounts,
-    fileCounts,
+    counts,
   ] = await Promise.all([
     db
       .from('project_api_keys')
@@ -341,11 +416,7 @@ export async function loadProjectSetupSignals(
     // source the Connect page's SDK version reads.
     db.from('project_sdk_observations').select('project_id').in('project_id', projectIds),
     loadIntegrationSignals(db, projectIds),
-    countRowsPerProject(db, 'reports', projectIds),
-    countRowsPerProject(db, 'fix_attempts', projectIds),
-    countRowsPerProject(db, 'fix_attempts', projectIds, { notNullColumn: 'merged_at' }),
-    // Head counts: a plain select is capped at the API's 1000-row limit.
-    countRowsPerProject(db, 'project_codebase_files', projectIds, { nullColumns: INDEXED_FILE_ROW }),
+    loadProjectCounts(db, projectIds),
   ])
 
   const keysBy = new Map<string, Array<Record<string, string | null>>>()
@@ -366,16 +437,17 @@ export async function loadProjectSetupSignals(
   for (const pid of projectIds) {
     const keys = keysBy.get(pid) ?? []
     const heartbeat = freshestHeartbeat(keys)
+    const count = counts.get(pid)
     out.set(pid, {
       ...(integrationSignals.get(pid) ?? { hasGithub: false, hasSentry: false, hasByok: false, hasSlack: false }),
       hasKey: keys.length > 0,
       heartbeat,
       hasSdk: Boolean(heartbeat) || sdkReportSignal.has(pid) || observed.has(pid),
-      reportCount: reportCounts.get(pid) ?? 0,
-      fixCount: fixCounts.get(pid) ?? 0,
-      mergedFixCount: mergedFixCounts.get(pid) ?? 0,
+      reportCount: count?.reports ?? 0,
+      fixCount: count?.fixes ?? 0,
+      mergedFixCount: count?.mergedFixes ?? 0,
       hasQaPassing: qaPassing.has(pid),
-      indexedFileCount: fileCounts.get(pid) ?? 0,
+      indexedFileCount: count?.indexedFiles ?? 0,
     })
   }
   return out

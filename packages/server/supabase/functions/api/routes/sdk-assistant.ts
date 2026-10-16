@@ -23,7 +23,6 @@
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { openAiProvider } from '../../_shared/openai-compat.ts'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
@@ -243,10 +242,11 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
             maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
           })
         },
-        (key) => {
+        async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
           fallbackUsed = true
+          const { openAiProvider } = await import('../../_shared/openai-compat.ts')
           const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
           return generateValidatedObject(ReplyLlmSchema, {
             model: openai(ASSIST_FALLBACK),

@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { countPeriodUsage, llmCostSince } from '../../_shared/billing-usage-counts.ts';
+import { countPeriodUsage, llmCostByProjectSince, llmCostSince } from '../../_shared/billing-usage-counts.ts';
 import { log } from '../../_shared/logger.ts';
 import { diagnosisOverageBillable } from '../../_shared/billing-rules.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
@@ -261,18 +261,19 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
 
     const projectIdsForUser = await callerProjectIds(c, db, userId);
-    const { data: projects } =
+    // Always send the plan catalog so the FE can render the upgrade modal
+    // without a second round-trip — even when the user owns 0 projects. It
+    // does not depend on the project read, so both run at once.
+    const [{ data: projects }, plans] = await Promise.all([
       projectIdsForUser.length > 0
-        ? await db
+        ? db
             .from('projects')
             .select('id, name, organization_id')
             .in('id', projectIdsForUser)
             .order('created_at', { ascending: true })
-        : { data: [] };
-
-    // Always send the plan catalog so the FE can render the upgrade modal
-    // without a second round-trip — even when the user owns 0 projects.
-    const plans = await listPlans();
+        : Promise.resolve({ data: [] as Array<{ id: string; name: string; organization_id: string | null }> }),
+      listPlans(),
+    ]);
 
     if (!projects || projects.length === 0) {
       return c.json({ ok: true, data: { projects: [], plans } });
@@ -339,12 +340,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       // §2: real LLM cost (COGS) for the current billing month so the
       // Billing page can show "$ spent on LLM this month" alongside report
       // quota. Reads the persisted cost_usd column written by telemetry.ts.
-      db
-        .from('llm_invocations')
-        .select('project_id, cost_usd')
-        .in('project_id', projectIds)
-        .gte('created_at', periodStart.toISOString())
-        .not('cost_usd', 'is', null),
+      llmCostByProjectSince(db, projectIds, periodStart.toISOString()),
       // Pull org-level billing posture so projects whose org is on a
       // complimentary plan (Mushi staff, sponsored, beta) render the right
       // tier without a Stripe subscription row. The fallback hierarchy is:

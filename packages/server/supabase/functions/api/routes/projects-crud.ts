@@ -18,7 +18,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
-import { countRowsPerProject, INDEXED_FILE_ROW } from '../../_shared/setup-signals.ts';
+import { loadProjectCounts } from '../../_shared/setup-signals.ts';
 
 /**
  * Exact report count per project, one `head: true` count query each. Never
@@ -139,7 +139,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
 
     const [
-      reportCounts,
+      projectCounts,
       allKeys,
       members,
       latestReportTimestamps,
@@ -148,13 +148,19 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       planBacklogs,
       checkPending,
       repos,
-      codebaseFileRows,
       severityRows,
       projectSettingsRows,
+      { data: sdkCatalogRows },
+      projectFixTruths,
     ] = await Promise.all([
-        // One exact head count per project: reading the rows and counting
-        // them in JS stopped at PostgREST's row cap (QA #136).
-        countReportsPerProject(db, projectIds),
+        // Exact report and live indexed-file counts per project in one RPC
+        // (console_project_counts). Reading the rows and counting them in JS
+        // stopped at PostgREST's row cap (QA #136) and counted symbol chunks
+        // and tombstones as files. Codebase index footprint matters: a
+        // project with an attached repo but zero indexed files is one where
+        // codebase-aware features (RAG-augmented triage, fix suggestions,
+        // ontology mapping) silently degrade.
+        loadProjectCounts(db, projectIds, { strict: true }),
         // Pull `last_seen_*` per-key alongside the existing identity columns so
         // ProjectsPage's SdkHealthSummary can render per-key connectivity
         // status without a second round-trip. The same heartbeat columns power
@@ -203,15 +209,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .in('project_id', projectIds)
           .order('is_primary', { ascending: false })
           .order('created_at', { ascending: true }),
-        // Codebase index footprint per project. Counts of indexed files
-        // are a real "is this thing wired up" signal — a project with
-        // an attached repo but zero indexed files is a project where
-        // codebase-aware features (RAG-augmented triage, fix
-        // suggestions, ontology mapping) silently degrade. One head count
-        // per project of live file rows: reading the rows and counting them
-        // in JS stopped at PostgREST's row cap and counted symbol chunks and
-        // tombstones as files.
-        countRowsPerProject(db, 'project_codebase_files', projectIds, { nullColumns: INDEXED_FILE_ROW }),
         // Severity breakdown over the last 30 days, plus signal data
         // for the new ProjectsPage chips: 7-day report trend (this
         // 7d vs prior 7d) and "Sentry connected" detection (≥1
@@ -227,6 +224,16 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .from('project_settings')
           .select('project_id, github_repo_url')
           .in('project_id', projectIds),
+        // The latest-version catalogue and the fix truths used to run one
+        // after the other once this batch finished; neither depends on it.
+        db
+          .from('sdk_versions')
+          .select('package, version, deprecated, deprecation_message, released_at')
+          .order('released_at', { ascending: false }),
+        // Per REPORT from its current state (fix-report-truth.ts): a report a
+        // merged PR fixed never counts as failed, however many earlier attempts
+        // failed. Same 30-day report window as the dashboard and /fixes.
+        loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds),
       ]);
 
     const settingsGithubByProject: Record<string, string | null> = {};
@@ -235,7 +242,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         (s as { github_repo_url?: string | null }).github_repo_url ?? null;
     }
 
-    const countMap: Record<string, number> = reportCounts;
+    const countMap: Record<string, number> = Object.fromEntries(
+      projectIds.map((pid) => [pid, projectCounts.get(pid)?.reports ?? 0]),
+    );
 
     const keyMap: Record<string, Array<Record<string, unknown>>> = {};
     for (const k of allKeys.data ?? []) {
@@ -294,11 +303,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     // tiny (one row per package) and shared across every row — a project
     // running @mushi-mushi/web@0.7 is "outdated" the same way regardless of
     // which org owns it.
-    const { data: sdkCatalogRows } = await db
-      .from('sdk_versions')
-      .select('package, version, deprecated, deprecation_message, released_at')
-      .order('released_at', { ascending: false });
-
     interface LatestSdk {
       version: string;
       deprecated: boolean;
@@ -327,10 +331,6 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       planBacklogMap[r.project_id] = (planBacklogMap[r.project_id] ?? 0) + 1;
     }
 
-    // Per REPORT from its current state (fix-report-truth.ts): a report a
-    // merged PR fixed never counts as failed, however many earlier attempts
-    // failed. Same 30-day report window as the dashboard and /fixes.
-    const projectFixTruths = await loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds);
     const fixInflightMap: Record<string, number> = {};
     const fixFailedMap: Record<string, number> = {};
     for (const t of projectFixTruths.truths.values()) {
@@ -411,7 +411,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       else void runScans();
     }
 
-    const codebaseFileCount: Record<string, number> = Object.fromEntries(codebaseFileRows);
+    const codebaseFileCount: Record<string, number> = Object.fromEntries(
+      projectIds.map((pid) => [pid, projectCounts.get(pid)?.indexedFiles ?? 0]),
+    );
 
     // Severity breakdown over `thirtyDaysAgo`. We accept any string for
     // `severity` since the column is plain text — the FE collapses
