@@ -140,6 +140,10 @@ Warn-level (not counted): optionalPeerDependencies 8.
 
 ## Read in cascade order
 
+> This walk-through describes the 2026-09-12 findings. For what the current
+> counts contain, and why each item is kept, see the keep/kill tables in
+> [`docs/plan-dead-code-2026-10-16.md`](../../plan-dead-code-2026-10-16.md).
+
 1. **files** — the register. `packages/agents/src/**` (8, `FixOrchestrator`
    never constructed), `packages/mcp/scripts/*.mjs` (3 manual scripts with no
    package.json or docs reference), `packages/plugin-jira/src/jira-webhook.ts`,
