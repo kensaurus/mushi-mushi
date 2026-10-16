@@ -364,7 +364,7 @@ export function PublicIntegrationsPage() {
               </Link>
               <Link
                 to="/dashboard"
-                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Get started
               </Link>
@@ -559,7 +559,7 @@ export function PublicIntegrationsPage() {
                 href={PLUGIN_SDK_DOCS_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 <IconExternalLink size={12} />
                 Read the SDK docs

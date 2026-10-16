@@ -297,7 +297,7 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
     <Card className="p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h4 className="text-xs font-semibold text-fg-primary">Codebase indexing</h4>
+          <h4 className="text-xs font-semibold text-fg">Codebase indexing</h4>
           {enabled
             ? <Badge tone="okSubtle">On</Badge>
             : <Badge tone="warnSubtle">Off</Badge>}
@@ -555,7 +555,7 @@ function AutofixToggleRow({
     <div className="flex items-start justify-between gap-3 pt-2 border-t border-edge-subtle">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-fg-primary">Autofix dispatcher</span>
+          <span className="text-xs font-semibold text-fg">Autofix dispatcher</span>
           <Badge className={isOn ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
             {enabled == null ? '\u2014' : isOn ? 'On' : 'Off'}
           </Badge>

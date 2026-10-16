@@ -223,7 +223,7 @@ interface CardPanelProps {
   action?: ReactNode
 }
 
-/** Opaque bordered panel — use instead of ad-hoc bg-surface-2 divs. */
+/** Opaque bordered panel — use instead of ad-hoc bg-surface-raised divs. */
 export function SurfacePanel({
   children,
   className = '',

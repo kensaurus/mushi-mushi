@@ -778,7 +778,7 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
   return (
     <Card className="max-w-lg p-6 space-y-4">
       <div className="space-y-2">
-        <h2 className="text-base font-semibold text-fg-primary">Manual drift scan</h2>
+        <h2 className="text-base font-semibold text-fg">Manual drift scan</h2>
         <ContainedBlock tone="muted">
           <p className="text-sm leading-relaxed text-fg-muted">
             Builds a fresh contract snapshot then walks routes with Thompson-sampled priority.
@@ -792,7 +792,7 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
         </ContainedBlock>
       )}
       <label className="block space-y-1">
-        <span className="text-sm font-medium text-fg-primary">Max paths to walk</span>
+        <span className="text-sm font-medium text-fg">Max paths to walk</span>
         <input
           type="number"
           min={10}
@@ -844,7 +844,7 @@ function FindingDetailDrawer({
           <Badge className={HEADER_BADGE_TONE.neutral}>{finding.surface}</Badge>
         </div>
 
-        <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm text-fg-primary">{finding.message}</div>
+        <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm text-fg">{finding.message}</div>
 
         {finding.expected != null && (
           <div>

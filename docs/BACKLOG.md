@@ -8,8 +8,8 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-14 (first run, so there is no delta to report)
-- **Rows added since:** BL-019..BL-022 (2026-10-16 repo housekeep)
-- **Open items:** 22 · **Recently closed:** 0
+- **Rows added since:** BL-019..BL-022, BL-035 (2026-10-16 housekeep)
+- **Open items:** 23 · **Recently closed:** 0
 
 | Class | Open |
 |---|---|
@@ -17,12 +17,12 @@ parked work is visible in one place.
 | test-gap | 4 |
 | tech-debt | 8 |
 | known-bug | 0 |
-| decision-needed | 3 |
+| decision-needed | 4 |
 | unfinished-feature | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 19 |
+| relevant | 20 |
 | verify-done | 2 |
 | stale (propose removal) | 1 |
 
@@ -65,6 +65,7 @@ parked work is visible in one place.
 | BL-020 | decision-needed | Product screenshots are committed three times: `docs/screenshots/` (88 files, about 204 MB), `apps/docs/public/screenshots/` (the copy `scripts/sync-docs-screenshots.mjs` makes) and `apps/admin/public/screenshots/` (81 files, about 213 MB). Identical files share one git blob, but every checkout and worktree writes about 620 MB to disk. Keep one source and copy at build time, or keep the copies on purpose. Demo GIFs are referenced by a built name (`apps/docs/components/AdminDocHero.tsx:26`), so a grep for a file name does not prove it unused | relevant | low | `scripts/sync-docs-screenshots.mjs`; `scripts/sync-marketing-screenshots.mjs` | — |
 | BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
 | BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | relative-link scan of tracked `*.md`, 2026-10-16 | — |
+| BL-035 | decision-needed | Console design housekeep 2026-10-16 left 9 visible-change decisions: z-index model (`--z-*` unused, 59 literals), dark `fg-faint` brighter than `fg-muted`, dark `warn` = `brand` amber, three "merged" PR colours, `warn` vs `warning-foreground` naming, unused type ramp, Streamdown `border-border` never generated, editorial keycap shadow, four `SeverityBadge` copies. Also `packages/mcp/tsup.config.ts` `clean: true` race that deletes library `.d.ts` on a cold build | relevant | low | `docs/design/housekeep-design-state-2026-10-16.md` (Owner decisions; Follow-ups) | — |
 
 ---
 
