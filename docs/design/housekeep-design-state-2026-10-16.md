@@ -3,8 +3,9 @@
 Executor log for `housekeep-design` on `apps/admin`. The previous burndown,
 [`docs/plan-uiux-unification.md`](../plan-uiux-unification.md), is fully checked,
 so this pass ran a fresh inventory. Scope: token and component de-duplication
-only. Anything that would visibly change the UI is listed for the owner at the
-end and is **not** in this diff, with one exception the gate forces (next section).
+only. Anything that would visibly change the UI was listed for the owner at the
+end, with one exception the gate forced (next section). The owner then had all
+nine decided the same day; see "BL-035 decisions" below for what changed.
 
 ## Visible changes made
 
@@ -102,7 +103,7 @@ change small unless the current state is a bug. One line of rationale each:
 
 1. **Z-index → Tailwind `z-0`…`z-50` inside the app shell; `--z-toast` 60, `--z-alert` 70, `--z-top` 100 above it.** The tokens take the values the overlays already use, so nothing restacks, and the unused 0/20/40/50/60/70/80 scale that contradicted the code is deleted; `z-[1]`/`z-[2]` became `z-1`/`z-2`.
 2. **Dark `fg-muted` 0.62 → 0.67.** A bug: muted sat below faint (0.63), and it measured 4.33:1 on `surface-overlay`, which fails AA; at 0.67 the ramp reads fg > secondary > muted > faint and every step is ≥ 4.5:1 on surface, raised and overlay.
-3. **Dark warn family → hue 55 (orange): `warn` 0.78 0.16 55, `warn-muted` 0.30 0.06 55, `warn-foreground` 0.84 0.12 55.** A bug: warn and brand were ΔE 0.010 apart (below the ~0.02 the eye separates); hue 55 is ΔE 0.072 from brand and 0.16+ from danger and medium yellow, chips stay ≥ 8.6:1; light mode already separated them and is unchanged.
+3. **Dark warn family → hue 55 (orange): `warn` 0.78 0.16 55, `warn-muted` 0.30 0.06 55, `warn-foreground` 0.84 0.12 55, and `viz-score-warn` (hero-flow severity, similarity bar, PDCA "check" stage) 0.75 0.15 55.** A bug: warn and brand were ΔE 0.010 apart (below the ~0.02 the eye separates); hue 55 is ΔE 0.072 from brand and 0.16+ from danger and medium yellow, chips stay ≥ 8.6:1. Light mode already separated them (amber warn, vermillion brand) and is unchanged, so warn's hue now differs by theme on purpose. The categorical chart colours in `lib/tokens.ts` (`NODE_COLORS.version`, `SCORE_COLORS.repro`) keep hue 80: they name a category, not a warning.
 4. **One PR-lifecycle map, GitHub's convention (`PR_STATE_TONE_KEY` / `prStateChipTone` in `lib/chipTone.ts`): open green, merged violet (accent), closed red, draft grey.** The four PR maps disagreed on every state, and merged-green would have made open and merged identical in two of them; status lists where "merged" just means done (`lib/tokens.ts`, `BulkSdkUpgradePanel`) keep green.
 5. **`warning-foreground` → `warn-foreground`.** Every other member of the family is `warn-*` and every other foreground is `<family>-foreground`; same value, 62 uses in 38 files, gate-blocked.
 6. **Delete `--text-label/body/title/heading/display`.** Zero users and each equals a Tailwind size (`text-xs/sm/base/lg/2xl`), the scale the code already uses; gate-blocked with the matching suggestion.
@@ -114,6 +115,19 @@ Visible changes, all measured: dark muted copy slightly brighter, dark warn chip
 PR chips (BeforeAfterCard, UxRunPullRequest, ReportBranchGraph merged), "Warn" → "Warning" and
 Info border on 2 pages, Streamdown borders themed, integrations icon-tile edge. Light mode
 changes only in items 4, 7, 8 and 9.
+
+Left as is, noted for later: `Hero.tsx:76` (a 3px, 0.22 CTA key) and `MushiCanvas.tsx:48`
+(a rule-coloured key) are different keycap variants and stay hand-written; the gate
+catches only the 2px rgba form. Light `text-warn` on `surface` is 2.64:1 (fails AA as
+text); warn is used as fills and dots in light, but any warn text there should use
+`text-warn-foreground`.
+
+Found while doing item 3: Tailwind drops `@theme` colours that no utility uses, so the dark
+`--color-viz-*` values never reach the built CSS (only the light overrides do, from
+`base-and-density.css`). In dark mode `readVizToken()` therefore returns the copy in
+`VIZ_FALLBACKS` (`lib/vizTokens.ts`), a second source of truth for every JS-read chart
+colour. Item 3 changed both. Moving the viz tokens to `@theme static`, or into a plain
+`:root` block, would make the stylesheet the one source.
 
 ### Original owner list (2026-10-16, before the decisions above)
 
