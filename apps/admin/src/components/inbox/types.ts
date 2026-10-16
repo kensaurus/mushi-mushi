@@ -19,6 +19,8 @@ export interface InboxStats {
   criticalReports14d: number
   openBacklog: number
   failedFixes14d: number
+  /** Critical or high reports still open after triage: the server's PLAN rule. */
+  urgentOpenReports: number
   integrationRed: number
   integrationAmber: number
   judgeStale: boolean
@@ -56,6 +58,7 @@ export const EMPTY_INBOX_STATS: InboxStats = {
   criticalReports14d: 0,
   openBacklog: 0,
   failedFixes14d: 0,
+  urgentOpenReports: 0,
   integrationRed: 0,
   integrationAmber: 0,
   judgeStale: false,

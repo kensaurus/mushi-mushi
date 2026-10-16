@@ -10,8 +10,15 @@ import type { PageAction } from '../components/PageActionBar'
 import type { DashboardData } from '../components/dashboard/types'
 import type { InboxStats } from '../components/inbox/types'
 
-/** Judge staleness from `/v1/admin/inbox/stats` — keeps cards aligned with the banner. */
-export type InboxCardBuildContext = Pick<InboxStats, 'judgeStale' | 'judgeStaleHours'> | undefined
+/**
+ * Counters from `/v1/admin/inbox/stats`, the source the banner and the "do
+ * this next" line count from. When given they win over the dashboard
+ * payload, so a stage card is never ticked while the banner counts it open.
+ */
+export type InboxCardBuildContext =
+  | (Pick<InboxStats, 'judgeStale' | 'judgeStaleHours'> &
+      Partial<Pick<InboxStats, 'urgentOpenReports' | 'integrationRed' | 'integrationAmber'>>)
+  | undefined
 
 export type InboxCardGroup = 'plan' | 'do' | 'check' | 'act' | 'ops'
 
@@ -59,9 +66,17 @@ export function buildInboxCards(
   const openBacklog = data?.counts?.openBacklog ?? 0
   const fixSummary = data?.fixSummary
   const failedFixes = fixSummary?.failed ?? 0
+  // 2026-10-16: the banner said "3 open actions" while every card was ticked.
+  // The server counts a `down` probe as red and opens Plan on urgent reports
+  // that are triaged but unfixed; this list knew neither.
+  const urgentOpen = ctx?.urgentOpenReports ?? 0
   const integrations = data?.integrations ?? []
-  const redIntegrations = integrations.filter((i) => i.lastStatus === 'red' || i.lastStatus === 'fail').length
-  const amberIntegrations = integrations.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded').length
+  const redIntegrations =
+    ctx?.integrationRed ??
+    integrations.filter((i) => i.lastStatus === 'red' || i.lastStatus === 'fail' || i.lastStatus === 'down').length
+  const amberIntegrations =
+    ctx?.integrationAmber ??
+    integrations.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded').length
 
   return [
     {
@@ -78,6 +93,14 @@ export function buildInboxCards(
               reason: 'From the last 14 days. Confirm severity on the worst bugs first; auto-fix waits for triage.',
               primary: { kind: 'link', to: '/reports?status=open&severity=critical&days=14', label: 'Open critical queue' },
             }
+          : urgentOpen > 0
+            ? {
+                // Same wording and list as the server's Plan flag.
+                tone: 'do',
+                title: `${urgentOpen} critical or high report${urgentOpen === 1 ? ' is' : 's are'} still unfixed`,
+                reason: 'Read each diagnosis, then dispatch a fix or close it as not a code bug.',
+                primary: { kind: 'link', to: '/reports?status=open', label: 'Review & fix' },
+              }
           : openBacklog > 0
             ? {
                 // Stalled non-critical queue used to render an EMPTY inbox
