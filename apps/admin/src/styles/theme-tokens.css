@@ -141,7 +141,9 @@
   --color-viz-flow-brand: oklch(0.78 0.14 80);
   --color-viz-flow-danger: oklch(0.63 0.22 25);
   --color-viz-score-ok: oklch(0.72 0.19 155);
-  --color-viz-score-warn: oklch(0.75 0.15 80);
+  /* Same hue as --color-warn (55): charts and the hero flow read warnings
+     in the chip colour, not the brand amber. */
+  --color-viz-score-warn: oklch(0.75 0.15 55);
   --color-viz-score-danger: oklch(0.63 0.22 25);
   --color-viz-lang-default: oklch(0.55 0.01 285);
   --color-viz-terminal-bg: oklch(0.12 0.01 285);
