@@ -110,6 +110,16 @@ describe('reportHasCodeLocation: has a location', () => {
     ).toBe(true)
   })
 
+  it('a Safari/Firefox-style stack with a first-party frame is true', () => {
+    const stack = 'TypeError: undefined is not an object\nrender@https://app.dev/assets/index-3f2a.js:12:340\nglobal code@https://app.dev/assets/index-3f2a.js:1:1'
+    expect(reportHasCodeLocation(report({ console_logs: [{ level: 'error', message: 'x', timestamp: 1, stack }] }))).toBe(true)
+  })
+
+  it('a Safari-style stack of only dependency frames is false', () => {
+    const stack = 'Error\nf@https://app.dev/node_modules/react-dom/index.js:1:2'
+    expect(reportHasCodeLocation(report({ console_logs: [{ level: 'error', message: 'x', timestamp: 1, stack }] }))).toBe(false)
+  })
+
   it('a console warn with a stack frame is true', () => {
     expect(
       reportHasCodeLocation(report({ console_logs: [{ level: 'warn', message: 'w', timestamp: 1, stack: 'w\n    at src/a.ts:1:2' }] })),
