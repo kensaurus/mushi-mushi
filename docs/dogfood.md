@@ -15,7 +15,7 @@ invented — each links to the public PR or report it produced.
 ## Mushi runs on Mushi
 
 A full Plan → PR loop run against the production project on 2026-04-23
-([live-pdca-run.md](audit-2026-04-23/live-pdca-run.md)):
+([live-pdca-run.md](archive/audits-2026-04-05/audit-2026-04-23/live-pdca-run.md)):
 
 - **Report → classified** in 4.0 s (`severity=high`, `confidence=0.95`, `stage1_model=claude-haiku-4-5`).
 - **Plan → draft PR** ([glot.it#12](https://github.com/kensaurus/glot.it/pull/12)) end-to-end in **~18 seconds** — faster than our own README's "P50 ≤ 60 s" claim.
