@@ -4,6 +4,7 @@ import type { ReportDetail, ReportFixAttempt } from './types'
 import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
+import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -130,6 +131,8 @@ function mergeReadyRecommendation(
  * a raw dispatch: every "Dispatch fix" / "Retry dispatch" here goes through
  * it. `block` is the same gate the triage bar uses; while it blocks, those
  * controls render disabled and the reason shows as a chip.
+ * `hasCodeLocation` is reportHasCodeLocation(report): when false, no card
+ * leads with Dispatch; it becomes the ghost "Dispatch anyway" (BL-061).
  */
 export function deriveRecommendation(
   report: ReportDetail,
@@ -138,8 +141,9 @@ export function deriveRecommendation(
   onRequestDispatch: () => void,
   nowMs: number = Date.now(),
   block: { blocked: boolean; reason: string | null } = { blocked: false, reason: null },
+  hasCodeLocation = true,
 ): Recommendation {
-  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs)
+  const rec = recommendationFor(report, dispatchState, commentCount, onRequestDispatch, nowMs, hasCodeLocation)
   if (!block.blocked) return rec
   const isDispatch = (onClick: (() => void) | undefined) => onClick === onRequestDispatch
   const touchesDispatch = isDispatch(rec.cta?.onClick) || (rec.actions ?? []).some((a) => isDispatch(a.onClick))
@@ -160,7 +164,20 @@ function recommendationFor(
   commentCount: number,
   onDispatch: () => void,
   nowMs: number,
+  hasCodeLocation: boolean,
 ): Recommendation {
+  // A triage card whose CTA would be Dispatch fix: with nothing for an agent
+  // to edit, say so, point at "Not a code bug" and keep dispatch as a ghost.
+  const triage = (rec: Recommendation): Recommendation =>
+    hasCodeLocation
+      ? rec
+      : {
+          title: rec.title,
+          description: `${NO_CODE_LOCATION_REASON} If it is config, an outage or expected behaviour, close it with Not a code bug below.`,
+          tone: rec.tone,
+          actions: [{ label: 'Dispatch anyway', onClick: onDispatch, tone: 'ghost' }],
+        }
+
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {
     return mergeReadyRecommendation(report, dispatchState.prUrl, pickPrimaryFixAttempt(report.fix_attempts))
   }
@@ -408,7 +425,7 @@ function recommendationFor(
         meta: lastAttemptMeta,
         actions: [
           { label: 'View pipeline log \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: onDispatch, tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: hasCodeLocation ? 'primary' : 'ghost' },
         ],
       }
     }
@@ -437,30 +454,30 @@ function recommendationFor(
   }
 
   if (report.status === 'new' && (report.severity === 'critical' || report.severity === 'high')) {
-    return {
+    return triage({
       title: `Confirm priority for this ${severityLabel(report.severity).toLowerCase()} bug`,
       description: 'Set the status to Classified, then dispatch a fix or hand off to engineering.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'urgent',
-    }
+    })
   }
 
   if (report.status === 'classified' && commentCount === 0) {
-    return {
+    return triage({
       title: 'Triage this report',
       description: 'Add a triage note for context, or dispatch an autofix attempt.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
-    }
+    })
   }
 
   if (report.status === 'new') {
-    return {
+    return triage({
       title: 'Start triage',
       description: 'Set the severity and update status, or dispatch a fix if confidence is high.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
-    }
+    })
   }
 
   return {

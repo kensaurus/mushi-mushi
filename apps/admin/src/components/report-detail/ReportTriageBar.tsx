@@ -14,6 +14,7 @@ import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import { CLOSE_REASONS, closeReasonSentryNotice } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { trackAdHoc } from '../../lib/track'
+import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -49,6 +50,9 @@ interface ReportTriageBarProps {
   /** The project's linked repos and the one the fix goes to. The Repo
    *  select shows only when there is more than one. */
   repoChoice?: DispatchTargetRepo
+  /** reportHasCodeLocation(report). When false, "Not a code bug" leads and
+   *  Dispatch becomes the secondary "Dispatch anyway" (BL-061). */
+  hasCodeLocation?: boolean
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -68,6 +72,7 @@ export function ReportTriageBar({
   dispatchBlock,
   isDispatchBusy,
   repoChoice,
+  hasCodeLocation = true,
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -99,7 +104,7 @@ export function ReportTriageBar({
   const failure = dispatchState.status === 'failed' ? humanizeFixError(dispatchState.error) : null
   const retryHelps = !failure || failure.action?.target.kind === 'retry' || failure.known === false
   const dispatchLabel =
-    dispatchState.status === 'idle' ? 'Dispatch fix' :
+    dispatchState.status === 'idle' ? (hasCodeLocation ? 'Dispatch fix' : 'Dispatch anyway') :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
     dispatchState.status === 'queued' ? 'Queued…' :
     dispatchState.status === 'running' ? 'Agent running…' :
@@ -281,8 +286,8 @@ export function ReportTriageBar({
             archives the linked Sentry issue (sentry-resolve-back.ts). */}
         {!closing && report.status !== 'dismissed' && report.status !== 'fixed' && report.status !== 'verified' && (
           <Btn
-            variant="ghost"
-            size="sm"
+            variant={hasCodeLocation ? 'ghost' : 'primary'}
+            size={hasCodeLocation ? 'sm' : 'md'}
             onClick={() => {
               setCloseReason('working_as_intended')
               setClosing(true)
@@ -295,7 +300,8 @@ export function ReportTriageBar({
         )}
         <div className="flex flex-col items-end gap-1">
           <Btn
-            variant="primary"
+            variant={hasCodeLocation ? 'primary' : 'ghost'}
+            size={hasCodeLocation ? 'md' : 'sm'}
             onClick={onRequestDispatch}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
@@ -336,6 +342,9 @@ export function ReportTriageBar({
             )}
         </div>
       </div>
+      {!hasCodeLocation && (
+        <p className="basis-full text-right text-xs text-fg-muted">{NO_CODE_LOCATION_REASON}</p>
+      )}
     </Card>
   )
 }

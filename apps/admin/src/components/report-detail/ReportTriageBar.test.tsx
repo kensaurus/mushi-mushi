@@ -72,6 +72,7 @@ function Harness(props: {
   onDispatch: () => void
   report?: ReportDetail
   preflight?: PreflightState
+  hasCodeLocation?: boolean
 }) {
   const report = props.report ?? REPORT
   const confirmed = useConfirmedDispatch({
@@ -94,6 +95,7 @@ function Harness(props: {
       dispatchBlock: confirmed.block,
       isDispatchBusy: false,
       repoChoice: props.repoChoice,
+      hasCodeLocation: props.hasCodeLocation,
     }),
     confirmed.dialog,
   )
@@ -102,7 +104,7 @@ function Harness(props: {
 async function render(
   repoChoice: DispatchTargetRepo,
   onDispatch = vi.fn(),
-  extra: { report?: ReportDetail; preflight?: PreflightState } = {},
+  extra: { report?: ReportDetail; preflight?: PreflightState; hasCodeLocation?: boolean } = {},
 ): Promise<void> {
   await act(async () => {
     root.render(createElement(Harness, { repoChoice, onDispatch, ...extra }))
@@ -269,5 +271,37 @@ describe('ReportTriageBar Not a code bug', () => {
     expect(reason?.value).toBe('working_as_intended')
     await act(async () => buttonByText('Close report')!.click())
     expect(onTriage).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'working_as_intended' })
+  })
+})
+
+// BL-061: a report with no stack trace, file or failed request leads with
+// "Not a code bug"; Dispatch stays available as the secondary action.
+describe('ReportTriageBar with no code location', () => {
+  const isPrimary = (b: HTMLButtonElement | undefined) => /(^|\s)bg-brand(\s|$)/.test(b?.className ?? '')
+
+  it('leads with "Not a code bug", says why, and keeps "Dispatch anyway" working', async () => {
+    const onDispatch = vi.fn()
+    await render(choice([FRONTEND], 'repo-front'), onDispatch, { hasCodeLocation: false })
+    expect(isPrimary(buttonByText('Not a code bug'))).toBe(true)
+    const anyway = buttonByText('Dispatch anyway')
+    expect(anyway).toBeDefined()
+    expect(isPrimary(anyway)).toBe(false)
+    expect(buttonByText('Dispatch fix')).toBeUndefined()
+    expect(container.textContent).toContain(
+      "This report has no stack trace or file to change, so a fix agent usually can't act on it.",
+    )
+    await act(async () => anyway!.click())
+    const dialog = document.body.querySelector('[role="dialog"], [role="alertdialog"]')
+    const confirm = Array.from(dialog!.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Dispatch fix')
+    await act(async () => confirm?.click())
+    expect(onDispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('with a code location, "Dispatch fix" stays the primary and no reason shows', async () => {
+    await render(choice([FRONTEND], 'repo-front'), vi.fn(), { hasCodeLocation: true })
+    expect(isPrimary(buttonByText('Dispatch fix'))).toBe(true)
+    expect(isPrimary(buttonByText('Not a code bug'))).toBe(false)
+    expect(buttonByText('Dispatch anyway')).toBeUndefined()
+    expect(container.textContent).not.toContain('no stack trace or file to change')
   })
 })

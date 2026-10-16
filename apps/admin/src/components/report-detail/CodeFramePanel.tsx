@@ -16,6 +16,8 @@
  * When no commit SHA is available, frames are rendered without links.
  */
 
+import { parseStackFrames } from '../../lib/reportCodeLocation'
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface CodeFrame {
@@ -39,35 +41,6 @@ interface ConsoleLogEntry {
 }
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
-
-/**
- * Parse V8-style stack frames from a stack string.
- * Handles both "at FnName (file.ts:10:5)" and "at file.ts:10:5" forms.
- * Skips dependency, bundler and Mushi SDK frames, that is every file path containing
- * "node_modules", "webpack:" or "mushi-mushi" (which covers @mushi-mushi/*).
- */
-function parseStackFrames(stack: string): { fn?: string; file: string; line: number; col: number; raw: string }[] {
-  const frames: { fn?: string; file: string; line: number; col: number; raw: string }[] = []
-  // e.g. "    at SomeFunction (src/foo.ts:10:5)" or "    at src/foo.ts:10:5"
-  const V8_FRAME = /^\s+at\s+(?:(.+?)\s+\((.+):(\d+):(\d+)\)|(.+):(\d+):(\d+))\s*$/
-
-  for (const line of stack.split('\n')) {
-    const m = line.match(V8_FRAME)
-    if (!m) continue
-
-    const [, fn, file1, lineNum1, col1, file2, lineNum2, col2] = m
-    const file = file1 ?? file2 ?? ''
-    const lineN = parseInt(lineNum1 ?? lineNum2 ?? '0', 10)
-    const colN = parseInt(col1 ?? col2 ?? '0', 10)
-
-    // Skip internal / bundler frames.
-    if (file.includes('node_modules') || file.includes('webpack:') || file.includes('mushi-mushi')) continue
-
-    frames.push({ fn: fn?.trim() || undefined, file, line: lineN, col: colN, raw: line.trim() })
-    if (frames.length >= 10) break // cap at 10 frames
-  }
-  return frames
-}
 
 /** Strip protocol + origin from a bundled file path (common in browser stacks). */
 function stripOrigin(file: string): string {

@@ -32,6 +32,7 @@ import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
 type StoryState = StageStamp
@@ -245,7 +246,9 @@ export function buildStoryNodes(
       return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
     }
     if (dispatched) return 'Fix attempt recorded'
-    return 'No fix dispatched yet — click "Dispatch fix" to start'
+    return reportHasCodeLocation(report)
+      ? 'No fix dispatched yet — click "Dispatch fix" to start'
+      : 'No fix dispatched yet — no stack trace or file for an agent to change'
   })()
   const doLink = fix?.pr_url
     ? { href: fix.pr_url, label: `PR${fix.pr_number ? ` #${fix.pr_number}` : ''}` }
