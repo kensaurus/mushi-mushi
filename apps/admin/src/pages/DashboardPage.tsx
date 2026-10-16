@@ -48,7 +48,6 @@ import { useDashboardUx } from '../lib/dashboardModeUx'
 import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
 import { PLATFORM_DEFS } from '../components/integrations/types'
 import { semanticBannerTone } from '../lib/tokens'
-import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import { IconDashboard } from '../components/icons'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
@@ -213,18 +212,19 @@ export function DashboardPage() {
 
   // The one-line insight banner sits above the canvas and must not hide it
   // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
-  // The global pipeline strip (Advanced only) already draws the four stage
-  // cards, so neither the canvas nor the stage hero repeats them under it.
-  const pipelineStripVisible = isAdvanced && shouldShowPipelineRibbon('/dashboard')
+  // Advanced opens on the "do this next" line instead of the four stage
+  // cards (owner, 2026-10-16: the stage visuals did not say what to do), so
+  // neither the canvas nor the stage hero draws them here.
+  const loopVisualsHidden = isAdvanced
   const showPdcaFlow = shouldShowPdcaFlow({
     isAdvanced,
     renderFullDashboard,
     hasPdcaStages,
     showFirstReportHero,
-    pipelineStripVisible,
+    loopVisualsHidden,
   })
   const showHeroIntro =
-    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow && !pipelineStripVisible
+    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow && !loopVisualsHidden
 
   const pdcaFlowBlock = showPdcaFlow ? (
     <>

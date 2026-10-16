@@ -64,3 +64,33 @@ export async function llmCostSince(db: ServiceDb, projectId: string, sinceIso: s
   return ((rows ?? []) as Array<{ cost_usd: number | string | null }>).reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
 }
 
+/**
+ * Recorded LLM cost per project since `sinceIso`, one row per project with
+ * cost, via billing_llm_cost_by_project (migration 20261016100100). /billing
+ * summed a plain row read, which PostgREST stops at 1000 rows (1,726 this
+ * month on 2026-10-16). Until the function is applied, `llmCostSince` answers
+ * per project, still exactly.
+ */
+export async function llmCostByProjectSince(
+  db: ServiceDb,
+  projectIds: string[],
+  sinceIso: string,
+): Promise<{ data: Array<{ project_id: string; cost_usd: number }> }> {
+  if (projectIds.length === 0) return { data: [] };
+  const { data, error } = await db.rpc('billing_llm_cost_by_project', {
+    p_project_ids: projectIds,
+    p_since: sinceIso,
+  });
+  if (!error && Array.isArray(data)) {
+    return {
+      data: (data as Array<{ project_id: string; cost_usd: number | string | null }>).map((r) => ({
+        project_id: r.project_id,
+        cost_usd: Number(r.cost_usd ?? 0),
+      })),
+    };
+  }
+  log.warn('billing_llm_cost_by_project unavailable; summing per project', { err: error?.message ?? 'no data' });
+  const costs = await Promise.all(projectIds.map((pid) => llmCostSince(db, pid, sinceIso)));
+  return { data: projectIds.map((project_id, i) => ({ project_id, cost_usd: costs[i] })) };
+}
+

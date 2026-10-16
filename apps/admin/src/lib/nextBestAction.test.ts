@@ -15,7 +15,15 @@ const SETUP_DONE: NbaSetup = {
   activeProject: { report_count: 7, fix_count: 16 },
   isStepIncomplete: () => false,
 }
-const QUIET: NbaWork = { ready: true, urgentOpenReports: 0, fixesFailed: 0, fixesRetryable: 0, prsOpen: 0 }
+const QUIET: NbaWork = {
+  ready: true,
+  urgentOpenReports: 0,
+  untriagedBacklog: 0,
+  fixesFailed: 0,
+  fixesRetryable: 0,
+  prsOpen: 0,
+  judgeDisagreements: 0,
+}
 
 describe('computeNextAction', () => {
   it('puts unfixed critical/high reports first', () => {
@@ -29,6 +37,25 @@ describe('computeNextAction', () => {
       'Auto-fix stopped on 1 report',
     )
     expect(computeNextAction(SETUP_DONE, { ...QUIET, prsOpen: 2 }, '/reports')?.title).toBe('2 fix PRs are waiting for your review')
+  })
+
+  it('sends new bugs (Sentry imports included) to review before stopped fixes', () => {
+    const a = computeNextAction(SETUP_DONE, { ...QUIET, untriagedBacklog: 3, fixesFailed: 1 }, '/inbox')
+    expect(a?.title).toBe('3 new bugs are waiting for a look')
+    expect(a?.cta).toMatchObject({ kind: 'link', to: '/reports?status=new' })
+    // Urgent unfixed reports still come first.
+    expect(computeNextAction(SETUP_DONE, { ...QUIET, untriagedBacklog: 3, urgentOpenReports: 1 }, '/inbox')?.title).toBe(
+      '1 critical or high report is still unfixed',
+    )
+  })
+
+  it('names judge disagreements after setup gaps, before all clear', () => {
+    const work = { ...QUIET, judgeDisagreements: 19 }
+    const a = computeNextAction(SETUP_DONE, work, '/inbox')
+    expect(a?.title).toBe('The judge disagreed with 19 diagnoses')
+    expect(a?.cta).toMatchObject({ to: '/judge?tab=evaluations&filter=disagreement' })
+    const setupGap = { ...SETUP_DONE, isStepIncomplete: (s: string) => s === 'sentry_connected' }
+    expect(computeNextAction(setupGap, work, '/inbox')?.title).toBe('Wire merged fixes back to Sentry / Slack')
   })
 
   it('puts real work ahead of a setup gap', () => {

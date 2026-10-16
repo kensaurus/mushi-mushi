@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-12 · **692** routes.
+> Generated: 2026-10-16 · **694** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 58 |
 | `jwtAuth` | 354 |
 | `jwtOrApiKey` | 3 |
-| `public` | 59 |
+| `public` | 61 |
 | `unknown` | 45 |
 
 ## Routes by path
@@ -183,6 +183,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/intelligence/jobs/:id/cancel` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/intelligence/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/inventory/:projectId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/inventory.ts` |
+| GET | `/v1/admin/inventory/:projectId` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
+| GET | `/v1/admin/inventory/:projectId` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | POST | `/v1/admin/inventory/:projectId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/inventory.ts` |
 | GET | `/v1/admin/inventory/:projectId/agents.md` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/inventory.ts` |
 | GET | `/v1/admin/inventory/:projectId/diff` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/inventory.ts` |

@@ -33,6 +33,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { logDbFailure } from '../_shared/error-codes.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import {
@@ -127,7 +128,7 @@ export async function runAgentStatusPoll(db: SupabaseClient, opts: PollOptions =
     .order('started_at', { ascending: true })
     .limit(POLL_BATCH)
   if (rowsErr) {
-    log.error('open attempt scan failed', { error: rowsErr.message })
+    logDbFailure(log, 'open attempt scan failed', rowsErr, { error: rowsErr.message })
     return summary
   }
 

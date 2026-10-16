@@ -4,7 +4,7 @@
  * collects src/**, so they never ran in CI.
  */
 import { describe, expect, it } from 'vitest'
-import { isTransientDbConnectionError } from '../../supabase/functions/_shared/error-codes.ts'
+import { isTransientDbConnectionError, logDbFailure } from '../../supabase/functions/_shared/error-codes.ts'
 
 const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toBe(expected)
 
@@ -59,6 +59,33 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError({ message: 'cannot connect now', code: '57P03' }), true)
   })
 
+  // ── PostgREST schema-cache reload (MUSHI-MUSHI-SERVER-1M) ─────────────────────
+
+  it('PGRST002 (schema cache reload) is transient, by code or by its message', () => {
+    const message = 'Could not query the database for the schema cache. Retrying.'
+    assertEquals(isTransientDbConnectionError({ message, code: 'PGRST002' }), true)
+    assertEquals(isTransientDbConnectionError({ message: '', code: 'pgrst002' }), true)
+    assertEquals(isTransientDbConnectionError({ message, code: null }), true)
+  })
+
+  it('other "schema cache" PostgREST errors are real bugs, NOT transient', () => {
+    // A missing column / function is schema drift: it fails on every call.
+    assertEquals(
+      isTransientDbConnectionError({
+        message: "Could not find the 'foo' column of 'reports' in the schema cache",
+        code: 'PGRST204',
+      }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'Could not find the function public.write_codebase_graph without parameters in the schema cache',
+        code: 'PGRST202',
+      }),
+      false,
+    )
+  })
+
   // ── False-positive guards from code review ────────────────────────────────────
 
   it('a bare "522" substring in an unrelated message is NOT transient', () => {
@@ -79,5 +106,40 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError(undefined), false)
     assertEquals(isTransientDbConnectionError({}), false)
     assertEquals(isTransientDbConnectionError({ message: undefined, code: undefined }), false)
+  })
+})
+
+describe('logDbFailure', () => {
+  const spyLogger = () => {
+    const calls: Array<{ level: 'warn' | 'error'; msg: string; meta?: Record<string, unknown> }> = []
+    return {
+      calls,
+      warn: (msg: string, meta?: Record<string, unknown>) => calls.push({ level: 'warn', msg, meta }),
+      error: (msg: string, meta?: Record<string, unknown>) => calls.push({ level: 'error', msg, meta }),
+    }
+  }
+
+  it('a pooler outage is a warn (no Sentry event) and reports transient', () => {
+    const logger = spyLogger()
+    const err = { message: 'upstream connect error ... delayed connect error: 111', code: null }
+    expect(logDbFailure(logger, 'failed to load jobs', err, { err: err.message })).toBe(true)
+    expect(logger.calls).toEqual([
+      { level: 'warn', msg: 'failed to load jobs', meta: { err: err.message, db_code: null, transient: true } },
+    ])
+  })
+
+  it('PGRST002 is classified from the code, not just the text', () => {
+    const logger = spyLogger()
+    expect(logDbFailure(logger, 'Failed to fetch qa_stories', { message: 'x', code: 'PGRST002' })).toBe(true)
+    expect(logger.calls[0].level).toBe('warn')
+  })
+
+  it('a real error, a statement timeout, or a missing error object stays an error', () => {
+    const logger = spyLogger()
+    expect(logDbFailure(logger, 'a', { message: 'column x does not exist', code: '42703' }, { k: 1 })).toBe(false)
+    expect(logDbFailure(logger, 'b', { message: 'canceling statement due to statement timeout', code: '57014' })).toBe(false)
+    expect(logDbFailure(logger, 'c', null)).toBe(false)
+    expect(logger.calls.map((c) => c.level)).toEqual(['error', 'error', 'error'])
+    expect(logger.calls[0].meta).toEqual({ k: 1 })
   })
 })

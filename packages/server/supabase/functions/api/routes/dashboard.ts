@@ -21,6 +21,7 @@ import {
   loadIntegrationHealth,
   summarizeHealthByKind,
 } from '../../_shared/integration-health-rollup.ts';
+import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -131,11 +132,18 @@ function dashboardReadFailed(
 ): Response {
   if (err instanceof DashboardReadError) return dbError(c, err.readError ?? { message: err.message });
   if (err instanceof IntegrationHealthReadError) return dbError(c, { message: err.message, code: err.code });
+  if (err instanceof DashboardChartReadError) return dbError(c, err.readError ?? { message: err.message });
   throw err;
 }
 
-/** Rows kept for the 14-day charts; the headline counts are exact counts. */
+/** Rows kept for the 7-day fix / judge series; the headline counts are exact counts. */
 const CHART_ROW_CAP = 5000;
+/**
+ * Row cap for the chart fallback read when dashboard_chart_rollup is not
+ * deployed: PostgREST returns at most 1,000 rows, so asking for more only hid
+ * that the charts were a sample.
+ */
+const CHART_FALLBACK_ROW_CAP = 1000;
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -422,7 +430,12 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     // evaluates nothing and the "Judge scores are Nh old" card never clears.
     const judgeStale = isJudgeStale({ judgeStaleHours, ungradedReports: reads.ungradedReports });
 
-    const openPlan = criticalUntriaged > 0;
+    // Plan is open while a critical report waits for triage OR any critical
+    // or high report is still unfixed. Triage alone missed the classified
+    // ones: glot.it showed "All clear" over 3 critical and 16 high open
+    // reports, all of them Sentry imports the classifier had already tagged
+    // (2026-10-16).
+    const openPlan = criticalUntriaged > 0 || urgentOpenReports > 0;
     const openDo = failedFixes14d > 0;
     const openCheck = judgeStale;
     const openOps = integrationRed > 0 || integrationAmber > 0;
@@ -434,13 +447,21 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
 
     const openFlags = [
       openPlan
-        ? {
-            stage: 'plan',
-            title: `${criticalUntriaged} critical report${criticalUntriaged === 1 ? '' : 's'} need triage`,
-            hint: 'Confirm severity on the worst bugs first — auto-fix waits for triage.',
-            // Lists exactly what criticalUntriaged counts: the triage backlog, any age.
-            to: scoped('/reports?severity=critical&status=new'),
-          }
+        ? criticalUntriaged > 0
+          ? {
+              stage: 'plan',
+              title: `${criticalUntriaged} critical report${criticalUntriaged === 1 ? '' : 's'} need triage`,
+              hint: 'Confirm severity on the worst bugs first — auto-fix waits for triage.',
+              // Lists exactly what criticalUntriaged counts: the triage backlog, any age.
+              to: scoped('/reports?severity=critical&status=new'),
+            }
+          : {
+              stage: 'plan',
+              title: `${urgentOpenReports} critical or high report${urgentOpenReports === 1 ? ' is' : 's are'} still unfixed`,
+              hint: 'Read each diagnosis, then dispatch a fix or close it as not a code bug.',
+              // Same list the "do this next" line opens for this count.
+              to: scoped('/reports?status=open'),
+            }
         : null,
       openDo
         ? {
@@ -837,24 +858,12 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { empty: true } });
     }
-    const { data: projects } = await db
-      .from('projects')
-      .select('id, name')
-      .in('id', projectIds);
 
     const sinceIso = reportWindowStartIso(14);
     const since = new Date(sinceIso);
     const now = Date.now();
     const sevenDaysAgoIso = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    type ChartReport = { created_at: string; severity: string | null; component: string | null };
-    type ChartLlm = {
-      created_at: string;
-      status: string | null;
-      latency_ms: number | null;
-      input_tokens: number | null;
-      output_tokens: number | null;
-    };
     type RecentReport = {
       id: string;
       summary: string | null;
@@ -877,6 +886,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     };
 
     let loaded: {
+      projects: Array<{ id: string; name: string }>;
       reports14d: number;
       openBacklog: number;
       openCritical14d: number;
@@ -885,8 +895,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       llmOk14d: number;
       pendingEvals: number;
       disagreements: number;
-      chartReports: ChartReport[];
-      chartLlm: ChartLlm[];
+      charts: Awaited<ReturnType<typeof loadDashboardCharts>>;
       latestReports: RecentReport[];
       recentFixes: RecentFix[];
       evalDays: Array<{ created_at: string }>;
@@ -896,6 +905,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     };
     try {
       const [
+        projects,
         reports14d,
         openBacklog,
         openCritical14d,
@@ -904,8 +914,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         llmOk14d,
         pendingEvals,
         disagreements,
-        chartReports,
-        chartLlm,
+        charts,
         latestReports,
         recentFixes,
         evalDays,
@@ -913,6 +922,14 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         health,
         dashTruths,
       ] = await Promise.all([
+        // Teams v1: every project the caller can access (owner OR org
+        // member), with names so the FE can render per-project breakouts.
+        // A failed read keeps the old answer: an empty list.
+        db
+          .from('projects')
+          .select('id, name')
+          .in('id', projectIds)
+          .then(({ data }) => (data ?? []) as Array<{ id: string; name: string }>),
         exactCount(
           'reports 14d',
           db
@@ -974,27 +991,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
             .gte('created_at', sinceIso)
             .eq('classification_agreed', false),
         ),
-        // Chart rows only (newest first). Headline numbers above are exact counts.
-        rowsOf<ChartReport>(
-          'report chart rows',
-          db
-            .from('reports')
-            .select('created_at, severity, component')
-            .in('project_id', projectIds)
-            .gte('created_at', sinceIso)
-            .order('created_at', { ascending: false })
-            .limit(CHART_ROW_CAP),
-        ),
-        rowsOf<ChartLlm>(
-          'llm chart rows',
-          db
-            .from('llm_invocations')
-            .select('created_at, status, latency_ms, input_tokens, output_tokens')
-            .in('project_id', projectIds)
-            .gte('created_at', sinceIso)
-            .order('created_at', { ascending: false })
-            .limit(CHART_ROW_CAP),
-        ),
+        // Per-day chart buckets, summed in SQL (dashboard_chart_rollup).
+        // Headline numbers above are exact counts.
+        loadDashboardCharts(db, projectIds, sinceIso, CHART_FALLBACK_ROW_CAP),
         rowsOf<RecentReport>(
           'latest reports',
           db
@@ -1046,6 +1045,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         loadRecentFixTruths(db as unknown as Parameters<typeof loadRecentFixTruths>[0], projectIds),
       ]);
       loaded = {
+        projects,
         reports14d,
         openBacklog,
         openCritical14d,
@@ -1054,8 +1054,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         llmOk14d,
         pendingEvals,
         disagreements,
-        chartReports,
-        chartLlm,
+        charts,
         latestReports,
         recentFixes,
         evalDays,
@@ -1069,7 +1068,6 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const { reports14d, openBacklog, openCritical14d, pendingEvals, disagreements, recentFixes, dashTruths } = loaded;
 
     // Bucket helpers
-    const dayKey = (iso: string) => iso.slice(0, 10);
     const days: string[] = [];
     for (let i = 0; i < 14; i++) {
       const d = new Date(since);
@@ -1089,19 +1087,10 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         unscored: number;
       }
     > = {};
-    for (const d of days)
+    for (const d of days) {
       reportsByDay[d] = { total: 0, critical: 0, high: 0, medium: 0, low: 0, unscored: 0 };
-    for (const r of loaded.chartReports) {
-      const d = dayKey(String(r.created_at));
-      if (!reportsByDay[d]) continue;
-      const bucket = reportsByDay[d];
-      bucket.total++;
-      const sev = (r.severity ?? '').toLowerCase();
-      if (sev === 'critical' || sev === 'high' || sev === 'medium' || sev === 'low') {
-        bucket[sev as 'critical' | 'high' | 'medium' | 'low']++;
-      } else {
-        bucket.unscored++;
-      }
+      const bucket = loaded.charts.reportDays.get(d);
+      if (bucket) reportsByDay[d] = { ...bucket };
     }
 
     // Per-day LLM cost (token-based proxy: input + output tokens / 1k)
@@ -1109,35 +1098,22 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       string,
       { calls: number; tokens: number; latencyMs: number; failures: number }
     > = {};
-    for (const d of days) llmByDay[d] = { calls: 0, tokens: 0, latencyMs: 0, failures: 0 };
     let totalTokens = 0;
-    for (const inv of loaded.chartLlm) {
-      const d = dayKey(String(inv.created_at));
-      if (!llmByDay[d]) continue;
-      llmByDay[d].calls++;
-      const tok = (inv.input_tokens ?? 0) + (inv.output_tokens ?? 0);
-      llmByDay[d].tokens += tok;
-      llmByDay[d].latencyMs += inv.latency_ms ?? 0;
-      if (inv.status !== 'success') llmByDay[d].failures++;
-      totalTokens += tok;
+    for (const d of days) {
+      llmByDay[d] = { calls: 0, tokens: 0, latencyMs: 0, failures: 0 };
+      const bucket = loaded.charts.llmDays.get(d);
+      if (bucket) {
+        llmByDay[d] = { ...bucket };
+        totalTokens += bucket.tokens;
+      }
     }
     const totalLlmCalls = loaded.llmCalls14d;
     const totalLlmFailures = Math.max(0, loaded.llmCalls14d - loaded.llmOk14d);
-    // True when a chart had more rows than CHART_ROW_CAP; the KPI counts stay exact.
-    const chartsSampled =
-      loaded.chartReports.length >= CHART_ROW_CAP || loaded.chartLlm.length >= CHART_ROW_CAP;
+    // True only when the fallback row read hit its cap; the KPI counts stay exact.
+    const chartsSampled = loaded.charts.sampled;
 
     // Top components by report count
-    const componentCounts = new Map<string, number>();
-    for (const r of loaded.chartReports) {
-      const comp = (r.component ?? '').trim();
-      if (!comp) continue;
-      componentCounts.set(comp, (componentCounts.get(comp) ?? 0) + 1);
-    }
-    const topComponents = [...componentCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([component, count]) => ({ component, count }));
+    const topComponents = loaded.charts.topComponents;
 
     // `total` is the number of reports with an attempt in the shared 30-day window.
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());
@@ -1229,9 +1205,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const planSeries7d = new Array(7).fill(0) as number[];
     const doSeries7d = new Array(7).fill(0) as number[];
     const checkSeries7d = new Array(7).fill(0) as number[];
-    for (const r of loaded.chartReports) {
-      const i = last7Index.get(String(r.created_at).slice(0, 10));
-      if (i !== undefined) planSeries7d[i] += 1;
+    for (const [day, bucket] of loaded.charts.reportDays) {
+      const i = last7Index.get(day);
+      if (i !== undefined) planSeries7d[i] += bucket.total;
     }
     for (const f of recentFixes) {
       const i = last7Index.get(String(f.created_at).slice(0, 10));
@@ -1338,7 +1314,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       ok: true,
       data: {
         empty: false,
-        projects: (projects ?? []).map((p) => ({ id: p.id, name: p.name })),
+        projects: loaded.projects.map((p) => ({ id: p.id, name: p.name })),
         window: { days, since: sinceIso },
         counts: {
           reports14d,

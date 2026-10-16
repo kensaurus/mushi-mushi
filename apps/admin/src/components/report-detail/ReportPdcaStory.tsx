@@ -31,6 +31,7 @@ import { Card, RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
+import { humanizeFixError } from '../../lib/humanizeFixError'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
 type StoryState = StageStamp
@@ -240,7 +241,9 @@ export function buildStoryNodes(
     }
     if (liveStatus === 'completed' && dispatchState.prUrl) return 'Fix dispatched — PR opened just now'
     if (inFlight) return 'Auto-fix agent is drafting the PR right now'
-    if (fixStatus === 'failed') return `Last attempt failed — ${fix?.error ?? 'see fixes page'}`
+    if (fixStatus === 'failed') {
+      return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
+    }
     if (dispatched) return 'Fix attempt recorded'
     return 'No fix dispatched yet — click "Dispatch fix" to start'
   })()

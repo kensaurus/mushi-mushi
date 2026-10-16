@@ -228,9 +228,9 @@ function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
 }
 
 // ── Shared store ────────────────────────────────────────────────────────────
-// Layout and PipelineStatusRibbon both read these counters. As two hook
-// instances they each fired the whole request set; now every instance reads
-// one module-level snapshot and loads are deduplicated by context key.
+// Layout, the next-step line and page badges all read these counters. Every
+// instance reads one module-level snapshot and loads are deduplicated by
+// context key, so a second reader never starts a second request.
 
 interface LoadContext {
   key: string
@@ -368,7 +368,7 @@ export function useNavCounts(
   opts: { live?: boolean; slices?: readonly string[] | null } = {},
 ): NavCounts {
   const counts = useSyncExternalStore(subscribe, () => snapshot, () => INITIAL)
-  const { isSuperAdmin, has: hasFeature } = useEntitlements()
+  const { isSuperAdmin, has: hasFeature, loading: entitlementsLoading } = useEntitlements()
   const inventoryEnabled = hasFeature('inventory_v2')
   const activeProjectSignal = useActiveProjectSignal()
   const activeOrgSignal = useActiveOrgSignal()
@@ -378,10 +378,13 @@ export function useNavCounts(
   const key = `${activeOrgSignal}|${activeProjectSignal}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}|${slicesKey}`
 
   useEffect(() => {
-    if (!live) return
+    // Wait for entitlements: they decide the include list, and loading before
+    // them sent a second full nav-meta request once they landed (measured on
+    // prod 2026-10-16: nav-meta at 1.8 s and again at 6.8 s, ~5 s each).
+    if (!live || entitlementsLoading) return
     requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, false)
     // `slices` is captured through `key` (slicesKey).
-  }, [live, key, inventoryEnabled, isSuperAdmin])
+  }, [live, key, inventoryEnabled, isSuperAdmin, entitlementsLoading])
 
   useRealtimeReload(
     NAV_COUNT_TABLES,

@@ -1,5 +1,5 @@
 import { getServiceClient } from './db.ts'
-import { openAiCompatibleModelId } from './openai-compat.ts'
+import { openAiCompatibleModelId } from './openai-model-id.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
 import { markKeyStatus, markKeyUsed, resolveLlmKey } from './byok.ts'

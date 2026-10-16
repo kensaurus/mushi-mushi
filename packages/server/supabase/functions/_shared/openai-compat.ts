@@ -12,23 +12,12 @@
  * (embeddings).
  */
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
+import { isOpenRouterBaseUrl, openAiCompatibleModelId } from './openai-model-id.ts'
 
-/** True when an OpenAI-compatible base URL points at OpenRouter. */
-export function isOpenRouterBaseUrl(baseUrl: string | null | undefined): boolean {
-  if (!baseUrl) return false
-  try {
-    const host = new URL(baseUrl).hostname.toLowerCase()
-    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai')
-  } catch {
-    return false
-  }
-}
-
-/** The model id to send: vendor-prefixed for OpenRouter, unchanged elsewhere. */
-export function openAiCompatibleModelId(modelId: string, baseUrl: string | null | undefined): string {
-  if (!isOpenRouterBaseUrl(baseUrl) || modelId.includes('/')) return modelId
-  return `openai/${modelId}`
-}
+// The id rule lives in an npm-free module so raw-fetch callers can use it
+// without loading the AI SDK. Inside the api function, import this module
+// lazily (`await import(...)`) from the handler that calls a model.
+export { isOpenRouterBaseUrl, openAiCompatibleModelId }
 
 type OpenAiOptions = NonNullable<Parameters<typeof createOpenAI>[0]>
 type OpenAiProvider = ReturnType<typeof createOpenAI>

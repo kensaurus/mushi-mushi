@@ -17,6 +17,7 @@ import {
 } from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
 import { coerceApiResult, errorFromBody, type ApiResult } from './apiEnvelope'
+import { clearLastGood, registerLastGoodKey, rememberLastGood } from './lastGoodCache'
 import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
@@ -286,8 +287,31 @@ export async function apiFetch<T>(
         inFlight.delete(cacheKey)
       })
   }
+  // `no-store` reloads skip the micro-cache but still refresh the last good
+  // answer, so the next visit to this page opens on current data.
+  const lastGoodKey = cacheKey ?? coalesceKey(method, path, options?.body, scope)
+  if (lastGoodKey) {
+    promise
+      .then((value) => {
+        if (value.ok) rememberLastGood(lastGoodKey, value.data)
+      })
+      .catch(() => {})
+  }
   return promise
 }
+
+// Pages paint the last good answer for a request while they refetch it
+// (lastGoodCache.ts); lookups must use the same key this module stores with.
+registerLastGoodKey((path, scope) => coalesceKey('GET', path, null, scope))
+
+let lastGoodUserId: string | null = null
+supabase.auth.onAuthStateChange((event, session) => {
+  const userId = session?.user?.id ?? null
+  if (event === 'SIGNED_OUT' || (lastGoodUserId && userId && userId !== lastGoodUserId)) {
+    clearLastGood()
+  }
+  if (userId) lastGoodUserId = userId
+})
 
 /** POST/PATCH/DELETE helper — auto-generates Idempotency-Key unless provided. */
 export async function apiFetchMutate<T>(

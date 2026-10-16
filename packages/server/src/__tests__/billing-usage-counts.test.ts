@@ -65,3 +65,28 @@ describe('llmCostSince', () => {
     expect(await llmCostSince(fakeDb({ shadow: 0 }) as never, 'p1', '2026-10-01T00:00:00Z')).toBeCloseTo(2.5371)
   })
 })
+
+describe('llmCostByProjectSince', () => {
+  it('reads one SQL aggregate for every project', async () => {
+    const { llmCostByProjectSince } = await import('../../supabase/functions/_shared/billing-usage-counts.ts')
+    const db = fakeDb({ shadow: 0, rpc: { data: [{ project_id: 'p1', cost_usd: '12.5' }], error: null } })
+    const res = await llmCostByProjectSince(db as never, ['p1', 'p2'], '2026-10-01T00:00:00Z')
+    expect(res.data).toEqual([{ project_id: 'p1', cost_usd: 12.5 }])
+    expect(db.rpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the exact per-project aggregate when the batch function is missing', async () => {
+    const { llmCostByProjectSince } = await import('../../supabase/functions/_shared/billing-usage-counts.ts')
+    const db = fakeDb({ shadow: 0 })
+    db.rpc.mockImplementation(async (fn: string) =>
+      fn === 'billing_llm_cost_by_project'
+        ? { data: null, error: { code: 'PGRST202', message: 'missing' } }
+        : { data: '1.25', error: null },
+    )
+    const res = await llmCostByProjectSince(db as never, ['p1', 'p2'], '2026-10-01T00:00:00Z')
+    expect(res.data).toEqual([
+      { project_id: 'p1', cost_usd: 1.25 },
+      { project_id: 'p2', cost_usd: 1.25 },
+    ])
+  })
+})

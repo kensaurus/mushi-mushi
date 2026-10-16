@@ -7,8 +7,6 @@
 import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming'
-import { openAiProvider } from '../../_shared/openai-compat.ts'
-import { generateText, streamText } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
@@ -321,6 +319,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         },
         async (key) => {
           keySource = key.source
+          const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
@@ -508,6 +507,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           async (key): Promise<AssistStream> => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
+            const [{ openAiProvider }, { streamText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
             const openai = openAiProvider({
               apiKey: key.key,
               ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
@@ -689,6 +689,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
+          const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
@@ -824,6 +825,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           async (key) => {
             keySource = key.source
             usedModel = ASSIST_FALLBACK
+            const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
             const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
             return assistText(
               await generateText({
@@ -949,6 +951,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         async (key) => {
           keySource = key.source
           usedModel = ASSIST_FALLBACK
+          const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
           return assistText(
             await generateText({
