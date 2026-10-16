@@ -9,9 +9,10 @@
  * keep "Dispatch anyway" as the second choice.
  *
  * True when any of these hold:
- *   - a console error/warn stack has a first-party frame (parseStackFrames,
- *     the parser CodeFramePanel renders). A stack with only a message line,
- *     `(?)` frames or JVM frames without columns does not count;
+ *   - a console error/warn stack has a first-party frame: V8 frames through
+ *     parseStackFrames (the parser CodeFramePanel renders), or Safari/Firefox
+ *     `fn@file:line:col` frames. A stack with only a message line, `(?)`
+ *     frames or JVM frames without columns does not count;
  *   - Sentry ingest stored an in-app source path (`custom_metadata.sentryFrames`,
  *     which skips `in_app: false` frames; `_shared/sentry-frames.ts`);
  *   - the classifier named a file: a path token with a `/` and a code
@@ -58,6 +59,17 @@ export function parseStackFrames(stack: string): ParsedStackFrame[] {
   return frames
 }
 
+/** Safari/JSC and Firefox frames: `fn@https://host/x.js:12:34`, `global code@…`. */
+const AT_SIGN_FRAME = /^(.*?)@(.+):(\d+):(\d+)\s*$/
+
+function stackHasFirstPartyFrame(stack: string): boolean {
+  if (parseStackFrames(stack).length > 0) return true
+  return stack.split('\n').some((line) => {
+    const file = AT_SIGN_FRAME.exec(line.trim())?.[2]
+    return !!file && !file.includes('node_modules') && !file.includes('webpack:') && !file.includes('mushi-mushi')
+  })
+}
+
 /** A path token like `features/chat/chat-input.tsx`: a folder and a code extension. */
 const FILE_PATH_RE = /[\w@.-]+\/[\w@./-]*\.(?:[cm]?[jt]sx?|vue|svelte|astro|py|rb|go|rs|java|kt|kts|swift|dart|php|cs|ex|exs|scala)\b/i
 
@@ -72,7 +84,7 @@ type CodeLocationSource = Pick<
 
 export function reportHasCodeLocation(report: CodeLocationSource): boolean {
   const stackHasFrame = (report.console_logs ?? []).some(
-    (l) => (l.level === 'error' || l.level === 'warn') && !!l.stack && parseStackFrames(l.stack).length > 0,
+    (l) => (l.level === 'error' || l.level === 'warn') && !!l.stack && stackHasFirstPartyFrame(l.stack),
   )
   if (stackHasFrame) return true
 
