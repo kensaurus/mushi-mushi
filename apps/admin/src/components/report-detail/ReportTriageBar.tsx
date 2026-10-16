@@ -266,6 +266,24 @@ export function ReportTriageBar({
             ))}
           </SelectField>
         )}
+        {/* Closing used to hide in the Status select. Many Sentry imports are
+            config, an outage or expected noise, so say it in one click; the
+            reason picker opens preset to "works as intended", which also
+            archives the linked Sentry issue (sentry-resolve-back.ts). */}
+        {!closing && report.status !== 'dismissed' && report.status !== 'fixed' && report.status !== 'verified' && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCloseReason('working_as_intended')
+              setClosing(true)
+            }}
+            disabled={saving}
+            title="Close it as config, an outage or expected behaviour. Pick the reason next."
+          >
+            Not a code bug
+          </Btn>
+        )}
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"

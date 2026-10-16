@@ -323,6 +323,9 @@ export async function apiFetchMutate<T>(
   return apiFetch<T>(path, { ...options, method, idempotencyKey })
 }
 
+/** Deadline for a console read; the slowest healthy route measured 4.5 s cold. */
+const GET_TIMEOUT_MS = 15_000
+
 async function doFetch<T>(
   path: string,
   options: ApiFetchOptions<T> | undefined,
@@ -353,6 +356,9 @@ async function doFetch<T>(
       const token = await getAccessToken(attempt > 0)
       res = await fetch(url, {
         ...options,
+        // A GET that hangs used to hold its panel on a skeleton forever. Writes
+        // keep no deadline: dispatch and Ask Mushi can legitimately run long.
+        signal: options?.signal ?? (method === 'GET' ? AbortSignal.timeout(GET_TIMEOUT_MS) : undefined),
         headers: {
           'Content-Type': 'application/json',
           'X-Request-Id': requestId,
@@ -597,6 +603,21 @@ async function doFetch<T>(
       },
       message: `${method} ${path} → NETWORK_ERROR`,
     })
+    // A read past GET_TIMEOUT_MS is slowness, not a reachability bug: the
+    // breadcrumb above records it, and the panel offers a retry.
+    // AbortSignal.timeout() rejects with a DOMException, which is not an
+    // Error instance in every runtime: match on the name.
+    if ((err as { name?: unknown } | null)?.name === 'TimeoutError') {
+      return {
+        ok: false,
+        requestId,
+        error: {
+          code: 'TIMEOUT',
+          message: 'The server took too long to answer. Try again in a moment.',
+          requestId,
+        },
+      }
+    }
     if (err instanceof Error && err.name !== 'AbortError') {
       Sentry.captureException(err, {
         tags: {
