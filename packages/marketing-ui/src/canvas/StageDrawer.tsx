@@ -79,7 +79,7 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
                   kicker text now reads as caption ink, not a second red
                   surface stacked next to the badge. */}
               <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
-                <span className="grid h-5 w-5 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-[9px] font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]">
+                <span className="grid h-5 w-5 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-[9px] font-semibold text-white shadow-(--mushi-elevation-key-fill)">
                   {String(stage.index + 1).padStart(2, '0')}
                 </span>
                 {stage.kicker}
@@ -178,7 +178,7 @@ function DrawerPill({ label, value, tone }: { label: string; value: string; tone
         {label}
       </span>
       <span
-        className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] shadow-[inset_0_-2px_0_rgba(0,0,0,0.18)]"
+        className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] shadow-(--mushi-elevation-key)"
         style={{ background: colors.bg, color: colors.fg, borderLeft: `1px solid ${colors.border}` }}
       >
         {tone === 'alert' && (

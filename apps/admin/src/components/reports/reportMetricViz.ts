@@ -32,7 +32,7 @@ export function confidenceEmptySegmentTone(): string {
 
 export function confidenceTextTone(pct: number): string {
   if (pct >= 85) return 'text-ok-foreground'
-  if (pct >= 65) return 'text-warning-foreground'
+  if (pct >= 65) return 'text-warn-foreground'
   return 'text-danger-foreground'
 }
 

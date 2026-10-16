@@ -255,7 +255,7 @@ export function OverviewTab() {
       </Section>
 
       {pendingLiability > 0 && (
-        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
           <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
           monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
         </div>
@@ -402,7 +402,7 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       {!canEdit && (
-        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
           Upgrade to Starter or higher to configure activity rules.
         </div>
       )}
@@ -542,7 +542,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       {!canEdit && (
-        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
           Upgrade to Starter or higher to edit tier thresholds.
         </div>
       )}
@@ -2087,7 +2087,7 @@ export function RetentionAnalyticsTab() {
             </div>
           )}
           {(data.lift_pct ?? 0) < 0 && (
-            <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
+            <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
               Top contributors are retaining <strong>less</strong> than average. Consider adding
               recurring incentives or time-gated perks to retain power users after they hit the top tier.
             </div>

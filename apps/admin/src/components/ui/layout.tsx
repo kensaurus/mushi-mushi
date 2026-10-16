@@ -53,6 +53,15 @@ export function Badge({ children, className = '', title, tone }: BadgeProps) {
   )
 }
 
+/** error / warn / info finding severity as a labelled chip (text, not colour
+ *  alone). One home for the recipe, design-deviance, code-health and
+ *  full-stack audit lists; anything else renders Info. */
+export function FindingSeverityBadge({ severity }: { severity: unknown }) {
+  if (severity === 'error') return <Badge tone="dangerSubtle">Error</Badge>
+  if (severity === 'warn') return <Badge tone="warnSubtle">Warning</Badge>
+  return <Badge tone="neutral">Info</Badge>
+}
+
 /* ── Card ─────────────────────────────────────────────────────────────────
  *
  * Guide surface elevation: page bg → FeatureExplainPanel (raised) → stage rows

@@ -74,7 +74,7 @@ export function FunnelBars({ steps, caption, className = '' }: FunnelBarsProps) 
                   {prev != null && (
                     <>
                       <span title="Conversion from the previous step">{fromPrev.toFixed(1)}%</span>
-                      <span className={dropped > 0 ? 'text-warning-foreground' : 'text-fg-faint'} title="Dropped since the previous step">
+                      <span className={dropped > 0 ? 'text-warn-foreground' : 'text-fg-faint'} title="Dropped since the previous step">
                         −{dropped.toLocaleString()}
                       </span>
                       <span title="Median time from the previous step">{formatMedianSecs(step.median_secs)}</span>

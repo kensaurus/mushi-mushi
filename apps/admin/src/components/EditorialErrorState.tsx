@@ -87,7 +87,7 @@ function Action({ href, label, external, kind }: ActionProps & { kind: 'primary'
     'inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.18em] transition motion-safe:hover:-translate-y-0.5'
   const tone =
     kind === 'primary'
-      ? 'bg-editorial-ink text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] hover:bg-editorial-ink-emphasis'
+      ? 'bg-editorial-ink text-editorial-paper shadow-editorial-key-ink hover:bg-editorial-ink-emphasis'
       : 'border border-editorial-rule bg-editorial-paper text-editorial-ink hover:border-editorial-ink hover:bg-editorial-paper-wash'
   return (
     <a

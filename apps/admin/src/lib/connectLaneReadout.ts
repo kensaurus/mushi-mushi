@@ -61,8 +61,8 @@ export interface ConnectLaneReadoutModel {
 const CHIP: Record<WorkflowPosture, string> = {
   clear: `${CHIP_TONE.okSubtle}`,
   ok: `${CHIP_TONE.okSubtle}`,
-  open: 'bg-warn-muted/40 text-warning-foreground border-warn/30',
-  warn: 'bg-warn-muted/40 text-warning-foreground border-warn/30',
+  open: 'bg-warn-muted/40 text-warn-foreground border-warn/30',
+  warn: 'bg-warn-muted/40 text-warn-foreground border-warn/30',
   danger: `${CHIP_TONE.dangerSubtle}`,
   info: `${CHIP_TONE.infoSubtle}`,
 }

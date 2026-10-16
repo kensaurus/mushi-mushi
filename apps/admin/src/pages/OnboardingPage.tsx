@@ -1366,7 +1366,7 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
         <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
       </Card>
       <HelpBanner tone="warn" className="rounded-sm">
-        <p className="text-2xs text-warning-foreground">
+        <p className="text-2xs text-warn-foreground">
           Save this key securely. It will not be shown again after you leave this page.
         </p>
       </HelpBanner>

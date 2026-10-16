@@ -5,16 +5,10 @@
  */
 
 import { useState } from 'react'
-import { Badge } from '../ui'
+import { FindingSeverityBadge } from '../ui'
 import type { RecipeIssue } from '../../lib/recipeTypes'
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warn: 1, info: 2 }
-
-function SeverityBadge({ severity }: { severity: unknown }) {
-  if (severity === 'error') return <Badge tone="dangerSubtle">Error</Badge>
-  if (severity === 'warn') return <Badge tone="warnSubtle">Warning</Badge>
-  return <Badge tone="neutral">Info</Badge>
-}
 
 /** Issues shown per code before "Show all": one code repeated 300 times made a 9,000 px wall. */
 const PER_CODE = 5
@@ -37,7 +31,7 @@ export function RecipeIssueList({ issues, empty }: { issues: RecipeIssue[]; empt
           <div key={code} className="flex flex-col gap-1.5">
             {groups.size > 1 || list.length > PER_CODE ? (
               <p className="flex items-center gap-2 text-2xs text-fg-muted">
-                <SeverityBadge severity={list[0]!.severity} />
+                <FindingSeverityBadge severity={list[0]!.severity} />
                 <span className="font-mono">{code}</span>
                 <span>× {list.length}</span>
               </p>
@@ -45,7 +39,7 @@ export function RecipeIssueList({ issues, empty }: { issues: RecipeIssue[]; empt
             <ul className="flex flex-col gap-1.5">
               {shown.map((issue, i) => (
                 <li key={`${issue.code}:${i}`} className="flex flex-wrap items-start gap-2 text-xs">
-                  <SeverityBadge severity={issue.severity} />
+                  <FindingSeverityBadge severity={issue.severity} />
                   <span className="min-w-0 flex-1 text-fg-secondary">
                     {issue.message}
                     {(issue.file || issue.path) && (
