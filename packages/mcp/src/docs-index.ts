@@ -156,7 +156,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/dashboard",
     markdown: "admin/dashboard.md",
     keywords: ["admin", "dashboard"],
-    headings: ["What to look for first", "Flow canvas", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
+    headings: ["What to look for first", "Flow canvas (Beginner mode)", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
     excerpt: "The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.",
   },
   {
@@ -259,13 +259,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.",
   },
   {
-    title: "Action inbox",
+    title: "To-do",
     url: docUrl("/admin/inbox"),
     route: "/admin/inbox",
     markdown: "admin/inbox.md",
-    keywords: ["admin", "inbox", "action"],
+    keywords: ["admin", "inbox", "to-do"],
     headings: ["How it works", "Reading an action card", "Cleared stages strip", "Filtering by PDCA phase", "Common tasks", "Morning triage (the fast path)", "Understanding a stage chip colour", "When the Inbox seems wrong"],
-    excerpt: "The Action inbox gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.",
+    excerpt: "The To-do list gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.",
   },
   {
     title: "Integrations",
