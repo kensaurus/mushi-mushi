@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp-ci
 
+## 0.6.6
+
+### Patch Changes
+
+- 5ad0452: Internal cleanup with no change to what these packages export or do. Helpers and types that nothing imported, including the package's own tests, are now private to their module or removed. None of them was reachable from a package entry point.
+
 ## 0.6.5
 
 ### Patch Changes
