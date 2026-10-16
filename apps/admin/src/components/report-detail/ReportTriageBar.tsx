@@ -12,6 +12,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import { CLOSE_REASONS } from '../../lib/closeReasons'
+import { humanizeFixError } from '../../lib/humanizeFixError'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -92,6 +93,10 @@ export function ReportTriageBar({
   // One gate for every dispatch control on the page (dispatchBlock()).
   const dispatchDisabled = dispatchBlock.blocked
   const dispatchBlockReason = dispatchBlock.reason ?? undefined
+  // A failed dispatch says why in plain words. Only offer "retry" when a
+  // retry can help: a report with nothing to fix stops the same way again.
+  const failure = dispatchState.status === 'failed' ? humanizeFixError(dispatchState.error) : null
+  const retryHelps = !failure || failure.action?.target.kind === 'retry' || failure.known === false
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
@@ -103,7 +108,7 @@ export function ReportTriageBar({
     // straight into the same wall (2026-08-16 audit P1-4).
     dispatchState.status === 'completed_no_pr' ? 'Fix ready — connect GitHub' :
     dispatchState.status === 'skipped' ? 'Skipped — see reason' :
-    'Failed — retry'
+    retryHelps ? 'Failed — retry' : 'Dispatch again'
 
   const syncToIntegrations = async () => {
     if (destinations.length === 0) {
@@ -283,8 +288,17 @@ export function ReportTriageBar({
             </a>
           )}
           {dispatchState.status === 'failed' && dispatchState.error && (
-            <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}>
-              {dispatchState.error}
+            <span
+              className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}
+              title={failure?.raw ?? dispatchState.error}
+            >
+              {failure ? (
+                <>
+                  <span className="font-medium">{failure.title}</span> {failure.hint}
+                </>
+              ) : (
+                dispatchState.error
+              )}
             </span>
           )}
           {(dispatchState.status === 'skipped' || dispatchState.status === 'completed_no_pr') &&
