@@ -10,6 +10,7 @@ export const ja: MushiLocale = {
     submitting: '送信中…',
     submitted: 'ありがとうございます！レポートが送信されました。',
     error: 'エラーが発生しました。もう一度お試しください。',
+    hideLauncher: 'このアクセス中はバグボタンを隠す',
   },
   step1: {
     moreNav: {

@@ -171,19 +171,36 @@ export function SdkInstallPreview({
         <button
           type="button"
           className="absolute flex items-center justify-center transition-transform hover:-translate-y-0.5"
-          style={{
-            ...cornerPos[config.position],
-            height: config.trigger === 'edge-tab' ? 70 : 44,
-            width: config.trigger === 'edge-tab' ? 24 : 44,
-            background: paper,
-            color: ink,
-            border: `1px solid ${hairline}`,
-            borderRadius: config.trigger === 'edge-tab' ? '4px 0 0 4px' : 4,
-            fontSize: config.trigger === 'edge-tab' ? 14 : 18,
-            lineHeight: 1,
-            writingMode: config.trigger === 'edge-tab' ? 'vertical-rl' : undefined,
-            boxShadow: config.trigger === 'edge-tab' ? `inset -3px 0 0 ${ink}` : `inset 0 -3px 0 ${ink}`,
-          }}
+          style={
+            config.trigger === 'edge-tab'
+              ? {
+                  // Mirrors the SDK's slim tab: flush with the edge, 22×48 drawn (scaled to the mock).
+                  ...cornerPos[config.position],
+                  ...(config.position.endsWith('left') ? { left: 0 } : { right: 0 }),
+                  height: 40,
+                  width: 19,
+                  background: paper,
+                  color: ink,
+                  border: `1px solid ${hairline}`,
+                  ...(config.position.endsWith('left') ? { borderLeft: 0 } : { borderRight: 0 }),
+                  borderRadius: config.position.endsWith('left') ? '0 4px 4px 0' : '4px 0 0 4px',
+                  fontSize: 12,
+                  lineHeight: 1,
+                  boxShadow: `inset ${config.position.endsWith('left') ? 2 : -2}px 0 0 ${ink}`,
+                }
+              : {
+                  ...cornerPos[config.position],
+                  height: 44,
+                  width: 44,
+                  background: paper,
+                  color: ink,
+                  border: `1px solid ${hairline}`,
+                  borderRadius: 4,
+                  fontSize: 18,
+                  lineHeight: 1,
+                  boxShadow: `inset 0 -3px 0 ${ink}`,
+                }
+          }
           aria-label="Mock bug-capture trigger button — click to preview panel"
           onClick={() => (panelOpen ? close() : open())}
         >
