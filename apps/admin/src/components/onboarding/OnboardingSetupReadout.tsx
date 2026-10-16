@@ -1,7 +1,7 @@
 /**
  * FILE: OnboardingSetupReadout.tsx
  * PURPOSE: Setup wizard provenance — ingest endpoint, project ref, and SDK/admin
- *          host alignment using live onboarding stats (mirrors ConnectProvenanceBand).
+ *          host alignment using live onboarding stats.
  */
 
 import { DetailRows, type DetailRowItem } from '../ui/fields'

@@ -5,7 +5,7 @@
  * OVERVIEW:
  * - The canonical implementations now live in `packages/mcp/src/clients.ts`
  *   (shared registry). This file re-exports the named functions that existing
- *   callers in McpPage and McpInstallButtons depend on, so no import paths
+ *   callers in McpPage depend on, so no import paths
  *   need to change outside this file.
  * - New code should import directly from `@mushi-mushi/mcp/clients` instead.
  *
