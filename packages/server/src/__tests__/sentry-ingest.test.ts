@@ -209,6 +209,115 @@ describe('ingestSentryError', () => {
   })
 })
 
+describe('ingestSentryError — transient database outages are not filed', () => {
+  // The extra shapes are the ones the 2026-10-14 pooler outage filed as reports.
+  const POOLER =
+    'upstream connect error or disconnect/reset before headers. retried and the latest reset reason: ' +
+    'remote connection failure, transport failure reason: delayed connect error: 111'
+  let state: Parameters<typeof makeDbStub>[0]
+  let classified: string[]
+
+  beforeEach(() => {
+    state = { links: [], reports: [], inserted: [], updated: [] }
+    classified = []
+  })
+
+  const ingest = (event: Parameters<typeof mod.ingestSentryError>[1]['event']) =>
+    mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event,
+      issue: null,
+      triggerClassification: (rid) => classified.push(rid),
+      intake: 'poll',
+    })
+
+  it('skips a log.error event whose extra carries the pooler reset (MUSHI-MUSHI-SERVER-22)', async () => {
+    const result = await ingest({ title: 'open attempt scan failed', issue_id: '9001', extra: { error: POOLER } })
+    expect(result.outcome).toBe('ignored')
+    expect(state.inserted).toHaveLength(0)
+    expect(classified).toHaveLength(0)
+  })
+
+  it('skips a PGRST002 schema-cache reload carried as a PostgREST object (MUSHI-MUSHI-SERVER-1M)', async () => {
+    const result = await ingest({
+      title: 'Failed to fetch qa_stories',
+      issue_id: '9002',
+      extra: {
+        err: {
+          code: 'PGRST002',
+          details: null,
+          hint: null,
+          message: 'Could not query the database for the schema cache. Retrying.',
+        },
+      },
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(state.inserted).toHaveLength(0)
+  })
+
+  it('skips a thrown error whose title is the pooler reset (MUSHI-MUSHI-SERVER-2S)', async () => {
+    const result = await ingest({
+      title: `Error: project_repos.repo_url lookup failed: ${POOLER}`,
+      issue_id: '9003',
+    })
+    expect(result.outcome).toBe('ignored')
+  })
+
+  it('a webhook alert for a pooler reset is skipped too', async () => {
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: { title: 'failed to load jobs', issue_id: '9006', extra: { err: POOLER } },
+      issue: null,
+      triggerClassification: () => {},
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(state.inserted).toHaveLength(0)
+  })
+
+  it('an operator import by hand still files it: they asked for that issue', async () => {
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: { title: 'failed to load jobs', issue_id: '9007', extra: { err: POOLER } },
+      issue: null,
+      triggerClassification: () => {},
+      intake: 'import',
+    })
+    expect(result.outcome).toBe('created')
+  })
+
+  it('skips a PGRST002 that carries only its code', async () => {
+    const result = await ingest({ title: 'load failed', issue_id: '9008', extra: { err: { code: 'PGRST002', message: '' } } })
+    expect(result.outcome).toBe('ignored')
+  })
+
+  it.each([
+    'Error: read ECONNRESET',
+    'Error: socket hang up',
+    'Error: connection reset by peer',
+  ])('still files a user-app network error from its own backend: %s', async (title) => {
+    const result = await ingest({ title, issue_id: `9100-${title}` })
+    expect(result.outcome).toBe('created')
+  })
+
+  it('still files a statement timeout: that is a slow query, a real bug', async () => {
+    const result = await ingest({
+      title: 'analyze job failed',
+      issue_id: '9004',
+      extra: { err: { code: '57014', message: 'canceling statement due to statement timeout' } },
+    })
+    expect(result.outcome).toBe('created')
+  })
+
+  it('still files a missing column, even though PostgREST says "schema cache"', async () => {
+    const result = await ingest({
+      title: 'reports update failed',
+      issue_id: '9005',
+      extra: { err: { code: 'PGRST204', message: "Could not find the 'foo' column of 'reports' in the schema cache" } },
+    })
+    expect(result.outcome).toBe('created')
+  })
+})
+
 describe('ingestSentryError — import intake, extra, frames', () => {
   let state: Parameters<typeof makeDbStub>[0]
 

@@ -20,7 +20,20 @@
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any }
-type QueryResult = { data?: Array<Record<string, unknown>> | null; error?: { message: string } | null }
+type DbError = { message: string; code?: string | null }
+type QueryResult = { data?: Array<Record<string, unknown>> | null; error?: DbError | null }
+
+/**
+ * A binding lookup failed. `dbError` keeps the PostgREST error, code included,
+ * so the route can tell a pooler outage (503, logged as a warning) from a real
+ * error (500, reported to Sentry).
+ */
+export class RepoLookupError extends Error {
+  constructor(message: string, readonly dbError: DbError) {
+    super(message)
+    this.name = 'RepoLookupError'
+  }
+}
 
 const REPO_URL_RE = /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i
 
@@ -60,7 +73,7 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
   const orgIds = new Set<string>()
   results.forEach((res: QueryResult, i) => {
     const { table, column } = sources[i]
-    if (res.error) throw new Error(`${table}.${column} lookup failed: ${res.error.message}`)
+    if (res.error) throw new RepoLookupError(`${table}.${column} lookup failed: ${res.error.message}`, res.error)
     for (const row of res.data ?? []) {
       if (!isRepoUrl(row[column], fullName)) continue
       if (typeof row.project_id === 'string') ids.add(row.project_id)
@@ -69,7 +82,7 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
   })
   if (orgIds.size > 0) {
     const res: QueryResult = await db.from('projects').select('id').in('organization_id', [...orgIds])
-    if (res.error) throw new Error(`projects lookup failed: ${res.error.message}`)
+    if (res.error) throw new RepoLookupError(`projects lookup failed: ${res.error.message}`, res.error)
     for (const row of res.data ?? []) if (typeof row.id === 'string') ids.add(row.id)
   }
   return [...ids]
