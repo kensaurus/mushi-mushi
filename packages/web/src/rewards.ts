@@ -182,20 +182,6 @@ export function initRewards(ctx: RewardsContext): void {
   }
 }
 
-/** Called by Mushi.identify() to update the current user context. */
-export function updateRewardsUser(
-  userId: string,
-  traits?: { email?: string; name?: string; provider?: string },
-  reporterToken?: string,
-): void {
-  currentUserId = userId;
-  currentUserTraits = traits ?? null;
-  if (reporterToken) reporterTokenRaw = reporterToken;
-  // Invalidate tier cache on user change
-  tierCache = null;
-  tierCacheTime = 0;
-}
-
 /** Manually enqueue a host-defined activity event. */
 export function enqueue(event: MushiActivityEvent): void {
   if (!optedIn || !currentUserId) return;
