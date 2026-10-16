@@ -10,11 +10,11 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 # Privacy Policy
 
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-09-21. Treat
+  description of how Mushi Mushi handles personal data as of 2026-10-10. Treat
   it as a description of current practice, not a finished legal document.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-09-21 · **Version:** 1
+**Effective date:** 2026-10-10 · **Version:** 2 (version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl)
 
 This policy covers **Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -24,7 +24,7 @@ and this policy does not apply to your instance.
 
 ## 1. Who is responsible
 
-Mushi Mushi is built and operated by **kensaurus**, an individual developer
+Mushi Mushi is built and operated by **kensaurus LLC (kensaurus合同会社)**,
 based in Japan (the "controller" for the data described in section 3, and the
 "processor" for the data described in section 4).
 
@@ -105,7 +105,7 @@ cannot reach them, email us and we will forward the request.
 | **Sentry** | Console error telemetry (section 2) | US | Console only; the SDK in your app never reports to our Sentry |
 | **GitHub** | OAuth sign-in profile; repo metadata, code index and draft PRs when you connect a repository | US | Access is scoped to the repos you pick and revocable in GitHub settings |
 | **Stripe** | Billing name, email, card details (Stripe holds the card, we never see the full number), invoices | US | Paid plans only |
-| **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory or QA-coverage crawls | US | Only pages you ask us to crawl |
+| **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory, QA-coverage or story-mapping crawls; queries you run on the Research page; and, only if a project turns on **Search the web for known fixes**: the error message of a report with IDs, URLs and long numbers removed (plus the runtime name, such as `node`), searched in Firecrawl's developer index (GitHub issues, pull requests, READMEs, docs) and on GitHub and Stack Overflow after classification or when someone presses **Search again**, and, for a fix dispatch with little code context, the report summary or the first 200 characters of its description | US | Only pages you ask us to crawl. The known-fix search is off by default and set per project (Settings → Web tools) |
 | **Tremendous** | Gift-card delivery for Bounties testers: email, amount, and KYC data past the threshold | US | Bounties only |
 
 ## 6. International transfers and residency
@@ -162,7 +162,7 @@ or the reporter identity before releasing anything.
 This section applies to personal information handled by Mushi as a
 business operator under the APPI (個人情報の保護に関する法律).
 
-- **Business operator (個人情報取扱事業者):** kensaurus, Japan. Contact:
+- **Business operator (個人情報取扱事業者):** kensaurus LLC (kensaurus合同会社), Japan. Contact:
   [kensaurus@gmail.com](mailto:kensaurus@gmail.com).
 - **Purpose of use (利用目的):** to provide and improve the Mushi service,
   bill for paid plans, answer support requests, keep the service secure, pay
@@ -232,7 +232,7 @@ after the effective date means the new version applies.
 
 ## 13. Contact
 
-**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+**kensaurus LLC (kensaurus合同会社)** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
 subject `[mushi-privacy]`
 
 Related: [Terms of Service](/legal/terms) · [Security summary](/security) ·
