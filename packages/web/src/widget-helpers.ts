@@ -63,12 +63,10 @@ export function readLauncherDismissed(): boolean {
   }
 }
 
-/** Remember (or forget) the choice for this tab. Blocked storage keeps it for this page only. */
-export function writeLauncherDismissed(hidden: boolean): void {
+/** Remember the choice until the tab closes. Blocked storage keeps it for this page only. */
+export function writeLauncherDismissed(): void {
   try {
-    if (typeof sessionStorage === 'undefined') return;
-    if (hidden) sessionStorage.setItem(LAUNCHER_DISMISSED_STORAGE_KEY, '1');
-    else sessionStorage.removeItem(LAUNCHER_DISMISSED_STORAGE_KEY);
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(LAUNCHER_DISMISSED_STORAGE_KEY, '1');
   } catch { /* private mode / blocked storage */ }
 }
 

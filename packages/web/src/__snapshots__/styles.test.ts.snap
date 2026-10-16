@@ -156,6 +156,9 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
       box-shadow: 0 4px 12px -6px rgba(14,13,11,0.4), inset -2px 0 0 var(--_accent);
       transition: width 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
     }
+    /* A text label reads down the tab; the tab grows to fit it. */
+    .mushi-trigger.edge-tab.text { height: auto; min-height: 48px; }
+    .mushi-trigger.edge-tab.text .mushi-trigger-face { height: auto; min-height: 48px; padding: 10px 0; writing-mode: vertical-rl; font-size: 12px; white-space: nowrap; }
     .mushi-trigger.edge-tab:hover .mushi-trigger-face,
     .mushi-trigger.edge-tab:focus-visible .mushi-trigger-face { width: 28px; }
     .mushi-trigger.edge-tab:focus-visible { outline: none; }

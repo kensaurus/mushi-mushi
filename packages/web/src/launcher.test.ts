@@ -114,6 +114,20 @@ describe('launcher shape', () => {
     optIn.mount();
     expect(trigger(optIn)!.classList.contains('edge-tab')).toBe(true);
     optIn.destroy();
+    // A word label doesn't fit a 22px face: auto keeps the FAB; an explicit tab reads it vertically.
+    const label = new MushiWidget({ triggerText: 'Report bug' }, noopCallbacks);
+    label.mount();
+    expect(trigger(label)!.classList.contains('edge-tab')).toBe(false);
+    label.destroy();
+    const labelTab = new MushiWidget({ trigger: 'edge-tab', triggerText: 'Report bug' }, noopCallbacks);
+    labelTab.mount();
+    expect(trigger(labelTab)!.classList.contains('text')).toBe(true);
+    labelTab.destroy();
+    const glyph = new MushiWidget({ triggerText: '\u{1F41E}' }, noopCallbacks);
+    glyph.mount();
+    expect(trigger(glyph)!.classList.contains('edge-tab')).toBe(true);
+    expect(trigger(glyph)!.classList.contains('text')).toBe(false);
+    glyph.destroy();
     // A bottom offset alone (clearing a tab bar) is not a placement choice.
     const bottomOnly = new MushiWidget({ inset: { bottom: 96 } }, noopCallbacks);
     bottomOnly.mount();
@@ -414,7 +428,7 @@ describe('edge tab drag', () => {
 });
 
 describe('hide for this visit', () => {
-  it('hides the launcher until the tab closes; show() brings it back', () => {
+  it('hides the launcher until the tab closes, even through host show() calls', () => {
     const w = new MushiWidget({}, noopCallbacks);
     w.mount();
     w.open();
@@ -434,10 +448,18 @@ describe('hide for this visit', () => {
     const nextPage = new MushiWidget({}, noopCallbacks);
     nextPage.mount();
     expect(trigger(nextPage)).toBeNull();
+    // Hosts call show() on routine paths (glot.it: after every overlay closes).
     nextPage.showTrigger();
-    expect(trigger(nextPage)).not.toBeNull();
-    expect(sessionStorage.getItem(LAUNCHER_DISMISSED_STORAGE_KEY)).toBeNull();
+    expect(trigger(nextPage)).toBeNull();
+    expect(sessionStorage.getItem(LAUNCHER_DISMISSED_STORAGE_KEY)).toBe('1');
     nextPage.destroy();
+
+    // A new tab starts with an empty sessionStorage: the launcher is back.
+    sessionStorage.clear();
+    const newTab = new MushiWidget({}, noopCallbacks);
+    newTab.mount();
+    expect(trigger(newTab)).not.toBeNull();
+    newTab.destroy();
   });
 
   it('is offered only for a visible floating launcher the host lets visitors hide', () => {
