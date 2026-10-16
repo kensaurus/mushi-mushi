@@ -23,8 +23,7 @@ export interface AdminMigrationGuideMeta {
   summary: string
 }
 
-/** @public Parsed as text by scripts/check-migration-catalog-sync.mjs. */
-export const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
+const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
   {
     slug: 'capacitor-to-react-native',
     title: 'Capacitor → React Native',

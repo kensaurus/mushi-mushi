@@ -75,8 +75,7 @@ const COMPETITOR_PACKAGES: Record<string, string[]> = {
 
 /** Internal catalog. Order matters: in-transition shapes come first so we
  *  surface them above one-shot legacy detections. */
-/** @public Parsed as text by scripts/check-migration-catalog-sync.mjs. */
-export const MIGRATE_CATALOG: readonly MigrateGuide[] = [
+const MIGRATE_CATALOG: readonly MigrateGuide[] = [
   // ── In-transition / cross-stack shapes (highest priority) ─────────
   {
     slug: 'capacitor-to-react-native',
