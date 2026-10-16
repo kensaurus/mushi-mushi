@@ -8,20 +8,21 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-14 (first run, so there is no delta to report)
-- **Open items:** 18 · **Recently closed:** 0
+- **Rows added since:** BL-019..BL-022 (2026-10-16 repo housekeep)
+- **Open items:** 22 · **Recently closed:** 0
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 6 |
 | test-gap | 4 |
-| tech-debt | 5 |
+| tech-debt | 8 |
 | known-bug | 0 |
-| decision-needed | 2 |
+| decision-needed | 3 |
 | unfinished-feature | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 15 |
+| relevant | 19 |
 | verify-done | 2 |
 | stale (propose removal) | 1 |
 
@@ -60,6 +61,10 @@ parked work is visible in one place.
 | BL-016 | decision-needed | Seven July audit plans (`docs/plan-antislop.md`, `plan-docs-sync.md`, `plan-error-handling.md`, `plan-input-validation.md`, `plan-uiux-unification.md`, `plan-uplift-sdk-cli-mcp.md`; `plan-gtm.md` from 2026-09-22) carry open items that were never re-verified against today's code. Triage each: close, carry as rows, or archive | relevant | low | `docs/plan-*.md` | — |
 | BL-017 | deferred-plan-phase | Plan 021 Phase 1 recorded the live judge call, the Cursor/Codex adapters and an `apps/admin` run as not yet verified | verify-done | low | `docs/execplans/PLANS.md:643` | — |
 | BL-018 | test-gap | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline". The knip gate (ADR 0007) and the 2026-10-14 pass have since covered it | stale (propose removal) | low | `docs/execplans/PLANS.md:572` | — |
+| BL-019 | tech-debt | 169 env names the source reads are in no `.env.example`, among them `ADMIN_ORIGIN`, the `STRIPE_PRICE_*` set, `TREMENDOUS_*` and the admin `VITE_MUSHI_SELF_*`. CI runs the check with `--warn`, so nothing stops new ones. Template each in its owning `.env.example` (or allowlist the platform builtins), then drop `--warn` | relevant | low | `pnpm check:env-source-parity`; `.github/workflows/ci.yml:412` | — |
+| BL-020 | decision-needed | Product screenshots are committed three times: `docs/screenshots/` (88 files, about 204 MB), `apps/docs/public/screenshots/` (the copy `scripts/sync-docs-screenshots.mjs` makes) and `apps/admin/public/screenshots/` (81 files, about 213 MB). Identical files share one git blob, but every checkout and worktree writes about 620 MB to disk. Keep one source and copy at build time, or keep the copies on purpose. Demo GIFs are referenced by a built name (`apps/docs/components/AdminDocHero.tsx:26`), so a grep for a file name does not prove it unused | relevant | low | `scripts/sync-docs-screenshots.mjs`; `scripts/sync-marketing-screenshots.mjs` | — |
+| BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
+| BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | relative-link scan of tracked `*.md`, 2026-10-16 | — |
 
 ---
 
