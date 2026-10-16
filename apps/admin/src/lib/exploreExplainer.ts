@@ -2,7 +2,7 @@
  * Plain-language Explore / Codebase Atlas tab guide.
  */
 
-export type ExploreGuideTabId =
+type ExploreGuideTabId =
   | 'overview'
   | 'ask'
   | 'tour'

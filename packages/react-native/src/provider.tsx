@@ -210,7 +210,6 @@ export interface MushiRNConfig {
 }
 
 // MushiHallOfFameEntry is now defined in and imported from @mushi-mushi/core
-export type { MushiHallOfFameEntry }
 
 export interface MushiRNInstance {
   open(): void

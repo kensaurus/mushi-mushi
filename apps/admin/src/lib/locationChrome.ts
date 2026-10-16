@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from 'react'
 
 /** Desktop sub-header shows breadcrumb at md+; mobile uses drawer title only. */
-export function useBreadcrumbVisible(): boolean {
+function useBreadcrumbVisible(): boolean {
   return useSyncExternalStore(
     subscribeViewport,
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,

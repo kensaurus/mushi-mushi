@@ -11,8 +11,9 @@ import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
-import { CLOSE_REASONS } from '../../lib/closeReasons'
+import { CLOSE_REASONS, closeReasonSentryNotice } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { trackAdHoc } from '../../lib/track'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -185,6 +186,11 @@ export function ReportTriageBar({
             size="sm"
             onClick={() => {
               setClosing(false)
+              trackAdHoc('report_closed', {
+                report_id: report.id,
+                reason: closeReason || 'none',
+                sentry_linked: report.sentry_links?.some((l) => !l.resolved_at) ?? false,
+              })
               void onTriage(closeReason ? { status: 'dismissed', closed_reason: closeReason } : { status: 'dismissed' })
             }}
             disabled={saving}
@@ -194,6 +200,9 @@ export function ReportTriageBar({
           <Btn size="sm" variant="ghost" onClick={() => setClosing(false)} disabled={saving}>
             Cancel
           </Btn>
+          {(report.sentry_links?.some((l) => !l.resolved_at) ?? false) && (
+            <p className="basis-full text-xs text-fg-muted">{closeReasonSentryNotice(closeReason)}</p>
+          )}
         </div>
       )}
 
@@ -265,6 +274,24 @@ export function ReportTriageBar({
               </option>
             ))}
           </SelectField>
+        )}
+        {/* Closing used to hide in the Status select. Many Sentry imports are
+            config, an outage or expected noise, so say it in one click; the
+            reason picker opens preset to "works as intended", which also
+            archives the linked Sentry issue (sentry-resolve-back.ts). */}
+        {!closing && report.status !== 'dismissed' && report.status !== 'fixed' && report.status !== 'verified' && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCloseReason('working_as_intended')
+              setClosing(true)
+            }}
+            disabled={saving}
+            title="Close it as config, an outage or expected behaviour. Pick the reason next."
+          >
+            Not a code bug
+          </Btn>
         )}
         <div className="flex flex-col items-end gap-1">
           <Btn

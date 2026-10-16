@@ -10,6 +10,8 @@ export interface MushiLocale {
     submitting: string;
     submitted: string;
     error: string;
+    /** Panel action that hides the floating launcher until the tab closes. */
+    hideLauncher?: string;
   };
   step1: {
     /** @deprecated The 3-step flow is retired (Plan 018); unused since 1.30. */

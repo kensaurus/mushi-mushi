@@ -24,6 +24,7 @@ import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
 import { QUICK_PRE_SETUP_PATHS, SIMPLE_NAV_GROUPS } from '../lib/navRegistry'
@@ -179,6 +180,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // The phone and desktop headers both stay in the DOM (CSS picks one), but
+  // the team and project switchers mount only in the visible one: mounted in
+  // both, each ran its hooks and data reads twice on every page.
+  const isDesktopHeader = useMediaQuery('(min-width: 48rem)', true)
   const [railSignOutOpen, setRailSignOutOpen] = useState(false)
   /** Which sidebar category is expanded — single accordion in rail + full sidebar. */
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
@@ -851,8 +856,12 @@ export function Layout({ children }: { children: ReactNode }) {
             <IconMenu size={18} />
           </Btn>
           <div className="flex min-w-0 flex-1 items-center gap-1.5 [&>*]:min-w-0">
-            <OrgSwitcher />
-            <ProjectSwitcher />
+            {!isDesktopHeader && (
+              <>
+                <OrgSwitcher />
+                <ProjectSwitcher />
+              </>
+            )}
           </div>
           <div className="shrink-0">
             <SearchButton />
@@ -913,8 +922,12 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
             <span className="hidden xl:block h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
             <div className="flex min-w-0 items-center gap-1">
-              <OrgSwitcher />
-              <ProjectSwitcher />
+              {isDesktopHeader && (
+                <>
+                  <OrgSwitcher />
+                  <ProjectSwitcher />
+                </>
+              )}
             </div>
           </div>
         </header>}

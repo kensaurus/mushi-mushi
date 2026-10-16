@@ -15,7 +15,7 @@ import {
   type DocsAuthSession,
 } from '../lib/migrationProgress'
 
-export interface MigrationStep {
+interface MigrationStep {
   /** Stable identifier — used as the localStorage key entry. Once shipped,
    *  treat as part of the public API: renaming an ID resets that step's
    *  progress for every user. */

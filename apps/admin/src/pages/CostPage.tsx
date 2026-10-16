@@ -11,7 +11,6 @@ import { usePageCopy } from '../lib/copy'
 import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -108,7 +107,6 @@ export function CostPage() {
     lastFetchedAt,
     isValidating,
   } = usePageData<CostStats>(statsPath)
-  usePublishPageHeroStats('/cost', statsData)
   const stats = statsData ?? EMPTY_COST_STATS
 
   const summaryPath = activeProjectId

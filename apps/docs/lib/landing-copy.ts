@@ -244,7 +244,7 @@ export interface LandingPlatformCard {
  * (those 404 on the kensaur Default origin; CF 301 is only a safety net).
  */
 const DOCS_BASE = (process.env.NEXT_PUBLIC_MUSHI_BASE_PATH ?? '').replace(/\/+$/, '')
-export const LANDING_BRAND_MARK = `${DOCS_BASE}/brand/logo-mark.svg`
+const LANDING_BRAND_MARK = `${DOCS_BASE}/brand/logo-mark.svg`
 
 /** Base path for assets under `apps/docs/public`. Exported so components can
  *  build self-hosted asset URLs without re-deriving the static-export prefix. */
@@ -459,9 +459,6 @@ export const LANDING_COMMUNITY = {
   label: 'GitHub Discussions →',
   href: `${MUSHI_CANONICAL_URLS.repo}/discussions`,
 } as const
-
-export const LANDING_ARCHITECTURE_LINK =
-  'See **[Concepts → Architecture](/concepts/architecture)** for the wire-level sequence diagram and component-by-component spec.'
 
 export const LANDING_OPERATOR = {
   question: 'Run the 60-second proof',

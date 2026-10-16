@@ -28,7 +28,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 export const TESTER_PANEL =
   'rounded-md border border-edge-subtle bg-surface-raised'
 
-export const TESTER_PANEL_INTERACTIVE =
+const TESTER_PANEL_INTERACTIVE =
   `${TESTER_PANEL} motion-safe:transition-[transform,opacity] hover:border-brand/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`
 
 export interface TesterPageIntroProps {

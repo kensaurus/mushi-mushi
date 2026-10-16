@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the MCP SNAPSHOT strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { McpStats } from '../../components/mcp/types'
 import { metricTip } from '../metricTooltipBuilder'

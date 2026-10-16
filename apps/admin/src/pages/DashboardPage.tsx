@@ -12,7 +12,6 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -133,7 +132,6 @@ export function DashboardPage() {
       failingIntegrations: failing.map((i) => ({ kind: i.kind, label: integrationLabel(i.kind) })),
     }
   }, [dashCounts, dashFix, data?.integrations])
-  usePublishPageHeroStats('/dashboard', dashboardHeroStats)
   const dashSummary = loading
     ? 'Loading dashboard…'
     : !data || data.empty

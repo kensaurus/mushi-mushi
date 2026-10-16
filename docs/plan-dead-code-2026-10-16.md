@@ -1,0 +1,164 @@
+# Dead-code pass — 2026-10-16
+
+Second pass under the owner's 2026-10-14 approval ([`plan-dead-code-2026-10-14.md`](plan-dead-code-2026-10-14.md)):
+delete what is **provably** dead, and keep anything in doubt with a row in [`BACKLOG.md`](BACKLOG.md).
+The first pass judged only files. This pass judged what it left: files, exports, types and
+dependencies.
+
+Measured on branch `housekeep/2026-10-16-deadcode` (base `76592f11`, master `c37eff30` plus one
+commit), pnpm 10.33.0, Node 22.23.2, knip 6.34.0, after `pnpm build`.
+
+## Method
+
+- **Files.** Each finding was checked for an import in every branch ref updated since 2026-09-01
+  (272 refs) and in every sibling worktree, not only in `HEAD`. The only hits were 2026-10-04
+  console-overhaul sub-branches that #434 squash-merged, and #434 is the commit that removed those
+  imports. The deletion set was diffed against the approved list before committing.
+- **Exports and types.** `knip --fix-type exports,types` ran once per workspace, because a
+  repo-wide run edits nothing on this setup. The repo builds with `noUnusedLocals`, so TypeScript's
+  own `unusedIdentifier_delete` and `unusedIdentifier_deleteImports` code fixes then removed the
+  declarations un-exporting had orphaned. They looped until the tree typechecked. Every export
+  finding in a published package sits in a module that no `package.json` `exports` entry or tsup
+  entry reaches, so no published API changed (`check:sdk-api-surface` and `check:package-types`
+  pass).
+- **Text consumers.** Scripts that read source as text or load it through jiti were checked by
+  running every check step in `ci.yml` after each round.
+- **Dependencies.** Each finding was checked against source, config strings, CSS `@import`,
+  vitest aliases and the turbo task graph.
+- **Design lane.** Design-system files (`components/ui/*`, tokens, chip tones, motion tokens, flow
+  primitives, icons, charts, the page scaffold) were first held back for the parallel design
+  housekeep. That lane reviewed them and released them back to this pass, which took them in
+  round 3. Its own edits in four of those files are on different lines.
+
+## Commits
+
+| # | Category | Items | Cascade | Gates after | Commit |
+|---|---|---|---|---|---|
+| 1 | C1 files | 32 files, 3,599 lines | none in that round | admin + agents typecheck, test (2058 + 100), build; docs build | `bfe404a8` |
+| 2 | C2 + C3, round 1 | 211 exports and 184 types un-exported or removed with the declarations they orphaned | `ConnectStepLaneReadout.tsx` became unused | full typecheck (53), lint, test (87 tasks), `test:scripts`, build (45), every `ci.yml` check | `66b3a54c` |
+| 3 | C1 cascade | 1 file | none | admin typecheck, test, build | `686b76b8` |
+| 4 | C2, round 2 | 2 types | counts stopped moving | admin typecheck, lint, test, build | `0f6b6015` |
+| 5 | changeset | patch for cli, mcp-ci, node, react-native, ux, wasm-classifier (core and web already had one) | — | `check-changeset-coverage`, `changelog:check`, `check:changeset-orphans` | `e8fd7a24` |
+| 6 | C4 dependencies | 11 | none | frozen install, full build and typecheck, tests of the 5 touched workspaces, `check:package-types`, `check:install-size`, publish readiness | `a93b6736` |
+| 7 | ratchet | `ci.yml` 705 → 282, 534 → 95; baselines regenerated | — | 282/95 pass, 281/94 fail | `4a7578dd` |
+| 8 | notes | this file, BACKLOG rows, README glance counts | — | `check:docs-stats` | `3d6e158e` |
+| 9 | page hero store | `usePublishPageHeroStats`, `usePublishHeroSnapshot`, the listener store, 31 call sites and imports, 3 `vi.mock` stubs of the removed hook | none (no page lost a local) | admin typecheck, lint, test (2058), build | `774ec526` |
+| 10 | C2 + C3, round 3 | the released design files (23) and `updateRewardsUser` | `loopOverviewMedia` became unused | full typecheck (53), lint, admin + web + docs tests, build (45), `check:design`, `check:spine`, `check:nav-registry`, `check:console-knowledge`, `check:residue`, dead buttons, `check:sdk-api-surface`, `check:docs-stats` | `ffd9b371` |
+| 11 | C2 + C3, round 4 | `loopOverviewMedia` (its gif is still used by apps/docs) | counts stopped moving | marketing-ui, admin, docs typecheck; build | `109d183e` |
+| 12 | ratchet | `ci.yml` 282 → 232, 95 → 39; baselines regenerated | — | 232/39 pass, 231/38 fail | `07050cee` |
+| 13 | notes | rounds 3–4, the hero store, BACKLOG renumbered to BL-040..042 | — | — | `0a80fed0` |
+| 14 | C2 correction | `@public` tags on `MIGRATE_CATALOG` and `MIGRATIONS_CATALOG` removed and both un-exported, because they have no outside consumer (see Exports and types). Counts are unchanged, since a tagged export was not counted | — | cli + admin typecheck, lint, tests (702 + 2058); `check:migration-catalog` | `60d9f25a` |
+
+C2 and C3 share one commit on purpose. With `noUnusedLocals` on, a commit that only removes
+`export` from a symbol nothing uses fails typecheck, so it could not be bisected through.
+
+## Files (46 at baseline)
+
+| Group | Count | Verdict |
+|---|---|---|
+| `apps/admin` orphans: `AuditResourceChip` + `lib/auditResources`, `PipelineStageChip` + `lib/pipelineStages`, `McpInstallButtons`, `ConnectProvenanceBand`, `DashboardPdcaGuide`, `FixCard`, `ReportSourceBadge`, `qa-coverage/{RunDetail,StoryCard,StoryDrawer,qaStoryTypes}`, `skeletons/{Query,Research}Skeleton`, `lib/{humanAlertsBurndown,reportStatus,staleness,useOptimisticMutation}`, `lib/statTooltips/{dashboard,integrations,reports}` | 22 | **KILL**. Each lost its last importer between April and October. `FixCard`'s 2026-10-14 Sentry link also lives in the rendered `FixDetailPanel`. The `qa-coverage` four duplicate inline copies in `QaCoveragePage.tsx` |
+| The four banners the 2026-10-14 pass kept: `DashboardStatusBanner`, `InventoryStatusBanner`, `FirecrawlStatusBanner`, `SkillsReadout` | 4 | **KILL**. Their last importers left on 2026-05-20, 05-27 and 06-23. Their October edits were repo-wide sweeps, and the console rework has since landed (#490) |
+| `packages/agents/src/browser/*` (5) and `src/sandbox.ts` | 6 | **KILL**. The package is private and has no `exports` map, so `@mushi-mushi/agents/browser` never resolved. `sandbox.ts` was superseded by `src/sandbox/` |
+| `ConnectStepLaneReadout.tsx` | 1 | **KILL** (cascade). Its only importer was the ConnectStepFlow canvas, removed in commit 2 |
+| Manual tools: `apps/admin/scripts/capture-theme-matrix.mjs`, `packages/mcp/scripts/{generate-glama-json,reinstall-cursor-mcp,verify-stdio-install}.mjs` | 4 | KEEP. Each header documents how to run it |
+| Design primitives: `Jargon`, `PageHelpPanel` + `lib/pageHelpPrefs`, `PageSection`, `TabbedSubNav`, `motion/MotionOverlay` | 6 | KEEP. `page-scaffold.ts` lists `PageSection` and `PageHelpPanel` as canonical primitives, and the tablist lint rule names `TabbedSubNav`. Retiring a canonical primitive is a design decision, not a dead-code one |
+| `packages/agents/src/drift-agent.ts` | 1 | KEEP. `_shared/drift-agent.ts` calls it the canonical source to keep in sync. Deleting it needs that comment changed in a deployed edge file (BL-041) |
+| `packages/plugin-jira/src/jira-webhook.ts` | 1 | KEEP, decision. A documented inbound Jira → Mushi bridge that the package never exports, so it ships to no one (BL-040) |
+| `packages/react-native/src/instance.ts` | 1 | KEEP, decision. The changelog says `MushiRN.getInstance()` is exported, but nothing exports or registers it (BL-040) |
+| `apps/admin/src/content/dispatch-prerequisites.mdx` | 1 | KEEP, decision. The console has no MDX loader, so this page never renders. Move it into `apps/docs` or delete it (BL-041) |
+
+## Exports and types
+
+| Group | Verdict |
+|---|---|
+| 211 exports and 184 types, plus the declarations they orphaned (about 1,850 lines) | **KILL** (commits 2 and 4) |
+| 54 findings in 23 design-system files the design lane released, and the declarations that left dead (about 570 lines: `PanelRow`, `PageActionBar`, `ConfiguredSecretField`, the unused client icons, …) | **KILL** (commits 10 and 11) |
+| `updateRewardsUser` (`packages/web/src/rewards.ts`) | **KILL** (commit 10). Internal, not exported from the web entry, never called. `Mushi.identify()` re-runs `initRewards()`, which resets the user. The separate tier-cache bug is fixed on `release/2026-10-16-console-followups` (`876fecc1`) |
+| `page-scaffold.ts`: its 3 constants and 1 type | KEEP. `ui.tsx` re-exports it with `export *`, and two lint messages send readers to it. Emptying it would leave the barrel re-exporting a non-module |
+| `JARGON` (`lib/copy.ts`) | KEEP. Imported by the kept `Jargon.tsx`, which knip ignores as an importer because it is itself unused |
+| `isKeychainEnabled`, `tryDeleteKeyFromKeychain` (`packages/cli/src/keychain.ts`) | KEEP. No caller on this branch, but `release/2026-10-16-console-followups` (`b15de71e`) fixes the keychain loading and calls `tryDeleteKeyFromKeychain` from the key-change path |
+| `ChartEventSchema`, `PROJECT_GROUP_COLORS` | KEEP. Only a type reads these values, and the lint rule forbids a module-private value that is used only as a type |
+| `STATIC_ROUTES` (`apps/admin/src/lib/searchIndex.ts`) | KEEP, tagged `@public`; see False positives |
+| `MIGRATE_CATALOG`, `MIGRATIONS_CATALOG` | **KILL the export** (commit 14). Commit 2 tagged them `@public` because `check-migration-catalog-sync.mjs` reads both files as text, but that script reads the `slug: '…'` properties (`extractPropertySlugs`, lines 116–126), not the `export`. Only `KNOWN_GUIDE_SLUGS` goes through its `export const` regex (line 125). With no outside consumer, the tags were removed and the two constants made module-private. `check:migration-catalog` still passes |
+| 5 duplicate exports (`bannerEnterSpring`/`chromeEnterSpring`, `PAGE_CONTENT_STACK`/`PAGE_STACK`, `CONFIDENCE_SEGMENT_COUNT`/`confidenceSegmentCount`, `DIAGNOSIS_PLAIN`/`PRICING_LEDE`, `DocsBridgePage` named + default) | KEEP. Merging an alias means renaming its importers, which is refactor work. Two of them sit in design files (BL-042) |
+
+**Page hero snapshots.** Commit 2 removed `usePageHeroSnapshot()`, the store's only reader, because
+nothing consumed it. `PageHero.tsx` and `hero-flow/heroMetricDisplay.ts` import only
+`heroMetricChips`, a pure string helper. So the 31 pages calling `usePublishPageHeroStats` were
+writing a module variable nobody read. With the coordinator's go-ahead, commit 9 removed the hooks,
+the store and every call site. `heroSnapshotFromPageStats` and the helpers it uses
+(`syntheticNavCountsForRoute`, `buildHeroEnrichment`) are now reached only from their tests. Knip's
+default mode counts tests and so does not flag them; production mode does (BL-042).
+
+## False positives
+
+Only one knip tag was added in this pass. Every other kept finding still counts against the ceiling.
+
+| Item | Consumer knip cannot see | Written back |
+|---|---|---|
+| `STATIC_ROUTES` | `scripts/build-console-knowledge.mjs:58`-`59`: `jiti.import(SEARCH_INDEX)`, then `mod?.STATIC_ROUTES`. It runs as `pnpm check:console-knowledge` (`package.json:36`, a `ci.yml` step) | `/** @public */` with that reason, at `apps/admin/src/lib/searchIndex.ts:20` |
+
+## Dependencies (4 + 15 + 2 unlisted at baseline)
+
+| Package | Dependency | Verdict |
+|---|---|---|
+| `apps/docs` | `@react-three/drei` | **KILL**. Named only in `transpilePackages`, which was edited too |
+| `apps/docs` | `@theguild/remark-mermaid` | **KILL**. Nextra 4.6.1 declares its own copy |
+| `packages/agents` | `@browserbasehq/sdk`, `@cursor/sdk`, `@mendable/firecrawl-js`, `@playwright/test` (dev) | **KILL**. Their users were the deleted browser providers. The optional `@cursor/sdk` peer stays |
+| `packages/react` | `@testing-library/jest-dom` (dev) | **KILL**. No setup file or import |
+| `eslint-plugin-mushi-mushi` | `@types/eslint`, `@typescript-eslint/utils` (dev) | **KILL**. ESLint 10 ships its own types; no import |
+| `packages/node` | `@types/express` (dev) | **KILL**. The express adapter uses structural types and imports nothing from `express` |
+| `examples/e2e-dogfood` | `msw` (dev) | **KILL**. No import, though two comments claim msw mocks GitHub (BL-041) |
+| `apps/docs` | `tailwindcss` (dev) | KEEP. `globals.css` has `@import 'tailwindcss'` |
+| `packages/server` | `yaml` (dev) | KEEP. `vitest.config.ts` aliases `npm:yaml@2` to it |
+| `packages/svelte` | `svelte` (dev) | KEEP. It backs the `svelte >=4` peer |
+| `packages/marketing-ui` | `@mushi-mushi/brand` | KEEP. Its CSS reads `--mushi-*` custom properties from brand |
+| `examples/e2e-dogfood` | `@mushi-mushi/core`, `@mushi-mushi/web` (dev) | KEEP. The workspace links may be how the tests resolve the SDK build; not proven either way |
+| `packages/mcp` | `@modelcontextprotocol/core` | KEEP, owner. Not imported by `src` or `dist`, and `@modelcontextprotocol/server` depends on it itself. It is a published dependency added on purpose in #380 (BL-042) |
+| `examples/realworld` | `@modelcontextprotocol/sdk` (dev) | KEEP. `tests/conduit-journey.spec.ts` dynamic-imports it; knip misses the call |
+| unlisted | `esbuild` in `packages/web/src/build-strip.test.ts`, `@e2b/code-interpreter` in `packages/agents` | KEEP (BL-013). Both resolve today: one through tsup, one as an optional runtime import |
+
+## Not judged this pass
+
+- Production mode still reports 157 exports and 21 types. Most of them are used only by tests,
+  which production mode does not read. Each needs `@internal`, deletion together with its test, or
+  a non-test caller (BL-042).
+- `check:catalog-sync` fails on this branch: the base commit's docs rename left
+  `packages/mcp/src/docs-index.ts` stale. This is expected, because it is fixed on
+  `release/2026-10-16-console-followups` (`d331ec70`), which this branch merges onto.
+- `packages/mcp/tsup.config.ts`: pass 1 (`clean: true`) and pass 2 build in parallel. Once, pass 1's
+  DTS step finished last and deleted pass 2's `clients.d.ts`, so the docs build failed. Three
+  standalone mcp builds and the rerun of the full build were green. This is a pre-existing,
+  timing-dependent race. Setting `clean: false` on pass 1 and cleaning in the build script would remove it.
+- C5 residue: `check:residue` ratchets it; no `.only` or `debugger` was found.
+- C6 duplication was measured but not ratcheted: `npx jscpd@4 apps/admin/src packages/*/src
+  --min-tokens 50`, ignoring tests, `dist` and `packages/server`, found 397 exact clones, which is
+  5,689 lines or 1.7% of 2,238 files. A gate would need jscpd as a new devDependency and a new CI
+  step, which belongs to `housekeep-gates`, not to this deletion-only pass. Fixing the clones is
+  `workflow-refactor` work.
+- C7 orphan assets and C8 suppressions were not examined.
+- C9 schema: not examined (human gate).
+
+## Probes
+
+- **Fresh clone.** `git clone` of this branch into a scratch directory, then
+  `pnpm install --frozen-lockfile`, `pnpm build` (45/45), `pnpm typecheck` (53/53) and
+  `pnpm test` (87/87). Both knip commands passed with the exact `ci.yml` flags. On Windows, clone
+  into a short path or with `core.longpaths=true`. Nine glot fixture files under
+  `packages/server/src/__tests__/fixtures/recipe/glot/…/directions/` are 257–258 characters deep
+  from a long parent path. Without that, the checkout fails silently, and three server test files
+  fail on ENOENT.
+- **Deliberate violation.** `export const zz = 1` appended to `apps/admin/src/lib/mergeFix.ts`
+  made both knip commands exit 1 at the new ceilings. It was then reverted.
+
+## Baseline vs after
+
+| Metric | Before | After |
+|---|---:|---:|
+| knip default (error-level) | 534 | **39**, ceiling 39 (38 fails) |
+| — files | 46 | 14 |
+| — exports / types | 265 / 195 | 8 / 1 |
+| — dependencies / devDependencies | 4 / 15 | 2 / 6 |
+| — unlisted / unresolved / duplicates | 2 / 1 / 6 | 2 / 1 / 5 |
+| knip production (error-level) | 702 (ceiling 705) | **232**, ceiling 232 (231 fails) |
+| Diff vs `76592f11`, without the lockfile, the baseline JSON and the three notes files | — | 338 files, +293 / −6,265 lines |

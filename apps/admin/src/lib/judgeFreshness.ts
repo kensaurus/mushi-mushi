@@ -4,7 +4,7 @@
  *          the sidebar Check-stage staleness badge.
  */
 
-export const JUDGE_FRESHNESS_KEY = 'mushi:health:judge-freshness-ts'
+const JUDGE_FRESHNESS_KEY = 'mushi:health:judge-freshness-ts'
 
 export function readJudgeStaleHours(): number | null {
   if (typeof window === 'undefined') return null

@@ -21,12 +21,6 @@ import {
  *  on the page. Kept narrow so `Record<Kind, …>` literals stay exhaustive. */
 export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
-/** Wider union accepted by the `/v1/admin/health/integration/:kind` probe
- *  route. Includes the four routing destinations (Jira / Linear /
- *  GitHub Issues / PagerDuty) so a single Test button on a routing card can
- *  reuse the same probe endpoint. */
-export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
-
 /** Where an effective credential value came from. */
 export type FieldSource = 'project' | 'org' | 'env' | null
 
@@ -54,7 +48,7 @@ export interface HealthRow {
  *  union (rather than a function reference) so this types module stays
  *  pure data — easy to serialise, easy to snapshot-test, and cheap for the
  *  card to look up via `resolveValidator()` in `lib/validators.ts`. */
-export type FieldValidatorName =
+type FieldValidatorName =
   | 'url'
   | 'httpsUrl'
   | 'email'

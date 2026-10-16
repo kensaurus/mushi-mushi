@@ -10,7 +10,7 @@ import type { StepNodeData } from '../components/connect/ConnectStepFlow'
 
 export type LaneMetaTone = 'ok' | 'warn' | 'muted' | 'info'
 
-export interface ConnectLaneFlags {
+interface ConnectLaneFlags {
   githubConnected: boolean
   sdkConnected: boolean
   mcpConnected?: boolean

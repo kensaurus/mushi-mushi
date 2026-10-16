@@ -2,7 +2,7 @@
  * Lightweight content-quality slice for sidebar nav badges.
  */
 
-export type ContentQualityTopPriority =
+type ContentQualityTopPriority =
   | 'no_project'
   | 'regen_failed'
   | 'user_flags'

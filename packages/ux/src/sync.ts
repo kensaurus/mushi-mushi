@@ -137,7 +137,7 @@ interface WantedShot {
 }
 
 /** Pure: every screenshot the console should have for this state. */
-export function wantedShots(state: RunState): WantedShot[] {
+function wantedShots(state: RunState): WantedShot[] {
   const out: WantedShot[] = []
   for (const s of state.surfaces) {
     const key = s.surface.key

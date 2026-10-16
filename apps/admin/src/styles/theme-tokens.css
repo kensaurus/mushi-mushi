@@ -15,10 +15,6 @@
   /* Subtle hover wash between surface and surface-raised — used by list rows,
      icon buttons, and table hover states (bg-surface-hover). */
   --color-surface-hover: oklch(0.195 0.006 285);
-  /* Aliases used by skill pipelines + inline panels — must stay opaque so
-     category tints / page wash never bleed through stacked surfaces. */
-  --color-surface-2: var(--color-surface-raised);
-  --color-surface-3: var(--color-surface-overlay);
 
   /* ── Border ──────────────────────────────────────────────────────────
      2026-05-07 contrast pass: bumped from L=0.35/0.30 to L=0.45/0.40 so
@@ -104,16 +100,9 @@
   --color-meta-theme-dark: #09090b;
   --color-meta-theme-light: #fafafa;
 
-  /* ── Aliases — older code references these names. Keep them mapped to
-       the canonical tokens above so stale class names still render the
-       right colour instead of silently dropping out. */
-  --color-err: var(--color-danger);       /* text-err / bg-err / border-err shorthand */
-  --color-err-muted: var(--color-danger-muted);
-  --color-warning: var(--color-warn);
-  --color-warning-subtle: var(--color-warn-muted);
-  --color-danger-subtle: var(--color-danger-muted);
-  --color-info-subtle: var(--color-info-muted);
-  --color-ok-subtle: var(--color-ok-muted);
+  /* Retired aliases (err, warning, *-subtle, surface-2/3, fg-primary) were
+     merged into their canonical tokens on 2026-10-16; check:design-tokens
+     rejects them. Add a new name here only when it has its own value. */
 
   /* ── Editorial bridge (packages/brand editorial.css) ────────────────
      Use bg-editorial-paper / text-editorial-ink in admin islands that
@@ -222,7 +211,6 @@
   --color-lime-muted: oklch(0.23 0.09 128);
   /* Copy on bg-lime-muted — use text-lime-foreground, not text-lime-fg. */
 
-  --color-fg-primary: var(--color-fg);
   --color-fg-on-accent: var(--color-fg);
   --color-border: var(--color-edge);
   --color-border-subtle: var(--color-edge-subtle);
@@ -337,7 +325,6 @@
   /* instant = tooltip / chip; fast = hover; base = bloom; panel = overlay;
      slow = stamp / deliberate; ring = long ambient (CSS animations). */
   --duration-instant: 120ms;
-  --duration-micro: var(--duration-instant); /* alias — prefer instant */
   --duration-fast: 200ms;
   --duration-base: 220ms;
   --duration-panel: 300ms;

@@ -41,7 +41,7 @@ import {
 } from './authIdentity'
 import { useSyncExternalStore } from 'react'
 
-export const ACCOUNTS_STORAGE_KEY = 'mushi:accounts'
+const ACCOUNTS_STORAGE_KEY = 'mushi:accounts'
 const ACCOUNTS_EVENT = 'mushi:accounts-change'
 
 export interface StoredAccount {
@@ -124,7 +124,7 @@ export function getAccountsSnapshot(): AccountsState {
   return cachedSnapshot
 }
 
-export function subscribeAccounts(listener: () => void): () => void {
+function subscribeAccounts(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   const onLocal = () => listener()
   const onStorage = (event: StorageEvent) => {
@@ -183,7 +183,7 @@ export function upsertAccount(session: Session, activate: boolean): void {
   writeState({ accounts, activeUserId })
 }
 
-export function markNeedsReauth(userId: string, needsReauth: boolean): void {
+function markNeedsReauth(userId: string, needsReauth: boolean): void {
   const state = getAccountsSnapshot()
   const accounts = state.accounts.map((a) =>
     a.userId === userId ? { ...a, needsReauth } : a,

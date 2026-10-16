@@ -4,7 +4,7 @@
 
 export type StorageTabId = 'overview' | 'configure' | 'usage'
 
-export type StorageHealthStatus = 'unknown' | 'healthy' | 'degraded' | 'failing'
+type StorageHealthStatus = 'unknown' | 'healthy' | 'degraded' | 'failing'
 
 export interface StorageStats {
   projectId: string | null
@@ -51,4 +51,3 @@ export const EMPTY_STORAGE_STATS: StorageStats = {
   lastHealthCheckAt: null,
   latestFailureError: null,
 }
-

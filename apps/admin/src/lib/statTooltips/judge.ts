@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Judge snapshot strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import { judgeWeekTitle, type JudgeStats } from '../../components/judge/JudgeStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

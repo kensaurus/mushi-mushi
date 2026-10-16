@@ -17,7 +17,7 @@ import type { PdcaStageId } from '../../lib/pdca'
 // mushi-mushi-allowlist: noop default when rendered outside PdcaFlowProvider
 function noopOpenStage(_stage: PdcaStageId | null) {}
 
-export type PdcaFlowVariant = 'live' | 'onboarding'
+type PdcaFlowVariant = 'live' | 'onboarding'
 
 export interface PdcaFlowContextValue {
   variant: PdcaFlowVariant

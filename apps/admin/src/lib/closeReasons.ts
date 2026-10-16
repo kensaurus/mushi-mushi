@@ -37,6 +37,25 @@ const REPORTER_SEES: Record<string, string> = {
   working_as_intended: 'This is expected behaviour.',
 }
 
+/**
+ * Close reasons that also archive the report's open Sentry issues (until they
+ * escalate). Mirrors ARCHIVE_ON_CLOSE in
+ * packages/server/supabase/functions/_shared/sentry-resolve-back.ts.
+ */
+const ARCHIVES_IN_SENTRY = new Set(['working_as_intended', 'wont_fix'])
+
+/**
+ * What closing does to the linked Sentry issue, for a report imported from
+ * Sentry. "Couldn't reproduce" leaves the issue open on purpose (the error
+ * may still be happening), which surprised owners who expected Sentry to
+ * clear; saying so lets them pick "Works as intended" for noise.
+ */
+export function closeReasonSentryNotice(reason: string): string {
+  return ARCHIVES_IN_SENTRY.has(reason)
+    ? 'Sentry: the linked issue is archived until it gets worse.'
+    : 'Sentry: the linked issue stays open. Pick "Works as intended" or "Won\'t fix" to archive it there too.'
+}
+
 /** What closing tells the reporter(s), for the confirm dialog. */
 export function closeReasonNotice(reason: string, count = 1): string {
   if (reason === 'spam') return count === 1 ? 'Closed as spam: the reporter is not told.' : 'Closed as spam: reporters are not told.'

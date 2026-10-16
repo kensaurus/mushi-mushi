@@ -26,14 +26,6 @@ export function canDeleteProject(role: OrgRole | string | null | undefined): boo
   return canManageOrg(role)
 }
 
-export function canRenameProject(role: OrgRole | string | null | undefined): boolean {
-  return canManageOrg(role)
-}
-
-export function canInviteMembers(role: OrgRole | string | null | undefined): boolean {
-  return canManageOrg(role)
-}
-
 export function viewerRoleHint(role: OrgRole | string | null | undefined): string | null {
   if (role === 'viewer') return 'You are a viewer in this team — ask an owner or admin to make changes.'
   if (role === 'member') return 'Some actions require owner or admin access in this team.'

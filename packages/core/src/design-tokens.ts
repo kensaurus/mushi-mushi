@@ -267,8 +267,8 @@ export const MUSHI_LETTER_SPACING = {
 export const MUSHI_GEOMETRY = {
   bannerHeight: 36,
   fabSize: 52,
-  /** edge-tab launcher width (px) */
-  edgeTabWidth: 32,
+  /** edge-tab launcher drawn width (px) */
+  edgeTabWidth: 22,
   /** default gutter from the screen edge (added on top of safe-area insets) */
   gutter: 24,
   /** Web panel width (px) — matches shipped Shadow DOM widget */

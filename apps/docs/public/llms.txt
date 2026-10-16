@@ -60,7 +60,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Full-stack audit](https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit): The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
 - [Knowledge graph](https://kensaur.us/mushi-mushi/docs/admin/graph): The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.
 - [Integration health](https://kensaur.us/mushi-mushi/docs/admin/health): The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.
-- [Action inbox](https://kensaur.us/mushi-mushi/docs/admin/inbox): The Action inbox gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
+- [To-do](https://kensaur.us/mushi-mushi/docs/admin/inbox): The To-do list gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
 - [Integrations](https://kensaur.us/mushi-mushi/docs/admin/integrations): Set up Mushi integrations from one page — send new bugs to Linear, bring in Sentry feedback, and open fix pull requests on your GitHub repo.
 - [Intelligence reports](https://kensaur.us/mushi-mushi/docs/admin/intelligence): Intelligence reports are Mushi's weekly plain-English bug digest for each project — what broke, what got fixed and what to watch, sent to your inbox.
 - [User stories · Inventory](https://kensaur.us/mushi-mushi/docs/admin/inventory): The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.

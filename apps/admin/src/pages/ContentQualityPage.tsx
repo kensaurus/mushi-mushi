@@ -452,7 +452,7 @@ export function ContentQualityPage() {
                         {/* Asset: human key; type and language are in the group row */}
                         <td className="px-3 py-3">
                           <div className="min-w-0">
-                            <div className="font-medium text-fg-primary truncate max-w-48" title={item.content_key}>
+                            <div className="font-medium text-fg truncate max-w-48" title={item.content_key}>
                               {label}
                             </div>
                           </div>

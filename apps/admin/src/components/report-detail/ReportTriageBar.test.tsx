@@ -241,3 +241,33 @@ describe('ReportTriageBar feature-request confirmation', () => {
     expect(buttonByText("It's a bug: confirm Visual")).toBeUndefined()
   })
 })
+
+describe('ReportTriageBar Not a code bug', () => {
+  it('opens the close picker preset to "works as intended" and closes with that reason', async () => {
+    const onTriage = vi.fn(async () => {})
+    await act(async () => {
+      root.render(
+        createElement(ReportTriageBar, {
+          report: REPORT,
+          onTriage,
+          saving: false,
+          savedAt: null,
+          dispatchState: { status: 'idle' },
+          onRequestDispatch: vi.fn(),
+          dispatchBlock: { blocked: false, reason: null },
+          isDispatchBusy: false,
+          repoChoice: choice([FRONTEND], 'repo-front'),
+        }),
+      )
+    })
+    const open = buttonByText('Not a code bug')
+    expect(open).toBeDefined()
+    await act(async () => open!.click())
+    const reason = Array.from(container.querySelectorAll('label'))
+      .find((l) => l.textContent?.startsWith('Why close it?'))
+      ?.querySelector('select')
+    expect(reason?.value).toBe('working_as_intended')
+    await act(async () => buttonByText('Close report')!.click())
+    expect(onTriage).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'working_as_intended' })
+  })
+})

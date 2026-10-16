@@ -19,14 +19,14 @@ export interface TourStop {
   layer: string
 }
 
-export interface DomainStep {
+interface DomainStep {
   id: string
   name: string
   description: string
   file_paths: string[]
 }
 
-export interface DomainFlow {
+interface DomainFlow {
   id: string
   name: string
   description: string

@@ -36,9 +36,6 @@ import {
 } from './charts/chartAxis'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
-export { shortDay, formatChartCount, formatChartUsd } from './charts/chartAxis'
-export { ChartFrame } from './charts/ChartFrame'
-
 /* ── KpiTile ────────────────────────────────────────────────────────────── */
 
 export type Tone = 'ok' | 'warn' | 'danger' | 'brand' | 'muted' | 'info'

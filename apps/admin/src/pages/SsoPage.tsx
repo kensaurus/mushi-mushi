@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase';
 import { usePageData } from '../lib/usePageData';
-import { usePublishPageHeroStats } from '../lib/heroSnapshots';
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers';
@@ -68,7 +67,6 @@ export function SsoPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<SsoStats>('/v1/admin/sso/stats');
-  usePublishPageHeroStats('/sso', statsData);
   const stats = statsData ?? EMPTY_SSO_STATS;
   const configs = data?.configs ?? [];
   const [form, setForm] = useState({

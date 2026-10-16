@@ -25,14 +25,14 @@ const AGENT_LABELS: Record<string, string> = {
 /** The binary each local agent needs; cursor-cloud needs a key instead. */
 const AGENT_BINARY: Record<string, string | null> = { 'claude-code': 'claude', cursor: 'agent', codex: 'codex', 'cursor-cloud': null }
 
-export interface AgentAvailability {
+interface AgentAvailability {
   name: string
   label: string
   installed: boolean
   note?: string
 }
 
-export async function agentAvailability(env: NodeJS.ProcessEnv = process.env): Promise<AgentAvailability[]> {
+async function agentAvailability(env: NodeJS.ProcessEnv = process.env): Promise<AgentAvailability[]> {
   return Promise.all(
     Object.keys(AGENTS).map(async (name) => {
       const label = AGENT_LABELS[name] ?? name

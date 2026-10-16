@@ -43,7 +43,7 @@ and provenance chips that used to live as separate strips.
 | 2 | **Connect GitHub** | Link the primary repo so upgrade PRs and CI secret sync can resolve tokens |
 | 3 | **Install SDK** | Framework tabs + copy snippet (`SdkInstallCard`) |
 | 4 | **Native app CI secrets** | Diagnose + one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
-| 5 | **Install MCP** | **Add to Cursor** / **Add to VS Code** deeplinks (`McpInstallButtons`) |
+| 5 | **Install MCP** | **Add to Cursor** / **Add to VS Code** deeplinks (`ClientConnectButton`) |
 | 6 | **Install CLI** | `npm i -g @mushi-mushi/cli@latest` + copy `mushi connect` / `mushi init` |
 | 7 | **Update center** | Per-package freshness chips + **Create Upgrade PR** (`SdkUpgradeCTA`) |
 

@@ -9,7 +9,6 @@ import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { pdcaRunsFromEnvelope, type PdcaRunsEnvelope } from '../lib/pdcaRuns'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -101,7 +100,6 @@ export function IteratePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<IterateStats>('/v1/admin/pdca/stats')
-  usePublishPageHeroStats('/iterate', statsData)
   const stats = { ...EMPTY_ITERATE_STATS, ...statsData }
 
   const listPath =

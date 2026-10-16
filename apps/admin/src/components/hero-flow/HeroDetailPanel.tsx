@@ -69,7 +69,7 @@ const TILE_COLORS = {
 const TONE_CLASS: Record<string, string> = {
   ok:      CHIP_TONE.okSubtle,
   warn:    CHIP_TONE.warnSubtle,
-  crit:    'bg-err/15 text-err border border-err/30',
+  crit:    CHIP_TONE.dangerSubtle,
   info:    CHIP_TONE.infoSubtle,
   neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
@@ -444,7 +444,7 @@ export function HeroDetailPanel({
             <Card  className="flex items-start gap-3 px-3 py-2 mt-1">
               <div className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
                 evidence.status === 'ok' ? 'bg-ok'
-                : evidence.status === 'error' ? 'bg-err'
+                : evidence.status === 'error' ? 'bg-danger'
                 : evidence.status === 'warn' ? 'bg-warn'
                 : 'bg-fg-faint'
               }`} aria-hidden />

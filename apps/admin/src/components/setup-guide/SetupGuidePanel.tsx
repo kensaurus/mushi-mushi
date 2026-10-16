@@ -28,7 +28,7 @@ import {
   IconChevronDown,
 } from '../icons'
 
-export const SETUP_GUIDE_PANEL_ID = 'setup-guide-panel'
+const SETUP_GUIDE_PANEL_ID = 'setup-guide-panel'
 
 interface StateStyle {
   Icon: typeof IconCheck

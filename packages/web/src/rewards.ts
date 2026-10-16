@@ -41,6 +41,8 @@ let apiClient: MushiApiClient | null = null;
 let optedIn = false;
 let tierCache: MushiTierResult | null = null;
 let tierCacheTime = 0;
+/** Whose tier `tierCache` holds: a cached tier is never answered for anyone else. */
+let tierCacheUserId: string | null = null;
 const TIER_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
 /** After a permanent 4xx, pause rewards API calls to avoid retry storms. */
@@ -182,20 +184,6 @@ export function initRewards(ctx: RewardsContext): void {
   }
 }
 
-/** Called by Mushi.identify() to update the current user context. */
-export function updateRewardsUser(
-  userId: string,
-  traits?: { email?: string; name?: string; provider?: string },
-  reporterToken?: string,
-): void {
-  currentUserId = userId;
-  currentUserTraits = traits ?? null;
-  if (reporterToken) reporterTokenRaw = reporterToken;
-  // Invalidate tier cache on user change
-  tierCache = null;
-  tierCacheTime = 0;
-}
-
 /** Manually enqueue a host-defined activity event. */
 export function enqueue(event: MushiActivityEvent): void {
   if (!optedIn || !currentUserId) return;
@@ -245,7 +233,7 @@ export async function flush(ctx: RewardsContext): Promise<void> {
 
 export async function getTier(userId: string): Promise<MushiTierResult | null> {
   const now = Date.now();
-  if (tierCache && now - tierCacheTime < TIER_CACHE_TTL) return tierCache;
+  if (tierCache && tierCacheUserId === userId && now - tierCacheTime < TIER_CACHE_TTL) return tierCache;
   return fetchAndCacheTier(userId);
 }
 
@@ -255,6 +243,7 @@ async function fetchAndCacheTier(userId: string): Promise<MushiTierResult | null
   if (res.ok && res.data) {
     tierCache = res.data as MushiTierResult;
     tierCacheTime = Date.now();
+    tierCacheUserId = userId;
     return tierCache;
   }
   noteRewardsApiFailure(res.error?.code);
@@ -296,6 +285,7 @@ export function teardown(): void {
   apiClient = null;
   optedIn = false;
   tierCache = null;
+  tierCacheUserId = null;
   rewardsApiBackoffUntil = 0;
 }
 

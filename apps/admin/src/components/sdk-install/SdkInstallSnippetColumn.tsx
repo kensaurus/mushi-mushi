@@ -11,7 +11,7 @@ import {
 } from '../../lib/sdkSnippets'
 
 /** Maps each framework tab to the language label on the code-panel chrome. */
-export const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
+const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
   loader: 'html',
   react: 'tsx',
   'react-native': 'tsx',

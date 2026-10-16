@@ -20,6 +20,16 @@ out/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
 
+# --- Native SDKs: Gradle (packages/android, capacitor, flutter) and Swift ----
+# (Package.swift, packages/ios, packages/capacitor). local.properties holds the
+# machine's SDK path and must never be committed.
+.gradle/
+local.properties
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+
 # --- Turbo / Vite / Rollup caches -------------------------------------------
 .turbo/
 .vite/
@@ -146,11 +156,16 @@ nul
 # local burndown scratch state. The shared .claude/settings.json is allowed.
 .claude/settings.local.json
 .cursor/*-state.md
+.cursor/*-state.*.md
 # Agent worktrees live under .claude/worktrees (see the workspace CLAUDE.md).
 # Each is a full checkout: without this, knip and other repo-wide scanners
 # count a second copy of every package, and `git add -A` would stage it.
 .claude/worktrees/
+.worktrees/
 .claude/*.log
+# Frozen copy of a package's dist that a long-running local session (the UX
+# studio) executes from, so a rebuild does not swap code under a live run.
+**/.dist-run/
 
 # Archive holding-pens for ad-hoc audit screenshots. Kept out of git so they
 # can't grow unbounded; the canonical product screenshots live in

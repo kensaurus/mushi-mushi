@@ -15,7 +15,7 @@
 import { apiFetch, apiFetchMutate, supabase } from './supabase'
 import type { ApiResult } from './apiEnvelope'
 
-export type VoiceSessionStatus =
+type VoiceSessionStatus =
   | 'received'
   | 'transcribed'
   | 'awaiting_confirm'
@@ -47,7 +47,7 @@ export interface VoiceSession {
   expires_at?: string | null
 }
 
-export interface VoiceUploadTarget {
+interface VoiceUploadTarget {
   bucket: string
   path: string
   signedUrl: string
@@ -81,7 +81,7 @@ export function voiceStatusTone(status: string): 'ok' | 'warn' | 'danger' | 'inf
   }
 }
 
-export const VOICE_STATUS_LABEL: Record<string, string> = {
+const VOICE_STATUS_LABEL: Record<string, string> = {
   received: 'Received',
   transcribed: 'Transcribed',
   awaiting_confirm: 'Needs confirmation',
@@ -127,7 +127,7 @@ export function canConfirmVoiceSession(
   return effectiveVoiceStatus(session, now) === 'awaiting_confirm' && Boolean(session.confirm_token)
 }
 
-export const VOICE_ACTION_LABEL: Record<string, string> = {
+const VOICE_ACTION_LABEL: Record<string, string> = {
   create_report: 'Create a bug report',
   open_draft_pr: 'Open a draft PR',
   unknown: 'Could not tell what to do',
@@ -193,7 +193,7 @@ function resolveVoiceMime(file: { type?: string; name?: string }): string | null
   return VOICE_EXTENSION_MIME[name.slice(dot + 1).toLowerCase()] ?? null
 }
 
-export async function requestVoiceUploadUrl(mime: string): Promise<ApiResult<VoiceUploadTarget>> {
+async function requestVoiceUploadUrl(mime: string): Promise<ApiResult<VoiceUploadTarget>> {
   return apiFetchMutate<VoiceUploadTarget>('/v1/intake/voice/upload-url', { body: JSON.stringify({ mime }) })
 }
 
@@ -202,7 +202,7 @@ export async function requestVoiceUploadUrl(mime: string): Promise<ApiResult<Voi
  * Supabase storage; falls back to a direct PUT so BYO-storage signed URLs
  * (S3 / R2 / GCS presigned) keep working.
  */
-export async function uploadVoiceFile(target: VoiceUploadTarget, file: File | Blob): Promise<{ ok: true } | { ok: false; message: string }> {
+async function uploadVoiceFile(target: VoiceUploadTarget, file: File | Blob): Promise<{ ok: true } | { ok: false; message: string }> {
   // The bucket accepts only canonical audio types, so upload under the type
   // the server picked for this object, not the browser's guess.
   const contentType = target.mime || file.type || 'application/octet-stream'
@@ -233,7 +233,7 @@ export async function uploadVoiceFile(target: VoiceUploadTarget, file: File | Bl
 
 // ── intake ───────────────────────────────────────────────────────────────────
 
-export async function submitVoiceAudio(input: { audioPath: string; externalId: string }): Promise<ApiResult<{ session: VoiceSession }>> {
+async function submitVoiceAudio(input: { audioPath: string; externalId: string }): Promise<ApiResult<{ session: VoiceSession }>> {
   return apiFetch<{ session: VoiceSession }>('/v1/intake/voice', {
     method: 'POST',
     idempotencyKey: input.externalId,

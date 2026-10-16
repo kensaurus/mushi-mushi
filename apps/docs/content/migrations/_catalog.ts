@@ -19,9 +19,9 @@
  */
 
 export type MigrationCategory = 'mobile' | 'web' | 'competitor' | 'sdk-upgrade'
-export type MigrationEffort = 'Hours' | 'Days' | 'Weeks'
-export type MigrationRisk = 'Low' | 'Med' | 'High'
-export type MigrationStatus = 'published' | 'draft'
+type MigrationEffort = 'Hours' | 'Days' | 'Weeks'
+type MigrationRisk = 'Low' | 'Med' | 'High'
+type MigrationStatus = 'published' | 'draft'
 
 export interface GuideMeta {
   /** Slug under /migrations/. The MDX file at
@@ -282,11 +282,3 @@ export const CATALOG: readonly GuideMeta[] = [
     status: 'draft',
   },
 ] as const
-
-export const PUBLISHED_GUIDES: readonly GuideMeta[] = CATALOG.filter(
-  (g) => g.status === 'published',
-)
-
-export function findGuideBySlug(slug: string): GuideMeta | undefined {
-  return CATALOG.find((g) => g.slug === slug)
-}

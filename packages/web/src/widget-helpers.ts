@@ -51,6 +51,25 @@ export interface AssistantTurn {
   offerReport?: boolean;
 }
 
+/** sessionStorage key for "Hide the bug button for this visit". */
+const LAUNCHER_DISMISSED_STORAGE_KEY = 'mushi-launcher-hidden';
+
+/** True when the visitor hid the launcher earlier in this tab. Blocked storage reads as "not hidden". */
+export function readLauncherDismissed(): boolean {
+  try {
+    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(LAUNCHER_DISMISSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Remember the choice until the tab closes. Blocked storage keeps it for this page only. */
+export function writeLauncherDismissed(): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(LAUNCHER_DISMISSED_STORAGE_KEY, '1');
+  } catch { /* private mode / blocked storage */ }
+}
+
 /** sessionStorage key for same-tab Ask transcript resume (UX only — not auth). */
 export const ASSISTANT_SESSION_STORAGE_KEY = 'mushi-assistant-session-v1';
 

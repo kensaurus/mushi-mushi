@@ -6,29 +6,6 @@
 
 import type { PageAction } from '../components/PageActionBar'
 
-type Scope =
-  | 'audit'
-  | 'compliance'
-  | 'intelligence'
-  | 'judge'
-  | 'health'
-  | 'graph'
-  | 'queue'
-  | 'anti-gaming'
-  | 'storage'
-  | 'query'
-  // Wave S (2026-04-23) — extended scopes so PageHero/PageActionBar drive
-  // the same rule engine on every Advanced page, not just the first ten.
-  | 'dlq'
-  | 'prompt-lab'
-  | 'repo'
-  | 'mcp'
-  | 'billing'
-  | 'notifications'
-  | 'marketplace'
-  | 'integrations'
-  | 'inventory'
-
 type Input =
   | { scope: 'audit'; warnCount: number; failCount: number }
   | { scope: 'compliance'; openControls: number; nextReviewInDays: number | null }
@@ -423,5 +400,3 @@ export function computeNextBestAction(input: Input): PageAction | null {
 export function useNextBestAction(input: Input): PageAction | null {
   return computeNextBestAction(input)
 }
-
-export type { Scope as PageScope, Input as PageActionInput }

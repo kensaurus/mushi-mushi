@@ -56,7 +56,7 @@ export function severityActiveIndex(severity: string | null | undefined): number
   return idx >= 0 ? idx : null
 }
 
-export const SEVERITY_LEVEL_KEYS = SEVERITY_LEVELS
+const SEVERITY_LEVEL_KEYS = SEVERITY_LEVELS
 /** @deprecated Prefer `SEVERITY_LEVEL_KEYS` — alias for cell components. */
 export const severityLevelKeys = SEVERITY_LEVEL_KEYS
 

@@ -1854,10 +1854,10 @@ const SDK_INSTALL: ConfigDoc[] = [
     summary:
       'Controls whether Mushi injects its own launcher, pins a slim header banner, attaches to your button, or stays programmatic-only.',
     howItWorks:
-      'Five modes: `banner` (recommended) renders a slim 36 px strip pinned to the top or bottom of the viewport — less obtrusive than a FAB and never competes with bottom navigation. `auto` keeps the default editorial stamp button. `edge-tab` pins a vertical tab to the viewport edge. `attach` hides the default button and binds to `attachToSelector`. `manual` / `hidden` render no launcher — call `Mushi.open()` programmatically. The banner\'s body padding is adjusted automatically on mount and removed on dismiss, sdk.hide(), route suppression, or destroy().',
+      'Five modes: `banner` (recommended) renders a slim 36 px strip pinned to the top or bottom of the viewport — less obtrusive than a FAB and never competes with bottom navigation. `auto` shows the stamp button on desktop and the edge tab on phones (768 px wide or less). `edge-tab` is a 22×48 px tab flush with the screen edge (44 px tap area) that visitors can drag along the edge. Both lift above fixed bottom bars, fade while the page scrolls, and offer "Hide the bug button for this visit" in the panel. `attach` hides the default button and binds to `attachToSelector`. `manual` / `hidden` render no launcher — call `Mushi.open()` programmatically. The banner\'s body padding is adjusted automatically on mount and removed on dismiss, sdk.hide(), route suppression, or destroy().',
     default: { value: 'auto' },
     whenToChange:
-      'Use `banner` for beta apps and user-research builds — maximises discoverability with minimal layout intrusion. Use `attach` for mature production apps with a help menu. Use `edge-tab` on tablet or when bottom nav competes. Use `manual` on regulated or fullscreen flows.',
+      'Use `banner` for beta apps and user-research builds — maximises discoverability with minimal layout intrusion. Use `attach` for mature production apps with a help menu. Use `edge-tab` to get the slim tab on desktop too. Use `manual` on regulated or fullscreen flows.',
     learnMore: {
       label: 'Trigger modes',
       href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',

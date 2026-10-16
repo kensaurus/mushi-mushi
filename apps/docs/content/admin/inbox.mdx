@@ -1,13 +1,13 @@
 ---
-title: Action inbox
-description: The Action inbox gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
+title: To-do
+description: The To-do list gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
 ---
 
 import { Callout } from 'nextra/components'
 
 <AdminDocHero page="inbox" />
 
-# Action inbox
+# To-do
 
 **Route:** `/inbox`
 
@@ -22,9 +22,12 @@ you, in one prioritised view. Think of it as Monday-morning standup prep, auto-g
 
 ## How it works
 
-The Inbox reads entirely from `GET /v1/admin/dashboard` — no extra API calls, no extra
-latency. Every card you see is a state in the pipeline that Mushi has identified as
-requiring a human decision or awareness.
+The cards come from `GET /v1/admin/dashboard`, and the status line and tab title from
+`GET /v1/admin/inbox/stats`. The page stays open (never "All clear") while any critical
+or high report is unfixed, including Sentry imports the classifier has already tagged.
+Every card you see is a state in the pipeline that Mushi has identified as requiring a
+human decision or awareness. A page you opened before shows its last data at once and
+refreshes behind it.
 
 ---
 

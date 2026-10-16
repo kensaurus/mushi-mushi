@@ -5,7 +5,7 @@
 
 export type FeedbackTabId = 'overview' | 'active' | 'shipped' | 'all'
 
-export type FeedbackTopPriority = 'reply' | 'active' | 'clear' | 'first_submit'
+type FeedbackTopPriority = 'reply' | 'active' | 'clear' | 'first_submit'
 
 export interface FeedbackStats {
   hasAnyProject: boolean

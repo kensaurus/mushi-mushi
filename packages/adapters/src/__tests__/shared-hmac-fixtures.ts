@@ -16,14 +16,6 @@ export function computeHmacSha256Hex(key: string, body: string): string {
 }
 
 /**
- * Computes a `sha256=<hex>` prefixed HMAC-SHA256 digest of `body`.
- * Matches the format used by: Honeycomb (`X-Honeycomb-Signature`).
- */
-export function computeHmacSha256Prefixed(key: string, body: string): string {
-  return `sha256=${computeHmacSha256Hex(key, body)}`
-}
-
-/**
  * Computes an HMAC-SHA256 base64 digest of `body` keyed with `key`.
  * Matches the format used by: OpsGenie (`X-OG-Signature`).
  */

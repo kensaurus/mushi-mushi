@@ -5,7 +5,7 @@
 
 export type ReleasesTabId = 'overview' | 'drafts' | 'published' | 'draft' | 'store'
 
-export type ReleasesTopPriority =
+type ReleasesTopPriority =
   | 'no_project'
   | 'drafts_pending'
   | 'ready_to_draft'

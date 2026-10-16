@@ -2,7 +2,7 @@
  * Plain-language QA Coverage provider choice guide.
  */
 
-export type QaProviderId = 'firecrawl_actions' | 'browserbase' | 'local'
+type QaProviderId = 'firecrawl_actions' | 'browserbase' | 'local'
 
 export interface QaProviderDefinition {
   id: QaProviderId
