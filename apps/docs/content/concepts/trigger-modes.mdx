@@ -11,8 +11,8 @@ corner stamp, edge tab, help menu, or your own custom button.
 
 | Mode | Best for | Behavior |
 | --- | --- | --- |
-| `auto` | Quick installs, prototypes, internal tools | Shows the editorial stamp trigger in the configured corner. |
-| `edge-tab` | Apps with bottom nav, chat bubbles, or dense CTAs | Pins a slim paper-tab trigger to the edge so it stays discoverable without covering content. |
+| `auto` | Quick installs, prototypes, internal tools | Shows the stamp button in the configured corner on desktop. On phones (768px wide or less) it draws the edge tab instead. |
+| `edge-tab` | Apps with bottom nav, chat bubbles, or dense CTAs | A 22×48px tab flush with the screen edge, with a 44px-wide tap area. Visitors can drag it up and down the edge. |
 | `attach` | Production apps with a help menu or existing feedback link | Hides the default trigger and binds Mushi to `attachToSelector`. |
 | `manual` / `hidden` | White-label apps, mobile flows, or regulated screens | Renders no launcher; call `Mushi.open()`, `Mushi.openWith(category)`, or `Mushi.captureEvent()` yourself. |
 
@@ -33,6 +33,37 @@ const mushi = Mushi.init({
 // You can also bind later, which is useful in SPAs.
 mushi.attachTo('#support-menu-feedback')
 ```
+
+## Staying out of the way
+
+The floating launcher does these by default, with no configuration:
+
+| Behaviour | Default | Option |
+| --- | --- | --- |
+| On phones, `trigger: 'auto'` draws the edge tab, not the 52px button. If you shaped the button yourself (a left or right `anchor` or `inset`, `draggable`, or a word `triggerText`), it stays a button. | on | `mobileTrigger: 'auto'` or `'edge-tab'` |
+| Lifts above fixed or sticky bars that touch the bottom of the screen (tab bars, cookie strips). The panel and toasts lift with it. | on | `avoidFixedBars: false` |
+| Fades while the page scrolls (the edge tab also slides most of the way off its edge) and comes back when scrolling stops | on | `tuckOnScroll: false` |
+| The edge tab can be dragged along its edge. The spot is saved for your site. | on | `draggable: false` |
+| A "Hide the bug button for this visit" link in the report panel. It lasts until the tab closes, also through `Mushi.show()` calls; `Mushi.open()` still opens the panel. | on | `dismissible: false` |
+| Safe-area insets (notch, home indicator) | on | `respectSafeArea: false` |
+
+The lift above a bar is a floor. When you already set `inset.bottom` or
+`anchor.bottom` high enough, your value wins:
+
+```ts
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'edge-tab',
+    // Explicit offset from the bottom edge, in px.
+    inset: { bottom: 96 },
+  },
+})
+```
+
+The edge tab always sits flush with its screen edge (inside the safe area).
+A horizontal `inset` or `anchor` value moves the panel, not the tab.
 
 ## Smart Hide
 

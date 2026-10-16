@@ -10,6 +10,7 @@ export const en: MushiLocale = {
     submitting: 'Sending…',
     submitted: 'Thank you! Your report has been submitted.',
     error: 'Could not send your report. Check your connection and try again.',
+    hideLauncher: 'Hide the bug button for this visit',
   },
   step1: {
     moreNav: {
