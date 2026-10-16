@@ -55,7 +55,6 @@ html[data-theme='dark'] [data-surface='ask-mushi'].ask-mushi-terminal {
   --color-fg-secondary: var(--am-text);
   --color-fg-muted: var(--am-text-muted);
   --color-fg-faint: var(--am-text-faint);
-  --color-fg-primary: var(--am-text);
   --color-brand: var(--am-accent-cyan);
   --color-brand-hover: var(--am-accent-green);
   --color-brand-subtle: color-mix(in oklch, var(--am-accent-cyan) 14%, var(--am-bg-inset));
@@ -65,8 +64,6 @@ html[data-theme='dark'] [data-surface='ask-mushi'].ask-mushi-terminal {
   --color-surface: var(--am-bg);
   --color-surface-raised: var(--am-bg-raised);
   --color-surface-overlay: var(--am-bg-inset);
-  --color-surface-2: var(--am-bg-raised);
-  --color-surface-3: var(--am-bg-inset);
   --color-edge: var(--am-border);
   --color-edge-subtle: var(--am-border);
   --color-border: var(--am-border);

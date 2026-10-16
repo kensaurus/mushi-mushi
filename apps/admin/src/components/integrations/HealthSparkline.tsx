@@ -23,7 +23,7 @@ const HEIGHT_BY_STATUS: Record<HealthRow['status'], string> = {
 
 const BG_BY_STATUS: Record<HealthRow['status'], string> = {
   ok: 'bg-ok',
-  degraded: 'bg-warning',
+  degraded: 'bg-warn',
   down: 'bg-danger',
   unknown: 'bg-fg-faint/30',
 }
