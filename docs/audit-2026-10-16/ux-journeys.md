@@ -9,7 +9,7 @@ Later the same day they added that the SDK widget launcher covers too much of ho
 
 **Method.** Each story was walked in the owner's signed-in Chrome on prod (kensaur.us/mushi-mushi/admin), at desktop width. The persona is the primary buyer from VISION.md: a solo vibe coder with several AI-built apps.
 
-**Evidence.** Measurements came from the browser Performance API, Supabase edge logs and Sentry. Funnel analytics for the console were not used: the console sends no step events for these stories. Findings are tagged `[observed]` (seen in a walkthrough or measured) or `[judgment]`.
+**Evidence.** Measurements came from the browser Performance API, Supabase edge logs and Sentry. Console funnel events exist for opening a report, copying the fix prompt and dispatching, but none were read for this audit. Findings are tagged `[observed]` (seen in a walkthrough or measured) or `[judgment]`.
 
 **What works.**
 - The report detail page puts a diagnosis, a paste-ready fix prompt and Dispatch fix on one screen.
@@ -45,5 +45,5 @@ Later the same day they added that the SDK widget launcher covers too much of ho
 |---|---|---|---|---|
 | F1 | Web-vital and native-crash Sentry reports carry no stack trace, so the cloud fix agent can only refuse them. These were 6 of 8 dispatches today. The console offers Dispatch as if it could work. | Medium | [observed] | Hide or soften Dispatch fix when a report has no stack or code location, and lead with "Copy fix prompt" (to be decided; BACKLOG). |
 | F2 | The per-request floor is about 0.85 s on every API route. The `api` function boots a fresh isolate for almost every request (4,338 boots for 3,656 requests in 24 h). | Medium | measured | Split the api router into a light admin-read function. This needs an ADR (BACKLOG). |
-| F3 | The console sends no step events for stories 1–5, so this audit could not use funnel data. | Low | [judgment] | Add page and step events for dispatch, close and next-step clicks so the next audit has numbers (BACKLOG). |
+| F3 | The console already sends `report_opened`, `fix_context_pulled`, `fix_dispatched` and `diagnosis_viewed`. Two steps had no event: clicking the "do this next" line, and closing a report. | Low | [observed] | Done in this batch: `next_step_clicked` {tone, to} and `report_closed` {reason, sentry_linked}. Both are ad hoc events (lib/track.ts), so the next audit can count them. |
 | F4 | First-run onboarding was not walked: only the owner's established account was available. | n/a | — | Walk it with a fresh test account. |

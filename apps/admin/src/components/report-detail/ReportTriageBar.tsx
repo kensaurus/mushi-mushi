@@ -13,6 +13,7 @@ import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchCo
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import { CLOSE_REASONS, closeReasonSentryNotice } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
+import { trackAdHoc } from '../../lib/track'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -185,6 +186,11 @@ export function ReportTriageBar({
             size="sm"
             onClick={() => {
               setClosing(false)
+              trackAdHoc('report_closed', {
+                report_id: report.id,
+                reason: closeReason || 'none',
+                sentry_linked: report.sentry_links?.some((l) => !l.resolved_at) ?? false,
+              })
               void onTriage(closeReason ? { status: 'dismissed', closed_reason: closeReason } : { status: 'dismissed' })
             }}
             disabled={saving}

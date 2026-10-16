@@ -29,6 +29,7 @@ import {
 } from '../lib/useNextStep'
 import { IconCheck, IconEye, IconFixes, IconFlag, IconSend } from './icons'
 import { Btn, Card, EmptyState, ResultChip } from './ui'
+import { trackAdHoc } from '../lib/track'
 
 const TONE_STYLE: Record<NbaTone, { ring: string; bg: string; chip: string; label: string }> = {
   plan: { ring: 'border-info/40', bg: 'bg-info-muted/15', chip: CHIP_TONE.infoSubtle, label: 'Plan' },
@@ -205,8 +206,15 @@ function StepCta({
   testState: TestState
 }) {
   if (step.cta.kind === 'link') {
+    const to = step.cta.to
     return (
-      <Btn to={step.cta.to} size={size} variant={variant}>
+      <Btn
+        to={to}
+        size={size}
+        variant={variant}
+        // Which "do this next" lines people act on (2026-10-16 redesign).
+        onClick={() => trackAdHoc('next_step_clicked', { tone: step.tone, to: to.split('?')[0] })}
+      >
         {step.cta.label} <span aria-hidden="true">→</span>
       </Btn>
     )
