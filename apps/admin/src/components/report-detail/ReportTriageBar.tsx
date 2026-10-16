@@ -11,7 +11,7 @@ import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
-import { CLOSE_REASONS } from '../../lib/closeReasons'
+import { CLOSE_REASONS, closeReasonSentryNotice } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
@@ -194,6 +194,9 @@ export function ReportTriageBar({
           <Btn size="sm" variant="ghost" onClick={() => setClosing(false)} disabled={saving}>
             Cancel
           </Btn>
+          {(report.sentry_links?.some((l) => !l.resolved_at) ?? false) && (
+            <p className="basis-full text-xs text-fg-muted">{closeReasonSentryNotice(closeReason)}</p>
+          )}
         </div>
       )}
 
