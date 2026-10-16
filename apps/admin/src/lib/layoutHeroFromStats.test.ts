@@ -1,22 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { resolveLayoutHero, type LayoutHeroFallback } from './layoutHeroFromStats'
+import { buildHeroEnrichment } from './layoutHeroFromStats'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
 import type { NavCounts } from './useNavCounts'
-
-const MEMBERS_FALLBACK: LayoutHeroFallback = {
-  title: 'Members',
-  kicker: 'Workspace',
-  scope: 'members',
-  decide: {
-    label: 'Team roster',
-    summary: 'Static fallback copy.',
-    severity: 'info',
-  },
-  verify: {
-    label: 'Invite deliverability',
-    detail: 'Static verify copy.',
-  },
-}
 
 function navCounts(overrides: Partial<NavCounts> & { slices?: Partial<NavStatSlices> } = {}): NavCounts {
   return {
@@ -51,43 +36,32 @@ function navCounts(overrides: Partial<NavCounts> & { slices?: Partial<NavStatSli
   }
 }
 
-describe('resolveLayoutHero', () => {
-  it('returns null when no fallback exists', () => {
-    expect(resolveLayoutHero('/unknown', null, navCounts())).toBeNull()
+describe('buildHeroEnrichment', () => {
+  it('returns nothing for a route with no live hero data', () => {
+    expect(buildHeroEnrichment('/unknown', navCounts())).toEqual({})
   })
 
-  it('enriches members hero with live inactive seat metrics', () => {
-    const hero = resolveLayoutHero('/organization/members', MEMBERS_FALLBACK, navCounts())
-    expect(hero?.decide.metric).toContain('3 member')
-    expect(hero?.decide.metric).toContain('3 inactive')
-    expect(hero?.decide.severity).toBe('warn')
-    expect(hero?.act?.primary?.kind).toBe('link')
-    if (hero?.act?.primary?.kind === 'link') {
+  it('enriches the members hero with live inactive seat metrics', () => {
+    const hero = buildHeroEnrichment('/organization/members', navCounts())
+    expect(hero.decide?.metric).toContain('3 member')
+    expect(hero.decide?.metric).toContain('3 inactive')
+    expect(hero.decide?.severity).toBe('warn')
+    expect(hero.act?.primary?.kind).toBe('link')
+    if (hero.act?.primary?.kind === 'link') {
       expect(hero.act.primary.to).toContain('/organization/members')
     }
-    expect(hero?.actIdle?.label).toBeTruthy()
+    expect(hero.actIdle?.label).toBeTruthy()
   })
 
-  it('surfaces seat-cap act when at cap', () => {
-    const hero = resolveLayoutHero(
+  it('surfaces the seat-cap act when at cap', () => {
+    const hero = buildHeroEnrichment(
       '/organization/members',
-      MEMBERS_FALLBACK,
       navCounts({ membersAtSeatCap: true, membersInactiveCount: 0 }),
     )
-    expect(hero?.decide.severity).toBe('crit')
-    expect(hero?.act?.primary?.kind).toBe('link')
-    if (hero?.act?.primary?.kind === 'link') {
+    expect(hero.decide?.severity).toBe('crit')
+    expect(hero.act?.primary?.kind).toBe('link')
+    if (hero.act?.primary?.kind === 'link') {
       expect(hero.act.primary.to).toBe('/billing')
     }
-  })
-
-  it('keeps static fallback when nav counts not ready', () => {
-    const hero = resolveLayoutHero(
-      '/organization/members',
-      MEMBERS_FALLBACK,
-      navCounts({ ready: false }),
-    )
-    expect(hero?.decide.summary).toBe('Static fallback copy.')
-    expect(hero?.act).toBeNull()
   })
 })

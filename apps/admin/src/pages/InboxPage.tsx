@@ -112,7 +112,11 @@ export function InboxPage() {
     reload()
   }, [reloadStats, reload])
 
-  useRealtimeReload(['reports', 'fix_attempts', 'fix_events', 'integration_health_history'], reloadAll, {
+  // Not integration_health_history: probes write it about 150 times an hour
+  // across the projects a user can see, which reloaded both of this page's
+  // heaviest reads about every 24 s while it sat open (measured 2026-10-16).
+  // The health badge comes from nav-meta, which does not watch that table.
+  useRealtimeReload(['reports', 'fix_attempts', 'fix_events'], reloadAll, {
     debounceMs: 1000,
     enabled: stats.hasAnyProject,
   })
@@ -167,7 +171,7 @@ export function InboxPage() {
 
   usePublishPageContext({
     route: '/inbox',
-    title: 'Action inbox',
+    title: copy?.title ?? 'To-do',
     summary: `${activeTabMeta.label} · ${stats.openActions > 0 ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'}` : 'All clear'}`,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.openActions,
@@ -219,7 +223,7 @@ export function InboxPage() {
   return (
     <div data-inbox-root className={PAGE_CONTENT_STACK} data-testid="mushi-page-inbox">
       <PageHeaderBar
-        title={copy?.title ?? 'Action inbox'}
+        title={copy?.title ?? 'To-do'}
         projectScope={stats.projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About the inbox'}

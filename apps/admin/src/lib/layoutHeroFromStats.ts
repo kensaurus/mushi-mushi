@@ -1,6 +1,6 @@
 /**
- * Enriches layout-level PageHero fallbacks with live nav-meta / slice data.
- * Keeps static route copy in Layout.tsx; this file supplies metrics, severity,
+ * Live hero enrichment from nav-meta / slice data for pages that own a
+ * PageHero (published through lib/heroSnapshots): metrics, severity,
  * actionable Act tiles, and calm idle copy when nothing needs doing.
  */
 
@@ -11,31 +11,10 @@ import type { NavCounts } from './useNavCounts'
 import { computeNextBestAction } from './useNextBestAction'
 import type { PageHeroSnapshot } from './pageHeroSnapshot'
 
-export interface LayoutHeroFallback {
-  title: string
-  kicker: string
-  scope: string
-  decide: PageHeroDecide
-  verify: PageHeroVerify
-}
-
 export interface HeroActIdle {
   label: string
   metric?: string
   summary: string
-}
-
-export interface ResolvedLayoutHero extends LayoutHeroFallback {
-  act: PageAction | null
-  actIdle?: HeroActIdle
-}
-
-function mergeDecide(base: PageHeroDecide, patch: Partial<PageHeroDecide>): PageHeroDecide {
-  return { ...base, ...patch }
-}
-
-function mergeVerify(base: PageHeroVerify, patch: Partial<PageHeroVerify>): PageHeroVerify {
-  return { ...base, ...patch }
 }
 
 function idle(label: string, summary: string, metric?: string): HeroActIdle {
@@ -819,7 +798,7 @@ function enrichByPath(pathname: string, counts: NavCounts): {
   }
 }
 
-/** Live hero enrichment for a route — shared by Layout nav-meta and page stats publishers. */
+/** Live hero enrichment for a route, for pages that publish a hero snapshot. */
 export function buildHeroEnrichment(pathname: string, counts: NavCounts) {
   return enrichByPath(pathname, counts)
 }
@@ -831,46 +810,4 @@ export function buildHeroSnapshotFromCounts(
   const enrichment = enrichByPath(pathname, counts)
   if (Object.keys(enrichment).length === 0) return null
   return { route: pathname, ...enrichment }
-}
-
-/** Merge static Layout fallback with live counts when nav-meta is ready. */
-export function resolveLayoutHero(
-  pathname: string,
-  fallback: LayoutHeroFallback | null | undefined,
-  counts: NavCounts,
-  pageSnapshot?: PageHeroSnapshot | null,
-): ResolvedLayoutHero | null {
-  if (!fallback) return null
-
-  const patch = counts.ready ? enrichByPath(pathname, counts) : {}
-  const page =
-    pageSnapshot?.route === pathname
-      ? pageSnapshot
-      : null
-
-  const decide = mergeDecide(fallback.decide, {
-    ...(patch.decide ?? {}),
-    ...(page?.decide ?? {}),
-  })
-  const verify = mergeVerify(fallback.verify, {
-    ...(patch.verify ?? {}),
-    ...(page?.verify ?? {}),
-  })
-
-  const act =
-    page && 'act' in page && page.act !== undefined
-      ? page.act
-      : patch.act !== undefined
-        ? patch.act
-        : null
-
-  const actIdle = page?.actIdle ?? patch.actIdle
-
-  return {
-    ...fallback,
-    decide,
-    verify,
-    act,
-    actIdle,
-  }
 }
