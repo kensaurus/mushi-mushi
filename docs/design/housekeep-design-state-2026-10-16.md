@@ -96,7 +96,7 @@ Escape hatch: a new token goes in `styles/theme-tokens.css`. A reviewed exceptio
 
 ## Owner decisions (visible changes, not in this diff)
 
-Parked as `BL-023` in [`docs/BACKLOG.md`](../BACKLOG.md).
+Parked as `BL-035` in [`docs/BACKLOG.md`](../BACKLOG.md).
 
 1. **Z-index scale is unused and disagrees with the code.** `--z-*` (0/20/40/50/60/70/80) has 0 usages; 59 literal z values exist. Toasts sit at `z-[60]` while `--z-toast` is 70; four overlays (`BetaBanner`, `ConfigHelp`, `FirstRunTour`, `ui/misc` tooltip) use `z-[100]`, above `--z-overlay-max` (80). Pick one stacking model, then migrate.
 2. **Dark mode `fg-faint` (L 0.63) is brighter than `fg-muted` (L 0.62).** The hierarchy is inverted in dark only (light is 0.50 vs 0.44, correct).
