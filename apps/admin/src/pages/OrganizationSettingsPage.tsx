@@ -11,7 +11,6 @@ import { resolveOrgSettingsLink } from '../lib/orgSettingsRoute'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { trackSelf } from '../lib/track'
@@ -275,7 +274,6 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
   const { data: statsData, reload: reloadStats } = usePageData<MembersStats>(statsPath)
   const stats = statsData ?? EMPTY_MEMBERS_STATS
-  usePublishPageHeroStats('/organization/members', statsData)
 
   const reloadAll = useCallback(() => {
     reload()

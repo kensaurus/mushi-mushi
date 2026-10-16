@@ -29,7 +29,6 @@ import {
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { BarSparkline } from '../components/charts'
 import { formatChartDayLabel } from '../components/charts/chartAxis'
@@ -373,7 +372,6 @@ export function CodeHealthPage() {
     isValidating: statsValidating,
     lastFetchedAt: statsFetchedAt,
   } = usePageData<CodeHealthStats>('/v1/admin/code-health/stats')
-  usePublishPageHeroStats('/code-health', statsData)
   const stats = statsData ?? EMPTY_CODE_HEALTH_STATS
 
   const handleReload = useCallback(() => {

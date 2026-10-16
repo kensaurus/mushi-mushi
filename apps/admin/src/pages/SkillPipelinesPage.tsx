@@ -32,7 +32,6 @@ import { ReactFlow, Background, Controls, useNodesState, useEdgesState } from '@
 import '@xyflow/react/dist/style.css'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip } from '../components/ui'
@@ -189,7 +188,6 @@ export function SkillPipelinesPage() {
   const statsPath = projectId ? `/v1/admin/skills/stats?project_id=${projectId}` : null
   const { data: skillsStatsData, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } =
     usePageData<SkillsStats>(statsPath, { deps: [projectId] })
-  usePublishPageHeroStats('/skills', skillsStatsData)
   const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
 
   // Quick mode opens the posture tab once; links and clicks then win.
