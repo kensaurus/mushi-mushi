@@ -113,6 +113,8 @@ export interface WidgetRenderCtx {
   actionPending: boolean;
   actionError: string | null;
   unreadCount: number;
+  /** A floating launcher is on screen and the host allows hiding it for the visit. */
+  launcherDismissible: boolean;
   // ─── Header ────────────────────────────────────────────────────
   showMoreNav: boolean;
   pageFaviconHref: string | null;
@@ -151,6 +153,8 @@ export interface ViewRegions {
 
 const esc = escapeHtml;
 const BUILTIN_CHIPS = ['bug', 'slow', 'visual', 'confusing'] as const;
+/** For a custom locale object written before `widget.hideLauncher` existed. */
+const HIDE_LAUNCHER_FALLBACK = 'Hide the bug button for this visit';
 
 function btn(action: string, label: string, cls = '', extra = ''): string {
   return `<button type="button" class="${cls}" data-action="${action}"${extra}>${label}</button>`;
@@ -326,7 +330,7 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   return {
     header: renderHeader(ctx, ctx.config.expandedTitle || p.title),
     lead: `<textarea class="mushi-textarea" data-role="description" rows="3" maxlength="${DESCRIPTION_MAX_LENGTH}" placeholder="${esc(feature ? s3.featurePlaceholder : s3.descriptionPlaceholder)}" aria-label="${esc(p.title)}" aria-describedby="mushi-hint"></textarea>`,
-    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}<div class="mushi-attachments">${shot}${element}</div>${reason}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}`,
+    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}<div class="mushi-attachments">${shot}${element}</div>${reason}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}${ctx.launcherDismissible ? `<p class="mushi-note">${btn('hide-launcher', esc(t.widget.hideLauncher ?? HIDE_LAUNCHER_FALLBACK), 'mushi-link-btn')}</p>` : ''}`,
     footer: `<span class="mushi-footer-hint" id="mushi-hint" data-role="hint">${hint}</span><button type="button" class="mushi-submit" data-action="submit" aria-disabled="${!ctx.canSend || ctx.submitting}"${ctx.submitting ? ' aria-busy="true"' : ''}>${esc(ctx.submitting ? t.widget.submitting : p.send)}</button>`,
   };
 }
