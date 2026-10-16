@@ -16,6 +16,7 @@
 
 import type { getServiceClient } from './db.ts'
 import { log as rootLog } from './logger.ts'
+import { logDbFailure } from './error-codes.ts'
 import { parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
 import { findOpenPrByHeadPrefix, ghFetchOptional } from './github-pr.ts'
 import { openSdkUpgradePr, type LockfileOutcome } from './sdk-upgrade-pr.ts'
@@ -130,7 +131,7 @@ export async function syncAwaitingLockfileJobs(
     .order('created_at', { ascending: true })
     .limit(SWEEP_BATCH)
   if (error) {
-    log.error('failed to load awaiting_lockfile jobs', { err: error.message })
+    logDbFailure(log, 'failed to load awaiting_lockfile jobs', error, { err: error.message })
     return []
   }
 

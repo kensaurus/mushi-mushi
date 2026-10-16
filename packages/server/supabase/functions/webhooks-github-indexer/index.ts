@@ -76,13 +76,23 @@ import {
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
 import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
-import { projectIdsForRepo } from './repo-projects.ts';
+import { isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
+import { projectIdsForRepo, RepoLookupError } from './repo-projects.ts';
 
 ensureSentry('webhooks-github-indexer');
 
 const log = rootLog.child('webhooks-github-indexer');
 const app = new Hono();
-app.onError(sentryHonoErrorHandler);
+// A repo-binding lookup that hit a pooler outage (MUSHI-MUSHI-SERVER-2S) is
+// a warn and a 503: the delivery still shows failed and can be redelivered,
+// but Sentry gets no event. Anything else is reported.
+app.onError((err, c) => {
+  if (err instanceof RepoLookupError && isTransientDbConnectionError(err.dbError)) {
+    log.warn(err.message, { db_code: err.dbError.code ?? null, transient: true });
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Database briefly unavailable; redeliver.' } }, 503);
+  }
+  return sentryHonoErrorHandler(err, c);
+});
 
 function getDb() {
   return createClient(
@@ -2142,8 +2152,11 @@ app.post('/webhooks-github-indexer', async (c) => {
     .limit(1)
     .maybeSingle();
   if (projectErr) {
-    log.error('push: project_repos lookup failed', { repoFullName, error: projectErr.message });
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: projectErr.message } }, 500);
+    const transient = logDbFailure(log, 'push: project_repos lookup failed', projectErr, {
+      repoFullName,
+      error: projectErr.message,
+    });
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: projectErr.message } }, transient ? 503 : 500);
   }
   const project = projectRow as InternalPushRepoRow | null;
 

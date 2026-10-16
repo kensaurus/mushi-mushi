@@ -21,6 +21,8 @@ const PROJECT = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 const JOB = 'job-1'
 
 const state = vi.hoisted(() => ({
+  logWarn: vi.fn(),
+  logError: vi.fn(),
   db: null as unknown,
   helperPresent: false,
   // GET responses keyed by URL substring, first match wins.
@@ -42,7 +44,7 @@ const gh = vi.hoisted(() => ({
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
+  const noop = { info: () => {}, warn: state.logWarn, error: state.logError, debug: () => {}, child: () => noop }
   return { log: noop }
 })
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => state.db }))
@@ -209,6 +211,21 @@ describe('syncAwaitingLockfileJobs', () => {
 
   const commits = (...list: Array<{ sha: string; login?: string; message: string }>) =>
     list.map((c) => ({ sha: c.sha, author: c.login ? { login: c.login } : null, commit: { message: c.message } }))
+
+  it('a pooler outage loading the jobs is a warn, not a Sentry error (MUSHI-MUSHI-SERVER-2T)', async () => {
+    state.logWarn.mockClear()
+    state.logError.mockClear()
+    const { db } = createFakeDb(() => ({
+      data: null,
+      error: { message: 'upstream connect error or disconnect/reset before headers. delayed connect error: 111', code: null },
+    }))
+    expect(await syncAwaitingLockfileJobs(db, { now: NOW })).toEqual([])
+    expect(state.logError).not.toHaveBeenCalled()
+    expect(state.logWarn).toHaveBeenCalledWith(
+      'failed to load awaiting_lockfile jobs',
+      expect.objectContaining({ transient: true }),
+    )
+  })
 
   it('only scans jobs in awaiting_lockfile', async () => {
     const { db, queries } = sweepDb(awaitingJob(2))

@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createFakeDb, findQueries } from './__stubs__/fake-query-recorder.ts'
-import { isRepoUrl, projectIdsForRepo } from '../../supabase/functions/webhooks-github-indexer/repo-projects.ts'
+import { isRepoUrl, projectIdsForRepo, RepoLookupError } from '../../supabase/functions/webhooks-github-indexer/repo-projects.ts'
 
 describe('isRepoUrl', () => {
   it('matches the repository case-insensitively, with or without .git or a trailing slash', () => {
@@ -78,6 +78,15 @@ describe('projectIdsForRepo', () => {
     const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom' } }))
     await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)
   })
+
+  it('keeps the PostgREST error on the throw, so the route can classify it (MUSHI-MUSHI-SERVER-2S)', async () => {
+    const pooler = { message: 'upstream connect error ... delayed connect error: 111', code: null }
+    const { db } = createFakeDb(() => ({ data: null, error: pooler }))
+    const err = await projectIdsForRepo(db, 'acme/app').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RepoLookupError)
+    expect((err as RepoLookupError).dbError).toBe(pooler)
+    expect((err as Error).message).toMatch(/lookup failed: upstream connect error/)
+  })
 })
 
 describe('webhooks-github-indexer wiring', () => {
@@ -94,6 +103,15 @@ describe('webhooks-github-indexer wiring', () => {
     const body = fn('matchCloudAttemptByHeadRef')
     expect(body.match(/\.in\('project_id', projectIds\)/g)).toHaveLength(2)
     expect(fn('handlePullRequestState')).toMatch(/matchCloudAttemptByHeadRef\(db, headRef, repoProjectIds\)/)
+  })
+
+  it('a transient repo-binding lookup answers 503 with a warn; other errors still reach Sentry', () => {
+    const onError = src.split('app.onError(')[1]?.split('\n});')[0] ?? ''
+    expect(onError).toMatch(/err instanceof RepoLookupError && isTransientDbConnectionError\(err\.dbError\)/)
+    expect(onError).toMatch(/log\.warn\(/)
+    expect(onError).toMatch(/, 503\)/)
+    expect(onError).toMatch(/return sentryHonoErrorHandler\(err, c\)/)
+    expect(src).toMatch(/logDbFailure\(log, 'push: project_repos lookup failed', projectErr,/)
   })
 
   it('push commit events stay inside the routed project', () => {
