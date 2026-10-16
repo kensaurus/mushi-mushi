@@ -17,7 +17,6 @@ import {
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
-import { EmptySectionMessage } from '../ui/empty-section-message'
 import type { ReportDetail } from './types'
 
 export function ClassificationFields({ report }: { report: ReportDetail }) {
@@ -126,25 +125,6 @@ function ModelFooter({ model, latency }: { model: string | null; latency: number
             {latency.toLocaleString()} ms
           </span>
         </Tooltip>
-      )}
-    </div>
-  )
-}
-
-export function ScreenshotBlock({ url }: { url: string | null }) {
-  return (
-    <div className="mt-3">
-      <span className="flex items-center gap-1 text-xs text-fg-muted font-medium mb-1.5">
-        <IconCamera /> Screenshot
-        <InfoHint content="The screen the user captured at the moment they submitted this report." />
-      </span>
-      {url ? (
-        <ImageZoom src={url} alt="Bug report screenshot" thumbClassName="max-h-72 inline-block" />
-      ) : (
-        <EmptySectionMessage
-          text="No screenshot was attached to this report."
-          hint="The widget auto-captures the screen on open; the reporter can remove it before sending, and native SDKs need the optional view-shot dependency."
-        />
       )}
     </div>
   )

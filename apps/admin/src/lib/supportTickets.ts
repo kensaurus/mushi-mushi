@@ -11,7 +11,7 @@ export type SupportTicketStatus =
   | 'closed'
   | 'cancelled'
 
-export type SupportTicketCategory = 'billing' | 'bug' | 'feature' | 'other'
+type SupportTicketCategory = 'billing' | 'bug' | 'feature' | 'other'
 
 export interface ShippedRelease {
   id: string

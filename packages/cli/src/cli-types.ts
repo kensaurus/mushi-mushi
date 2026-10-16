@@ -37,7 +37,7 @@ export interface ReportListData {
   total: number
 }
 
-export interface ReportRow {
+interface ReportRow {
   id: string
   severity?: string | null
   status?: string | null

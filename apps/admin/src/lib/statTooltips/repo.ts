@@ -3,8 +3,6 @@
  * PURPOSE: Human-readable StatCard tooltips for the Repo snapshot strip.
  */
 
-export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
-
 import type { MetricTooltipData } from '../../components/ui'
 import type { RepoStats } from '../../components/repo/RepoStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

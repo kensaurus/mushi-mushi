@@ -110,7 +110,7 @@ function findIconLink(): HTMLLinkElement | null {
  * `<link rel="icon">` href. Safe to call from any component; it short-
  * circuits when the count hasn't changed since the previous paint.
  */
-export async function updateFaviconBadge(count: number): Promise<void> {
+async function updateFaviconBadge(count: number): Promise<void> {
   if (typeof document === 'undefined') return
   const safeCount = Math.max(0, Math.floor(count))
   if (lastRenderedCount === safeCount) return
@@ -173,7 +173,7 @@ export async function updateFaviconBadge(count: number): Promise<void> {
  * Reset the favicon to its SVG default. Used by the Layout cleanup
  * effect so a "danger" badge never lingers after sign-out.
  */
-export function resetFaviconBadge(): void {
+function resetFaviconBadge(): void {
   void updateFaviconBadge(0)
 }
 

@@ -1,6 +1,6 @@
 import type { PromptLabStats } from './PromptLabStatsTypes'
 
-export interface AutoGenerationMetadata {
+interface AutoGenerationMetadata {
   parentVersion?: string
   failureCount?: number
   topBuckets?: Array<{ reason: string; count: number }>

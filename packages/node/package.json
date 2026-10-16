@@ -148,7 +148,6 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
-    "@types/express": "^5.0.6",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
     "size-limit": "^12.1.0",

@@ -287,7 +287,7 @@ function cliAuthHeaders(cliToken: string): Record<string, string> {
  * indistinguishable from "you have no projects" and produced the reported
  * "browser says connected but the terminal returned to the prompts".
  */
-export class DeviceAuthRequestError extends Error {
+class DeviceAuthRequestError extends Error {
   readonly step: 'list_projects' | 'mint_key' | 'revoke_key';
   readonly status: number | undefined;
   readonly retryable: boolean;

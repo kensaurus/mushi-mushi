@@ -13,7 +13,7 @@ import { withAguiHandler } from './agui'
 import { trackSelf } from './track'
 import { dispatchErrorText } from './dispatchConfirm'
 
-export type DispatchStatus =
+type DispatchStatus =
   | 'idle'
   | 'queueing'
   | 'queued'

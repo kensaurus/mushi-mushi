@@ -368,6 +368,3 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
     },
   };
 }
-
-// Pure exports for the unit tests.
-export const __test = { matchTemplate };

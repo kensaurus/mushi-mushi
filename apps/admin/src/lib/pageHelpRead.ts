@@ -4,7 +4,7 @@
 
 const READ_PREFIX = 'mushi:pagehelp:read:'
 
-export function pageHelpReadKey(routeKey: string): string {
+function pageHelpReadKey(routeKey: string): string {
   return READ_PREFIX + routeKey
 }
 
@@ -26,5 +26,3 @@ export function markPageHelpRead(routeKey: string): void {
     /* private mode */
   }
 }
-
-export const PAGEHELP_READ_EVENT = 'mushi:pagehelp-read'

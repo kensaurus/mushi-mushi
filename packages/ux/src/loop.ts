@@ -77,7 +77,7 @@ const PLAN_NUDGE =
 const EDIT_NUDGE =
   'Time is up. Do not read any more files. Make the one change you have decided on now, touching at most 3 files, then stop.'
 /** How often a working attempt checks in (git status + state save). */
-export const HEARTBEAT_MS = 30_000
+const HEARTBEAT_MS = 30_000
 
 export type LoopEvent =
   | { type: 'log'; message: string }

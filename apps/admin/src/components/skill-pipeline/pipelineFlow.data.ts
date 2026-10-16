@@ -14,7 +14,7 @@ import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import { readVizToken, stepStatusColor } from '../../lib/vizTokens'
 
 // ── Step status colours ───────────────────────────────────────────────────────
-export const STEP_STATUS_HEX: Record<string, string> = {
+const STEP_STATUS_HEX: Record<string, string> = {
   pending: readVizToken('viz-step-pending'),
   running: readVizToken('viz-step-running'),
   passed: readVizToken('viz-step-passed'),
@@ -147,9 +147,4 @@ export function buildPipelineEdges(steps: PipelineStep[]): Edge<PipelineEdgeData
     })
   }
   return edges
-}
-
-/** Compute canvas width needed to fit all steps in a horizontal row. */
-export function pipelineCanvasWidth(stepCount: number): number {
-  return INSET_X * 2 + stepCount * NODE_WIDTH + Math.max(0, stepCount - 1) * GAP
 }

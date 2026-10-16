@@ -26,7 +26,7 @@ export function requireUuid(value: string, label = 'id'): string {
 
 // ─── API client ─────────────────────────────────────────────────────────────
 
-export const API_TIMEOUT_MS = 15_000
+const API_TIMEOUT_MS = 15_000
 
 export interface EndpointHealthProbe {
   ok: boolean

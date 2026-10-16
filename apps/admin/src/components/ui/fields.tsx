@@ -492,9 +492,9 @@ export function CopyButton(props: CopyButtonProps) {
 type CodeValueTone = 'neutral' | 'id' | 'url' | 'hash'
 
 /** Inverted terminal-style shell shared by CodeValue, LogBlock, and hand-rolled `<pre>`. */
-export const CODE_BLOCK_SHELL =
+const CODE_BLOCK_SHELL =
   'mushi-code-block border border-code-surface-border rounded-sm'
-export const CODE_BLOCK_BODY =
+const CODE_BLOCK_BODY =
   'mushi-code-body font-mono text-[0.8125rem] leading-relaxed wrap-anywhere'
 
 const CODE_TONES: Record<CodeValueTone, string> = {

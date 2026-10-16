@@ -179,8 +179,3 @@ export function chipForPath(pathname: string): PdcaChipId | null {
   if (pathname === '/dashboard' || pathname === '') return 'overview'
   return stageForPath(pathname)
 }
-
-export function nextStage(stage: PdcaStageId): PdcaStageId | null {
-  const i = PDCA_ORDER.indexOf(stage)
-  return i >= 0 && i < PDCA_ORDER.length - 1 ? PDCA_ORDER[i + 1] : null
-}

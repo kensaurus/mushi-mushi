@@ -91,7 +91,7 @@ const HARDCODED_CLOUD_ANON_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.
 export const CLOUD_SUPABASE_ANON_KEY =
   (import.meta.env.VITE_CLOUD_SUPABASE_ANON_KEY ?? '').trim() ||
   HARDCODED_CLOUD_ANON_KEY_FALLBACK
-export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
+const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 
 // Resolved env values with cloud fallback baked in. Use these everywhere
 // instead of reading `import.meta.env.VITE_SUPABASE_URL` directly — when no
@@ -209,7 +209,7 @@ export const RESOLVED_MCP_OAUTH_URL = mcpOAuthSignInUrl(RESOLVED_MCP_HTTP_URL)
 // Langfuse host used to build click-through URLs from fix attempts and LLM
 // invocation rows. Defaults to the public cloud — self-hosted Langfuse users
 // can override via VITE_LANGFUSE_HOST (e.g. https://langfuse.example.com).
-export const RESOLVED_LANGFUSE_HOST = stripTrailingSlash(
+const RESOLVED_LANGFUSE_HOST = stripTrailingSlash(
   (import.meta.env.VITE_LANGFUSE_HOST ?? '').trim() || 'https://cloud.langfuse.com',
 )
 

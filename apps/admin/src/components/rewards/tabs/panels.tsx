@@ -668,7 +668,7 @@ interface ContributorDetail {
 
 // ─── Contributor detail drawer ───────────────────────────────
 
-export function ContributorDrawer({
+function ContributorDrawer({
   endUserId,
   displayName,
   onClose,
@@ -924,7 +924,7 @@ export function ContributorDrawer({
   )
 }
 
-export function ActivityEventRow({
+function ActivityEventRow({
   event,
   tone,
   rejected,
@@ -1490,7 +1490,7 @@ const DISPUTE_BADGE: Record<string, string> = {
   withdrawn:    'bg-surface-overlay text-fg-muted',
 }
 
-export function DisputesSection({ canEdit = false }: { canEdit?: boolean } = {}) {
+function DisputesSection({ canEdit = false }: { canEdit?: boolean } = {}) {
   const toast = useToast()
   const confirmDeny = useConfirmAction()
   const { data: disputes, loading, error, reload } = usePageData<DisputeRow[]>('/v1/admin/rewards/disputes')
@@ -1613,7 +1613,7 @@ const PAYOUT_BADGE: Record<string, string> = {
   cancelled:  'bg-surface-overlay text-fg-muted',
 }
 
-export function PayoutLiabilitySection() {
+function PayoutLiabilitySection() {
   const { has } = useEntitlements()
   const { data: payouts, loading, error, reload } = usePageData<PayoutRow[]>('/v1/admin/rewards/payouts')
   if (!has('rewards_monetary')) return null
@@ -2245,4 +2245,3 @@ function IconBilling(p: { className?: string }) {
     </svg>
   )
 }
-

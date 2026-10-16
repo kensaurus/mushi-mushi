@@ -22,7 +22,6 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -110,7 +109,6 @@ export function BillingPage() {
   const membersStats = membersStatsQuery.data ?? EMPTY_MEMBERS_STATS
   const billing = billingQuery.data
   const stats = statsQuery.data ?? EMPTY_BILLING_STATS
-  usePublishPageHeroStats('/billing', statsQuery.data)
   const projects = billing?.projects ?? []
   const activeProject = useMemo(
     () => projects.find(p => p.project_id === activeProjectId) ?? projects[0] ?? null,

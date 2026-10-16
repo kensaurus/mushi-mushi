@@ -17,7 +17,7 @@ import type { Framework } from './sdkSnippets'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type DetectedMonorepo =
+type DetectedMonorepo =
   | 'npm-workspaces'
   | 'yarn-workspaces'
   | 'pnpm-workspaces'
@@ -448,109 +448,4 @@ export function monorepoInstallGuidance(
   )
 }
 
-// ─── ELI5 step builder ────────────────────────────────────────────────────────
 
-export interface SetupStep {
-  id: string
-  title: string
-  body: string
-  code?: string
-  actionLabel?: string
-  actionHref?: string
-  done?: boolean
-}
-
-/**
- * Build an ELI5 step list for a first-time integrator based on the
- * detection result and their project.
- */
-export function buildSetupSteps(
-  result: DetectionResult,
-  projectId: string,
-  apiKey: string | null | undefined,
-): SetupStep[] {
-  const fw = result.framework
-  const isMobile = fw === 'react-native' || fw === 'expo' || fw === 'capacitor'
-
-  const steps: SetupStep[] = []
-
-  // Step 1: Install the package
-  const pkg =
-    fw === 'react' ? '@mushi-mushi/react'
-    : fw === 'vue' ? '@mushi-mushi/vue @mushi-mushi/web'
-    : fw === 'svelte' ? '@mushi-mushi/svelte @mushi-mushi/web'
-    : fw === 'react-native' ? '@mushi-mushi/react-native'
-    : fw === 'expo' ? '@mushi-mushi/react-native expo-sensors'
-    : fw === 'capacitor' ? '@mushi-mushi/capacitor'
-    : '@mushi-mushi/web'
-
-  const installCmd =
-    fw === 'expo'
-      ? `npx expo install @mushi-mushi/react-native expo-sensors`
-      : fw === 'capacitor'
-        ? `npm install @mushi-mushi/capacitor && npx cap sync`
-        : `npm install ${pkg}`
-
-  steps.push({
-    id: 'install',
-    title: '1. Install the SDK',
-    body: result.monorepo
-      ? `You're in a ${result.monorepo} monorepo. Run this inside your app workspace (not the root).`
-      : 'Run this in your project folder.',
-    code: installCmd,
-    actionLabel: 'Copy',
-    done: false,
-  })
-
-  // Step 2: Get your API key
-  steps.push({
-    id: 'api-key',
-    title: '2. Get your API key',
-    body: apiKey
-      ? 'Your key is shown below — it was just generated. Copy it now; it won\'t be shown again.'
-      : 'Go to Projects, select your project, choose "SDK" from the scope dropdown, and click the key icon.',
-    actionLabel: apiKey ? 'Copy key' : 'Open Projects →',
-    actionHref: apiKey ? undefined : '/projects',
-    done: Boolean(apiKey),
-  })
-
-  // Step 3: Add the provider
-  steps.push({
-    id: 'add-provider',
-    title: isMobile ? '3. Wrap your app with MushiProvider' : '3. Initialise Mushi',
-    body: isMobile
-      ? `Wrap your root component (in App.tsx) with <MushiProvider projectId="…" apiKey="…">. ` +
-        `The snippet tab on the right has the full code — copy and paste.`
-      : `Call Mushi.init() once when your app loads. The snippet tab shows the exact call. ` +
-        `For Next.js, put it in app/layout.tsx. For Vite, put it in main.tsx.`,
-    code: isMobile
-      ? `import { MushiProvider } from '@mushi-mushi/react-native'\n\nexport default function App() {\n  return (\n    <MushiProvider projectId="${projectId}" apiKey="${apiKey ?? 'your-api-key'}">\n      <YourApp />\n    </MushiProvider>\n  )\n}`
-      : undefined,
-    done: false,
-  })
-
-  // Step 4: Send a test report
-  steps.push({
-    id: 'test-report',
-    title: '4. Send a test report',
-    body: isMobile
-      ? 'Run the app — you should see a floating 🐛 button. Tap it, fill in the description, and submit. The report will appear in Inbox within seconds.'
-      : 'After init, a 🐛 button appears in the corner of your browser. Click it, describe a fake bug, and submit. Check Inbox in the admin to confirm it arrived.',
-    done: false,
-  })
-
-  // Step 5 for mobile: verify env vars exist
-  if (isMobile) {
-    const envFile = fw === 'expo' ? '.env.local' : 'apps/mobile/.env'
-    steps.push({
-      id: 'env-vars',
-      title: '5. Add env vars to your .env file',
-      body:
-        `The SDK reads its credentials from env vars at build time. Add these to \`${envFile}\`:`,
-      code: `MUSHI_PROJECT_ID=${projectId}\nMUSHI_API_KEY=${apiKey ?? 'paste-key-here'}`,
-      done: Boolean(apiKey),
-    })
-  }
-
-  return steps
-}

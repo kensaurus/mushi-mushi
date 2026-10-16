@@ -53,7 +53,6 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/repo/RepoStatsTypes'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
 import { OpenPullRequests } from '../components/repo/OpenPullRequests'
 import { ListPager } from '../components/ListPager'
@@ -262,7 +261,6 @@ export function RepoPage() {
   } = usePageData<RepoStats>(
     activeProjectId ? '/v1/admin/repo/stats' : null,
   )
-  usePublishPageHeroStats('/repo', statsData)
   const repoStats = statsData ?? EMPTY_REPO_STATS
 
   const setActiveTab = useCallback(

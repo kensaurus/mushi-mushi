@@ -60,7 +60,6 @@ import {
 } from '../lib/settingsModeUx';
 import { usePublishPageContext } from '../lib/pageContext';
 import { usePageData } from '../lib/usePageData';
-import { usePublishPageHeroStats } from '../lib/heroSnapshots';
 import { usePersistentState } from '../lib/usePersistentState';
 import { useEntitlements } from '../lib/useEntitlements';
 import {
@@ -137,7 +136,6 @@ function SettingsPageBody({
     lastFetchedAt,
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
-  usePublishPageHeroStats('/settings', statsData);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
 
   const pool = useByokPool(byokEnabled);

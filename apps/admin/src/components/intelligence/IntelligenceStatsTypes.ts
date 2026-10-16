@@ -5,7 +5,7 @@
 
 export type IntelligenceTabId = 'overview' | 'reports' | 'pipeline'
 
-export type IntelligenceTopPriority =
+type IntelligenceTopPriority =
   | 'no_project'
   | 'feature_locked'
   | 'job_running'

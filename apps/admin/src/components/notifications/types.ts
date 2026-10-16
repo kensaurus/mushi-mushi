@@ -16,7 +16,7 @@ export interface ReporterNotification {
   created_at: string
 }
 
-export type NotificationTopPriority =
+type NotificationTopPriority =
   | 'no_project'
   | 'disabled'
   | 'unread_backlog'

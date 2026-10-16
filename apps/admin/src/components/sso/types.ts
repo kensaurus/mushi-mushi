@@ -4,8 +4,6 @@
 
 import type { SsoTopPriority } from '../../lib/ssoExplainer'
 
-export type { SsoTopPriority }
-
 export interface SsoStats {
   hasAnyProject: boolean
   projectId: string | null

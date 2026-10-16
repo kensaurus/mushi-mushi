@@ -159,7 +159,7 @@ export function Card({
  */
 
 export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
-export const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
+const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
 
 interface PanelHeaderProps {
   title: ReactNode
@@ -265,42 +265,7 @@ export function PanelSectionLabel({
   return <p className={`panel-section-label mb-2 ${className}`}>{children}</p>
 }
 
-interface PanelRowProps {
-  children: ReactNode
-  className?: string
-  interactive?: boolean
-  onClick?: () => void
-}
 
-/** Single row inside a `Panel` — hairline divider handled by CSS. */
-export function PanelRow({
-  children,
-  className = '',
-  interactive,
-  onClick,
-}: PanelRowProps) {
-  const interactiveProps = onClick
-    ? {
-        role: 'button' as const,
-        tabIndex: 0,
-        onClick,
-        onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onClick()
-          }
-        },
-      }
-    : {}
-  return (
-    <div
-      className={`panel-row ${interactive || onClick ? 'panel-row--interactive' : ''} ${className}`}
-      {...interactiveProps}
-    >
-      {children}
-    </div>
-  )
-}
 
 /** Card + PanelHeader — standard dashboard / insight tile shell. */
 export function CardPanel({ title, children, className = '', action }: CardPanelProps) {

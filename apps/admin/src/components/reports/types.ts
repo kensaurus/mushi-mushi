@@ -95,7 +95,7 @@ export interface ReportRow {
   end_user_id?: string | null
 }
 
-export interface ReportEnvironmentLite {
+interface ReportEnvironmentLite {
   url?: string | null
   /** Set by SDKs that compute a route from the URL (e.g. React Router
    *  match). Falls back to a path-derived value when the SDK didn't
@@ -139,7 +139,7 @@ export const PAGE_SIZE = 50
  *   medium   → brand  (blue) — not warn, to create a clear step between high and medium
  *   low      → ok     (green)
  */
-export const SEVERITY_STRIPE: Record<string, string> = {
+const SEVERITY_STRIPE: Record<string, string> = {
   critical: 'bg-danger',
   high:     'bg-warn',
   medium:   'bg-brand/70',

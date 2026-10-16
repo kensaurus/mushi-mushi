@@ -5,7 +5,7 @@
 
 export type RepoTabId = 'branches' | 'activity'
 
-export type RepoTopPriority =
+type RepoTopPriority =
   | 'no_project'
   | 'no_repo'
   | 'no_github_app'

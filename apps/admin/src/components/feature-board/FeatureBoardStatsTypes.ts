@@ -11,12 +11,3 @@ export interface FeatureBoardClientStats {
   totalTickets: number
   topRequestSubject: string | null
 }
-
-export const EMPTY_FEATURE_BOARD_CLIENT_STATS: FeatureBoardClientStats = {
-  projectId: null,
-  openCount: 0,
-  shippedCount: 0,
-  totalVotes: 0,
-  totalTickets: 0,
-  topRequestSubject: null,
-}

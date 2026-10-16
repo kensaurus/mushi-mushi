@@ -2,7 +2,7 @@
  * Lightweight full-stack audit slice for sidebar nav badges.
  */
 
-export type FullstackAuditTopPriority =
+type FullstackAuditTopPriority =
   | 'no_project'
   | 'failures'
   | 'warnings'

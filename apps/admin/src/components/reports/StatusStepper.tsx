@@ -18,8 +18,8 @@ import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
 
 /** Canonical stage order. `dismissed` is a terminal off-loop state and
  *  rendered as a single muted bar instead of a stepper. */
-export const STATUS_STEPS = ['new', 'classified', 'fixing', 'fixed'] as const
-export type StatusStep = (typeof STATUS_STEPS)[number]
+const STATUS_STEPS = ['new', 'classified', 'fixing', 'fixed'] as const
+type StatusStep = (typeof STATUS_STEPS)[number]
 
 const STEP_LABELS: Record<StatusStep, string> = {
   new: 'Received',

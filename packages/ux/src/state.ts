@@ -85,7 +85,7 @@ export interface SurfaceState {
 export type RunPhase = 'starting' | 'worktree' | 'install' | 'dev-server' | 'mapping' | 'working' | 'reviewing' | 'done' | 'failed'
 
 /** Live progress of the attempt in flight, refreshed at least every HEARTBEAT_MS. */
-export interface CurrentAttempt {
+interface CurrentAttempt {
   surface: string
   attempt: number
   startedAt: string

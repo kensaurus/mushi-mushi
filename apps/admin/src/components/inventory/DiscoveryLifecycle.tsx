@@ -20,7 +20,7 @@ import { Fragment, type ReactNode } from 'react'
  * On narrow viewports the strip stacks vertically with the connecting
  * line rotated 90°.
  */
-export type LifecycleStepState = 'done' | 'active' | 'pending'
+type LifecycleStepState = 'done' | 'active' | 'pending'
 
 export interface LifecycleStep {
   id: 'install' | 'observe' | 'propose' | 'accept'

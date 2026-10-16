@@ -23,7 +23,6 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { STAGE_LABELS, type PromptLabData, type PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
@@ -49,7 +48,6 @@ export function PromptLabPage() {
     reload: reloadStats,
   } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
   const [searchParams] = useSearchParams()
-  usePublishPageHeroStats('/prompt-lab', statsData)
   const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)

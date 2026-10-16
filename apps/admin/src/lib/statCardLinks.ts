@@ -4,16 +4,7 @@
  *          a KPI strip into the page that owns that metric.
  */
 
-import type { DashboardStats } from '../components/dashboard/DashboardStatsTypes'
-
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
-
-export const dashboardLinks = {
-  backlog: '/reports?status=new&sort=created_at&dir=asc',
-  reports14d: '/reports',
-  fixes: '/fixes',
-  focus: (stats: DashboardStats) => stats.topPriorityTo ?? '/dashboard?tab=loop',
-} as const
 
 /* ── Reports ───────────────────────────────────────────────────────────── */
 
@@ -103,13 +94,6 @@ export const judgeLinks = {
 } as const
 
 /* ── Integrations / Settings / Onboarding / Billing / MCP ────────────── */
-
-export const integrationsLinks = {
-  platform: '/integrations/config#integrations-required',
-  healthy: '/integrations/config#integrations-required',
-  routing: '/integrations/config#integrations-routing',
-  failing: '/integrations/config#integrations-required',
-} as const
 
 export const settingsLinks = {
   byok: '/settings?tab=byok',
@@ -312,13 +296,6 @@ export const marketplaceLinks = {
   successRate: '/marketplace?tab=deliveries',
   failing: '/marketplace?tab=deliveries',
   neverDelivered: '/marketplace?tab=installed',
-} as const
-
-export const inventoryLinks = {
-  verified: '/inventory?tab=stories',
-  regressed: '/inventory?tab=gates',
-  findings: '/inventory?tab=gates',
-  discovery: '/inventory?tab=discovery',
 } as const
 
 export const notificationsLinks = {

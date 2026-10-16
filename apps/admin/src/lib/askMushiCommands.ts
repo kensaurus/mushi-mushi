@@ -14,7 +14,7 @@
 
 import type { AskMushiIntent } from './askMushiTypes'
 
-export type SlashEffect =
+type SlashEffect =
   /** Prepend an instruction to the user's text and submit. */
   | { kind: 'prepend'; text: string; intent?: AskMushiIntent }
   /** Locally clear the conversation (start a new thread). */

@@ -12,19 +12,19 @@ import {
   type WidgetTheme,
 } from '../../lib/sdkSnippets'
 
-export const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-export const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
-export const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
-export const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
+const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
+const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
+const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
-export const POSITION_LABEL: Record<WidgetPosition, string> = {
+const POSITION_LABEL: Record<WidgetPosition, string> = {
   'top-left': 'Top left',
   'top-right': 'Top right',
   'bottom-left': 'Bottom left',
   'bottom-right': 'Bottom right',
 }
 
-export const SCREENSHOT_LABEL: Record<ScreenshotMode, string> = {
+const SCREENSHOT_LABEL: Record<ScreenshotMode, string> = {
   'on-report': 'When report opens',
   auto: 'Always',
   off: 'Never',

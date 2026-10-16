@@ -23,7 +23,7 @@ export const REWARDS_TABS: RewardsTabMeta[] = [
   { id: 'settings', label: 'Settings', description: 'Webhooks, identity providers, payout ledger, and disputes.' },
 ]
 
-export function isRewardsTabId(v: string | null): v is RewardsTabId {
+function isRewardsTabId(v: string | null): v is RewardsTabId {
   return REWARDS_TABS.some((t) => t.id === v)
 }
 

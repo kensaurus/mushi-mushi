@@ -10,7 +10,7 @@ export function scopeBadgeTone(scope: McpScope): string {
     : CHIP_TONE.infoSubtle
 }
 
-export function hintBadges(spec: ToolSpec) {
+function hintBadges(spec: ToolSpec) {
   const chips: Array<{ label: string; tone: string; title: string }> = []
   if (spec.hints.readOnly) {
     chips.push({

@@ -11,7 +11,7 @@ export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height, 2.5rem)'
 
 /** Tailwind top offset shared by every fixed overlay below persistent chrome. */
-export const topBelowAppChromeClass = [
+const topBelowAppChromeClass = [
   'top-[var(--mushi-beta-banner-offset,0px)]',
   `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
 ].join(' ')

@@ -35,7 +35,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export interface MushiFloatingButtonConfig {
+interface MushiFloatingButtonConfig {
   /** Allow the FAB to be dragged. Default: false. */
   draggable?: boolean
   /** Snap FAB to the nearest vertical edge on release. Default: true. */

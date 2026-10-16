@@ -37,7 +37,7 @@ import type { StorageStats } from '../../components/storage/types'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from '../extendedNavMeta'
 import type { NavCounts } from '../useNavCounts'
 
-export const READY_NAV_COUNTS_SEED: NavCounts = {
+const READY_NAV_COUNTS_SEED: NavCounts = {
   untriagedBacklog: 0,
   fixesInFlight: 0,
   fixesFailed: 0,

@@ -6,7 +6,7 @@
 export type McpTabId = 'overview' | 'setup' | 'catalog' | 'examples'
 export type CatalogTabId = 'tools' | 'resources' | 'prompts'
 
-export type McpTopPriority =
+type McpTopPriority =
   | 'no_project'
   | 'endpoint_mismatch'
   | 'report_only_keys'
@@ -60,7 +60,7 @@ export const EMPTY_MCP_STATS: McpStats = {
   topPriorityTo: null,
 }
 
-export interface McpKeyRow {
+interface McpKeyRow {
   id: string
   key_prefix: string
   created_at: string
