@@ -7,25 +7,35 @@ regenerating it.** Plans stay the source of truth for their own detail
 (`docs/execplans/PLANS.md` and each plan file); a row here points at them so
 parked work is visible in one place.
 
-- **Last regenerated:** 2026-10-14 (first run, so there is no delta to report)
-- **Rows added since:** BL-019..BL-022, BL-035 (2026-10-16 housekeep)
-- **Open items:** 23 · **Recently closed:** 0
+- **Last regenerated:** 2026-10-16 (second run; delta against 2026-10-14 below)
+- **Delta:** 24 new (BL-019..BL-022 repo housekeep, BL-035 design, BL-040..BL-042 dead code, BL-060..BL-075 this scan) · 0 closed · 0 newly stale · 3 rows gained a verify-done note (BL-003, BL-004, BL-035)
+- **Open items:** 42 · **Recently closed:** 0
 
 | Class | Open |
 |---|---|
-| deferred-plan-phase | 6 |
-| test-gap | 4 |
-| tech-debt | 8 |
+| deferred-plan-phase | 8 |
+| test-gap | 7 |
+| tech-debt | 14 |
 | known-bug | 0 |
-| decision-needed | 4 |
-| unfinished-feature | 1 |
+| decision-needed | 9 |
+| unfinished-feature | 3 |
+| needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 20 |
+| relevant | 39 |
 | verify-done | 2 |
 | stale (propose removal) | 1 |
 
+> **Scanned 2026-10-16** on `release/2026-10-16-batch`. The scan covered code
+> markers (about 20 real hits out of ~110), unchecked plan boxes outside
+> `docs/archive/` and the June audits, runtime and unconditional test skips
+> (none unconditional; BL-064), audit findings from 2026-09 on, and feature
+> flags. It re-checked every existing row's source and none is gone. The
+> production database was checked for two plan-017 findings: the stuck-reaper
+> migration is unapplied (BL-060). The hosted STT price row was not checked: no
+> price table exists in `public`, so it lives elsewhere.
+>
 > **Scanned 2026-10-14** on `origin/master` `a3224b7d`: code markers
 > (`TODO/FIXME/HACK/XXX`, outside tests; only `_shared/storage.ts:87` is parked
 > work, the rest are prompts and rules that mention the word); skipped tests
@@ -45,8 +55,8 @@ parked work is visible in one place.
 |---|---|---|---|---|---|---|
 | BL-001 | decision-needed | ADR 0022 (host-backend erasure deletes the subject's reports) is still `Proposed`: accept or reject it | relevant | high | `docs/adr/INDEX.md:37`; `docs/adr/0022-host-backend-erasure-deletes-the-subjects-reports.md` | — |
 | BL-002 | deferred-plan-phase | Plan 018 Reporter Loop v2, Phases 0–3: request timeout/retry, thread error states, mark-read on open, the shared status table, widget parity, loop wiring, opt-in email/web push. The live round trip messages a real user, so the owner approves it first | relevant | med | `docs/execplans/reporter-loop-v2.md:612`-`:618`; `docs/execplans/PLANS.md:599`-`:602` | — |
-| BL-003 | deferred-plan-phase | Plan 019 App Recipe Control Plane, Phase 1 / 1b: the glot.it acceptance (all 8 cards on the live API) cannot run until the design-plane migrations apply; recipe state, element routes, `/recipe` page, MCP `get_app_recipe` / `get_design_tokens`, `recipe-collector`, CLI `mushi recipe` | relevant | med | `docs/execplans/app-recipe-control-plane.md:659`-`:685`; `docs/execplans/PLANS.md:621`-`:622` | — |
-| BL-004 | deferred-plan-phase | Plan 020 Portfolio operator: generated MCP docs regenerated at merge; seven §4.2 detectors not built (`dead_app_live_spend`, `provider_key_invalid`, …); `check:admin-docs-coverage` warnings for `/recipe`, `/design`, `/analytics`, `/growth`, `/email/reporter` | relevant | low | `docs/execplans/PLANS.md:632`, `:634`; `docs/execplans/portfolio-operator.md:474`-`:475` | — |
+| BL-003 | deferred-plan-phase | Plan 019 App Recipe Control Plane, Phase 1 / 1b: the glot.it acceptance (all 8 cards on the live API) cannot run until the design-plane migrations apply; recipe state, element routes, `/recipe` page, MCP `get_app_recipe` / `get_design_tokens`, `recipe-collector`, CLI `mushi recipe` (2026-10-16: the MCP tools for this phase ship in `packages/mcp/src/catalog.ts`; the plan checkboxes are stale) | relevant | med | `docs/execplans/app-recipe-control-plane.md:659`-`:685`; `docs/execplans/PLANS.md:621`-`:622` | — |
+| BL-004 | deferred-plan-phase | Plan 020 Portfolio operator: generated MCP docs regenerated at merge; seven §4.2 detectors not built (`dead_app_live_spend`, `provider_key_invalid`, …); `check:admin-docs-coverage` warnings for `/recipe`, `/design`, `/analytics`, `/growth`, `/email/reporter` (2026-10-16: `dead_app_live_spend` and `provider_key_invalid` exist in `_shared/radar/operator-detectors.ts`; full count not re-checked) | relevant | low | `docs/execplans/PLANS.md:632`, `:634`; `docs/execplans/portfolio-operator.md:474`-`:475` | — |
 | BL-005 | deferred-plan-phase | Plan 021 `mushi ux`: owner-owed probes (Cursor `--list-models`, billing go/no-go, persistent-profile login, non-GET census); the single `NextStep` component waits on an owner decision; cloud-mode live dispatch not yet run | relevant | med | `docs/execplans/ux-loop.md:63`; `docs/execplans/PLANS.md:642`-`:646` | — |
 | BL-006 | deferred-plan-phase | Billing acceptance criteria never checked: quota validation over two cycles, one enterprise customer onboarded, the Sentry upsell visibility, annual prices from `stripe-bootstrap.mjs` | relevant | low | `docs/execplans/PLANS.md:515`-`:518` | — |
 | BL-007 | test-gap | The `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) | relevant | low | `docs/execplans/PLANS.md:545` | — |
@@ -65,10 +75,26 @@ parked work is visible in one place.
 | BL-020 | decision-needed | Product screenshots are committed three times: `docs/screenshots/` (88 files, about 204 MB), `apps/docs/public/screenshots/` (the copy `scripts/sync-docs-screenshots.mjs` makes) and `apps/admin/public/screenshots/` (81 files, about 213 MB). Identical files share one git blob, but every checkout and worktree writes about 620 MB to disk. Keep one source and copy at build time, or keep the copies on purpose. Demo GIFs are referenced by a built name (`apps/docs/components/AdminDocHero.tsx:26`), so a grep for a file name does not prove it unused | relevant | low | `scripts/sync-docs-screenshots.mjs`; `scripts/sync-marketing-screenshots.mjs` | — |
 | BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
 | BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | relative-link scan of tracked `*.md`, 2026-10-16 | — |
-| BL-035 | decision-needed | Console design housekeep 2026-10-16 left 9 visible-change decisions: z-index model (`--z-*` unused, 59 literals), dark `fg-faint` brighter than `fg-muted`, dark `warn` = `brand` amber, three "merged" PR colours, `warn` vs `warning-foreground` naming, unused type ramp, Streamdown `border-border` never generated, editorial keycap shadow, four `SeverityBadge` copies. Also `packages/mcp/tsup.config.ts` `clean: true` race that deletes library `.d.ts` on a cold build | relevant | low | `docs/design/housekeep-design-state-2026-10-16.md` (Owner decisions; Follow-ups) | — |
+| BL-035 | decision-needed | Console design housekeep 2026-10-16 left 9 visible-change decisions: z-index model (`--z-*` unused, 59 literals), dark `fg-faint` brighter than `fg-muted`, dark `warn` = `brand` amber, three "merged" PR colours, `warn` vs `warning-foreground` naming, unused type ramp, Streamdown `border-border` never generated, editorial keycap shadow, four `SeverityBadge` copies. Also `packages/mcp/tsup.config.ts` `clean: true` race that deletes library `.d.ts` on a cold build (2026-10-16: the mcp tsup clean race is fixed in `9c938600`) | relevant | low | `docs/design/housekeep-design-state-2026-10-16.md` (Owner decisions; Follow-ups) | — |
 | BL-040 | decision-needed | Shipped-but-unexported code in published packages. `packages/plugin-jira/src/jira-webhook.ts` is a documented inbound Jira → Mushi bridge that `src/index.ts` never exports. `packages/react-native/src/instance.ts` (`MushiRN.getInstance()`) is announced as exported in the changelog, but nothing exports or registers it. Export each with a test, or delete it | relevant | med | `packages/plugin-jira/src/handler.ts:29`; `packages/react-native/CHANGELOG.md:435` | — |
 | BL-041 | tech-debt | Small dead-code leftovers that need a non-code decision. `apps/admin/src/content/dispatch-prerequisites.mdx`: the console has no MDX loader, so move it into `apps/docs` or delete it. `packages/agents/src/drift-agent.ts`: `_shared/drift-agent.ts` names it the canonical copy; delete it and update that comment on the next edge deploy. `examples/e2e-dogfood`: two comments say msw mocks GitHub, but nothing wires msw (its devDependency was removed) | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-042 | tech-debt | knip findings left for an owner or a refactor. 5 duplicate exports (aliases such as `bannerEnterSpring`/`chromeEnterSpring` and `PAGE_CONTENT_STACK`/`PAGE_STACK`) need their importers renamed. Production mode reports 157 exports and 21 types used only by tests, among them `heroSnapshotFromPageStats` and its helpers now that the hero store is gone: tag each `@internal`, delete it with its test, or give it a caller. `@modelcontextprotocol/core` in `@mushi-mushi/mcp` is imported by neither `src` nor `dist`, since `@modelcontextprotocol/server` depends on it itself, but it was added on purpose in #380 | relevant | low | `pnpm exec knip --production` | — |
+| BL-060 | decision-needed | Migration `20260828100000_sdk_upgrade_jobs_stuck_reaper.sql` is on master (#380) but was never applied to production: `sdk_upgrade_jobs_stuck_reaper()` and its 10-minute cron do not exist (checked 2026-10-16; 0 jobs stuck today, so applying changes no rows). Plan 017 left it to the SDK-upgrade owner. Apply it and stamp the ledger row, or delete the file | relevant | high | `packages/server/supabase/migrations/20260828100000_sdk_upgrade_jobs_stuck_reaper.sql`; `docs/execplans/plan-017-verification.md:368` | — |
+| BL-061 | decision-needed | Dispatch fix is offered on reports with no stack trace or code location (web vitals, native crashes); the review gate refused 6 of 8 such dispatches on 2026-10-16. Keep "refuse with a plain message" or gate Dispatch behind a code-location signal | relevant | med | `docs/audit-2026-10-16/ux-journeys.md` F1 | — |
+| BL-062 | decision-needed | The `api` edge function boots a fresh isolate for nearly every request (about 0.85 s floor on every admin route). Splitting a light admin-read function needs an ADR | relevant | med | `docs/audit-2026-10-16/ux-journeys.md` F2 | — |
+| BL-063 | test-gap | First-run onboarding was not walked in the 2026-10-16 journey audit (needs a fresh account) | relevant | low | `docs/audit-2026-10-16/ux-journeys.md` F4 | — |
+| BL-064 | test-gap | `examples/e2e-dogfood/tests/confirmation-coverage.spec.ts` calls `test.skip()` at runtime when an element is missing, so the spec can pass without asserting | relevant | med | `examples/e2e-dogfood/tests/confirmation-coverage.spec.ts:84`, `:108`, `:119`, `:142`, `:145`, `:164`, `:181`, `:198`, `:216`, `:222` | — |
+| BL-065 | test-gap | `packages/adapters/src/__tests__/firebase-analytics.test.ts:56` names a `firebase-analytics.signature.test.ts` that was never created | relevant | low | `packages/adapters/src/__tests__/firebase-analytics.test.ts:56` | — |
+| BL-066 | deferred-plan-phase | Plan 019 App Recipe Control Plane, Phases 2 to 4 (portfolio, connectors, change worker, batches, act); BL-003 covers Phase 1/1b only | relevant | low | `docs/execplans/app-recipe-control-plane.md:693`-`:744` | — |
+| BL-067 | deferred-plan-phase | Plan 021 Phase 5 is outlined, not built, and `@mushi-mushi/ux` is unpublished; the owner pricing decision for a Mushi-hosted judge is still open | relevant | low | `docs/execplans/PLANS.md:638`; `docs/execplans/ux-loop.md:178` | — |
+| BL-068 | unfinished-feature | `CodexAgent` is a stub that returns `success: false` behind `MUSHI_ENABLE_CODEX_AGENT` | relevant | low | `packages/agents/src/adapters/codex.ts`; `packages/agents/README.md:193` | — |
+| BL-069 | unfinished-feature | Keyless `/connect` demo env vars and the incident-loop recording slot are still open | relevant | low | `marketing/launch-week.md:40`-`:42`; `apps/docs/content/quickstart/incident-loop.mdx:14` (TODO loop-video) | — |
+| BL-070 | tech-debt | Deprecated aliases and shims kept for back-compat in admin and api: `ownedProjectIds` alias, layout/page-help/charts/ResponsiveTable shims, report metric viz and classification aliases | relevant | low | `packages/server/supabase/functions/api/shared.ts:191`; `_shared/project-access.ts:164`; `apps/admin/src/components/ui/layout.tsx:66`, `:415`; `ui/page-help.tsx:129`; `charts.tsx:316`; `ResponsiveTable.tsx:33`; `reports/reportMetricViz.ts:46`, `:60`; `report-detail/ReportClassification.tsx:175`; `lib/sdkCiSecrets.ts:128`; `fixes/types.ts:127` | — |
+| BL-071 | tech-debt | `@mushi-mushi/web` i18n types carry about 31 keys marked deprecated, unused since 1.30. Removing them from a published type needs a major or a deprecation window | relevant | low | `packages/web/src/i18n/types.ts:15`-`:243` | — |
+| BL-072 | tech-debt | Admin primitive consolidation: three next steps marked "not in this pass", plus the RN intent-step and design-token codegen deferrals | relevant | low | `docs/admin/PRIMITIVE-CONSOLIDATION.md:78`-`:82`; `docs/admin/SDK-UI-UNIFICATION-DECISIONS.md:33`; `docs/admin/UX-UNIFICATION-BURNDOWN.md:274` | — |
+| BL-073 | tech-debt | Dead-code categories not run: C6 duplication measured (jscpd 1.7%, 397 clones) but not ratcheted (needs a devDependency and a CI step, housekeep-gates); C7 orphan assets, C8 suppression debt and C9 schema not examined | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
+| BL-074 | decision-needed | Owner launch gates with no code work left: tester marketplace (26 items incl. KYB, Tremendous keys, OFAC and attorney review), Capacitor-to-RN cutover (12), marketplace and storefront submission checklists, VS Code Marketplace deferred 2026-09-21 | relevant | low | `docs/runbooks/tester-marketplace-launch.md`; `docs/migrations/capacitor-to-react-native.md:825`-`:838`; `docs/marketplace/cursor-submission-checklist.md`; `docs/marketing/STOREFRONTS.md:211`; `docs/marketing/GTM-DISTRIBUTION.md` | — |
+| BL-075 | needs-triage | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) in the shared table registry; unclear whether this repo owns it | relevant | low | `docs/kenji-table-registry.md:78`-`:83` | — |
 
 ---
 
