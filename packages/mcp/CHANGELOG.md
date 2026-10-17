@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.26.1
+
+### Patch Changes
+
+- f220653: Internal cleanup with no change to what these packages export or do. Helpers that only the package's own tests called were removed together with those tests (`withAbort`, `formatError` and `formatUpgradeHint` in the CLI, `shouldWrap` in the MCP server), and helpers exported only for tests now carry an `@internal` doc tag. In React Native, one module-internal constant is now exported on its declaration instead of from a trailing export list. None of these is reachable from a package entry point.
+- Updated dependencies [f220653]
+  - @mushi-mushi/core@1.33.1
+
 ## 0.26.0
 
 ### Minor Changes
