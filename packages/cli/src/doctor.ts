@@ -15,6 +15,7 @@ import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanit
 const SIGN_IN_HINT =
   'Run `npx mushi-mushi` in your app folder — browser sign-in saves the API key, project and endpoint.';
 
+/** @internal Exported for tests only. */
 export interface DoctorCheck {
   name: string;
   ok: boolean;
@@ -95,6 +96,7 @@ export interface DoctorOptions {
 
 // ── Check 1: CLI config sanity ───────────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
   return [
     {
@@ -124,6 +126,7 @@ export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
 
 // ── Check 2: Endpoint reachability ───────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export async function checkEndpointReachability(
   endpoint: string,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
@@ -158,6 +161,7 @@ export async function checkEndpointReachability(
  *    so a badly skewed local clock can expire every code instantly.
  * 3. Saved CLI credentials validity via /v1/sync/whoami (warn-only when no
  *    credentials are saved yet — that's normal before first sign-in).
+ * @internal Exported for tests only.
  */
 export async function checkCliAuthPath(
   config: DoctorCliConfig,
@@ -294,6 +298,7 @@ async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
 
 // ── Check 4: Server preflight ────────────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export async function checkServerPreflight(
   config: DoctorCliConfig,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
@@ -698,6 +703,7 @@ async function scanDirForPattern(
   return walk(resolve(dir), 0);
 }
 
+/** @internal Exported for tests only. */
 export async function checkHashRouterCapture(cwd: string): Promise<DoctorCheck[]> {
   const hashFile = await scanDirForPattern(cwd, HASH_ROUTER_PATTERNS);
   if (!hashFile) return []; // no hash routing detected — no advisory needed
@@ -883,6 +889,7 @@ function assessMushiEntry(
   return { usable: false, stdio: true, detail: `${label}: MUSHI_API_KEY is neither a mushi_ key nor a placeholder` };
 }
 
+/** @internal Exported for tests only. */
 export async function checkMcpConfig(
   config: DoctorCliConfig,
   cwd: string,
@@ -1241,6 +1248,7 @@ async function checkVersionDrift(
  * stranded reports, codebase-index health, observability transports) into
  * the CLI report. Requires an mcp:read-scoped key; skipped quietly for
  * ingest-only keys.
+ * @internal Exported for tests only.
  */
 export async function checkPipelineDoctor(
   config: DoctorCliConfig,

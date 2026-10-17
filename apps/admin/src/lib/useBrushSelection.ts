@@ -74,6 +74,7 @@ export function brushIndexFromClient(
  * Normalise a (start, end) pair returned by pointerUp into a low-to-high
  * range. Returns `null` when the user clicked without moving — this is
  * the "clear selection" signal rather than a valid 1-index range.
+ * @internal Exported for tests only.
  */
 export function normaliseBrushRange(
   a: number,

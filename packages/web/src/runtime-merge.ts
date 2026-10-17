@@ -9,6 +9,7 @@ import type { MushiConfig, MushiRuntimeSdkConfig, MushiWidgetConfig } from '@mus
 /**
  * Merge the console's runtime capture flags over the host's, key by key.
  * Only keys the server explicitly sent (non-undefined) are applied.
+ * @internal Exported for tests only.
  */
 export function mergeRuntimeCapture(
   host: MushiConfig['capture'],

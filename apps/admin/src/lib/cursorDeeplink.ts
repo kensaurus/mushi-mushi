@@ -15,8 +15,7 @@
  * - @mushi-mushi/mcp/branding
  *
  * USAGE:
- *   import { buildCursorDeeplink, buildVsCodeDeeplink } from '@/lib/cursorDeeplink'
- *   // Works exactly as before — all signatures preserved.
+ *   import { buildCursorOrgDeeplink, buildVsCodeOrgDeeplink } from '@/lib/cursorDeeplink'
  */
 
 import {
@@ -130,26 +129,4 @@ function toVsCodeInstallConfig(config: McpStdioConfig | McpHttpConfig): McpHttpC
 
 function encodeVsCodeInstallDeeplink(name: string, config: McpStdioConfig | McpHttpConfig): string {
   return `vscode:mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(JSON.stringify(toVsCodeInstallConfig(config)))}`
-}
-
-/** One-click Cursor MCP install URL (stdio transport — recommended). */
-export function buildCursorDeeplink(
-  projectId: string,
-  projectName: string,
-  apiKey: string,
-  apiEndpoint: string,
-): string {
-  const name = projectServerName(projectId, projectName)
-  return encodeCursorInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
-}
-
-/** VS Code deeplink — stdio transport. */
-export function buildVsCodeDeeplink(
-  projectId: string,
-  projectName: string,
-  apiKey: string,
-  apiEndpoint: string,
-): string {
-  const name = projectServerName(projectId, projectName)
-  return encodeVsCodeInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
 }

@@ -30,7 +30,10 @@ function parseCore(version: string): [number, number, number] {
   ]
 }
 
-/** Negative = a older than b, 0 = equal, positive = a newer than b. */
+/**
+ * Negative = a older than b, 0 = equal, positive = a newer than b.
+ * @internal Exported for tests only.
+ */
 export function compareSemver(a: string, b: string): number {
   const [aa, ab, ac] = parseCore(a)
   const [ba, bb, bc] = parseCore(b)

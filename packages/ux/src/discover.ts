@@ -161,6 +161,7 @@ async function openedKind(page: Page, trigger: Trigger): Promise<SurfaceKind | n
  * Pure: a screen's name. The page title, unless another screen already has
  * that title (an SPA often keeps one <title>), then a name from the path:
  * "/" → "Home", "/account/settings/" → "Account / Settings".
+ * @internal Exported for tests only.
  */
 export function pageLabel(title: string, path: string, others: ReadonlyArray<{ label: string }>): string {
   const t = title.trim()

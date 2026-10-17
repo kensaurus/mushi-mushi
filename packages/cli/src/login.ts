@@ -30,6 +30,7 @@ export type RunLoginOptions = {
   suppressPostLoginBanner?: boolean
 }
 
+/** @internal Exported for tests only. */
 export function getPostLoginBannerMessage(opts: RunLoginOptions): string | null {
   if (opts.suppressPostLoginBanner) return null
   if (opts.upgradeScope) {
@@ -43,12 +44,14 @@ function printPostLoginBanner(opts: RunLoginOptions): void {
   if (message) console.log(message)
 }
 
+/** @internal Exported for tests only. */
 export type PollUntilApprovedResult =
   | { status: 'approved'; cliToken: string }
   | { status: 'denied' }
   | { status: 'timeout' }
   | { status: 'error'; message?: string }
 
+/** @internal Exported for tests only. */
 export interface PollUntilApprovedDeps {
   poll: typeof pollDeviceToken
   sleep?: (ms: number) => Promise<void>
@@ -63,6 +66,7 @@ const MAX_CONSECUTIVE_ERRORS = 5
  * tested without a TTY or process.exit. Honors the server's `slow_down`
  * back-off (previously ignored) and treats up to MAX_CONSECUTIVE_ERRORS
  * transient failures as retryable.
+ * @internal Exported for tests only.
  */
 export async function pollUntilApproved(
   endpoint: string,
@@ -108,6 +112,7 @@ export async function pollUntilApproved(
   return { status: 'timeout' }
 }
 
+/** @internal Exported for tests only. */
 export type ProjectChoice =
   | { kind: 'picked'; id: string; name: string }
   | { kind: 'create'; name: string }
@@ -118,6 +123,7 @@ export type ProjectChoice =
  * (numeric pick, out-of-range → create-new, empty name) is unit-testable.
  * Out-of-range or non-numeric input intentionally falls through to the
  * create-a-new-project prompt, matching the original inline behavior.
+ * @internal Exported for tests only.
  */
 export async function resolveProjectChoice(
   projectsList: Array<{ id: string; name: string }>,

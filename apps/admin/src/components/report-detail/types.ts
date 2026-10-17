@@ -10,6 +10,7 @@ interface ReportEnvironment {
 
 /** Structured failure reason written by `categorizeFailure()` in fix-worker.
  *  Matches the CHECK constraint in migration 20260510020000. */
+/** @internal Exported for tests only. */
 export type FixAttemptFailureCategory =
   | 'sandbox_timeout'
   | 'sandbox_error'

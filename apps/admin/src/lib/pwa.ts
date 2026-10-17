@@ -50,7 +50,10 @@ export type PushSupport =
       reason: 'insecure' | 'no_service_worker' | 'no_push' | 'no_notification' | 'ios_not_standalone'
     }
 
-/** Why push cannot work on this device, or `{ supported: true }`. */
+/**
+ * Why push cannot work on this device, or `{ supported: true }`.
+ * @internal Exported for tests only.
+ */
 export function detectPushSupport(env: {
   isSecureContext: boolean
   hasServiceWorker: boolean
@@ -91,7 +94,10 @@ export const PUSH_UNSUPPORTED_COPY: Record<Exclude<PushSupport, { supported: tru
 
 // ── keys ────────────────────────────────────────────────────────────────────
 
-/** VAPID public key (base64url) → the BufferSource `pushManager.subscribe` expects. */
+/**
+ * VAPID public key (base64url) → the BufferSource `pushManager.subscribe` expects.
+ * @internal Exported for tests only.
+ */
 export function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
   const normalised = base64Url.trim().replace(/=+$/, '').replace(/-/g, '+').replace(/_/g, '/')
   const padded = normalised + '='.repeat((4 - (normalised.length % 4)) % 4)

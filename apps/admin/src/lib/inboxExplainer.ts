@@ -58,7 +58,3 @@ export const INBOX_PDCA_STAGES: InboxStageDefinition[] = [
 
 export const INBOX_EXPLAINER_SUMMARY =
   'The Inbox is your cross-loop to-do list — it tells you what to do next across all five PDCA stages. It is distinct from the Reports page (which lists end-user bugs); the Inbox aggregates actions across triage, fixes, integrations, and ops. Each open card maps to one stage — work top to bottom, or jump straight to the highest-severity item.'
-
-export function inboxStageDefinition(stage: string): InboxStageDefinition | undefined {
-  return INBOX_PDCA_STAGES.find((s) => s.id === stage)
-}

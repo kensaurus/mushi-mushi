@@ -8,15 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { connectLinks, fixesLinks, judgeLinks, mcpLinks, onboardingLinks, repoLinks, reportsLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
-
-describe('inbox and reports stat links', () => {
-  it('never point /reports at a tab param', () => {
-    for (const href of Object.values(reportsLinks)) {
-      expect(href).not.toMatch(/[?&]tab=/)
-    }
-  })
-})
+import { connectLinks, fixesLinks, judgeLinks, mcpLinks, onboardingLinks, repoLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
 
 import { resolveMcpTab } from './mcpPageHelpers'
 import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'

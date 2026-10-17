@@ -5,8 +5,6 @@
 import { MUSHI_CANONICAL_URLS, MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
-export { MUSHI_TAGLINE_V2 }
-
 /** EditorialHero — category eyebrow + lead (title stays JSX in index.mdx for <em>). */
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,

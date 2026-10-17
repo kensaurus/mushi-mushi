@@ -113,6 +113,7 @@ const codex: AgentAdapter = {
  * The Cursor CLI takes a model's settings in brackets
  * (`claude-opus-4-8[context=1m,effort=high]`); the UI and the Cursor API use
  * `id?context=1m&effort=high`. A bare id passes through.
+ * @internal Exported for tests only.
  */
 export function cursorCliModel(spec: string): string {
   const [id, query] = spec.split('?')

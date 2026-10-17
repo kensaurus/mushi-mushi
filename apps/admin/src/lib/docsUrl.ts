@@ -14,7 +14,10 @@ function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
-/** Docs origin + path prefix, without a trailing slash. */
+/**
+ * Docs origin + path prefix, without a trailing slash.
+ * @internal Exported for tests only.
+ */
 export function getDocsBase(): string {
   const fromEnv = String(import.meta.env.VITE_DOCS_URL ?? '').trim()
   if (fromEnv) return stripTrailingSlash(fromEnv)

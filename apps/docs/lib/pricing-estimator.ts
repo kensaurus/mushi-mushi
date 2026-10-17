@@ -82,11 +82,3 @@ export function getNextTierId(tierId: string): string | null {
 export function getTierById(tierId: string): PricingTier {
   return TIERS.find((t) => t.id === tierId) ?? TIERS[1]
 }
-
-/** Diagnoses count at which a paid tier hits its spend cap (for docs copy). */
-export function diagnosesAtSpendCap(tier: PricingTier): number | null {
-  if (tier.overageUsd === null || tier.capUsd === null) return null
-  const maxOverage = tier.capUsd - tier.baseUsd
-  if (maxOverage <= 0) return tier.included
-  return tier.included + Math.floor(maxOverage / tier.overageUsd)
-}

@@ -9,7 +9,10 @@
 
 /** Hard cap from the plan (C1 "PWA"): recordings stop at 120 s. */
 export const MAX_RECORDING_MS = 120_000
-/** Server-side ceiling (voice-intake bucket file_size_limit is 25 MiB). */
+/**
+ * Server-side ceiling (voice-intake bucket file_size_limit is 25 MiB).
+ * @internal Exported for tests only.
+ */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 /** Probe order: best-supported first. Safari only speaks audio/mp4. */
@@ -33,6 +36,7 @@ export function pickRecorderMimeType(isTypeSupported: (mime: string) => boolean)
   return null
 }
 
+/** @internal Exported for tests only. */
 export function extensionForMime(mime: string | null | undefined): string {
   const base = (mime ?? '').split(';')[0].trim().toLowerCase()
   switch (base) {

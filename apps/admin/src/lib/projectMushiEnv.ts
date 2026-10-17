@@ -143,40 +143,6 @@ const BUNDLER_PREFIX: Record<MushiBundlerKind, MushiEnvPrefixInfo> = {
   none: { prefix: '', buildTimeInlined: false, bundlerLabel: 'No build (loader script)' },
 }
 
-/** Map a detected framework name (from frameworkDetect) to its bundler kind. */
-export function bundlerKindForFramework(framework: string | null | undefined): MushiBundlerKind {
-  switch (framework) {
-    case 'vue':
-    case 'svelte':
-      // Vue/Svelte SPAs are overwhelmingly Vite-powered in 2026. Nuxt/Next
-      // metas are handled by their own detection branch upstream.
-      return 'vite'
-    case 'react':
-      // React is ambiguous (Vite vs Next vs CRA). The detector tags Next.js
-      // separately via reason text; callers that know it's Next pass 'next'.
-      return 'vite'
-    case 'next':
-      // A caller that has resolved the repo to Next.js (e.g. via the detector's
-      // `reason` text or a direct `hasDep(pkg,'next')` check) passes 'next' so
-      // the SDK env vars get the build-time-inlined `NEXT_PUBLIC_` prefix.
-      // Without this case the value fell through to 'none' → unprefixed
-      // `MUSHI_PROJECT_ID`, which a Next bundle never inlines, silently
-      // disabling the SDK.
-      return 'next'
-    case 'nuxt':
-      // Symmetric to 'next': Vue is ambiguous (Vite vs Nuxt); a caller that
-      // knows it's Nuxt passes 'nuxt' for the `NUXT_PUBLIC_` prefix.
-      return 'nuxt'
-    case 'react-native':
-    case 'expo':
-      return 'expo'
-    case 'vanilla':
-      return 'none'
-    default:
-      return 'none'
-  }
-}
-
 /**
  * Resolve env-var naming from a detected bundler kind. Prefer this over
  * `mushiEnvVarsForProjectSlug` whenever a repo `package.json` has been

@@ -17,7 +17,10 @@
 
 import type { FixAgent, FixContext, FixResult } from '../types.js'
 
-/** DB-serialisable artifact shape stored in fix_attempts.cursor_artifacts. */
+/**
+ * DB-serialisable artifact shape stored in fix_attempts.cursor_artifacts.
+ * @internal Exported for tests only.
+ */
 export interface StoredArtifact {
   kind: 'screenshot' | 'video' | 'log' | 'file'
   path: string
@@ -296,7 +299,10 @@ const VIDEO_MIME_BY_EXT = {
   mov: 'video/quicktime',
 } as const
 
-/** Map a filesystem path to the DB-serialisable artifact shape with IANA MIME types. */
+/**
+ * Map a filesystem path to the DB-serialisable artifact shape with IANA MIME types.
+ * @internal Exported for tests only.
+ */
 export function classifyArtifactPath(filePath: string): StoredArtifact {
   const lower = filePath.toLowerCase()
   const ext = lower.split('.').pop() ?? ''

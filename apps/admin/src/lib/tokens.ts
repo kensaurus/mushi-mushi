@@ -247,7 +247,10 @@ export function semanticBannerTone(tone: SemanticBannerTone): string {
   return SEMANTIC_BANNER_TONE[tone]
 }
 
-/** WCAG-safe operator beta strip — bg-lime-muted + text-lime-foreground (not text-lime-fg). */
+/**
+ * WCAG-safe operator beta strip — bg-lime-muted + text-lime-foreground (not text-lime-fg).
+ * @internal Exported for tests only.
+ */
 export const BETA_BANNER_TONE =
   'border-lime/30 bg-lime-muted text-lime-foreground'
 

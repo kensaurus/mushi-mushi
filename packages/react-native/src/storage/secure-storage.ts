@@ -3,7 +3,8 @@ const QUEUE_CRYPTO_KEY = '@mushi:queue_aes_key'
 const LEGACY_QUEUE_KEY = '@mushi:offline_queue'
 export const ENCRYPTED_QUEUE_KEY = '@mushi:offline_queue_enc'
 
-const ENCRYPTED_PREFIX = 'mushi_enc_v1:'
+/** @internal Exported for tests only. */
+export const ENCRYPTED_PREFIX = 'mushi_enc_v1:'
 
 type AsyncStorageLike = {
   getItem: (key: string) => Promise<string | null>
@@ -159,4 +160,4 @@ export async function saveReporterToken(token: string, secureStorage: boolean): 
   if (storage) await storage.setItem(REPORTER_TOKEN_KEY, token)
 }
 
-export { LEGACY_QUEUE_KEY, ENCRYPTED_PREFIX }
+export { LEGACY_QUEUE_KEY }

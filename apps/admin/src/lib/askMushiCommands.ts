@@ -137,12 +137,6 @@ export function detectComposerToken(text: string, caret: number): ComposerToken 
   return null
 }
 
-export function findSlashCommand(token: string): SlashCommand | undefined {
-  const norm = token.trim().toLowerCase()
-  if (!norm.startsWith('/')) return undefined
-  return SLASH_COMMANDS.find((c) => c.command === norm)
-}
-
 /**
  * Filter the registry by a partial token (e.g. `/tld` → matches `/tldr`).
  * Aliases match too — e.g. `summarise` matches `/tldr`. Used by the cmdk

@@ -42,7 +42,3 @@ export function isCodeHealthGuideExpanded(topPriority: string | undefined): bool
     topPriority === 'warnings'
   )
 }
-
-export function codeHealthMetricDefinition(id: string): CodeHealthMetricDefinition | undefined {
-  return CODE_HEALTH_METRIC_DEFINITIONS.find((m) => m.id === id)
-}

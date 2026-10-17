@@ -190,7 +190,10 @@ export function enqueue(event: MushiActivityEvent): void {
   pendingEvents.push({ ...event, queuedAt: Date.now() });
 }
 
-/** Force-flush the pending event queue. */
+/**
+ * Force-flush the pending event queue.
+ * @internal Exported for tests only.
+ */
 export async function flush(ctx: RewardsContext): Promise<void> {
   if (!optedIn || !currentUserId || pendingEvents.length === 0) return;
 

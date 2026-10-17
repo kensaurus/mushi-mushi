@@ -61,7 +61,10 @@ export interface UpdateCenterView {
   ci: 'passing' | 'failing' | 'running' | 'not_checked'
 }
 
-/** Strip a leading `v` so "v1.31.1" and "1.31.1" compare equal. */
+/**
+ * Strip a leading `v` so "v1.31.1" and "1.31.1" compare equal.
+ * @internal Exported for tests only.
+ */
 export function normalizeVersion(v: string | null | undefined): string | null {
   if (!v) return null
   const t = v.trim().replace(/^v/i, '')

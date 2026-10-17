@@ -22,6 +22,7 @@ export type FeedbackSignal =
   | 'noise'
   | 'not_fixed'
 
+/** @internal Exported for tests only. */
 export interface ReportCommentRow {
   id: number
   report_id: string

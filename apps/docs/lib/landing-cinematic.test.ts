@@ -18,8 +18,8 @@ import {
   LANDING_QUICKSTART_PLATFORMS,
   LANDING_COMPARISON_ROWS,
   LANDING_TRUST_LINKS,
-  MUSHI_TAGLINE_V2,
 } from './landing-copy'
+import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

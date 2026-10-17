@@ -86,7 +86,3 @@ export const EXPLORE_ATLAS_TABS: ExploreTabDefinition[] = [
 
 export const EXPLORE_EXPLAINER_SUMMARY =
   'Explore indexes your connected GitHub repo so Ask, Search, and Graph answers are grounded in real source — not guesses. Enable indexing in Settings, wait ~90s, then try Ask or Search.'
-
-export function exploreTabDefinition(tab: string): ExploreTabDefinition | undefined {
-  return EXPLORE_ATLAS_TABS.find((t) => t.id === tab)
-}

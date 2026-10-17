@@ -93,7 +93,10 @@ import {
   sha256Hex,
 } from '@mushi-mushi/core';
 
-/** Resolve `reports.app_version` from SDK config and captured environment. */
+/**
+ * Resolve `reports.app_version` from SDK config and captured environment.
+ * @internal Exported for tests only.
+ */
 export function resolveReportAppVersion(
   config: MushiConfig,
   environment?: { buildId?: string },

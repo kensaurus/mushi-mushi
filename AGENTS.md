@@ -608,9 +608,9 @@ console presents these as copyable code blocks so developers are never dead-ende
 |---------|----------|-------------|
 | `SdkNativeConnectivityCard` | `apps/admin/src/components/SdkNativeConnectivityCard.tsx` | Fetches `/sdk-diagnostics`, renders status badge, one-click sync CTA, forbidden explanation, guided fallback commands |
 | `ConnectPage` section "Native app CI secrets" | `apps/admin/src/pages/ConnectPage.tsx` | Wires the card into the Connect hub beside SDK install |
-| `sdkCiSecrets.ts` | `apps/admin/src/lib/sdkCiSecrets.ts` | Pure helpers: required var names per project slug, `buildGuidedFallbackCommands`, `sdkCiStatusMeta` |
+| `sdkCiSecrets.ts` | `apps/admin/src/lib/sdkCiSecrets.ts` | Pure helpers: diagnostic response types and `sdkCiStatusMeta` |
 | `useCiSecretSync` | `apps/admin/src/lib/useCiSecretSync.ts` | React hook for the POST → sync flow (synchronous, no SSE needed) |
-| `sdkClientPlatform.ts` | `apps/admin/src/lib/sdkClientPlatform.ts` | `sdkOriginKind` + `isNativeOrigin` classify `capacitor://`, `okhttp`, `CFNetwork` signals |
+| `sdkClientPlatform.ts` | `apps/admin/src/lib/sdkClientPlatform.ts` | `sdkOriginKind` + `sdkPlatformHintFromUserAgent` classify `capacitor://`, `okhttp`, `CFNetwork` signals |
 
 ### Build-time guard (glot.it reference implementation)
 
