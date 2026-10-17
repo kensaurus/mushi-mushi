@@ -90,7 +90,10 @@ export function withAbort(init: RequestInit = {}): RequestInit {
   return init
 }
 
-/** Test helper. Reset module state between cases. */
+/**
+ * Test helper. Reset module state between cases.
+ * @internal Exported for tests only.
+ */
 export function __resetSignalHandlersForTesting(): void {
   installed = false
   activeController = null

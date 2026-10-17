@@ -197,6 +197,7 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 /** Backoff before a transient device-auth retry. Set to 0 in unit tests. */
 let deviceAuthRetryDelayMs = 1_000;
 
+/** @internal Exported for tests only. */
 export function setDeviceAuthRetryDelayMs(ms: number): void {
   deviceAuthRetryDelayMs = ms;
 }

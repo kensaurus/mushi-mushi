@@ -129,7 +129,10 @@ export function isPageUnloading(): boolean {
   return pageUnloading;
 }
 
-/** Test-only reset. */
+/**
+ * Test-only reset.
+ * @internal Exported for tests only.
+ */
 export function resetPageUnloadingForTests(): void {
   pageUnloading = false;
 }
