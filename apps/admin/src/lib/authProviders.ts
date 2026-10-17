@@ -42,6 +42,7 @@ interface GoTrueSettings {
  * page can offer. Unknown / missing fields default to `false` — fail closed,
  * because a hidden working button is strictly better than a visible one that
  * dumps the user on a raw JSON error page.
+ * @internal Exported for tests only.
  */
 export function parseAuthProviderAvailability(raw: unknown): AuthProviderAvailability {
   const settings = (raw ?? {}) as GoTrueSettings
@@ -53,6 +54,7 @@ export function parseAuthProviderAvailability(raw: unknown): AuthProviderAvailab
   }
 }
 
+/** @internal Exported for tests only. */
 export const NO_PROVIDERS: AuthProviderAvailability = {
   google: false,
   github: false,
@@ -64,6 +66,7 @@ export const NO_PROVIDERS: AuthProviderAvailability = {
 // next mount can retry rather than being pinned to the fail-closed default.
 let cached: Promise<AuthProviderAvailability> | null = null
 
+/** @internal Exported for tests only. */
 export function fetchEnabledAuthProviders(): Promise<AuthProviderAvailability> {
   if (cached) return cached
   const url = `${RESOLVED_SUPABASE_URL}/auth/v1/settings`

@@ -141,6 +141,7 @@ export async function settle(page: Page, quietMs = 400, maxMs = 5000): Promise<v
  * progress bar, or a spinning element covering most of the screen. An app
  * that boots behind a splash spinner was screenshotted as an empty page with
  * a spinner and "measured" as fine (glot.it /practice, 2026-10-06).
+ * @internal Exported for tests only.
  */
 export async function waitForContent(page: Page, maxMs = 20_000): Promise<void> {
   await page

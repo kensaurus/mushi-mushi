@@ -21,6 +21,7 @@ interface ModelParam {
   values: Array<{ value: string; label: string }>
 }
 
+/** @internal Exported for tests only. */
 export interface ModelOption {
   id: string
   label: string
@@ -45,6 +46,7 @@ const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/
  * `agent models` prints one model per line, usually `id - Display name`, with
  * a heading and sometimes a marker on the current one. Keep lines that start
  * with an id; drop prose.
+ * @internal Exported for tests only.
  */
 export function parseCursorCliModels(text: string): ModelOption[] {
   const out: ModelOption[] = []
@@ -72,7 +74,10 @@ interface CursorApiModel {
   parameters?: Array<{ id: string; displayName?: string; values: Array<{ value: string; displayName?: string }> }>
 }
 
-/** Cursor GET /v1/models items → options with their params. */
+/**
+ * Cursor GET /v1/models items → options with their params.
+ * @internal Exported for tests only.
+ */
 export function fromCursorApi(items: CursorApiModel[]): ModelOption[] {
   return items
     .filter((m) => typeof m.id === 'string' && ID_RE.test(m.id))

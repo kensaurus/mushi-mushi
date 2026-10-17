@@ -11,6 +11,7 @@
 
 export type NudgePhase = 'alpha' | 'beta' | 'ga'
 
+/** @internal Exported for tests only. */
 export interface NudgePreset {
   /** Maximum proactive prompts per session before we shut up. */
   maxProactivePerSession: number
@@ -85,6 +86,7 @@ const PRESETS: Record<NudgePhase, NudgePreset> = {
   },
 }
 
+/** @internal Exported for tests only. */
 export function getPreset(phase: NudgePhase): NudgePreset {
   return PRESETS[phase]
 }

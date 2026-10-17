@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildCursorDeeplink, buildVsCodeDeeplink } from './cursorDeeplink'
+import { buildCursorOrgDeeplink, buildVsCodeOrgDeeplink } from './cursorDeeplink'
 
 describe('cursorDeeplink', () => {
-  const projectId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-  const projectName = 'My Project'
+  const accountLabel = 'My Account'
   const apiKey = 'mcp-test-key'
   const apiEndpoint = 'https://example.supabase.co/functions/v1/api'
 
-  it('buildCursorDeeplink base64-encodes config under the Cursor deeplink authority', () => {
-    const url = buildCursorDeeplink(projectId, projectName, apiKey, apiEndpoint)
+  it('buildCursorOrgDeeplink base64-encodes config under the Cursor deeplink authority', () => {
+    const url = buildCursorOrgDeeplink(accountLabel, apiKey, apiEndpoint)
     expect(url).toMatch(/^cursor:\/\/anysphere\.cursor-deeplink\/mcp\/install\?/)
 
     const params = new URLSearchParams(url.split('?')[1]!)
@@ -17,8 +16,8 @@ describe('cursorDeeplink', () => {
     expect(config.env.MUSHI_API_KEY).toBe(apiKey)
   })
 
-  it('buildVsCodeDeeplink uses vscode:mcp/install with URL-encoded JSON config', () => {
-    const url = buildVsCodeDeeplink(projectId, projectName, apiKey, apiEndpoint)
+  it('buildVsCodeOrgDeeplink uses vscode:mcp/install with URL-encoded JSON config', () => {
+    const url = buildVsCodeOrgDeeplink(accountLabel, apiKey, apiEndpoint)
     expect(url.startsWith('vscode:mcp/install?')).toBe(true)
     expect(url).not.toContain('anysphere.cursor-deeplink')
     expect(url).not.toMatch(/config=[A-Za-z0-9+/=]+/) // not raw base64 in query

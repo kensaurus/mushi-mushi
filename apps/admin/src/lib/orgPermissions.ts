@@ -22,10 +22,6 @@ export function offerProjectCreate(role: OrgRole | string | null): boolean {
   return role === null || canCreateProject(role)
 }
 
-export function canDeleteProject(role: OrgRole | string | null | undefined): boolean {
-  return canManageOrg(role)
-}
-
 export function viewerRoleHint(role: OrgRole | string | null | undefined): string | null {
   if (role === 'viewer') return 'You are a viewer in this team — ask an owner or admin to make changes.'
   if (role === 'member') return 'Some actions require owner or admin access in this team.'

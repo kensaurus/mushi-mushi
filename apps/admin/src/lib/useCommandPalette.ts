@@ -33,6 +33,7 @@ function getSnapshot(): boolean {
  * Imperative setters live on the module so event handlers outside React
  * (keyboard listener, etc.) can toggle the palette without going through
  * a hook. Components read via {@link useCommandPalette}.
+ * @internal Exported for tests only.
  */
 export const commandPalette = {
   open() {

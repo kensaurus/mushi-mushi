@@ -51,7 +51,7 @@ const METRICS = [
     id: 'ts-suppress',
     label: '@ts-ignore + @ts-expect-error',
     pattern: /@ts-(ignore|expect-error)\b/g,
-    max: 1,
+    max: 0,
   },
   {
     id: 'eslint-disable',

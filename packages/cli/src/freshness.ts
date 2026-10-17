@@ -63,6 +63,7 @@ export async function checkFreshness(
  * Compare two semver strings. Returns true when `latest` is strictly newer
  * than `current` on the major.minor.patch axes AND is not a pre-release
  * (we don't want to nag stable users to upgrade to alpha/beta/rc tags).
+ * @internal Exported for tests only.
  */
 export function isNewerStableVersion(latest: string, current: string): boolean {
   const latestCore = stripPreRelease(latest)

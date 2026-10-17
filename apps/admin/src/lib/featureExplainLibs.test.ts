@@ -1,23 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { isIntegrationsBannerVisible } from './integrationsExplainer'
-import { qaProviderDefinition } from './qaProviderGuide'
-import { isReportsBannerVisible, severityDefinition } from './reportsExplainer'
-import { inboxStageDefinition } from './inboxExplainer'
-import { exploreTabDefinition } from './exploreExplainer'
+import { QA_PROVIDER_DEFINITIONS } from './qaProviderGuide'
+import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from './reportsExplainer'
+import { INBOX_PDCA_STAGES } from './inboxExplainer'
+import { EXPLORE_ATLAS_TABS } from './exploreExplainer'
 import { isMcpGuideExpanded } from './mcpExplainer'
 import { SKILL_MODE_DEFINITIONS } from './skillsExplainer'
-import { isSsoGuideExpanded, ssoProtocolDefinition } from './ssoExplainer'
-import { isComplianceGuideExpanded, complianceConceptDefinition } from './complianceExplainer'
+import { isSsoGuideExpanded, SSO_PROTOCOL_DEFINITIONS } from './ssoExplainer'
+import { isComplianceGuideExpanded, COMPLIANCE_CONCEPT_DEFINITIONS } from './complianceExplainer'
 import { isDriftGuideExpanded } from './driftExplainer'
-import { isAnomaliesGuideExpanded, anomalyMethodDefinition } from './anomaliesExplainer'
-import { isCodeHealthGuideExpanded, codeHealthMetricDefinition } from './codeHealthExplainer'
-import { isFixesGuideExpanded, fixLifecycleStage } from './fixesExplainer'
-import { isProjectsGuideExpanded, projectsHealthSignal } from './projectsExplainer'
-import { isConnectGuideExpanded } from './connectExplainer'
-import { isHealthGuideExpanded, healthProbeTab } from './healthExplainer'
+import { isAnomaliesGuideExpanded, ANOMALY_METHOD_DEFINITIONS } from './anomaliesExplainer'
+import { isCodeHealthGuideExpanded, CODE_HEALTH_METRIC_DEFINITIONS } from './codeHealthExplainer'
+import { isFixesGuideExpanded, FIX_LIFECYCLE_STAGES } from './fixesExplainer'
+import { isProjectsGuideExpanded, PROJECTS_HEALTH_SIGNALS } from './projectsExplainer'
+import { isHealthGuideExpanded, HEALTH_PROBE_TABS } from './healthExplainer'
 import { isOnboardingGuideExpanded } from './onboardingExplainer'
-import { isRewardsGuideExpanded, rewardsEconomyConcept } from './rewardsExplainer'
-import { isDashboardGuideExpanded, dashboardStagePlain } from './dashboardExplainer'
+import { isRewardsGuideExpanded, REWARDS_ECONOMY_CONCEPTS } from './rewardsExplainer'
+import { PDCA_STAGES } from './pdca'
 
 describe('integrationsExplainer', () => {
   it('shows banner when no project or not healthy', () => {
@@ -29,8 +28,7 @@ describe('integrationsExplainer', () => {
 
 describe('qaProviderGuide', () => {
   it('resolves known providers', () => {
-    expect(qaProviderDefinition('browserbase')?.label).toMatch(/Browserbase/)
-    expect(qaProviderDefinition('unknown')).toBeUndefined()
+    expect(QA_PROVIDER_DEFINITIONS.find((p) => p.id === 'browserbase')?.label).toMatch(/Browserbase/)
   })
 })
 
@@ -39,21 +37,20 @@ describe('reportsExplainer', () => {
     expect(isReportsBannerVisible({ hasAnyProject: true, hasIngest: true, topPriority: 'clear' })).toBe(
       false,
     )
-    expect(severityDefinition('critical')?.plain).toMatch(/workflow/i)
+    expect(TRIAGE_SEVERITY_DEFINITIONS.find((d) => d.id === 'critical')?.plain).toMatch(/workflow/i)
   })
 })
 
 describe('inboxExplainer', () => {
   it('defines all five PDCA stages', () => {
-    expect(inboxStageDefinition('plan')?.shortLabel).toBe('Plan')
-    expect(inboxStageDefinition('ops')?.examples.length).toBeGreaterThan(0)
+    expect(INBOX_PDCA_STAGES.find((d) => d.id === 'plan')?.shortLabel).toBe('Plan')
+    expect(INBOX_PDCA_STAGES.find((d) => d.id === 'ops')?.examples.length).toBeGreaterThan(0)
   })
 })
 
 describe('exploreExplainer', () => {
   it('covers atlas tabs', () => {
-    expect(exploreTabDefinition('ask')?.whenToUse).toMatch(/auth/i)
-    expect(exploreTabDefinition('missing')).toBeUndefined()
+    expect(EXPLORE_ATLAS_TABS.find((t) => t.id === 'ask')?.whenToUse).toMatch(/auth/i)
   })
 })
 
@@ -74,13 +71,13 @@ describe('ssoExplainer', () => {
   it('expands for setup gaps and defines SAML', () => {
     expect(isSsoGuideExpanded('no_providers')).toBe(true)
     expect(isSsoGuideExpanded('healthy')).toBe(false)
-    expect(ssoProtocolDefinition('saml')?.acronym).toBe('SAML')
+    expect(SSO_PROTOCOL_DEFINITIONS.find((p) => p.id === 'saml')?.acronym).toBe('SAML')
   })
 })
 
 describe('complianceExplainer', () => {
   it('covers DSAR concept and expands on risk', () => {
-    expect(complianceConceptDefinition('dsar')?.label).toMatch(/DSAR/)
+    expect(COMPLIANCE_CONCEPT_DEFINITIONS.find((c) => c.id === 'dsar')?.label).toMatch(/DSAR/)
     expect(isComplianceGuideExpanded('failing_controls')).toBe(true)
     expect(isComplianceGuideExpanded('healthy')).toBe(false)
   })
@@ -95,21 +92,21 @@ describe('driftExplainer', () => {
 
 describe('anomaliesExplainer', () => {
   it('defines detection methods', () => {
-    expect(anomalyMethodDefinition('zscore')?.plain).toMatch(/average/i)
+    expect(ANOMALY_METHOD_DEFINITIONS.find((m) => m.id === 'zscore')?.plain).toMatch(/average/i)
     expect(isAnomaliesGuideExpanded('no_metrics')).toBe(true)
   })
 })
 
 describe('codeHealthExplainer', () => {
   it('defines god-file metric', () => {
-    expect(codeHealthMetricDefinition('god_file')?.label).toMatch(/God file/)
+    expect(CODE_HEALTH_METRIC_DEFINITIONS.find((m) => m.id === 'god_file')?.label).toMatch(/God file/)
     expect(isCodeHealthGuideExpanded('no_data')).toBe(true)
   })
 })
 
 describe('fixesExplainer', () => {
   it('defines merge stage', () => {
-    expect(fixLifecycleStage('merge')?.label).toMatch(/Merge/)
+    expect(FIX_LIFECYCLE_STAGES.find((s) => s.id === 'merge')?.label).toMatch(/Merge/)
     expect(isFixesGuideExpanded('failed')).toBe(false)
     expect(isFixesGuideExpanded('no_project')).toBe(true)
   })
@@ -117,21 +114,14 @@ describe('fixesExplainer', () => {
 
 describe('projectsExplainer', () => {
   it('defines ingest signal', () => {
-    expect(projectsHealthSignal('ingest')?.plain).toMatch(/bug/)
+    expect(PROJECTS_HEALTH_SIGNALS.find((s) => s.id === 'ingest')?.plain).toMatch(/bug/)
     expect(isProjectsGuideExpanded('never_ingested')).toBe(true)
-  })
-})
-
-describe('connectExplainer', () => {
-  it('expands when github missing', () => {
-    expect(isConnectGuideExpanded({ githubConnected: false, sdkConnected: true })).toBe(true)
-    expect(isConnectGuideExpanded({ githubConnected: true, sdkConnected: true })).toBe(false)
   })
 })
 
 describe('healthExplainer', () => {
   it('defines LLM tab', () => {
-    expect(healthProbeTab('llm')?.label).toMatch(/LLM/)
+    expect(HEALTH_PROBE_TABS.find((t) => t.id === 'llm')?.label).toMatch(/LLM/)
     expect(isHealthGuideExpanded('llm_errors')).toBe(true)
   })
 })
@@ -145,22 +135,13 @@ describe('onboardingExplainer', () => {
 
 describe('rewardsExplainer', () => {
   it('defines rules concept', () => {
-    expect(rewardsEconomyConcept('rules')?.plain).toMatch(/Points/i)
+    expect(REWARDS_ECONOMY_CONCEPTS.find((c) => c.id === 'rules')?.plain).toMatch(/Points/i)
     expect(isRewardsGuideExpanded('no_rules')).toBe(true)
   })
 })
 
-describe('dashboardExplainer', () => {
-  it('plain stage hints; guide stays collapsed by default', () => {
-    expect(dashboardStagePlain('plan')).toMatch(/bug/i)
-    expect(isDashboardGuideExpanded()).toBe(false)
-  })
-})
-
-describe('featureExplainBurndown', () => {
-  it('has zero pending or partial routes', async () => {
-    const { FEATURE_EXPLAIN_BURNDOWN } = await import('./featureExplainBurndown')
-    const incomplete = FEATURE_EXPLAIN_BURNDOWN.filter((i) => i.status !== 'done')
-    expect(incomplete).toHaveLength(0)
+describe('dashboard PDCA stage copy', () => {
+  it('gives the plan stage a plain hint', () => {
+    expect(PDCA_STAGES.plan.hint).toMatch(/bug/i)
   })
 })

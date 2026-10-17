@@ -6,8 +6,10 @@
  * with Supabase Auth's session storage / browser password managers.
  */
 
+/** @internal Exported for tests only. */
 export const REMEMBERED_LOGIN_EMAIL_KEY = 'mushi:login:last_email'
 
+/** @internal Exported for tests only. */
 export function normalizeLoginEmail(email: string): string {
   return email.trim().toLowerCase()
 }

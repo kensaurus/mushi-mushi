@@ -7,15 +7,9 @@
  * - Unit-tested for routing contract stability
  */
 
-export const CLI_SETUP_QUERY = 'setup=cli'
-
 export function isCliSetupMode(params: URLSearchParams | string): boolean {
   const sp = typeof params === 'string' ? new URLSearchParams(params) : params
   return sp.get('setup') === 'cli'
-}
-
-export function cliSetupOnboardingPath(): string {
-  return `/onboarding?tab=steps&${CLI_SETUP_QUERY}`
 }
 
 export function shouldFocusCreateForm(params: URLSearchParams | string): boolean {

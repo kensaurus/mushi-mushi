@@ -78,7 +78,10 @@ interface MultiProfileConfigFile {
   profiles: Record<string, CliConfig>
 }
 
-/** The default profile name used when none is specified. */
+/**
+ * The default profile name used when none is specified.
+ * @internal Exported for tests only.
+ */
 export const DEFAULT_PROFILE = 'default'
 
 /** Type guard: is this parsed file the v2 multi-profile shape? */
@@ -125,6 +128,7 @@ const SECURE_DIR_MODE = 0o700
  *   default Linux/macOS           → ~/.config/mushi/config.json
  *
  * SOURCE: https://specifications.freedesktop.org/basedir-spec/latest/
+ * @internal Exported for tests only.
  */
 export function resolveXdgConfigPath(): string {
   // Per the XDG spec, $XDG_CONFIG_HOME may be set by the user; if unset
@@ -142,7 +146,10 @@ export function resolveXdgConfigPath(): string {
   return join(homedir(), '.config', 'mushi', 'config.json')
 }
 
-/** Path to the legacy single-file config maintained by CLI < 0.9. */
+/**
+ * Path to the legacy single-file config maintained by CLI < 0.9.
+ * @internal Exported for tests only.
+ */
 export const LEGACY_CONFIG_PATH = join(homedir(), '.mushirc')
 
 /**
@@ -378,6 +385,7 @@ export function setActiveProfile(name: string, path = CONFIG_PATH): void {
  *
  * On read failure (malformed JSON), the legacy file is left in place
  * so the user can recover it manually — we never silently drop creds.
+ * @internal Exported for tests only.
  */
 export function migrateLegacyConfig(
   legacyPath = LEGACY_CONFIG_PATH,

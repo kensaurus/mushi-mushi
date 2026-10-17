@@ -62,7 +62,3 @@ export function isComplianceGuideExpanded(topPriority: ComplianceTopPriority | u
     topPriority === 'at_risk'
   )
 }
-
-export function complianceConceptDefinition(id: string): ComplianceConceptDefinition | undefined {
-  return COMPLIANCE_CONCEPT_DEFINITIONS.find((c) => c.id === id)
-}

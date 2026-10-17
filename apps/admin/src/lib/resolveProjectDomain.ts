@@ -47,7 +47,10 @@ export function faviconSourceFromProject(
   }
 }
 
-/** Pull the SDK heartbeat origin off the setup checklist payload. */
+/**
+ * Pull the SDK heartbeat origin off the setup checklist payload.
+ * @internal Exported for tests only.
+ */
 export function sdkOriginFromSetupProject(project: SetupProject): string | null {
   return sdkDiagnosticFromSetupProject(project)?.last_sdk_origin ?? null
 }
@@ -72,7 +75,10 @@ function formatHeartbeatAgo(iso: string | null | undefined): string | null {
   return `${Math.round(seconds / 86400)}d ago`
 }
 
-/** Human-readable origin for heartbeat rows — host + optional path. */
+/**
+ * Human-readable origin for heartbeat rows — host + optional path.
+ * @internal Exported for tests only.
+ */
 export function formatHeartbeatOrigin(origin: string | null | undefined): string | null {
   if (!origin?.trim()) return null
   try {
@@ -85,8 +91,10 @@ export function formatHeartbeatOrigin(origin: string | null | undefined): string
   }
 }
 
+/** @internal Exported for tests only. */
 export type HeartbeatTone = 'live' | 'stale' | 'mismatch' | 'none'
 
+/** @internal Exported for tests only. */
 export function heartbeatTone(
   diagnostic: SetupStepDiagnostic | null,
   adminEndpointHost?: string | null,

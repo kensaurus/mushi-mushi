@@ -42,6 +42,7 @@ import { Console } from 'node:console'
  * anyway so that a single Console instance owns all formatting state
  * (group indentation, counters, timers) and no runtime that routes them
  * differently can leak onto stdout.
+ * @internal Exported for tests only.
  */
 export const GUARDED_CONSOLE_METHODS = [
   'log',
@@ -68,7 +69,10 @@ type GuardedMethod = (typeof GUARDED_CONSOLE_METHODS)[number];
 
 let installed = false;
 
-/** True once {@link installStdoutGuard} has redirected console output. */
+/**
+ * True once {@link installStdoutGuard} has redirected console output.
+ * @internal Exported for tests only.
+ */
 export function isStdoutGuardInstalled(): boolean {
   return installed;
 }

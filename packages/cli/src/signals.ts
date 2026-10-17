@@ -77,20 +77,9 @@ export function getAbortSignal(external?: AbortController): AbortSignal {
 }
 
 /**
- * Tighten a fetch RequestInit with the active abort signal so any
- * outstanding HTTP request fails-fast on Ctrl-C instead of waiting for
- * its natural timeout. Mutates and returns the same object for fluent
- * use:
- *   const res = await fetch(url, withAbort({ method: 'POST', body }))
+ * Test helper. Reset module state between cases.
+ * @internal Exported for tests only.
  */
-export function withAbort(init: RequestInit = {}): RequestInit {
-  if (!init.signal) {
-    init.signal = getAbortSignal()
-  }
-  return init
-}
-
-/** Test helper. Reset module state between cases. */
 export function __resetSignalHandlersForTesting(): void {
   installed = false
   activeController = null

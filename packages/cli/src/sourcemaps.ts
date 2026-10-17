@@ -26,7 +26,10 @@ export interface SourcemapsUploadOptions {
   inject?: boolean
 }
 
-/** Find all .js.map and .css.map files recursively in a directory. */
+/**
+ * Find all .js.map and .css.map files recursively in a directory.
+ * @internal Exported for tests only.
+ */
 export async function findMapFiles(dir: string): Promise<string[]> {
   const results: string[] = []
   async function walk(current: string): Promise<void> {

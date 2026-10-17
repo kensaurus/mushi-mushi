@@ -31,6 +31,7 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
  * We don't full-AST parse: a string match keeps the script dependency-free
  * and false positives are low (the file name is the safety net). The path
  * is derived from the directory structure relative to `app/`.
+ * @internal Exported for tests only.
  */
 export async function walkNextAppRouter(rootDir: string): Promise<DiscoveredRoute[]> {
   const out = new Set<DiscoveredRoute>()
@@ -74,6 +75,7 @@ export async function walkNextAppRouter(rootDir: string): Promise<DiscoveredRout
  * Parse an OpenAPI document (`openapi.yaml` / `.json`) and emit one
  * route per (method, path) entry. We use a lightweight Yaml fallback —
  * if `yaml` isn't installed in the consumer repo we just JSON.parse.
+ * @internal Exported for tests only.
  */
 export async function parseOpenApiFile(filePath: string): Promise<DiscoveredRoute[]> {
   const out: DiscoveredRoute[] = []

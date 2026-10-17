@@ -5,6 +5,7 @@
 
 import { useSyncExternalStore } from 'react'
 
+/** @internal Exported for tests only. */
 export const ACTIVE_ORG_STORAGE_KEY = 'mushi:active_org_id'
 export const ACTIVE_ORG_QUERY_PARAM = 'org'
 
@@ -64,6 +65,7 @@ export function setActiveOrgIdSnapshot(orgId: string): void {
   window.dispatchEvent(new CustomEvent(ACTIVE_ORG_EVENT, { detail: { orgId } }))
 }
 
+/** @internal Exported for tests only. */
 export function subscribeActiveOrg(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   const onActiveOrg = () => listener()

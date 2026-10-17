@@ -1299,6 +1299,7 @@ const PROVIDER_DEFAULTS: Record<string, { jwks_url: string; issuer: string; labe
   custom:   { label: 'Custom OIDC',    jwks_url: '', issuer: '' },
 }
 
+/** @internal Exported for tests only. */
 export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
   const toast = useToast()
   const { data: providers, loading, error, reload: reloadProviders } = usePageData<IdentityProvider[]>('/v1/admin/rewards/identity-providers')

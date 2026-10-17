@@ -4,8 +4,6 @@
  *
  * Provides:
  *  - type definitions for the /sdk-diagnostics and /sync-ci-secrets API responses
- *  - buildGuidedFallbackCommands(): generates copy-paste `gh secret set` /
- *    `gh variable set` commands and a CI env: block for manual setup
  *  - sdkCiStatusLabel(): human-readable label + severity for a diagnostic status
  */
 
@@ -56,57 +54,6 @@ export interface SyncCiSecretsResult {
 // ---------------------------------------------------------------------------
 // Guided fallback command generator (runs in the browser — no sensitive data)
 // ---------------------------------------------------------------------------
-
-export interface GuidedFallbackArgs {
-  /** GitHub owner/repo (e.g. "kensaurus/glot.it"). */
-  repo: string
-  slug: string | null | undefined
-  /** The project ID — safe to show (not a secret). */
-  projectId: string
-  /** The Mushi cloud endpoint — safe to show. */
-  endpoint: string
-  /** The freshly minted raw API key — must be shown once to the user. */
-  rawKey: string
-}
-
-export interface GuidedFallback {
-  /** Copy-paste shell commands to set GitHub Actions secrets/vars. */
-  commands: string[]
-  /** YAML snippet to paste into the env: block of build steps. */
-  envBlock: string
-  /** Individual lines for display in the UI. */
-  varRows: Array<{ name: string; ghKind: 'secret' | 'variable'; value: string }>
-}
-
-export function buildGuidedFallbackCommands(args: GuidedFallbackArgs): GuidedFallback {
-  const { repo, slug, projectId, endpoint, rawKey } = args
-  const envVars = mushiEnvVarsForProjectSlug(slug)
-  const { projectIdVar, apiKeyVar, endpointVar } = envVars
-
-  type Row = { name: string; ghKind: 'secret' | 'variable'; value: string }
-
-  const rows: Row[] = [
-    { name: projectIdVar, ghKind: 'variable', value: projectId },
-    { name: apiKeyVar, ghKind: 'secret', value: rawKey },
-    ...(endpointVar ? [{ name: endpointVar, ghKind: 'variable' as const, value: endpoint }] : []),
-  ]
-
-  const repoFlag = `--repo ${repo}`
-  const commands = rows.map((r) => {
-    if (r.ghKind === 'secret') {
-      return `gh secret set ${r.name} --body "${r.value}" ${repoFlag}`
-    }
-    return `gh variable set ${r.name} --body "${r.value}" ${repoFlag}`
-  })
-
-  const yamlLines = rows.map((r) => {
-    const ref = r.ghKind === 'secret' ? `secrets.${r.name}` : `vars.${r.name}`
-    return `          ${r.name}: \${{ ${ref} }}`
-  })
-  const envBlock = `        env:\n${yamlLines.join('\n')}`
-
-  return { commands, envBlock, varRows: rows }
-}
 
 // ---------------------------------------------------------------------------
 // Status labels

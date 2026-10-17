@@ -62,7 +62,3 @@ export function isSsoGuideExpanded(topPriority: SsoTopPriority | undefined): boo
     topPriority === 'no_providers'
   )
 }
-
-export function ssoProtocolDefinition(id: string): SsoProtocolDefinition | undefined {
-  return SSO_PROTOCOL_DEFINITIONS.find((p) => p.id === id)
-}

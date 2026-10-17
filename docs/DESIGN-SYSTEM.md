@@ -179,8 +179,8 @@ Don't invent "healthy", "active", "validation needed" or other synonyms.
   "Web research", not "Firecrawl BYOK". Keep the old term as a command-palette
   keyword (`paletteKeywords` in `navRegistry.ts`) so search still finds it.
 - Never show raw error codes, probe statuses (`error_auth`) or UUIDs. Route key
-  and provider errors through `lib/byokErrors.ts` (`describeByokError`,
-  `describeByokTestResult`). Ids may appear only in small monospace or a tooltip.
+  and provider errors through `lib/byokErrors.ts` (`describeByokError`). Ids may
+  appear only in small monospace or a tooltip.
 - Important text (status reasons, problems, next steps) is `text-sm`, or `text-xs`
   at the smallest. `text-2xs` and `text-3xs` are for metadata only.
 - Diagrams render labels at 12 px or more at their default zoom.

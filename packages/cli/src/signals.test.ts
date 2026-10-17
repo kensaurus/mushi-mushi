@@ -3,15 +3,13 @@
  * PURPOSE: Lock down the AbortSignal contract for SIGINT/SIGTERM. We
  *          can't synthesise a real signal in jsdom-style tests, but we
  *          can verify the controller is shared across `getAbortSignal`
- *          calls and that `withAbort` plumbs the signal through fetch
- *          init objects.
+ *          calls.
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   __resetSignalHandlersForTesting,
   getAbortSignal,
-  withAbort,
 } from './signals.js'
 
 afterEach(() => {
@@ -45,25 +43,5 @@ describe('getAbortSignal', () => {
     const b = getAbortSignal()
     expect(b).not.toBe(a)
     expect(b.aborted).toBe(false)
-  })
-})
-
-describe('withAbort', () => {
-  it('stamps the active signal onto a fresh init', () => {
-    const init = withAbort()
-    expect(init.signal).toBe(getAbortSignal())
-  })
-
-  it('preserves an explicit signal already on the init', () => {
-    const ctrl = new AbortController()
-    const init = withAbort({ method: 'POST', signal: ctrl.signal })
-    expect(init.signal).toBe(ctrl.signal)
-  })
-
-  it('mutates and returns the same object so it can be threaded fluently', () => {
-    const init: RequestInit = { method: 'GET' }
-    const out = withAbort(init)
-    expect(out).toBe(init)
-    expect(out.signal).toBeTruthy()
   })
 })

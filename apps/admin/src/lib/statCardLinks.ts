@@ -6,17 +6,6 @@
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
-/* ── Reports ───────────────────────────────────────────────────────────── */
-
-export const reportsLinks = {
-  // /reports reads filters, not a `tab` param: every link carries the
-  // filters that reproduce the count it sits next to.
-  total14d: '/reports?days=14',
-  untriaged: '/reports?status=new',
-  critical14d: '/reports?severity=critical&days=14',
-  dismissed14d: '/reports?status=dismissed&days=14',
-} as const
-
 /* ── Fixes ─────────────────────────────────────────────────────────────── */
 
 export const fixesLinks = {

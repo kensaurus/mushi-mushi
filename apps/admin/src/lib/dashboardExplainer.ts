@@ -1,16 +1,7 @@
 /**
- * Dashboard PDCA explainer — reuses inbox stage copy for the four-loop hero.
+ * Dashboard explainer — the plain-language insight verdict, and when the
+ * dashboard shows the PDCA flow.
  */
-
-import { PDCA_STAGES, type PdcaStageId } from './pdca'
-
-export function dashboardStagePlain(id: PdcaStageId): string {
-  return PDCA_STAGES[id].hint
-}
-
-export function isDashboardGuideExpanded(): boolean {
-  return false
-}
 
 // ---------------------------------------------------------------------------
 // Plain-language insight derivation — condensed 1-2 sentence verdict.

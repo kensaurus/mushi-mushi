@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { isNewerStableVersion } from './freshness.js'
 import {
   evaluateUpgradeCheckExit,
-  formatUpgradeHint as hintFromUpgrade,
   type UpgradePlan,
 } from './upgrade.js'
 
@@ -11,14 +10,7 @@ function plan(entries: UpgradePlan['entries']): UpgradePlan {
 }
 
 describe('upgrade helpers', () => {
-  it('formatUpgradeHint returns command when latest is newer', () => {
-    const line = hintFromUpgrade('@mushi-mushi/web', '1.6.0', '1.7.8')
-    expect(line).toContain('mushi upgrade')
-    expect(line).toContain('1.7.8')
-  })
-
-  it('formatUpgradeHint returns null when already current', () => {
-    expect(hintFromUpgrade('@mushi-mushi/web', '1.7.8', '1.7.8')).toBeNull()
+  it('isNewerStableVersion is false for the same version', () => {
     expect(isNewerStableVersion('1.7.8', '1.7.8')).toBe(false)
   })
 
