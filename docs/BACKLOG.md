@@ -8,13 +8,13 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
-- **Delta:** 3 new (BL-080, BL-081, BL-082) · 2 closed (BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 42 · **Recently closed:** 7 (BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Delta:** 3 new (BL-080, BL-081, BL-082) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
+- **Open items:** 41 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
-| test-gap | 7 |
+| test-gap | 6 |
 | tech-debt | 17 |
 | known-bug | 1 |
 | decision-needed | 5 |
@@ -25,7 +25,7 @@ parked work is visible in one place.
 |---|---|
 | relevant | 38 |
 | verify-done | 3 |
-| stale (propose removal) | 1 |
+| stale (propose removal) | 0 |
 
 > **Scanned 2026-10-17** on `origin/master` `3fc2476d` (#494, the PR that wrote
 > the last register). Code markers: 24 raw `TODO/FIXME/HACK/XXX` hits outside
@@ -85,7 +85,6 @@ parked work is visible in one place.
 | BL-015 | unfinished-feature | Enterprise tenancy follow-ups (22 items: SSO / MFA / invite-only org policy, verified domains, …). Enterprise work stays in `docs/operators/` and never leads (AGENTS.md positioning), so this is low until an enterprise customer asks | relevant | low | `docs/enterprise-tenancy-backlog.md` | — |
 | BL-016 | decision-needed | Seven July audit plans (`docs/plan-antislop.md`, `plan-docs-sync.md`, `plan-error-handling.md`, `plan-input-validation.md`, `plan-uiux-unification.md`, `plan-uplift-sdk-cli-mcp.md`; `plan-gtm.md` from 2026-09-22) carry open items that were never re-verified against today's code. Triage each: close, carry as rows, or archive | relevant | low | `docs/plan-*.md` | — |
 | BL-017 | deferred-plan-phase | Plan 021 Phase 1 recorded the live judge call, the Cursor/Codex adapters and an `apps/admin` run as not yet verified | verify-done | low | `docs/execplans/PLANS.md:643` | — |
-| BL-018 | test-gap | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline". The knip gate (ADR 0007) and the 2026-10-14 pass have since covered it | stale (propose removal) | low | `docs/execplans/PLANS.md:572` | — |
 | BL-019 | tech-debt | 169 env names the source reads are in no `.env.example` (221 read, 75 documented; unchanged 2026-10-17), among them `ADMIN_ORIGIN`, the `STRIPE_PRICE_*` set, `TREMENDOUS_*` and the admin `VITE_MUSHI_SELF_*`. CI runs the check with `--warn`, so nothing stops new ones. Template each in its owning `.env.example` (or allowlist the platform builtins), then drop `--warn` | relevant | low | `pnpm check:env-source-parity`; `.github/workflows/ci.yml:412` | — |
 | BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
 | BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | `docs/red-team-2026-07-02/red-team-defect-report.md:48`, `:65`, `:251`; `docs/report-ingest-contract.md:110` | — |
@@ -117,6 +116,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
 | BL-020 | Product screenshots are committed three times: `docs/screenshots/` (88 files, about 204 MB), `apps/docs/public/screenshots/` (the copy `scripts/sync-docs-screenshots.mjs` makes) and `apps/admin/public/screenshots/` (8… | 2026-10-16 | Decided 2026-10-16: keep the three copies on purpose. Identical files share one git blob, so the cost is checkout disk only, and the docs build reads its own copy. |
