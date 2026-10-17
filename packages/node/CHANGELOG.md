@@ -1,5 +1,13 @@
 # @mushi-mushi/node
 
+## 1.3.3
+
+### Patch Changes
+
+- f220653: Comment-only change: no code changed in these packages. Helpers that are exported only so the package's own tests can reach them now carry an `@internal` doc tag. None of them is reachable from a package entry point, and the published type declarations differ only by that comment.
+- Updated dependencies [f220653]
+  - @mushi-mushi/core@1.33.1
+
 ## 1.3.2
 
 ### Patch Changes
