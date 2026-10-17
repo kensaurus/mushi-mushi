@@ -13,7 +13,6 @@ import { isAnomaliesGuideExpanded, anomalyMethodDefinition } from './anomaliesEx
 import { isCodeHealthGuideExpanded, codeHealthMetricDefinition } from './codeHealthExplainer'
 import { isFixesGuideExpanded, fixLifecycleStage } from './fixesExplainer'
 import { isProjectsGuideExpanded, projectsHealthSignal } from './projectsExplainer'
-import { isConnectGuideExpanded } from './connectExplainer'
 import { isHealthGuideExpanded, healthProbeTab } from './healthExplainer'
 import { isOnboardingGuideExpanded } from './onboardingExplainer'
 import { isRewardsGuideExpanded, rewardsEconomyConcept } from './rewardsExplainer'
@@ -122,13 +121,6 @@ describe('projectsExplainer', () => {
   })
 })
 
-describe('connectExplainer', () => {
-  it('expands when github missing', () => {
-    expect(isConnectGuideExpanded({ githubConnected: false, sdkConnected: true })).toBe(true)
-    expect(isConnectGuideExpanded({ githubConnected: true, sdkConnected: true })).toBe(false)
-  })
-})
-
 describe('healthExplainer', () => {
   it('defines LLM tab', () => {
     expect(healthProbeTab('llm')?.label).toMatch(/LLM/)
@@ -154,13 +146,5 @@ describe('dashboardExplainer', () => {
   it('plain stage hints; guide stays collapsed by default', () => {
     expect(dashboardStagePlain('plan')).toMatch(/bug/i)
     expect(isDashboardGuideExpanded()).toBe(false)
-  })
-})
-
-describe('featureExplainBurndown', () => {
-  it('has zero pending or partial routes', async () => {
-    const { FEATURE_EXPLAIN_BURNDOWN } = await import('./featureExplainBurndown')
-    const incomplete = FEATURE_EXPLAIN_BURNDOWN.filter((i) => i.status !== 'done')
-    expect(incomplete).toHaveLength(0)
   })
 })

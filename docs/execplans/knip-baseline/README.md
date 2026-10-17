@@ -7,8 +7,18 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **104** | `--max-issues 104` |
+| production | `pnpm exec knip --production --reporter json` | **91** | `--max-issues 91` |
 | default | `pnpm exec knip --reporter json` | **38** | `--max-issues 38 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-17, second round: 91 production / 38 default** (90 and 37 fail).
+> With the owner's go-ahead, the admin modules that only their own tests reached were deleted
+> together with those tests: the Connect lane leftovers (`ConnectStepFlow.tsx`,
+> `connectLaneMetadata`, `connectLaneReadout`, `connectStepLanes`, `connectExplainer`),
+> `heroSnapshots/*`, `featureExplainBurndown`, `mcpConnectUx` and `lib/semver.ts`. Two cascades
+> followed: `layoutHeroFromStats.ts` (only `buildHeroEnrichment` and a type, now with no caller)
+> and `connectLaneOverlay` in `guideLiveOverlay.ts`. The `PageHeroSnapshot` type left with them.
+> The live `heroMetricChips` case moved to `pageHeroSnapshot.test.ts`; every other case in the
+> touched test files stays.
 
 > **Re-measured 2026-10-17 (dead-code pass), knip 6.34.0: 104 production / 38 default**
 > (103 and 37 fail, 104 and 38 pass; measured after `pnpm build` on branch
@@ -106,7 +116,7 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 21 |  |  |  | 34 | 4 | 4 | 63 |
+| apps/admin | 11 |  |  |  | 32 | 3 | 4 | 50 |
 | apps/docs |  |  |  |  | 2 |  | 1 | 3 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
@@ -120,7 +130,7 @@ Never raise them.
 | packages/react-native | 1 |  |  |  |  |  |  | 1 |
 | packages/server | 3 | 1 |  |  |  |  |  | 4 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| **total** | **44** | **3** | **1** | **1** | **46** | **4** | **5** | **104** |
+| **total** | **34** | **3** | **1** | **1** | **44** | **3** | **5** | **91** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).

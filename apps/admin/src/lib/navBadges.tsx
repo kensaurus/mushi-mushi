@@ -69,7 +69,8 @@ import {
 
 /**
  * Which nav-meta slices each path's badge and page hero read (mirrors the
- * `resolveNavBadge` switch below and `layoutHeroFromStats`). Paths whose
+ * `resolveNavBadge` switch below; the route hero enrichment that also read
+ * these, `layoutHeroFromStats`, had no caller and was removed). Paths whose
  * badge only uses the per-item counters need no slice. Layout sends the
  * union for the visible sidebar + current page, so Quick and Beginner stop
  * paying for the 45 stats routes Advanced shows.
