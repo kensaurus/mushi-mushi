@@ -42,7 +42,10 @@ export interface Recommendation {
   actions?: RecommendationAction[]
 }
 
-/** Format milliseconds as a human-friendly elapsed string ("47s", "3m 12s"). */
+/**
+ * Format milliseconds as a human-friendly elapsed string ("47s", "3m 12s").
+ * @internal Exported for tests only.
+ */
 export function formatElapsed(ms: number): string {
   if (ms < 0) return '0s'
   const s = Math.floor(ms / 1000)

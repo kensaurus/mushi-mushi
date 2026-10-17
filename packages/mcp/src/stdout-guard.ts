@@ -42,6 +42,7 @@ import { Console } from 'node:console'
  * anyway so that a single Console instance owns all formatting state
  * (group indentation, counters, timers) and no runtime that routes them
  * differently can leak onto stdout.
+ * @internal Exported for tests only.
  */
 export const GUARDED_CONSOLE_METHODS = [
   'log',

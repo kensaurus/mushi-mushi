@@ -32,7 +32,10 @@ export interface PagePostureProps {
   className?: string
 }
 
-/** Max summary rows above primary work UI — documented in apps/admin/README.md. */
+/**
+ * Max summary rows above primary work UI — documented in apps/admin/README.md.
+ * @internal Exported for tests only.
+ */
 export function postureBudgetForMode(mode: AdminMode): number {
   switch (mode) {
     case 'quickstart':

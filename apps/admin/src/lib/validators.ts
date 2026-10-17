@@ -66,6 +66,7 @@ function withOptional(opts: ValidatorOptions | undefined, body: Validator): Vali
 /** Compose multiple validators — first non-null result wins. Lets call
  *  sites combine "is a URL" + "uses https" + "starts with hooks.slack.com"
  *  without repeating the URL parse three times. */
+/** @internal Exported for tests only. */
 export function compose(...validators: Validator[]): Validator {
   return (value: string) => {
     for (const v of validators) {
@@ -224,6 +225,7 @@ export function sentryDsn(opts?: ValidatorOptions): Validator {
  * because (a) the strict grammar accepts addresses no SMTP server actually
  * delivers to, and (b) the WHATWG form-validation regex is the same one
  * the browser would apply to `<input type=email>` if we set it.
+ * @internal Exported for tests only.
  */
 export function email(opts?: ValidatorOptions): Validator {
   const RE =
@@ -338,6 +340,7 @@ export function numberInRange({ min, max, step, unit, optional }: NumberRangeOpt
  *
  * Platforms with a stricter rule get their own validator (see the Sentry
  * project slugs below).
+ * @internal Exported for tests only.
  */
 export function slug(opts?: ValidatorOptions): Validator {
   return withOptional(opts, (value) => {
@@ -378,6 +381,7 @@ function sentrySlugList(opts?: ValidatorOptions): Validator {
  * optionally followed by digits, must START with a letter. (e.g. `BUG`,
  * `WEBSITE2`). Lowercase is rejected — Jira's API normalises everything to
  * uppercase, but the UI surfaces lowercase as a "key not found" error.
+ * @internal Exported for tests only.
  */
 export function jiraProjectKey(opts?: ValidatorOptions): Validator {
   return withOptional(opts, (value) => {
@@ -395,6 +399,7 @@ export function jiraProjectKey(opts?: ValidatorOptions): Validator {
  * alphanumeric string. We don't error on length mismatch (PagerDuty has
  * occasionally issued 24- and 32-char keys) but we DO require alphanumeric
  * + reject whitespace, which catches the most common copy-paste mistakes.
+ * @internal Exported for tests only.
  */
 export function pagerdutyRoutingKey(opts?: ValidatorOptions): Validator {
   return withOptional(opts, (value) => {
@@ -473,6 +478,7 @@ export function supabaseProjectRef(opts?: ValidatorOptions): Validator {
  * the form layer here only validates the HTTPS shape — anything else will
  * surface as a server-side error after Save (which is fine; we don't want
  * to false-negative on the SSH variant some users still copy from GitHub).
+ * @internal Exported for tests only.
  */
 export function githubRepoUrl(opts?: ValidatorOptions): Validator {
   return compose(

@@ -34,6 +34,7 @@ interface OtelSpan {
   endTime: [number, number]
 }
 
+/** @internal Exported for tests only. */
 export interface OtelSpanProcessor {
   onStart(span: OtelSpan, parentContext: unknown): void
   onEnd(span: OtelSpan): void
@@ -41,6 +42,7 @@ export interface OtelSpanProcessor {
   forceFlush(): Promise<void>
 }
 
+/** @internal Exported for tests only. */
 export interface OtelSpanProcessorOptions {
   /**
    * When `true` (default), only ERROR spans trigger a Mushi report.

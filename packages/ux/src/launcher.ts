@@ -56,6 +56,7 @@ interface PackageJson {
  * Dev command guesses, best first. The framework's own command comes first:
  * `npm run dev` also runs `predev` / `postdev`, which in some repos kill
  * whatever holds the usual port (the person's own dev server).
+ * @internal Exported for tests only.
  */
 export function devCommandGuesses(repoRoot: string): { commands: string[]; warning: string | null } {
   const file = join(repoRoot, 'package.json')
@@ -153,7 +154,10 @@ async function git(repoRoot: string, args: string[]): Promise<string | null> {
   return res && res.exitCode === 0 ? res.stdout.trim() : null
 }
 
-/** Refs to branch from: the remote's default branch (and how far the checkout is behind it), then HEAD. */
+/**
+ * Refs to branch from: the remote's default branch (and how far the checkout is behind it), then HEAD.
+ * @internal Exported for tests only.
+ */
 export async function baseRefs(repoRoot: string): Promise<{ refs: Array<{ ref: string; label: string }>; defaultRef: string }> {
   const head = (await git(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'])) ?? 'HEAD'
   const remoteHead = (await git(repoRoot, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])) ?? ((await git(repoRoot, ['rev-parse', '--verify', 'origin/main'])) ? 'origin/main' : null)
@@ -179,6 +183,7 @@ export async function baseRefs(repoRoot: string): Promise<{ refs: Array<{ ref: s
 /**
  * Routes worth offering as start pages: concrete paths only (no template or
  * dynamic segments), no error/auth-callback/API/dev-only pages, shallow first.
+ * @internal Exported for tests only.
  */
 export function pageSuggestions(routes: string[], max = 60): string[] {
   return routes

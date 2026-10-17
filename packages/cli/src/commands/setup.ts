@@ -21,6 +21,7 @@ import { MUSHI_MCP_PIN_SPEC } from '../version.js';
 // Exported for unit testing — resolving the login endpoint has three sources
 // of truth and a wrong precedence here silently redirects a self-hosted
 // user's device-auth to the default cloud endpoint (see setup.test.ts).
+/** @internal Exported for tests only. */
 export function resolveLoginEndpoint(
   optsEndpoint: string | undefined,
   existingConfigEndpoint: string | undefined,

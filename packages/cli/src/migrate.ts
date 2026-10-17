@@ -39,6 +39,7 @@ const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 type MigrateCategory = 'mobile' | 'web' | 'competitor' | 'sdk-upgrade'
 type MigrateStatus = 'published' | 'draft'
 
+/** @internal Exported for tests only. */
 export interface MigrateGuide {
   /** URL slug — `/migrations/<slug>` under the docs site. */
   slug: string
@@ -169,6 +170,7 @@ export interface MigrateMatch {
  *  would never run and a regression that flipped the predicate to
  *  `g.status !== 'published'` would slip through unit tests. Production
  *  callers pass nothing and get the real catalog. */
+/** @internal Exported for tests only. */
 export function detectMigrations(
   deps: ReadonlySet<string>,
   catalog: readonly MigrateGuide[] = MIGRATE_CATALOG,
@@ -180,6 +182,7 @@ export function detectMigrations(
 
 /** Build the dep set the way `mushi migrate` will see it from a real
  *  `package.json`. Exposed for tests. */
+/** @internal Exported for tests only. */
 export function depsFromPackageJson(pkg: {
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>

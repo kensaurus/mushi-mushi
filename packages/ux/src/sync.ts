@@ -69,6 +69,7 @@ const PROJECT_LINE_RE = /^\s*(?:NEXT_PUBLIC_|VITE_|EXPO_PUBLIC_|PUBLIC_)?MUSHI_P
  * The Mushi project this repo's app reports to, from the public SDK variable
  * in its env files (NEXT_PUBLIC_MUSHI_PROJECT_ID and friends). Only that one
  * line is read; nothing else in the file is kept.
+ * @internal Exported for tests only.
  */
 export function repoProjectId(repoRoot: string): string | null {
   for (const name of ['.env.local', '.env.development.local', '.env.development', '.env']) {
@@ -104,6 +105,7 @@ function probeSummary(p: ProbeResult | undefined) {
  * the console gets only which files were read or edited; a command or a
  * search is counted, never shown. Anything else, raw lines included, is
  * dropped.
+ * @internal Exported for tests only.
  */
 export function syncableStep(line: string): string | null {
   if (/^\[(read|edit)\] \S/.test(line)) return line.slice(0, 300)

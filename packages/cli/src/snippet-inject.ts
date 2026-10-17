@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import type { FrameworkId } from './detect.js'
 
 export const MUSHI_MARKER_START = '// <mushi-mushi:init>'
+/** @internal Exported for tests only. */
 export const MUSHI_MARKER_END = '// </mushi-mushi:init>'
 
 /**

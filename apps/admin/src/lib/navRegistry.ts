@@ -1063,7 +1063,10 @@ const EXTRA_ROUTE_TITLE_MATCHERS: ReadonlyArray<readonly [RegExp, string]> = [
 
 let cachedRouteTitleMatchers: ReadonlyArray<readonly [RegExp, string]> | null = null
 
-/** Route → tab-title fallback derived from NAV_REGISTRY labels (longest path first). */
+/**
+ * Route → tab-title fallback derived from NAV_REGISTRY labels (longest path first).
+ * @internal Exported for tests only.
+ */
 export function buildRouteTitleMatchers(): ReadonlyArray<readonly [RegExp, string]> {
   if (cachedRouteTitleMatchers) return cachedRouteTitleMatchers
 

@@ -41,6 +41,7 @@ export const FIX_PROMPT_MAX_CHARS = 7_500
  * Cap on the URL-ENCODED prompt carried inside a link (Cursor deeplink, cloud
  * agent). Encoding grows newlines, "·", "…" and non-ASCII 3-9x, so the budget
  * is measured after encodeURIComponent, not on raw characters.
+ * @internal Exported for tests only.
  */
 export const FIX_PROMPT_URL_MAX_ENCODED = 6_000
 

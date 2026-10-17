@@ -107,6 +107,7 @@ const SUPABASE_CLOUD_REF_RE = /^[a-z0-9]{20}$/
  * Validate a backend URL before persisting or resolving against it.
  * Rejects typo'd Supabase refs (e.g. 24-char garbage in localStorage) that
  * produce `Failed to fetch` on every admin API call.
+ * @internal Exported for tests only.
  */
 export function isValidBackendUrl(url: string): boolean {
   const trimmed = stripTrailingSlash(url.trim())

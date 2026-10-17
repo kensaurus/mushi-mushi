@@ -2090,7 +2090,10 @@ const ASSISTANT: ConfigDoc[] = [
  *  REGISTRY
  * ============================================================================ */
 
-/** Ordered groups — drives the section order in `docs/CONFIG_REFERENCE.md`. */
+/**
+ * Ordered groups — drives the section order in `docs/CONFIG_REFERENCE.md`.
+ * @internal Exported for tests only.
+ */
 export const CONFIG_DOC_GROUPS: ReadonlyArray<{
   route: string;
   label: string;

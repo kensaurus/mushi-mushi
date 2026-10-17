@@ -50,6 +50,7 @@ export type UntrustedContentRole =
  * @param role    - Human-readable label explaining the content's origin (used
  *                  in the delimiter to help the LLM understand the boundary).
  * @returns       - The wrapped string, safe for inclusion in an MCP text block.
+ * @internal Exported for tests only.
  */
 export function wrapUntrusted(content: string, role: UntrustedContentRole): string {
   // Sanitise the role label so it can't itself escape the tag attribute.

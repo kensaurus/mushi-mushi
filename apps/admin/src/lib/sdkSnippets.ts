@@ -136,6 +136,7 @@ export type Framework = (typeof FRAMEWORKS)[number]
  * resolve to the CommonJS `main` and throw inside a `<script>` tag, which is
  * why the full file path is spelled out. Keep this byte-identical to the
  * header comment in packages/web/src/loader.ts.
+ * @internal Exported for tests only.
  */
 export const LOADER_CDN_URL =
   'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js'
@@ -145,6 +146,7 @@ export const LOADER_CDN_URL =
  * configurator to (a) hide the web-only "screenshot" / "elementSelector"
  * controls that don't apply, and (b) route the configured `native.triggerMode`
  * into the snippet instead of the `widget.trigger` web mapping.
+ * @internal Exported for tests only.
  */
 export const MOBILE_FRAMEWORKS = ['react-native', 'expo', 'capacitor'] as const
 export type MobileFramework = (typeof MOBILE_FRAMEWORKS)[number]

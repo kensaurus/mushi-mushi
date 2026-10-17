@@ -8,6 +8,7 @@
 
 import type { Project } from './project-models'
 
+/** @internal Exported for tests only. */
 export interface ProjectNextStep {
   id:
     | 'mint-key'
@@ -46,7 +47,10 @@ function sdkUpgradeAvailable(p: Project): boolean {
   )
 }
 
-/** Derive the ranked to-do list for one project. Earliest lifecycle gap wins. */
+/**
+ * Derive the ranked to-do list for one project. Earliest lifecycle gap wins.
+ * @internal Exported for tests only.
+ */
 export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
   const steps: ProjectNextStep[] = []
   const connectTo = `/connect?project=${p.id}`

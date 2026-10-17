@@ -45,7 +45,10 @@ function loadSkillFiles(dir: string, meta: { name: string; source: string }): Re
   return { name: meta.name, source: meta.source, text: files['SKILL.md']!.toString('utf8'), files }
 }
 
-/** True while the run saved its state recently and has not finished: it is running somewhere. */
+/**
+ * True while the run saved its state recently and has not finished: it is running somewhere.
+ * @internal Exported for tests only.
+ */
 export function isRunAlive(state: RunState, now = Date.now()): boolean {
   if (state.phase === 'done' || state.phase === 'failed') return false
   const at = Date.parse(state.updatedAt)

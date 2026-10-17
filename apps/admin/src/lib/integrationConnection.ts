@@ -45,6 +45,7 @@ const HTTP_MEANING: Record<number, string> = {
 /**
  * A probe message a person can read: no status lines, no JSON bodies.
  * Returns null when the message carries no information beyond "it worked".
+ * @internal Exported for tests only.
  */
 export function humanizeProbeMessage(message: string | null | undefined): string | null {
   if (!message) return null

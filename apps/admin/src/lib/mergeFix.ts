@@ -58,7 +58,10 @@ export function canMergeFix(fix: MergeEligibleFix): boolean {
   return getMergeBlockerReason(fix) === null
 }
 
-/** Human-readable reason when console merge is unavailable — drives bulk-bar hints and per-card affordances. */
+/**
+ * Human-readable reason when console merge is unavailable — drives bulk-bar hints and per-card affordances.
+ * @internal Exported for tests only.
+ */
 export function getMergeBlockerReason(fix: MergeEligibleFix): string | null {
   if (!fix.pr_url) return 'No pull request opened yet'
   if (!fix.pr_number) return 'PR number missing — refresh CI or open on GitHub'
