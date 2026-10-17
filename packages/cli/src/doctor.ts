@@ -96,6 +96,7 @@ export interface DoctorOptions {
 
 // ── Check 1: CLI config sanity ───────────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
   return [
     {

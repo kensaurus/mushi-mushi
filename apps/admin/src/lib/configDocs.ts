@@ -2092,7 +2092,7 @@ const ASSISTANT: ConfigDoc[] = [
 
 /**
  * Ordered groups — drives the section order in `docs/CONFIG_REFERENCE.md`.
- * @internal Exported for tests only.
+ * @public Read by scripts/generate-config-reference.mjs through jiti, which knip cannot follow.
  */
 export const CONFIG_DOC_GROUPS: ReadonlyArray<{
   route: string;
@@ -2150,6 +2150,9 @@ export function getConfigDoc(id: string): ConfigDoc | undefined {
   return CONFIG_DOC_INDEX.get(id);
 }
 
-/** Flat list of every entry, in declaration order. Used by tests and by the
- *  markdown generator. */
+/**
+ * Flat list of every entry, in declaration order. The tests use it to check
+ * every entry; the console reads CONFIG_DOC_GROUPS.
+ * @internal Exported for tests only.
+ */
 export const ALL_CONFIG_DOCS: readonly ConfigDoc[] = CONFIG_DOC_GROUPS.flatMap((g) => g.entries);

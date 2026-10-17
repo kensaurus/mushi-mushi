@@ -24,7 +24,10 @@ const ROW = 280
 /** Never zoom out below 100%: card text is at least 12 px (text-2xs) and must render at 12 px or more. */
 export const RECIPE_MIN_ZOOM = 1
 export const RECIPE_MAX_ZOOM = 1.25
-/** Smallest font used inside the canvas (text-2xs), in px. */
+/**
+ * Smallest font used inside the canvas (text-2xs), in px.
+ * @internal Exported for tests only.
+ */
 export const RECIPE_SMALLEST_FONT_PX = 12
 /**
  * Space above the first card for the lane headings.

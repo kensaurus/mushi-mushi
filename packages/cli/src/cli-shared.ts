@@ -259,7 +259,10 @@ export function setGlobalOutputFormat(fmt: string | undefined): void {
   globalOutputFormat = fmt === 'json' ? 'json' : 'text'
 }
 
-/** The global output format (default 'text'). */
+/**
+ * The global output format (default 'text').
+ * @internal Exported for tests only.
+ */
 export function getGlobalOutputFormat(): OutputFormat {
   return globalOutputFormat
 }

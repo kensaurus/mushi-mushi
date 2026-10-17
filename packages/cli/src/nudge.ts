@@ -86,6 +86,7 @@ const PRESETS: Record<NudgePhase, NudgePreset> = {
   },
 }
 
+/** @internal Exported for tests only. */
 export function getPreset(phase: NudgePhase): NudgePreset {
   return PRESETS[phase]
 }

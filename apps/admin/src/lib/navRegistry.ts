@@ -1065,7 +1065,7 @@ let cachedRouteTitleMatchers: ReadonlyArray<readonly [RegExp, string]> | null = 
 
 /**
  * Route → tab-title fallback derived from NAV_REGISTRY labels (longest path first).
- * @internal Exported for tests only.
+ * @internal Exported for tests; scripts/check-nav-registry.mjs also requires the export.
  */
 export function buildRouteTitleMatchers(): ReadonlyArray<readonly [RegExp, string]> {
   if (cachedRouteTitleMatchers) return cachedRouteTitleMatchers

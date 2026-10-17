@@ -69,7 +69,10 @@ type GuardedMethod = (typeof GUARDED_CONSOLE_METHODS)[number];
 
 let installed = false;
 
-/** True once {@link installStdoutGuard} has redirected console output. */
+/**
+ * True once {@link installStdoutGuard} has redirected console output.
+ * @internal Exported for tests only.
+ */
 export function isStdoutGuardInstalled(): boolean {
   return installed;
 }
