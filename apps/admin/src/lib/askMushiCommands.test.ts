@@ -11,7 +11,6 @@ import {
   SLASH_COMMANDS,
   detectComposerToken,
   filterSlashCommands,
-  findSlashCommand,
 } from './askMushiCommands'
 
 describe('SLASH_COMMANDS registry', () => {
@@ -40,24 +39,6 @@ describe('SLASH_COMMANDS registry', () => {
   // "/model:haiku" command could only claim a switch that never happens.
   it('offers no model-switch command', () => {
     expect(SLASH_COMMANDS.some((c) => c.command.startsWith('/model'))).toBe(false)
-  })
-})
-
-describe('findSlashCommand', () => {
-  it('matches an exact command', () => {
-    expect(findSlashCommand('/tldr')?.command).toBe('/tldr')
-  })
-
-  it('is case-insensitive', () => {
-    expect(findSlashCommand('/TLDR')?.command).toBe('/tldr')
-  })
-
-  it('returns undefined for non-slash tokens', () => {
-    expect(findSlashCommand('tldr')).toBeUndefined()
-  })
-
-  it('returns undefined for unknown commands', () => {
-    expect(findSlashCommand('/nope')).toBeUndefined()
   })
 })
 

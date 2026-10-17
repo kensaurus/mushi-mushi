@@ -42,7 +42,3 @@ export function isProjectsGuideExpanded(topPriority: string | undefined): boolea
     topPriority === 'partial_ingest'
   )
 }
-
-export function projectsHealthSignal(id: string): ProjectsHealthSignalDefinition | undefined {
-  return PROJECTS_HEALTH_SIGNALS.find((s) => s.id === id)
-}

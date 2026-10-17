@@ -36,10 +36,6 @@ export const TRIAGE_SEVERITY_DEFINITIONS: SeverityDefinition[] = [
   },
 ]
 
-export function severityDefinition(id: string): SeverityDefinition | undefined {
-  return TRIAGE_SEVERITY_DEFINITIONS.find((s) => s.id === id)
-}
-
 /** Show banner when queue needs attention (not clear/healthy). */
 export function isReportsBannerVisible(stats: {
   hasAnyProject?: boolean

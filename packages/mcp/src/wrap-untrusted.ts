@@ -77,12 +77,3 @@ export function wrapUntrustedJson(value: unknown, role: UntrustedContentRole): s
     typeof value === 'string' ? value : JSON.stringify(value, null, 2)
   return wrapUntrusted(serialised, role)
 }
-
-/**
- * Guard: returns true if the value should be wrapped. Wrapping is applied to
- * any string that contains free-text user content. Skip for short IDs,
- * numbers, dates, or booleans that can't carry injections.
- */
-export function shouldWrap(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 50
-}

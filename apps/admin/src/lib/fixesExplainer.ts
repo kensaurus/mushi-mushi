@@ -46,7 +46,3 @@ export function isFixesGuideExpanded(topPriority: string | undefined): boolean {
     topPriority === 'no_index'
   )
 }
-
-export function fixLifecycleStage(id: string): FixLifecycleStageDefinition | undefined {
-  return FIX_LIFECYCLE_STAGES.find((s) => s.id === id)
-}

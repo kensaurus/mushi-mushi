@@ -43,7 +43,3 @@ export function isHealthGuideExpanded(topPriority: string | undefined): boolean 
     topPriority === 'cron_warn'
   )
 }
-
-export function healthProbeTab(id: string): HealthProbeTabDefinition | undefined {
-  return HEALTH_PROBE_TABS.find((t) => t.id === id)
-}

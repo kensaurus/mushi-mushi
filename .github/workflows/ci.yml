@@ -356,7 +356,7 @@ jobs:
       # docs/execplans/knip-baseline/. Lower them as findings are paid down;
       # never raise them to get a red run green.
       - name: Check dead code (knip, production)
-        run: pnpm exec knip --production --max-issues 91
+        run: pnpm exec knip --production --max-issues 50
 
       - name: Check dead code (knip, default + config hints)
         run: pnpm exec knip --max-issues 38 --treat-config-hints-as-errors

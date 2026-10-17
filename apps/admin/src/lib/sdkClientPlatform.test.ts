@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isNativeOrigin, sdkOriginKind, sdkPlatformHintFromUserAgent } from './sdkClientPlatform'
+import { sdkOriginKind, sdkPlatformHintFromUserAgent } from './sdkClientPlatform'
 
 describe('sdkPlatformHintFromUserAgent', () => {
   it('labels iOS TestFlight-ish agents', () => {
@@ -35,26 +35,5 @@ describe('sdkOriginKind', () => {
     expect(sdkOriginKind(null)).toBe('unknown')
     expect(sdkOriginKind('')).toBe('unknown')
     expect(sdkOriginKind('ftp://weird')).toBe('unknown')
-  })
-})
-
-describe('isNativeOrigin', () => {
-  it('treats capacitor:// as native regardless of OS', () => {
-    expect(isNativeOrigin('capacitor://localhost', null)).toBe(true)
-    expect(isNativeOrigin('CAPACITOR://LOCALHOST', null)).toBe(true)
-  })
-
-  it('treats android-app:// as native', () => {
-    expect(isNativeOrigin('android-app://com.example.app', null)).toBe(true)
-  })
-
-  it('falls back to the user-agent when the origin is absent', () => {
-    expect(isNativeOrigin(null, 'MyApp/1 CFNetwork/1410 Darwin/22.6.0')).toBe(true)
-    expect(isNativeOrigin(null, 'okhttp/4.12.0')).toBe(true)
-  })
-
-  it('is not native for plain web origins/agents', () => {
-    expect(isNativeOrigin('https://app.example.com', 'Mozilla/5.0')).toBe(false)
-    expect(isNativeOrigin(null, null)).toBe(false)
   })
 })

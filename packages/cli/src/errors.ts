@@ -136,14 +136,3 @@ export function printAndExit(err: unknown, asJson = false): never {
   }
   process.exit(cliErr.exitCode)
 }
-
-/** Test helper — same shape as printAndExit but returns the formatted lines. */
-export function formatError(err: unknown): { lines: string[]; exitCode: number } {
-  const cliErr =
-    err instanceof MushiCliError
-      ? err
-      : new MushiCliError('E_INTERNAL', err instanceof Error ? err.message : String(err))
-  const lines = [`error [${cliErr.code}]: ${cliErr.message}`]
-  if (cliErr.hint) lines.push(`  → fix: ${cliErr.hint}`)
-  return { lines, exitCode: cliErr.exitCode }
-}

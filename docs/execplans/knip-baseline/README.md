@@ -7,8 +7,28 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **91** | `--max-issues 91` |
+| production | `pnpm exec knip --production --reporter json` | **50** | `--max-issues 50` |
 | default | `pnpm exec knip --reporter json` | **38** | `--max-issues 38 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-17, third round: 50 production / 38 default** (49 and 37 fail).
+> With the owner's go-ahead, the exports and types that no non-test code called were judged one
+> by one. Deleted with their tests: `withAbort`, `formatError` (a copy of `printAndExit`'s
+> formatting that had already drifted from it), `formatUpgradeHint`, `shouldWrap`,
+> `diagnosesAtSpendCap`, `reportsLinks`, the `orgPermissions` `canDeleteProject` (production uses
+> the one in `project-models.ts`), `bundlerKindForFramework`, `cliSetupOnboardingPath` and
+> `CLI_SETUP_QUERY`, `findSlashCommand`, `isNativeOrigin`, `describeByokTestResult`,
+> `buildGuidedFallbackCommands` and its two types, `monorepoInstallGuidance`, the project-level
+> `buildCursorDeeplink` / `buildVsCodeDeeplink`, and twelve explainer `*Definition` lookups plus
+> the two `dashboardExplainer` helpers. The `MUSHI_TAGLINE_V2` re-export in `landing-copy.ts` was
+> dropped. Where a deleted test also checked live code, the check stays against the live code: the
+> explainer tests read the guide tables directly, the deeplink tests use the org-level builders
+> that share the encoders, the pricing test keeps its `estimateCost` cap check, and the env-prefix
+> checks call `mushiEnvVarsForBundler`. Eight helpers stayed because their tests check behaviour
+> that remains (`getGlobalOutputFormat`, `isKeychainEnabled`, `isStdoutGuardInstalled`,
+> `checkCliConfig`, `ALL_CONFIG_DOCS`, `RECIPE_SMALLEST_FONT_PX`, `getPreset`,
+> `isNewerStableVersion`), and are tagged `@internal`. `CONFIG_DOC_GROUPS` is read by
+> `scripts/generate-config-reference.mjs` through jiti, so its tag is now `@public` with that
+> reason.
 
 > **Re-measured 2026-10-17, second round: 91 production / 38 default** (90 and 37 fail).
 > With the owner's go-ahead, the admin modules that only their own tests reached were deleted
@@ -116,21 +136,20 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 11 |  |  |  | 32 | 3 | 4 | 50 |
-| apps/docs |  |  |  |  | 2 |  | 1 | 3 |
+| apps/admin | 11 |  |  |  | 4 | 1 | 4 | 20 |
+| apps/docs |  |  |  |  |  |  | 1 | 1 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
 | packages/agents | 3 |  |  | 1 |  |  |  | 4 |
 | packages/brand | 1 |  |  |  |  |  |  | 1 |
 | packages/capacitor | 1 |  |  |  |  |  |  | 1 |
-| packages/cli |  |  |  |  | 7 |  |  | 7 |
 | packages/marketing-ui |  | 1 |  |  |  |  |  | 1 |
-| packages/mcp | 9 | 1 |  |  | 3 |  |  | 13 |
+| packages/mcp | 9 | 1 |  |  | 1 |  |  | 11 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  | 1 |
 | packages/react-native | 1 |  |  |  |  |  |  | 1 |
 | packages/server | 3 | 1 |  |  |  |  |  | 4 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| **total** | **34** | **3** | **1** | **1** | **44** | **3** | **5** | **91** |
+| **total** | **34** | **3** | **1** | **1** | **5** | **1** | **5** | **50** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
