@@ -33,6 +33,7 @@ const BANNER_COVERED_PRIORITIES: RewardsTopPriority[] = [
   'project_disabled',
 ]
 
+/** @internal Exported for tests only. */
 export function shouldHideEconomyGuide(topPriority: RewardsTopPriority | undefined): boolean {
   if (!topPriority) return false
   return BANNER_COVERED_PRIORITIES.includes(topPriority)

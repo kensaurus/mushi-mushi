@@ -41,7 +41,3 @@ export function isAnomaliesGuideExpanded(topPriority: string | undefined): boole
     topPriority === 'open_anomalies'
   )
 }
-
-export function anomalyMethodDefinition(id: string): AnomalyMethodDefinition | undefined {
-  return ANOMALY_METHOD_DEFINITIONS.find((m) => m.id === id)
-}

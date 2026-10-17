@@ -18,6 +18,7 @@ function normalizeRelativePath(path: string): string {
   return path
 }
 
+/** @internal Exported for tests only. */
 export function sanitizeNextPath(next: string | null | undefined): string {
   if (!next) return FALLBACK_PATH
   const normalized = normalizeRelativePath(next)

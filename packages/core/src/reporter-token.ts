@@ -82,7 +82,10 @@ export function getReporterToken(projectId?: string): string {
   return token;
 }
 
-/** Test-only helper — clears both legacy and scoped keys. */
+/**
+ * Test-only helper — clears both legacy and scoped keys.
+ * @internal Exported for tests only.
+ */
 export function clearReporterTokensForTests(projectId?: string): void {
   if (typeof localStorage === 'undefined') return;
   try {

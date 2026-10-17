@@ -7,8 +7,51 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **232** | `--max-issues 232` |
-| default | `pnpm exec knip --reporter json` | **39** | `--max-issues 39 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **50** | `--max-issues 50` |
+| default | `pnpm exec knip --reporter json` | **38** | `--max-issues 38 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-17, third round: 50 production / 38 default** (49 and 37 fail).
+> With the owner's go-ahead, the exports and types that no non-test code called were judged one
+> by one. Deleted with their tests: `withAbort`, `formatError` (a copy of `printAndExit`'s
+> formatting that had already drifted from it), `formatUpgradeHint`, `shouldWrap`,
+> `diagnosesAtSpendCap`, `reportsLinks`, the `orgPermissions` `canDeleteProject` (production uses
+> the one in `project-models.ts`), `bundlerKindForFramework`, `cliSetupOnboardingPath` and
+> `CLI_SETUP_QUERY`, `findSlashCommand`, `isNativeOrigin`, `describeByokTestResult`,
+> `buildGuidedFallbackCommands` and its two types, `monorepoInstallGuidance`, the project-level
+> `buildCursorDeeplink` / `buildVsCodeDeeplink`, and twelve explainer `*Definition` lookups plus
+> the two `dashboardExplainer` helpers. The `MUSHI_TAGLINE_V2` re-export in `landing-copy.ts` was
+> dropped. Where a deleted test also checked live code, the check stays against the live code: the
+> explainer tests read the guide tables directly, the deeplink tests use the org-level builders
+> that share the encoders, the pricing test keeps its `estimateCost` cap check, and the env-prefix
+> checks call `mushiEnvVarsForBundler`. Eight helpers stayed because their tests check behaviour
+> that remains (`getGlobalOutputFormat`, `isKeychainEnabled`, `isStdoutGuardInstalled`,
+> `checkCliConfig`, `ALL_CONFIG_DOCS`, `RECIPE_SMALLEST_FONT_PX`, `getPreset`,
+> `isNewerStableVersion`), and are tagged `@internal`. `CONFIG_DOC_GROUPS` is read by
+> `scripts/generate-config-reference.mjs` through jiti, so its tag is now `@public` with that
+> reason.
+
+> **Re-measured 2026-10-17, second round: 91 production / 38 default** (90 and 37 fail).
+> With the owner's go-ahead, the admin modules that only their own tests reached were deleted
+> together with those tests: the Connect lane leftovers (`ConnectStepFlow.tsx`,
+> `connectLaneMetadata`, `connectLaneReadout`, `connectStepLanes`, `connectExplainer`),
+> `heroSnapshots/*`, `featureExplainBurndown`, `mcpConnectUx` and `lib/semver.ts`. Two cascades
+> followed: `layoutHeroFromStats.ts` (only `buildHeroEnrichment` and a type, now with no caller)
+> and `connectLaneOverlay` in `guideLiveOverlay.ts`. The `PageHeroSnapshot` type left with them.
+> The live `heroMetricChips` case moved to `pageHeroSnapshot.test.ts`; every other case in the
+> touched test files stays.
+
+> **Re-measured 2026-10-17 (dead-code pass), knip 6.34.0: 104 production / 38 default**
+> (103 and 37 fail, 104 and 38 pass; measured after `pnpm build` on branch
+> `chore/housekeep-dead-code-2026-10-17`, base `origin/master` `3fc2476d`). Master itself measured
+> 232 / 38; `isKeychainEnabled` gained a caller when the 2026-10-16 follow-ups merged. Production
+> mode does not read tests, and 129 of its findings were exports whose implementation runs in
+> production but whose export exists only so a test can reach it (125, each with a live caller in its
+> own module), or declared test seams such as `resetPageUnloadingForTests` (4). Those now carry
+> `@internal Exported for tests only.` No code was deleted and no package sets `stripInternal`, so
+> no shipped `.d.ts` changed. `MUSHI_DOCS_INDEX` stays counted, because its file is generated in
+> lock-step with the hosted `mcp` edge function. The 46 exports and 4 types still counted have no
+> non-test caller anywhere. They, and the admin modules that only their own tests reach, wait for a
+> delete-with-test decision (BL-042).
 
 > **Re-measured 2026-10-16 (dead-code pass), knip 6.34.0: 232 production / 39 default**
 > (231 and 38 fail, 232 and 39 pass; measured after `pnpm build` on branch
@@ -93,26 +136,20 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 21 |  |  |  | 92 | 8 | 4 | 125 |
-| apps/docs |  |  |  |  | 2 |  | 1 | 3 |
+| apps/admin | 11 |  |  |  | 4 | 1 | 4 | 20 |
+| apps/docs |  |  |  |  |  |  | 1 | 1 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
-| packages/agents | 3 |  |  | 1 | 1 | 1 |  | 6 |
+| packages/agents | 3 |  |  | 1 |  |  |  | 4 |
 | packages/brand | 1 |  |  |  |  |  |  | 1 |
 | packages/capacitor | 1 |  |  |  |  |  |  | 1 |
-| packages/cli |  |  |  |  | 33 | 8 |  | 41 |
-| packages/core |  |  |  |  | 3 |  |  | 3 |
 | packages/marketing-ui |  | 1 |  |  |  |  |  | 1 |
-| packages/mcp | 9 | 1 |  |  | 5 |  |  | 15 |
-| packages/mcp-ci |  |  |  |  | 2 |  |  | 2 |
-| packages/node |  |  |  |  |  | 2 |  | 2 |
+| packages/mcp | 9 | 1 |  |  | 1 |  |  | 11 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  | 1 |
-| packages/react-native | 1 |  |  |  | 1 |  |  | 2 |
+| packages/react-native | 1 |  |  |  |  |  |  | 1 |
 | packages/server | 3 | 1 |  |  |  |  |  | 4 |
-| packages/ux |  |  |  |  | 11 | 1 |  | 12 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| packages/web |  |  |  |  | 7 | 1 |  | 8 |
-| **total** | **44** | **3** | **1** | **1** | **157** | **21** | **5** | **232** |
+| **total** | **34** | **3** | **1** | **1** | **5** | **1** | **5** | **50** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -126,7 +163,7 @@ react-native 4, wasm-classifier 1).
 | examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
 | packages/agents | 1 |  |  | 1 |  |  |  |  | 2 |
-| packages/cli |  |  |  |  |  | 2 |  |  | 2 |
+| packages/cli |  |  |  |  |  | 1 |  |  | 1 |
 | packages/marketing-ui |  | 1 |  |  |  |  |  |  | 1 |
 | packages/mcp | 3 | 1 |  |  |  |  |  |  | 4 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
@@ -134,7 +171,7 @@ react-native 4, wasm-classifier 1).
 | packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/web |  |  |  | 1 |  |  |  |  | 1 |
-| **total** | **14** | **2** | **6** | **2** | **1** | **8** | **1** | **5** | **39** |
+| **total** | **14** | **2** | **6** | **2** | **1** | **7** | **1** | **5** | **38** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 

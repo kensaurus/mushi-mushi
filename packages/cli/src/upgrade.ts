@@ -9,7 +9,7 @@
 import { resolve } from 'node:path'
 import { execSync } from 'node:child_process'
 import { detectPackageManager, installCommand, readPackageJson } from './detect.js'
-import { checkFreshness, isNewerStableVersion } from './freshness.js'
+import { checkFreshness } from './freshness.js'
 
 /** Strict semver guard before interpolating registry versions into shell commands. */
 const SAFE_NPM_VERSION = /^\d+\.\d+\.\d+(-[\w.]+)?$/
@@ -180,10 +180,4 @@ export async function runUpgrade(opts: RunUpgradeOptions = {}): Promise<RunUpgra
     upgraded: true,
     message: `Upgraded Mushi SDK packages.\n  ${plan.installCmd}${migrateNote}`,
   }
-}
-
-/** One-line upgrade hint for admin terminal blocks. */
-export function formatUpgradeHint(packageName: string, current: string, latest: string | null): string | null {
-  if (!latest || !isNewerStableVersion(latest, current.replace(/^[\^~>=<]*/, ''))) return null
-  return `mushi upgrade   # bump ${packageName} to v${latest}`
 }

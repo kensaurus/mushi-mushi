@@ -42,7 +42,3 @@ export const QA_PROVIDER_DEFINITIONS: QaProviderDefinition[] = [
 
 export const QA_COVERAGE_EXPLAINER_SUMMARY =
   'Each QA story is a user-flow test that runs on a schedule. Pick Firecrawl for quick smoke checks, Browserbase for full browser flows in the cloud, or local Playwright when you need maximum control.'
-
-export function qaProviderDefinition(provider: string): QaProviderDefinition | undefined {
-  return QA_PROVIDER_DEFINITIONS.find((p) => p.id === provider)
-}

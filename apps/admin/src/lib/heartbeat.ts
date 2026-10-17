@@ -30,7 +30,9 @@ export type HeartbeatState =
   /** Explicitly never seen (`null`), or no live keys exist at all. */
   | 'never'
 
+/** @internal Exported for tests only. */
 export const HEARTBEAT_FRESH_MS = 24 * 60 * 60 * 1000
+/** @internal Exported for tests only. */
 export const HEARTBEAT_STALE_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Shape of an API key row as the admin payload delivers it. */
@@ -40,7 +42,10 @@ export interface HeartbeatKeyLike {
   revoked?: boolean
 }
 
-/** A key still counts toward connectivity unless it is revoked/deactivated. */
+/**
+ * A key still counts toward connectivity unless it is revoked/deactivated.
+ * @internal Exported for tests only.
+ */
 export function isLiveKey(key: HeartbeatKeyLike): boolean {
   return !key.revoked && key.is_active !== false
 }

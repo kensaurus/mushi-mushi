@@ -99,6 +99,7 @@ async function storeKey(key: CryptoKey): Promise<void> {
  * Lazily get (or generate once + persist) the AES-GCM key for this origin.
  * `extractable: false` — so a script-level attacker can't `exportKey()` and
  * ship the raw bytes to their server, only use it via `encrypt`/`decrypt`.
+ * @internal Exported for tests only.
  */
 export async function getOfflineQueueKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey;

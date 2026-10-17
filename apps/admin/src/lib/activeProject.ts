@@ -29,6 +29,7 @@ export function clearActiveProject(): void {
   window.dispatchEvent(new CustomEvent(ACTIVE_PROJECT_EVENT, { detail: { projectId: null } }))
 }
 
+/** @internal Exported for tests only. */
 export const ACTIVE_PROJECT_EVENT = 'mushi:active-project-change'
 const SERVER_SNAPSHOT = '__server__'
 
@@ -90,6 +91,7 @@ export function setActiveProjectIdSnapshot(projectId: string): void {
   window.dispatchEvent(new CustomEvent(ACTIVE_PROJECT_EVENT, { detail: { projectId } }))
 }
 
+/** @internal Exported for tests only. */
 export function subscribeActiveProject(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
 

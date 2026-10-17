@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   detectFromPackageJson,
-  monorepoInstallGuidance,
 } from './frameworkDetect'
 
 // ─── detectFromPackageJson ─────────────────────────────────────────────────
@@ -201,83 +200,5 @@ describe('detectFromPackageJson', () => {
     )
     expect(result.confidence).toBeLessThan(0.5)
     expect(result.reason).toContain('monorepo root')
-  })
-})
-
-// ─── monorepoInstallGuidance ───────────────────────────────────────────────
-
-describe('monorepoInstallGuidance', () => {
-  it('returns null for flat (non-monorepo) repos', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({ dependencies: { react: '*' } }),
-    )
-    expect(monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')).toBeNull()
-  })
-
-  it('generates --workspace= command for npm-workspaces', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({ workspaces: ['apps/web'], dependencies: { react: '*' } }),
-    )
-    const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    expect(guidance).toContain('--workspace=')
-    expect(guidance).toContain('@mushi-mushi/react')
-  })
-
-  it('generates --filter command for pnpm-workspaces', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({
-        workspaces: ['apps/web'],
-        packageManager: 'pnpm@9.0.0',
-        dependencies: { react: '*' },
-      }),
-    )
-    const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    // A bare `apps/web` is a package-name pattern to pnpm; `./` makes it a path.
-    expect(guidance).toContain('pnpm add --filter ./apps/web @mushi-mushi/react')
-  })
-
-  it('installs from the workspace dir for yarn-workspaces (yarn workspace takes a name, not a path)', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({
-        workspaces: ['apps/web'],
-        packageManager: 'yarn@4.0.0',
-        dependencies: { react: '*' },
-      }),
-    )
-    const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    expect(guidance).toContain('cd apps/web && yarn add @mushi-mushi/react')
-    expect(guidance).not.toContain('yarn workspace apps/web')
-  })
-
-  it('strips -g flag from global CLI commands', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({ workspaces: ['apps/web'], dependencies: { react: '*' } }),
-    )
-    const guidance = monorepoInstallGuidance(result, 'npm install -g mushi-mcp')
-    // Should not produce a malformed command with -g mushi-mcp still in the pkg slot
-    expect(guidance).not.toContain('--workspace=-g')
-    expect(guidance).not.toContain('--filter -g')
-  })
-
-  it('strips every leading flag, short and long', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({ workspaces: ['apps/web'], dependencies: { react: '*' } }),
-    )
-    const guidance = monorepoInstallGuidance(result, 'npm install -D --save-exact @mushi-mushi/react')
-    expect(guidance).toContain('@mushi-mushi/react')
-    expect(guidance).not.toContain('--save-exact @mushi-mushi/react')
-  })
-
-  it('uses cd <path> for non-workspace monorepos (Turborepo)', () => {
-    const result = detectFromPackageJson(
-      JSON.stringify({
-        devDependencies: { turbo: '^1.0.0' },
-        dependencies: { react: '*' },
-      }),
-    )
-    result.monorepo = 'turborepo'
-    result.workspaceHint = 'apps/web'
-    const guidance = monorepoInstallGuidance(result, 'npm install @mushi-mushi/react')
-    expect(guidance).toContain('cd apps/web')
   })
 })

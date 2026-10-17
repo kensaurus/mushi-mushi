@@ -7,12 +7,16 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { loadConfig } from './config.js'
 
-/** Canonical hosted admin console (VITE_BASE_PATH=/mushi-mushi/admin/). */
+/**
+ * Canonical hosted admin console (VITE_BASE_PATH=/mushi-mushi/admin/).
+ * @internal Exported for tests only.
+ */
 export const HOSTED_CONSOLE_BASE = 'https://kensaur.us/mushi-mushi/admin'
 
 const LOCAL_ADMIN_URL = 'http://localhost:6464'
 const LOCAL_PROBE_MS = 800
 
+/** @internal Exported for tests only. */
 export function normalizeConsoleBase(url: string): string {
   // Char-by-char trailing-slash trim (not `/\/+$/`) to avoid a ReDoS surface on
   // attacker-controlled console URLs and the CodeQL polynomial-regex alert that
@@ -28,6 +32,7 @@ export function consoleUrl(base: string, route: string): string {
   return `${normalizeConsoleBase(base)}${normalizedRoute}`
 }
 
+/** @internal Exported for tests only. */
 export function resolveConsoleUrlFromEnv(): string | undefined {
   const raw = process.env['MUSHI_CONSOLE_URL']?.trim()
   return raw ? normalizeConsoleBase(raw) : undefined

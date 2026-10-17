@@ -70,7 +70,10 @@ export function writeLauncherDismissed(): void {
   } catch { /* private mode / blocked storage */ }
 }
 
-/** sessionStorage key for same-tab Ask transcript resume (UX only — not auth). */
+/**
+ * sessionStorage key for same-tab Ask transcript resume (UX only — not auth).
+ * @internal Exported for tests only.
+ */
 export const ASSISTANT_SESSION_STORAGE_KEY = 'mushi-assistant-session-v1';
 
 export type AssistantSessionSnapshot = {

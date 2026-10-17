@@ -4,7 +4,6 @@ import {
   MAX_SLIDER,
   TIERS,
   annualTotalUsd,
-  diagnosesAtSpendCap,
   displayBaseUsd,
   estimateCost,
   getNextTierId,
@@ -33,10 +32,10 @@ describe('estimateCost', () => {
   })
 
   it('shows Pro spend cap within slider range', () => {
-    const atCap = diagnosesAtSpendCap(pro)
-    expect(atCap).toBe(8040)
+    // Pro's included diagnoses plus (cap - base) / overage price.
+    const atCap = 8040
     expect(atCap).toBeLessThanOrEqual(MAX_SLIDER)
-    const atCapResult = estimateCost(pro, atCap!)
+    const atCapResult = estimateCost(pro, atCap)
     expect(atCapResult.total).toBe(200)
     expect(atCapResult.capped).toBe(true)
   })

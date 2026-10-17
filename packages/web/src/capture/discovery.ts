@@ -36,6 +36,7 @@
 import type { MushiDiscoverInventoryConfig } from '@mushi-mushi/core';
 import { subscribeHistory } from '../history-patch';
 
+/** @internal Exported for tests only. */
 export interface DiscoveryEvent {
   route: string;
   page_title: string | null;
@@ -77,6 +78,7 @@ const SLUG_HASHY_RE = /^[a-z0-9]{16,}$/i;
  * looks like an opaque identifier. We are deliberately conservative
  * — if a heuristic isn't confident, we leave the segment alone, since
  * over-collapsing is worse than under-collapsing for the proposer.
+ * @internal Exported for tests only.
  */
 export function normalizeSegment(seg: string): string {
   if (seg.length === 0) return seg;
@@ -101,6 +103,7 @@ export function normalizeSegment(seg: string): string {
  * prefix the result with `/#` so hash routes stay distinguishable from path
  * routes in the inventory. Pure anchors (`#section`) are not routes and fall
  * through to the pathname as before.
+ * @internal Exported for tests only.
  */
 export function deriveRoute(
   pathname: string,
@@ -127,6 +130,7 @@ export function deriveRoute(
  *   /practice/abc-123              + ['/practice/[id]'] → '/practice/[id]'
  *   /practice/01H8H8…             without templates    → '/practice/[id]'
  *   /tags/thai-language           without templates    → '/tags/thai-language'
+ * @internal Exported for tests only.
  */
 export function normalizeRoute(
   pathname: string,

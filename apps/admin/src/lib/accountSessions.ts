@@ -119,6 +119,7 @@ function writeState(next: AccountsState): void {
   window.dispatchEvent(new CustomEvent(ACCOUNTS_EVENT))
 }
 
+/** @internal Exported for tests only. */
 export function getAccountsSnapshot(): AccountsState {
   if (!cachePrimed) refreshSnapshot()
   return cachedSnapshot

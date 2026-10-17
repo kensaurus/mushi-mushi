@@ -20,6 +20,7 @@ const CLI_PACKAGE = '@mushi-mushi/cli'
 /** Strict semver guard before interpolating a registry version into a shell command. */
 const SAFE_NPM_VERSION = /^\d+\.\d+\.\d+(-[\w.]+)?$/
 
+/** @internal Exported for tests only. */
 export type InstallMethod = PackageManager | 'npx' | 'unknown'
 
 /**
@@ -31,6 +32,7 @@ export type InstallMethod = PackageManager | 'npx' | 'unknown'
  *   2. The absolute path of the running module — global installs live under a
  *      pm-specific prefix (`/pnpm/`, `/.bun/`, `node_modules/.bin`).
  *   3. Fall back to `npm` (the overwhelmingly common global install path).
+ * @internal Exported for tests only.
  */
 export function detectInstallMethod(
   argv1 = process.argv[1] ?? '',
@@ -59,6 +61,7 @@ export function detectInstallMethod(
  * Build the global self-upgrade command for a given install method + version.
  * Returns `null` for `npx` (nothing to upgrade — the next `npx` fetches latest)
  * and `unknown`.
+ * @internal Exported for tests only.
  */
 export function selfUpgradeCommand(method: InstallMethod, version: string): string | null {
   if (!SAFE_NPM_VERSION.test(version)) return null

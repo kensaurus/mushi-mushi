@@ -24,11 +24,20 @@ const ROW = 280
 /** Never zoom out below 100%: card text is at least 12 px (text-2xs) and must render at 12 px or more. */
 export const RECIPE_MIN_ZOOM = 1
 export const RECIPE_MAX_ZOOM = 1.25
-/** Smallest font used inside the canvas (text-2xs), in px. */
+/**
+ * Smallest font used inside the canvas (text-2xs), in px.
+ * @internal Exported for tests only.
+ */
 export const RECIPE_SMALLEST_FONT_PX = 12
-/** Space above the first card for the lane headings. */
+/**
+ * Space above the first card for the lane headings.
+ * @internal Exported for tests only.
+ */
 export const RECIPE_LANE_HEADER_Y = -76
-/** Tallest a canvas card renders (px, enforced by max-h-65 on the card); ROW leaves room for it. */
+/**
+ * Tallest a canvas card renders (px, enforced by max-h-65 on the card); ROW leaves room for it.
+ * @internal Exported for tests only.
+ */
 export const RECIPE_CARD_MAX_HEIGHT = 260
 
 const LANE_X: Record<(typeof RECIPE_LANES)[number]['id'], number> = {
@@ -38,7 +47,10 @@ const LANE_X: Record<(typeof RECIPE_LANES)[number]['id'], number> = {
   runtime: LANE_GAP * 3,
 }
 
-/** Top-left of each element card. Sources stack vertically; schema feeds routes. */
+/**
+ * Top-left of each element card. Sources stack vertically; schema feeds routes.
+ * @internal Exported for tests only.
+ */
 export const RECIPE_POSITIONS: Record<RecipeElementKey, { x: number; y: number }> = {
   schema: { x: LANE_X.sources, y: 0 },
   routes: { x: LANE_X.sources, y: ROW },

@@ -114,7 +114,10 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   return `${Math.round(hours / 24)}d ago`
 }
 
-/** `https://github.com/acme/web` → `acme/web`. Null when there's no url. */
+/**
+ * `https://github.com/acme/web` → `acme/web`. Null when there's no url.
+ * @internal Exported for tests only.
+ */
 export function repoSlug(url: string | null | undefined): string | null {
   if (!url) return null
   const cleaned = url
@@ -240,6 +243,7 @@ const EMPTY_MODEL: SetupGuideModel = {
  * The pre-project state. `/v1/admin/setup` returns `projects: []` before the
  * first project exists, so there is no server-built checklist to map — the
  * guide shows the one step that unlocks all the others.
+ * @internal Exported for tests only.
  */
 export const NO_PROJECT_MODEL: SetupGuideModel = {
   ...EMPTY_MODEL,

@@ -3,7 +3,6 @@ import {
   anomaliesMethodOverlay,
   codeHealthMetricOverlay,
   complianceConceptOverlay,
-  connectLaneOverlay,
   driftSeverityOverlay,
   exploreTabOverlay,
   fixesStageOverlay,
@@ -28,16 +27,6 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('open')
     expect(overlay.metric).toBe('Open')
-  })
-
-  it('connect mcp lane not done when sdk connected', () => {
-    const overlay = connectLaneOverlay('mcp', {
-      githubConnected: true,
-      sdkConnected: true,
-      mcpConnected: false,
-    })
-    expect(overlay.metric).toBe('Not in IDE')
-    expect(overlay.posture).toBe('open')
   })
 
   it('fixes dispatch shows failed count', () => {

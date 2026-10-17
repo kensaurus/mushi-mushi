@@ -245,6 +245,7 @@ export async function apiCall<T = unknown>(
 
 // ─── Output format ───────────────────────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export type OutputFormat = 'text' | 'json'
 
 // Process-wide output format, set once by the global `-o/--output` option in
@@ -258,7 +259,10 @@ export function setGlobalOutputFormat(fmt: string | undefined): void {
   globalOutputFormat = fmt === 'json' ? 'json' : 'text'
 }
 
-/** The global output format (default 'text'). */
+/**
+ * The global output format (default 'text').
+ * @internal Exported for tests only.
+ */
 export function getGlobalOutputFormat(): OutputFormat {
   return globalOutputFormat
 }

@@ -43,7 +43,3 @@ export function isRewardsGuideExpanded(topPriority: string | undefined): boolean
     topPriority === 'webhooks_failing'
   )
 }
-
-export function rewardsEconomyConcept(id: string): RewardsEconomyConceptDefinition | undefined {
-  return REWARDS_ECONOMY_CONCEPTS.find((c) => c.id === id)
-}

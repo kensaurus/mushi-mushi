@@ -30,7 +30,10 @@ export interface PeriodCostInputs {
   spendCapUsd: number | null
 }
 
-/** Estimate monthly bill for diagnoses count (mirrors docs pricing-estimator). */
+/**
+ * Estimate monthly bill for diagnoses count (mirrors docs pricing-estimator).
+ * @internal Exported for tests only.
+ */
 export function estimateDiagnosisBill(
   inputs: PeriodCostInputs,
   diagnoses: number,

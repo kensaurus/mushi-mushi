@@ -13,6 +13,7 @@ import { scopedHref } from '../../lib/humanPageHints'
 
 export type InboxOverviewMode = 'setup' | 'actions' | 'clear'
 
+/** @internal Exported for tests only. */
 export function resolveInboxOverviewMode(stats: InboxStats, openCardCount: number): InboxOverviewMode {
   if (!stats.setupDone || stats.topPriority === 'setup') return 'setup'
   if (openCardCount > 0) return 'actions'

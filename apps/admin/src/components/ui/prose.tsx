@@ -26,13 +26,17 @@ export interface ProseBlockProps {
 
 const MD_SIGNAL = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\)/
 
+/** @internal Exported for tests only. */
 export function looksLikeMarkdown(text: string): boolean {
   const t = text.trim()
   if (!t) return false
   return MD_SIGNAL.test(t)
 }
 
-/** First paragraph of markdown-ish copy, headings stripped, length-capped. */
+/**
+ * First paragraph of markdown-ish copy, headings stripped, length-capped.
+ * @internal Exported for tests only.
+ */
 export function excerptFirstParagraph(
   md: string | null | undefined,
   max = 380,

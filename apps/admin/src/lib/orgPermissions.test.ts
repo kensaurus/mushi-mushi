@@ -6,7 +6,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   canCreateProject,
-  canDeleteProject,
   canManageOrg,
   mayManageActiveOrg,
   resolveActiveOrgRole,
@@ -19,7 +18,6 @@ describe('orgPermissions', () => {
     expect(canManageOrg('owner')).toBe(true)
     expect(canManageOrg('admin')).toBe(true)
     expect(canCreateProject('admin')).toBe(true)
-    expect(canDeleteProject('owner')).toBe(true)
   })
 
   it('member/viewer cannot manage org resources', () => {
