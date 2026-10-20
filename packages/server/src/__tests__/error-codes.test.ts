@@ -100,6 +100,28 @@ describe('isTransientDbConnectionError', () => {
 
   // ── PostgREST schema-cache reload (MUSHI-MUSHI-SERVER-1M) ─────────────────────
 
+  it('hosted gateway "Project not specified." is transient, including a bare PGRST code', () => {
+    // postgrest-js keeps a non-JSON gateway body as { message } (no code).
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.' }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified', code: null }), true)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'Bad request - please check your parameters: Project not specified.',
+        code: null,
+      }),
+      true,
+    )
+    // `PGRST` is 5 letters, so it looks like a SQLSTATE. It is the PostgREST
+    // prefix, not a class, and must not hide this gateway body.
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: 'PGRST' }), true)
+  })
+
+  it('a real SQLSTATE or a different sentence containing those words is NOT transient', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: 'P0001' }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'the project not specified in the payload', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'column missing', code: 'PGRST' }), false)
+  })
+
   it('PGRST002 (schema cache reload) is transient, by code or by its message', () => {
     const message = 'Could not query the database for the schema cache. Retrying.'
     assertEquals(isTransientDbConnectionError({ message, code: 'PGRST002' }), true)
