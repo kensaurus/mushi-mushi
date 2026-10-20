@@ -109,6 +109,32 @@ describe('SdkNativeConnectivityCard', () => {
     expect(document.body.textContent).toContain('Revoked the previous CI key mushi_old111…')
   })
 
+  it('a Next repo’s env snippet uses NEXT_PUBLIC_, not bare MUSHI_*', async () => {
+    await mount(diag({
+      stack: 'nextjs',
+      stackSource: 'repo',
+      requiredVars: ['NEXT_PUBLIC_MUSHI_PROJECT_ID', 'NEXT_PUBLIC_MUSHI_API_KEY'],
+    }))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Next.js')
+    expect(text).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID')
+    expect(text).toContain('NEXT_PUBLIC_MUSHI_API_KEY')
+  })
+
+  it('a Nuxt repo’s env snippet uses NUXT_PUBLIC_', async () => {
+    await mount(diag({
+      stack: 'nuxt',
+      stackSource: 'repo',
+      requiredVars: ['NUXT_PUBLIC_MUSHI_PROJECT_ID', 'NUXT_PUBLIC_MUSHI_API_KEY'],
+      missingVars: ['NUXT_PUBLIC_MUSHI_API_KEY'],
+    }))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Nuxt')
+    expect(text).toContain('NUXT_PUBLIC_MUSHI_PROJECT_ID')
+    expect(text).toContain('NUXT_PUBLIC_MUSHI_API_KEY')
+    expect(text).not.toContain('NEXT_PUBLIC_MUSHI_')
+  })
+
   it('without a GitHub token the primary button opens the commands, using this console’s endpoint', async () => {
     await mount(diag({ hasGithubToken: false, repoUrl: null, missingVars: diag().requiredVars }))
     const cta = button(/Copy setup commands/)!

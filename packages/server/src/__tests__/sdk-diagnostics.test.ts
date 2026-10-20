@@ -23,6 +23,7 @@ describe('required CI vars per stack', () => {
     ])
     expect(requiredCiVarNames('expo').map((v) => v.name)).toEqual(['EXPO_PUBLIC_MUSHI_PROJECT_ID', 'EXPO_PUBLIC_MUSHI_API_KEY'])
     expect(requiredCiVarNames('vite').map((v) => v.name)).toEqual(['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY'])
+    expect(requiredCiVarNames('nuxt').map((v) => v.name)).toEqual(['NUXT_PUBLIC_MUSHI_PROJECT_ID', 'NUXT_PUBLIC_MUSHI_API_KEY'])
   })
 
   // The SDK defaults to Mushi Cloud's endpoint, so a missing endpoint var is not a fault.
