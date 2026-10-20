@@ -170,9 +170,18 @@ export interface PrReviews {
  */
 export async function loadReviewsForPr(
   db: SupabaseClient,
-  input: { projectId: string; repo: string; number: number; fixAttemptId?: string | null },
+  input: {
+    projectId: string
+    repo: string
+    number: number
+    fixAttemptId?: string | null
+    /** GitHub's repo id (`base.repo.id`): finds reviews stored under a name the repo had before a rename. */
+    repoId?: number | null
+    /** Other spellings of the same repo (the URL the caller came in through). */
+    aliases?: string[]
+  },
 ): Promise<PrReviews> {
-  const repo = input.repo.toLowerCase()
+  const names = [...new Set([input.repo, ...(input.aliases ?? [])].map((n) => n.toLowerCase()))]
   const { data: attempts, error: attemptErr } = await db
     .from('fix_attempts')
     .select('id, pr_url')
@@ -182,7 +191,7 @@ export async function loadReviewsForPr(
   if (attemptErr) return { rows: [], attemptIds: [], error: attemptErr.message }
   const attemptIds = new Set(
     ((attempts ?? []) as Array<{ id: string; pr_url: string | null }>)
-      .filter((a) => samePr(a.pr_url, repo, input.number))
+      .filter((a) => names.some((repo) => samePr(a.pr_url, repo, input.number)))
       .map((a) => a.id),
   )
   if (input.fixAttemptId) attemptIds.add(input.fixAttemptId)
@@ -192,11 +201,21 @@ export async function loadReviewsForPr(
   const { data: byPr, error: prErr } = await db
     .from('fix_reviews')
     .select(FIX_REVIEW_PUBLIC_COLUMNS)
-    .eq('repo', repo)
+    .in('repo', names)
     .eq('pr_number', input.number)
     .limit(100)
   if (prErr && !missing(prErr as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: prErr.message }
   for (const r of (byPr ?? []) as FixReviewRow[]) rows.set(r.id, r)
+  if (input.repoId) {
+    const { data, error } = await db
+      .from('fix_reviews')
+      .select(FIX_REVIEW_PUBLIC_COLUMNS)
+      .eq('repo_id', input.repoId)
+      .eq('pr_number', input.number)
+      .limit(100)
+    if (error && !missing(error as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: error.message }
+    for (const r of (data ?? []) as FixReviewRow[]) rows.set(r.id, r)
+  }
   if (attemptIds.size > 0) {
     const { data, error } = await db.from('fix_reviews').select(FIX_REVIEW_PUBLIC_COLUMNS).in('fix_attempt_id', [...attemptIds])
     if (error && !missing(error as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: error.message }

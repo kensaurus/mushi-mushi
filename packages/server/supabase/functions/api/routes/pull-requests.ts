@@ -23,7 +23,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import type { GithubRepoRef } from '../../_shared/github.ts'
+import { baseRepoOf, type GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, githubJsonHeaders, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import { summarizeChecks, type PrChecks } from '../../_shared/ux-runs.ts'
 import { reviewStatesForPrs } from '../../_shared/fix-review-db.ts'
@@ -161,7 +161,7 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     const token = await (await repoTokenResolver(db, projectId))(ref)
     if (!token) return jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to merge its pull requests.', 409)
     const pull = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${number}`, { headers: githubJsonHeaders(token), signal: AbortSignal.timeout(10_000) })
-      .then(async (r) => (r.ok ? ((await r.json()) as { title?: string; state?: string; head?: { sha?: string } }) : null))
+      .then(async (r) => (r.ok ? ((await r.json()) as { title?: string; state?: string; head?: { sha?: string }; base?: Parameters<typeof baseRepoOf>[0] }) : null))
       .catch(() => null)
     if (!pull) return jsonError(c, 'NOT_FOUND', `Pull request #${number} was not found in ${owner}/${repo}.`, 404)
     if (pull.state !== 'open') return jsonError(c, 'NOT_OPEN', `Pull request #${number} is not open.`, 409)
@@ -175,7 +175,7 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
         token,
         ref,
         number,
-        currentHead: pull.head?.sha ?? null,
+        pull: { headSha: pull.head?.sha ?? null, ...baseRepoOf(pull.base) },
         override: body.data.override === true,
         overrideReason: body.data.overrideReason?.trim() || null,
         confirmPendingReview: body.data.confirmPendingReview === true,

@@ -112,7 +112,10 @@ export function classifyPrSubstance(files: PrChangedFile[], opts: { complete: bo
   }
 }
 
-const CANONICAL_PR_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/i
+const CANONICAL_PR_RE = /^https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)$/i
+
+/** A GitHub owner or repo name: no "." / ".." path segments, no ".git" clone suffix. */
+const okName = (name: string) => name !== '.' && name !== '..' && !/\.git$/i.test(name)
 
 /**
  * The one form Mushi stores a pull request URL in (ADR 0030):
@@ -127,7 +130,7 @@ export function canonicalPrUrl(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim().replace(/[?#].*$/s, '').replace(/\/+$/, '')
   const m = CANONICAL_PR_RE.exec(trimmed)
-  if (!m) return null
+  if (!m || !okName(m[1]) || !okName(m[2])) return null
   const number = Number(m[3])
   if (!Number.isSafeInteger(number) || number <= 0) return null
   return `https://github.com/${m[1].toLowerCase()}/${m[2].toLowerCase()}/pull/${number}`

@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => ({
   background: vi.fn(),
   rate: vi.fn(),
   head: { sha: 'sha1' as string | null },
+  /** `base.repo` of the PR as GitHub answers it (null: GitHub left it out). */
+  base: { id: null as number | null, fullName: null as string | null },
   auth: { method: 'jwt' as string },
   role: { value: 'member' as string | null },
 }))
@@ -81,7 +83,15 @@ vi.mock('../../supabase/functions/_shared/github.ts', async (importOriginal) => 
     ...actual,
     installationIdForAttempt: async () => null,
     resolveProjectGithubToken: async () => 'gh-token',
-    fetchPullRequest: async () => ({ number: 195, draft: false, state: 'open', merged: false, headSha: mocks.head.sha }),
+    fetchPullRequest: async () => ({
+      number: 195,
+      draft: false,
+      state: 'open',
+      merged: false,
+      headSha: mocks.head.sha,
+      baseRepoId: mocks.base.id,
+      baseRepoFullName: mocks.base.fullName,
+    }),
   }
 })
 vi.mock('../../supabase/functions/_shared/fix-merge.ts', async (importOriginal) => {
@@ -183,6 +193,8 @@ beforeEach(() => {
   mocks.background.mockReset()
   mocks.rate.mockReset().mockResolvedValue({ allowed: true })
   mocks.head.sha = 'sha1'
+  mocks.base.id = null
+  mocks.base.fullName = null
   mocks.auth.method = 'jwt'
   mocks.role.value = 'member'
 })
@@ -531,5 +543,61 @@ describe('cross-project and URL spelling (final review of #534)', () => {
     db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge', status: 'running' })] })
     mocks.auth.method = 'apiKey'
     expect((await call('POST', MERGE, {})).status).toBe(200)
+  })
+})
+
+describe('a renamed repo (verification of 90fe9156)', () => {
+  const OLD_URL = 'https://github.com/acme/old-app/pull/195'
+
+  it('only the old name connected: the old-name URL gets 409 REPO_RENAMED and the hold under the new name is never bypassed', async () => {
+    // The project still has the old name in the legacy settings column; GitHub
+    // redirects acme/old-app to acme/app, where another project's review held the PR.
+    mocks.base.id = 4242
+    mocks.base.fullName = 'Acme/App'
+    db = makeFakeDb({
+      project_repos: [],
+      project_settings: [{ project_id: P, github_repo_url: 'https://github.com/acme/old-app' }],
+      fix_attempts: [attempt({ pr_url: OLD_URL })],
+      fix_reviews: [review({ id: 'rev-new', fix_attempt_id: 'fa-elsewhere', project_id: '9000000f-0000-4000-8000-0000000000cc', repo_id: 4242 })],
+    })
+    mocks.auth.method = 'apiKey'
+    const res = await call('POST', MERGE, {})
+    expect(res.status).toBe(409)
+    expect(res.json.error.code).toBe('REPO_RENAMED')
+    expect(res.json.error.message).toContain('acme/app')
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('a hold stored under a former name is found by GitHub repo id', async () => {
+    mocks.base.id = 4242
+    mocks.base.fullName = 'acme/app'
+    db = makeDb({
+      fix_attempts: [attempt()],
+      fix_reviews: [review({ id: 'rev-old', fix_attempt_id: 'fa-elsewhere', project_id: '9000000f-0000-4000-8000-0000000000cc', repo: 'acme/old-app', pr_url: OLD_URL, repo_id: 4242 })],
+    })
+    const res = await call('POST', MERGE, {})
+    expect(res.status).toBe(409)
+    expect(res.json.error.code).toBe('REVIEW_HOLD')
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('both names connected: the old-name URL is gated and merged under the name GitHub uses now', async () => {
+    mocks.base.id = 4242
+    mocks.base.fullName = 'acme/app'
+    db = makeFakeDb({
+      project_repos: [...REPOS, { project_id: P, repo_url: 'https://github.com/acme/old-app', is_primary: false }],
+      fix_attempts: [attempt({ pr_url: OLD_URL })],
+      fix_reviews: [review({ fix_attempt_id: 'fa-elsewhere', project_id: '9000000f-0000-4000-8000-0000000000cc', repo_id: 4242 })],
+    })
+    const held = await call('POST', MERGE, {})
+    expect(held.json.error.code).toBe('REVIEW_HOLD')
+
+    db = makeFakeDb({
+      project_repos: [...REPOS, { project_id: P, repo_url: 'https://github.com/acme/old-app', is_primary: false }],
+      fix_attempts: [attempt({ pr_url: OLD_URL })],
+    })
+    const ok = await call('POST', MERGE, {})
+    expect(ok.status).toBe(200)
+    expect(mocks.merge.mock.calls[0][1]).toEqual({ owner: 'acme', repo: 'app' })
   })
 })

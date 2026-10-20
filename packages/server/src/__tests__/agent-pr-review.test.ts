@@ -177,6 +177,8 @@ function deps(over: Partial<ReviewDeps> = {}): ReviewDeps & { calls: { model: nu
       headRef: ATTEMPT.branch,
       headSha: 'abcdef1234567',
       baseRef: 'main',
+      baseRepoId: 4242,
+      baseRepoFullName: 'acme/app',
       mergeable: true,
       mergeableState: 'clean',
     }),
@@ -283,6 +285,8 @@ describe('a completed review', () => {
       cost_usd: 0.168,
       pr_url: ATTEMPT.pr_url,
       repo: 'acme/app',
+      // GitHub's repo id: the merge gate finds this review by it after a rename.
+      repo_id: 4242,
       pr_number: 194,
       run_id: null,
       error: null,

@@ -33,7 +33,9 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: state.audit }))
 vi.mock('../../supabase/functions/_shared/fix-merge.ts', () => ({ mergeGithubPullRequest: state.merge }))
-vi.mock('../../supabase/functions/_shared/github.ts', () => ({
+vi.mock('../../supabase/functions/_shared/github.ts', async (importOriginal) => ({
+  // The real reader of GitHub's `base.repo`: the merge gate keys on it.
+  baseRepoOf: (await importOriginal<typeof import('../../supabase/functions/_shared/github.ts')>()).baseRepoOf,
   parseGithubRepoUrl: (url: string | null) => {
     const m = url?.match(/github\.com\/([^/]+)\/([^/#?]+?)(?:\.git)?\/?$/)
     return m ? { owner: m[1], repo: m[2] } : null

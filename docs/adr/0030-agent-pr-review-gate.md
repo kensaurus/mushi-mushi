@@ -93,10 +93,11 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   (`get_fix_timeline`) with its model-written fields marked untrusted.
 - **One spelling per PR.** Mushi stores PR URLs only as
   `https://github.com/<owner>/<repo>/pull/<n>`, owner and repo lowercased, no
-  trailing slash, query or fragment (`canonicalPrUrl`), wherever one is
-  accepted: `PATCH /v1/admin/fixes/:id` (`submit_fix_result`), the UX-run
-  snapshot (whose number must match the URL) and the cloud-agent completion
-  path. Anything else is a 400. A trailing slash used to dodge
+  trailing slash, query or fragment (`canonicalPrUrl`; owner and repo
+  limited to GitHub's `[A-Za-z0-9._-]`, never `.`, `..` or a `.git` suffix),
+  wherever one is accepted: `PATCH /v1/admin/fixes/:id` (`submit_fix_result`),
+  the UX-run snapshot (whose number must match the URL), the cloud-agent
+  completion path and the PR `fix-worker` opens itself. Anything else is a 400. A trailing slash used to dodge
   `uq_fix_attempts_pr_url` and attach a second attempt, in another project,
   to a PR that already had a review.
 - **The merge gate.** Every merge Mushi makes on request goes through one
@@ -105,12 +106,17 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   `mushi fixes merge`), the console's generic PR merge, the UX-run merge
   (whose PR URL comes from an API-key snapshot) and the SDK-upgrade merge. A
   test fails if any other file calls GitHub's merge. The helper:
+  - always reads the PR from GitHub and keys on the repo GitHub names now
+    (`base.repo.id` and `base.repo.full_name`), never on the URL's spelling:
+    GitHub answers a renamed repo under its old name too;
   - refuses a PR whose repo is not one of the project's repos (403
-    `REPO_NOT_IN_PROJECT`);
-  - finds every review of the PR by its identity, `fix_reviews.repo` +
-    `pr_number` (lowercased owner/name + number, written only by the service
-    role), across ALL projects, plus the reviews of this project's attempts
-    that name it. A caller cannot unlink a held fix, and a second project
+    `REPO_NOT_IN_PROJECT`), or whose old name is connected but not its
+    current one (409 `REPO_RENAMED`: update the connected repo);
+  - finds every review of the PR by its identity across ALL projects:
+    `fix_reviews.repo_id` (GitHub's repo id, which survives a rename) or
+    `fix_reviews.repo` (lowercased owner/name), each with `pr_number`, all
+    written only by the service role; plus the reviews of this project's
+    attempts that name it. A caller cannot unlink a held fix, and a second project
     cannot merge around another project's hold; `PATCH /v1/admin/fixes/:id`
     also refuses to change `pr_url` once a PR is attached, and refuses any
     API-key write of `commit_sha` after that;

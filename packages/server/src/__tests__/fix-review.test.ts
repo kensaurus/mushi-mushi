@@ -404,6 +404,8 @@ describe('one spelling per PR (canonicalPrUrl)', () => {
     expect(canonicalPrUrl('https://github.com/o/r/pull/5/')).toBe('https://github.com/o/r/pull/5')
     expect(canonicalPrUrl('  https://GitHub.com/Kensaurus/Glot.it/pull/147?tab=files#diff  ')).toBe('https://github.com/kensaurus/glot.it/pull/147')
     expect(canonicalPrUrl('https://github.com/o/r/pull/007')).toBe('https://github.com/o/r/pull/7')
+    expect(canonicalPrUrl('https://github.com/my-org/my_repo.js/pull/3')).toBe('https://github.com/my-org/my_repo.js/pull/3')
+    expect(canonicalPrUrl('https://github.com/o/.github/pull/3')).toBe('https://github.com/o/.github/pull/3')
   })
 
   it('rejects anything that is not exactly a GitHub PR URL', () => {
@@ -416,6 +418,14 @@ describe('one spelling per PR (canonicalPrUrl)', () => {
       'https://github.com/o/pull/5',
       'https://github.com/o/r/pull/0',
       'https://github.com/o/r/pull/abc',
+      // Owner and repo: GitHub's character set only, no path segments, no clone suffix.
+      'https://github.com/o/r.git/pull/5',
+      'https://github.com/o/R.GIT/pull/5',
+      'https://github.com/./r/pull/5',
+      'https://github.com/o/../pull/5',
+      'https://github.com/o/r%2F..%2Fx/pull/5',
+      'https://github.com/o/r~x/pull/5',
+      'https://github.com/o:p/r/pull/5',
       null,
       42,
     ]) {

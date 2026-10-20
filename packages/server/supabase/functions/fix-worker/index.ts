@@ -104,6 +104,7 @@ import {
   materializeFixFiles,
 } from '../_shared/fix-edits.ts';
 import { matchFramePathsToTree } from '../_shared/sentry-frames.ts';
+import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
@@ -1322,12 +1323,16 @@ ${
         },
       );
       prSpan.end({ prUrl: prResult.url });
+      // ADR 0030: one spelling per PR. GitHub's html_url keeps the owner and
+      // repo's case; stored as is it would dodge uq_fix_attempts_pr_url and
+      // the review gate's lookups.
+      const prUrl = canonicalPrUrl(prResult.url) ?? prResult.url;
 
       // ---- 8. Persist + cleanup --------------------------------------------
       await completeAttempt(db, fixAttemptId, {
         status: 'completed',
         branch: prResult.branch,
-        pr_url: prResult.url,
+        pr_url: prUrl,
         pr_number: prResult.number,
         commit_sha: prResult.commitSha,
         files_changed: prFiles.map((f) => f.path),
@@ -1347,7 +1352,7 @@ ${
         .from('fix_dispatch_jobs')
         .update({
           status: 'completed',
-          pr_url: prResult.url,
+          pr_url: prUrl,
           finished_at: new Date().toISOString(),
         })
         .eq('id', dispatch.id);
@@ -1356,7 +1361,7 @@ ${
         .from('reports')
         .update({
           fix_branch: prResult.branch,
-          fix_pr_url: prResult.url,
+          fix_pr_url: prUrl,
           status: 'fixing',
           // Clear any stale autofix_blocked stamp from a prior skipped/failed
           // attempt — this attempt made it through.
@@ -1399,7 +1404,7 @@ ${
           id: fixAttemptId,
           agent: 'mushi-fix-worker',
           branch: prResult.branch,
-          prUrl: prResult.url,
+          prUrl,
           commitSha: prResult.commitSha,
           summary: fix.summary,
         },
@@ -1410,7 +1415,7 @@ ${
       // Team channels (Slack thread / Discord / Teams): the draft-PR link,
       // threaded onto the report's original Slack card when one exists.
       void notifyTeamFixEvent(db, dispatch.project_id, dispatch.report_id, 'fix_pr_opened', {
-        prUrl: prResult.url,
+        prUrl,
         prNumber: prResult.number,
         branch: prResult.branch,
       }).catch((e) =>
@@ -1442,7 +1447,7 @@ ${
           fixAttemptId,
           primaryRepo: repo,
           codeFiles,
-          prUrl: prResult.url,
+          prUrl,
           prNumber: prResult.number,
         });
       } catch (err) {
@@ -1471,7 +1476,7 @@ ${
               trigger: 'post_pr',
               fix_attempt_id: fixAttemptId,
               report_id: dispatch.report_id,
-              pr_url: prResult.url,
+              pr_url: prUrl,
               queued_at: new Date().toISOString(),
             },
           })
@@ -1498,7 +1503,7 @@ ${
           metadata: {
             fix_attempt_id: fixAttemptId,
             report_id: dispatch.report_id,
-            pr_url: prResult.url,
+            pr_url: prUrl,
             pr_number: prResult.number,
           },
         });
@@ -1516,7 +1521,7 @@ ${
         JSON.stringify({
           ok: true,
           fixAttemptId,
-          prUrl: prResult.url,
+          prUrl,
           branch: prResult.branch,
           langfuseTraceId: trace.id,
         }),

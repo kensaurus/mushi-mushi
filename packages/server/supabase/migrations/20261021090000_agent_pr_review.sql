@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS public.fix_reviews (
   -- whichever project queued it.
   repo                  text CHECK (repo IS NULL OR repo = lower(repo)),
   pr_number             integer CHECK (pr_number IS NULL OR pr_number > 0),
+  -- GitHub's numeric repo id (base.repo.id), filled by the worker from the PR
+  -- it reads. It survives a repo rename, which the name above does not.
+  repo_id               bigint CHECK (repo_id IS NULL OR repo_id > 0),
   head_sha              text,
   verdict               text CHECK (verdict IS NULL OR verdict IN ('merge', 'fix_first', 'hold')),
   fixes_report          boolean,
@@ -92,6 +95,10 @@ CREATE INDEX IF NOT EXISTS idx_fix_reviews_project
 CREATE INDEX IF NOT EXISTS idx_fix_reviews_repo_pr
   ON public.fix_reviews (repo, pr_number)
   WHERE repo IS NOT NULL;
+-- The same lookup by GitHub repo id, for a repo renamed since its review.
+CREATE INDEX IF NOT EXISTS idx_fix_reviews_repo_id_pr
+  ON public.fix_reviews (repo_id, pr_number)
+  WHERE repo_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_fix_reviews_report_id
   ON public.fix_reviews (report_id)
   WHERE report_id IS NOT NULL;

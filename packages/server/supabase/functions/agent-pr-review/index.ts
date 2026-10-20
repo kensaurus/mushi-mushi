@@ -579,6 +579,8 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     error: null,
     pr_url: canonicalPrUrl(attempt.pr_url) ?? attempt.pr_url,
     repo: `${pr.owner}/${pr.repo}`.toLowerCase(),
+    // GitHub's id survives a rename; the merge gate finds this review by it.
+    repo_id: details.baseRepoId ?? null,
     pr_number: pr.number,
     head_sha: details.headSha,
     diff_truncated: diff.truncated,

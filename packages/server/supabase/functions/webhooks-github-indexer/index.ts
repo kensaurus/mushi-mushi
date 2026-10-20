@@ -390,6 +390,10 @@ async function handlePullRequestState(
     .from('fix_attempts')
     .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
     .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!attempt) {
     // Cloud-agent fallback: match by head ref while pr_url is still NULL.
@@ -432,6 +436,8 @@ async function handlePullRequestState(
       .from('fix_attempts')
       .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
       .in('pr_url', prUrlForms)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     attempt = reread.data;
     if (!attempt) {
@@ -702,6 +708,10 @@ async function handleFixPrMerged(payload: {
       'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, summary, rationale, files_changed',
     )
     .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!attempt) {
