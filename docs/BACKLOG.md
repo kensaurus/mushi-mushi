@@ -9,12 +9,12 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 45 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 44 · **Recently closed:** 9 (BL-007 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
-| test-gap | 7 |
+| test-gap | 6 |
 | tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 5 |
@@ -23,7 +23,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 42 |
+| relevant | 41 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -74,7 +74,6 @@ parked work is visible in one place.
 | BL-004 | deferred-plan-phase | Plan 020 Portfolio operator. 2026-10-17: all seven §4.2 detectors the plan lists as unbuilt are in `_shared/radar/` (`dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch`, `provider_limit_unset`), so the Phase 2 box is stale. `check:admin-docs-coverage` now warns on 3 pages, down from 5: `/design`, `/email/reporter`, `/recipe`. Left: those three MDX pages, the MCP-docs regeneration box, and ticking the plan | relevant | low | `docs/execplans/PLANS.md:632`, `:634`; `docs/execplans/portfolio-operator.md:474`-`:475`; `node scripts/check-admin-docs-coverage.mjs` | — |
 | BL-005 | deferred-plan-phase | Plan 021 `mushi ux`: owner-owed probes (Cursor `--list-models`, billing go/no-go, persistent-profile login, non-GET census); the single `NextStep` component waits on an owner decision; cloud-mode live dispatch not yet run | relevant | med | `docs/execplans/ux-loop.md:63`; `docs/execplans/PLANS.md:642`-`:646` | — |
 | BL-006 | deferred-plan-phase | Billing launch gate never ticked. The runbook says public Stripe checkout and paid tiers wait until all 12 items are green: hard-stop tests (Free at 50 → `NO_SUBSCRIPTION_OVER_FREE`, Indie overage, spend cap → `SPEND_CAP_REACHED`), billing UI states, 50/80/100% alerts, `stripe-bootstrap.mjs` lookup keys, metered overage only after Stage 2. PLANS.md adds quota validation over two cycles, one enterprise customer, the Sentry upsell, and annual prices. 2026-10-17: `pricing_plans` has `free_cloud`, `indie` and `pro`, the tiers migration is recorded, and there are 0 `billing_subscriptions`, so nothing is charged yet. Raised to med because it blocks paid launch | relevant | med | `docs/runbooks/billing-launch-gate.md:20`-`:57`; `docs/execplans/PLANS.md:515`-`:518` | — |
-| BL-007 | test-gap | The `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) | relevant | low | `docs/execplans/PLANS.md:545` | — |
 | BL-008 | test-gap | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | relevant | low | `docs/execplans/PLANS.md:230`, `:233` | — |
 | BL-009 | test-gap | Code-health ingest's ship checklist is unticked. 2026-10-17: the migration is live and 50 `code_health` gate runs plus 156 `bundle.*` / `code_health.*` metric rows from yen-yen are in production (last run 2026-07-16), so the "migration applied" and "one real yen-yen push" boxes are done. Not re-run: `POST /v1/ingest/metrics` 201 / 429, the owner vs non-member RLS spot-check, advisors. Tick those or reopen. Ingest has since stopped (BL-082) | verify-done | med | `docs/execplans/PLANS.md:421`-`:431` | — |
 | BL-010 | tech-debt | knip reports one unresolved import: `packages/server/src/__tests__/explore-tab-navigation.test.ts` imports `../../apps/admin/src/lib/exploreTabNavigation.ts`. Vitest resolves it and the test runs (3 tests pass in CI), but knip cannot follow the path, and `apps/admin` already has its own `exploreTabNavigation.test.ts`. Point the import at a path knip resolves, or drop the duplicate test | relevant | low | `packages/server/src/__tests__/explore-tab-navigation.test.ts:2`; CI run 38518598645 | — |
@@ -120,6 +119,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-007 | The `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) | 2026-10-20 | `.github/workflows/e2e-realworld.yml` runs `pnpm e2e:realworld` with `MUSHI_REALWORLD=1` after installing Playwright chromium and building `@mushi-mushi/react` and `@mushi-mushi/node` (and their workspace deps). Triggers: path-filtered pull requests (`examples/realworld`, `packages/core`, `packages/web`, `packages/react`, `packages/node`), daily cron `15 5 * * *`, and `workflow_dispatch`. `scripts/e2e-realworld-workflow.test.mjs` pins that invocation. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
