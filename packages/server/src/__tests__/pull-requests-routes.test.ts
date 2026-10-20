@@ -6,6 +6,8 @@
  *          a project with the App installed and no stored token answered 409
  *          "Connect GitHub" (lets-talk, 2026-10-14). The merge keeps its
  *          CI-skip stripping and its viewer and connected-repo refusals.
+ *          A PR that is a Mushi fix goes through the Opus review gate
+ *          (ADR 0030), and the list shows its review.
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -16,6 +18,7 @@ const P = '3d2abd0b-cfd1-4b31-a8cd-3db158923862'
 const state = vi.hoisted(() => ({
   db: null as unknown,
   role: null as string | null,
+  authMethod: 'jwt' as string,
   merge: vi.fn(),
   audit: vi.fn(async () => null),
   resolveCalls: [] as Array<{ installationId: unknown; opts: unknown }>,
@@ -30,7 +33,9 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: state.audit }))
 vi.mock('../../supabase/functions/_shared/fix-merge.ts', () => ({ mergeGithubPullRequest: state.merge }))
-vi.mock('../../supabase/functions/_shared/github.ts', () => ({
+vi.mock('../../supabase/functions/_shared/github.ts', async (importOriginal) => ({
+  // The real reader of GitHub's `base.repo`: the merge gate keys on it.
+  baseRepoOf: (await importOriginal<typeof import('../../supabase/functions/_shared/github.ts')>()).baseRepoOf,
   parseGithubRepoUrl: (url: string | null) => {
     const m = url?.match(/github\.com\/([^/]+)\/([^/#?]+?)(?:\.git)?\/?$/)
     return m ? { owner: m[1], repo: m[2] } : null
@@ -68,7 +73,7 @@ class FakeApp {
     const all: Record<string, string> = { pid: P, ...params }
     const c = {
       req: { json: async () => body, param: (k: string) => all[k], query: () => undefined },
-      get: (k: string) => ({ userId: 'u1' })[k as 'userId'],
+      get: (k: string) => ({ userId: 'u1', authMethod: state.authMethod } as Record<string, string>)[k],
       json: (b: unknown, status = 200) => ({ body: b, status }),
     }
     return (await route.handler(c)) as Res
@@ -80,12 +85,14 @@ const MERGE = '/v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge'
 
 type RepoRow = { repo_url: string; is_primary: boolean; github_app_installation_id: number | null }
 
-function setup(repos: RepoRow[], settingsRepo: string | null = null): FakeApp {
+function setup(repos: RepoRow[], settingsRepo: string | null = null, extra: Record<string, Array<Record<string, unknown>>> = {}): FakeApp {
   state.db = makeFakeDb({
     project_repos: repos.map((r) => ({ project_id: P, ...r })),
     project_settings: [{ project_id: P, github_repo_url: settingsRepo, github_installation_token_ref: null }],
+    ...extra,
   })
   state.role = null
+  state.authMethod = 'jwt'
   state.resolveCalls = []
   state.tokens = new Map<number | null, string | null>([[null, null]])
   state.merge.mockReset()
@@ -107,7 +114,7 @@ function stubGithub(): Array<{ url: string; auth: string | null }> {
         user: { login: 'kensaurus' }, head: { ref: 'feat/x', sha: 'abc' }, base: { ref: 'main' }, updated_at: '2026-10-14T00:00:00Z',
       }]))
     }
-    if (/\/pulls\/\d+$/.test(url)) return new Response(JSON.stringify({ title: 'chore: release [skip ci]', state: 'open' }))
+    if (/\/pulls\/\d+$/.test(url)) return new Response(JSON.stringify({ title: 'chore: release [skip ci]', state: 'open', head: { sha: 'abc' } }))
     if (url.includes('/rules/branches/')) return new Response('[]')
     if (url.includes('/check-runs')) return new Response(JSON.stringify({ check_runs: [] }))
     return new Response('{}', { status: 404 })
@@ -191,5 +198,57 @@ describe('merging from the Pull requests page', () => {
     expect((await app.call('POST', MERGE, { owner: 'someone', repo: 'elses', number: '7' }, {})).status).toBe(403)
     expect(state.resolveCalls).toEqual([])
     expect(state.merge).not.toHaveBeenCalled()
+  })
+})
+
+describe('a Mushi fix PR on the Pull requests page (ADR 0030)', () => {
+  const repos: RepoRow[] = [{ repo_url: 'https://github.com/kensaurus/sbc-docs', is_primary: true, github_app_installation_id: 111 }]
+  const fixAttempt = { id: 'fa-7', project_id: P, pr_number: 7, pr_url: 'https://github.com/kensaurus/sbc-docs/pull/7', created_at: '2026-10-20T00:00:00Z' }
+  const hold = {
+    id: 'rev-7', fix_attempt_id: 'fa-7', project_id: P, status: 'completed', verdict: 'hold', head_sha: 'abc',
+    repo: 'kensaurus/sbc-docs', pr_number: 7, pr_url: 'https://github.com/kensaurus/sbc-docs/pull/7',
+    findings: [], removes_behavior: [], rules_applied: [], summary: 'Removes the resume flow.', reviewed_at: '2026-10-21T00:00:00Z',
+  }
+
+  it('the list shows the review of a fix PR', async () => {
+    const app = setup(repos, null, { fix_attempts: [fixAttempt], fix_reviews: [hold] })
+    state.tokens.set(111, 'ghs_111')
+    stubGithub()
+    const res = await app.call('GET', LIST)
+    const pr = (res.body.data?.pullRequests as Array<{ review?: unknown }>)[0]
+    expect(pr.review).toEqual({ state: 'hold', label: 'Opus review: hold', fixId: 'fa-7', verdict: 'hold', pending: false })
+  })
+
+  it('refuses to merge a held fix PR, and never reaches GitHub', async () => {
+    const app = setup(repos, null, { fix_attempts: [fixAttempt], fix_reviews: [hold] })
+    state.tokens.set(111, 'ghs_111')
+    stubGithub()
+    const res = await app.call('POST', MERGE, { owner: 'kensaurus', repo: 'sbc-docs', number: '7' }, {})
+    expect(res.status).toBe(409)
+    expect(res.body.error?.code).toBe('REVIEW_HOLD')
+    expect(state.merge).not.toHaveBeenCalled()
+  })
+
+  it('a member overrides with a reason: merged at the reviewed head, audited', async () => {
+    const app = setup(repos, null, { fix_attempts: [fixAttempt], fix_reviews: [hold] })
+    state.tokens.set(111, 'ghs_111')
+    stubGithub()
+    state.role = 'member'
+    state.merge.mockResolvedValue({ merged: true, alreadyMerged: false, sha: 'm1' })
+    expect((await app.call('POST', MERGE, { owner: 'kensaurus', repo: 'sbc-docs', number: '7' }, { override: true })).status).toBe(400)
+    const res = await app.call('POST', MERGE, { owner: 'kensaurus', repo: 'sbc-docs', number: '7' }, { override: true, overrideReason: 'Checked by hand' })
+    expect(res.status).toBe(200)
+    expect(state.merge.mock.calls[0][3]).toMatchObject({ sha: 'abc' })
+    expect(state.audit.mock.calls[0][6]).toMatchObject({ fix_attempt_ids: ['fa-7'], review_state: 'hold', review_override: true, override_reason: 'Checked by hand', merged_head_sha: 'abc' })
+  })
+
+  it('a PR that is not a Mushi fix merges as before, without a pinned head', async () => {
+    const app = setup(repos, null, { fix_attempts: [], fix_reviews: [] })
+    state.tokens.set(111, 'ghs_111')
+    stubGithub()
+    state.merge.mockResolvedValue({ merged: true, alreadyMerged: false, sha: 'm1' })
+    const res = await app.call('POST', MERGE, { owner: 'kensaurus', repo: 'sbc-docs', number: '7' }, {})
+    expect(res.status).toBe(200)
+    expect(state.merge.mock.calls[0][3]).not.toHaveProperty('sha')
   })
 })

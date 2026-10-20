@@ -71,6 +71,8 @@ npx supabase functions deploy mcp --no-verify-jwt
 npx supabase functions deploy telegram-webhook --no-verify-jwt
 npx supabase functions deploy cursor-webhook --no-verify-jwt
 npx supabase functions deploy agent-status-poll --no-verify-jwt
+# Agent PR review gate (ADR 0030): Opus review of every cloud-agent PR
+npx supabase functions deploy agent-pr-review --no-verify-jwt
 ```
 
 Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.

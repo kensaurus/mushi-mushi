@@ -35,7 +35,6 @@ import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import {
   finalizeFixMerge,
-  mergeGithubPullRequest,
   parsePrRepoRef,
   type MergeMethod,
 } from '../../_shared/fix-merge.ts';
@@ -46,10 +45,17 @@ import {
   type FixTimelineEvent,
 } from '../../_shared/fix-timeline.ts';
 import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import { REVIEW_RERUNS_PER_HOUR, REVIEW_RUN_STALE_MS, toPublicReview } from '../../_shared/fix-review.ts';
+import { runInBackground } from '../../_shared/background.ts';
+import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
+import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
+import { gatedMergePullRequest } from '../../_shared/gated-merge.ts';
+import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
+  fetchPullRequest,
   installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
@@ -941,12 +947,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    let body: { mergeMethod?: MergeMethod } = {};
+    let body: { mergeMethod?: MergeMethod; override?: unknown; overrideReason?: unknown; confirmPendingReview?: unknown } = {};
     try {
       body = await c.req.json();
     } catch {
       // empty body ok
     }
+    const override = body.override === true;
+    const confirmPendingReview = body.confirmPendingReview === true;
+    const overrideReason =
+      typeof body.overrideReason === 'string' ? body.overrideReason.trim().slice(0, 500) || null : null;
 
     const { data: attempt, error: fetchErr } = await db
       .from('fix_attempts')
@@ -1010,25 +1020,43 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    let mergeResult;
+    // ADR 0030: the review gate, through the one gated merge every merge
+    // route uses (_shared/gated-merge.ts): every review linked to this PR,
+    // the PR's head now, the override rules, and a merge pinned to that head.
+    let outcome;
     try {
-      mergeResult = await mergeGithubPullRequest(token, ref, attempt.pr_number, {
-        mergeMethod: body.mergeMethod ?? 'squash',
-        commitTitle: attempt.summary
-          ? `fix: ${String(attempt.summary).slice(0, 72)}`
-          : undefined,
+      outcome = await gatedMergePullRequest(db, {
+        projectId: attempt.project_id,
+        token,
+        ref,
+        number: attempt.pr_number,
+        fixAttemptId: attempt.id,
+        override,
+        overrideReason,
+        confirmPendingReview,
+        authMethod: c.get('authMethod') as string | undefined,
+        role: access.role,
+        merge: {
+          mergeMethod: body.mergeMethod ?? 'squash',
+          commitTitle: attempt.summary ? `fix: ${String(attempt.summary).slice(0, 72)}` : undefined,
+        },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ ok: false, error: { code: 'GITHUB_MERGE_FAILED', message: msg } }, 502);
     }
+    if (!outcome.ok) {
+      return c.json({ ok: false, error: { code: outcome.code, message: outcome.message }, data: { review: outcome.review } }, outcome.status);
+    }
+    const { result: mergeResult, gate } = outcome;
+    const review = gate.review;
 
     if (!mergeResult.merged && !mergeResult.alreadyMerged) {
       return c.json(
         {
           ok: false,
           error: {
-            code: 'NOT_MERGEABLE',
+            code: mergeResult.headMoved ? 'HEAD_MOVED' : 'NOT_MERGEABLE',
             message: mergeResult.message ?? 'GitHub rejected the merge',
           },
         },
@@ -1052,7 +1080,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       'fix.merge',
       'fix_attempt',
       attempt.id,
-      { report_id: attempt.report_id, pr_number: attempt.pr_number },
+      {
+        report_id: attempt.report_id,
+        pr_number: attempt.pr_number,
+        review_state: review.state,
+        ...outcome.audit,
+      },
     ).catch(() => null);
 
     return c.json({
@@ -1064,8 +1097,143 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         reportId: attempt.report_id,
         reportStatus,
         sha: mergeResult.sha ?? null,
+        review: { state: review.state, label: review.label, overridden: gate.overridden },
       },
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Re-run the agent PR review — POST /v1/admin/fixes/:id/review (ADR 0030)
+  //
+  // Queues a fresh Opus review of the attempt's PR and asks agent-pr-review to
+  // run it now. The last completed verdict stays in force until the new
+  // review completes: a re-run never clears a hold. Billed to the project's
+  // Anthropic key, so viewers cannot start one, a review already queued or
+  // running is a 409, and each fix is limited to 3 re-runs an hour.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const fixId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const { data: attempt, error: fetchErr } = await db
+      .from('fix_attempts')
+      .select('id, project_id, report_id, pr_url, pr_state, merged_at, repo_id')
+      .eq('id', fixId)
+      .maybeSingle();
+    if (fetchErr) return dbError(c, fetchErr);
+    if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
+    }
+    if (!attempt.pr_url) {
+      return c.json({ ok: false, error: { code: 'NO_PR', message: 'This fix has no pull request to review' } }, 409);
+    }
+    if (attempt.merged_at || attempt.pr_state === 'merged' || attempt.pr_state === 'closed') {
+      return c.json(
+        { ok: false, error: { code: 'PR_NOT_OPEN', message: 'The pull request is already merged or closed' } },
+        409,
+      );
+    }
+    if (access.role === 'viewer') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot start a review.' } }, 403);
+    }
+
+    const current = await loadFixReviewRow(db, attempt.id);
+    if (current.error) {
+      return c.json({ ok: false, error: { code: 'REVIEW_UNAVAILABLE', message: 'Could not read the current review. Try again in a minute.' } }, 503);
+    }
+    // A hold on the commit it reviewed is re-reviewed only at a person's
+    // request: an API key re-running until the verdict flips would be a way
+    // around the hold. New commits re-queue the review on their own (the
+    // pull_request.synchronize webhook), so an agent never needs this.
+    // The head is read LIVE from GitHub (C2): fix_attempts.commit_sha is a
+    // cache a caller could once write. If GitHub cannot be read, assume the
+    // hold is still on the current head.
+    let headNow: string | null = null;
+    if (current.row?.verdict === 'hold') {
+      const prRef = parsePrRepoRef(attempt.pr_url);
+      const prNumber = parsePullRequestUrl(canonicalPrUrl(attempt.pr_url) ?? '')?.number ?? null;
+      if (prRef && prNumber) {
+        const installationId = await installationIdForAttempt(db, attempt);
+        const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
+        if (token) {
+          headNow = await fetchPullRequest(token, prRef, prNumber).then((p) => p?.headSha ?? null).catch(() => null);
+        }
+      }
+    }
+    const holdOnHead = current.row?.verdict === 'hold' && (!headNow || headNow === current.row.head_sha);
+    if (holdOnHead && c.get('authMethod') !== 'jwt') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RERUN_NEEDS_CONSOLE',
+            message: 'The Opus review says hold for this commit. Only a person can ask for it again: open the fix in the Mushi console. New commits are reviewed automatically.',
+          },
+        },
+        403,
+      );
+    }
+    const startedMs = current.row?.started_at ? Date.parse(current.row.started_at) : NaN;
+    const runningFresh = current.row?.status === 'running' && Number.isFinite(startedMs) && Date.now() - startedMs < REVIEW_RUN_STALE_MS;
+    if (current.row?.status === 'queued' || runningFresh) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'REVIEW_IN_PROGRESS', message: 'A review of this pull request is already queued or running.' },
+          data: { review: toPublicReview(current.row) },
+        },
+        409,
+      );
+    }
+    const rate = await claimTenantRateLimit(db, `fix:${attempt.id}:pr_review_rerun`, REVIEW_RERUNS_PER_HOUR, 3600);
+    if (!rate.allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message: `This fix was reviewed ${REVIEW_RERUNS_PER_HOUR} times in the last hour. Try again later.`,
+          },
+        },
+        429,
+        rate.retryAfterSec ? { 'Retry-After': String(rate.retryAfterSec) } : undefined,
+      );
+    }
+
+    const queued = await enqueueFixReview(
+      db,
+      { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+      { force: true },
+    );
+    if (!queued.queued) {
+      return c.json({ ok: false, error: { code: 'REVIEW_NOT_QUEUED', message: queued.error ?? 'Could not queue the review' } }, 500);
+    }
+
+    // Fire and forget: the cron drains the queue anyway if this call is lost.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const internalSecret =
+      Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && internalSecret) {
+      runInBackground(
+        fetch(`${supabaseUrl}/functions/v1/agent-pr-review`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${internalSecret}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fixAttemptId: attempt.id, trigger: 'manual' }),
+        }),
+        'agent-pr-review re-run',
+      );
+    }
+
+    await logAudit(db, attempt.project_id, userId, 'fix.reviewed', 'fix_attempt', attempt.id, {
+      report_id: attempt.report_id,
+      requested: 'agent_pr_review_rerun',
+    }).catch(() => null);
+
+    return c.json({ ok: true, data: { review: await loadFixReview(db, attempt.id) } }, 202);
   });
 
   // PDCA timeline for a single fix attempt — merges fix_dispatch_jobs +
@@ -1118,7 +1286,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
       if (!fix) {
         const events = pendingDispatchEvents(job);
-        return c.json({ ok: true, data: { fix: null, dispatch: job, events, source: 'synthesized' } });
+        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), source: 'synthesized' } });
       }
     }
 
@@ -1148,6 +1316,10 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       ? await repoQuery.eq('id', fix.repo_id).maybeSingle()
       : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
     const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
+    // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
+    // fix_attempts.commit_sha follows the PR head on push (webhooks-github-indexer),
+    // so a verdict about an older commit shows as stale here.
+    const review = await loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null);
 
     if (storedEvents && storedEvents.length > 0) {
       const events = mergeStoredFixTimeline(
@@ -1161,11 +1333,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           status: (e.status ?? undefined) as FixTimelineEvent['status'],
         })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'fix_events' } });
     }
 
     const events = synthesizeFixTimeline(dispatch ?? null, fix);
-    return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'synthesized' } });
+    return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1506,6 +1678,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         | 'ci_started'
         | 'ci_resolved'
         | 'pr_state_changed'
+        | 'reviewed'
         | 'completed'
         | 'failed';
       fix_attempt_id: string;
@@ -1654,6 +1827,64 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowed[key]) updates[key] = value;
+    }
+
+    // ADR 0030: one spelling per PR. A trailing slash, query or odd casing
+    // used to dodge uq_fix_attempts_pr_url and point a second attempt (in
+    // any project) at a PR that already has one.
+    if ('pr_url' in updates && updates.pr_url !== null) {
+      const canonical = canonicalPrUrl(updates.pr_url);
+      if (!canonical) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_PR_URL',
+              message: 'pr_url must be a GitHub pull request URL: https://github.com/<owner>/<repo>/pull/<number>.',
+            },
+          },
+          400,
+        );
+      }
+      updates.pr_url = canonical;
+      updates.pr_number = parsePullRequestUrl(canonical)!.number;
+    }
+
+    // ADR 0030: once a PR is attached, its link is fixed. Retargeting or
+    // clearing pr_url / commit_sha would unlink the fix from its Opus review
+    // and slip a held PR past the merge gate. Setting them while unset (an
+    // external agent reporting its PR, submit_fix_result) still works.
+    if ('pr_url' in updates || 'commit_sha' in updates) {
+      const { data: current, error: currentErr } = await db
+        .from('fix_attempts')
+        .select('pr_url, commit_sha')
+        .eq('id', fixId)
+        .in('project_id', projectIds)
+        .maybeSingle();
+      if (currentErr) return dbError(c, currentErr);
+      const row = current as { pr_url: string | null; commit_sha: string | null } | null;
+      if (row?.pr_url) {
+        const prChanged = 'pr_url' in updates && updates.pr_url !== (canonicalPrUrl(row.pr_url) ?? row.pr_url);
+        // The head the review gate compares against comes from GitHub, but
+        // nothing legitimate writes commit_sha with a key once the PR is
+        // attached (the push webhook does, as the service role): refuse it.
+        const shaChanged =
+          'commit_sha' in updates &&
+          updates.commit_sha !== row.commit_sha &&
+          (row.commit_sha != null || c.get('authMethod') !== 'jwt');
+        if (prChanged || shaChanged) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'PR_LINK_LOCKED',
+                message: 'This fix already has a pull request; its PR URL and commit cannot be changed. Dispatch a new fix for a different PR.',
+              },
+            },
+            409,
+          );
+        }
+      }
     }
 
     const { error } = await db

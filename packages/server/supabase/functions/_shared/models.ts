@@ -36,10 +36,18 @@ export const ANTHROPIC_SONNET_LATEST = 'claude-sonnet-5-5'
  *  calls it through `claude-messages.ts` (`pdca-models.ts`). */
 export const ANTHROPIC_SONNET = 'claude-sonnet-4-6'
 
-/** Opus 4.8 (released 2026-05-28). Not a stage default; listed so pricing
- *  pre-flight covers it. Like every 4.7+ / 5.x model it rejects the AI SDK
- *  v4 call shape, so any caller must use `claude-messages.ts`. */
+/** Previous Opus (4.8, released 2026-05-28). Not a stage default; listed so
+ *  pricing pre-flight covers a per-project override onto it. Like every
+ *  4.7+ / 5.x model it rejects the AI SDK v4 call shape, so any caller must
+ *  use `claude-messages.ts`. */
 export const ANTHROPIC_OPUS = 'claude-opus-4-8'
+
+/** Current Opus: Opus 5.5 ($4/$20 per MTok, 1M context, 128K output; Claude
+ *  API model table, cached 2026-10-06). Thinking is always on (`disabled`
+ *  and `budget_tokens` are a 400) and effort defaults to `medium`, so callers
+ *  set effort explicitly; forced tool_choice is a 400, so callers go through
+ *  `claude-messages.ts` (structured outputs). Used by the agent PR review. */
+export const ANTHROPIC_OPUS_LATEST = 'claude-opus-5-5'
 
 /** Latest Haiku. Fast path: fast-filter + nl-query summariser. Haiku 4.5
  *  still accepts `temperature` and forced tool use, so it stays on AI SDK v4. */
@@ -146,6 +154,10 @@ export const CODEBASE_ASSIST_MODEL = ANTHROPIC_HAIKU_LATEST
 /** test-gen-from-story default. */
 export const TEST_GEN_MODEL = ANTHROPIC_SONNET_LATEST
 
+/** agent-pr-review: the independent review of a cloud agent's pull request
+ *  (ADR 0030). Opus, because it grades another model's code. */
+export const AGENT_PR_REVIEW_MODEL = ANTHROPIC_OPUS_LATEST
+
 // --- Effort per route (`output_config.effort`) ------------------------------
 //
 // Starting points from the Sonnet 5.5 migration guide: `low` for chat,
@@ -169,6 +181,12 @@ export const INVENTORY_PROPOSE_EFFORT = 'medium' as const
 export const MISTAKE_EFFORT = 'low' as const
 export const CODEBASE_ASSIST_EFFORT = 'low' as const
 export const NL_QUERY_PLANNER_EFFORT = 'medium' as const
+/** Code review of a whole PR, on Opus 5.5 (whose default is `medium`).
+ *  `high` would suit it better, but the review must finish inside the 150 s
+ *  edge wall clock (100 s per call, 8k output tokens), and deeper thinking
+ *  there is cut off rather than used. Raise it when the review moves to a
+ *  longer-running worker or a streamed call. */
+export const AGENT_PR_REVIEW_EFFORT = 'medium' as const
 
 /** Extra `max_tokens` on top of a reply cap so adaptive thinking (which counts
  *  toward `max_tokens`) cannot truncate a short assistant answer. */
@@ -273,6 +291,7 @@ export const ALL_ACTIVE_CHAT_MODELS: readonly string[] = [
   ANTHROPIC_SONNET_LATEST,
   ANTHROPIC_SONNET,
   ANTHROPIC_OPUS,
+  ANTHROPIC_OPUS_LATEST,
   OPENAI_PRIMARY,
   OPENAI_MINI,
 ] as const

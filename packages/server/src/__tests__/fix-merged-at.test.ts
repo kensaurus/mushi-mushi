@@ -128,6 +128,16 @@ describe('mergeGithubPullRequest', () => {
     expect(out).toMatchObject({ merged: true, alreadyMerged: true, mergedAt: '2026-10-02T22:10:00Z' })
   })
 
+  // ADR 0030: the merge pins the commit the review gate saw.
+  it('sends the checked head SHA, and reports a PR that moved since as headMoved', async () => {
+    mocks.fetchPullRequest.mockResolvedValue({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ message: 'Head branch was modified. Review and try the merge again.' }), { status: 409 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12, { sha: 'abc123' })
+    expect(JSON.parse(String((fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toMatchObject({ sha: 'abc123' })
+    expect(out).toMatchObject({ merged: false, alreadyMerged: false, headMoved: true })
+  })
+
   it('falls back to GitHub\'s message only when the PR cannot be re-read', async () => {
     mocks.fetchPullRequest
       .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
