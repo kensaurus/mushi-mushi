@@ -29,7 +29,7 @@ how much is left.
   model, fixes per day (1-200, default 10) and how many days before expiry to
   start (1-90, default 14). Off by default; Cursor keys only; on requires a
   date (database check).
-- The `spend-down-worker` (cron `28,58 * * * *`) dispatches, for each key in
+- The `spend-down-worker` (cron `8-58/10 * * * *`, every 10 minutes since 2026-10-20) dispatches, for each key in
   its window, the best open reports of the apps that key **already serves**,
   using ADR 0023's order without changing the resolver: a key serves an app
   only where `resolveCursorApiKey` would pick it first (own pool key by
