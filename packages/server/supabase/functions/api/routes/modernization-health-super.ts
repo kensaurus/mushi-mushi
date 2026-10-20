@@ -608,13 +608,10 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
   app.get('/v1/super-admin/metrics', jwtAuth, requireSuperAdmin, async (c) => {
     const db = getServiceClient();
     const { data, error } = await db.from('super_admin_metrics').select('*').maybeSingle();
-    if (error) {
-      log.error('super_admin_metrics_failed', { err: error.message });
-      return c.json(
-        { ok: false, error: { code: 'INTERNAL', message: 'Failed to load metrics' } },
-        500,
-      );
-    }
+    // A gateway blip (Cloudflare 502/522/524) puts an HTML page in
+    // error.message. dbError classifies that as transient and returns JSON
+    // without forwarding the page to Sentry.
+    if (error) return dbError(c, error);
     return c.json({
       ok: true,
       data: data ?? {
