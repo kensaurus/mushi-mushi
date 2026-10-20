@@ -34,6 +34,83 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError(err), true)
   })
 
+  // The 522 page shares its template with the other origin/gateway failures.
+  // A 520 body starts with the same `<!DOCTYPE html>` / IE conditional comments
+  // and only names the code in the title ("520: Web server is returning an
+  // unknown error") — the old template has no "Error code 520" label. That
+  // page was reported as RepoLookupError on project_repos.repo_url
+  // (MUSHI-9d390abc).
+  it('Cloudflare 520/521/523/524 and 502/503/504 gateway HTML is transient', () => {
+    const head =
+      '<!DOCTYPE html>\n' +
+      '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n' +
+      '<!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en-US"> <![endif]-->\n' +
+      '<!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en-US"> <![endif]-->\n' +
+      '<!--[if gt IE 8]><!--> <html class="no-js" lang="en-US"> <!--<![endif]-->\n'
+    const titles = [
+      'abc.supabase.co | 520: Web server is returning an unknown error',
+      'abc.supabase.co | 521: Web server is down',
+      'abc.supabase.co | 523: Origin is unreachable',
+      'abc.supabase.co | 524: A timeout occurred',
+      'abc.supabase.co | 502: Bad gateway',
+      'abc.supabase.co | 503: Service temporarily unavailable',
+      'abc.supabase.co | 504: Gateway time-out',
+      'abc.supabase.co | 504: Gateway timeout',
+    ]
+    for (const title of titles) {
+      assertEquals(
+        isTransientDbConnectionError({
+          message: `${head}<title>${title}</title><span class="cf-error-code">520</span>`,
+          code: null,
+        }),
+        true,
+      )
+    }
+    // Newer template: the code is a label, not only the title.
+    for (const code of [502, 503, 504, 520, 521, 523, 524]) {
+      assertEquals(
+        isTransientDbConnectionError({
+          message: `<span class="code-label">Error code ${code}</span>`,
+          code: '',
+        }),
+        true,
+      )
+    }
+  })
+
+  it('Cloudflare certificate failures and challenge pages are NOT transient', () => {
+    const head = '<!DOCTYPE html><!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->'
+    assertEquals(
+      isTransientDbConnectionError({
+        message:
+          `${head}<title>abc.supabase.co | 525: SSL handshake failed</title>` +
+          '<span class="code-label">Error code 525</span>',
+        code: null,
+      }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({
+        message: `${head}<title>abc.supabase.co | 526: Invalid SSL certificate</title>`,
+        code: null,
+      }),
+      false,
+    )
+    // Bot-fight / WAF interstitial. Retrying forever would hide a block.
+    assertEquals(
+      isTransientDbConnectionError({
+        message: `${head}<title>Attention Required! | Cloudflare</title>`,
+        code: null,
+      }),
+      false,
+    )
+    // The status span alone is just a number. Same rule as a bare "522".
+    assertEquals(
+      isTransientDbConnectionError({ message: '<span class="cf-error-code">520</span>', code: null }),
+      false,
+    )
+  })
+
   // ── Must NOT hide real bugs: genuine coded SQLSTATE errors always report ───────
 
   it('real DB errors with a SQLSTATE are NOT transient (never silenced)', () => {
@@ -44,6 +121,14 @@ describe('isTransientDbConnectionError', () => {
     // token, the code wins and it is reported (the review's top false-negative risk).
     assertEquals(
       isTransientDbConnectionError({ message: 'RAISE: connection timed out for provider', code: 'P0001' }),
+      false,
+    )
+    // A coded error wins even when the text quotes a Cloudflare gateway page.
+    assertEquals(
+      isTransientDbConnectionError({
+        message: '520: Web server is returning an unknown error',
+        code: 'P0001',
+      }),
       false,
     )
     // Pool exhaustion / statement timeout are real capacity signals — keep paging.
@@ -92,6 +177,8 @@ describe('isTransientDbConnectionError', () => {
     // e.g. a real validation/constraint error whose text happens to contain 522.
     assertEquals(isTransientDbConnectionError({ message: 'value 5220 exceeds maximum allowed', code: null }), false)
     assertEquals(isTransientDbConnectionError({ message: 'row 522 failed check constraint', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'error code 5200 exceeds maximum allowed', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'error code 5229', code: null }), false)
   })
 
   it('generic "connection refused" (persistent misconfig) is NOT auto-silenced', () => {
