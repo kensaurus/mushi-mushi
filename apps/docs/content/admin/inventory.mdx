@@ -106,7 +106,9 @@ for inventory drift, `SyntheticTimeline` for the synthetic walks.
 
 Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
 
-Each broken page files one report. When 5 or more pages break in the same check (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it files again.
+A page has to fail twice before it becomes a report. When a check finds a broken page, Mushi loads that page again, waits about 10 seconds for it to finish loading, and files only if it is still broken. A page caught mid-load (a loading screen, only a "Skip to content" link, a status line waiting on a request) is not a broken page. A server error or a page that won't load also files when two checks in a row see it. If your whole site is down, Mushi files one report within the hour. Two cases file at low severity: a page Firecrawl's checker keeps calling broken that Mushi can't load again to confirm (marked "unconfirmed"), and a server error that keeps coming back but loads fine each time Mushi looks again (3 times in 7 days, marked "intermittent"). These second loads use your app's own Firecrawl key: at most 6 per hourly read, shared across your apps, 1 credit each.
+
+Each broken page files one report. When 5 or more pages break at once (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it has to fail twice again before it files.
 
 **Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
 
