@@ -37,6 +37,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ProjectAccessReadError } from '../../supabase/functions/_shared/project-access.ts'
 import { sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
 
 interface MinimalContext {
@@ -143,5 +144,52 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     const err = new Error('downstream HTTP 503')
     const res = sentryHonoErrorHandler(err, fakeContext('/v1/admin/fixes/dispatch', 'POST') as never)
     expect(res.status).toBe(500)
+  })
+
+  it('does not report a Cloudflare HTML access failure (MUSHI-a8a03270)', async () => {
+    const err = new ProjectAccessReadError('organization_members', {
+      message:
+        '<!DOCTYPE html>\n' +
+        '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n' +
+        '<head><title>abc.supabase.co | 522: Connection timed out</title></head>' +
+        `<body><div id="cf-wrapper">${'z'.repeat(5000)}</div></body>`,
+      code: '',
+    })
+    expect(err.transient).toBe(true)
+    const res = sentryHonoErrorHandler(
+      err,
+      fakeContext('/v1/admin/workspace/nav-meta', 'GET', { requestId: '7f39978d' }) as never,
+    )
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: { code: string; message: string; requestId?: string } }
+    expect(body.error.code).toBe('DB_ERROR')
+    expect(body.error.message).not.toContain('<!DOCTYPE')
+    expect(body.error.requestId).toBe('7f39978d')
+    const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
+    expect(payload.event).toBe('db_transient_error')
+    expect(String(payload.err_message)).not.toContain('<!DOCTYPE')
+    expect(String(payload.err_message)).toContain('522: Connection timed out')
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('still returns 500 internal for a project-access failure that is a real query error', async () => {
+    const err = new ProjectAccessReadError('organization_members', {
+      message: 'column "user_id" does not exist',
+      code: '42703',
+    })
+    expect(err.transient).toBe(false)
+    const res = sentryHonoErrorHandler(err, fakeContext() as never)
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('INTERNAL')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('an unrelated throw that quotes HTML is not swallowed as a DB blip', async () => {
+    const err = new Error('<!DOCTYPE html><title>502 Bad Gateway</title> from api.github.com')
+    const res = sentryHonoErrorHandler(err, fakeContext() as never)
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('INTERNAL')
   })
 })
