@@ -208,7 +208,12 @@ html[data-theme="light"] {
   --color-lime:          oklch(0.46 0.22 128);
   --color-lime-fg:       oklch(0.99 0.01 128);
   --color-lime-muted:    oklch(0.91 0.09 128);
-  --color-warn:          oklch(0.68 0.18 80);
+  /* BL-076 (2026-10-20): light warn was oklch(0.68 0.18 80) — 2.64:1 as
+     text on surface and 2.82:1 for warn-fg on the fill, under WCAG AA
+     (4.5:1 text, 3:1 for the dot). Same hue and chroma, L 0.50: 5.50:1
+     on surface, 4.80:1 on surface-overlay, 5.87:1 for warn-fg on the
+     fill. Dark warn stays hue 55. */
+  --color-warn:          oklch(0.50 0.18 80);
   --color-sev-medium:    oklch(0.80 0.17 100);
   --color-warn-fg:       oklch(0.99 0.02 80);
   --color-warn-muted:    oklch(0.96 0.06 80);
