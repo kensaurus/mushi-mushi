@@ -107,4 +107,4 @@ After submitting from a signed-in dev build:
 
 - [`packages/react-native/README.md`](../packages/react-native/README.md) — SDK install + capture options
 - [`apps/docs/content/sdks/react-native.mdx`](../apps/docs/content/sdks/react-native.mdx) — public docs site
-- [`yen-yen/docs/mushi-integration.md`](../../yen-yen/docs/mushi-integration.md) — host-app runbook (sibling repo)
+- `yen-yen/docs/mushi-integration.md` — host-app runbook in the yen-yen checkout (not a file in this repo)
