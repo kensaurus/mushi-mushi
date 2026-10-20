@@ -3,6 +3,7 @@
  *
  * Your AI keys → "Turn off" (suspected-bugs entry 251) took a working key out
  * of rotation in one click. It now asks first; turning a key on does not.
+ * "Test" shows a sentence from describeByokTestResult, never a probe code.
  */
 
 import { act, createElement } from 'react'
@@ -101,5 +102,30 @@ describe('ByokPanel turn off', () => {
     await act(async () => button('Turn on').click())
     expect(patches()).toHaveLength(1)
     expect(document.body.textContent).not.toContain('Turn off this')
+  })
+
+  it('shows a sentence when Test is rejected, not the probe code', async () => {
+    mocks.keys = [ACTIVE]
+    mocks.apiFetch.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/test')) {
+        return {
+          ok: true,
+          data: {
+            validation: {
+              status: 'error_auth',
+              detail: 'Provider rejected the credential',
+              latencyMs: 12,
+            },
+          },
+        }
+      }
+      return { ok: true, data: {} }
+    })
+    await render()
+    await act(async () => button('Test').click())
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Anthropic (Claude) rejected the key. Replace it with a new one.')
+    expect(text).not.toContain('error_auth')
+    expect(text).not.toContain('Provider rejected the credential')
   })
 })
