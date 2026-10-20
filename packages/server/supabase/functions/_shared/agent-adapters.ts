@@ -29,6 +29,7 @@ import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
+import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
@@ -211,15 +212,19 @@ async function resolveVaultRef(db: SupabaseClient, ref: string | null | undefine
 }
 
 /**
- * Cursor key: BYOK pool row (`byok_keys`, provider 'cursor') → legacy
- * `project_settings.cursor_api_key_ref` (vault ref, what the Integrations
- * page writes) → env `CURSOR_API_KEY` (self-host). resolveLlmKey already
- * covers the pool + env; the project-level ref is checked BEFORE the env
- * fallback so a project's own key always beats the platform-wide one.
+ * Cursor key, in ADR 0023's order: the app's own pool row (`byok_keys`,
+ * provider 'cursor') → its legacy `project_settings.cursor_api_key_ref`
+ * (vault ref, what the Integrations page writes) → the organization's shared
+ * pool row → env `CURSOR_API_KEY` (self-host).
+ *
+ * Until 2026-10-20 any pool row, shared included, came first, so adding a
+ * shared Cursor key moved every app with a legacy key onto it (mushi-mushi
+ * started billing another account). The spend-down worker reads the same
+ * order (`_shared/spend-down-db.ts`).
  */
 export async function resolveCursorApiKey(db: SupabaseClient, projectId: string): Promise<string | null> {
   const resolved = await resolveLlmKey(db, projectId, 'cursor')
-  if (resolved?.source === 'byok' && resolved.key) return resolved.key
+  if (resolved?.source === 'byok' && resolved.key && !resolved.shared) return resolved.key
 
   const { data } = await db
     .from('project_settings')
@@ -774,16 +779,21 @@ export async function applyCloudAgentOutcome(
   }
 
   // Terminal without a PR (failed / cancelled / finished empty-handed).
+  // A finished agent usually says why it opened nothing ("already fixed on
+  // main", "the code is in the backend repo"); keep that verdict instead of
+  // filing an API error the console would offer to retry.
   const isFailure = outcome.kind === 'failed'
-  const errorText = isFailure
-    ? outcome.error.slice(0, 1000)
-    : 'Cloud agent finished without opening a pull request.'
+  const noPr = isFailure ? null : classifyNoPrSummary(outcome.summary)
+  const errorText = isFailure ? outcome.error.slice(0, 1000) : noPrErrorText(noPr!).slice(0, 1000)
+  const failureCategory = isFailure
+    ? failureCategoryFor(target.agent, outcome.failureCategory)
+    : (noPr?.category ?? failureCategoryFor(target.agent, null))
   const { data: closed, error: closeErr } = await db
     .from('fix_attempts')
     .update({
       status: 'failed',
       error: errorText,
-      failure_category: failureCategoryFor(target.agent, isFailure ? outcome.failureCategory : null),
+      failure_category: failureCategory,
       ...(!isFailure && outcome.summary ? { summary: outcome.summary.slice(0, 2000) } : {}),
       completed_at: now,
     })
@@ -799,7 +809,8 @@ export async function applyCloudAgentOutcome(
   await db
     .from('fix_dispatch_jobs')
     .update({
-      status: isFailure ? 'failed' : 'completed_no_pr',
+      // 'skipped' when the agent explained itself: nothing is waiting on GitHub.
+      status: isFailure ? 'failed' : noPr?.category ? 'skipped' : 'completed_no_pr',
       error: errorText.slice(0, 500),
       finished_at: now,
     })
@@ -817,10 +828,16 @@ export async function applyCloudAgentOutcome(
     project_id: target.projectId,
     kind: 'failed',
     status: 'fail',
-    label: isFailure ? 'Cloud agent failed' : 'Cloud agent finished without a PR',
+    label: isFailure
+      ? 'Cloud agent failed'
+      : noPr?.category === 'already_fixed'
+        ? 'Agent found nothing to change'
+        : noPr?.category === 'wrong_repo'
+          ? 'Agent says the code is in another repo'
+          : 'Cloud agent finished without a PR',
     detail: errorText.slice(0, 500),
     dedupe_key: `cloud-final:${target.attemptId}`,
-    payload: { agent: target.agent },
+    payload: { agent: target.agent, ...(noPr?.category ? { verdict: noPr.category } : {}) },
   })
 
   dispatchPluginEventDetached(db, target.projectId, 'fix.failed', {
@@ -830,7 +847,7 @@ export async function applyCloudAgentOutcome(
 
   void notifyTeamFixEvent(db, target.projectId, target.reportId, 'fix_failed', {
     error: errorText.slice(0, 500),
-    failureCategory: failureCategoryFor(target.agent, isFailure ? outcome.failureCategory : null),
+    failureCategory,
   }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
 
   return { applied: true }

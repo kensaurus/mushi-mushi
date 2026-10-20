@@ -111,6 +111,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump; weekly signups/activations per app on `gtm_weekday`) once a day at its `send_hour_utc` to Slack, Discord, Teams, Telegram (each through one project's existing connection), email or push (Plan 020 §9; `operator_digest_settings`, off by default) |
 | `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
 | `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl crawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key) and files each newly broken page (5xx, linked 4xx, load error, judge-confirmed breakage) as a report with `source = 'site_watch'`; one open finding per page in `site_watch_pages` |
+| `spend-down-worker` | At :28 and :58; spend-down mode (ADR 0028): for each Cursor key with spend-down on and inside its window (`byok_keys.credits_expire_at` minus `spend_down_window_days`), dispatches the best open reports of the apps the key already serves (ADR 0023 order) as automatic `cursor_cloud` fixes, up to `spend_down_daily_limit` a day, inside each app's auto-fix caps, ≤3 running per app; writes `spend_down_last_summary` |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
@@ -278,7 +279,7 @@ Live App URL
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
-| **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add`, `mushi connectors list/status/actions` |
+| **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
 | **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
 | **Billing** | `mushi usage`, `mushi billing status/cap`, `mushi budgets show/autofix` |
 
@@ -350,7 +351,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **117 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **119 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 

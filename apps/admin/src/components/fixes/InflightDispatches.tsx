@@ -17,11 +17,7 @@ interface Props {
   dispatches: DispatchJob[]
 }
 
-import { DISPATCH_ATTENTION_STATUSES } from '../../lib/fixesBannerReconcile'
-
-// One definition with the banner reconciliation (lib/fixesBannerReconcile.ts)
-// so the "needs attention" cards and the status banner never disagree.
-const ATTENTION_STATUSES = DISPATCH_ATTENTION_STATUSES
+import { stoppedDispatches } from '../../lib/fixesBannerReconcile'
 
 function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean }) {
   return (
@@ -52,10 +48,10 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
 export function InflightDispatches({ dispatches }: Props) {
   const active = dispatches.filter((d) => d.status === 'queued' || d.status === 'running')
   // Terminal-but-actionable: the user must see the stop reason to unblock.
-  // Cap at 5 newest so old noise doesn't pile up.
-  const needsAttention = dispatches
-    .filter((d) => ATTENTION_STATUSES.has(d.status))
-    .slice(0, 5)
+  // One definition with the banner reconciliation (lib/fixesBannerReconcile.ts)
+  // so the cards and the status banner never disagree; a stop that a newer
+  // dispatch on the same report replaced is not listed. Cap at 5 newest.
+  const needsAttention = stoppedDispatches(dispatches).slice(0, 5)
   if (active.length === 0 && needsAttention.length === 0) return null
 
   return (

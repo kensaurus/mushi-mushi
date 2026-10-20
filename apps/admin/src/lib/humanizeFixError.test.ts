@@ -60,3 +60,21 @@ describe('humanizeFixError: Cursor cannot reach the repo', () => {
     )
   })
 })
+
+describe('humanizeFixError: the agent explained why it opened no PR', () => {
+  it('already fixed: no Retry, by category or by the error line', () => {
+    const byCat = humanizeFixError('anything', { category: 'already_fixed' })
+    const byText = humanizeFixError('Agent found nothing to change: This crash is already fixed on main.')
+    for (const h of [byCat, byText]) {
+      expect(h?.title).toBe('The agent found nothing to change.')
+      expect(h?.severity).toBe('hard')
+      expect(h?.action).toBeUndefined()
+    }
+  })
+
+  it('wrong repo: points at the repos page', () => {
+    const h = humanizeFixError('Agent says the code is in another repo: The payout check is not in this repository.')
+    expect(h?.title).toBe('The fix belongs in another repo.')
+    expect(h?.action?.target).toEqual({ kind: 'route', to: '/repo' })
+  })
+})

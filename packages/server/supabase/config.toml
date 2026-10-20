@@ -349,6 +349,11 @@ verify_jwt = false
 [functions.agent-status-poll]
 verify_jwt = false
 
+# spend-down-worker is invoked by pg_cron (mushi-spend-down, 28,58 * * * *)
+# through the internal caller token; requireServiceRoleAuth inside (ADR 0028).
+[functions.spend-down-worker]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on

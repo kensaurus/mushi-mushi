@@ -1991,6 +1991,27 @@ const SDK_INSTALL: ConfigDoc[] = [
     },
   },
   {
+    id: 'byok.spend_down',
+    label: 'Spend down expiring credits',
+    summary:
+      "Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.",
+    howItWorks:
+      "From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges.",
+    default: { value: 'off; 10 fixes a day; starts 14 days before expiry' },
+    backend: {
+      table: 'byok_keys',
+      column: 'spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days',
+      endpoint: 'PATCH /v1/admin/byok/keys/:keyId/spend-down',
+      readBy: ['spend-down-worker edge function (cron :28 and :58)', 'GET /v1/admin/byok/spend-down', 'MCP get_spend_down_status', 'mushi keys spend-down'],
+    },
+    whenToChange:
+      "Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.",
+    learnMore: {
+      label: 'ADR 0028',
+      href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0028-spend-down-expiring-agent-credits.md',
+    },
+  },
+  {
     id: 'sdk-install.framework',
     label: 'Framework tab',
     summary:

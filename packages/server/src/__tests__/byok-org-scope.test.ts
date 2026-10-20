@@ -205,7 +205,13 @@ describe('key routes', () => {
     // "not set up" for apps using a shared key (2026-10-10).
     const root = resolve(__dirname, '../../supabase/functions')
     // Reviewed: these pair the project query with a separate organization query.
-    const pairedWithOrgQuery = new Set(['_shared/fix-report-truth-load.ts', '_shared/setup-signals.ts'])
+    // spend-down-db.ts reads each app's OWN Cursor keys on purpose: a shared
+    // key must not spend on an app that has one (ADR 0023, ADR 0028).
+    const pairedWithOrgQuery = new Set([
+      '_shared/fix-report-truth-load.ts',
+      '_shared/setup-signals.ts',
+      '_shared/spend-down-db.ts',
+    ])
     const offenders: string[] = []
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {

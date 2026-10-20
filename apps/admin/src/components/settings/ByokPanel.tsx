@@ -34,6 +34,7 @@ import {
   type ManagedKey,
 } from './keyStatus';
 import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
+import { SpendDownSection } from './SpendDownSection';
 
 interface ProviderMeta {
   name: string;
@@ -696,6 +697,9 @@ export function ByokPanel() {
                   {providerKeys.map(keyLine)}
                   {providerLegacyKeys.map(keyLine)}
                 </ul>
+              )}
+              {provider === 'cursor' && providerKeys.length > 0 && (
+                <SpendDownSection canManageShared={Boolean(sharing?.canManage)} />
               )}
               {isOpen && (
                 <form
