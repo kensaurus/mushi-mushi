@@ -236,7 +236,7 @@ describe('a Mushi fix PR on the Pull requests page (ADR 0030)', () => {
     const res = await app.call('POST', MERGE, { owner: 'kensaurus', repo: 'sbc-docs', number: '7' }, { override: true, overrideReason: 'Checked by hand' })
     expect(res.status).toBe(200)
     expect(state.merge.mock.calls[0][3]).toMatchObject({ sha: 'abc' })
-    expect(state.audit.mock.calls[0][6]).toMatchObject({ fix_attempt_id: 'fa-7', review_state: 'hold', review_override: true, override_reason: 'Checked by hand' })
+    expect(state.audit.mock.calls[0][6]).toMatchObject({ fix_attempt_ids: ['fa-7'], review_state: 'hold', review_override: true, override_reason: 'Checked by hand', merged_head_sha: 'abc' })
   })
 
   it('a PR that is not a Mushi fix merges as before, without a pinned head', async () => {

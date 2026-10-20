@@ -39,7 +39,9 @@ checked; if the pull request changes in between, nothing is merged.
 
 Overriding a hold is a person's decision: it works only from the console, by
 a project member who is not a viewer, with a reason that goes in the audit
-log. The CLI and MCP tools cannot override.
+log. The CLI and MCP tools cannot override. While a fix's first review is
+still running, the CLI and MCP wait for it; in the console you can merge
+after confirming that you want to skip it.
 
 ## What the review checks
 
@@ -68,7 +70,8 @@ mushi fixes review <fixId> --show   # read the current one
 
 The last verdict stays in force until the new review finishes, so re-running
 never unlocks a hold by itself. A fix can be re-reviewed at most three times
-an hour, and not while a review is already running.
+an hour, and not while a review is already running. Asking again about a hold
+on the same commit needs a person in the console.
 
 ## Cost and keys
 

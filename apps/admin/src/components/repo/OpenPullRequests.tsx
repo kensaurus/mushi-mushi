@@ -113,7 +113,11 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
     const [owner, repo] = pr.repo.split('/')
     const res = await apiFetchMutate<{ merged: boolean; alreadyMerged: boolean; message?: string }>(
       `/v1/admin/projects/${projectId}/pull-requests/${owner}/${repo}/${pr.number}/merge`,
-      { method: 'POST', body: JSON.stringify({ method }) },
+      {
+        method: 'POST',
+        // The fix's first review is still running: confirming here is the person's choice (ADR 0030).
+        body: JSON.stringify(pr.review?.state === 'queued' ? { method, confirmPendingReview: true } : { method }),
+      },
     )
     inFlight.current = false
     setMerging(false)
@@ -162,7 +166,8 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
         <Callout tone="warn">
           <div className="flex flex-col gap-2">
             <p className="text-xs text-fg">
-              Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
+              Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}
+              {pr.review?.state === 'queued' ? 'Its Opus review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <SelectField label="Merge method" value={method} disabled={merging} onChange={(e) => setMethod(e.target.value as MergeMethod)}>

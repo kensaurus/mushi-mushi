@@ -95,6 +95,21 @@ describe('OpenPullRequests', () => {
     expect(host.textContent).toContain('Required check failing: gate.')
   })
 
+  it('confirms a merge while the fix PR\'s first review is still running', async () => {
+    render([{ ...pr(11, [check('gate', 'success')]), review: { state: 'queued', label: 'Review in progress', fixId: null, verdict: null } }])
+    act(() => button('Merge')?.click())
+    expect(host.textContent).toContain('Its Opus review is still running; merging now skips it.')
+    mocks.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { merged: true, alreadyMerged: false } })
+    await act(async () => {
+      button('Confirm merge')?.click()
+      await Promise.resolve()
+    })
+    expect(mocks.apiFetchMutate).toHaveBeenCalledWith(
+      `/v1/admin/projects/${P}/pull-requests/o/web/11/merge`,
+      expect.objectContaining({ body: JSON.stringify({ method: 'squash', confirmPendingReview: true }) }),
+    )
+  })
+
   // ADR 0030: a Mushi fix PR shows its Opus review; a hold blocks Merge here.
   it('shows the review of a fix PR and keeps Merge off for a hold', () => {
     const held = { ...pr(9, [check('gate', 'success')]), review: { state: 'hold', label: 'Opus review: hold', fixId: null, verdict: 'hold' } }

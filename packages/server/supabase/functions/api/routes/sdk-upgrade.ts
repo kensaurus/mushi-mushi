@@ -477,6 +477,10 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     await db.from('sdk_upgrade_jobs').update({ release_status: 'merging' }).eq('id', jobId)
 
+    // Not routed through _shared/gated-merge.ts on purpose: the PR URL is the
+    // job's own, written by sdk-upgrade-worker for the bump PR Mushi opened
+    // (never by a caller), and an SDK upgrade PR is never a fix PR, so the
+    // agent PR review gate (ADR 0030) has nothing to say about it.
     const result = await mergeGithubPullRequest(token, ref, prNumber, { mergeMethod })
 
     if (!result.merged) {

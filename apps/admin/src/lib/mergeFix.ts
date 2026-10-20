@@ -19,7 +19,7 @@ export interface MergeFixResult {
 export async function mergeFixAttempt(
   fixId: string,
   mergeMethod: MergeMethod = 'squash',
-  opts: { override?: boolean; overrideReason?: string } = {},
+  opts: { override?: boolean; overrideReason?: string; confirmPendingReview?: boolean } = {},
 ): Promise<MergeFixResult> {
   const res = await apiFetch<{
     merged?: boolean
@@ -31,6 +31,7 @@ export async function mergeFixAttempt(
       mergeMethod,
       ...(opts.override ? { override: true } : {}),
       ...(opts.overrideReason ? { overrideReason: opts.overrideReason } : {}),
+      ...(opts.confirmPendingReview ? { confirmPendingReview: true } : {}),
     }),
   })
 

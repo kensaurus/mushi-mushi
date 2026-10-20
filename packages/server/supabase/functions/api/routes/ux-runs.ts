@@ -22,7 +22,8 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { mergeGithubPullRequest, parsePrRepoRef } from '../../_shared/fix-merge.ts'
+import { parsePrRepoRef } from '../../_shared/fix-merge.ts'
+import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
 import { fetchPullRequestDetails, type GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, prTitle, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import {
@@ -416,36 +417,60 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     const ctx = await prContext(c, { write: true })
     if ('response' in ctx) return ctx.response
     const body = z
-      .object({ method: z.enum(['squash', 'merge', 'rebase']).default('squash') })
+      .object({
+        method: z.enum(['squash', 'merge', 'rebase']).default('squash'),
+        override: z.boolean().optional(),
+        overrideReason: z.string().max(500).optional(),
+        confirmPendingReview: z.boolean().optional(),
+      })
       .safeParse((await c.req.json().catch(() => ({}))) ?? {})
     if (!body.success) return jsonError(c, 'VALIDATION_ERROR', 'method must be squash, merge or rebase')
     // GitHub's default squash message lists every commit's subject, and one "[skip ci]" in it
     // (a bot's baseline commit) silences every workflow on the merge, a store release included
     // (glot.it #146, 2026-10-07). Write the message instead.
     const title = await prTitle(ctx.token, ctx.ref, ctx.number).catch(() => null)
-    let result
+    // ADR 0030: the run's PR URL comes from a snapshot an API key can write, so
+    // it can name any PR of a connected repo, a held fix PR included. Merge
+    // through the one gated merge (_shared/gated-merge.ts) like every route.
+    const db = getServiceClient()
+    let outcome
     try {
-      result = await mergeGithubPullRequest(ctx.token, ctx.ref, ctx.number, {
-        mergeMethod: body.data.method,
-        ...(body.data.method === 'rebase'
-          ? {}
-          : {
-              commitTitle: title ? `${stripCiSkips(title)} (#${ctx.number})` : undefined,
-              commitMessage: `Merged from the Mushi console (UX run ${c.req.param('runId')}).`,
-            }),
+      outcome = await gatedMergePullRequest(db, {
+        projectId: ctx.projectId,
+        token: ctx.token,
+        ref: ctx.ref,
+        number: ctx.number,
+        override: body.data.override === true,
+        overrideReason: body.data.overrideReason?.trim() || null,
+        confirmPendingReview: body.data.confirmPendingReview === true,
+        authMethod: c.get('authMethod') as string | undefined,
+        role: ctx.role,
+        merge: {
+          mergeMethod: body.data.method,
+          ...(body.data.method === 'rebase'
+            ? {}
+            : {
+                commitTitle: title ? `${stripCiSkips(title)} (#${ctx.number})` : undefined,
+                commitMessage: `Merged from the Mushi console (UX run ${c.req.param('runId')}).`,
+              }),
+        },
       })
     } catch (err) {
       return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not merge: ${(err as Error).message.slice(0, 200)}`, 502)
     }
-    if (!result.merged) return jsonError(c, 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
+    if (!outcome.ok) {
+      return c.json({ ok: false, error: { code: outcome.code, message: outcome.message }, data: { review: outcome.review } }, outcome.status)
+    }
+    const result = outcome.result
+    if (!result.merged) return jsonError(c, result.headMoved ? 'HEAD_MOVED' : 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
     const mergedAt = result.mergedAt ?? new Date().toISOString()
-    const db = getServiceClient()
     const { error } = await db.from('ux_runs').update({ pr_state: 'merged', pr_merged_at: mergedAt }).eq('id', ctx.run.id)
     if (error) return dbError(c, error)
     await logAudit(db, ctx.projectId, ctx.userId, 'ux_run.merged', 'ux_run', ctx.run.id, {
       pr_number: ctx.number,
       method: body.data.method,
       already_merged: result.alreadyMerged,
+      ...outcome.audit,
     }).catch(() => null)
     return c.json({ ok: true, data: { merged: true, alreadyMerged: result.alreadyMerged, sha: result.sha, message: result.message } })
   })
@@ -519,7 +544,7 @@ interface RunPrRow {
 
 type PrContext =
   | { response: Response }
-  | { userId: string; projectId: string; run: RunPrRow; token: string; ref: GithubRepoRef; number: number }
+  | { userId: string; projectId: string; run: RunPrRow; token: string; ref: GithubRepoRef; number: number; role: string | null }
 
 /**
  * The run, its PR and a token for it. The PR must be in a repo connected to
@@ -554,5 +579,5 @@ async function prContext(c: Context<{ Variables: Variables }>, opts: { write?: b
   }
   const token = await (await repoTokenResolver(db, projectId))(ref)
   if (!token) return { response: jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to see and merge its pull requests.', 409) }
-  return { userId, projectId, run: row, token, ref, number: row.pr_number }
+  return { userId, projectId, run: row, token, ref, number: row.pr_number, role: access.role ?? null }
 }

@@ -98,6 +98,8 @@ export interface ReviewRuleContext {
    * GitHub sent no patch). Code nobody read cannot be called safe: hold.
    */
   sourceOmitted?: boolean
+  /** GitHub listed only part of the changed files: code nobody saw, so hold. */
+  fileListIncomplete?: boolean
 }
 
 const MAX_FINDINGS = 30
@@ -158,6 +160,7 @@ export function normalizeReview(raw: AgentPrReviewRaw, ctx: ReviewRuleContext): 
   if (findings.some((f) => f.severity === 'blocker')) apply('hold', 'A finding is a blocker.')
   if (decision) apply('hold', 'A product decision needs the owner.')
   if (ctx.sourceOmitted) apply('hold', 'A source file was too large to review in full.')
+  if (ctx.fileListIncomplete) apply('hold', 'GitHub listed only part of the changed files.')
   if (ctx.ciFailed) apply('fix_first', 'CI is failing on the PR.')
   if (removes.length > 0) apply('fix_first', 'The diff removes existing behaviour.')
   if (raw.scope_creep === true) apply('fix_first', 'The diff changes more than the report asked for.')
@@ -235,21 +238,27 @@ const LOCK_FILE_NAMES = new Set([
 /**
  * Build output at the repository ROOT only. A `build/` or `vendor/` folder
  * deeper in the tree (`src/build/auth.ts`, `lib/vendor/session.ts`) is
- * source an agent can hide a change in, so it is reviewed like any other.
+ * source and is reviewed like any other. Root build output is listed by name
+ * rather than read, but it is not exempt: `vendor/` can hold real code
+ * (Go, PHP), so an unshown source-like file there holds the review too.
  */
 const ROOT_BUILD_DIR_RE = /^(dist|build|\.next|node_modules|vendor|coverage)\//
 
-/** Listed by name, never reviewed line by line: lock files and root build output. */
-export function isGeneratedFile(path: string): boolean {
-  const base = path.split('/').pop() ?? path
-  return LOCK_FILE_NAMES.has(base) || ROOT_BUILD_DIR_RE.test(path)
+/** A lock file, by exact name: the only change the review may skip entirely. */
+export function isLockFile(path: string): boolean {
+  return LOCK_FILE_NAMES.has(path.split('/').pop() ?? path)
 }
 
-/** Files whose change is not code: an unshown one does not hold the review. */
-const NON_SOURCE_RE = /\.(png|jpe?g|gif|webp|avif|ico|bmp|tiff?|pdf|woff2?|ttf|otf|eot|mp3|mp4|mov|webm|wav|zip|gz|tgz|md|mdx|markdown|rst|txt)$/i
+/** Listed by name, never read line by line: lock files and root build output. */
+export function isGeneratedFile(path: string): boolean {
+  return isLockFile(path) || ROOT_BUILD_DIR_RE.test(path)
+}
+
+/** Files whose change is not code: an unshown one marks the diff truncated but does not hold it. `.mdx` is code (JSX). */
+const NON_SOURCE_RE = /\.(png|jpe?g|gif|webp|avif|ico|bmp|tiff?|pdf|woff2?|ttf|otf|eot|mp3|mp4|mov|webm|wav|zip|gz|tgz|md|markdown|rst|txt)$/i
 
 function isSourceFile(path: string): boolean {
-  return !isGeneratedFile(path) && !NON_SOURCE_RE.test(path)
+  return !isLockFile(path) && !NON_SOURCE_RE.test(path)
 }
 
 export const REVIEW_DIFF_MAX_CHARS = 100_000
@@ -312,8 +321,14 @@ export function buildReviewDiff(
       }
       continue
     }
+    if (isLockFile(f.filename)) {
+      lines.push(`--- ${f.filename}: not shown (lock file)`)
+      continue
+    }
     if (isGeneratedFile(f.filename)) {
-      lines.push(`--- ${f.filename}: not shown (lock file or root build output)`)
+      anyUnshown = true
+      if (isSourceFile(f.filename)) sourceOmitted.push(f.filename)
+      lines.push(`--- ${f.filename}: not shown (root build or vendor output; not reviewed)`)
       continue
     }
     anyUnshown = true
@@ -360,7 +375,7 @@ const FENCED_TAGS = ['bug_report', 'pull_request', 'pr_diff'] as const
 export function fenceUntrusted(text: string): string {
   let out = text
   for (const tag of FENCED_TAGS) {
-    out = out.replace(new RegExp(`<(/?)\\s*${tag}`, 'gi'), (_m, slash: string) => `<${slash}${tag}_text`)
+    out = out.replace(new RegExp(`<\\s*(/?)\\s*${tag}`, 'gi'), (_m, slash: string) => `<${slash}${tag}_text`)
   }
   return out
 }
@@ -502,6 +517,12 @@ export function commentSafe(text: string): string {
     .replace(/@(?=[A-Za-z0-9_-])/g, '@​')
 }
 
+/** One line, cut short: comment labels point to the console, they do not carry the detail. */
+function shortLabel(text: string, max: number): string {
+  const one = text.replace(/\s+/g, ' ').trim()
+  return one.length > max ? `${one.slice(0, max - 1)}…` : one
+}
+
 export function formatReviewComment(
   review: NormalizedReview,
   meta: {
@@ -522,14 +543,14 @@ export function formatReviewComment(
     lines.push('', '**Findings**')
     for (const f of review.findings) {
       const where = f.file === '(general)' ? '' : ` \`${f.file.replace(/`/g, "'")}${f.line ? `:${f.line}` : ''}\``
-      lines.push(`- **${SEVERITY_LABEL[f.severity]}**${where}: ${commentSafe(f.issue)} _Fix:_ ${commentSafe(f.suggested_fix)}`)
+      lines.push(`- **${SEVERITY_LABEL[f.severity]}**${where}: ${commentSafe(shortLabel(f.issue, 240))} _Fix:_ ${commentSafe(shortLabel(f.suggested_fix, 240))}`)
     }
   }
   if (review.removes_behavior.length > 0) {
-    lines.push('', '**Removes existing behaviour**', ...review.removes_behavior.map((r) => `- ${commentSafe(r)}`))
+    lines.push('', '**Removes existing behaviour**', ...review.removes_behavior.map((r) => `- ${commentSafe(shortLabel(r, 80))}`))
   }
   if (review.needs_human_decision) {
-    lines.push('', `**Needs your decision:** ${commentSafe(review.needs_human_decision)}`)
+    lines.push('', `**Needs your decision:** ${commentSafe(shortLabel(review.needs_human_decision, 120))} (details in the console)`)
   }
   if (review.rules_applied.length > 0) {
     lines.push('', `_Mushi set the verdict to "${VERDICT_LABEL[review.verdict]}": ${review.rules_applied.join(' ')}_`)

@@ -452,8 +452,12 @@ webhook.
 
 Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerge`).
 
-**Review gate (ADR 0030).** This route and the console's generic PR merge
-refuse a cloud agent PR whose latest completed Opus review (`fix_reviews`,
+**Review gate (ADR 0030).** Every request merge goes through
+`_shared/gated-merge.ts` (this route, the console's generic PR merge and the
+UX-run merge; a test fails on any other caller of GitHub's merge except the
+SDK upgrade). It refuses a PR (found by fix attempt or by
+`fix_reviews.pr_url`, and PATCH cannot rewrite a fix's PR once set) whose
+latest completed Opus review (`fix_reviews`,
 written by `agent-pr-review`) says `hold`, with 409 `REVIEW_HOLD`: also while
 a re-review runs and on newer commits (a re-run never clears a verdict). Only
 a console session of a non-viewer overrides, with `override: true` and an
@@ -461,8 +465,10 @@ a console session of a non-viewer overrides, with `override: true` and an
 `OVERRIDE_NEEDS_CONSOLE`. GitHub merges only the head SHA the gate saw (409
 `HEAD_MOVED` otherwise); a failed review read is a 503. `fix_first` merges; no
 review merges as before and reports "Not reviewed"; a verdict about an older
-commit reads "stale". `POST /v1/admin/fixes/:id/review` re-runs a review
-(non-viewers, 3 an hour per fix, 409 while one runs) and a PR push
+commit reads "stale"; while a fix's first review runs, an API key gets 409
+`REVIEW_PENDING` and a console user confirms first. `POST /v1/admin/fixes/:id/review` re-runs a review
+(non-viewers, 3 an hour per fix, 409 while one runs; a hold on its own
+commit only from the console) and a PR push
 (`pull_request.synchronize`) re-queues it; the verdict rides on
 `GET /v1/admin/fixes/:id/timeline` (`data.review`, MCP `get_fix_timeline`).
 CLI: `mushi fixes review`.

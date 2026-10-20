@@ -11,9 +11,16 @@
  *            GET /v1/admin/fixes/:id/timeline carries the review (stale when
  *            the attempt's head moved);
  *            POST /v1/admin/fixes/:id/review re-queues without clearing the
- *            verdict, and refuses a running review, viewers and a burst.
+ *            verdict, and refuses a running review, viewers and a burst;
+ *          and the ways around a hold the second review found: a rewritten
+ *          fix_attempts.pr_url (PATCH is locked, and the gate also matches
+ *          fix_reviews.pr_url), an API key re-running a hold until it flips,
+ *          an API key merging while the first review runs, and a merge path
+ *          that calls GitHub without the gate.
  */
 
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
@@ -345,5 +352,105 @@ describe('POST /v1/admin/fixes/:id/review — re-run', () => {
     const res = await call('POST', RERUN)
     expect(res.status).toBe(409)
     expect(res.json.error.code).toBe('PR_NOT_OPEN')
+  })
+})
+
+describe('a hold cannot be unlinked, re-rolled or merged before the review (second review of #534)', () => {
+  const OTHER = '3000000f-0000-4000-8000-0000000000bb'
+
+  it('PATCH cannot retarget or clear the PR of a fix that has one, but can set it while unset', async () => {
+    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })] })
+    const retarget = await call('PATCH', `/v1/admin/fixes/${FIX}`, { pr_url: 'https://github.com/acme/app/pull/999' })
+    expect(retarget.status).toBe(409)
+    expect(retarget.json.error.code).toBe('PR_LINK_LOCKED')
+    expect((await call('PATCH', `/v1/admin/fixes/${FIX}`, { pr_url: null })).status).toBe(409)
+    expect((await call('PATCH', `/v1/admin/fixes/${FIX}`, { commit_sha: 'other' })).status).toBe(409)
+    expect(db.tables.fix_attempts[0]).toMatchObject({ pr_url: 'https://github.com/acme/app/pull/195', commit_sha: 'sha1' })
+
+    db = makeFakeDb({ fix_attempts: [attempt({ pr_url: null, pr_number: null, commit_sha: null })] })
+    const first = await call('PATCH', `/v1/admin/fixes/${FIX}`, { pr_url: 'https://github.com/acme/app/pull/196', commit_sha: 'c1' })
+    expect(first.status).toBe(200)
+    expect(db.tables.fix_attempts[0]).toMatchObject({ pr_url: 'https://github.com/acme/app/pull/196', commit_sha: 'c1' })
+  })
+
+  it('finds a hold through fix_reviews.pr_url even when no fix attempt points at the PR any more', async () => {
+    // The held fix was unlinked (its attempt now names another PR); a second
+    // attempt with no review points at the held PR and tries to merge it.
+    db = makeFakeDb({
+      fix_attempts: [
+        attempt({ pr_url: 'https://github.com/acme/app/pull/999', pr_number: 999 }),
+        attempt({ id: OTHER }),
+      ],
+      fix_reviews: [review({ pr_url: 'https://github.com/acme/app/pull/195' })],
+    })
+    const res = await call('POST', `/v1/admin/fixes/${OTHER}/merge`, {})
+    expect(res.status).toBe(409)
+    expect(res.json.error.code).toBe('REVIEW_HOLD')
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('an API key cannot re-run a hold on the reviewed commit; a person can; a new head re-runs for anyone', async () => {
+    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })], fix_reviews: [review()] })
+    mocks.auth.method = 'apiKey'
+    const key = await call('POST', RERUN)
+    expect(key.status).toBe(403)
+    expect(key.json.error.code).toBe('RERUN_NEEDS_CONSOLE')
+    expect(db.tables.fix_reviews[0]).toMatchObject({ status: 'completed', verdict: 'hold' })
+
+    mocks.auth.method = 'jwt'
+    expect((await call('POST', RERUN)).status).toBe(202)
+
+    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'newer' })], fix_reviews: [review()] })
+    mocks.auth.method = 'apiKey'
+    expect((await call('POST', RERUN)).status).toBe(202)
+  })
+
+  it('while the first review runs: an API key gets REVIEW_PENDING, a person merges after confirming', async () => {
+    const pending = review({ status: 'running', verdict: null, head_sha: null, reviewed_at: null, started_at: new Date().toISOString() })
+    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [pending] })
+    mocks.auth.method = 'apiKey'
+    const key = await call('POST', MERGE, {})
+    expect(key.status).toBe(409)
+    expect(key.json.error.code).toBe('REVIEW_PENDING')
+
+    mocks.auth.method = 'jwt'
+    const unconfirmed = await call('POST', MERGE, {})
+    expect(unconfirmed.status).toBe(409)
+    expect(unconfirmed.json.error.code).toBe('REVIEW_PENDING')
+    expect(mocks.merge).not.toHaveBeenCalled()
+
+    const confirmed = await call('POST', MERGE, { confirmPendingReview: true })
+    expect(confirmed.status).toBe(200)
+    expect(mocks.merge.mock.calls[0][3]).toMatchObject({ sha: 'sha1' })
+    const meta = mocks.audit.mock.calls.find((c) => c[3] === 'fix.merge')?.[6]
+    expect(meta).toMatchObject({ merged_before_review: true })
+  })
+
+  it('a review skipped for no key keeps today\'s behaviour, also for an API key', async () => {
+    db = makeFakeDb({
+      fix_attempts: [attempt()],
+      fix_reviews: [review({ status: 'skipped', verdict: null, head_sha: null, reviewed_at: null, skip_reason: 'no_anthropic_key' })],
+    })
+    mocks.auth.method = 'apiKey'
+    const res = await call('POST', MERGE, {})
+    expect(res.status).toBe(200)
+    expect(res.json.data.review.state).toBe('skipped')
+  })
+
+  it('every merge path goes through the gated merge: only gated-merge.ts and the SDK upgrade call GitHub\'s merge', () => {
+    const root = resolve(__dirname, '../../supabase/functions')
+    const callers: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = join(dir, name)
+        if (statSync(full).isDirectory()) walk(full)
+        else if (name.endsWith('.ts') && /mergeGithubPullRequest\(/.test(readFileSync(full, 'utf8').replace(/export async function mergeGithubPullRequest\(/, ''))) {
+          callers.push(relative(root, full))
+        }
+      }
+    }
+    walk(root)
+    expect(callers.sort()).toEqual(['_shared/gated-merge.ts', 'api/routes/sdk-upgrade.ts'])
+    expect(readFileSync(join(root, 'api/routes/sdk-upgrade.ts'), 'utf8')).toMatch(/Not routed through _shared\/gated-merge\.ts on purpose/)
   })
 })

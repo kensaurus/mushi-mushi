@@ -557,6 +557,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     ciFailed: ci.failed,
     diffTruncated: diff.truncated,
     sourceOmitted: diff.sourceOmitted.length > 0,
+    fileListIncomplete: diff.fileListIncomplete,
   })
   const model = servedModel(result, AGENT_PR_REVIEW_MODEL)
   const tokens = extractLlmUsage(result)

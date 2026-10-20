@@ -113,6 +113,7 @@ export function MergeFixPreflight({
 
   // A hold needs "Merge anyway" ticked AND a reason: the server refuses either missing.
   const holdBlocks = reviewBlocksMerge(review) && (!overrideHold || !overrideReason.trim())
+  const reviewPending = review?.state === 'queued' && !review.verdict
 
   const ciFailed = liveCiConclusion === 'failure' || liveCiConclusion === 'cancelled' || liveCiConclusion === 'timed_out'
   const ciPassed = liveCiConclusion === 'success'
@@ -120,11 +121,11 @@ export function MergeFixPreflight({
   const handleMerge = async (method: MergeMethod) => {
     setMerging(true)
     setError(null)
-    const result = await mergeFixAttempt(
-      fixId,
-      method,
-      overrideHold ? { override: true, overrideReason: overrideReason.trim() } : {},
-    )
+    const result = await mergeFixAttempt(fixId, method, {
+      ...(overrideHold ? { override: true, overrideReason: overrideReason.trim() } : {}),
+      // The first review is still running: this click is the person's confirmation (ADR 0030).
+      ...(reviewPending ? { confirmPendingReview: true } : {}),
+    })
     setMerging(false)
     if (!result.ok) {
       setError(result.error ?? 'Merge failed')
@@ -196,6 +197,12 @@ export function MergeFixPreflight({
               onRerun={() => void handleRerun()}
             />
           </div>
+
+          {reviewPending && (
+            <p className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.warnSubtle}`}>
+              The Opus review is still running. Merging now skips it; wait a few minutes to see what it finds.
+            </p>
+          )}
 
           {reviewBlocksMerge(review) && (
             <div className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.dangerSubtle}`}>

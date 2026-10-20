@@ -115,6 +115,15 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.filters.push((r) => values.includes(readPath(r, key)))
     return this
   }
+  /** SQL LIKE (`%`, `_`); a NULL column never matches. */
+  like(key: string, pattern: string): this {
+    const re = likePattern(pattern)
+    this.filters.push((r) => {
+      const v = readPath(r, key)
+      return typeof v === 'string' && re.test(v)
+    })
+    return this
+  }
   not(key: string, op: string, value: string | null): this {
     if (op === 'is' && value === null) {
       // `.not(col, 'is', null)`: the column is set.

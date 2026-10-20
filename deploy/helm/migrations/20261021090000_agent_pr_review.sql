@@ -123,12 +123,21 @@ DECLARE
   v_vals text[];
   v_add  text[] := ARRAY['reviewed'];
 BEGIN
+  -- By name first (Postgres names the inline check fix_events_kind_check);
+  -- the definition match is only a fallback for a renamed constraint.
   SELECT conname, pg_get_constraintdef(oid) INTO v_name, v_def
     FROM pg_constraint
    WHERE conrelid = 'public.fix_events'::regclass
      AND contype = 'c'
-     AND pg_get_constraintdef(oid) ILIKE '%kind%'
-   LIMIT 1;
+     AND conname = 'fix_events_kind_check';
+  IF v_def IS NULL THEN
+    SELECT conname, pg_get_constraintdef(oid) INTO v_name, v_def
+      FROM pg_constraint
+     WHERE conrelid = 'public.fix_events'::regclass
+       AND contype = 'c'
+       AND pg_get_constraintdef(oid) ~* '\mkind\M'
+     LIMIT 1;
+  END IF;
   IF v_def IS NULL THEN
     RAISE EXCEPTION 'fix_events kind check not found; refusing to guess the allowed kinds';
   END IF;

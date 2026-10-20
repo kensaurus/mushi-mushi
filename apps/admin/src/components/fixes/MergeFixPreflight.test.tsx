@@ -146,6 +146,14 @@ describe('MergeFixPreflight — Opus review gate', () => {
     expect(button('Squash merge').disabled).toBe(false)
   })
 
+  it('while the first review runs, says so and sends the confirmation with the click', async () => {
+    respond({ ...NOT_REVIEWED, state: 'queued', label: 'Review in progress' })
+    await open()
+    expect(document.body.textContent).toContain('The Opus review is still running. Merging now skips it')
+    await act(async () => button('Squash merge').click())
+    expect(mergeBody()).toEqual({ mergeMethod: 'squash', confirmPendingReview: true })
+  })
+
   it('re-runs the review on request, and offers no second run while one is going', async () => {
     respond(HOLD)
     await open()

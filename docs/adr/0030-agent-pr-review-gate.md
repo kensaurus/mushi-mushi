@@ -38,7 +38,9 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   is not reviewed automatically; any PR can be reviewed on request
   (`POST /v1/admin/fixes/:id/review`, `mushi fixes review`, the console's
   "Review with Opus"), by a non-viewer, at most 3 times an hour per fix, and
-  not while a review is queued or running.
+  not while a review is queued or running. Re-running a hold on the commit it
+  reviewed needs a console session (an API key gets 403
+  `RERUN_NEEDS_CONSOLE`), so a key cannot re-roll a hold until it flips.
 - **Who reviews it.** Claude Opus 5.5 (`ANTHROPIC_OPUS_LATEST`), at effort
   `medium` (the model's default), with structured output, through
   `claude-messages.ts`, inside the 150 s edge wall clock the repo assumes:
@@ -54,10 +56,12 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   Over budget, every file stays in the list and patches fill the budget
   smallest first, so a one-line change to an auth check is never crowded out
   by a large rewrite; the first patch that no longer fits is cut. The prompt
-  says what was left out. Only lock files (by exact name) and build output
-  directories at the repository root (`dist/`, `build/`, `vendor/`, …) are
-  listed by name only: a `build/` or `vendor/` folder deeper in the tree is
-  source and is reviewed.
+  says what was left out. Lock files (by exact name) are the only changes
+  skipped outright. Build output directories at the repository root
+  (`dist/`, `build/`, `vendor/`, …) are listed by name only, but an unshown
+  source-like file there (`.go`, `.php`, `.js`, …) still holds the review;
+  a `build/` or `vendor/` folder deeper in the tree is reviewed like any
+  source. `.mdx` counts as source.
 - **Untrusted input.** The report and the PR are data, wrapped in tagged
   blocks whose closing tags are fenced. Report text goes through
   `sanitizeForLLM`. The diff does not: rewriting code would hide what a
@@ -70,8 +74,9 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   Fixed rules can only raise the model's verdict, so it cannot contradict its
   own fields:
   - **hold** when the diff does not fix the report, a finding is a blocker,
-    a decision needs the owner, or a source file's change was not shown in
-    full (left out for size, cut, or sent by GitHub with no patch);
+    a decision needs the owner, a source file's change was not shown in
+    full (left out for size, cut, or sent by GitHub with no patch), or
+    GitHub listed only part of the changed files;
   - **at least fix first** when CI failed, the diff removes behaviour, strays
     from the report, has a major finding or high risk, or any other part
     (an image, a cut file list) was not shown.
@@ -85,11 +90,18 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   report text: a PR can be public, the report is not, so the comment links to
   the report in the console), and is returned by the fix timeline
   (`get_fix_timeline`) with its model-written fields marked untrusted.
-- **The merge gate.** `POST /v1/admin/fixes/:id/merge` (the console's merge
-  dialog, `merge_fix`, `mushi fixes merge`) and the console's generic PR merge
-  (`POST /v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge`,
-  for a PR that is a Mushi fix) read the latest COMPLETED verdict and the PR's
-  head now:
+- **The merge gate.** Every merge Mushi makes on request goes through one
+  helper, `_shared/gated-merge.ts` `gatedMergePullRequest`: the fix merge
+  (`POST /v1/admin/fixes/:id/merge`: the console's merge dialog, `merge_fix`,
+  `mushi fixes merge`), the console's generic PR merge and the UX-run merge
+  (whose PR URL comes from an API-key snapshot). A test fails if any other
+  file calls GitHub's merge; the one exception is the SDK upgrade merge,
+  whose PR URL the worker writes for its own bump PR. The helper finds every
+  review linked to the PR, through any fix attempt whose `pr_url` names it
+  and through `fix_reviews.pr_url` (written only by the service role), so a
+  caller cannot unlink a held fix; `PATCH /v1/admin/fixes/:id` also refuses
+  to change `pr_url`, or a set `commit_sha`, once a PR is attached. It reads
+  the latest COMPLETED verdict of each and the PR's head now:
   - a `hold` is a 409 `REVIEW_HOLD`, also while a re-review is queued or
     running, after a re-run was skipped or failed, and when the PR has new
     commits since (a stale hold blocks until a review of the new head
@@ -99,9 +111,12 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
     (the CLI, MCP, CI) gets 403 `OVERRIDE_NEEDS_CONSOLE`; MCP `merge_fix` has
     no override parameter at all. The override and its reason go to the audit
     log. The 409 message never quotes the review;
+  - while a fix's first review is still queued or running, an API key gets
+    409 `REVIEW_PENDING`; a console user merges after confirming
+    (`confirmPendingReview`, audited);
   - `fix_first` and `merge` pass; a verdict about an older commit is "stale"
-    and counts as not reviewed; no verdict yet merges as today and says "Not
-    reviewed";
+    and counts as not reviewed; a PR with no review, or one skipped (no key,
+    turned off) or failed, merges as today;
   - GitHub is asked to merge only the head SHA the gate saw (`sha`), so new
     commits between the check and the merge are a 409 `HEAD_MOVED`;
   - a review read that fails is a 503 (never merge on an unknown verdict),

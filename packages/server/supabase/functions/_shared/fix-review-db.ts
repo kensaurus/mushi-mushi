@@ -140,26 +140,60 @@ function samePr(prUrl: string | null, repo: string, number: number): boolean {
   return Boolean(m && `${m[1]}/${m[2]}`.toLowerCase() === repo.toLowerCase() && Number(m[3]) === number)
 }
 
+export interface PrReviews {
+  /** Every review linked to the PR: through a fix attempt OR through fix_reviews.pr_url. */
+  rows: FixReviewRow[]
+  /** Fix attempts whose pr_url points at the PR (plus the one the caller named). */
+  attemptIds: string[]
+  /** A read failed (other than the table not existing yet): callers fail closed. */
+  error: string | null
+}
+
 /**
- * The fix attempt behind a PR of this project, if Mushi opened (or attached)
- * it. Matched by number, then by the repo in its URL, case-insensitively.
+ * Every review linked to one PR of a project. Two independent links, so a
+ * caller cannot unlink a held fix by rewriting `fix_attempts.pr_url`:
+ *   - fix attempts whose pr_url names this PR (and `fixAttemptId`, when the
+ *     caller merges a known attempt);
+ *   - fix_reviews rows whose pr_url names this PR. That column is written only
+ *     by the service role (the enqueue and the worker), never by an API.
  */
-export async function findFixAttemptForPr(
+export async function loadReviewsForPr(
   db: SupabaseClient,
-  projectId: string,
-  repo: string,
-  number: number,
-): Promise<{ attempt: { id: string; pr_url: string | null } | null; error: string | null }> {
-  const { data, error } = await db
+  input: { projectId: string; repo: string; number: number; fixAttemptId?: string | null },
+): Promise<PrReviews> {
+  const { data: attempts, error: attemptErr } = await db
     .from('fix_attempts')
-    .select('id, pr_url, created_at')
-    .eq('project_id', projectId)
-    .eq('pr_number', number)
-    .order('created_at', { ascending: false })
-    .limit(20)
-  if (error) return { attempt: null, error: error.message }
-  const rows = (data ?? []) as Array<{ id: string; pr_url: string | null }>
-  return { attempt: rows.find((r) => samePr(r.pr_url, repo, number)) ?? null, error: null }
+    .select('id, pr_url')
+    .eq('project_id', input.projectId)
+    .eq('pr_number', input.number)
+    .limit(50)
+  if (attemptErr) return { rows: [], attemptIds: [], error: attemptErr.message }
+  const attemptIds = new Set(
+    ((attempts ?? []) as Array<{ id: string; pr_url: string | null }>)
+      .filter((a) => samePr(a.pr_url, input.repo, input.number))
+      .map((a) => a.id),
+  )
+  if (input.fixAttemptId) attemptIds.add(input.fixAttemptId)
+
+  const rows = new Map<string, FixReviewRow>()
+  const missing = (err: { code?: string } | null) => TABLE_MISSING_CODES.has(String(err?.code ?? ''))
+  if (attemptIds.size > 0) {
+    const { data, error } = await db.from('fix_reviews').select(FIX_REVIEW_PUBLIC_COLUMNS).in('fix_attempt_id', [...attemptIds])
+    if (error && !missing(error as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: error.message }
+    for (const r of (data ?? []) as FixReviewRow[]) rows.set(r.id, r)
+  }
+  // `%/pull/<n>` narrows by number; the repo is matched exactly below.
+  const { data: byUrl, error: urlErr } = await db
+    .from('fix_reviews')
+    .select(`${FIX_REVIEW_PUBLIC_COLUMNS}, pr_url`)
+    .eq('project_id', input.projectId)
+    .like('pr_url', `%/pull/${input.number}`)
+    .limit(50)
+  if (urlErr && !missing(urlErr as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: urlErr.message }
+  for (const r of (byUrl ?? []) as Array<FixReviewRow & { pr_url: string | null }>) {
+    if (samePr(r.pr_url, input.repo, input.number)) rows.set(r.id, r)
+  }
+  return { rows: [...rows.values()], attemptIds: [...attemptIds], error: null }
 }
 
 /** Review state per open PR (`owner/repo#n`), for the console's PR list. Empty on a failed read. */
@@ -169,29 +203,21 @@ export async function reviewStatesForPrs(
   prs: Array<{ repo: string; number: number; headSha: string | null }>,
 ): Promise<Map<string, PublicFixReview>> {
   const out = new Map<string, PublicFixReview>()
-  if (prs.length === 0) return out
-  const { data: attempts, error } = await db
-    .from('fix_attempts')
-    .select('id, pr_url, pr_number')
-    .eq('project_id', projectId)
-    .in('pr_number', [...new Set(prs.map((p) => p.number))])
-  if (error || !attempts?.length) return out
-  const byAttempt = new Map<string, { repo: string; number: number; headSha: string | null }>()
   for (const pr of prs) {
-    const hit = (attempts as Array<{ id: string; pr_url: string | null }>).find((a) => samePr(a.pr_url, pr.repo, pr.number))
-    if (hit) byAttempt.set(hit.id, pr)
-  }
-  if (byAttempt.size === 0) return out
-  const { data: reviews, error: reviewErr } = await db
-    .from('fix_reviews')
-    .select(FIX_REVIEW_PUBLIC_COLUMNS)
-    .in('fix_attempt_id', [...byAttempt.keys()])
-  if (reviewErr) return out
-  for (const row of (reviews ?? []) as FixReviewRow[]) {
-    const pr = byAttempt.get(row.fix_attempt_id)
-    if (pr) out.set(`${pr.repo}#${pr.number}`, toPublicReview(row, pr.headSha))
+    const found = await loadReviewsForPr(db, { projectId, repo: pr.repo, number: pr.number })
+    if (found.error || found.rows.length === 0) continue
+    out.set(`${pr.repo}#${pr.number}`, toPublicReview(pickDisplayRow(found.rows, null), pr.headSha))
   }
   return out
+}
+
+/** The review to show: a hold first (it is what blocks), else the newest verdict, else any. */
+function pickDisplayRow(rows: FixReviewRow[], preferAttemptId: string | null): FixReviewRow {
+  return (
+    rows.find((r) => r.verdict === 'hold') ??
+    rows.find((r) => r.fix_attempt_id === preferAttemptId) ??
+    [...rows].sort((a, b) => String(b.reviewed_at ?? '').localeCompare(String(a.reviewed_at ?? '')))[0]
+  )
 }
 
 export type GateEvaluation =
@@ -200,33 +226,38 @@ export type GateEvaluation =
       review: PublicFixReview
       /** True when a hold was overridden by this request. */
       overridden: boolean
-      /** Pass to GitHub's merge as `sha`: a head that moved after this check makes GitHub refuse. */
+      /** True when a console user merged while the first review was still running. */
+      mergedBeforeReview: boolean
+      /** Pass to GitHub's merge as `sha` when a review is linked: a head that moved after this check makes GitHub refuse. */
       expectedHeadSha: string | null
+      /** Fix attempts and reviews linked to the PR (for the audit log). */
+      attemptIds: string[]
+      reviewIds: string[]
     }
   | { ok: false; status: 400 | 403 | 409 | 503; code: string; message: string; review: PublicFixReview | null }
 
+export interface GateCaller {
+  override: boolean
+  overrideReason: string | null
+  /** A console user saw "review in progress" and chose to merge anyway. */
+  confirmPendingReview: boolean
+  authMethod: string | null | undefined
+  role: string | null | undefined
+}
+
 /**
- * The review gate for one merge (ADR 0030), shared by
- * POST /v1/admin/fixes/:id/merge and the console's generic PR merge:
- *   - a review read that fails for any reason other than the table not
- *     existing yet is a 503: never merge on an unknown verdict;
- *   - a hold (current or stale) is a 409 unless the caller overrides, and an
- *     override needs a console session, a non-viewer and a reason;
- *   - everything else passes and returns the head SHA the merge must land.
+ * The review gate for one PR (ADR 0030), over EVERY review linked to it:
+ *   - a read failure (other than the table not existing yet) is a 503;
+ *   - any hold (current or on an older commit) is a 409 unless overridden,
+ *     and an override needs a console session, a non-viewer and a reason;
+ *   - a cloud-agent fix whose first review is still queued or running is a
+ *     409 REVIEW_PENDING for an API key, and for a console user until they
+ *     confirm; a review that was skipped (no key, turned off) or failed keeps
+ *     today's behaviour, as does a PR with no review at all;
+ *   - otherwise the merge goes ahead, pinned to the head the gate saw.
  */
-export async function evaluateMergeGate(
-  db: SupabaseClient,
-  input: {
-    fixAttemptId: string
-    currentHead: string | null
-    override: boolean
-    overrideReason: string | null
-    authMethod: string | null | undefined
-    role: string | null | undefined
-  },
-): Promise<GateEvaluation> {
-  const read = await loadFixReviewRow(db, input.fixAttemptId)
-  if (read.error) {
+export function decidePrGate(found: PrReviews, currentHead: string | null, caller: GateCaller, preferAttemptId: string | null = null): GateEvaluation {
+  if (found.error) {
     return {
       ok: false,
       status: 503,
@@ -235,13 +266,52 @@ export async function evaluateMergeGate(
       review: null,
     }
   }
-  const review = toPublicReview(read.row, input.currentHead)
-  const plain = mergeGate(read.row, { currentHead: input.currentHead })
-  if (plain.allowed) return { ok: true, review, overridden: false, expectedHeadSha: plain.expectedHeadSha }
-  if (!input.override) return { ok: false, status: 409, code: plain.code, message: plain.message, review }
-  const refusal = overrideRefusal({ authMethod: input.authMethod, role: input.role, reason: input.overrideReason })
-  if (refusal) return { ok: false, ...refusal, review }
-  const overridden = mergeGate(read.row, { currentHead: input.currentHead, override: true })
-  if (!overridden.allowed) return { ok: false, status: 409, code: overridden.code, message: overridden.message, review }
-  return { ok: true, review, overridden: true, expectedHeadSha: overridden.expectedHeadSha }
+  const base = { attemptIds: found.attemptIds, reviewIds: found.rows.map((r) => r.id) }
+  if (found.rows.length === 0) {
+    return { ok: true, review: toPublicReview(null), overridden: false, mergedBeforeReview: false, expectedHeadSha: null, ...base }
+  }
+  const shown = pickDisplayRow(found.rows, preferAttemptId)
+  const review = toPublicReview(shown, currentHead)
+  const hold = found.rows.find((r) => r.verdict === 'hold')
+  if (hold) {
+    const plain = mergeGate(hold, { currentHead })
+    if (plain.allowed) {
+      return { ok: true, review, overridden: false, mergedBeforeReview: false, expectedHeadSha: plain.expectedHeadSha, ...base }
+    }
+    if (!caller.override) return { ok: false, status: 409, code: plain.code, message: plain.message, review }
+    const refusal = overrideRefusal({ authMethod: caller.authMethod, role: caller.role, reason: caller.overrideReason })
+    if (refusal) return { ok: false, ...refusal, review }
+    return { ok: true, review, overridden: true, mergedBeforeReview: false, expectedHeadSha: currentHead ?? hold.head_sha, ...base }
+  }
+  const pending = found.rows.find((r) => !r.verdict && (r.status === 'queued' || r.status === 'running'))
+  if (pending) {
+    if (caller.authMethod !== 'jwt') {
+      return {
+        ok: false,
+        status: 409,
+        code: 'REVIEW_PENDING',
+        message: 'The Opus review of this pull request is still running, so Mushi will not merge it from an API key. Wait a few minutes, or merge it from the Mushi console.',
+        review,
+      }
+    }
+    if (!caller.confirmPendingReview) {
+      return {
+        ok: false,
+        status: 409,
+        code: 'REVIEW_PENDING',
+        message: 'The Opus review of this pull request is still running. Confirm that you want to merge before it finishes.',
+        review,
+      }
+    }
+    return { ok: true, review, overridden: false, mergedBeforeReview: true, expectedHeadSha: currentHead, ...base }
+  }
+  const plain = mergeGate(shown, { currentHead })
+  return {
+    ok: true,
+    review,
+    overridden: false,
+    mergedBeforeReview: false,
+    expectedHeadSha: plain.allowed ? plain.expectedHeadSha : currentHead,
+    ...base,
+  }
 }

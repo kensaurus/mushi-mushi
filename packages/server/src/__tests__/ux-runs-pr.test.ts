@@ -3,7 +3,10 @@
  * PURPOSE: A UX run's pull request in the console (Plan 021): the CLI's sync
  *          stores it, the console reads its checks live, and a person's click
  *          merges it. The PR must be in a repo connected to the project, a
- *          viewer cannot merge, and a merge GitHub refuses says why.
+ *          viewer cannot merge, and a merge GitHub refuses says why. The
+ *          run's PR URL comes from an API-key snapshot, so the merge goes
+ *          through the agent PR review gate (ADR 0030): a snapshot naming a
+ *          held fix PR cannot merge it.
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -42,6 +45,8 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
     return m ? { owner: m[1], repo: m[2] } : null
   },
   resolveProjectGithubToken: async () => state.token,
+  // The gated merge reads the PR's head before merging.
+  fetchPullRequest: async () => ({ number: 147, draft: false, state: 'open', merged: false, headSha: 'abc1234' }),
   fetchPullRequestDetails: async () => ({
     number: 147, draft: true, state: 'open', merged: false, htmlUrl: PR, headRef: `mushi-ux/${RUN}`,
     headSha: 'abc1234', baseRef: 'main', mergeable: true, mergeableState: 'blocked',
@@ -78,7 +83,7 @@ class FakeApp {
     const params: Record<string, string> = { pid: P, runId: RUN }
     const c = {
       req: { json: async () => body, param: (k: string) => params[k], query: () => undefined },
-      get: (k: string) => ({ userId: 'u1' })[k as 'userId'],
+      get: (k: string) => ({ userId: 'u1', authMethod: 'jwt' } as Record<string, string>)[k],
       json: (b: unknown, status = 200) => ({ body: b, status }),
     }
     return (await route.handler(c)) as Res
@@ -170,6 +175,21 @@ describe('a UX run pull request', () => {
     })
     expect(db.table('ux_runs')[0]).toMatchObject({ pr_state: 'merged' })
     expect(state.audit).toHaveBeenCalledWith(expect.anything(), P, 'u1', 'ux_run.merged', 'ux_run', expect.any(String), expect.objectContaining({ pr_number: 147 }))
+  })
+
+  it('will not merge a held fix PR that a snapshot names (ADR 0030)', async () => {
+    const { db, app } = setup()
+    db.table('fix_attempts').push({ id: 'fa-147', project_id: P, pr_number: 147, pr_url: PR })
+    db.table('fix_reviews').push({
+      id: 'rev-147', fix_attempt_id: 'fa-147', project_id: P, pr_url: PR, status: 'completed', verdict: 'hold',
+      head_sha: 'abc1234', reviewed_at: '2026-10-21T00:00:00Z', findings: [], removes_behavior: [], rules_applied: [],
+    })
+    await app.call('PUT', BASE, snapshot({ url: PR, number: 147 }))
+    state.role = 'admin'
+    const res = await app.call('POST', `${BASE}/merge`, { method: 'squash' })
+    expect(res.status).toBe(409)
+    expect(res.body.error?.code).toBe('REVIEW_HOLD')
+    expect(state.merge).not.toHaveBeenCalled()
   })
 
   it('passes on why GitHub refused a merge', async () => {

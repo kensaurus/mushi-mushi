@@ -23,11 +23,11 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { mergeGithubPullRequest } from '../../_shared/fix-merge.ts'
 import type { GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, githubJsonHeaders, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import { summarizeChecks, type PrChecks } from '../../_shared/ux-runs.ts'
-import { evaluateMergeGate, findFixAttemptForPr, reviewStatesForPrs } from '../../_shared/fix-review-db.ts'
+import { reviewStatesForPrs } from '../../_shared/fix-review-db.ts'
+import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
 import type { ReviewState, ReviewVerdict } from '../../_shared/fix-review.ts'
 
 const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/
@@ -136,6 +136,7 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
         method: z.enum(['squash', 'merge', 'rebase']).default('squash'),
         override: z.boolean().optional(),
         overrideReason: z.string().max(500).optional(),
+        confirmPendingReview: z.boolean().optional(),
       })
       .safeParse((await c.req.json().catch(() => ({}))) ?? {})
     if (!body.success) return jsonError(c, 'VALIDATION_ERROR', 'method must be squash, merge or rebase')
@@ -155,51 +156,44 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     if (!pull) return jsonError(c, 'NOT_FOUND', `Pull request #${number} was not found in ${owner}/${repo}.`, 404)
     if (pull.state !== 'open') return jsonError(c, 'NOT_OPEN', `Pull request #${number} is not open.`, 409)
 
-    // ADR 0030: a Mushi fix PR merges through the same review gate as the fix route.
-    const found = await findFixAttemptForPr(db, projectId, `${owner}/${repo}`, number)
-    if (found.error) return jsonError(c, 'REVIEW_UNAVAILABLE', 'Mushi could not check whether this pull request is a reviewed fix, so it will not merge it now. Try again in a minute.', 503)
-    let gate: Awaited<ReturnType<typeof evaluateMergeGate>> | null = null
-    if (found.attempt) {
-      gate = await evaluateMergeGate(db, {
-        fixAttemptId: found.attempt.id,
+    // ADR 0030: the one gated merge (_shared/gated-merge.ts). A PR linked to
+    // a Mushi fix review goes through the review gate; any other PR merges as before.
+    let outcome
+    try {
+      outcome = await gatedMergePullRequest(db, {
+        projectId,
+        token,
+        ref,
+        number,
         currentHead: pull.head?.sha ?? null,
         override: body.data.override === true,
         overrideReason: body.data.overrideReason?.trim() || null,
+        confirmPendingReview: body.data.confirmPendingReview === true,
         authMethod: c.get('authMethod') as string | undefined,
         role: access.role,
-      })
-      if (!gate.ok) {
-        return c.json({ ok: false, error: { code: gate.code, message: gate.message }, data: { review: gate.review } }, gate.status)
-      }
-    }
-    let result
-    try {
-      result = await mergeGithubPullRequest(token, ref, number, {
-        mergeMethod: body.data.method,
-        ...(gate?.ok ? { sha: gate.expectedHeadSha } : {}),
-        ...(body.data.method === 'rebase'
-          ? {}
-          : {
-              commitTitle: pull.title ? `${stripCiSkips(pull.title)} (#${number})` : undefined,
-              commitMessage: 'Merged from the Mushi console.',
-            }),
+        merge: {
+          mergeMethod: body.data.method,
+          ...(body.data.method === 'rebase'
+            ? {}
+            : {
+                commitTitle: pull.title ? `${stripCiSkips(pull.title)} (#${number})` : undefined,
+                commitMessage: 'Merged from the Mushi console.',
+              }),
+        },
       })
     } catch (err) {
       return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not merge: ${(err as Error).message.slice(0, 200)}`, 502)
     }
+    if (!outcome.ok) {
+      return c.json({ ok: false, error: { code: outcome.code, message: outcome.message }, data: { review: outcome.review } }, outcome.status)
+    }
+    const result = outcome.result
     if (!result.merged) return jsonError(c, result.headMoved ? 'HEAD_MOVED' : 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
     await logAudit(db, projectId, userId, 'pull_request.merged', 'pull_request', `${owner}/${repo}#${number}`, {
       method: body.data.method,
       already_merged: result.alreadyMerged,
       sha: result.sha ?? null,
-      ...(gate?.ok
-        ? {
-            fix_attempt_id: found.attempt?.id ?? null,
-            review_state: gate.review.state,
-            merged_head_sha: gate.expectedHeadSha,
-            ...(gate.overridden ? { review_override: true, override_reason: body.data.overrideReason?.trim() ?? null } : {}),
-          }
-        : {}),
+      ...outcome.audit,
     }).catch(() => null)
     return c.json({ ok: true, data: { merged: true, alreadyMerged: result.alreadyMerged, sha: result.sha, message: result.message } })
   })
