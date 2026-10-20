@@ -42,7 +42,7 @@
  * at 100 s, and usage is recorded as soon as the call returns.
  *
  * Auth: `requireServiceRoleAuth`. Invoked by pg_cron `mushi-agent-pr-review`
- * (migration 20261021090000, `3-53/10 * * * *`) and by
+ * (migration 20261020172855, `3-53/10 * * * *`) and by
  * POST /v1/admin/fixes/:id/review (re-run).
  */
 

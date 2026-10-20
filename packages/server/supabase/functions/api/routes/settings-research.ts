@@ -609,7 +609,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
       'supabase_project_ref',
-      // Agent PR review (ADR 0030, migration 20261021090000): turning it off
+      // Agent PR review (ADR 0030, migration 20261020172855): turning it off
       // removes the merge gate and stops spending the Anthropic key on
       // reviews, so project admins only. Validated below.
       'agent_pr_review_enabled',

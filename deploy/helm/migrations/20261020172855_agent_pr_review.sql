@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261021090000_agent_pr_review
+-- 20261020172855_agent_pr_review
 --
 -- Agent PR review gate (ADR 0030). Every pull request a cloud coding agent
 -- (cursor_cloud / github_cloud_agent) opens as a fix gets an independent
