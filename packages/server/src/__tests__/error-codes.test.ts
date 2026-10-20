@@ -6,6 +6,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   dbDiagnosticMessage,
+  dbErrorFingerprint,
+  dbFailureMessage,
   isTransientDbConnectionError,
   logDbFailure,
 } from '../../supabase/functions/_shared/error-codes.ts'
@@ -86,8 +88,16 @@ describe('isTransientDbConnectionError', () => {
       false,
     )
     // Pool exhaustion / statement timeout are real capacity signals — keep paging.
+    // A timeout whose text also contains a doctype is still a coded SQLSTATE.
     assertEquals(isTransientDbConnectionError({ message: 'too many connections', code: '53300' }), false)
     assertEquals(isTransientDbConnectionError({ message: 'canceling statement due to statement timeout', code: '57014' }), false)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'canceling statement due to statement timeout <!DOCTYPE html>',
+        code: '57014',
+      }),
+      false,
+    )
   })
 
   // ── Genuine connection-family SQLSTATEs ARE transient ─────────────────────────
@@ -212,6 +222,31 @@ describe('dbDiagnosticMessage', () => {
     expect(dbDiagnosticMessage(message)).not.toContain('<')
     expect(dbDiagnosticMessage('502 Bad Gateway')).toBe('[upstream gateway error] 502 Bad Gateway')
     expect(dbDiagnosticMessage('column missing')).toBe('column missing')
+  })
+})
+
+describe('dbFailureMessage / dbErrorFingerprint', () => {
+  it('keeps a real message, and falls through empty message to details then code', () => {
+    expect(dbFailureMessage({ message: 'canceling statement due to statement timeout', code: '57014' })).toBe(
+      'canceling statement due to statement timeout',
+    )
+    expect(dbFailureMessage({ message: '  ', code: '57014', details: 'process 1' })).toBe('process 1')
+    expect(dbFailureMessage({ message: '', code: 'XX000' })).toBe('Unknown DB error (XX000)')
+    expect(dbFailureMessage(null)).toBe('Unknown DB error (unknown)')
+  })
+
+  it('never puts a gateway HTML page in the exception text', () => {
+    expect(
+      dbFailureMessage({ message: '<!DOCTYPE html><title>502 Bad Gateway</title><script>x()</script>', code: '42703' }),
+    ).toBe('[upstream gateway error] 502 Bad Gateway')
+    expect(dbFailureMessage({ message: '', code: '57014', details: '<html><body>oops</body></html>' })).not.toContain('<')
+  })
+
+  it('folds uuids and long numeric ids into the fingerprint', () => {
+    const path = '/v1/admin/projects/1000000a-0000-4000-8000-000000000000/reports/42'
+    expect(dbErrorFingerprint('57014', path)).toEqual(['db-error', '57014', '/v1/admin/projects/:id/reports/:n'])
+    expect(dbErrorFingerprint('  ', '/v1/admin/reports')).toEqual(['db-error', 'unknown', '/v1/admin/reports'])
+    expect(dbErrorFingerprint(null, '')).toEqual(['db-error', 'unknown', 'unknown'])
   })
 })
 

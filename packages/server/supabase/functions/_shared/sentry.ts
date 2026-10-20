@@ -56,7 +56,13 @@ export function ensureSentry(functionName?: string): void {
 
 export function reportError(
   err: unknown,
-  ctx?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+  ctx?: {
+    tags?: Record<string, string>
+    extra?: Record<string, unknown>
+    /** Replaces Sentry's stack fingerprint. `dbError` passes one so different
+     *  SQLSTATEs on the same wrapper line do not collapse into one issue. */
+    fingerprint?: string[]
+  },
 ): void {
   if (!inited) return
   Sentry.captureException(err, ctx)
