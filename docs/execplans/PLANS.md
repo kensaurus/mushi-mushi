@@ -540,9 +540,9 @@ spec-conformance matrix, and burndown live in
       JWT pattern catches Conduit's non-Bearer scheme).
 - Verified: core 192 tests, web 225 tests, typecheck 47/47 green.
 
-### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (except CI gate, 2026-09-12 audit)
+### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE`
 - [x] Vendored `examples/realworld/` + `conduit-journey.spec.ts` + `pnpm e2e:realworld` shipped in `76ec9325` (#340).
-- [ ] `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) — tracked under Plan 017 P0.
+- [x] `MUSHI_REALWORLD=1` CI job: `.github/workflows/e2e-realworld.yml` (path-filtered pull request, daily cron `15 5 * * *`, `workflow_dispatch`).
 Vendored `examples/realworld/` (express backend + react-vite + hash-router
 frontends), non-interactive `mushi init` wiring, `conduit-journey.spec.ts`
 capture→ingest assertions, MCP fix-loop dogfood step, `MUSHI_REALWORLD=1`
