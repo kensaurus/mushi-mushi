@@ -26,7 +26,7 @@
  * of each tick is written to `byok_keys.spend_down_last_summary`.
  *
  * Auth: `requireServiceRoleAuth` — invoked by pg_cron `mushi-spend-down`
- * (migration 20261020090056, schedule `28,58 * * * *`).
+ * (migration 20261020090056; every 10 minutes, `8-58/10 * * * *`, since 20261020140720).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
