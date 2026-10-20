@@ -67,6 +67,7 @@
     "GET /v1/admin/billing/stats": {"mcp": ["get_usage"], "cli": ["billing cap", "budgets show", "usage"]},
     "GET /v1/admin/byok/browserbase": {"allow": "jwt-only"},
     "GET /v1/admin/byok/credits": {"allow": "parity-debt"},
+    "GET /v1/admin/byok/cursor/models": {"allow": "jwt-only", "note": "Model list for spend-down and the Integrations Cursor model field. Cursor GET /v1/models for that key, or for the key the app would use. The Run in the cloud card reads the same list through GET /v1/admin/integrations/cursor/models. The terminal lists models with `mushi ux models --agent cursor-cloud`."},
     "GET /v1/admin/byok/firecrawl": {"allow": "jwt-only"},
     "GET /v1/admin/byok/keys": {"mcp": ["list_byok_keys"], "cli": ["keys list"]},
     "GET /v1/admin/byok/spend-down": {"mcp": ["get_spend_down_status"], "cli": ["keys spend-down"]},
