@@ -100,7 +100,7 @@ describe('upsertCodebaseChunks', () => {
 
 describe('upsert_codebase_chunks migration', () => {
   const sql = readFileSync(
-    resolve(__dirname, '../../supabase/migrations/20261020143000_upsert_codebase_chunks.sql'),
+    resolve(__dirname, '../../supabase/migrations/20261020140331_upsert_codebase_chunks.sql'),
     'utf8',
   )
 
