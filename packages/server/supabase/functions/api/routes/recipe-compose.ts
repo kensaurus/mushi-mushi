@@ -43,6 +43,7 @@ import type {
 import { RECIPE_ELEMENT_KEYS } from '../../_shared/recipe-types.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
 import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { mapWithConcurrency } from '../../_shared/concurrency.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -170,16 +171,26 @@ export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
 export const RECIPE_GATES: readonly string[] = GATE_IDS.filter((g) => !RADAR_GATES.includes(g))
 
 /**
- * The newest finished run of each of `gates`, read one gate at a time.
+ * In-flight `gate_runs` lookups. Each gate is its own query (a shared page
+ * hid older gates), and callers pass every live gate. An unbounded
+ * Promise.all checked out one pool connection per gate — inventory stats
+ * did that inside another Promise.all — and Supavisor answered
+ * "Timed out acquiring connection from connection pool". Sentry grouped
+ * the failure on the gate that lost the race, `store_review`.
+ */
+export const GATE_RUN_READ_CONCURRENCY = 4
+
+/**
+ * The newest finished run of each of `gates`, one query per gate.
  * A shared "newest N runs" page would let busy gates (daily radar runs,
  * per-push CI runs) push an older failing gate out, and that gate would read
  * as never run. Same filters as latestPerGate + isScanRun, in the query:
  * running / queued runs are skipped, and only a deviance scan counts for
  * design_drift (the same read as loadLatestDesignScans). A failed read
- * throws (P-1).
+ * throws (P-1). At most GATE_RUN_READ_CONCURRENCY queries are in flight.
  */
 export async function loadLatestGateRuns(db: Db, projectId: string, gates: readonly string[]): Promise<GateRunRow[]> {
-  const reads = await Promise.all(gates.map(async (gate) => {
+  const reads = await mapWithConcurrency(gates, GATE_RUN_READ_CONCURRENCY, async (gate) => {
     let q = db
       .from('gate_runs')
       .select('id, gate, status, started_at, completed_at, summary, findings_count, commit_sha')
@@ -190,7 +201,7 @@ export async function loadLatestGateRuns(db: Db, projectId: string, gates: reado
     const { data, error } = await q.order('started_at', { ascending: false }).limit(1).maybeSingle()
     if (error) throw new Error(`gate_runs (${gate}): ${error.message}`)
     return (data as GateRunRow | null) ?? null
-  }))
+  })
   return reads.filter((r): r is GateRunRow => r !== null)
 }
 

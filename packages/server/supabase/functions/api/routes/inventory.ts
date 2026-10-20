@@ -206,7 +206,6 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       summaryRpc,
       discoveryRes,
       proposalsRes,
-      openFindingsRead,
       gateRunRes,
       projectRes,
     ] = await Promise.all([
@@ -226,7 +225,6 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id)
         .eq('status', 'draft'),
-      countLatestOpenFindings(db, activeProject.id),
       db
         .from('gate_runs')
         .select('started_at')
@@ -240,6 +238,11 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .eq('id', activeProject.id)
         .maybeSingle(),
     ])
+    // After the banner reads release their connections. Counting open findings
+    // looks up every gate, and holding those lookups together with the queries
+    // above exhausted the pool (gate_runs (store_review): timed out acquiring
+    // a connection).
+    const openFindingsRead = await countLatestOpenFindings(db, activeProject.id)
 
     const summaryRaw = summaryRpc.data
     const summary =
