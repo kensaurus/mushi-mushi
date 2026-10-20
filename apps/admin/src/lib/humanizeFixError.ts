@@ -55,6 +55,21 @@ export function humanizeFixError(
     };
   }
 
+  // Cursor: the API key's Cursor account has no GitHub access to the repo.
+  // Cursor reports this as "Failed to verify existence of branch 'main' in
+  // repository owner/name" even when the branch exists. Retrying with the
+  // same key fails the same way (2026-10-20, five private dogfood repos).
+  if (m.includes('failed to verify existence of branch')) {
+    const repo = raw.match(/in repository ([\w.-]+\/[\w.-]+?)\.?(?:\s|$)/i)?.[1] ?? 'this repository';
+    return {
+      title: "Cursor can't see this repository.",
+      hint: `The Cursor account behind your API key has no GitHub access to ${repo}. Sign in to that Cursor account, connect GitHub under Integrations with access to the repo, then retry.`,
+      severity: 'hard',
+      action: { label: 'Open Cursor integrations', target: { kind: 'external', url: 'https://cursor.com/dashboard?tab=integrations' } },
+      raw,
+    };
+  }
+
   // Cursor: unrecognised body key (schema drift like branchName removal)
   // Mushi sent a request shape Cursor's API rejects (field removed, or a
   // field combination such as envVars + agentId — fixed 2026-10-03).

@@ -40,3 +40,23 @@ describe('humanizeFixError: review gate', () => {
     expect(h?.action?.target).toEqual({ kind: 'retry' })
   })
 })
+
+describe('humanizeFixError: Cursor cannot reach the repo', () => {
+  const raw =
+    "Cursor API 400 validation_error: Failed to verify existence of branch 'main' in repository kensaurus/yen-yen. Please ensure the branch name is correct."
+
+  it('blames GitHub access, names the repo and offers no retry', () => {
+    const h = humanizeFixError(raw)
+    expect(h?.title).toBe("Cursor can't see this repository.")
+    expect(h?.hint).toContain('kensaurus/yen-yen')
+    expect(h?.hint).not.toContain('yen-yen..')
+    expect(h?.severity).toBe('hard')
+    expect(h?.action?.target).toEqual({ kind: 'external', url: 'https://cursor.com/dashboard?tab=integrations' })
+  })
+
+  it('keeps the schema-drift reading for other validation errors', () => {
+    expect(humanizeFixError('Cursor API 400 validation_error: Unrecognized key "branchName"')?.title).toBe(
+      'Mushi sent Cursor a field it no longer accepts.',
+    )
+  })
+})
