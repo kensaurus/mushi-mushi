@@ -38,10 +38,9 @@ When you land on the dashboard, scan these three things in order:
 
 ---
 
-## Flow canvas (Beginner mode)
+## Flow canvas
 
-In Beginner mode an animated graph shows live report counts at each stage. Quick and
-Advanced modes skip it and lead with the "do this next" line instead:
+An animated graph shows live report counts at each stage, under the "do this next" line:
 
 | Stage | What it counts |
 |-------|---------------|

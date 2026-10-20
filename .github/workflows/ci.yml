@@ -247,11 +247,11 @@ jobs:
         # only in release.yml, so before this step a PR could pass every gate,
         # merge, deploy to seven channels, and only then fail to publish.
         #
-        # Must run BEFORE `pnpm build`: the docs build rewrites the tracked
-        # apps/docs/public/llms-full.txt (nextra embeds git modified-times and
-        # CI checks out shallow), which leaves the tree dirty. The same dirty
-        # file already broke the changesets action's own `git checkout` during
-        # the failed release of #380.
+        # Must run BEFORE `pnpm build`: the docs prebuild rewrites tracked
+        # public files. llms-full.txt used to stamp today's date, so a clean
+        # checkout came out dirty and broke the changesets `git checkout`
+        # during the failed release of #380. The stamp is gone (BL-014);
+        # keep this step first so a generator regression cannot do it again.
         run: pnpm check:release-version
 
       - name: Audit dependencies for known vulnerabilities
@@ -452,6 +452,13 @@ jobs:
 
       - name: Check SDK version matrix
         run: pnpm check:sdk-version-matrix
+
+      - name: Check generated LLM docs are fresh
+        # llm-md twins, llms-full.txt, llms-ctx.txt and blog/feed.xml are
+        # committed. A version bump rewrites the MDX (mcp pin, SDK matrix)
+        # and used to leave the twins stale, so `pnpm build` dirtied them.
+        # Run `pnpm gen:llms-docs` and commit when this fails.
+        run: pnpm check:llms-docs
 
       - name: Check Flutter PII pattern sync
         # Regression guard for production-readiness audit item #16: the
