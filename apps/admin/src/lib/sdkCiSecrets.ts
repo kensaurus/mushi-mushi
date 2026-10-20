@@ -7,7 +7,7 @@
  *  - sdkCiStatusLabel(): human-readable label + severity for a diagnostic status
  */
 
-import { formatEnvVarPair, mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+import { formatEnvVarPair, mushiEnvVarsForProjectSlug, type ProjectMushiEnvVars } from './projectMushiEnv'
 
 // ---------------------------------------------------------------------------
 // API response types (mirror packages/server/.../project-ci-secrets.ts)
@@ -31,7 +31,7 @@ export interface SdkDiagnosticsResult {
   missingVars: string[] | null
   lastSeenAt: string | null
   nativeEverSeen: boolean
-  stack: 'nextjs' | 'expo' | 'vite'
+  stack: 'nextjs' | 'nuxt' | 'expo' | 'vite'
   /** `repo`: read from the repo's package.json; `slug`: a guess (older API: absent). */
   stackSource?: 'repo' | 'slug'
   recommendedFix: string
@@ -81,9 +81,12 @@ export function sdkCiStatusMeta(
   status: SdkDiagnosticStatus,
   hasGithubToken: boolean,
   slug?: string | null,
-  extras?: Pick<SdkDiagnosticsResult, 'nativeEverSeen' | 'launcherMode'>,
+  extras?: Partial<Pick<SdkDiagnosticsResult, 'nativeEverSeen' | 'launcherMode'>> & {
+    /** Names already resolved from the repo stack. Beats the slug guess. */
+    env?: ProjectMushiEnvVars
+  },
 ): SdkCiStatusMeta {
-  const env = mushiEnvVarsForProjectSlug(slug)
+  const env = extras?.env ?? mushiEnvVarsForProjectSlug(slug)
   const envPair = formatEnvVarPair(env)
   const envWhere = 'GitHub Actions'
   const nativeEverSeen = extras?.nativeEverSeen ?? false
