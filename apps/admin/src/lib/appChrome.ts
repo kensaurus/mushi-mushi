@@ -1,10 +1,10 @@
 /**
  * FILE: apps/admin/src/lib/appChrome.ts
  * PURPOSE: Shared layout offsets for fixed overlays (drawers, panels)
- *          so they clear the beta banner and desktop sub-header.
+ *          so they clear the desktop sub-header (and the beta strip offset,
+ *          which stays 0 since the strip was removed on 2026-10-20).
  */
 
-export const BETA_BANNER_ID = 'mushi-beta-banner'
 export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 
 /**
@@ -38,7 +38,8 @@ export const headerDropdownPanelClass =
 
 /**
  * Right-anchored drawer shell that starts below persistent top chrome.
- * Beta strip height is published by BetaBanner via ResizeObserver.
+ * The beta-strip offset variable is kept for the fixed overlays' math; nothing
+ * publishes a non-zero value any more.
  */
 export const drawerBelowAppChromeClass = [
   'fixed inset-x-0 bottom-0 z-50 flex justify-end',
@@ -57,8 +58,3 @@ export const mobileNavBelowAppChromeClass = [
   topBelowAppChromeClass,
 ].join(' ')
 
-/** Publish measured beta-banner height on :root for fixed overlays. */
-export function setBetaBannerOffset(px: number) {
-  if (typeof document === 'undefined') return
-  document.documentElement.style.setProperty(BETA_BANNER_OFFSET_VAR, `${px}px`)
-}

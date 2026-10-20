@@ -13,6 +13,13 @@ interface Props {
   isValidating?: boolean
   sectionTitle?: string
   hint?: string
+  /**
+   * Name of the project the console is viewing, as the page knows it from
+   * the project list. Wins over `stats.activeProjectName`, which the stats
+   * endpoint only fills when the request carried the project header and the
+   * cached answer can lag a project switch.
+   */
+  activeProjectName?: string | null
 }
 
 export function ProjectsSnapshotStrip({
@@ -21,7 +28,9 @@ export function ProjectsSnapshotStrip({
   isValidating,
   sectionTitle = 'Projects snapshot',
   hint,
+  activeProjectName,
 }: Props) {
+  const viewingName = activeProjectName ?? stats.activeProjectName
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
@@ -65,13 +74,15 @@ export function ProjectsSnapshotStrip({
         />
         <StatCard
           label="Viewing"
-          value={stats.activeProjectName ? 'Set' : 'None'}
+          value={viewingName ?? 'None'}
           hint={
-            stats.activeProjectHasReports
-              ? stats.activeProjectSdkConnected
-                ? 'Active project ingesting'
-                : 'Active project — no heartbeat'
-              : 'Pick a project on list tab'
+            !viewingName
+              ? 'Pick a project on list tab'
+              : stats.activeProjectHasReports
+                ? stats.activeProjectSdkConnected
+                  ? 'Active project ingesting'
+                  : 'Active project — no heartbeat'
+                : 'Active project — no reports yet'
           }
         />
       </MetricStrip>

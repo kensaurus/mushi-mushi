@@ -244,7 +244,7 @@ export function ProjectsPage() {
 
   usePublishPageContext({
     route: '/projects',
-    title: `${activeMeta.label} · Projects`,
+    title: `${activeMeta.label} · Manage apps`,
     summary: activeMeta.description,
     filters: { tab: activeTab, active_project_id: activeProjectId ?? undefined },
     criticalCount:
@@ -610,13 +610,13 @@ export function ProjectsPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-projects">
       <PageHeaderBar
-        title={copy?.title ?? 'Projects'}
+        title={copy?.title ?? 'Manage apps'}
         icon={<IconProjects />}
         description={
           copy?.description ??
           'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
         }
-        helpTitle={copy?.help?.title ?? 'About projects'}
+        helpTitle={copy?.help?.title ?? 'About managing apps'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.'
@@ -680,6 +680,7 @@ export function ProjectsPage() {
                 isValidating={validating}
                 sectionTitle="PROJECTS SNAPSHOT"
                 hint={activeMeta.description}
+                activeProjectName={selectedProject?.name ?? null}
               />
             ),
           },

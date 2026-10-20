@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_116 configuration knobs across 19 sections · last regenerated 2026-10-16._
+_116 configuration knobs across 19 sections · last regenerated 2026-10-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -165,7 +165,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
 
-**Learn more** — [About the AI judge](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+**Learn more** — [About triage grading](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Fix model
 

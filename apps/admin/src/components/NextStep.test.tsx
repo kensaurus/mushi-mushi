@@ -50,7 +50,7 @@ vi.mock('../lib/useSendTestReport', () => ({ useSendTestReport: () => vi.fn() })
 import { NextStep } from './NextStep'
 import { SetupChecklist } from './SetupChecklist'
 import { useClaimNextStep } from '../lib/useNextStep'
-import { buildSetupGuideModel } from '../lib/setupGuideSteps'
+import { nextSetupStepId } from '../lib/setupGuideSteps'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -214,7 +214,7 @@ describe('NextStep', () => {
   it('the checklist marks the step the setup guide marks, prerequisites first', () => {
     // Out of chain order: the SDK row comes first, but it needs the API key.
     const p = project([step('project_created', true), step('sdk_installed', false), step('api_key_generated', false)])
-    expect(buildSetupGuideModel(p).nextStepId).toBe('api_key_generated')
+    expect(nextSetupStepId(p)).toBe('api_key_generated')
     render(createElement(SetupChecklist, { project: p, mode: 'wizard' }))
     const marked = Array.from(container.querySelectorAll('li')).filter((li) => /do this next/i.test(li.textContent ?? ''))
     expect(marked).toHaveLength(1)

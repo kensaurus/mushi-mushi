@@ -60,8 +60,13 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id, stage, is_active, is_candidate, traffic_percentage, avg_judge_score')
         .or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
         .limit(200),
-      db.from('judge_results')
-        .select('id, labelled_by', { count: 'exact', head: false })
+      // The judge writes `classification_evaluations` (judge-batch, the
+      // Judge page). This read used a `judge_results` table that never
+      // existed, so the query failed quietly and the banner always said
+      // "the judge hasn't scored anything yet" beside a Judge page showing
+      // dozens of grades (console audit 2026-10-20, B6).
+      db.from('classification_evaluations')
+        .select('id, judge_score', { count: 'exact', head: false })
         .in('project_id', projectIds)
         .limit(1000),
     ])
@@ -80,7 +85,7 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
 
     const evalRows = evalRes.data ?? []
     const datasetTotal = evalRes.count ?? evalRows.length
-    const datasetLabelled = evalRows.filter((r) => r.labelled_by).length
+    const datasetLabelled = evalRows.filter((r) => r.judge_score !== null && r.judge_score !== undefined).length
     const datasetLabelPct = datasetTotal > 0 ? Math.round((datasetLabelled / datasetTotal) * 100) : null
 
     let topPriority: typeof empty.topPriority = 'healthy'

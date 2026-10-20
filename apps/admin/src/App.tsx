@@ -17,7 +17,6 @@ import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
-import { BetaBanner } from './components/BetaBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
 
@@ -52,6 +51,7 @@ const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m
 const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.RepoPage })))
 const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m.VoicePage })))
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
+const ChecksPage = lazy(() => import('./pages/ChecksPage').then(m => ({ default: m.ChecksPage })))
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
@@ -279,11 +279,9 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-      {/* App shell — one viewport, one primary scroll surface. BetaBanner
-          lives inside the shell (not above a separate h-screen Layout) so
-          we never get body + <main> double scrollbars. */}
+      {/* App shell — one viewport, one primary scroll surface, so we never
+          get body + <main> double scrollbars. */}
       <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
-      <BetaBanner />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ResilienceLayer />
       <MushiSelfMount />
@@ -306,7 +304,7 @@ export function App() {
             dashboard — ProtectedRoute redirects to /login when unauthenticated.
             (Retired PublicHomePage so the noindex admin shell no longer duplicates
             the indexable landing.) */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/reports" replace />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
@@ -390,6 +388,7 @@ export function App() {
                   <Route path="/repo" element={<RepoPage />} />
                   <Route path="/voice" element={<VoicePage />} />
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
+                  <Route path="/checks" element={<ChecksPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />

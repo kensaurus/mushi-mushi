@@ -7,6 +7,7 @@
 import { Link } from 'react-router-dom'
 import { Card, PanelHeader } from '../ui'
 import { HealthPill } from '../charts'
+import { integrationPillStatus } from '../../lib/integrationPill'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { relTime, type ActivityItem, type IntegrationStatus } from './types'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
@@ -136,7 +137,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
                     {(it.uptime * 100).toFixed(0)}% up
                   </span>
                 )}
-                <HealthPill status={it.lastStatus} />
+                <HealthPill status={integrationPillStatus(it.lastStatus, it.uptime)} />
               </div>
             </Link>
           ))}

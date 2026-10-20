@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildUsageForecast,
   daysUntilPeriodReset,
   estimateDiagnosisBill,
   fmtBillingLimit,
   formatPeriodResetLabel,
+  formatPlanQuotaChip,
   monthlyQuotaWindowEnd,
 } from './billingUsageForecast'
 
@@ -56,6 +57,57 @@ describe('buildUsageForecast', () => {
     expect(forecast!.etaDays).toBeGreaterThan(0)
     expect(forecast!.projectedCostUsd).toBeGreaterThanOrEqual(15)
     expect(forecast!.projectedCostLabel).toMatch(/Projected ~\$/)
+  })
+
+  it('names a date that agrees with the day count when the limit falls inside the period', () => {
+    // Pin the clock so the pace is exactly 200 over 10 days = 20/day;
+    // 300 left = 15 days, inside the 20 remaining.
+    const now = Date.UTC(2026, 9, 20, 12, 0, 0)
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    try {
+      const start = new Date(now - 10 * 86_400_000).toISOString()
+      const end = new Date(now + 20 * 86_400_000).toISOString()
+      const forecast = buildUsageForecast(200, 500, start, end)
+      expect(forecast).not.toBeNull()
+      expect(forecast!.hitsThisPeriod).toBe(true)
+      expect(forecast!.etaDays).toBe(15)
+      expect(forecast!.etaDate.getTime()).toBe(now + 15 * 86_400_000)
+      const dateStr = forecast!.etaDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      expect(forecast!.label).toBe(`At current rate, you'll hit your limit on ${dateStr} (15d away)`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says the limit will not be hit this period instead of a far-future date', () => {
+    // B8: 17 / 2,000 diagnoses, two weeks in, two weeks left — the old label
+    // read "on Nov 24 (2227d away)".
+    const start = new Date(Date.now() - 14 * 86_400_000).toISOString()
+    const end = new Date(Date.now() + 14 * 86_400_000).toISOString()
+    const forecast = buildUsageForecast(17, 2000, start, end, {
+      baseUsd: 49,
+      included: 2000,
+      overageRate: 0.03,
+      spendCapUsd: null,
+    })
+    expect(forecast).not.toBeNull()
+    expect(forecast!.hitsThisPeriod).toBe(false)
+    expect(forecast!.tone).toBe('muted')
+    expect(forecast!.label).toBe("You won't hit your limit this period at the current rate")
+    expect(forecast!.label).not.toMatch(/\d+d away/)
+  })
+})
+
+describe('formatPlanQuotaChip', () => {
+  it('shows the plan name and its diagnoses quota', () => {
+    expect(formatPlanQuotaChip('Pro', 2000, 1000)).toBe('Pro: 2,000 diagnoses / mo')
+  })
+
+  it('falls back to the reports quota, then unlimited', () => {
+    expect(formatPlanQuotaChip('Hobby', null, 1000)).toBe('Hobby: 1,000 reports / mo')
+    expect(formatPlanQuotaChip('Enterprise', null, null)).toBe('Enterprise: unlimited')
+    expect(formatPlanQuotaChip('', null, null)).toBe('Plan: unlimited')
   })
 })
 

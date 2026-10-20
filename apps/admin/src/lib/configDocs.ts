@@ -248,7 +248,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
     whenToChange: 'Pick Haiku 5.5 when cost matters more than an independent second opinion.',
     learnMore: {
-      label: 'About the AI judge',
+      label: 'About triage grading',
       href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
     },
   },

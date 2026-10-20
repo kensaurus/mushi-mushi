@@ -483,9 +483,9 @@ export function FeatureBoardPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feature-board">
       <PageHeaderBar
-        title="Feature board"
+        title="Feature requests"
         withPageHero={false}
-        helpTitle="About the feature board"
+        helpTitle="About feature requests"
         helpWhatIsIt="Community feature requests from the Feedback form, ranked by votes. Owners, admins and members can mark items shipped; the requester then sees it on their Support page."
         helpUseCases={[
           'See which ideas your users care about most',

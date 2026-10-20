@@ -631,7 +631,7 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 | Understand | `ask`, `tour`, `domains`, `knowledge` | `api/routes/codebase-understand.ts` |
 | Map | `graph`, `layers` | `GET …/codebase/explore` (+ UA graph JSON when `symbols=1`) |
 | Search | `search` | `POST …/codebase/search` (semantic + name modes) |
-| Index | `index` (Advanced mode) | scope settings + analyze job debug |
+| Index | `index` | scope settings + analyze job debug |
 
 **Workers & tables (Jun 2026):**
 

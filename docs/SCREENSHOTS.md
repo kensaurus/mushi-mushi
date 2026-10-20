@@ -36,8 +36,8 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 <table width="100%">
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/"><img src="./screenshots/quickstart-dark.png" alt="Quickstart mode dashboard — three-page sidebar (Setup, Bugs to fix, Fixes ready) with verb-led labels and zero PDCA jargon." /></a>
-    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors — pill-toggle up to Beginner (9 pages) or Advanced (all pages) anytime.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/"><img src="./screenshots/quickstart-dark.png" alt="Home — nine-page sidebar (Home, Bugs, Fixes, Apps, Connect, Integrations, Checks, Team, Settings) and the one next step." /></a>
+    <p align="center"><b>One sidebar</b> · <sub>Nine pages for every account; extra pages are Labs you switch on in Settings. Screenshot predates the 2026-10-20 navigation change.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/admin/"><img src="./screenshots/first-run-tour-dark.png" alt="First-run interactive tour — spotlight cutout around the Plan tile, dark backdrop, coach-mark panel with Next button." /></a>

@@ -18,6 +18,7 @@ import {
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
 import { coerceApiResult, errorFromBody, type ApiResult } from './apiEnvelope'
 import { clearLastGood, registerLastGoodKey, rememberLastGood } from './lastGoodCache'
+import { forgetHasAnyProject } from './projectPresence'
 import type * as CrossTeamProject from './crossTeamProject'
 
 const authOptions = {
@@ -309,6 +310,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   const userId = session?.user?.id ?? null
   if (event === 'SIGNED_OUT' || (lastGoodUserId && userId && userId !== lastGoodUserId)) {
     clearLastGood()
+    forgetHasAnyProject()
   }
   if (userId) lastGoodUserId = userId
 })

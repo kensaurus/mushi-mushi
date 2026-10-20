@@ -17,12 +17,11 @@ interface Props {
   dispatches: DispatchJob[]
 }
 
-const ATTENTION_STATUSES: ReadonlySet<DispatchJob['status']> = new Set([
-  'skipped',
-  'skipped_no_sandbox',
-  'completed_no_pr',
-  'failed',
-])
+import { DISPATCH_ATTENTION_STATUSES } from '../../lib/fixesBannerReconcile'
+
+// One definition with the banner reconciliation (lib/fixesBannerReconcile.ts)
+// so the "needs attention" cards and the status banner never disagree.
+const ATTENTION_STATUSES = DISPATCH_ATTENTION_STATUSES
 
 function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean }) {
   return (

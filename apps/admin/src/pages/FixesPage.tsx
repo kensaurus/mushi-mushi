@@ -44,6 +44,7 @@ import {
 } from '../lib/fixRetry'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
+import { reconcileFixesStats } from '../lib/fixesBannerReconcile'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
@@ -147,7 +148,7 @@ export function FixesPage() {
   } = usePageData<FixesStats>(
     activeProjectId ? '/v1/admin/fixes/stats' : null,
   )
-  const fixesStats = statsData ?? EMPTY_FIXES_STATS
+  const serverFixesStats = statsData ?? EMPTY_FIXES_STATS
 
   // Latest page (refreshed by realtime) plus older pages loaded on request,
   // so every attempt is reachable instead of the first 50 (console QA 91).
@@ -162,6 +163,9 @@ export function FixesPage() {
   }, [latestFixes, olderFixes])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
+  // The banner and snapshot must agree with the stopped-dispatch cards they
+  // sit above (audit 2026-10-20, B3): reconcile server stats with the list.
+  const fixesStats = useMemo(() => reconcileFixesStats(serverFixesStats, dispatches), [serverFixesStats, dispatches])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
   const [baseBranches, setBaseBranches] = useState<Record<string, string | null>>({})
@@ -698,7 +702,8 @@ export function FixesPage() {
     title: projectName ? `Fixes · ${projectName}` : 'Fixes',
     summary: loading
       ? 'Loading fix pipeline…'
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${bucketCounts.failed} failed`,
+      // Same number as the banner and the stopped-dispatch cards (B3).
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
     filters: {
       bucket: statusBucket,
     },
