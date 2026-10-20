@@ -192,6 +192,47 @@ function isSupabaseGatewayProjectUnspecified(message: string): boolean {
   )
 }
 
+/**
+ * Text for a Sentry exception and the log line. An empty `message` used to
+ * become `new Error("")`, which Sentry titles "Error" and groups on the
+ * `dbError` frame. Details, then hint, then the code, keep the cause in the
+ * title. Gateway HTML collapses to its title (dbDiagnosticMessage).
+ */
+export function dbFailureMessage(
+  err:
+    | { message?: string; code?: string | null; details?: string | null; hint?: string | null }
+    | null
+    | undefined,
+): string {
+  const text = (value: unknown) => {
+    const t = typeof value === 'string' ? value.trim() : ''
+    return t && isHtmlGatewayDbMessage(t) ? dbDiagnosticMessage(t) : t
+  }
+  const message = text(err?.message)
+  if (message) return message
+  const details = text(err?.details)
+  if (details) return details
+  const hint = text(err?.hint)
+  if (hint) return hint
+  const code = (typeof err?.code === 'string' ? err.code.trim() : '') || 'unknown'
+  return `Unknown DB error (${code})`
+}
+
+/**
+ * Group DB exceptions by SQLSTATE and route shape. `dbError` wraps every
+ * plain PostgREST error in `new Error` on one line, so Sentry's default
+ * stack fingerprint merged statement timeouts and real SQL errors into a
+ * single issue titled "Error". UUIDs and long numeric ids are folded so one
+ * row is not its own issue.
+ */
+export function dbErrorFingerprint(code: string | null | undefined, path: string): string[] {
+  const dbCode = (code ?? '').trim() || 'unknown'
+  const route = (path || 'unknown')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+    .replace(/\/\d{2,}(?=\/|$)/g, '/:n')
+  return ['db-error', dbCode, route]
+}
+
 export function isTransientDbConnectionError(
   err:
     | { message?: string; code?: string | null; details?: string | null }
