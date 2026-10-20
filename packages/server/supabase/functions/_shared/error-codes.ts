@@ -132,12 +132,45 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * Pattern sources:
  *   - "delayed connect error: 111" / "upstream connect error" — Supabase pooler
  *     cold-start or transient reset (Supabase Discussions #26769).
- *   - Cloudflare "Error code 522" origin-timeout page (HTML body leaks into
- *     PostgREST error.message).
+ *   - Cloudflare / gateway HTML (body starts with `<!DOCTYPE` or `<html`, or
+ *     names "Error code 502/503/504/520-524", "502 Bad Gateway", …). The raw
+ *     page leaks into PostgREST error.message (MUSHI-61dfa948).
  *   - "Could not query the database for the schema cache. Retrying." — the
  *     PGRST002 message, matched verbatim for callers that kept only the text
  *     (MUSHI-MUSHI-SERVER-1M).
  */
+
+/**
+ * True when `message` is an upstream HTML/gateway page rather than a Postgres
+ * error. A bare "502" or "522" does not match — those show up in real values.
+ */
+export function isHtmlGatewayDbMessage(message: string | null | undefined): boolean {
+  const lower = (message ?? '').replace(/^\uFEFF/, '').trim().toLowerCase()
+  if (!lower) return false
+  if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('<!doctype')) return true
+  if (/\berror code:?\s*(?:50[234]|52[0-4])\b/.test(lower)) return true
+  if (/\b502 bad gateway\b/.test(lower)) return true
+  if (/\b503 service (?:temporarily )?unavailable\b/.test(lower)) return true
+  if (/\b504 gateway time/.test(lower)) return true
+  if (/\b52[0-4]:\s*(?:connection timed out|web server|origin is unreachable|a timeout occurred)/.test(lower)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Text safe to log or attach to a Sentry exception. Gateway HTML collapses to
+ * a title summary so the page body never becomes the issue message.
+ */
+export function dbDiagnosticMessage(message: string | null | undefined): string {
+  const raw = message ?? ''
+  if (!isHtmlGatewayDbMessage(raw)) return raw.slice(0, 500)
+  const title = /<title[^>]*>([^<]{1,160})/i.exec(raw)?.[1]?.replace(/\s+/g, ' ').trim()
+  if (title) return `[upstream gateway error] ${title}`.slice(0, 500)
+  if (!raw.includes('<')) return `[upstream gateway error] ${raw.trim()}`.slice(0, 500)
+  return '[upstream gateway error]'
+}
+
 export function isTransientDbConnectionError(
   err:
     | { message?: string; code?: string | null; details?: string | null }
@@ -166,6 +199,7 @@ export function isTransientDbConnectionError(
   // No SQLSTATE — socket / gateway-level failures. Match NARROW, specific
   // signatures only (each denotes a reset/disconnect/origin-timeout, not a
   // persistent misconfiguration or an incidental substring).
+  if (isHtmlGatewayDbMessage(err.message)) return true
   return (
     msg.includes('upstream connect error') ||
     msg.includes('delayed connect error') ||
@@ -175,10 +209,6 @@ export function isTransientDbConnectionError(
     msg.includes('connection reset by peer') ||
     msg.includes('socket hang up') ||
     msg.includes('server closed the connection unexpectedly') ||
-    // Cloudflare 522 origin-timeout page — anchored to the Cloudflare markers,
-    // not a bare "522" (which would match arbitrary numeric substrings).
-    msg.includes('error code 522') ||
-    msg.includes('522: connection timed out') ||
     msg.includes('could not query the database for the schema cache')
   )
 }

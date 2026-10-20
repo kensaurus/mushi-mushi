@@ -9,6 +9,8 @@
  * - dbError's transient-DB log line carries the requestId the 500 body has.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { SAFE_INTERNAL_MESSAGE } from '../../supabase/functions/_shared/error-codes.ts'
+import { reportError } from '../../supabase/functions/_shared/sentry.ts'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => { throw new Error('no real db') } }))
@@ -123,5 +125,49 @@ describe('dbError transient log line', () => {
     const line = JSON.parse(String(warn.mock.calls[0]![0]))
     expect(line.event).toBe('db_transient_error')
     expect(line.requestId).toBe('req-123')
+  })
+
+  it('an HTML gateway page is a 503 and is not sent to Sentry', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const html =
+      '<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head>' +
+      '<body><h1>502 Bad Gateway</h1><script>secret()</script></body></html>'
+    const c = {
+      get: () => 'req-html',
+      req: { path: '/v1/admin/reports', method: 'GET' },
+      json: (body: unknown, status?: number) => ({ body, status }),
+    }
+    const res = shared.dbError(c as never, { message: html, code: '' }) as unknown as {
+      body: { ok: boolean; error: { code: string; message: string; requestId?: string } }
+      status: number
+    }
+    expect(res.status).toBe(503)
+    expect(res.body.ok).toBe(false)
+    expect(res.body.error.code).toBe('DB_ERROR')
+    expect(res.body.error.message).toBe(SAFE_INTERNAL_MESSAGE)
+    expect(res.body.error.requestId).toBe('req-html')
+    expect(JSON.stringify(res.body)).not.toContain('<')
+    expect(reportError).not.toHaveBeenCalled()
+    const line = JSON.parse(String(warn.mock.calls[0]![0]))
+    expect(line.event).toBe('db_transient_error')
+    expect(line.err_message).toBe('[upstream gateway error] 502 Bad Gateway')
+    expect(String(line.err_message)).not.toContain('<')
+  })
+
+  it('a real SQL error is still reported and the client message stays generic', () => {
+    const c = {
+      get: () => undefined,
+      req: { path: '/v1/admin/reports', method: 'GET' },
+      json: (body: unknown, status?: number) => ({ body, status }),
+    }
+    const res = shared.dbError(c as never, { code: '42703', message: 'column x does not exist' }) as unknown as {
+      body: { error: { message: string } }
+      status: number
+    }
+    expect(res.status).toBe(500)
+    expect(res.body.error.message).not.toContain('column')
+    expect(reportError).toHaveBeenCalledOnce()
+    const captured = vi.mocked(reportError).mock.calls[0]![0] as Error
+    expect(captured.message).toBe('column x does not exist')
   })
 })
