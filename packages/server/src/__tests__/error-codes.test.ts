@@ -166,6 +166,33 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError({ message: 'connection refused', code: null }), false)
   })
 
+  // ── Supabase API gateway "Project not specified." (MUSHI 89ac1103) ─────────
+  // Plain-text 400 from the hosted gateway when the host has no project ref.
+  // webhook_audit_log.project_id is nullable and is not part of the insert.
+
+  it('Supabase gateway "Project not specified." is transient when it has no SQLSTATE', () => {
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Project not specified.\n' }), true)
+    assertEquals(
+      isTransientDbConnectionError({
+        message: 'Bad request - please check your parameters: Project not specified.',
+        code: '',
+      }),
+      true,
+    )
+  })
+
+  it('a real RAISE or a longer "project" message is NOT the gateway error', () => {
+    assertEquals(
+      isTransientDbConnectionError({ message: 'Project not specified.', code: 'P0001' }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({ message: 'project not specified for this row', code: null }),
+      false,
+    )
+  })
+
   // ── Null / shape safety ───────────────────────────────────────────────────────
 
   it('null / undefined / empty errors are not transient', () => {
@@ -211,6 +238,14 @@ describe('logDbFailure', () => {
     const logger = spyLogger()
     expect(logDbFailure(logger, 'Failed to fetch qa_stories', { message: 'x', code: 'PGRST002' })).toBe(true)
     expect(logger.calls[0].level).toBe('warn')
+  })
+
+  it('a gateway "Project not specified." is a warn, not a Sentry error', () => {
+    const logger = spyLogger()
+    const err = { message: 'Project not specified.', code: null as string | null }
+    expect(logDbFailure(logger, 'audit insert failed', err, { scope: 'webhook-middleware', err: err.message })).toBe(true)
+    expect(logger.calls[0].level).toBe('warn')
+    expect(logger.calls[0].meta).toMatchObject({ transient: true, scope: 'webhook-middleware' })
   })
 
   it('a real error, a statement timeout, or a missing error object stays an error', () => {
