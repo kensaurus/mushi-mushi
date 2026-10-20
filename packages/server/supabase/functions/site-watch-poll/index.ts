@@ -7,8 +7,12 @@
 // Auth:    requireServiceRoleAuth (internal only).
 //
 // Firecrawl runs each watch's crawl on its own schedule and bills the
-// project's Firecrawl key. This function only reads results: for each
-// active watch, the checks finished since the last one read, oldest first.
+// project's Firecrawl key. For each active watch this function reads the
+// checks finished since the last one read, oldest first, and records each
+// broken page as a suspect. Then it settles the watch's suspects: a confirm
+// scrape on the same key (at most CONFIRM_SCRAPES_PER_RUN per run, 1 credit
+// each) or a second failing check decides whether a suspect files (ADR 0029).
+// Settling runs on every poll, so a suspect is retried hourly, not daily.
 // See _shared/site-watch.ts.
 // ============================================================
 
@@ -21,12 +25,17 @@ import { queueReportClassification } from '../_shared/report-classification.ts'
 import {
   checkPages,
   checksToProcess,
+  CONFIRM_RUN_DEADLINE_MS,
+  CONFIRM_SCRAPES_PER_RUN,
+  confirmScrape,
   FirecrawlMonitorError,
   getMonitor,
   listChecks,
   monitorNeedsReconcile,
   processCheck,
+  settleSuspects,
   updateMonitor,
+  type ConfirmBudget,
   type ProcessDeps,
 } from '../_shared/site-watch.ts'
 
@@ -87,9 +96,12 @@ Deno.serve(
       return json({ ok: false, error: { code: 'WATCHES_READ_FAILED', message: 'Could not read the site watches.' } }, 500)
     }
 
+    // Confirm scrapes are capped per run over every watch, so a run's spend
+    // and wall time stay bounded however many pages broke.
+    const budget: ConfirmBudget = { remaining: CONFIRM_SCRAPES_PER_RUN, deadline: Date.now() + CONFIRM_RUN_DEADLINE_MS }
     const results: Array<Record<string, unknown>> = []
     for (const w of (watches ?? []) as WatchRow[]) {
-      const line: Record<string, unknown> = { projectId: w.project_id, checks: 0, filed: 0, resolved: 0 }
+      const line: Record<string, unknown> = { projectId: w.project_id, checks: 0, filed: 0, resolved: 0, confirmScrapes: 0, dismissed: 0 }
       try {
         const fc = await resolveFirecrawl(db, w.project_id)
         if (!fc) {
@@ -123,21 +135,35 @@ Deno.serve(
         const todo = checksToProcess(checks, w.last_check_id)
         for (const check of todo) {
           const pages = await checkPages(fc.key, w.firecrawl_monitor_id!, check.id)
-          const r = await processCheck(db, w, pages, deps)
+          const r = await processCheck(db, w, pages, deps, check.id)
           line.checks = (line.checks as number) + 1
-          line.filed = (line.filed as number) + r.filed
           line.resolved = (line.resolved as number) + r.resolved
           await db
             .from('site_watches')
             .update({
               last_check_id: check.id,
               last_checked_at: check.finishedAt ?? new Date().toISOString(),
-              last_summary: { ...(check.summary ?? {}), broken: r.broken, actualCredits: check.actualCredits ?? null },
+              last_summary: {
+                ...(check.summary ?? {}),
+                broken: r.broken,
+                suspects: r.suspects,
+                actualCredits: check.actualCredits ?? null,
+              },
               last_error: null,
               updated_at: new Date().toISOString(),
             })
             .eq('id', w.id)
         }
+        // Every run, new check or not: a suspect left unconfirmed (budget,
+        // a Firecrawl hiccup) is retried within the hour.
+        const settled = await settleSuspects(db, w, {
+          ...deps,
+          confirm: (url) => confirmScrape(fc.key, url),
+          budget,
+        })
+        line.filed = settled.filed
+        line.confirmScrapes = settled.scrapes
+        line.dismissed = settled.dismissed
         // A skipped or failed newest check is worth showing, not filing.
         const newest = checks[0]
         if (newest && (newest.status === 'failed' || newest.status === 'skipped_no_credits')) {

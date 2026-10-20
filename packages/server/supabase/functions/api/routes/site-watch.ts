@@ -131,6 +131,8 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id, url, problem, status_code, detail, first_seen_at, last_seen_at, report_id')
         .eq('project_id', a.projectId)
         .is('resolved_at', null)
+        // Filed findings only: a suspect seen failing once is not "broken" yet (ADR 0029).
+        .not('confirmed_at', 'is', null)
         .order('last_seen_at', { ascending: false })
         .limit(50),
       db.from('project_settings').select('crawler_base_url').eq('project_id', a.projectId).maybeSingle(),

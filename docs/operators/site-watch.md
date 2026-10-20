@@ -7,6 +7,30 @@ Users turn it on from **Inventory → Discovery → Watch your live site**; the
 user-facing description is in
 [`apps/docs/content/admin/inventory.mdx`](../../apps/docs/content/admin/inventory.mdx).
 
+## A broken page files only when it is seen failing twice
+
+[ADR 0029](../adr/0029-site-watch-files-a-page-only-after-a-second-failure.md)
+amends 0024's filing rule. A page a check finds broken is a *suspect*
+(`site_watch_pages.confirmed_at` is null). `site-watch-poll` files it when:
+
+- a **confirm scrape** (`POST /v2/scrape`, `waitFor` 10 s, `maxAge: 0`,
+  same Firecrawl key, same User-Agent) still sees it broken: the error status
+  again, a 408 (it did not load), or a settled page that is still blank, only
+  a skip link, a loading screen or an error screen; or
+- for a 5xx/4xx or a load failure only, **two checks in a row** saw it, when
+  no confirm scrape was conclusive.
+
+A confirm scrape that finds the page healthy drops the suspect. A judge
+answer of "Judge response not valid JSON — defaulting to meaningful", or any
+low-confidence judgment, is never evidence on its own. Reports no longer
+carry a viewport.
+
+Cost: at most 6 confirm scrapes per poll run over every watch (3 per watch,
+in parallel), 3 per page per check, none within 10 minutes of the last one
+for that page. Each is 1 credit when Firecrawl returns the page, 0 when it
+fails on its side. `site_watch_pages.last_confirm` keeps the last verdict;
+the poll's response lists `confirmScrapes` and `dismissed` per watch.
+
 ## Filter the crawler out of your monitoring and analytics
 
 Every page fetch the watch makes sends this `User-Agent` header (a normal
