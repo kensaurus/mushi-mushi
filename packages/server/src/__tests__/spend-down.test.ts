@@ -112,14 +112,16 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
 })
 
 describe('reportsWithNoRetryVerdict', () => {
-  it('settles a report only when its newest attempt is already_fixed or wrong_repo', () => {
+  it('settles a report only when its newest attempt carries an agent verdict', () => {
     const out = reportsWithNoRetryVerdict([
       { report_id: 'a', failure_category: 'already_fixed', created_at: '2026-10-20T08:00:00Z' },
+      { report_id: 'd', failure_category: 'not_actionable', created_at: '2026-10-20T08:00:00Z' },
+      { report_id: 'e', failure_category: 'needs_human', created_at: '2026-10-20T08:00:00Z' },
       { report_id: 'b', failure_category: 'wrong_repo', created_at: '2026-10-20T07:00:00Z' },
       { report_id: 'b', failure_category: null, created_at: '2026-10-20T09:00:00Z' },
       { report_id: 'c', failure_category: 'cursor_api_error', created_at: '2026-10-20T08:00:00Z' },
     ])
-    expect([...out]).toEqual(['a'])
+    expect([...out].sort()).toEqual(['a', 'd', 'e'])
   })
 })
 
