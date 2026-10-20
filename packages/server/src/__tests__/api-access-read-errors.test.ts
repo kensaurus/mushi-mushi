@@ -30,16 +30,25 @@ const ORG = '5000000a-0000-4000-8000-000000000000'
 const P_ORG = '1000000a-0000-4000-8000-000000000000'
 const USER = 'member-user'
 
-function db(failing: string | null) {
+function db(failing: string | null, message = 'connection reset') {
   return makeFakeDb(
     {
       projects: [{ id: P_ORG, name: 'Team app', owner_id: 'someone-else', organization_id: ORG }],
       organization_members: [{ organization_id: ORG, user_id: USER, role: 'member' }],
       project_members: [],
     },
-    { failRead: (table) => (table === failing ? 'connection reset' : null) },
+    { failRead: (table) => (table === failing ? message : null) },
   )
 }
+
+/** The page Sentry stored on MUSHI-a8a03270, plus a status title and padding. */
+const CF_HTML =
+  '<!DOCTYPE html>\n' +
+  '<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n' +
+  '<!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en-US"> <![endif]-->\n' +
+  '<!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en-US"> <![endif]-->\n' +
+  '<head><title>abc.supabase.co | 522: Connection timed out</title></head>' +
+  `<body><div id="cf-wrapper">${'x'.repeat(8000)}</div></body>`
 
 describe('userCanAccessProject on a failed read', () => {
   it('grants access normally', async () => {
@@ -47,6 +56,19 @@ describe('userCanAccessProject on a failed read', () => {
       allowed: true,
       role: 'member',
     })
+  })
+
+  it('does not embed a Cloudflare HTML page when organization_members fails', async () => {
+    const err = await shared.userCanAccessProject(db('organization_members', CF_HTML) as never, USER, P_ORG).then(
+      () => {
+        throw new Error('expected ProjectAccessReadError')
+      },
+      (caught: unknown) => caught,
+    )
+    expect(err).toBeInstanceOf(access.ProjectAccessReadError)
+    const message = (err as Error).message
+    expect(message).toContain('[upstream gateway error] abc.supabase.co | 522: Connection timed out')
+    expect(message).not.toContain('<!DOCTYPE')
   })
 
   for (const table of ['projects', 'organization_members', 'project_members']) {
@@ -72,6 +94,31 @@ describe('accessibleProjectIds lenient mode', () => {
     await expect(
       access.accessibleProjectIds(db('project_members') as never, USER, { strict: true }),
     ).rejects.toBeInstanceOf(access.ProjectAccessReadError)
+  })
+
+  it('strict mode does not embed a Cloudflare HTML page in the error', async () => {
+    const err = await access
+      .accessibleProjectIds(db('organization_members', CF_HTML) as never, USER, { strict: true })
+      .then(
+        () => {
+          throw new Error('expected ProjectAccessReadError')
+        },
+        (caught: unknown) => caught,
+      )
+    expect(err).toBeInstanceOf(access.ProjectAccessReadError)
+    const message = (err as Error).message
+    expect(message).toContain('organization_members')
+    expect(message).toContain('[upstream gateway error] abc.supabase.co | 522: Connection timed out')
+    expect(message).not.toContain('<!DOCTYPE')
+    expect(message.length).toBeLessThan(200)
+  })
+
+  it('lenient mode logs the one-line summary, not the HTML page', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await access.accessibleProjectIds(db('organization_members', CF_HTML) as never, USER)
+    const logged = warn.mock.calls.map((args) => String(args[0])).join('\n')
+    expect(logged).toContain('[upstream gateway error] abc.supabase.co | 522: Connection timed out')
+    expect(logged).not.toContain('<!DOCTYPE')
   })
 })
 

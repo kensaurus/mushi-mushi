@@ -306,7 +306,7 @@ export async function userCanAccessProject(
     .select('id, owner_id, organization_id')
     .eq('id', projectId)
     .maybeSingle();
-  if (projectErr) throw new ProjectAccessReadError('projects', projectErr.message);
+  if (projectErr) throw new ProjectAccessReadError('projects', projectErr);
   if (!project) return { allowed: false, role: null };
 
   // 1. Direct ownership wins immediately — owner has full rights regardless
@@ -321,7 +321,7 @@ export async function userCanAccessProject(
       .eq('organization_id', project.organization_id)
       .eq('user_id', userId)
       .maybeSingle();
-    if (orgErr) throw new ProjectAccessReadError('organization_members', orgErr.message);
+    if (orgErr) throw new ProjectAccessReadError('organization_members', orgErr);
     const role = (orgMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
     if (role) return { allowed: true, role };
   }
@@ -334,7 +334,7 @@ export async function userCanAccessProject(
     .eq('project_id', projectId)
     .eq('user_id', userId)
     .maybeSingle();
-  if (memberErr) throw new ProjectAccessReadError('project_members', memberErr.message);
+  if (memberErr) throw new ProjectAccessReadError('project_members', memberErr);
   const projRole = (projectMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
   if (projRole) return { allowed: true, role: projRole };
 
