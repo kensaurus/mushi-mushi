@@ -210,9 +210,19 @@ export interface PullRequestSnapshot {
   mergedAt?: string | null
   /** Current head commit; CI runs against this, not the first fix commit. */
   headSha?: string | null
+  /**
+   * The base repository as GitHub names it now (`base.repo`). A renamed repo
+   * still answers under its old URL, so the id and current full name are the
+   * PR's identity, not the URL it was read through.
+   */
+  baseRepoId?: number | null
+  baseRepoFullName?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
+  /** PR title and description (agent-written for cloud-agent PRs: untrusted). */
+  title?: string | null
+  body?: string | null
   htmlUrl: string | null
   headRef: string | null
   headSha: string | null
@@ -236,6 +246,18 @@ export function prNumberFromUrl(url: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+type BaseRepoBody = { ref?: string; repo?: { id?: number; full_name?: string } | null }
+
+/** `base.repo` of a pull request payload, as `baseRepoId` / `baseRepoFullName`. */
+export function baseRepoOf(base: BaseRepoBody | undefined): { baseRepoId: number | null; baseRepoFullName: string | null } {
+  const id = base?.repo?.id
+  const name = base?.repo?.full_name
+  return {
+    baseRepoId: typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null,
+    baseRepoFullName: typeof name === 'string' && /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(name) ? name : null,
+  }
+}
+
 export async function fetchPullRequest(
   token: string,
   ref: GithubRepoRef,
@@ -256,6 +278,7 @@ export async function fetchPullRequest(
     closed_at?: string | null
     merged_at?: string | null
     head?: { sha?: string }
+    base?: BaseRepoBody
   }
   return {
     number: body.number ?? pullNumber,
@@ -266,6 +289,7 @@ export async function fetchPullRequest(
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
     headSha: body.head?.sha ?? null,
+    ...baseRepoOf(body.base),
   }
 }
 
@@ -287,8 +311,10 @@ export async function fetchPullRequestDetails(
     merged?: boolean
     node_id?: string
     html_url?: string
+    title?: string | null
+    body?: string | null
     head?: { ref?: string; sha?: string }
-    base?: { ref?: string }
+    base?: BaseRepoBody
     mergeable?: boolean | null
     mergeable_state?: string | null
   }
@@ -298,10 +324,13 @@ export async function fetchPullRequestDetails(
     state: body.state ?? 'open',
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
+    title: typeof body.title === 'string' ? body.title : null,
+    body: typeof body.body === 'string' ? body.body : null,
     htmlUrl: body.html_url ?? null,
     headRef: body.head?.ref ?? null,
     headSha: body.head?.sha ?? null,
     baseRef: body.base?.ref ?? null,
+    ...baseRepoOf(body.base),
     mergeable: body.mergeable ?? null,
     mergeableState: body.mergeable_state ?? null,
   }

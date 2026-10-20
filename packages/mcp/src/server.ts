@@ -3203,6 +3203,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         sha: z.string().nullable().optional().describe('Merge commit SHA, when GitHub reported one'),
         reportId: z.string().describe('Report UUID linked to this fix attempt'),
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
+        review: z
+          .object({
+            state: z.string().describe('merge | fix_first | stale | queued | skipped | failed | not_reviewed (a hold never merges here)'),
+            label: z.string().describe('One line, e.g. "Opus review: fix first" or "Not reviewed"'),
+            overridden: z.boolean().describe('Always false from MCP: only a person in the console can override a hold'),
+          })
+          .optional()
+          .describe('The Opus review of the PR at merge time (ADR 0030)'),
       }),
     },
     async (args) => {

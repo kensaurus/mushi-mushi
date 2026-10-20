@@ -30,6 +30,8 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
+import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
+import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
 import { isAdvisoryCheckRun } from '../_shared/github.ts';
@@ -369,21 +371,29 @@ async function handlePullRequestState(
       state?: string;
       closed_at?: string | null;
       delivery_id?: string;
-      head?: { ref?: string };
+      head?: { ref?: string; sha?: string };
     };
     repository?: { full_name?: string };
   },
   deliveryId: string,
 ): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  // ADR 0030: Mushi stores PR URLs canonical (lowercase owner/repo); rows
+  // written before that keep GitHub's casing, so match either spelling.
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   let { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!attempt) {
     // Cloud-agent fallback: match by head ref while pr_url is still NULL.
@@ -425,7 +435,9 @@ async function handlePullRequestState(
     const reread = await db
       .from('fix_attempts')
       .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-      .eq('pr_url', prUrl)
+      .in('pr_url', prUrlForms)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     attempt = reread.data;
     if (!attempt) {
@@ -434,6 +446,27 @@ async function handlePullRequestState(
         { status: 202, headers: { 'Content-Type': 'application/json' } },
       );
     }
+  }
+
+  // New commits on a reviewed PR (ADR 0030): follow the head and queue a
+  // review of it. The old verdict keeps gating merges (a hold stays a hold)
+  // until the new review completes.
+  if (payload.action === 'synchronize') {
+    const head = payload.pull_request?.head?.sha ?? null;
+    if (head && head !== attempt.commit_sha) {
+      await db.from('fix_attempts').update({ commit_sha: head }).eq('id', attempt.id);
+    }
+    const requeued = await requeueReviewForNewHead(
+      db,
+      { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+      head,
+    );
+    log.info('PR synchronize: agent PR review', { fixAttemptId: attempt.id, head, review: requeued });
+    // A push does not change the PR's lifecycle state: no pr_state event.
+    return new Response(
+      JSON.stringify({ ok: true, fix_attempt_id: attempt.id, synchronize: true, review: requeued }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   // Derive the new lifecycle state.
@@ -662,9 +695,11 @@ async function handleFixPrMerged(payload: {
   pull_request?: { html_url?: string; number?: number; merged_at?: string | null };
   repository?: { full_name?: string };
 }): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   const { data: attempt } = await db
@@ -672,7 +707,11 @@ async function handleFixPrMerged(payload: {
     .select(
       'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, summary, rationale, files_changed',
     )
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!attempt) {
@@ -2075,7 +2114,7 @@ app.post('/webhooks-github-indexer', async (c) => {
         number?: number;
         draft?: boolean;
         state?: string;
-        head?: { ref?: string };
+        head?: { ref?: string; sha?: string };
       };
       repository?: { full_name?: string };
     };
@@ -2085,6 +2124,8 @@ app.post('/webhooks-github-indexer', async (c) => {
       'ready_for_review',
       'converted_to_draft',
       'closed',
+      // New commits: re-queue the agent PR review of a reviewed fix (ADR 0030).
+      'synchronize',
     ]);
     if (!supportedActions.has(prPayload.action ?? '')) {
       return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202);

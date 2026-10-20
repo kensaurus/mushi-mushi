@@ -28,11 +28,12 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey } from './byok.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
-import { classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
+import { canonicalPrUrl, classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
 import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
+import { enqueueFixReview } from './fix-review-db.ts'
 import {
   CursorApiError,
   buildV0WebhookSecret,
@@ -555,7 +556,7 @@ export interface CloudAgentOutcomeTarget {
 
 export interface CloudAgentOutcomeResult {
   applied: boolean
-  reason?: 'already_has_pr' | 'pr_url_conflict' | 'not_open' | 'update_failed'
+  reason?: 'already_has_pr' | 'pr_url_conflict' | 'not_open' | 'update_failed' | 'invalid_pr_url'
   /** The PR only adds notes (markdown / TODO comments), or the finished
    *  agent's PR changes nothing: the attempt is flagged needs-investigation
    *  and the report is NOT moved to fixing. */
@@ -647,10 +648,23 @@ export async function applyCloudAgentOutcome(
   const now = new Date().toISOString()
   // "Finished, no PR" on an attempt that already holds the PR the agent
   // opened while working: that PR is the result, so it gets judged.
-  const outcome: CloudAgentOutcome =
+  const preliminary: CloudAgentOutcome =
     rawOutcome.kind === 'completed_no_pr' && target.pendingPrUrl
       ? { kind: 'pr_opened', prUrl: target.pendingPrUrl, summary: rawOutcome.summary ?? null, agentFinished: true }
       : rawOutcome
+  // ADR 0030: store one spelling per PR (claimAttemptForPr, attachPendingPr
+  // and the review queue all key on it). A vendor URL that is not a GitHub
+  // PR is not attached at all.
+  const canonicalUrl = preliminary.kind === 'pr_opened' ? canonicalPrUrl(preliminary.prUrl) : null
+  if (preliminary.kind === 'pr_opened' && !canonicalUrl) {
+    alog.warn('Cloud agent reported a PR URL that is not a GitHub pull request; not attached', {
+      attemptId: target.attemptId,
+      prUrl: String(preliminary.prUrl).slice(0, 200),
+    })
+    return { applied: false, reason: 'invalid_pr_url' }
+  }
+  const outcome: CloudAgentOutcome =
+    preliminary.kind === 'pr_opened' ? { ...preliminary, prUrl: canonicalUrl! } : preliminary
 
   if (outcome.kind === 'pr_opened') {
     const finished = outcome.agentFinished === true
@@ -758,6 +772,20 @@ export async function applyCloudAgentOutcome(
       dedupe_key: `cloud-pr:${target.attemptId}`,
       payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null, contentCheck },
     })
+
+    // ADR 0030: every cloud agent PR accepted as a fix gets an independent
+    // Opus review (agent-pr-review drains the queue). Best-effort: a failed
+    // enqueue never fails the PR bookkeeping, and the merge gate treats a
+    // missing review as "not reviewed".
+    const queued = await enqueueFixReview(db, {
+      fixAttemptId: target.attemptId,
+      projectId: target.projectId,
+      reportId: target.reportId,
+      prUrl: outcome.prUrl,
+    })
+    if (!queued.queued) {
+      alog.warn('Agent PR review not queued (non-fatal)', { attemptId: target.attemptId, err: queued.error ?? null })
+    }
 
     dispatchPluginEventDetached(db, target.projectId, 'fix.proposed', {
       report: { id: target.reportId },
