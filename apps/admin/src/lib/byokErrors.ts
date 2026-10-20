@@ -1,11 +1,13 @@
 /**
  * FILE: apps/admin/src/lib/byokErrors.ts
- * PURPOSE: Turn BYOK API failures into plain English for Settings → AI keys.
- *          The panel used to print `res.error.message`, which for several
- *          routes was just the code ("BAD_PROVIDER"), or "Failed to add key."
- *          with no cause. Each code maps to a sentence the owner can act on;
- *          `where` says whether it belongs under the key field, the base URL
- *          field, or next to the row or form.
+ * PURPOSE: Turn BYOK API failures and Test key results into plain English
+ *          for Settings → AI keys. The panel used to print `res.error.message`,
+ *          which for several routes was just the code ("BAD_PROVIDER"), or
+ *          "Failed to add key." with no cause. Each code maps to a sentence
+ *          the owner can act on; `where` says whether it belongs under the
+ *          key field, the base URL field, or next to the row or form.
+ *          `describeByokTestResult` is the Test button: probe codes such as
+ *          `error_auth` become a sentence, and a log-only detail is not shown.
  */
 
 interface ByokApiError {
@@ -110,5 +112,78 @@ export function describeByokError(
     }
     default:
       return { message: own ?? fallback, where: 'form' };
+  }
+}
+
+/** Log lines from the probe. They are not sentences an owner can act on. */
+const GENERIC_PROBE_DETAILS = new Set([
+  'Provider rejected the credential',
+  'Provider accepted the request but the account is rate-limited or out of quota',
+  'Provider validation request could not be completed',
+]);
+
+function isGenericProbeDetail(text: string): boolean {
+  return (
+    GENERIC_PROBE_DETAILS.has(text) ||
+    /^Provider validation endpoint returned HTTP \d+$/.test(text) ||
+    /^Credential validated \(HTTP \d+\)$/.test(text)
+  );
+}
+
+const PROBE_CODE = /\berror_(?:auth|quota|network)\b/;
+
+/**
+ * A probe detail worth showing: a sentence, not a status code or a log line.
+ * Supabase tests put the next step here ("set the project ref first").
+ */
+function specificProbeDetail(detail: string | null | undefined): string | null {
+  const text = detail?.trim();
+  if (!text) return null;
+  if (PROBE_CODE.test(text)) return null;
+  if (/^[A-Z][A-Z0-9_]*$/.test(text)) return null;
+  if (isGenericProbeDetail(text)) return null;
+  return text;
+}
+
+/**
+ * A key test's outcome as one sentence. `status` is a probe code
+ * (`error_auth`, …) and the generic `detail` is written for logs, so neither
+ * is shown on its own.
+ */
+export function describeByokTestResult(
+  result: { status?: string | null; detail?: string | null; latencyMs?: number | null },
+  providerName: string,
+): { ok: boolean; message: string } {
+  const clue = specificProbeDetail(result.detail);
+  switch (result.status) {
+    case 'ok':
+      return {
+        ok: true,
+        message: `${providerName} accepted the key${result.latencyMs != null ? ` (${result.latencyMs} ms)` : ''}.`,
+      };
+    case 'error_auth':
+      return {
+        ok: false,
+        message: clue ?? `${providerName} rejected the key. Replace it with a new one.`,
+      };
+    case 'error_quota':
+      return {
+        ok: false,
+        message:
+          clue ??
+          `${providerName} says this key is out of quota. Add another key or wait for it to reset.`,
+      };
+    case 'error_network':
+      return {
+        ok: false,
+        message: clue ?? `Mushi couldn't reach ${providerName}. Test again in a minute.`,
+      };
+    default:
+      return {
+        ok: false,
+        message: clue
+          ? `${providerName} didn't accept the key. ${clue}`
+          : `${providerName} didn't accept the key.`,
+      };
   }
 }
