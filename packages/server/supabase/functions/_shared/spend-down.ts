@@ -15,7 +15,9 @@
  *          organization's apps that have no Cursor key of their own.
  *
  *          Cursor has no API for remaining credit, so the limit is a count of
- *          dispatches, not dollars. The worker only reads and dispatches; it
+ *          dispatches, not dollars. Open reports rank by severity, the judge
+ *          score and a named component, times 1.3 when the report already has
+ *          Sentry or stack evidence. The worker only reads and dispatches; it
  *          never merges anything (fixes open draft PRs as usual).
  *
  * Pure: no Deno globals, no npm: specifiers, so vitest imports it directly.
@@ -167,21 +169,72 @@ export interface SpendDownCandidate {
   component: string | null
   report_group_id: string | null
   created_at: string
+  /**
+   * The report already carries Sentry or a stack (plan §4 step 3). Absent
+   * scores as false so callers that have not read evidence stay unboosted.
+   */
+  has_cheap_evidence?: boolean
 }
 
+/** Columns `candidatesFor` must select so `spendDownCandidateFromReport` can see evidence. */
+export const SPEND_DOWN_CANDIDATE_COLUMNS =
+  'id, severity, judge_score, component, report_group_id, created_at, source, sentry_issue_url, sentry_event_id, custom_metadata, console_logs'
+
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+/** Plan §4 step 3: a report that already has Sentry or stack evidence is a better bet. */
+export const SPEND_DOWN_CHEAP_EVIDENCE_BOOST = 1.3
+
+/** Report fields the worker can read in the same row as the ranking inputs. */
+export interface SpendDownEvidenceRow {
+  source?: string | null
+  sentry_issue_url?: string | null
+  sentry_event_id?: string | null
+  custom_metadata?: unknown
+  console_logs?: unknown
+}
+
+function nonEmptyText(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+/**
+ * Cheap evidence already on the report: a Sentry origin, issue URL or event
+ * id, stored Sentry frame paths, or a console stack. No extra lookup.
+ */
+export function reportHasCheapEvidence(row: SpendDownEvidenceRow): boolean {
+  if (row.source === 'sentry') return true
+  if (nonEmptyText(row.sentry_issue_url) || nonEmptyText(row.sentry_event_id)) return true
+  const frames = (row.custom_metadata as { sentryFrames?: unknown } | null | undefined)?.sentryFrames
+  if (Array.isArray(frames) && frames.some(nonEmptyText)) return true
+  if (!Array.isArray(row.console_logs)) return false
+  return row.console_logs.some((log) => nonEmptyText((log as { stack?: unknown } | null)?.stack))
+}
+
+export function spendDownCandidateFromReport(row: SpendDownCandidate & SpendDownEvidenceRow): SpendDownCandidate {
+  return {
+    id: row.id,
+    severity: row.severity ?? null,
+    judge_score: row.judge_score ?? null,
+    component: row.component ?? null,
+    report_group_id: row.report_group_id ?? null,
+    created_at: row.created_at,
+    has_cheap_evidence: reportHasCheapEvidence(row),
+  }
+}
 
 /**
  * Highest expected value first: severity, times the judge's grade of the
  * diagnosis (a confident, graded diagnosis is a better bet), times 1.5 when
- * the diagnosis names a component the agent can open. One report per group,
+ * the diagnosis names a component the agent can open, times 1.3 when the
+ * report already carries Sentry or stack evidence. One report per group,
  * so a burst of duplicates is fixed once.
  */
 export function rankSpendDownCandidates(rows: SpendDownCandidate[]): SpendDownCandidate[] {
   const score = (r: SpendDownCandidate) =>
     (SEVERITY_WEIGHT[(r.severity ?? '').toLowerCase()] ?? 1) *
     (r.judge_score != null && Number.isFinite(r.judge_score) ? Math.max(0.2, r.judge_score) : 0.5) *
-    (r.component && r.component.trim() ? 1.5 : 1)
+    (r.component && r.component.trim() ? 1.5 : 1) *
+    (r.has_cheap_evidence ? SPEND_DOWN_CHEAP_EVIDENCE_BOOST : 1)
   const sorted = [...rows].sort((a, b) => score(b) - score(a) || b.created_at.localeCompare(a.created_at))
   const seenGroups = new Set<string>()
   const out: SpendDownCandidate[] = []
