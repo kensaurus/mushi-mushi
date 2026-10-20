@@ -4,7 +4,11 @@
  * collects src/**, so they never ran in CI.
  */
 import { describe, expect, it } from 'vitest'
-import { isTransientDbConnectionError, logDbFailure } from '../../supabase/functions/_shared/error-codes.ts'
+import {
+  dbDiagnosticMessage,
+  isTransientDbConnectionError,
+  logDbFailure,
+} from '../../supabase/functions/_shared/error-codes.ts'
 
 const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toBe(expected)
 
@@ -32,6 +36,41 @@ describe('isTransientDbConnectionError', () => {
       code: null,
     }
     assertEquals(isTransientDbConnectionError(err), true)
+  })
+
+  // MUSHI-61dfa948: a gateway HTML page with no "522" marker was reported as
+  // `Error: <!DOCTYPE html>`.
+  it('an HTML gateway page or named 502/503/504/520-524 status is transient', () => {
+    assertEquals(
+      isTransientDbConnectionError({
+        message: '<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head><body>cloudflare</body></html>',
+        code: null,
+      }),
+      true,
+    )
+    assertEquals(
+      isTransientDbConnectionError({ message: '<html><body>503 Service Unavailable</body></html>', code: '' }),
+      true,
+    )
+    assertEquals(isTransientDbConnectionError({ message: '502 Bad Gateway', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: '503 Service Temporarily Unavailable', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: '504 Gateway Time-out', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Error code 520', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'Error code: 521', code: null }), true)
+    assertEquals(
+      isTransientDbConnectionError({ message: '520: Web server returned an unknown error', code: null }),
+      true,
+    )
+  })
+
+  it('a coded SQL error is reported even when its text contains an HTML page', () => {
+    assertEquals(
+      isTransientDbConnectionError({
+        message: '<!DOCTYPE html><title>502 Bad Gateway</title>',
+        code: '42703',
+      }),
+      false,
+    )
   })
 
   // ── Must NOT hide real bugs: genuine coded SQLSTATE errors always report ───────
@@ -92,6 +131,12 @@ describe('isTransientDbConnectionError', () => {
     // e.g. a real validation/constraint error whose text happens to contain 522.
     assertEquals(isTransientDbConnectionError({ message: 'value 5220 exceeds maximum allowed', code: null }), false)
     assertEquals(isTransientDbConnectionError({ message: 'row 522 failed check constraint', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'value 5020 exceeds maximum allowed', code: null }), false)
+    assertEquals(isTransientDbConnectionError({ message: 'error code 5200', code: null }), false)
+    assertEquals(
+      isTransientDbConnectionError({ message: 'expected a tag like <html> in the template', code: null }),
+      false,
+    )
   })
 
   it('generic "connection refused" (persistent misconfig) is NOT auto-silenced', () => {
@@ -106,6 +151,18 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError(undefined), false)
     assertEquals(isTransientDbConnectionError({}), false)
     assertEquals(isTransientDbConnectionError({ message: undefined, code: undefined }), false)
+  })
+})
+
+describe('dbDiagnosticMessage', () => {
+  it('keeps a gateway title and drops the HTML body', () => {
+    const message =
+      '<!DOCTYPE html><html><head><title>supabase.co | 502: Bad gateway</title></head>' +
+      '<body><script>secret()</script></body></html>'
+    expect(dbDiagnosticMessage(message)).toBe('[upstream gateway error] supabase.co | 502: Bad gateway')
+    expect(dbDiagnosticMessage(message)).not.toContain('<')
+    expect(dbDiagnosticMessage('502 Bad Gateway')).toBe('[upstream gateway error] 502 Bad Gateway')
+    expect(dbDiagnosticMessage('column missing')).toBe('column missing')
   })
 })
 

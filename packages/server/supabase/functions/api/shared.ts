@@ -22,6 +22,9 @@ import { keyAllowsProject } from '../_shared/key-project-scope.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
+  SAFE_INTERNAL_MESSAGE,
+  dbDiagnosticMessage,
+  isHtmlGatewayDbMessage,
   isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
@@ -38,12 +41,15 @@ import {
  * single out e.g. `42703` (undefined column) vs `42501` (permission).
  *
  * TRANSIENT CONNECTIVITY ERRORS: pooler resets (`delayed connect error: 111`,
- * `upstream connect error`), Cloudflare 522s, and TCP-level connection
- * failures are NOT reported to Sentry — they are external infra noise that
- * self-resolves and would regress repeatedly (same pattern as the
- * client-abort fix in sentryHonoErrorHandler). They are emitted as a
- * structured console.warn to Supabase Logs instead, queryable via:
+ * `upstream connect error`), HTML gateway pages (`<!DOCTYPE html>`, 502/503/
+ * 504/520-524), and TCP-level connection failures are NOT reported to
+ * Sentry — they are external infra noise that self-resolves and would
+ * regress repeatedly (same pattern as the client-abort fix in
+ * sentryHonoErrorHandler). They are emitted as a structured console.warn to
+ * Supabase Logs instead, queryable via:
  *   metadata.parsed.event = "db_transient_error"
+ * An HTML gateway page answers 503 with SAFE_INTERNAL_MESSAGE. The raw page
+ * is never the client message, the log line, or the Sentry exception text.
  */
 export function dbError(
   c: Context,
@@ -56,6 +62,7 @@ export function dbError(
     // Do NOT report transient pooler/network failures as Sentry exceptions —
     // they are infrastructure noise, not app bugs. Route to Supabase Logs.
     const requestId = c.get('requestId') as string | undefined;
+    const gateway = isHtmlGatewayDbMessage(err?.message);
     console.warn(
       JSON.stringify({
         ts: new Date().toISOString(),
@@ -65,18 +72,19 @@ export function dbError(
         msg: 'transient DB connectivity failure — not an app bug, not reported to Sentry',
         path: c.req.path,
         method: c.req.method,
-        // Same id jsonError puts in the 500 body, so a client-reported
+        // Same id jsonError puts in the body, so a client-reported
         // requestId can be matched to this log line.
         ...(requestId ? { requestId } : {}),
         db_code: err?.code ?? 'unknown',
-        // Truncate: pooler error messages can be verbose; 500 chars is enough to classify.
-        err_message: (err?.message ?? '').slice(0, 500),
+        // Gateway HTML collapses to a title. Other messages cap at 500 chars.
+        err_message: dbDiagnosticMessage(err?.message),
       }),
     );
-    return jsonError(c, 'DB_ERROR', SAFE_DB_MESSAGE, 500);
+    return jsonError(c, 'DB_ERROR', gateway ? SAFE_INTERNAL_MESSAGE : SAFE_DB_MESSAGE, gateway ? 503 : 500);
   }
 
-  const captured = err instanceof Error ? err : new Error(err?.message ?? 'Unknown DB error');
+  const diagnostic = dbErrorDiagnostic(err);
+  const captured = err instanceof Error && err.message === diagnostic ? err : new Error(diagnostic);
   reportError(captured, {
     tags: {
       path: c.req.path,
@@ -86,11 +94,23 @@ export function dbError(
     },
     extra: {
       pg_code: err?.code ?? null,
-      pg_details: err?.details ?? null,
-      pg_hint: err?.hint ?? null,
+      pg_details: dbErrorDetail(err?.details),
+      pg_hint: dbErrorDetail(err?.hint),
     },
   });
   return jsonError(c, 'DB_ERROR', SAFE_DB_MESSAGE, 500);
+}
+
+/** Exception text for a non-transient DB error. HTML never becomes the message. */
+function dbErrorDiagnostic(err: { message?: string } | null | undefined): string {
+  const raw = err?.message ?? '';
+  if (isHtmlGatewayDbMessage(raw)) return dbDiagnosticMessage(raw);
+  return raw || 'Unknown DB error';
+}
+
+function dbErrorDetail(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  return isHtmlGatewayDbMessage(value) ? dbDiagnosticMessage(value) : value;
 }
 
 /** Canonical success envelope for admin routes. */
