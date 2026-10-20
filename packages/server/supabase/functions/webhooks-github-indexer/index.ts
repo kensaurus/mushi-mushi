@@ -41,6 +41,11 @@ import {
   type PlannedChunk,
   type StoredChunk,
 } from '../_shared/codebase-index-plan.ts';
+import {
+  CODEBASE_CHUNK_UPSERT_BATCH,
+  upsertCodebaseChunks,
+  type CodebaseChunkWrite,
+} from '../_shared/codebase-chunk-upsert.ts';
 import { envInt } from '../_shared/env-int.ts';
 import { runInBackground } from '../_shared/background.ts';
 import {
@@ -1185,7 +1190,7 @@ async function loadStoredChunks(
 }
 
 /** Row columns for a chunk, without the embedding. */
-function chunkRow(projectId: string, c: IndexChunk) {
+function chunkRow(projectId: string, c: IndexChunk): CodebaseChunkWrite {
   return {
     project_id: projectId,
     file_path: c.path,
@@ -1204,8 +1209,8 @@ function chunkRow(projectId: string, c: IndexChunk) {
 
 /**
  * Re-write the metadata of chunks whose text did not change (un-tombstone,
- * new imports, moved lines). The embedding column is not in the payload, so
- * the stored embedding is kept and nothing is paid for.
+ * new imports, moved lines). The embedding is omitted, so the stored vector
+ * stays and the IVFFlat index is not rewritten.
  */
 async function refreshChunks(
   db: ReturnType<typeof getDb>,
@@ -1216,11 +1221,9 @@ async function refreshChunks(
   let failed = 0;
   let lastError: string | undefined;
   const paths = new Set<string>();
-  for (let i = 0; i < chunks.length; i += 200) {
-    const batch = chunks.slice(i, i + 200);
-    const { error } = await db
-      .from('project_codebase_files')
-      .upsert(batch.map((c) => chunkRow(projectId, c)), { onConflict: 'project_id,file_path,symbol_name' });
+  for (let i = 0; i < chunks.length; i += CODEBASE_CHUNK_UPSERT_BATCH) {
+    const batch = chunks.slice(i, i + CODEBASE_CHUNK_UPSERT_BATCH);
+    const { error } = await upsertCodebaseChunks(db, batch.map((c) => chunkRow(projectId, c)));
     if (error) {
       failed += batch.length;
       lastError = `chunk refresh failed: ${error.message}`;
@@ -1574,14 +1577,11 @@ async function sweepIndexRepo(
       continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { error } = await db.from('project_codebase_files').upsert(
-        {
-          ...chunkRow(projectId, batch[j]),
-          embedding: embeddings[j],
-          embedding_model: 'text-embedding-3-small',
-        },
-        { onConflict: 'project_id,file_path,symbol_name' },
-      );
+      const { error } = await upsertCodebaseChunks(db, [{
+        ...chunkRow(projectId, batch[j]),
+        embedding: embeddings[j],
+        embedding_model: 'text-embedding-3-small',
+      }]);
       if (error) {
         skipped++;
         continue;
@@ -1818,16 +1818,14 @@ async function indexPushForProject(
     }
     for (let j = 0; j < batch.length; j++) {
       const c = batch[j];
-      // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
-      // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.
-      const { error } = await db.from('project_codebase_files').upsert(
-        {
-          ...chunkRow(projectId, c),
-          embedding: embeddings[j],
-          embedding_model: 'text-embedding-3-small',
-        },
-        { onConflict: 'project_id,file_path,symbol_name' },
-      );
+      // upsert_codebase_chunks targets uq_codebase_chunks
+      // (project_id, file_path, symbol_name) NULLS NOT DISTINCT. Its own
+      // statement_timeout is 30s; the authenticator role's is 8s.
+      const { error } = await upsertCodebaseChunks(db, [{
+        ...chunkRow(projectId, c),
+        embedding: embeddings[j],
+        embedding_model: 'text-embedding-3-small',
+      }]);
       if (error) {
         upsertFailures++;
         log.error('chunk upsert failed', {
