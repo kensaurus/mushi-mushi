@@ -140,7 +140,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~511K TS lines · 2,348 source files · 45 workspace / 37 npm packages · 65 edge functions · 472 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~514K TS lines · 2,360 source files · 45 workspace / 37 npm packages · 66 edge functions · 474 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

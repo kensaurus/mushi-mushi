@@ -2553,6 +2553,29 @@
         ]
       }
     },
+    "get_spend_down_status": {
+      "title": "Spend-down status of Cursor keys",
+      "description": "For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off | not_started | active | expired | key_unusable), fixes started today out of the daily limit, the apps the key pays for, and what the last worker tick did. Returns { keys: [{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects, lastRunAt, lastSummary }] }. Read-only. Use to see whether expiring Cursor credits are being used; use set_byok_spend_down to change it.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Spend-down status of Cursor keys",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (`project_id` is accepted too.)"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
     "get_spend_ledger": {
       "title": "Spend ledger",
       "description": "Return the 30-day spend ledger of one organization, per app: Mushi LLM spend, provider AI spend from llm_usage connectors, estimated CI cost, Supabase, and imported bills, with totals, the AI spend not bound to an app, whether every source was read (complete), and the 10 latest bill imports. Optional organizationId; needs an account-level key. Returns { organizationId, from, to, days, apps, totals, unattributedProviderUsd, complete, imports }. Read-only.",
@@ -4710,6 +4733,62 @@
         "additionalProperties": false
       },
       "returnsUntrusted": true
+    },
+    "set_byok_spend_down": {
+      "title": "Set spend-down for a Cursor key",
+      "description": "Turn spend-down mode on or off for one of this project's own Cursor keys and set when its credits expire (YYYY-MM-DD), the Cursor model (id?param=value), fixes per day (1-200) and how many days before expiry to start (1-90). While on, Mushi dispatches the project's best open reports to Cursor on its own, inside the auto-fix caps; each fix opens a draft PR. A key shared by the organization can only be changed by an org owner or admin in the console. Write; spends Cursor credits once on; idempotent. Confirm with the user before turning it on.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Set spend-down for a Cursor key",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (`project_id` is accepted too.)"
+          },
+          "keyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Cursor key id from get_spend_down_status"
+          },
+          "enabled": {
+            "description": "Turn spend-down on or off",
+            "type": "boolean"
+          },
+          "creditsExpireAt": {
+            "description": "When the credits expire, YYYY-MM-DD",
+            "type": "string"
+          },
+          "model": {
+            "description": "Cursor model spec, e.g. grok-4.7?reasoning_effort=xhigh&context=500k",
+            "type": "string",
+            "maxLength": 300
+          },
+          "dailyLimit": {
+            "description": "Fixes per day across the apps this key pays for",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "windowDays": {
+            "description": "Start this many days before the credits expire",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          }
+        },
+        "required": [
+          "projectId",
+          "keyId"
+        ]
+      }
     },
     "set_design_settings": {
       "title": "Set design score actions",

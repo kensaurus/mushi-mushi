@@ -56,7 +56,10 @@ export function completedTooltip(stats: FixesStats): MetricTooltipData {
 /** "4 of 5 reports fixed": the success rate's own numerator and denominator. */
 export function completedDetail(stats: FixesStats): string {
   const finished = stats.completed + stats.failed
-  return finished > 0 ? `${stats.completed} of ${finished} reports fixed` : 'no finished runs'
+  if (finished > 0) return `${stats.completed} of ${finished} reports fixed`
+  // An open fix PR is a finished run that has not merged yet, not "nothing".
+  if (stats.prsOpen > 0) return `${stats.prsOpen} PR${stats.prsOpen === 1 ? '' : 's'} waiting to merge`
+  return 'no finished runs'
 }
 
 export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltipData {

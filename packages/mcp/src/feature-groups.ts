@@ -173,6 +173,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   add_byok_key: 'setup',
   test_byok_key: 'setup',
   remove_byok_key: 'setup',
+  get_spend_down_status: 'setup',
+  set_byok_spend_down: 'setup',
 
   // audit
   run_fullstack_audit: 'audit',

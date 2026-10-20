@@ -1264,7 +1264,7 @@ const COPY: CopyRegistry = {
       sections: { snapshot: 'Summary' },
       statLabels: {
         totalAttempts: 'Fixes (30 days)',
-        completed: 'Completed',
+        completed: 'Fixed',
         failed: 'Failed',
         inProgress: 'In flight',
         prsOpen: 'PRs open',
