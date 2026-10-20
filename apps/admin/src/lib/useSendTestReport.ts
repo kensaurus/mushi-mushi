@@ -43,6 +43,9 @@ export function useSendTestReport(): (projectId: string) => Promise<SendTestRepo
         return { ok: false, message }
       }
       const { reportId, projectName } = res.data
+      // `test_report_sent` is emitted by the server with a per-report dedup
+      // key (api/routes/project-integrations.ts); the console must not emit
+      // it again (decision 394, docs/marketing/scorecard.md).
       // The checklist's "first report" step reads this; refresh every copy.
       invalidateSetupStatus()
       toast.success(

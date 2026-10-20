@@ -35,6 +35,7 @@ import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
 import {
   STATUS_OPTIONS,
+  queueStatusLabel,
   type QueueItem,
   type QueueSummary,
   type StatusFilter,
@@ -253,6 +254,7 @@ export function DLQPage() {
           label="Status"
           value={filter}
           options={STATUS_OPTIONS as unknown as string[]}
+          optionLabel={queueStatusLabel}
           onChange={(e) => onFilterChange(e.currentTarget.value as StatusFilter)}
         />
         {summary && summary.stages.length > 0 && (

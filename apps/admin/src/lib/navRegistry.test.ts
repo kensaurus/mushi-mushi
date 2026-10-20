@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { NAV_REGISTRY, SIMPLE_NAV_GROUPS, routeSection } from './navRegistry'
+import { NAV_REGISTRY, routeSection } from './navRegistry'
 import { buildOperatorNav } from './buildNav'
 import { HOME_HUB } from './pageHubs'
 import { paletteRoutesFor, rankPaletteRoutes } from './searchIndex'
@@ -44,30 +44,6 @@ describe('navigation names', () => {
     for (const [path, alias] of Object.entries(formerNames)) {
       const entry = NAV_REGISTRY.find((e) => e.path === path)
       expect(entry?.paletteKeywords, path).toContain(alias)
-    }
-  })
-})
-
-describe('Quick and Beginner sidebars', () => {
-  const registryPaths = new Set(NAV_REGISTRY.map((e) => e.path))
-  const quick = SIMPLE_NAV_GROUPS.flatMap((g) => g.quick)
-  const beginner = SIMPLE_NAV_GROUPS.flatMap((g) => g.beginner)
-
-  it('only lists real pages, each once', () => {
-    for (const path of beginner) expect(registryPaths.has(path), path).toBe(true)
-    expect(new Set(beginner).size).toBe(beginner.length)
-  })
-
-  it('stays small: Quick is a subset of Beginner and far below Advanced', () => {
-    for (const path of quick) expect(beginner).toContain(path)
-    expect(quick.length).toBeLessThanOrEqual(12)
-    expect(beginner.length).toBeLessThanOrEqual(20)
-    expect(sidebar.length).toBeGreaterThan(beginner.length * 2)
-  })
-
-  it('covers bugs, fixes, apps, connect, integrations and settings', () => {
-    for (const path of ['/reports', '/inbox', '/fixes', '/portfolio', '/projects', '/connect', '/integrations/config', '/settings']) {
-      expect(quick).toContain(path)
     }
   })
 })
@@ -130,11 +106,11 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('orders the Advanced sections along the cycle', () => {
     expect(sections.map((s) => s.title)).toEqual([
-      '1 · Connect',
-      '2 · Bugs',
-      '3 · Fix',
-      '4 · Verify',
-      '5 · Ship & watch',
+      'Connect',
+      'Bugs',
+      'Fix',
+      'Verify',
+      'Ship & watch',
       'Account',
     ])
     expect(sections.map((s) => s.step ?? null)).toEqual([1, 2, 3, 4, 5, null])
@@ -142,34 +118,31 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('puts each step’s first page where the cycle starts it', () => {
     const first = (title: string) => sections.find((s) => s.title === title)?.items[0]?.path
-    expect(first('1 · Connect')).toBe('/onboarding')
-    expect(first('2 · Bugs')).toBe('/dashboard')
-    expect(first('3 · Fix')).toBe('/fixes')
-    expect(first('4 · Verify')).toBe('/qa-coverage')
-    expect(first('5 · Ship & watch')).toBe('/portfolio')
+    expect(first('Connect')).toBe('/onboarding')
+    expect(first('Bugs')).toBe('/dashboard')
+    expect(first('Fix')).toBe('/fixes')
+    expect(first('Verify')).toBe('/qa-coverage')
+    expect(first('Ship & watch')).toBe('/portfolio')
   })
 
-  it('orders the Quick and Beginner groups the same way', () => {
-    expect(SIMPLE_NAV_GROUPS.map((g) => g.title)).toEqual(['Connect', 'Bugs', 'Fix', 'Verify', 'Ship & watch', 'Account'])
-  })
 
   it('gives a moved page the palette heading of the section it sits in', () => {
     const group = { start: 'Start', plan: 'Plan', do: 'Do', check: 'Check', act: 'Act', workspace: 'Workspace' } as const
     for (const e of NAV_REGISTRY) expect(e.paletteGroup, e.path).toBe(group[e.sectionId])
   })
 
-  it('uses "All apps" for one page only (Home’s view is Overview)', () => {
-    expect(NAV_REGISTRY.filter((e) => e.label === 'All apps').map((e) => e.path)).toEqual(['/portfolio'])
-    expect(HOME_HUB.views.map((v) => v.label)).not.toContain('All apps')
+  it('uses "Apps" for one page only (Home’s view is Overview)', () => {
+    expect(NAV_REGISTRY.filter((e) => e.label === 'Apps').map((e) => e.path)).toEqual(['/portfolio'])
+    expect(HOME_HUB.views.map((v) => v.label)).not.toContain('Apps')
   })
 })
 
 describe('routeSection (breadcrumb)', () => {
   it('names the section a page sits in and links to its first page', () => {
-    expect(routeSection('/graph')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/reports/abc')).toEqual({ title: '2 · Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/integrations/config')).toEqual({ title: '1 · Connect', firstPath: '/onboarding' })
-    expect(routeSection('/judge')?.title).toBe('4 · Verify')
+    expect(routeSection('/graph')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/reports/abc')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
+    expect(routeSection('/integrations/config')).toEqual({ title: 'Connect', firstPath: '/onboarding' })
+    expect(routeSection('/judge')?.title).toBe('Verify')
   })
   it('returns null outside the sidebar', () => {
     expect(routeSection('/login')).toBeNull()

@@ -131,7 +131,21 @@ export function OrgSwitcher() {
   if (loading) {
     return <HeaderContextChipSkeleton label="Loading team" />
   }
-  const orgs = data?.organizations ?? []
+  if (!data) {
+    // No answer and nothing cached: a failed `/v1/org` must not read as
+    // "you have no team" (B1, 2026-10-20) — offer a retry instead.
+    return orgsQuery.error ? (
+      <HeaderContextChip
+        label="Teams unavailable"
+        trailing={<span className="text-fg-faint">Retry</span>}
+        onClick={() => orgsQuery.reload()}
+        title={`Could not load your teams: ${orgsQuery.error}. Click to retry.`}
+      />
+    ) : (
+      <HeaderContextChipSkeleton label="Loading team" />
+    )
+  }
+  const orgs = data.organizations ?? []
   // Empty-state branch — previously the switcher returned `null` when a
   // user had zero org memberships. That stranded brand-new signups whose
   // personal-org trigger hadn't fired yet: with no switcher rendered

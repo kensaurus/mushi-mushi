@@ -45,7 +45,8 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
   if (setup.loading) return <GettingStartedSkeleton />
-  if (!setup.hasAnyProject) return <Navigate to="/onboarding" replace />
+  // Resolved answers only: an unresolved fetch must not bounce to the wizard.
+  if (setup.resolved && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
 
   const project = setup.activeProject
   if (!project) return <GettingStartedSkeleton />

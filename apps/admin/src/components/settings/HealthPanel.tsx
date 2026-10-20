@@ -16,7 +16,6 @@ import { IconBolt, IconGlobe, IconHealth, IconStorage, IconTerminal } from '../i
 import { RESOLVED_API_URL } from '../../lib/env'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { usePersistentState } from '../../lib/usePersistentState'
-import { SdkInstallCard } from '../SdkInstallCard'
 import { ConnectionStatus as BackendDiagnostics } from '../ConnectionStatus'
 import { BackendModePanel, currentBackendLabel } from './BackendModePanel'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
@@ -27,7 +26,7 @@ interface HealthPanelProps {
   projectSlug?: string | null
 }
 
-export function HealthPanel({ projectId, projectName, projectSlug }: HealthPanelProps) {
+export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
   const project = { id: projectId, name: projectName ?? 'this project' }
   const [showChecks, setShowChecks] = usePersistentState('settings:health:checks-open', false, {
     projectId,
@@ -74,14 +73,13 @@ export function HealthPanel({ projectId, projectName, projectSlug }: HealthPanel
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Install the bug widget" description="Add the Mushi SDK to your app so people can report bugs.">
+      <SettingsList title="Install the bug widget" description="The install lives on one page so the snippet, the keys and the preview never drift.">
         <SettingsRow
           icon={<IconTerminal size={16} />}
           title="Install command and setup code"
-          purpose="Pick your framework and copy the two snippets. They already contain this project's id."
-        >
-          <SdkInstallCard projectId={project.id} projectSlug={projectSlug} embedded />
-        </SettingsRow>
+          purpose="Framework picker, live preview and this project's keys are on Connect."
+          action={<Btn to="/connect#connect-sdk" size="sm" variant="ghost">Open Connect →</Btn>}
+        />
         <SettingsRow
           icon={<IconGlobe size={16} />}
           title="API address"

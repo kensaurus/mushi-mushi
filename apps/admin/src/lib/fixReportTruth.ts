@@ -172,6 +172,8 @@ const CAUSE_LABELS: Record<string, string> = {
   claude_workflow_missing: 'Workflow missing',
   claude_api_error: 'Claude API error',
   cursor_api_error: 'Cursor API error',
+  already_fixed: 'Agent found nothing to change',
+  wrong_repo: 'Code is in another repo',
   sandbox_timeout: 'Ran out of time',
   scope_blocked: 'Outside allowed files',
   spec_violation: 'Failed the spec check',

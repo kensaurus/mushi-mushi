@@ -329,7 +329,7 @@ export function QueryPage() {
 
   usePublishPageContext({
     route: '/query',
-    title: `${activeTabMeta.label} · Ask Your Data`,
+    title: `${activeTabMeta.label} · SQL query`,
     summary: activeTabMeta.description,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.errors24h,
@@ -366,9 +366,9 @@ export function QueryPage() {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-query">
         <PageHeaderBar
-          title={copy?.title ?? 'Ask Your Data'}
+          title={copy?.title ?? 'SQL query'}
 
-          helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
+          helpTitle={copy?.help?.title ?? 'About SQL query'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'
@@ -396,10 +396,10 @@ export function QueryPage() {
   return (
     <div className="space-y-4">
       <PageHeaderBar
-        title={copy?.title ?? 'Ask Your Data'}
+        title={copy?.title ?? 'SQL query'}
         projectScope={stats.projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
+        helpTitle={copy?.help?.title ?? 'About SQL query'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'

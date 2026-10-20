@@ -305,6 +305,34 @@ describe('applyCloudAgentOutcome', () => {
     expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'completed_no_pr' })
   })
 
+  it('completed_no_pr with an "already fixed" summary: own category, skipped job, no retry bait', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
+      return { data: null }
+    })
+    const summary = 'This crash is already fixed on `main`. I did not open a pull request.'
+    const res = await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary })
+    expect(res).toEqual({ applied: true })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({
+      status: 'failed',
+      failure_category: 'already_fixed',
+      error: 'Agent found nothing to change: This crash is already fixed on main.',
+      summary,
+    })
+    expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'skipped' })
+    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({ label: 'Agent found nothing to change' })
+    expect(mocks.notifyTeamFixEvent).toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_failed', expect.objectContaining({ failureCategory: 'already_fixed' }))
+  })
+
+  it('completed_no_pr with a "not in this repository" summary is wrong_repo', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    await applyCloudAgentOutcome(db, TARGET, {
+      kind: 'completed_no_pr',
+      summary: 'The payout fee check is not in this repository, so I did not open a pull request.',
+    })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'wrong_repo' })
+  })
+
   it('pr_opened with a notes-only PR: attempt needs investigation, report NOT moved to fixing', async () => {
     const { db, queries } = createFakeDb((q) => {
       if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
@@ -689,6 +717,19 @@ describe('resolveCursorApiKey', () => {
 
     const { db: db3 } = createFakeDb(() => ({ data: null }))
     expect(await resolveCursorApiKey(db3, PROJECT)).toBe('crsr_env')
+  })
+
+  it("ADR 0023: the app's legacy key beats an organization's shared key, which beats env", async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ key: 'crsr_shared', source: 'byok', hint: 'shrd', shared: true })
+    const { db } = createFakeDb((q) => {
+      if (q.table === 'project_settings') return { data: { cursor_api_key_ref: 'vault://sec-cursor' } }
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_project' }
+      return { data: null }
+    })
+    expect(await resolveCursorApiKey(db, PROJECT)).toBe('crsr_project')
+
+    const { db: noLegacy } = createFakeDb(() => ({ data: null }))
+    expect(await resolveCursorApiKey(noLegacy, PROJECT)).toBe('crsr_shared')
   })
 })
 

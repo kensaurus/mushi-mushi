@@ -21,9 +21,11 @@
  * console then dogfoods nothing while `vite dev` (which does resolve bare
  * names) looks fine. `mushi-self.test.ts` pins this.
  *
- * Launcher policy: the lime BetaBanner is the sole visible entry point.
- * The SDK widget uses `trigger: 'hidden'` + `runtimeConfig: false` so a
- * remote dashboard default cannot resurrect the FAB or a second banner.
+ * Launcher policy: "Report a bug" on Help & support (`reportMushiBug`) is the
+ * sole visible entry point; the beta strip that used to host it was removed on
+ * 2026-10-20 (console audit). The SDK widget uses `trigger: 'hidden'` +
+ * `runtimeConfig: false` so a remote dashboard default cannot resurrect the
+ * FAB or a second banner.
  */
 
 import type { MushiConfig, MushiSDKInstance } from '@mushi-mushi/core'
@@ -112,7 +114,7 @@ export async function initMushiSelf(options?: {
           // reads support_tickets (category 'feature') written by
           // FeedbackModal. The widget's feature card files a *report*
           // (category 'other') that the board never shows, so the self widget
-          // takes bugs only and BetaBanner / Support send ideas to the modal.
+          // takes bugs only and Help & support sends ideas to the modal.
           featureRequestCard: false,
         },
 

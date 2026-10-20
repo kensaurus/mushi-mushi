@@ -40,3 +40,41 @@ describe('humanizeFixError: review gate', () => {
     expect(h?.action?.target).toEqual({ kind: 'retry' })
   })
 })
+
+describe('humanizeFixError: Cursor cannot reach the repo', () => {
+  const raw =
+    "Cursor API 400 validation_error: Failed to verify existence of branch 'main' in repository kensaurus/yen-yen. Please ensure the branch name is correct."
+
+  it('blames GitHub access, names the repo and offers no retry', () => {
+    const h = humanizeFixError(raw)
+    expect(h?.title).toBe("Cursor can't see this repository.")
+    expect(h?.hint).toContain('kensaurus/yen-yen')
+    expect(h?.hint).not.toContain('yen-yen..')
+    expect(h?.severity).toBe('hard')
+    expect(h?.action?.target).toEqual({ kind: 'external', url: 'https://cursor.com/dashboard?tab=integrations' })
+  })
+
+  it('keeps the schema-drift reading for other validation errors', () => {
+    expect(humanizeFixError('Cursor API 400 validation_error: Unrecognized key "branchName"')?.title).toBe(
+      'Mushi sent Cursor a field it no longer accepts.',
+    )
+  })
+})
+
+describe('humanizeFixError: the agent explained why it opened no PR', () => {
+  it('already fixed: no Retry, by category or by the error line', () => {
+    const byCat = humanizeFixError('anything', { category: 'already_fixed' })
+    const byText = humanizeFixError('Agent found nothing to change: This crash is already fixed on main.')
+    for (const h of [byCat, byText]) {
+      expect(h?.title).toBe('The agent found nothing to change.')
+      expect(h?.severity).toBe('hard')
+      expect(h?.action).toBeUndefined()
+    }
+  })
+
+  it('wrong repo: points at the repos page', () => {
+    const h = humanizeFixError('Agent says the code is in another repo: The payout check is not in this repository.')
+    expect(h?.title).toBe('The fix belongs in another repo.')
+    expect(h?.action?.target).toEqual({ kind: 'route', to: '/repo' })
+  })
+})

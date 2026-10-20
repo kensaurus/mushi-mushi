@@ -85,12 +85,12 @@ const AUTO_EXPAND_SUPPRESSED_ROUTES = ['/onboarding']
  */
 const SETUP_GUIDE_NARROW_QUERY = '(max-width: 639px)'
 
-export function isNarrowViewport(): boolean {
+function isNarrowViewport(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
   return window.matchMedia(SETUP_GUIDE_NARROW_QUERY).matches
 }
 
-export function shouldSuppressAutoExpand(pathname: string, narrowViewport = false): boolean {
+function shouldSuppressAutoExpand(pathname: string, narrowViewport = false): boolean {
   if (narrowViewport) return true
   return AUTO_EXPAND_SUPPRESSED_ROUTES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
@@ -103,7 +103,7 @@ export function shouldSuppressAutoExpand(pathname: string, narrowViewport = fals
  * An explicit choice from the user always wins; `suppressAutoExpand` only
  * blocks the *automatic* open.
  */
-export function resolveSetupGuideView(
+function resolveSetupGuideView(
   stored: StoredSetupGuideView,
   opts: { requiredComplete: boolean; suppressAutoExpand: boolean },
 ): SetupGuideView {

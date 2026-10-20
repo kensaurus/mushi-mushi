@@ -124,6 +124,7 @@ export function DashboardPage() {
     const degraded = failing.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded')
     return {
       openBacklog: dashCounts.openBacklog,
+      openCritical14d: dashCounts.openCritical14d ?? 0,
       fixesInProgress: dashFix.inProgress,
       fixesFailed: dashFix.failed,
       openPrs: dashFix.openPrs ?? dashCounts.openPrs,
@@ -137,7 +138,7 @@ export function DashboardPage() {
     : !data || data.empty
       ? 'Waiting for first report'
       : dashCounts
-        ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
+        ? `${dashCounts.openCritical14d ?? 0} critical to decide · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
         : undefined
   usePublishPageContext({
     route: '/dashboard',
@@ -171,7 +172,12 @@ export function DashboardPage() {
   // skeleton + empty-state bounce and the second loading flicker. We gate on
   // `!setup.loading` so a user whose projects simply haven't loaded yet is not
   // redirected prematurely.
-  if (!setup.loading && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
+  // Only a resolved "no projects" answer sends anyone to the wizard. A failed
+  // or pending setup fetch keeps the remembered answer (B1, 2026-10-20).
+  if (setup.resolved && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
+  if (!setup.resolved && setup.error && !setup.loading) {
+    return <PageLoadError error={setup.error} onRetry={setup.reload} resource="your setup status" endpoint="/v1/admin/setup" />
+  }
   if (loading || setup.loading) return <DashboardSkeleton />
   if (error) return <PageLoadError error={error} onRetry={reload} resource="the dashboard" endpoint="/v1/admin/dashboard" />
   if (!data || data.empty) return <GettingStartedEmpty />
@@ -199,6 +205,7 @@ export function DashboardPage() {
     renderFullDashboard && dashboardHeroStats
       ? deriveDashboardInsight({
           openBacklog: dashboardHeroStats.openBacklog,
+          openCritical14d: dashboardHeroStats.openCritical14d,
           fixesInProgress: dashboardHeroStats.fixesInProgress,
           fixesFailed: dashboardHeroStats.fixesFailed,
           integrationIssues: dashboardHeroStats.integrationIssues,
@@ -258,7 +265,7 @@ export function DashboardPage() {
         title={copy?.title ?? 'Home'}
         icon={<IconDashboard />}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
-        helpTitle={copy?.help?.title ?? 'About the Dashboard'}
+        helpTitle={copy?.help?.title ?? 'About your home screen'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.'}
         helpUseCases={copy?.help?.useCases ?? [
           'See whether report intake is rising or falling vs the prior week',

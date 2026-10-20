@@ -234,7 +234,7 @@ export function InboxPage() {
         title={copy?.title ?? 'To-do'}
         projectScope={stats.projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About the inbox'}
+        helpTitle={copy?.help?.title ?? 'About the to-do list'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Your cross-loop action worklist — not the same as the Reports page. Reports lists end-user bugs. The Inbox tells you what to do about them, and aggregates all other actions across triage, failed fixes, integration health, and ops into one priority-ordered list.'

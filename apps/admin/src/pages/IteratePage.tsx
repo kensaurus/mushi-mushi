@@ -301,7 +301,7 @@ export function IteratePage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         contextChip={<PdcaContextHint stage="act" />}
-        helpTitle={copy?.help?.title ?? 'About PDCA iteration'}
+        helpTitle={copy?.help?.title ?? 'About improvement runs'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona until target score or max iterations.'

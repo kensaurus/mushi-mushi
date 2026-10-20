@@ -46,6 +46,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
+import { ReportDiagnosisGraph } from '../components/report-detail/ReportDiagnosisGraph'
 import { BeforeAfterCard } from '../components/report-detail/BeforeAfterCard'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
@@ -573,6 +574,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           page used to repeat it as a flow graph and a receipt strip too. */}
       <ReportPdcaStory report={report} dispatchState={dispatchState} />
 
+      {/* Why Mushi believes the diagnosis, claim by claim, with the weak ones
+          marked (console audit 2026-10-20). */}
+      <ReportDiagnosisGraph report={report} />
+
       <BeforeAfterCard report={report} />
 
       {latestFix && (
@@ -645,7 +650,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Section title="User report" icon={<IconUser />}>
+        <Section id="report-user-report" title="User report" icon={<IconUser />}>
           {report.user_category && (
             <div className="mb-2.5">
               <div className="flex items-center gap-1 text-xs text-fg-muted font-medium">
@@ -675,7 +680,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
         </Section>
 
-        <Section title="LLM classification" icon={<IconIntelligence />}>
+        <Section id="report-classification" title="LLM classification" icon={<IconIntelligence />}>
           {/* Same "classified?" answer as the story and the recommendation
               (REPORT A2): a Stage-2 diagnosis without a Stage-1 object is
               classified, not "pending". */}
@@ -713,7 +718,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           </Section>
         )}
 
-        <Section title="Performance metrics" icon={<IconGauge />}>
+        <Section id="report-performance" title="Performance metrics" icon={<IconGauge />}>
           {/* Phase 4b: pass anomalies for σ-above-baseline provenance badges */}
           <PerformanceMetrics
             metrics={report.performance_metrics}
@@ -721,7 +726,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           />
         </Section>
 
-        <Section title="Console logs" icon={<IconTerminal />}>
+        <Section id="report-console-logs" title="Console logs" icon={<IconTerminal />}>
           <ConsoleLogs logs={report.console_logs} />
           {/* Phase 4d: stack-frame panel with GitHub deeplinks when a fix commit exists */}
           <CodeFramePanel
@@ -731,7 +736,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           />
         </Section>
 
-        <Section title="Network requests" icon={<IconNetwork />}>
+        <Section id="report-network" title="Network requests" icon={<IconNetwork />}>
           <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
           {/* Phase 4a: trace waterfall — client requests + backend spans in causal order */}
           {((report.network_logs?.some((r) => r.traceId)) || (report.backend_spans?.length ?? 0) > 0) && (

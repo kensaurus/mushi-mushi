@@ -48,6 +48,8 @@ export interface NbaWork {
 
 export interface NbaSetup {
   hasAnyProject: boolean
+  /** False while `/v1/admin/setup` has not answered yet; defaults to true. */
+  resolved?: boolean
   activeProject: { report_count: number; fix_count: number } | null
   isStepIncomplete: (step: 'sdk_installed' | 'sentry_connected') => boolean
 }
@@ -68,7 +70,9 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
   if (pathname === '/' || pathname.startsWith('/onboarding')) return null
 
   const project = setup.activeProject
-  if (!setup.hasAnyProject || !project) {
+  // "Create your first project" only on a resolved answer; while the setup
+  // call is pending or failed, say nothing rather than something false (B1).
+  if ((setup.resolved ?? true) && !setup.hasAnyProject) {
     return {
       tone: 'plan',
       title: 'Create your first project',
@@ -76,6 +80,7 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
       cta: { kind: 'link', to: '/onboarding', label: 'Open setup wizard' },
     }
   }
+  if (!project) return null
 
   if (work.ready) {
     if (work.urgentOpenReports > 0) {

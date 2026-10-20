@@ -223,8 +223,10 @@ export function SdkInstallKeyPanel({
             </Btn>
           )}
           <p className="text-2xs text-fg-muted">
-            Full secret shown once at mint or rotate. “Never used” keys were minted but no app has
-            authenticated with them yet.
+            Full secret shown once at mint or rotate. Healthy: the SDK authenticated with it in the
+            last hour. Stale: no activity in the last hour (normal for a quiet app). Cold: nothing for
+            over 7 days, so the deploy may have stopped shipping the SDK. Never used: minted, but no
+            app has authenticated with it yet.
           </p>
         </Box>
       )}

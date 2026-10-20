@@ -145,6 +145,7 @@ import {
   isDispatchableCloudAgent,
   recordCloudAgentDispatched,
 } from '../_shared/agent-adapters.ts';
+import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -1976,10 +1977,8 @@ async function dispatchToCloudAgent(
     kind: requestedAgent,
   });
   const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
-  const model =
-    requestedAgent === 'cursor_cloud' && typeof settings?.cursor_default_model === 'string'
-      ? settings.cursor_default_model
-      : undefined;
+  // A per-dispatch model (CLI --model, spend-down) wins over the project default.
+  const model = cursorModelForDispatch(requestedAgent, dispatchMeta, settings?.cursor_default_model);
   const now = new Date().toISOString();
 
   await db

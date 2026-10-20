@@ -55,6 +55,41 @@ export function humanizeFixError(
     };
   }
 
+  // Cloud agent finished without a PR and said why (_shared/cloud-agent-no-pr.ts).
+  // Retrying reaches the same answer, so neither offers Retry.
+  if (category === 'already_fixed' || m.startsWith('agent found nothing to change')) {
+    return {
+      title: 'The agent found nothing to change.',
+      hint: 'It says this is already fixed, or that it does not happen on the current deploy. Read its notes on the attempt. If the bug is gone, mark the report fixed.',
+      severity: 'hard',
+      raw,
+    };
+  }
+  if (category === 'wrong_repo' || m.startsWith('agent says the code is in another repo')) {
+    return {
+      title: 'The fix belongs in another repo.',
+      hint: 'The agent looked in the project\'s primary repo and found the code elsewhere. Link that repo to the project, then dispatch the fix against it.',
+      severity: 'hard',
+      action: { label: 'Open repos', target: { kind: 'route', to: '/repo' } },
+      raw,
+    };
+  }
+
+  // Cursor: the API key's Cursor account has no GitHub access to the repo.
+  // Cursor reports this as "Failed to verify existence of branch 'main' in
+  // repository owner/name" even when the branch exists. Retrying with the
+  // same key fails the same way (2026-10-20, five private dogfood repos).
+  if (m.includes('failed to verify existence of branch')) {
+    const repo = raw.match(/in repository ([\w.-]+\/[\w.-]+?)\.?(?:\s|$)/i)?.[1] ?? 'this repository';
+    return {
+      title: "Cursor can't see this repository.",
+      hint: `The Cursor account behind your API key has no GitHub access to ${repo}. Sign in to that Cursor account, connect GitHub under Integrations with access to the repo, then retry.`,
+      severity: 'hard',
+      action: { label: 'Open Cursor integrations', target: { kind: 'external', url: 'https://cursor.com/dashboard?tab=integrations' } },
+      raw,
+    };
+  }
+
   // Cursor: unrecognised body key (schema drift like branchName removal)
   // Mushi sent a request shape Cursor's API rejects (field removed, or a
   // field combination such as envVars + agentId — fixed 2026-10-03).

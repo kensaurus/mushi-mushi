@@ -61,6 +61,7 @@ import { WebhookSecretReveal, revealedSecretFromMeta, type RevealedWebhookSecret
 import { useConfirmAction } from '../useConfirmAction'
 import { describeWebhookTest, type WebhookTestSummary } from '../webhookTestOutcome'
 import { paginationWindow } from '../paginationWindow'
+import { metadataPairs } from './activityMetadata'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -332,11 +333,20 @@ export function OverviewTab() {
                         </span>
                       </div>
                     </div>
-                    {ev.metadata && Object.keys(ev.metadata).length > 0 && (
-                      <div className="text-2xs font-mono text-fg-faint mt-0.5 truncate">
-                        {JSON.stringify(ev.metadata)}
-                      </div>
-                    )}
+                    {(() => {
+                      const pairs = metadataPairs(ev.metadata)
+                      if (pairs.length === 0) return null
+                      return (
+                        <div className="text-2xs text-fg-faint mt-0.5 truncate">
+                          {pairs.map((pair, i) => (
+                            <span key={pair.key}>
+                              {i > 0 ? ' · ' : ''}
+                              {pair.label}: <span className="font-mono">{pair.value}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               )
