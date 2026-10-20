@@ -105,6 +105,7 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
   return CODE_SET.has(value)
 }
 
+
 /**
  * Classify a Supabase/Postgres error as a transient infrastructure failure
  * (pooler reset, Cloudflare 522 origin timeout) versus a genuine
@@ -225,6 +226,7 @@ export function isTransientDbConnectionError(
     return false
   }
   if (rawCode.toUpperCase() === 'PGRST002') return true
+
 
   // No SQLSTATE — socket / gateway-level failures. Match NARROW, specific
   // signatures only (each denotes a reset/disconnect/origin-timeout, not a
