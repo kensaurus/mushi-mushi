@@ -59,7 +59,7 @@ Tests: `packages/core/src/pii-scrubber.test.ts` (scrubUrl matrix + `Token
 Verified 2026-07-23: `pnpm --filter @mushi-mushi/core test` 192 passed ·
 `pnpm --filter @mushi-mushi/web test` 225 passed · `pnpm typecheck` 47/47.
 
-## Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (CI gate deferred to Plan 017)
+## Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE`
 
 Vendor reference Conduit apps under `examples/realworld/` (MIT attribution):
 `backend-express` (+`@mushi-mushi/node`), `frontend-react-vite` (path router,
@@ -68,8 +68,8 @@ Vendor reference Conduit apps under `examples/realworld/` (MIT attribution):
 `tests/conduit-journey.spec.ts` asserting web+node capture, hash+path route
 timelines, report ingest; then an MCP dogfood step
 (`get_recent_reports` → `get_report_detail` → `get_fix_context` →
-`run_nl_query`) against the reports just produced. CI-gated behind
-`MUSHI_REALWORLD=1` + `pnpm e2e:realworld`.
+`run_nl_query`) against the reports just produced. CI runs
+`.github/workflows/e2e-realworld.yml` (`MUSHI_REALWORLD=1 pnpm e2e:realworld`).
 
 ## Phase 3 — Backlog (out of initial scope)
 
