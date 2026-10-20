@@ -10,7 +10,7 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 50 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 49 · **Recently closed:** 9 (BL-086 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -20,11 +20,11 @@ parked work is visible in one place.
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 6 |
-| needs-triage | 2 |
+| needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 47 |
+| relevant | 46 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -113,7 +113,6 @@ parked work is visible in one place.
 | BL-083 | tech-debt | `PATH_SLICES` in `apps/admin/src/lib/navBadges.tsx` lists the nav-meta slices each route's badge and page hero read. `layoutHeroFromStats`, the route hero enrichment that also read them, had no caller and was deleted on 2026-10-17, so some entries may now fetch slices only that hero used. Audit `PATH_SLICES` against `resolveNavBadge` and drop the extra slices. This changes request behaviour, so the dead-code pass left it | relevant | low | `apps/admin/src/lib/navBadges.tsx:70`-`:76` (on `chore/housekeep-dead-code-2026-10-17`) | — |
 | BL-084 | test-gap | `printAndExit` in `packages/cli/src/errors.ts` writes the `error [E_*]: …` and `  → fix: …` lines scripts grep on, and no test checks them. The tests that looked like they did called `formatError`, a copy that had already drifted (it gave unknown errors no fix line), and it was deleted on 2026-10-17. Add a test that captures stderr from `printAndExit` | relevant | low | `packages/cli/src/errors.ts`; `packages/cli/src/errors.test.ts` | — |
 | BL-085 | needs-triage | `docs/DESIGN-SYSTEM.md` says key-test results must read as sentences, never probe codes like `error_auth`. `describeByokTestResult`, the helper written for that, had no caller and was deleted on 2026-10-17. Check what the console's "Test key" result shows today, and wire a sentence mapping if it shows the raw status | relevant | low | `docs/DESIGN-SYSTEM.md:181`; `apps/admin/src/lib/byokErrors.ts` | — |
-| BL-086 | needs-triage | `bundlerKindForFramework` mapped a detected `next` / `nuxt` framework to the `NEXT_PUBLIC_` / `NUXT_PUBLIC_` env prefix, after a bug where Next apps got unprefixed `MUSHI_PROJECT_ID` and the SDK silently stayed off. Nothing called it, so it was deleted on 2026-10-17. Check which path picks the bundler for a connected repo's env snippet, and that a Next repo gets `NEXT_PUBLIC_` | relevant | low | `apps/admin/src/lib/projectMushiEnv.ts` (`mushiEnvVarsForBundler`, `mushiEnvVarsForProjectSlug`) | — |
 | BL-087 | deferred-plan-phase | Spend-down UX lane: spend an expiring Cursor key on cloud UX runs as well as fixes. Parked because the cloud UX run route is session-only (ADR 0017 approval posture); needs an owner decision on who `requested_by` is for an unattended run | relevant | low | ADR 0028 (Rejected), `api/routes/ux-cloud.ts`, plan cursor-credit-spend-down §4 step 5 | — |
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
 | BL-089 | unfinished-feature | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing (no app it is first pick for, auto-fix off, every report settled). Today only the console status line and `get_spend_down_status` say so | relevant | low | ADR 0028, `_shared/radar.ts`, plan §4 Console | — |
@@ -126,6 +125,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-086 | `bundlerKindForFramework` had no caller, so a connected Next/Nuxt repo could be handed the wrong env prefix | 2026-10-20 | The connected-repo path is `stackFromPackageJsons` → `buildCiVars`, and the console snippet is `SdkNativeConnectivityCard` → `bundlerKindForFramework` → `mushiEnvVarsForBundler` (also `mushiEnvVarsForProjectSlug(slug, framework)`). `next` / `nextjs` emit `NEXT_PUBLIC_MUSHI_*`; `nuxt` wins over Vite and emits `NUXT_PUBLIC_MUSHI_*`. An unknown framework keeps the slug default (`NEXT_PUBLIC_`), not bare `MUSHI_*`. Tests: `projectMushiEnv.test.ts`, `SdkNativeConnectivityCard.test.tsx`, `sdk-diagnostics.test.ts`, `recipe-env-stack.test.ts`. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
