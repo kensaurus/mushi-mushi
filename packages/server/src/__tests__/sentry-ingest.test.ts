@@ -255,6 +255,24 @@ describe('ingestSentryError — transient database outages are not filed', () =>
     expect(state.inserted).toHaveLength(0)
   })
 
+  it('skips the hosted gateway body on a repo-binding lookup', async () => {
+    const result = await ingest({
+      title: 'Error: project_settings.github_repo_url lookup failed: Project not specified.',
+      issue_id: '9010',
+      extra: { message: 'project_settings.github_repo_url lookup failed: Project not specified.' },
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(state.inserted).toHaveLength(0)
+  })
+
+  it('still files a caller sentence that only resembles the gateway body', async () => {
+    const result = await ingest({
+      title: 'Error: Project not specified by the caller',
+      issue_id: '9011',
+    })
+    expect(result.outcome).toBe('created')
+  })
+
   it('skips a thrown error whose title is the pooler reset (MUSHI-MUSHI-SERVER-2S)', async () => {
     const result = await ingest({
       title: `Error: project_repos.repo_url lookup failed: ${POOLER}`,
