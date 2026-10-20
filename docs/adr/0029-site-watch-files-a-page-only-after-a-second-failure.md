@@ -4,7 +4,7 @@ Status: Accepted (owner-delegated, 2026-10-21) Date: 2026-10-21
 
 Amends: ADR 0024 ("What counts as broken" and "One report per broken page").
 Related: migrations `20261020152752_site_watch_confirm_before_filing.sql` and
-`20261021100000_site_watch_unconfirmed_and_flapping.sql`,
+`20261020154405_site_watch_unconfirmed_and_flapping.sql`,
 `_shared/site-watch.ts` (`confirmScrape`, `judgeConfirmation`,
 `processCheck`, `settleSuspects`), `site-watch-poll/index.ts`.
 
