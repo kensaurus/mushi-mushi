@@ -55,8 +55,8 @@ export const LAYER_LABELS: Record<ExploreLayer, string> = {
 
 /**
  * Colour tokens per layer — resolved via `readVizToken` because ReactFlow
- * strips CSS variable references from SVG attributes. Fallbacks in
- * vizTokens.ts match the @theme `--color-viz-layer-*` values.
+ * strips CSS variable references from SVG attributes. Values come from
+ * `@theme static` `--color-viz-layer-*` in styles/theme-tokens.css.
  */
 export const LAYER_COLORS: Record<ExploreLayer, string> = {
   get ui() { return readVizToken('viz-layer-ui') },

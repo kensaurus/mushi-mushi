@@ -126,8 +126,13 @@ Found while doing item 3: Tailwind drops `@theme` colours that no utility uses, 
 `--color-viz-*` values never reach the built CSS (only the light overrides do, from
 `base-and-density.css`). In dark mode `readVizToken()` therefore returns the copy in
 `VIZ_FALLBACKS` (`lib/vizTokens.ts`), a second source of truth for every JS-read chart
-colour. Item 3 changed both. Moving the viz tokens to `@theme static`, or into a plain
-`:root` block, would make the stylesheet the one source.
+colour. Item 3 changed both.
+
+Fixed 2026-10-20 (BL-079): those colours now live in `@theme static` in
+`apps/admin/src/styles/theme-tokens.css`, so the built CSS is the only palette.
+`readVizToken()` no longer keeps `VIZ_FALLBACKS`. `scripts/check-design-tokens.mjs`
+compiles the theme with no utility candidates and fails if a viz token read in
+admin source is missing from that CSS.
 
 ### Original owner list (2026-10-16, before the decisions above)
 

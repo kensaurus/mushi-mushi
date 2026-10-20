@@ -28,13 +28,20 @@
  *                edge, nav, overlay) but the full root isn't defined in
  *                index.css — i.e. a typo against a real namespace.
  *
+ *          Viz colours are read at runtime, not as utilities. This script
+ *          compiles styles/theme-tokens.css with no class candidates and
+ *          fails when a viz token used in admin source is missing from
+ *          that CSS (Tailwind drops unused `@theme` colours; `@theme
+ *          static` keeps them).
+ *
  *          Run locally:  node scripts/check-design-tokens.mjs
  *          In CI:        pnpm check:design-tokens
  *          Pre-commit:   wired via scripts/install-git-hooks.mjs
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -816,6 +823,100 @@ if (retiredAliasHits.length > 0) {
   )
 }
 
+// ── Viz tokens must survive Tailwind's unused-theme prune ───────────────
+// readVizToken() and var(--color-viz-*) never generate a utility, so a
+// normal @theme colour is absent from the built CSS. Compile the admin
+// theme with zero class candidates: every viz token declared or read in
+// source has to be in that output, and an unused non-static probe must not.
+// A trailing hyphen (the glob in `--color-viz-layer-*`) is not a token name.
+const VIZ_TOKEN = String.raw`[a-z0-9]+(?:-[a-z0-9]+)*`
+const VIZ_NAME_RE = new RegExp(String.raw`--color-viz-(${VIZ_TOKEN})(?![a-z0-9-])\s*:`, 'g')
+const VIZ_READ_RE = new RegExp(
+  String.raw`['"]viz-(${VIZ_TOKEN})['"]|--color-viz-(${VIZ_TOKEN})(?![a-z0-9-])`,
+  'g',
+)
+
+function vizNamesIn(src, re) {
+  const names = new Set()
+  for (const match of src.matchAll(re)) {
+    const name = match[1] || match[2]
+    if (name && name !== 'probe-dropped') names.add(name)
+  }
+  return names
+}
+
+async function compileAdminThemeUnused() {
+  const adminPkg = resolve(ROOT, 'apps/admin/package.json')
+  const req = createRequire(adminPkg)
+  let compile
+  try {
+    const imported = await import(pathToFileURL(req.resolve('tailwindcss')).href)
+    compile = imported.compile ?? imported.default?.compile
+    if (typeof compile !== 'function') {
+      throw new Error('tailwindcss did not export compile')
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Cannot load tailwindcss from apps/admin (${detail}). Install dependencies before check:design-tokens.`,
+    )
+  }
+  const adminRoot = resolve(ROOT, 'apps/admin')
+  async function loadStylesheet(id, base) {
+    const path = id.startsWith('.') || id.startsWith('/')
+      ? resolve(base, id)
+      : req.resolve(id.endsWith('.css') ? id : `${id}/index.css`)
+    return { path, base: dirname(path), content: readFileSync(path, 'utf8') }
+  }
+  const css = [
+    '@import "tailwindcss" source(none);',
+    '@import "./src/styles/theme-tokens.css";',
+    '@theme { --color-viz-probe-dropped: oklch(0.2 0 0); }',
+  ].join('\n')
+  const compiler = await compile(css, { base: adminRoot, loadStylesheet })
+  return compiler.build([])
+}
+
+const themeTokenCss = readFileSync(resolve(TOKEN_STYLES_DIR, 'theme-tokens.css'), 'utf8')
+const declaredViz = vizNamesIn(themeTokenCss, VIZ_NAME_RE)
+const readViz = new Set()
+for (const file of files) {
+  if (!/\.tsx?$/.test(file)) continue
+  for (const name of vizNamesIn(readFileSync(file, 'utf8'), VIZ_READ_RE)) readViz.add(name)
+}
+
+let compiledViz = new Set()
+let vizCompileError = null
+let vizProbeLeaked = false
+try {
+  const compiled = await compileAdminThemeUnused()
+  compiledViz = vizNamesIn(compiled, VIZ_NAME_RE)
+  vizProbeLeaked = /--color-viz-probe-dropped\s*:/.test(compiled)
+} catch (err) {
+  vizCompileError = err instanceof Error ? err.message : String(err)
+}
+
+const vizMissing = [...new Set([...declaredViz, ...readViz])]
+  .filter((name) => !compiledViz.has(name))
+  .sort()
+
+if (vizCompileError) {
+  console.error(`\n[viz-css] Could not compile admin theme tokens:\n  ${vizCompileError}\n`)
+}
+if (vizProbeLeaked) {
+  console.error(
+    `\n[viz-css] Tailwind emitted an unused non-static viz probe. The unused-theme check cannot tell a static token from a pruned one.\n`,
+  )
+}
+if (vizMissing.length > 0) {
+  console.error(`\n[viz-css] Viz tokens missing from compiled CSS (no utility candidates):\n`)
+  for (const name of vizMissing) console.error(`  --color-viz-${name}`)
+  console.error(
+    `\nFix: declare each token in the @theme static block in apps/admin/src/styles/theme-tokens.css.\n` +
+      `A normal @theme colour is dropped when nothing uses it as a utility, and readVizToken() is not a utility.\n`,
+  )
+}
+
 const lintFailures =
   retiredAliasHits.length > 0 ||
   denied.length > 0 ||
@@ -831,7 +932,10 @@ const lintFailures =
   pageElevatedHits.length > 0 ||
   transitionAllHits.length > 0 ||
   focusOutlineHits.length > 0 ||
-  ellipsisHits.length > 0
+  ellipsisHits.length > 0 ||
+  vizCompileError !== null ||
+  vizProbeLeaked ||
+  vizMissing.length > 0
 
 if (lintFailures) process.exit(1)
 
@@ -839,5 +943,6 @@ const totalTypeFloorFiles = typeFloorFiles.length
 console.log(
   `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
     `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean. ` +
-    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses.`,
+    `Retired aliases: ${RETIRED_CUSTOM_PROPS.size} names, 0 uses. ` +
+    `Viz CSS: ${compiledViz.size} --color-viz-* tokens emitted with no utility candidates.`,
 )

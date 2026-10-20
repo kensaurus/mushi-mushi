@@ -9,13 +9,13 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 45 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 44 · **Recently closed:** 9 (BL-079 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
 | test-gap | 7 |
-| tech-debt | 18 |
+| tech-debt | 17 |
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 4 |
@@ -23,7 +23,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 42 |
+| relevant | 41 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -105,7 +105,6 @@ parked work is visible in one place.
 | BL-074 | decision-needed | Owner launch gates with no code work left: tester marketplace (26 items incl. KYB, Tremendous keys, OFAC and attorney review), Capacitor-to-RN cutover (9), marketplace and storefront submission checklists, awesome-list submissions (one a week, plus checking the MCP registry `websiteUrl`), VS Code Marketplace deferred 2026-09-21 | relevant | low | `docs/runbooks/tester-marketplace-launch.md`; `docs/migrations/capacitor-to-react-native.md:825`-`:838`; `docs/marketplace/cursor-submission-checklist.md`; `docs/marketing/STOREFRONTS.md:211`; `docs/marketing/GTM-DISTRIBUTION.md`; `docs/marketing/awesome-list-submissions.md:76`-`:81` | #38 |
 | BL-076 | known-bug | Light-mode `text-warn` on `surface` is 2.64:1, under WCAG AA for text. Warn is mostly a fill in light mode, but text uses fail | relevant | med | `docs/design/housekeep-design-state-2026-10-16.md:121` | — |
 | BL-077 | tech-debt | Agent browser sessions on the owner PC (stored playwright profiles glot-guest, testprof, tsumagoi) raised most of glot.it's 2026-10-16 Sentry issues: a minimized window reports `visible` but never paints, so FCP/LCP/TTFB look like 8-16 s. `app.automated` stays false because the window is not webdriver-flagged. Tag these sessions (or the minimized-window signal) so web vitals from them are dropped | relevant | med | glot.it GLOT-IT-D0/CY/CZ/DA/DB/DE-DK closed 2026-10-16 as ours | — |
-| BL-079 | tech-debt | Dark `--color-viz-*` tokens never reach the CSS (Tailwind drops unused `@theme` colours), so `readVizToken()` falls back to the copy in `lib/vizTokens.ts`, a second source for chart colours. `@theme static` would make the stylesheet the one source | relevant | low | `apps/admin/src/lib/vizTokens.ts`; `docs/design/housekeep-design-state-2026-10-16.md` | — |
 | BL-080 | unfinished-feature | PR #338 "feat(observability): metrics, logs & traces as first-class evidence" (+1000/−31, branch `feat/observability-evidence-pillars`) has been open since 2026-07-22, last updated 2026-10-10. Merge it in a batch, rebase it, or close it. The positioning check matters here: AGENTS.md rules out "observability" as our category, so the copy needs that test before it lands | relevant | low | PR #338 | #338 |
 | BL-081 | tech-debt | 15 open Dependabot PRs, the oldest from 2026-07-09 (#304–#308 Actions bumps, #386, #414–#420, #426, #436 dependency groups). Fold them into the next release batch (ci-cost rule 7) or close the ones a later bump superseded | relevant | low | `gh pr list --author app/dependabot` | #304–#308, #386, #414–#420, #426, #436 |
 | BL-082 | decision-needed | yen-yen code-health ingest has been silent since 2026-07-16. yen-yen's `bundle-budget.yml` dropped its push-to-main trigger on purpose (a cost cut), and its "Push code-health metrics to Mushi" step is gated on `github.event_name == 'push'`, so the `workflow_dispatch` path its own comment offers never posts either. `/code-health` for yen-yen shows July data with no staleness signal, and AGENTS.md ("Code Health Ingest") still says it posts on every push to `main`. Decide: let the step run on `workflow_dispatch` or a weekly schedule in yen-yen, or update AGENTS.md and show staleness on the page | relevant | low | `kensaurus/yen-yen` `.github/workflows/bundle-budget.yml:24`-`:37`, `:168`; `AGENTS.md` (Code Health Ingest); BL-009 | — |
@@ -120,6 +119,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-079 | Dark `--color-viz-*` tokens never reached the CSS, so `readVizToken()` used a second palette in `lib/vizTokens.ts` | 2026-10-20 | Viz colours are `@theme static` in `apps/admin/src/styles/theme-tokens.css`, so Tailwind emits them with no utility class. `readVizToken()` reads that CSS and the `VIZ_FALLBACKS` map is gone (`apps/admin/src/lib/vizTokens.test.ts`). `scripts/check-design-tokens.mjs` compiles the theme with zero class candidates and fails if a `viz-*` token read in admin source is missing. `viz-neutral` had already drifted (stylesheet L 0.65, fallback L 0.55); the stylesheet value is the one that ships. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
