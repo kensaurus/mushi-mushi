@@ -7,8 +7,15 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **50** | `--max-issues 50` |
-| default | `pnpm exec knip --reporter json` | **38** | `--max-issues 38 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **49** | `--max-issues 50` |
+| default | `pnpm exec knip --reporter json` | **35** | `--max-issues 35 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-20 on `152b4428`: 49 production / 35 default** (default ceiling 35; 34 fails).
+> The production ceiling stays at 50 here. Master was already at 36 default before this change.
+> Deleted `packages/server/src/__tests__/explore-tab-navigation.test.ts`. It imported
+> `apps/admin/src/lib/exploreTabNavigation.ts` through a relative path that leaves the
+> server workspace, which knip reports as unresolved and Vitest still resolved. The three
+> cases now live in `apps/admin/src/lib/exploreTabNavigation.test.ts`.
 
 > **Re-measured 2026-10-17, third round: 50 production / 38 default** (49 and 37 fail).
 > With the owner's go-ahead, the exports and types that no non-test code called were judged one
@@ -158,7 +165,7 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| apps/admin | 8 |  |  |  |  | 6 | 1 | 4 | 19 |
+| apps/admin | 7 |  |  |  |  | 5 | 1 | 4 | 17 |
 | apps/docs |  |  | 1 |  |  |  |  | 1 | 2 |
 | examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
@@ -168,10 +175,10 @@ react-native 4, wasm-classifier 1).
 | packages/mcp | 3 | 1 |  |  |  |  |  |  | 4 |
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
 | packages/react-native | 1 |  |  |  |  |  |  |  | 1 |
-| packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
+| packages/server |  |  | 1 |  |  |  |  |  | 1 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/web |  |  |  | 1 |  |  |  |  | 1 |
-| **total** | **14** | **2** | **6** | **2** | **1** | **7** | **1** | **5** | **38** |
+| **total** | **13** | **2** | **6** | **2** |  | **6** | **1** | **5** | **35** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
@@ -190,7 +197,9 @@ Warn-level (not counted): optionalPeerDependencies 8.
 2. **unresolved** — `packages/server/src/__tests__/explore-tab-navigation.test.ts`
    imports `../../apps/admin/src/lib/exploreTabNavigation.ts`, which resolves
    to `packages/server/apps/…` (does not exist). Real bug, out of Workstream A
-   scope; the owning fix belongs to the server test suite.
+   scope; the owning fix belongs to the server test suite. Paid down 2026-10-20
+   (BL-010): that test file is deleted, the cases live next to the module in
+   `apps/admin`, and default mode reports zero unresolved imports.
 3. **unlisted** — `packages/agents` dynamic-imports `@e2b/code-interpreter`
    without declaring it; the three `@modelcontextprotocol/sdk/client` hits in
    `packages/mcp/scripts/*.mjs` (default mode only) are transient: the MCP SDK
