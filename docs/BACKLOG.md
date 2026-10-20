@@ -9,12 +9,12 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 45 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 44 · **Recently closed:** 9 (BL-065 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
-| test-gap | 7 |
+| test-gap | 6 |
 | tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 5 |
@@ -23,7 +23,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 42 |
+| relevant | 41 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -93,7 +93,6 @@ parked work is visible in one place.
 | BL-042 | tech-debt | knip findings left for an owner or a refactor. 5 duplicate exports (aliases such as `bannerEnterSpring`/`chromeEnterSpring` and `PAGE_CONTENT_STACK`/`PAGE_STACK`) need their importers renamed. `@modelcontextprotocol/core` in `@mushi-mushi/mcp` is imported by neither `src` nor `dist`, since `@modelcontextprotocol/server` depends on it itself, but it was added on purpose in #380. The 5 exports and 1 type production mode still reports are kept on purpose: the three `page-scaffold.ts` constants and its type (the canonical-primitive list `ui.tsx` re-exports), `JARGON` (imported by the kept `Jargon.tsx`), and the generated `MUSHI_DOCS_INDEX`. The 2026-10-17 pass deleted every other export with no non-test caller, and tagged test-only exports whose code production runs `@internal` | relevant | low | `pnpm exec knip --production`; `docs/execplans/knip-baseline/README.md` | — |
 | BL-063 | test-gap | First-run onboarding was not walked in the 2026-10-16 journey audit (needs a fresh account) | relevant | low | `docs/audit-2026-10-16/ux-journeys.md:49` (F4) | — |
 | BL-064 | test-gap | `examples/e2e-dogfood/tests/confirmation-coverage.spec.ts` calls `test.skip()` at runtime when an element is missing, so the spec can pass without asserting | relevant | med | `examples/e2e-dogfood/tests/confirmation-coverage.spec.ts:84`, `:108`, `:119`, `:142`, `:145`, `:164`, `:181`, `:198`, `:216`, `:222` | — |
-| BL-065 | test-gap | `packages/adapters/src/__tests__/firebase-analytics.test.ts:56` names a `firebase-analytics.signature.test.ts` that was never created | relevant | low | `packages/adapters/src/__tests__/firebase-analytics.test.ts:56` | — |
 | BL-066 | deferred-plan-phase | Plan 019 App Recipe Control Plane, Phases 2 to 4 (portfolio, connectors, change worker, batches, act); BL-003 covers Phase 1/1b only | relevant | low | `docs/execplans/app-recipe-control-plane.md:693`-`:744` | — |
 | BL-067 | deferred-plan-phase | Plan 021 Phase 5 is outlined, not built, and the owner pricing decision for a Mushi-hosted judge is still open. (`@mushi-mushi/ux` is published: 0.1.0 on 2026-10-08, 0.1.1 on 2026-10-17; the older "unpublished" note was wrong) | relevant | low | `docs/execplans/PLANS.md:638`; `docs/execplans/ux-loop.md:178` | — |
 | BL-068 | unfinished-feature | Stub fix agents. `CodexAgent` returns `success: false` behind `MUSHI_ENABLE_CODEX_AGENT`. The `anthropic_managed` cloud agent is interface-only (ADR 0013, a typed stub that throws `CloudAgentNotImplementedError` on poll). `ClaudeCodeAgent` is real behind its flag and is not part of this row | relevant | low | `packages/agents/src/adapters/codex.ts`; `packages/agents/README.md:193`; `packages/server/supabase/functions/_shared/agent-adapters.ts:487`-`:501`; `docs/adr/0013-cloud-coding-agents-run-through-edge-adapters.md:31` | — |
@@ -120,6 +119,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-065 | `firebase-analytics.test.ts` named a `firebase-analytics.signature.test.ts` that was never created | 2026-10-20 | `packages/adapters/src/__tests__/firebase-analytics.signature.test.ts` serves a local JWKS and checks the default RS256 path: a fixture-signed token with `iss` `https://accounts.google.com` or `accounts.google.com` returns 200 and calls the sink; a different key, a tampered payload, a wrong `aud`, and a project-id substring spoof return 401 `INVALID_TOKEN`; a valid signature from another issuer returns 401 `INVALID_ISS`. The unsigned cases stay in `firebase-analytics.test.ts`, which now points at this file. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
