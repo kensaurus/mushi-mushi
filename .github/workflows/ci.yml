@@ -359,7 +359,7 @@ jobs:
         run: pnpm exec knip --production --max-issues 50
 
       - name: Check dead code (knip, default + config hints)
-        run: pnpm exec knip --max-issues 37 --treat-config-hints-as-errors
+        run: pnpm exec knip --max-issues 35 --treat-config-hints-as-errors
 
       - name: Check debug residue and suppression ratchet
         # console.(log|debug|warn), @ts-ignore/@ts-expect-error, eslint-disable

@@ -7,10 +7,11 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **50** | `--max-issues 50` |
-| default | `pnpm exec knip --reporter json` | **37** | `--max-issues 37 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **49** | `--max-issues 50` |
+| default | `pnpm exec knip --reporter json` | **35** | `--max-issues 35 --treat-config-hints-as-errors` |
 
-> **Re-measured 2026-10-20: 50 production / 37 default** (49 and 36 fail).
+> **Re-measured 2026-10-20 on `152b4428`: 49 production / 35 default** (default ceiling 35; 34 fails).
+> The production ceiling stays at 50 here. Master was already at 36 default before this change.
 > Deleted `packages/server/src/__tests__/explore-tab-navigation.test.ts`. It imported
 > `apps/admin/src/lib/exploreTabNavigation.ts` through a relative path that leaves the
 > server workspace, which knip reports as unresolved and Vitest still resolved. The three
@@ -164,7 +165,7 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| apps/admin | 8 |  |  |  |  | 6 | 1 | 4 | 19 |
+| apps/admin | 7 |  |  |  |  | 5 | 1 | 4 | 17 |
 | apps/docs |  |  | 1 |  |  |  |  | 1 | 2 |
 | examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
@@ -177,7 +178,7 @@ react-native 4, wasm-classifier 1).
 | packages/server |  |  | 1 |  |  |  |  |  | 1 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/web |  |  |  | 1 |  |  |  |  | 1 |
-| **total** | **14** | **2** | **6** | **2** |  | **7** | **1** | **5** | **37** |
+| **total** | **13** | **2** | **6** | **2** |  | **6** | **1** | **5** | **35** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
