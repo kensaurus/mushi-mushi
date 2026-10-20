@@ -10,13 +10,13 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 50 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 49 · **Recently closed:** 9 (BL-091 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 10 |
 | test-gap | 7 |
-| tech-debt | 19 |
+| tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 6 |
@@ -24,7 +24,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 47 |
+| relevant | 46 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -118,7 +118,6 @@ parked work is visible in one place.
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
 | BL-089 | unfinished-feature | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing (no app it is first pick for, auto-fix off, every report settled). Today only the console status line and `get_spend_down_status` say so | relevant | low | ADR 0028, `_shared/radar.ts`, plan §4 Console | — |
 | BL-090 | unfinished-feature | Cursor model picker for spend-down and Integrations, fed by Cursor's `GET /v1/models` through a new `/v1/admin/byok/cursor/models`. The console takes a free-text model spec validated by `parseCursorModelSpec` | relevant | low | `apps/admin/src/components/settings/SpendDownSection.tsx`, plan §4 Console | — |
-| BL-091 | tech-debt | Spend-down ranking leaves out the ×1.3 boost for Sentry or stack evidence from the plan (`rankSpendDownCandidates` uses severity × judge score × named component). Add it once a report carries a cheap evidence flag the worker can select | relevant | low | `_shared/spend-down.ts`, plan §4 step 3 | — |
 
 ---
 
@@ -126,6 +125,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-091 | Spend-down ranking leaves out the ×1.3 boost for Sentry or stack evidence | 2026-10-20 | `rankSpendDownCandidates` multiplies by `SPEND_DOWN_CHEAP_EVIDENCE_BOOST` (1.3) when `has_cheap_evidence` is set. `candidatesFor` selects `SPEND_DOWN_CANDIDATE_COLUMNS` and `spendDownCandidateFromReport` sets the flag from `source = sentry`, `sentry_issue_url`, `sentry_event_id`, `custom_metadata.sentryFrames`, or a console-log stack. `packages/server/src/__tests__/spend-down.test.ts` covers the boost, the flag, and dispatch order. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |

@@ -15,8 +15,8 @@
  *     automatic dispatch);
  *   - reports: classified or reopened, not dispatched in the last 7 days,
  *     and not settled by an agent verdict (latest attempt already_fixed or
- *     wrong_repo), ranked by severity × judge score × named component, one
- *     per group;
+ *     wrong_repo), ranked by severity × judge score × named component × 1.3
+ *     when the report already has Sentry or stack evidence, one per group;
  *   - each goes through `dispatchFixForReport` (auto-fix switch, feature
  *     requests, resolved reports, in-flight dedupe) as an automatic
  *     `cursor_cloud` dispatch carrying `spend_down_key_id` and the key's model.
@@ -41,9 +41,12 @@ import {
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
   remainingToday,
+  SPEND_DOWN_CANDIDATE_COLUMNS,
+  spendDownCandidateFromReport,
   spendDownDispatchMetadata,
   spendDownWindow,
   type SpendDownCandidate,
+  type SpendDownEvidenceRow,
   type SpendDownKey,
   type SpendDownState,
 } from '../_shared/spend-down.ts'
@@ -84,13 +87,13 @@ export interface SpendDownDeps {
 async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): Promise<SpendDownCandidate[]> {
   const { data: reports, error } = await db
     .from('reports')
-    .select('id, severity, judge_score, component, report_group_id, created_at')
+    .select(SPEND_DOWN_CANDIDATE_COLUMNS)
     .eq('project_id', projectId)
     .in('status', ['classified', 'reopened'])
     .order('created_at', { ascending: false })
     .limit(60)
   if (error) throw new Error(`spend-down: reports read failed: ${error.message}`)
-  const rows = (reports ?? []) as SpendDownCandidate[]
+  const rows = ((reports ?? []) as Array<SpendDownCandidate & SpendDownEvidenceRow>).map(spendDownCandidateFromReport)
   if (rows.length === 0) return []
 
   const since = new Date(now.getTime() - SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS * 86_400_000).toISOString()

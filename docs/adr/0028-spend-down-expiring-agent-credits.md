@@ -39,7 +39,8 @@ how much is left.
 - Every dispatch is `trigger: 'automatic'`, so the app's auto-fix caps apply
   (checked by the worker and again by fix-worker), at most three cloud agents
   run per app, and a report dispatched in the last 7 days is not picked again.
-  Ranking: severity × judge score × named component, one per report group.
+  Ranking: severity × judge score × named component × 1.3 when the report
+  already has Sentry or stack evidence, one per report group.
 - The limit is a count of dispatches, not dollars, because no balance is
   readable. Nothing merges: each fix is a draft PR, as today.
 - Turning it on for a shared key is an organization owner's or admin's call

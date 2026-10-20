@@ -3,8 +3,9 @@
  * PURPOSE: Spend-down mode (ADR 0028). The rules in _shared/spend-down.ts,
  *          and the worker on an in-memory database: which apps a key pays
  *          for (ADR 0023), the window, the daily limit, the auto-fix caps,
- *          the 3-running bound, the 7-day re-dispatch cooldown, and the
- *          dispatch metadata fix-worker reads (cursor_cloud, model, trigger).
+ *          the 3-running bound, the 7-day re-dispatch cooldown, the 1.3
+ *          boost for Sentry or stack evidence, and the dispatch metadata
+ *          fix-worker reads (cursor_cloud, model, trigger).
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -13,7 +14,10 @@ import {
   firstCursorKeyFor,
   projectCapacity,
   rankSpendDownCandidates,
+  reportHasCheapEvidence,
   reportsWithNoRetryVerdict,
+  SPEND_DOWN_CANDIDATE_COLUMNS,
+  spendDownCandidateFromReport,
   type CursorPoolKey,
   spendDownDispatchMetadata,
   spendDownProjectIds,
@@ -133,6 +137,47 @@ describe('rankSpendDownCandidates', () => {
     ])
     expect(ranked.map((r) => r.id)).toEqual(['high-comp', 'crit', 'low'])
   })
+
+  it('boosts Sentry or stack evidence by 1.3 without jumping a severity band', () => {
+    const same = { severity: 'high', judge_score: 0.5, component: null, report_group_id: null }
+    const ranked = rankSpendDownCandidates([
+      { ...same, id: 'plain', created_at: '2026-10-20', has_cheap_evidence: false },
+      { ...same, id: 'with-stack', created_at: '2026-10-18', has_cheap_evidence: true },
+      { ...same, severity: 'critical', id: 'crit', created_at: '2026-10-17' },
+    ])
+    // Severity weights: high 3 × 1.3 = 3.9, critical 4. Same judge score, so critical still leads.
+    expect(ranked.map((r) => r.id)).toEqual(['crit', 'with-stack', 'plain'])
+  })
+})
+
+describe('reportHasCheapEvidence', () => {
+  it('is true for a Sentry origin, link, event, frame path, or console stack', () => {
+    expect(reportHasCheapEvidence({})).toBe(false)
+    expect(reportHasCheapEvidence({ source: 'widget', sentry_issue_url: '  ' })).toBe(false)
+    expect(reportHasCheapEvidence({ source: 'sentry' })).toBe(true)
+    expect(reportHasCheapEvidence({ sentry_issue_url: 'https://sentry.io/issues/1' })).toBe(true)
+    expect(reportHasCheapEvidence({ sentry_event_id: 'evt' })).toBe(true)
+    expect(reportHasCheapEvidence({ custom_metadata: { sentryFrames: ['', ' src/a.ts '] } })).toBe(true)
+    expect(reportHasCheapEvidence({ custom_metadata: { sentryFrames: [] } })).toBe(false)
+    expect(reportHasCheapEvidence({ console_logs: [{ level: 'error', message: 'nope' }] })).toBe(false)
+    expect(reportHasCheapEvidence({ console_logs: [{ stack: '  at submit (src/pay.ts:10:2)' }] })).toBe(true)
+  })
+
+  it('copies the flag onto the candidate the worker ranks', () => {
+    expect(SPEND_DOWN_CANDIDATE_COLUMNS).toContain('sentry_issue_url')
+    expect(SPEND_DOWN_CANDIDATE_COLUMNS).toContain('console_logs')
+    const row = spendDownCandidateFromReport({
+      id: 'r',
+      severity: 'low',
+      judge_score: null,
+      component: null,
+      report_group_id: null,
+      created_at: '2026-10-18',
+      console_logs: [{ stack: '  at f (src/a.ts:1:1)' }],
+    })
+    expect(row.has_cheap_evidence).toBe(true)
+    expect(row).not.toHaveProperty('console_logs')
+  })
 })
 
 describe('projectCapacity', () => {
@@ -203,6 +248,46 @@ describe('runSpendDownForKey', () => {
       },
     })
     expect(summary).toMatchObject({ state: 'active', dispatched: 2, remainingToday: 8 })
+  })
+
+  it('dispatches a stacked or Sentry report ahead of an otherwise equal newer one', async () => {
+    const base = {
+      project_id: P1,
+      status: 'classified',
+      severity: 'high',
+      judge_score: 0.8,
+      component: 'a.ts',
+      report_group_id: null,
+      source: 'widget',
+    }
+    const db = seed({
+      reports: [
+        { ...base, id: 'newer', created_at: '2026-10-19T00:00:00Z' },
+        {
+          ...base,
+          id: 'stacked',
+          created_at: '2026-10-18T00:00:00Z',
+          console_logs: [{ level: 'error', stack: '  at submit (src/pay.ts:10:2)' }],
+        },
+        {
+          ...base,
+          id: 'sentry',
+          created_at: '2026-10-17T00:00:00Z',
+          sentry_issue_url: 'https://acme.sentry.io/issues/1/',
+        },
+      ],
+      fix_dispatch_jobs: [],
+    })
+    const calls: Array<Record<string, unknown>> = []
+    await worker.runSpendDownForKey(db as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch: async (input) => {
+        calls.push(input as never)
+        return { ok: true }
+      },
+    })
+    expect(calls.map((c) => c.reportId)).toEqual(['stacked', 'sentry', 'newer'])
   })
 
   it('never picks a report whose last run the agent settled as already fixed or wrong repo', async () => {
