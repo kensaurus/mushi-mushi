@@ -27,13 +27,19 @@
  *     time to settle, and still sees it broken; or
  *   - for an HTTP error or a load failure, the next check sees it failing
  *     too (two consecutive checks), when no confirm scrape was conclusive.
- * A judged break files only through a confirm scrape: an SPA boot card with
- * a rotating tip "changes" on every check, so the judge can repeat the same
+ * A judged break files through a confirm scrape: an SPA boot card with a
+ * rotating tip "changes" on every check, so the judge can repeat the same
  * wrong answer. A judge that failed open never counts as an observation.
+ * Two low-severity fallbacks keep real breakage from going unfiled: a
+ * confident judged break whose confirms stayed inconclusive in two checks
+ * files marked unconfirmed, and a 5xx that a confirm finds healthy three
+ * times in seven days files as intermittent. See `judgeConfirmation` for
+ * what a confirm scrape counts as broken.
  *
  * One open finding per page: a page that stays broken does not file again;
  * a page that loads cleanly again is marked resolved (a suspect is
- * dropped), and filing again later needs a second observation again.
+ * dropped), and filing again later needs a second observation again. A
+ * judged break shown unchanged (`same`) is still broken, not recovered.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -174,8 +180,15 @@ export const CONFIRM_SCRAPES_PER_WATCH = 3;
 export const CONFIRM_ATTEMPTS_PER_CHECK = 3;
 /** A suspect confirmed this recently is not confirmed again (overlapping polls). */
 export const CONFIRM_RETRY_AFTER_MS = 10 * 60_000;
-/** No new confirm scrape starts this long into a poll run. */
-export const CONFIRM_RUN_DEADLINE_MS = 90_000;
+/** The longest one confirm scrape can take: Firecrawl's timeout plus our abort margin. */
+export const CONFIRM_WORST_CASE_MS = CONFIRM_TIMEOUT_MS + 10_000;
+/**
+ * Every confirm scrape must be able to finish within this long of the poll
+ * run's start, so a run stays inside the 150 s edge-function wall clock of
+ * Supabase's smallest plan: a confirm starts only while
+ * now + CONFIRM_WORST_CASE_MS is within the deadline.
+ */
+export const CONFIRM_RUN_DEADLINE_MS = 120_000;
 /**
  * Pending suspects of one kind (hard, or judged) at which a sample stands for
  * all of them: when at least two confirm scrapes reproduce the failure and
@@ -183,13 +196,38 @@ export const CONFIRM_RUN_DEADLINE_MS = 90_000;
  * the rest of that kind file with them in one outage report.
  */
 const OUTAGE_SAMPLE_BROKEN = 2;
+/**
+ * A confident judged break whose confirm scrapes stayed inconclusive in this
+ * many checks files anyway, at low severity, marked unconfirmed. Never for a
+ * judge that failed open.
+ */
+export const UNCONFIRMED_AFTER_CHECKS = 2;
+/** A 5xx that a confirm scrape found healthy this many times ... */
+export const FLAP_DISMISSALS = 3;
+/** ... within this window files at low severity as intermittent. */
+export const FLAP_WINDOW_MS = 7 * 24 * 3_600_000;
+
+/**
+ * Firecrawl error codes that mean the site itself could not be reached: DNS
+ * did not resolve, the browser's connection failed (connection refused or
+ * reset, and the like), or the TLS handshake failed. The v2 scrape endpoint
+ * answers the DNS case with HTTP 200 and `success: false`, the others with
+ * HTTP 500, each with this `code` in the body. Not in docs.firecrawl.dev;
+ * read from Firecrawl's source (2026-10-21):
+ * https://github.com/firecrawl/firecrawl/blob/main/apps/api/src/scraper/scrapeURL/error.ts
+ * and apps/api/src/controllers/v2/scrape.ts. SCRAPE_ALL_ENGINES_FAILED is
+ * left out: anti-bot walls end there too.
+ */
+const SITE_UNREACHABLE_CODES = new Set(['SCRAPE_DNS_RESOLUTION_ERROR', 'SCRAPE_SITE_ERROR', 'SCRAPE_SSL_ERROR']);
 
 /** What one confirm scrape saw. */
 export type ConfirmScrape =
   /** Firecrawl returned the page, with whatever status the site answered. */
   | { kind: 'loaded'; statusCode: number | null; markdown: string; title: string | null; contentType: string | null }
-  /** Firecrawl answered 408: the page did not finish loading within the timeout. */
+  /** Firecrawl answered 408 SCRAPE_TIMEOUT: the page did not finish loading within the timeout. */
   | { kind: 'timed_out'; error: string }
+  /** Firecrawl could not reach the site at all (DNS, connection, TLS). */
+  | { kind: 'unreachable'; code: string; error: string }
   /** Firecrawl could not be asked, or failed on its side: says nothing about the page. */
   | { kind: 'unavailable'; reason: string };
 
@@ -211,9 +249,13 @@ export type ConfirmScrape =
  * Responses: a page that answered with an error status is still a document,
  * with the site's status in `data.metadata.statusCode`, and costs 1 credit
  * (https://docs.firecrawl.dev/billing). 408 means the page took longer than
- * `timeout` to load; 402, 429 and 5xx are Firecrawl's side
+ * `timeout` to load (code SCRAPE_TIMEOUT; CONCURRENCY_QUEUE_TIMEOUT is
+ * Firecrawl's own queue); 402, 429 and 5xx are Firecrawl's side
  * (https://docs.firecrawl.dev/api-reference/errors) and cost nothing, since
- * no document came back.
+ * no document came back, except the site-unreachable codes above. 403
+ * UNSUPPORTED_SITE is a site Firecrawl will not scrape, not a bad key.
+ * When our own abort fires first, Firecrawl may still finish and charge the
+ * credit.
  */
 export async function confirmScrape(key: string, url: string): Promise<ConfirmScrape> {
   let res: Response;
@@ -230,25 +272,37 @@ export async function confirmScrape(key: string, url: string): Promise<ConfirmSc
         maxAge: 0,
         headers: { 'User-Agent': SITE_WATCH_USER_AGENT },
       }),
-      signal: AbortSignal.timeout(CONFIRM_TIMEOUT_MS + 10_000),
+      signal: AbortSignal.timeout(CONFIRM_WORST_CASE_MS),
     });
   } catch (err) {
     return { kind: 'unavailable', reason: `FIRECRAWL_UNREACHABLE: ${String(err).slice(0, 120)}` };
   }
   const text = await res.text().catch(() => '');
-  if (res.status === 408) return { kind: 'timed_out', error: errorText(text) || 'Request Timeout' };
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) return { kind: 'unavailable', reason: 'FIRECRAWL_AUTH_FAILED' };
-    if (res.status === 402) return { kind: 'unavailable', reason: 'FIRECRAWL_NO_CREDITS' };
-    if (res.status === 429) return { kind: 'unavailable', reason: 'FIRECRAWL_RATE_LIMITED' };
-    return { kind: 'unavailable', reason: `FIRECRAWL_HTTP_${res.status}: ${errorText(text).slice(0, 120)}` };
-  }
-  let json: { data?: { markdown?: unknown; metadata?: Record<string, unknown> } };
+  let json: { success?: unknown; code?: unknown; error?: unknown; data?: { markdown?: unknown; metadata?: Record<string, unknown> } } | null;
   try {
     json = text ? JSON.parse(text) : {};
   } catch {
-    return { kind: 'unavailable', reason: 'FIRECRAWL_BAD_JSON' };
+    json = null;
   }
+  const code = typeof json?.code === 'string' ? json.code : '';
+  const error = typeof json?.error === 'string' ? json.error : text.slice(0, 200);
+  if (SITE_UNREACHABLE_CODES.has(code)) return { kind: 'unreachable', code, error: error.slice(0, 300) };
+  if (res.status === 408) {
+    if (code === 'CONCURRENCY_QUEUE_TIMEOUT') return { kind: 'unavailable', reason: 'FIRECRAWL_QUEUE_TIMEOUT' };
+    return { kind: 'timed_out', error: error || 'Request Timeout' };
+  }
+  if (!res.ok) {
+    if (res.status === 401) return { kind: 'unavailable', reason: 'FIRECRAWL_AUTH_FAILED' };
+    if (res.status === 403) {
+      if (code === 'UNSUPPORTED_SITE') return { kind: 'unavailable', reason: 'FIRECRAWL_UNSUPPORTED_SITE' };
+      return { kind: 'unavailable', reason: code ? `FIRECRAWL_403_${code}` : 'FIRECRAWL_AUTH_FAILED' };
+    }
+    if (res.status === 402) return { kind: 'unavailable', reason: 'FIRECRAWL_NO_CREDITS' };
+    if (res.status === 429) return { kind: 'unavailable', reason: 'FIRECRAWL_RATE_LIMITED' };
+    return { kind: 'unavailable', reason: `FIRECRAWL_HTTP_${res.status}${code ? ` ${code}` : ''}: ${error.slice(0, 120)}` };
+  }
+  if (!json) return { kind: 'unavailable', reason: 'FIRECRAWL_BAD_JSON' };
+  if (json.success === false) return { kind: 'unavailable', reason: `FIRECRAWL_${code || 'FAILED'}: ${error.slice(0, 120)}` };
   const meta = json.data?.metadata ?? {};
   const rawTitle = Array.isArray(meta.title) ? meta.title[0] : meta.title;
   return {
@@ -258,15 +312,6 @@ export async function confirmScrape(key: string, url: string): Promise<ConfirmSc
     title: typeof rawTitle === 'string' ? rawTitle : null,
     contentType: typeof meta.contentType === 'string' ? meta.contentType : null,
   };
-}
-
-function errorText(body: string): string {
-  try {
-    const j = JSON.parse(body) as { error?: unknown };
-    return typeof j.error === 'string' ? j.error : '';
-  } catch {
-    return body.slice(0, 200);
-  }
 }
 
 /** "Skip to content" and its kin: an accessibility link, not content. */
@@ -319,17 +364,34 @@ export interface ConfirmVerdict {
   statusCode: number | null;
 }
 
-/** Does a confirm scrape reproduce the suspect's failure? */
-export function judgeConfirmation(scrape: ConfirmScrape): ConfirmVerdict {
+/**
+ * Does a confirm scrape reproduce the suspect's failure? The rule, for a
+ * suspect of kind `problem`:
+ *   - Firecrawl could not run it (402, 429, 5xx, queue timeout, bad key):
+ *     inconclusive;
+ *   - the site could not be reached (DNS, connection, TLS): broken for an
+ *     HTTP error or load failure, inconclusive for a judged break;
+ *   - 408, the page did not load in time: broken for a load failure only,
+ *     inconclusive otherwise (a slow page is not an error screen or a 5xx);
+ *   - the page answered 5xx or a 4xx other than 401/403/407/429: broken,
+ *     whatever the suspect's kind; 401/403/407/429: inconclusive;
+ *   - no status and no content: inconclusive;
+ *   - a non-HTML page that loaded: healthy;
+ *   - otherwise the settled markdown decides: blank, only a skip link, or a
+ *     short page (≤ 200 characters besides skip links) showing an error or
+ *     loading screen is broken; anything else is healthy.
+ */
+export function judgeConfirmation(scrape: ConfirmScrape, problem: PageProblem['problem']): ConfirmVerdict {
   if (scrape.kind === 'unavailable') {
     return { outcome: 'inconclusive', detail: `The confirm scrape could not run (${scrape.reason}).`, statusCode: null };
   }
+  if (scrape.kind === 'unreachable') {
+    const detail = `Loaded again, the site could not be reached (${scrape.code}: ${scrape.error.slice(0, 160)}).`;
+    return { outcome: isHardProblem(problem) ? 'broken' : 'inconclusive', detail, statusCode: null };
+  }
   if (scrape.kind === 'timed_out') {
-    return {
-      outcome: 'broken',
-      detail: `Loaded again, the page still did not finish loading within ${CONFIRM_TIMEOUT_MS / 1000} seconds.`,
-      statusCode: null,
-    };
+    const detail = `Loaded again, the page did not finish loading within ${CONFIRM_TIMEOUT_MS / 1000} seconds.`;
+    return { outcome: problem === 'load_error' ? 'broken' : 'inconclusive', detail, statusCode: null };
   }
   const code = scrape.statusCode;
   if (code !== null && code >= 400) {
@@ -337,7 +399,7 @@ export function judgeConfirmation(scrape: ConfirmScrape): ConfirmVerdict {
     if (NOT_BREAKAGE.has(code)) {
       return { outcome: 'inconclusive', detail: `Loaded again, the page answered HTTP ${code}.`, statusCode: code };
     }
-    return { outcome: 'broken', detail: `Loaded again, the page still returned HTTP ${code}.`, statusCode: code };
+    return { outcome: 'broken', detail: `Loaded again, the page returned HTTP ${code}.`, statusCode: code };
   }
   if (code === null && scrape.markdown.trim() === '') {
     return { outcome: 'inconclusive', detail: 'Loaded again, Firecrawl returned neither a status nor content.', statusCode: null };
@@ -540,10 +602,13 @@ export interface ProcessDeps {
   classify: (db: SupabaseClient, reportId: string, projectId: string) => Promise<void>;
 }
 
-/** The confirm scrapes one poll run may still start, over every watch. */
+/** The confirm scrapes one watch may still start in this poll run. */
 export interface ConfirmBudget {
   remaining: number;
-  /** Epoch ms after which no new confirm scrape starts. */
+  /**
+   * Epoch ms by which every confirm scrape must be able to finish: one starts
+   * only while now + CONFIRM_WORST_CASE_MS is at or before it.
+   */
   deadline: number;
 }
 
@@ -555,9 +620,18 @@ export interface SettleDeps extends ProcessDeps {
 
 /** How a filed page was seen failing a second time. */
 export interface FilingEvidence {
-  basis: 'confirm_scrape' | 'two_checks' | 'outage_sample';
+  /**
+   * `unconfirmed` (a confident judgment whose confirms stayed inconclusive)
+   * and `flapping` (a 5xx found healthy again and again) file at low severity.
+   */
+  basis: 'confirm_scrape' | 'two_checks' | 'outage_sample' | 'unconfirmed' | 'flapping';
   detail: string;
   statusCode: number | null;
+}
+
+/** Evidence weak enough to file at low severity, and never into an outage report. */
+function isWeakEvidence(evidence: FilingEvidence | undefined): boolean {
+  return evidence?.basis === 'unconfirmed' || evidence?.basis === 'flapping';
 }
 
 /**
@@ -604,12 +678,17 @@ export function buildSiteWatchReport(
         : `${path} looks broken`;
   // A 5xx is the site failing; a load error can be Firecrawl's side (a
   // timeout, an anti-bot wall), so it files at medium until the diagnosis
-  // says otherwise.
-  const severity = problem.statusCode !== null && problem.statusCode >= 500 ? 'high' : 'medium';
+  // says otherwise. Weak evidence files at low.
+  const severity = isWeakEvidence(evidence)
+    ? 'low'
+    : problem.statusCode !== null && problem.statusCode >= 500
+      ? 'high'
+      : 'medium';
+  const mark = evidence?.basis === 'unconfirmed' ? ' (unconfirmed)' : evidence?.basis === 'flapping' ? ' (intermittent)' : '';
   return {
     id: crypto.randomUUID(),
     project_id: projectId,
-    title: `Live site: ${headline}`.slice(0, 200),
+    title: `Live site: ${headline}${mark}`.slice(0, 200),
     description:
       `${problem.detail}\n\n` +
       (evidence ? `Seen again: ${evidence.detail}\n\n` : '') +
@@ -706,12 +785,32 @@ export interface ProcessResult {
 interface FindingRow {
   id: string;
   url: string;
+  problem: PageProblem['problem'] | null;
   resolved_at: string | null;
   report_id: string | null;
   /** Null while the page is a suspect; set when its report is filed. */
   confirmed_at: string | null;
   fail_streak: number | null;
   last_failed_check_id: string | null;
+  judge_fail_open: boolean | null;
+}
+
+/**
+ * Filed, not a suspect. The poll deployed before ADR 0029 files rows with
+ * `report_id` set and `confirmed_at` null; those are filed too.
+ */
+export function isFiled(row: { confirmed_at?: string | null; report_id?: string | null }): boolean {
+  return Boolean(row.confirmed_at || row.report_id);
+}
+
+/**
+ * An open judged break the next check shows unchanged. The judge runs only
+ * on a page that changed, so `same` means the page still shows what the
+ * judge called broken: not a sign it recovered.
+ */
+function stillShowsJudgedBreak(row: FindingRow, page: MonitorPage): boolean {
+  if (row.problem !== 'judged_broken' || page.status !== 'same') return false;
+  return typeof page.statusCode !== 'number' || page.statusCode < 400;
 }
 
 /**
@@ -720,13 +819,16 @@ interface FindingRow {
  *
  * - A page that is fine again resolves its row: a filed finding is closed,
  *   a suspect is dropped. Either way, filing again needs a second
- *   observation again.
+ *   observation again. An open judged break stays open on `same` (see
+ *   `stillShowsJudgedBreak`); it closes on a change the judge does not call
+ *   broken, on a healthy confirm scrape, or when the page is removed.
  * - A suspect seen failing again by a later check counts that check once
  *   (two polls can read the same check; `last_failed_check_id` keeps it to
- *   one), and only an HTTP error or a load failure adds to `fail_streak`.
+ *   one), and earns fresh confirm attempts. Only an HTTP error or a load
+ *   failure adds to `fail_streak`.
  * - A newly broken page is CLAIMED as a suspect row (unique per watch and
  *   url, or a conditional reopen of a resolved row), so overlapping polls
- *   record it once.
+ *   record it once. A reopen keeps `flap_dismissals`.
  */
 export async function processCheck(
   db: SupabaseClient,
@@ -740,7 +842,7 @@ export async function processCheck(
 
   const { data: existingRows, error: readErr } = await db
     .from('site_watch_pages')
-    .select('id, url, resolved_at, report_id, confirmed_at, fail_streak, last_failed_check_id')
+    .select('id, url, problem, resolved_at, report_id, confirmed_at, fail_streak, last_failed_check_id, judge_fail_open')
     .eq('watch_id', watch.id);
   if (readErr) throw new Error(`site_watch_pages read failed: ${readErr.message}`);
   const existing = new Map(((existingRows ?? []) as FindingRow[]).map((r) => [r.url, r]));
@@ -749,20 +851,35 @@ export async function processCheck(
     const problem = classifyPage(page);
     const row = existing.get(page.url);
     if (!problem) {
-      // No longer broken: it loads, it was removed from the site, or
-      // Firecrawl now skips it on purpose.
+      if (row && !row.resolved_at && stillShowsJudgedBreak(row, page)) {
+        result.broken++;
+        const patch: Record<string, unknown> = { last_seen_at: nowIso };
+        if (!isFiled(row)) {
+          result.suspects++;
+          if (row.last_failed_check_id !== checkId) {
+            patch.last_failed_check_id = checkId;
+            patch.confirm_attempts = 0;
+          }
+        }
+        await db.from('site_watch_pages').update(patch).eq('id', row.id);
+        continue;
+      }
+      // No longer broken: it loads, it was removed from the site, it changed
+      // in a way the judge does not call broken, or Firecrawl now skips it
+      // on purpose.
       if (row && !row.resolved_at) {
         await db
           .from('site_watch_pages')
           .update({ resolved_at: nowIso, fail_streak: 0, confirm_attempts: 0 })
           .eq('id', row.id)
           .is('resolved_at', null);
-        if (row.confirmed_at) result.resolved++;
+        if (isFiled(row)) result.resolved++;
       }
       continue;
     }
     result.broken++;
     const hard = isHardProblem(problem.problem);
+    const failOpen = Boolean(problem.judgeFailOpen);
 
     if (row && !row.resolved_at) {
       const patch: Record<string, unknown> = {
@@ -770,8 +887,10 @@ export async function processCheck(
         status_code: problem.statusCode,
         detail: problem.detail,
         problem: problem.problem,
+        // A suspect a confident judgment ever named stays a confident one.
+        judge_fail_open: hard ? false : Boolean(row.judge_fail_open) && failOpen,
       };
-      if (!row.confirmed_at) {
+      if (!isFiled(row)) {
         result.suspects++;
         if (row.last_failed_check_id !== checkId) {
           patch.last_failed_check_id = checkId;
@@ -800,6 +919,8 @@ export async function processCheck(
       confirm_attempts: 0,
       last_confirm_at: null,
       last_confirm: null,
+      judge_fail_open: failOpen,
+      inconclusive_checks: 0,
     };
     if (row) {
       const { data, error } = await db
@@ -844,41 +965,149 @@ export interface SettleResult {
 
 interface SuspectRow {
   id: string;
+  watch_id?: string;
   url: string;
   problem: PageProblem['problem'];
   status_code: number | null;
   detail: string | null;
+  first_seen_at: string | null;
   fail_streak: number | null;
   confirm_attempts: number | null;
   last_confirm_at: string | null;
+  last_confirm: { outcome?: string; checkId?: string | null } | null;
+  last_failed_check_id: string | null;
+  judge_fail_open: boolean | null;
+  inconclusive_checks: number | null;
+  flap_dismissals: string[] | null;
 }
 
-function suspectProblem(s: SuspectRow, statusCode?: number | null): PageProblem {
+const SUSPECT_COLUMNS =
+  'id, watch_id, url, problem, status_code, detail, first_seen_at, fail_streak, confirm_attempts, last_confirm_at, ' +
+  'last_confirm, last_failed_check_id, judge_fail_open, inconclusive_checks, flap_dismissals';
+
+/** May this suspect get a confirm scrape now (budget and deadline aside)? */
+function confirmEligible(s: SuspectRow, now: Date, baseUrl: string): boolean {
+  if ((s.confirm_attempts ?? 0) >= CONFIRM_ATTEMPTS_PER_CHECK) return false;
+  if (s.last_confirm_at && now.getTime() - Date.parse(s.last_confirm_at) < CONFIRM_RETRY_AFTER_MS) return false;
+  return sameSite(s.url, baseUrl);
+}
+
+/** Suspects of one watch that could take a confirm scrape now. */
+export interface WatchSuspects {
+  watchId: string;
+  /** first_seen_at of its oldest pending suspect. */
+  oldestPendingAt: string;
+  eligible: number;
+}
+
+/**
+ * The confirm-eligible suspects of each watch, for `allocateConfirms`. Rows
+ * the old poll filed (`report_id` set) are not suspects.
+ */
+export async function pendingConfirmsByWatch(
+  db: SupabaseClient,
+  watches: SiteWatchRow[],
+  now: Date,
+): Promise<WatchSuspects[]> {
+  if (watches.length === 0) return [];
+  const { data, error } = await db
+    .from('site_watch_pages')
+    .select(SUSPECT_COLUMNS)
+    .in(
+      'watch_id',
+      watches.map((w) => w.id),
+    )
+    .is('resolved_at', null)
+    .is('confirmed_at', null)
+    .is('report_id', null);
+  if (error) throw new Error(`site_watch_pages pending read failed: ${error.message}`);
+  const base = new Map(watches.map((w) => [w.id, w.base_url]));
+  const byWatch = new Map<string, WatchSuspects>();
+  for (const s of (data ?? []) as unknown as SuspectRow[]) {
+    const baseUrl = s.watch_id ? base.get(s.watch_id) : undefined;
+    if (!baseUrl || !confirmEligible(s, now, baseUrl)) continue;
+    const seen = s.first_seen_at ?? now.toISOString();
+    const w = byWatch.get(s.watch_id!) ?? { watchId: s.watch_id!, oldestPendingAt: seen, eligible: 0 };
+    w.eligible++;
+    if (seen < w.oldestPendingAt) w.oldestPendingAt = seen;
+    byWatch.set(s.watch_id!, w);
+  }
+  return [...byWatch.values()];
+}
+
+/**
+ * Share a run's confirm scrapes fairly: watches in order of their oldest
+ * pending suspect, each gets one before any gets a second, never more than
+ * `perWatch` or than it has eligible suspects.
+ */
+export function allocateConfirms(
+  watches: WatchSuspects[],
+  total: number,
+  perWatch = CONFIRM_SCRAPES_PER_WATCH,
+): Map<string, number> {
+  const order = watches
+    .slice()
+    .sort((a, b) => (a.oldestPendingAt < b.oldestPendingAt ? -1 : a.oldestPendingAt > b.oldestPendingAt ? 1 : 0));
+  const out = new Map<string, number>();
+  let remaining = total;
+  for (let round = 0; round < perWatch && remaining > 0; round++) {
+    for (const w of order) {
+      if (remaining <= 0) break;
+      const have = out.get(w.watchId) ?? 0;
+      if (have >= Math.min(perWatch, w.eligible)) continue;
+      out.set(w.watchId, have + 1);
+      remaining--;
+    }
+  }
+  return out;
+}
+
+/**
+ * The problem a filed suspect reports. The confirm scrape's status code
+ * replaces the crawl's only when it is an error (≥ 400): a 200 from a page
+ * that is still a blank shell must not title the report "returns HTTP 200".
+ */
+function suspectProblem(s: SuspectRow, confirmStatus?: number | null): PageProblem {
   return {
     problem: s.problem,
-    statusCode: statusCode ?? s.status_code,
+    statusCode: confirmStatus != null && confirmStatus >= 400 ? confirmStatus : s.status_code,
     detail: s.detail?.trim() || 'The page looked broken in the last check.',
   };
 }
+
+/** Dismissals of a 5xx inside the flapping window, oldest first. */
+function recentDismissals(list: string[] | null, now: Date): string[] {
+  return (Array.isArray(list) ? list : []).filter(
+    (t) => typeof t === 'string' && now.getTime() - Date.parse(t) < FLAP_WINDOW_MS,
+  );
+}
+
+type Filing = { s: SuspectRow; problem: PageProblem; title: string | null; evidence: FilingEvidence };
 
 /**
  * File the suspects that were seen failing a second time; drop the ones a
  * confirm scrape finds healthy.
  *
- * 1. Up to CONFIRM_SCRAPES_PER_WATCH suspects (and what is left of the run's
- *    budget) get a confirm scrape: measured failures first. Each is claimed
- *    first (`confirm_attempts` compare-and-set) so overlapping polls do not
- *    scrape the same page twice.
- * 2. A confirm scrape decides when it is conclusive: still broken files,
- *    healthy drops the suspect. Inconclusive (Firecrawl failed, an auth wall)
- *    leaves it for the rule below or a later poll.
+ * 1. Up to `deps.budget.remaining` suspects (the watch's share of the run,
+ *    `allocateConfirms`) get a confirm scrape: measured failures first. Each
+ *    is claimed first (`confirm_attempts` compare-and-set) so overlapping
+ *    polls do not scrape the same page twice. None starts when it could not
+ *    finish by the run deadline.
+ * 2. A confirm scrape decides when it is conclusive (`judgeConfirmation`):
+ *    broken files, healthy drops the suspect, except that a 5xx found
+ *    healthy FLAP_DISMISSALS times within FLAP_WINDOW_MS files at low
+ *    severity as intermittent. Inconclusive leaves it for the rules below
+ *    or a later poll.
  * 3. An HTTP error or load failure seen in two checks in a row files without
- *    a conclusive confirm scrape. A judged break never does.
+ *    a conclusive confirm scrape. A confident judged break whose confirms
+ *    stayed inconclusive in UNCONFIRMED_AFTER_CHECKS checks files at low
+ *    severity, marked unconfirmed. A fail-open judgment never files here.
  * 4. Five or more suspects of one kind, with at least two sampled and still
  *    broken and none sampled healthy, file together as one outage.
  *
- * Filing claims each row (`confirmed_at` set where still null), so a page
- * files once; a failed report insert gives the claim back.
+ * Filing claims each row (`confirmed_at` set where it and `report_id` are
+ * still null), so a page files once; a failed report insert gives the claim
+ * back.
  */
 export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, deps: SettleDeps): Promise<SettleResult> {
   const now = deps.now();
@@ -887,12 +1116,13 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
 
   const { data: rows, error: readErr } = await db
     .from('site_watch_pages')
-    .select('id, url, problem, status_code, detail, fail_streak, confirm_attempts, last_confirm_at')
+    .select(SUSPECT_COLUMNS)
     .eq('watch_id', watch.id)
     .is('resolved_at', null)
-    .is('confirmed_at', null);
+    .is('confirmed_at', null)
+    .is('report_id', null);
   if (readErr) throw new Error(`site_watch_pages suspects read failed: ${readErr.message}`);
-  const suspects = ((rows ?? []) as SuspectRow[])
+  const suspects = ((rows ?? []) as unknown as SuspectRow[])
     .slice()
     .sort(
       (a, b) =>
@@ -904,17 +1134,16 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
   const sampled: SuspectRow[] = [];
   for (const s of suspects) {
     if (sampled.length >= CONFIRM_SCRAPES_PER_WATCH) break;
-    if (deps.budget.remaining <= 0 || now.getTime() > deps.budget.deadline) break;
+    if (deps.budget.remaining <= 0 || now.getTime() + CONFIRM_WORST_CASE_MS > deps.budget.deadline) break;
+    if (!confirmEligible(s, now, watch.base_url)) continue;
     const attempts = s.confirm_attempts ?? 0;
-    if (attempts >= CONFIRM_ATTEMPTS_PER_CHECK) continue;
-    if (s.last_confirm_at && now.getTime() - Date.parse(s.last_confirm_at) < CONFIRM_RETRY_AFTER_MS) continue;
-    if (!sameSite(s.url, watch.base_url)) continue;
     const { data: won, error: claimErr } = await db
       .from('site_watch_pages')
       .update({ confirm_attempts: attempts + 1, last_confirm_at: nowIso })
       .eq('id', s.id)
       .eq('confirm_attempts', attempts)
       .is('confirmed_at', null)
+      .is('report_id', null)
       .is('resolved_at', null)
       .select('id');
     if (claimErr || !won || (won as unknown[]).length === 0) continue;
@@ -928,38 +1157,72 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
       const scrape = await deps
         .confirm(s.url)
         .catch((err): ConfirmScrape => ({ kind: 'unavailable', reason: String(err).slice(0, 120) }));
-      return { s, scrape, verdict: judgeConfirmation(scrape) };
+      return { s, scrape, verdict: judgeConfirmation(scrape, s.problem) };
     }),
   );
   result.scrapes = verdicts.length;
 
-  const toFile = new Map<string, { s: SuspectRow; problem: PageProblem; title: string | null; evidence: FilingEvidence }>();
+  const toFile = new Map<string, Filing>();
   const healthy = new Set<string>();
+  const inconclusiveChecks = new Map<string, number>();
   for (const { s, scrape, verdict } of verdicts) {
-    const lastConfirm = { outcome: verdict.outcome, detail: verdict.detail, statusCode: verdict.statusCode, at: nowIso };
+    const lastConfirm = {
+      outcome: verdict.outcome,
+      detail: verdict.detail,
+      statusCode: verdict.statusCode,
+      at: nowIso,
+      checkId: s.last_failed_check_id,
+    };
     if (verdict.outcome === 'healthy') {
+      const flapping = s.problem === 'http_error' && (s.status_code ?? 0) >= 500;
+      const dismissals = flapping ? [...recentDismissals(s.flap_dismissals, now), nowIso] : recentDismissals(s.flap_dismissals, now);
+      if (flapping && dismissals.length >= FLAP_DISMISSALS) {
+        await db.from('site_watch_pages').update({ last_confirm: lastConfirm, flap_dismissals: dismissals }).eq('id', s.id);
+        toFile.set(s.id, {
+          s,
+          problem: suspectProblem(s),
+          title: scrape.kind === 'loaded' ? scrape.title : null,
+          evidence: {
+            basis: 'flapping',
+            detail:
+              `The crawl saw HTTP ${s.status_code} on this page ${dismissals.length} times in ` +
+              `${FLAP_WINDOW_MS / 86_400_000} days, and each time it loaded fine a few minutes later.`,
+            statusCode: s.status_code,
+          },
+        });
+        continue;
+      }
       healthy.add(s.id);
       await db
         .from('site_watch_pages')
-        .update({ resolved_at: nowIso, fail_streak: 0, confirm_attempts: 0, last_confirm: lastConfirm })
+        .update({ resolved_at: nowIso, fail_streak: 0, confirm_attempts: 0, last_confirm: lastConfirm, flap_dismissals: dismissals })
         .eq('id', s.id)
         .is('confirmed_at', null)
+        .is('report_id', null)
         .is('resolved_at', null);
       result.dismissed++;
       continue;
     }
-    await db.from('site_watch_pages').update({ last_confirm: lastConfirm }).eq('id', s.id);
+    const patch: Record<string, unknown> = { last_confirm: lastConfirm };
+    if (verdict.outcome === 'inconclusive') {
+      // Count each check once, however many confirms ran for it.
+      const counted = s.last_confirm?.outcome === 'inconclusive' && s.last_confirm?.checkId === s.last_failed_check_id;
+      const n = (s.inconclusive_checks ?? 0) + (counted ? 0 : 1);
+      inconclusiveChecks.set(s.id, n);
+      patch.inconclusive_checks = n;
+    }
+    await db.from('site_watch_pages').update(patch).eq('id', s.id);
     if (verdict.outcome === 'broken') {
       toFile.set(s.id, {
         s,
-        problem: suspectProblem(s, isHardProblem(s.problem) ? verdict.statusCode : undefined),
+        problem: suspectProblem(s, verdict.statusCode),
         title: scrape.kind === 'loaded' ? scrape.title : null,
         evidence: { basis: 'confirm_scrape', detail: verdict.detail, statusCode: verdict.statusCode },
       });
     }
   }
 
-  // 3. Two checks in a row, for measured failures only.
+  // 3. Two checks in a row for measured failures; unconfirmed for confident judgments.
   for (const s of suspects) {
     if (toFile.has(s.id) || healthy.has(s.id)) continue;
     if (isHardProblem(s.problem) && (s.fail_streak ?? 0) >= 2) {
@@ -968,6 +1231,22 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
         problem: suspectProblem(s),
         title: null,
         evidence: { basis: 'two_checks', detail: 'The page failed in two checks in a row.', statusCode: s.status_code },
+      });
+      continue;
+    }
+    const inconclusive = inconclusiveChecks.get(s.id) ?? s.inconclusive_checks ?? 0;
+    if (s.problem === 'judged_broken' && !s.judge_fail_open && inconclusive >= UNCONFIRMED_AFTER_CHECKS) {
+      toFile.set(s.id, {
+        s,
+        problem: suspectProblem(s),
+        title: null,
+        evidence: {
+          basis: 'unconfirmed',
+          detail:
+            `Firecrawl's checker called the page broken, and Mushi could not load it again to confirm in ` +
+            `${inconclusive} checks (the confirm scrapes failed on Firecrawl's side or were blocked).`,
+          statusCode: s.status_code,
+        },
       });
     }
   }
@@ -980,7 +1259,7 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
     const stillBroken = ofKind.filter((v) => v.verdict.outcome === 'broken').length;
     if (stillBroken < OUTAGE_SAMPLE_BROKEN || ofKind.some((v) => v.verdict.outcome === 'healthy')) continue;
     for (const s of kind) {
-      if (toFile.has(s.id)) continue;
+      if (toFile.has(s.id) && !isWeakEvidence(toFile.get(s.id)!.evidence)) continue;
       toFile.set(s.id, {
         s,
         problem: suspectProblem(s),
@@ -996,13 +1275,14 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
   if (toFile.size === 0) return result;
 
   // Claim each page for filing; a concurrent poll that already did skips it.
-  const claimed: Array<{ s: SuspectRow; problem: PageProblem; title: string | null; evidence: FilingEvidence }> = [];
+  const claimed: Filing[] = [];
   for (const f of toFile.values()) {
     const { data, error } = await db
       .from('site_watch_pages')
       .update({ confirmed_at: nowIso })
       .eq('id', f.s.id)
       .is('confirmed_at', null)
+      .is('report_id', null)
       .is('resolved_at', null)
       .select('id');
     if (error) {
@@ -1015,23 +1295,29 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
   result.confirmed = claimed.length;
   if (claimed.length === 0) return result;
 
-  const groups =
-    claimed.length >= OUTAGE_PAGE_THRESHOLD
+  // Weak evidence (unconfirmed, intermittent) always files on its own, at low.
+  const strong = claimed.filter((c) => !isWeakEvidence(c.evidence));
+  const weak = claimed.filter((c) => isWeakEvidence(c.evidence));
+  const single = (c: Filing) => ({
+    report: buildSiteWatchReport(watch.project_id, c.s.url, c.problem, c.title, now, c.evidence),
+    members: [c],
+  });
+  const groups = [
+    ...(strong.length >= OUTAGE_PAGE_THRESHOLD
       ? [
           {
             report: buildSiteOutageReport(
               watch.project_id,
               watch.base_url,
-              claimed.map((c) => ({ url: c.s.url, problem: c.problem, evidence: c.evidence })),
+              strong.map((c) => ({ url: c.s.url, problem: c.problem, evidence: c.evidence })),
               now,
             ),
-            members: claimed,
+            members: strong,
           },
         ]
-      : claimed.map((c) => ({
-          report: buildSiteWatchReport(watch.project_id, c.s.url, c.problem, c.title, now, c.evidence),
-          members: [c],
-        }));
+      : strong.map(single)),
+    ...weak.map(single),
+  ];
 
   for (const g of groups) {
     const { error: insErr } = await db.from('reports').insert(g.report);
@@ -1045,7 +1331,10 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
       continue;
     }
     for (const m of g.members) {
-      await db.from('site_watch_pages').update({ report_id: g.report.id }).eq('id', m.s.id);
+      // A filed flap starts its count again.
+      const patch: Record<string, unknown> = { report_id: g.report.id };
+      if (m.evidence.basis === 'flapping') patch.flap_dismissals = [];
+      await db.from('site_watch_pages').update(patch).eq('id', m.s.id);
     }
     result.filed++;
     await deps.classify(db, g.report.id as string, watch.project_id);

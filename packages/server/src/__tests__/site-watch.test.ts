@@ -130,11 +130,13 @@ function makeDb(pages: Array<Record<string, unknown>> = [], opts: { failReports?
           for (const r of rows()) pages.splice(pages.indexOf(r), 1)
           return { data: null, error: null }
         }
-        return { data: rows(), error: null }
+        // A snapshot, like PostgREST: later writes do not change rows already read.
+        return { data: rows().map((r) => structuredClone(r)), error: null }
       }
       const q: Record<string, unknown> = {
         select: () => ((returning = op !== 'select'), q),
         eq: (col: string, v: unknown) => (filters.push((r) => r[col] === v), q),
+        in: (col: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[col])), q),
         is: (col: string, v: unknown) => (filters.push((r) => (r[col] ?? null) === v), q),
         not: (col: string, _op: string, v: unknown) => (filters.push((r) => (r[col] ?? null) !== v), q),
         update: (p: Record<string, unknown>) => ((op = 'update'), (patch = p), q),
@@ -215,39 +217,58 @@ describe('judge fail-open is not evidence', () => {
   })
 })
 
+type Problem = Parameters<typeof sw.judgeConfirmation>[1]
+const jc = (scrape: Parameters<typeof sw.judgeConfirmation>[0], problem: Problem = 'judged_broken') =>
+  sw.judgeConfirmation(scrape, problem)
+
 describe('judgeConfirmation: does the settled page still fail?', () => {
   it('a skip-link-only first frame is broken; the settled article is not', () => {
-    expect(sw.judgeConfirmation(loaded(SKIP_LINK_FRAME))).toMatchObject({ outcome: 'broken' })
-    expect(sw.judgeConfirmation(loaded(SKIP_LINK_FRAME)).detail).toMatch(/only a skip link/)
-    expect(sw.judgeConfirmation(loaded(SETTLED_ARTICLE))).toMatchObject({ outcome: 'healthy', statusCode: 200 })
+    expect(jc(loaded(SKIP_LINK_FRAME))).toMatchObject({ outcome: 'broken' })
+    expect(jc(loaded(SKIP_LINK_FRAME)).detail).toMatch(/only a skip link/)
+    expect(jc(loaded(SETTLED_ARTICLE))).toMatchObject({ outcome: 'healthy', statusCode: 200 })
   })
 
   it('a boot card or a mid-request status line is a loading screen; the hydrated page is not', () => {
-    expect(sw.judgeConfirmation(loaded(BOOT_CARD)).detail).toMatch(/loading screen/)
-    expect(sw.judgeConfirmation(loaded(DEMO_STATUS_LINE))).toMatchObject({ outcome: 'broken' })
-    expect(sw.judgeConfirmation(loaded(SETTLED_LEGAL))).toMatchObject({ outcome: 'healthy' })
+    expect(jc(loaded(BOOT_CARD)).detail).toMatch(/loading screen/)
+    expect(jc(loaded(DEMO_STATUS_LINE))).toMatchObject({ outcome: 'broken' })
+    expect(jc(loaded(SETTLED_LEGAL))).toMatchObject({ outcome: 'healthy' })
   })
 
   it('error-panel copy beside real content is not an error screen', () => {
-    expect(sw.judgeConfirmation(loaded(SHOP_CATALOG))).toMatchObject({ outcome: 'healthy' })
-    expect(sw.judgeConfirmation(loaded('# Application error: a client-side exception has occurred'))).toMatchObject({ outcome: 'broken' })
+    expect(jc(loaded(SHOP_CATALOG))).toMatchObject({ outcome: 'healthy' })
+    expect(jc(loaded('# Application error: a client-side exception has occurred'))).toMatchObject({ outcome: 'broken' })
   })
 
-  it('a page that stays blank, a 5xx or a 404 that reproduces, and a 408 are broken', () => {
-    expect(sw.judgeConfirmation(loaded('   \n'))).toMatchObject({ outcome: 'broken', detail: expect.stringMatching(/still blank/) })
-    expect(sw.judgeConfirmation(loaded('<h1>502 Bad Gateway</h1>', 502))).toMatchObject({ outcome: 'broken', statusCode: 502 })
-    expect(sw.judgeConfirmation(loaded('# Not found', 404))).toMatchObject({ outcome: 'broken', statusCode: 404 })
-    expect(sw.judgeConfirmation({ kind: 'timed_out', error: 'Request Timeout' })).toMatchObject({ outcome: 'broken' })
+  it('a page that stays blank, or a 5xx or 404 that reproduces, is broken for any kind of suspect', () => {
+    expect(jc(loaded('   \n'))).toMatchObject({ outcome: 'broken', detail: expect.stringMatching(/still blank/) })
+    for (const p of ['judged_broken', 'http_error', 'load_error'] as const) {
+      expect(jc(loaded('<h1>502 Bad Gateway</h1>', 502), p)).toMatchObject({ outcome: 'broken', statusCode: 502 })
+      expect(jc(loaded('# Not found', 404), p)).toMatchObject({ outcome: 'broken', statusCode: 404 })
+    }
+  })
+
+  it('a 408 is broken only for a page that did not load; a slow page is not an error screen or a 5xx', () => {
+    const timedOut = { kind: 'timed_out' as const, error: 'Request Timeout' }
+    expect(jc(timedOut, 'load_error')).toMatchObject({ outcome: 'broken' })
+    expect(jc(timedOut, 'http_error')).toMatchObject({ outcome: 'inconclusive' })
+    expect(jc(timedOut, 'judged_broken')).toMatchObject({ outcome: 'inconclusive' })
+  })
+
+  it('an unreachable site (DNS, connection, TLS) is broken for an HTTP error or load failure, not for a judgment', () => {
+    const down = { kind: 'unreachable' as const, code: 'SCRAPE_DNS_RESOLUTION_ERROR', error: 'DNS resolution failed' }
+    expect(jc(down, 'load_error')).toMatchObject({ outcome: 'broken', detail: expect.stringMatching(/SCRAPE_DNS_RESOLUTION_ERROR/) })
+    expect(jc(down, 'http_error')).toMatchObject({ outcome: 'broken' })
+    expect(jc(down, 'judged_broken')).toMatchObject({ outcome: 'inconclusive' })
   })
 
   it('an auth wall, a Firecrawl failure or an empty answer decides nothing', () => {
-    expect(sw.judgeConfirmation(loaded('Sign in', 403))).toMatchObject({ outcome: 'inconclusive' })
-    expect(sw.judgeConfirmation({ kind: 'unavailable', reason: 'FIRECRAWL_HTTP_502' })).toMatchObject({ outcome: 'inconclusive' })
-    expect(sw.judgeConfirmation(loaded('', null))).toMatchObject({ outcome: 'inconclusive' })
+    expect(jc(loaded('Sign in', 403))).toMatchObject({ outcome: 'inconclusive' })
+    expect(jc({ kind: 'unavailable', reason: 'FIRECRAWL_HTTP_502' })).toMatchObject({ outcome: 'inconclusive' })
+    expect(jc(loaded('', null))).toMatchObject({ outcome: 'inconclusive' })
   })
 
   it('a non-HTML page that loads is healthy', () => {
-    expect(sw.judgeConfirmation({ ...loaded(''), contentType: 'application/xml' })).toMatchObject({ outcome: 'healthy' })
+    expect(jc({ ...loaded(''), contentType: 'application/xml' })).toMatchObject({ outcome: 'healthy' })
   })
 })
 
@@ -292,6 +313,34 @@ describe('confirmScrape', () => {
     expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'unavailable' })
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('network down'))))
     expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'unavailable' })
+  })
+
+  it('keeps the error code: an unreachable site is not a Firecrawl failure (codes from Firecrawl source)', async () => {
+    const answer = (status: number, body: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status })))
+    // DNS failures come back as HTTP 200 with success: false (controllers/v2/scrape.ts).
+    answer(200, { success: false, code: 'SCRAPE_DNS_RESOLUTION_ERROR', error: 'DNS resolution failed for the hostname.' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toEqual({
+      kind: 'unreachable',
+      code: 'SCRAPE_DNS_RESOLUTION_ERROR',
+      error: 'DNS resolution failed for the hostname.',
+    })
+    answer(500, { success: false, code: 'SCRAPE_SITE_ERROR', error: 'net::ERR_CONNECTION_REFUSED' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'unreachable', code: 'SCRAPE_SITE_ERROR' })
+    answer(500, { success: false, code: 'SCRAPE_SSL_ERROR', error: 'certificate has expired' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'unreachable', code: 'SCRAPE_SSL_ERROR' })
+    // Anti-bot walls end in all-engines-failed too: not proof the site is down.
+    answer(500, { success: false, code: 'SCRAPE_ALL_ENGINES_FAILED', error: 'All scraping engines failed.' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'unavailable' })
+    // 408 is the page timing out, unless it was Firecrawl's own queue.
+    answer(408, { success: false, code: 'SCRAPE_TIMEOUT', error: 'Scrape timed out' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toMatchObject({ kind: 'timed_out' })
+    answer(408, { success: false, code: 'CONCURRENCY_QUEUE_TIMEOUT', error: 'Queued too long' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toEqual({ kind: 'unavailable', reason: 'FIRECRAWL_QUEUE_TIMEOUT' })
+    // A site Firecrawl will not scrape is not a bad key.
+    answer(403, { success: false, code: 'UNSUPPORTED_SITE', error: 'We do not support this site.' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toEqual({ kind: 'unavailable', reason: 'FIRECRAWL_UNSUPPORTED_SITE' })
+    answer(401, { success: false, error: 'Unauthorized' })
+    expect(await sw.confirmScrape('k', `${BASE}/a`)).toEqual({ kind: 'unavailable', reason: 'FIRECRAWL_AUTH_FAILED' })
   })
 })
 
@@ -408,7 +457,7 @@ describe('settleSuspects: file only what is seen failing twice', () => {
       severity: 'high',
       custom_metadata: { confirmation: { basis: 'confirm_scrape', statusCode: 503, waitForMs: sw.CONFIRM_WAIT_MS } },
     })
-    expect(String(report.description)).toContain('Seen again: Loaded again, the page still returned HTTP 503.')
+    expect(String(report.description)).toContain('Seen again: Loaded again, the page returned HTTP 503.')
     // No fake 0×0 viewport: the real one is unknown.
     expect(report.environment).not.toHaveProperty('viewport')
     expect(h.pages[0]).toMatchObject({ confirmed_at: '2026-10-21T01:35:00.000Z', report_id: report.id })
@@ -581,6 +630,203 @@ describe('settleSuspects: file only what is seen failing twice', () => {
     h.budget.deadline = 0
     expect((await h.settle()).scrapes).toBe(0)
     expect(h.confirm).not.toHaveBeenCalled()
+  })
+})
+
+describe('review fixes 2026-10-21 (PR #533)', () => {
+  const unavailable = { kind: 'unavailable' as const, reason: 'FIRECRAWL_HTTP_502' }
+  const same = (path: string): Page => ok(`${BASE}${path}`, 'same')
+
+  // Finding 1: a judged break the next check shows unchanged is still broken.
+  it('a persistent judged break survives `same`, gets fresh confirms, and files unconfirmed at low after 2 inconclusive checks', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(unavailable)
+    await h.check([judged('/shop', 'The page renders blank.')], 'c1')
+    await h.settle()
+    expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirm_attempts: 1 })
+
+    h.later()
+    // The page did not change, so Firecrawl's judge did not run: `same`.
+    expect(await h.check([same('/shop')], 'c2')).toEqual({ broken: 1, suspects: 1, resolved: 0 })
+    expect(h.pages[0]).toMatchObject({ resolved_at: null, last_failed_check_id: 'c2', confirm_attempts: 0 })
+
+    expect(await h.settle()).toMatchObject({ scrapes: 1, filed: 1 })
+    expect(h.reports[0]).toMatchObject({
+      title: 'Live site: /help-her-take-photo/shop looks broken (unconfirmed)',
+      severity: 'low',
+      custom_metadata: { confirmation: { basis: 'unconfirmed' } },
+    })
+  })
+
+  it('inconclusive confirms within one check count once', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(unavailable)
+    await h.check([judged('/shop', 'The page renders blank.')], 'c1')
+    for (let i = 0; i < sw.CONFIRM_ATTEMPTS_PER_CHECK; i++) {
+      await h.settle()
+      h.later()
+    }
+    expect(h.confirm).toHaveBeenCalledTimes(sw.CONFIRM_ATTEMPTS_PER_CHECK)
+    expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirmed_at: null })
+    expect(h.reports).toHaveLength(0)
+  })
+
+  it('a fail-open judgment never files unconfirmed, however long it stays', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(unavailable)
+    await h.check([judged('/', 'Judge response not valid JSON — defaulting to meaningful')], 'c1')
+    await h.settle()
+    for (const c of ['c2', 'c3', 'c4']) {
+      h.later()
+      await h.check([same('/')], c)
+      await h.settle()
+    }
+    expect(h.reports).toHaveLength(0)
+    expect(h.pages[0]).toMatchObject({ judge_fail_open: true, resolved_at: null })
+    expect(h.pages[0]!.inconclusive_checks).toBeGreaterThanOrEqual(2)
+  })
+
+  it('a judged break closes on a change the judge does not call broken, or on a healthy confirm', async () => {
+    const h = harness()
+    await h.check([judged('/a', 'The page renders blank.'), judged('/b', 'The page renders blank.')], 'c1')
+    await h.check([{ ...ok(`${BASE}/a`, 'changed'), judgment: { meaningful: false, confidence: 'high', reason: 'content restored' } }], 'c2')
+    expect(h.pages.find((p) => p.url === `${BASE}/a`)).toMatchObject({ resolved_at: expect.any(String) })
+    h.confirm.mockResolvedValue(loaded(SETTLED_ARTICLE))
+    expect(await h.settle()).toMatchObject({ dismissed: 1, filed: 0 })
+    expect(h.pages.every((p) => p.resolved_at)).toBe(true)
+  })
+
+  it('a filed judged finding stays open on `same`, so it does not file again on the next change', async () => {
+    const h = harness([{ ...filedRow('f1', '/shop'), problem: 'judged_broken' }])
+    expect(await h.check([same('/shop')], 'c1')).toEqual({ broken: 1, suspects: 0, resolved: 0 })
+    expect(h.pages[0]!.resolved_at).toBeNull()
+  })
+
+  // Finding 2: a site that is down files within the hour, as one outage.
+  it('a fully down site: the confirm sample cannot reach it, and every page files as one outage on the first poll', async () => {
+    const h = harness()
+    await h.check(
+      Array.from({ length: 6 }, (_, i): Page => ({ url: `${BASE}/p${i}`, status: 'error', statusCode: null, error: 'ERR_NAME_NOT_RESOLVED' })),
+      'c1',
+    )
+    h.confirm.mockResolvedValue({ kind: 'unreachable', code: 'SCRAPE_DNS_RESOLUTION_ERROR', error: 'DNS resolution failed' })
+    expect(await h.settle()).toMatchObject({ scrapes: sw.CONFIRM_SCRAPES_PER_WATCH, confirmed: 6, filed: 1 })
+    expect(h.reports[0]).toMatchObject({ title: 'Live site: 6 pages broke at once', severity: 'critical' })
+  })
+
+  // Finding 4: a 408 on judged suspects is not an outage.
+  it('a burst of judged suspects that only time out files nothing', async () => {
+    const h = harness()
+    await h.check(Array.from({ length: 6 }, (_, i) => judged(`/p${i}`, 'The page shows only a loading message.')), 'c1')
+    h.confirm.mockResolvedValue({ kind: 'timed_out', error: 'Request Timeout' })
+    expect(await h.settle()).toMatchObject({ scrapes: sw.CONFIRM_SCRAPES_PER_WATCH, filed: 0 })
+    expect(h.reports).toHaveLength(0)
+  })
+
+  // Finding 5: a 5xx that keeps coming back but loads on every confirm.
+  it('a flapping 5xx files at low as intermittent on its 3rd healthy confirm in 7 days, across reopens', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(loaded(SETTLED_ARTICLE))
+    for (const c of ['c1', 'c2']) {
+      await h.check([broken('/pair', 502)], c)
+      expect(await h.settle()).toMatchObject({ dismissed: 1, filed: 0 })
+      h.later(24 * 3_600_000)
+    }
+    expect(h.pages[0]!.flap_dismissals).toHaveLength(2)
+    await h.check([broken('/pair', 502)], 'c3')
+    expect(await h.settle()).toMatchObject({ dismissed: 0, filed: 1 })
+    expect(h.reports[0]).toMatchObject({
+      title: 'Live site: /help-her-take-photo/pair returns HTTP 502 (intermittent)',
+      severity: 'low',
+      custom_metadata: { confirmation: { basis: 'flapping' } },
+    })
+    expect(h.pages[0]).toMatchObject({ flap_dismissals: [], report_id: h.reports[0]!.id })
+  })
+
+  it('dismissals older than 7 days do not count toward flapping', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(loaded(SETTLED_ARTICLE))
+    for (const c of ['c1', 'c2', 'c3']) {
+      await h.check([broken('/pair', 500)], c)
+      await h.settle()
+      h.later(4 * 24 * 3_600_000)
+    }
+    expect(h.reports).toHaveLength(0)
+    expect(h.pages[0]!.flap_dismissals).toHaveLength(2)
+  })
+
+  // Finding 6: rows the old poll filed (report_id set, confirmed_at null).
+  it('a row the pre-0029 poll filed is never a suspect: no confirm, no second report', async () => {
+    const legacy = { ...filedRow('L1', '/pair'), confirmed_at: null }
+    const h = harness([legacy])
+    h.confirm.mockResolvedValue(loaded('', 500))
+    expect(await h.check([broken('/pair')], 'c1')).toEqual({ broken: 1, suspects: 0, resolved: 0 })
+    expect(await h.settle()).toEqual({ scrapes: 0, dismissed: 0, confirmed: 0, filed: 0 })
+    expect(h.reports).toHaveLength(0)
+    expect(sw.isFiled(legacy)).toBe(true)
+    expect(await h.check([ok(`${BASE}/pair`)], 'c2')).toMatchObject({ resolved: 1 })
+  })
+
+  // Finding 7: the confirm's status code only titles the report when it is an error.
+  it('a 5xx suspect confirmed by a blank 200 page keeps its 5xx in the title and severity', async () => {
+    const h = harness()
+    await h.check([broken('/pair', 503)], 'c1')
+    h.confirm.mockResolvedValue(loaded('', 200))
+    await h.settle()
+    expect(h.reports[0]).toMatchObject({ title: 'Live site: /help-her-take-photo/pair returns HTTP 503', severity: 'high' })
+  })
+
+  // Finding 3: fair sharing of a run's confirm scrapes.
+  it('allocateConfirms: oldest pending suspect first, one per watch before any gets a second', () => {
+    const w = (watchId: string, oldestPendingAt: string, eligible: number) => ({ watchId, oldestPendingAt, eligible })
+    const watches = [w('new', '2026-10-21T00:00:00Z', 5), w('old', '2026-10-01T00:00:00Z', 5), w('mid', '2026-10-10T00:00:00Z', 1), w('x', '2026-10-15T00:00:00Z', 4)]
+    expect(Object.fromEntries(sw.allocateConfirms(watches, 6))).toEqual({ old: 2, mid: 1, x: 2, new: 1 })
+    expect(Object.fromEntries(sw.allocateConfirms(watches, 2))).toEqual({ old: 1, mid: 1 })
+    expect(Object.fromEntries(sw.allocateConfirms([w('a', '2026-10-01T00:00:00Z', 9)], 6))).toEqual({ a: sw.CONFIRM_SCRAPES_PER_WATCH })
+  })
+
+  it('pendingConfirmsByWatch counts only confirm-eligible suspects, per watch', async () => {
+    const suspect = (id: string, watch_id: string, url: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      watch_id,
+      url,
+      problem: 'http_error',
+      first_seen_at: '2026-10-20T00:00:00.000Z',
+      resolved_at: null,
+      confirmed_at: null,
+      report_id: null,
+      confirm_attempts: 0,
+      ...extra,
+    })
+    const f = makeDb([
+      suspect('a1', 'w1', `${BASE}/a`, { first_seen_at: '2026-10-19T00:00:00.000Z' }),
+      suspect('a2', 'w1', `${BASE}/b`, { confirm_attempts: sw.CONFIRM_ATTEMPTS_PER_CHECK }),
+      suspect('a3', 'w1', `${BASE}/c`, { report_id: 'r-old' }),
+      suspect('b1', 'w2', 'https://kensaur.us/glot-it/x'),
+      suspect('b2', 'w2', 'https://evil.example/x'),
+    ])
+    const out = await sw.pendingConfirmsByWatch(
+      f.db,
+      [watch, { id: 'w2', project_id: 'p2', base_url: 'https://kensaur.us/glot-it' }],
+      new Date('2026-10-21T01:35:00Z'),
+    )
+    expect(out.sort((x, y) => x.watchId.localeCompare(y.watchId))).toEqual([
+      { watchId: 'w1', oldestPendingAt: '2026-10-19T00:00:00.000Z', eligible: 1 },
+      { watchId: 'w2', oldestPendingAt: '2026-10-20T00:00:00.000Z', eligible: 1 },
+    ])
+  })
+
+  // Finding 10: a confirm starts only when it can finish by the run deadline.
+  it('no confirm starts when its worst case would overrun the run deadline', async () => {
+    const h = harness()
+    await h.check([broken('/pair')], 'c1')
+    h.confirm.mockResolvedValue(loaded('', 500))
+    const now = new Date('2026-10-21T01:35:00Z').getTime()
+    h.budget.deadline = now + sw.CONFIRM_WORST_CASE_MS - 1
+    expect((await h.settle()).scrapes).toBe(0)
+    h.budget.deadline = now + sw.CONFIRM_WORST_CASE_MS
+    expect((await h.settle()).scrapes).toBe(1)
+    expect(sw.CONFIRM_RUN_DEADLINE_MS).toBeLessThan(150_000)
   })
 })
 
