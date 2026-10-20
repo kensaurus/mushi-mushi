@@ -56,7 +56,7 @@ export function PortfolioPage() {
   if (!orgId) {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeaderBar title="Portfolio" />
+        <PageHeaderBar title="Apps" />
         <div className="flex flex-1 items-center justify-center">
           <EmptyState title="No team selected" description="Pick a team in the switcher at the top to see all of its apps." />
         </div>
@@ -117,9 +117,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
       <PageHeaderBar
-        title="Portfolio"
+        title="Apps"
         description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
-        helpTitle="About Portfolio"
+        helpTitle="About apps"
         helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
         helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
         helpFlowPath="/portfolio"

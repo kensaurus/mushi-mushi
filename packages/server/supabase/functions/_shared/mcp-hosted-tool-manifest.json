@@ -317,6 +317,28 @@
     "required": ["keyId"],
     "hints": { "destructive": true, "idempotent": true }
   },
+  "get_spend_down_status": {
+    "scope": "mcp:read",
+    "description": "Spend-down status of this project's Cursor keys.",
+    "method": "GET",
+    "path": "/v1/admin/byok/spend-down",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "set_byok_spend_down": {
+    "scope": "mcp:write",
+    "description": "Set spend-down mode for one of this project's own Cursor keys.",
+    "method": "PATCH",
+    "path": "/v1/admin/byok/keys/{keyId}/spend-down",
+    "required": ["keyId"],
+    "body": {
+      "enabled": "{enabled}",
+      "creditsExpireAt": "{creditsExpireAt}",
+      "model": "{model}",
+      "dailyLimit": "{dailyLimit}",
+      "windowDays": "{windowDays}"
+    },
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "run_fullstack_audit": {
     "scope": "mcp:write",
     "description": "Run full-stack health audit.",

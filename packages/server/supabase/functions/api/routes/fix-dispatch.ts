@@ -5,6 +5,7 @@ import { streamSSE } from 'npm:hono@4/streaming';
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
+import { parseCursorModelSpec } from '../../_shared/cursor-cloud.ts';
 import { log } from '../../_shared/logger.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
@@ -81,6 +82,11 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // Path-glob routing cannot tell two repos apart when both own
         // `src/**`, or when a bundled backend's frames are `dist/*.mjs`.
         targetRepoId?: string | null;
+        // Cursor model spec for this one dispatch (`id?param=value&…`, the
+        // same shape as project_settings.cursor_default_model). `mushi fix
+        // --model` has sent it since the CLI gained the flag; until
+        // 2026-10-20 the route dropped it and the project default won.
+        cursorModel?: string | null;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -122,6 +128,21 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           {
             ok: false,
             error: { code: 'INVALID_TARGET_REPO_ID', message: 'targetRepoId must be a UUID' },
+          },
+          400,
+        );
+      }
+
+      const cursorModel =
+        typeof body.cursorModel === 'string' && body.cursorModel.trim() !== '' ? body.cursorModel.trim() : null;
+      if (body.cursorModel != null && (cursorModel === null || !parseCursorModelSpec(cursorModel))) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_CURSOR_MODEL',
+              message: 'cursorModel must be a Cursor model id, optionally with ?param=value pairs',
+            },
           },
           400,
         );
@@ -297,6 +318,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           dispatch_metadata: {
             trigger: 'manual',
             ...(agentOverride ? { agent_override: agentOverride } : {}),
+            ...(cursorModel ? { model_override: cursorModel } : {}),
             ...(targetRepo
               ? { target_repo_id: targetRepo.id, target_repo_url: targetRepo.repo_url }
               : {}),

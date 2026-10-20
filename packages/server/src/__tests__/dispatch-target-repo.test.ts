@@ -187,3 +187,30 @@ describe('POST /v1/admin/fixes/dispatch targetRepoId', () => {
     }
   })
 })
+
+describe('POST /v1/admin/fixes/dispatch cursorModel', () => {
+  it('stores a valid model spec as dispatch_metadata.model_override', async () => {
+    const { db, app } = setup()
+    const res = await app.post$(DISPATCH, {
+      reportId: REPORT,
+      projectId: PROJECT,
+      cursorModel: ' grok-4.7?reasoning_effort=xhigh&context=500k ',
+    })
+    expect(res.status).toBe(200)
+    expect(db.table('fix_dispatch_jobs')[0].dispatch_metadata).toEqual({
+      trigger: 'manual',
+      model_override: 'grok-4.7?reasoning_effort=xhigh&context=500k',
+    })
+  })
+
+  it('rejects a malformed spec with 400 and queues nothing', async () => {
+    const { db, app } = setup()
+    for (const bad of ['grok 4.7', 'grok-4.7?effort', '', 7]) {
+      const res = await app.post$(DISPATCH, { reportId: REPORT, projectId: PROJECT, cursorModel: bad })
+      expect(res.status, String(bad)).toBe(400)
+      expect(res.body.error?.code).toBe('INVALID_CURSOR_MODEL')
+    }
+    expect(db.table('fix_dispatch_jobs')).toHaveLength(0)
+  })
+})
+

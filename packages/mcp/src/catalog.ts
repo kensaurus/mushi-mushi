@@ -1105,6 +1105,24 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Remove a rotated or compromised provider key from the runtime pool.',
   },
   {
+    name: 'get_spend_down_status',
+    title: 'Spend-down status of Cursor keys',
+    description:
+      "For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off | not_started | active | expired | key_unusable), fixes started today out of the daily limit, the apps the key pays for, and what the last worker tick did. Returns { keys: [{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects, lastRunAt, lastSummary }] }. Read-only. Use to see whether expiring Cursor credits are being used; use set_byok_spend_down to change it.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'Are my expiring Cursor credits being spent on fixes?',
+  },
+  {
+    name: 'set_byok_spend_down',
+    title: 'Set spend-down for a Cursor key',
+    description:
+      "Turn spend-down mode on or off for one of this project's own Cursor keys and set when its credits expire (YYYY-MM-DD), the Cursor model (id?param=value), fixes per day (1-200) and how many days before expiry to start (1-90). While on, Mushi dispatches the project's best open reports to Cursor on its own, inside the auto-fix caps; each fix opens a draft PR. A key shared by the organization can only be changed by an org owner or admin in the console. Write; spends Cursor credits once on; idempotent. Confirm with the user before turning it on.",
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Spend my Cursor credits on open bugs before they expire on the 31st.',
+  },
+  {
     name: 'list_pending_review_stories',
     title: 'List QA stories pending review',
     description:

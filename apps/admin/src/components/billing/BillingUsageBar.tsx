@@ -42,6 +42,11 @@ export interface BillingUsageBarProps {
   /** Phase 2: diagnoses-metered plans — when non-null, show diagnoses count/limit instead of reports. */
   diagnosesUsed?: number | null
   diagnosesLimit?: number | null
+  /**
+   * Complimentary org (no Stripe charges): the quota forecast still shows,
+   * but never a projected dollar bill.
+   */
+  complimentary?: boolean
 }
 
 // Severity tone the whole UsageBar takes on — matches across chip, progress
@@ -237,6 +242,7 @@ export function BillingUsageBar({
   usageSeries,
   diagnosesUsed,
   diagnosesLimit,
+  complimentary = false,
 }: BillingUsageBarProps) {
   // Phase 2: prefer diagnoses metering when the plan has a diagnoses limit.
   const usingDiagnoses = diagnosesLimit != null
@@ -251,7 +257,7 @@ export function BillingUsageBar({
   const barWidthPct = pct == null ? 0 : Math.min(100, Math.max(2, pct))
 
   const costInputs: PeriodCostInputs | null =
-    usingDiagnoses && overageRateDiagnoses != null && overageRateDiagnoses > 0
+    !complimentary && usingDiagnoses && overageRateDiagnoses != null && overageRateDiagnoses > 0
       ? {
           baseUsd: basePriceUsd,
           included: diagnosesLimit ?? 0,

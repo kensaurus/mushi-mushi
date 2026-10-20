@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_116 configuration knobs across 19 sections · last regenerated 2026-10-16._
+_117 configuration knobs across 19 sections · last regenerated 2026-10-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (13)
+- [SDK install card](#sdk-install-card) (14)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -165,7 +165,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
 
-**Learn more** — [About the AI judge](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+**Learn more** — [About triage grading](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Fix model
 
@@ -1844,6 +1844,24 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
 **Learn more** — [Screenshot preview docs](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+### Spend down expiring credits
+
+<a id="byok-spend-down"></a>
+
+`byok.spend_down`
+
+**Summary** — Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.
+
+**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges.
+
+**Default** — `off; 10 fixes a day; starts 14 days before expiry`
+
+**Where it lives** — table `byok_keys.spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days` · endpoint `PATCH /v1/admin/byok/keys/:keyId/spend-down` · read by `spend-down-worker edge function (cron :28 and :58)`, `GET /v1/admin/byok/spend-down`, `MCP get_spend_down_status`, `mushi keys spend-down`
+
+**When to change** — Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.
+
+**Learn more** — [ADR 0028](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0028-spend-down-expiring-agent-credits.md)
 
 ### Framework tab
 

@@ -296,16 +296,16 @@ export function GeneralPanel() {
           purpose="Turns production errors and Sentry user feedback into Mushi reports."
           status={sentryStatus}
         >
-          <Input
+          {/* The DSN carries the public key; mask it like the webhook secret below. */}
+          <SecretInput
             label="Sentry DSN"
             helpId="settings.general.sentry_dsn"
-            type="text"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
             placeholder="https://abc@o0.ingest.sentry.io/4511023875"
             validate={sentryDsn()}
           />
-          <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="url" />
+          <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
           <SecretInput
             label="Webhook secret"
             helpId="settings.general.sentry_webhook_secret"

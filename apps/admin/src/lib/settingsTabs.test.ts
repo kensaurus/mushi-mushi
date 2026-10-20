@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/lib/settingsTabs.test.ts
- * PURPOSE: Settings went from seven tabs to five. Old links (bookmarks, the
+ * PURPOSE: Settings went from seven tabs to five, then gained Labs. Old links (bookmarks, the
  *          server's `?tab=firecrawl` / `?tab=keys`) and tabs remembered in
  *          localStorage must still open the right tab and section.
  */
@@ -13,8 +13,8 @@ const OLD_IDS = ['firecrawl', 'browserbase', 'health', 'dev', 'keys']
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from './settingsTabExplainer'
 
 describe('SETTINGS_TAB_IDS', () => {
-  it('is the five tabs, in strip order', () => {
-    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk'])
+  it('is the six tabs, in strip order', () => {
+    expect(SETTINGS_TAB_IDS).toEqual(['general', 'byok', 'tools', 'voice', 'sdk', 'labs'])
   })
 })
 
@@ -108,6 +108,7 @@ describe('Settings tab labels', () => {
       tools: 'Web tools',
       voice: 'Voice reports',
       sdk: 'SDK & connection',
+      labs: 'Labs',
     })
   })
 

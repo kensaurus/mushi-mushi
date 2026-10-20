@@ -43,7 +43,6 @@ import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
 import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
-import { ActiveProjectStatusChip } from './ActiveProjectStatusChip'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
@@ -247,8 +246,22 @@ export function ProjectSwitcher() {
     }
   }, [creating])
 
-  if (setup.loading || !setup.data) {
+  if (setup.loading) {
     return <HeaderContextChipSkeleton label="Loading project" />
+  }
+  if (!setup.data) {
+    // The fetch failed and nothing is cached: say so and offer a retry
+    // instead of a skeleton that never resolves (B1, 2026-10-20).
+    return setup.error ? (
+      <HeaderContextChip
+        label="Projects unavailable"
+        trailing={<span className="text-fg-faint">Retry</span>}
+        onClick={() => setup.reload()}
+        title={`Could not load your projects: ${setup.error}. Click to retry.`}
+      />
+    ) : (
+      <HeaderContextChipSkeleton label="Loading project" />
+    )
   }
   if (setup.data.projects.length === 0) {
     return (
@@ -340,7 +353,6 @@ export function ProjectSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
       />
-      <ActiveProjectStatusChip snapshot={snapshot} className="hidden xl:inline-flex" />
       {open && (
         <div
           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
