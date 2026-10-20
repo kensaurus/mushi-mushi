@@ -472,9 +472,19 @@ mushi integrations test github
 mushi keys list
 MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup"
 
+# Spend down a Cursor key's expiring credits on open bugs (draft PRs only)
+mushi keys spend-down                                   # status of every Cursor key
+mushi keys spend-down <keyId> --on --expires 2026-10-31 \
+  --model 'grok-4.7?reasoning_effort=xhigh&context=500k' --per-day 20
+
 mushi slack status
 mushi slack test
 ```
+
+Spend-down mode starts `--window-days` (default 14) before the credits expire
+and dispatches the best open reports of the apps the key already pays for,
+inside each app's auto-fix limits. A key shared by the whole organization is
+changed by an owner or admin in the console (Settings, AI keys, Cursor).
 
 ---
 
