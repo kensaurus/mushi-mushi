@@ -83,9 +83,10 @@ ensureSentry('webhooks-github-indexer');
 
 const log = rootLog.child('webhooks-github-indexer');
 const app = new Hono();
-// A repo-binding lookup that hit a pooler outage (MUSHI-MUSHI-SERVER-2S) is
-// a warn and a 503: the delivery still shows failed and can be redelivered,
-// but Sentry gets no event. Anything else is reported.
+// A repo-binding lookup that hit a pooler outage (MUSHI-MUSHI-SERVER-2S) or
+// the hosted gateway body "Project not specified." is a warn and a 503: the
+// delivery still shows failed and can be redelivered, but Sentry gets no
+// event. Anything else is reported.
 app.onError((err, c) => {
   if (err instanceof RepoLookupError && isTransientDbConnectionError(err.dbError)) {
     log.warn(err.message, { db_code: err.dbError.code ?? null, transient: true });

@@ -10,6 +10,8 @@
  *
  *          index.ts imports Deno globals, so its wiring is asserted at the
  *          source level; the resolver itself runs for real on a fake client.
+ *          A hosted-gateway "Project not specified." on one of those reads
+ *          stays on the transient path (503, no Sentry).
  */
 
 import { describe, it, expect } from 'vitest'
@@ -17,6 +19,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createFakeDb, findQueries } from './__stubs__/fake-query-recorder.ts'
 import { isRepoUrl, projectIdsForRepo, RepoLookupError } from '../../supabase/functions/webhooks-github-indexer/repo-projects.ts'
+import { isTransientDbConnectionError } from '../../supabase/functions/_shared/error-codes.ts'
 
 describe('isRepoUrl', () => {
   it('matches the repository case-insensitively, with or without .git or a trailing slash', () => {
@@ -77,6 +80,19 @@ describe('projectIdsForRepo', () => {
   it('throws on a read error so GitHub redelivers', async () => {
     const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom' } }))
     await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)
+  })
+
+  it('a gateway "Project not specified" on github_repo_url is the transient class the route answers 503 for', async () => {
+    const gateway = { message: 'Project not specified.', code: 'PGRST' }
+    const { db } = createFakeDb((q) => {
+      const column = String(q.filters.find((f) => f.method === 'ilike')?.args[0])
+      if (q.table === 'project_settings' && column === 'github_repo_url') return { data: null, error: gateway }
+      return { data: [] }
+    })
+    const err = await projectIdsForRepo(db, 'acme/app').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RepoLookupError)
+    expect((err as Error).message).toBe('project_settings.github_repo_url lookup failed: Project not specified.')
+    expect(isTransientDbConnectionError((err as RepoLookupError).dbError)).toBe(true)
   })
 
   it('keeps the PostgREST error on the throw, so the route can classify it (MUSHI-MUSHI-SERVER-2S)', async () => {
