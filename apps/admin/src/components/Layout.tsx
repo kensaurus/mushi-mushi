@@ -424,14 +424,16 @@ export function Layout({ children }: { children: ReactNode }) {
   ])
 
   // One nav-meta request for the sidebar. Advanced shows every section
-  // badge, so it asks for every slice; Quick and Beginner ask only for what
-  // their ~10 items and the current page's hero read (slices = null → all).
+  // badge, so it asks for every slice (null). Quick and Beginner ask only
+  // for the visible items' badges. The current pathname used to be unioned
+  // in so `layoutHeroFromStats` could fill the route hero; that reader is
+  // gone, and a page that is not in the sidebar does not read these slices.
   const navSlices = useMemo(
     () =>
       isAdvanced
         ? null
-        : navSlicesForPaths([...visibleNav.flatMap((s) => s.items.map((i) => i.path)), pathname]),
-    [isAdvanced, visibleNav, pathname],
+        : navSlicesForPaths(visibleNav.flatMap((s) => s.items.map((i) => i.path))),
+    [isAdvanced, visibleNav],
   )
   const navCounts = useNavCounts({ live: true, slices: navSlices })
 

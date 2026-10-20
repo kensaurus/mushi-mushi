@@ -68,12 +68,16 @@ import {
 } from './useNavCounts'
 
 /**
- * Which nav-meta slices each path's badge and page hero read (mirrors the
- * `resolveNavBadge` switch below; the route hero enrichment that also read
- * these, `layoutHeroFromStats`, had no caller and was removed). Paths whose
- * badge only uses the per-item counters need no slice. Layout sends the
- * union for the visible sidebar + current page, so Quick and Beginner stop
- * paying for the 45 stats routes Advanced shows.
+ * Which nav-meta slices each path's badge reads. Mirrors the
+ * `resolveNavBadge` switch below. `layoutHeroFromStats` used to read this
+ * same map for the route hero; it had no caller and was removed, so nothing
+ * here is kept for a hero. Paths whose badge only uses the per-item counters
+ * need no slice. `projects` and `members` stay: those stats routes fill the
+ * badge counters (`projectCount`, `pendingInvites`, …), not `slices.*`.
+ * `navSlicesForPaths` always asks for `dashboard` (Home badge and
+ * `healthIssues`), so `/health` does not repeat it. Layout sends the union
+ * for the visible sidebar, so Quick and Beginner stop paying for the stats
+ * routes Advanced shows.
  */
 const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/onboarding': ['onboarding'],
@@ -103,7 +107,7 @@ const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/graph': ['graph'],
   '/fixes': ['fixes'],
   '/repo': ['repo'],
-  '/health': ['health', 'dashboard'],
+  '/health': ['health'],
   '/skills': ['skills'],
   '/integrations/config': ['integrations'],
   '/mcp': ['mcp'],
@@ -116,7 +120,7 @@ const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/query': ['query'],
 }
 
-/** Slices needed to badge `paths` (sidebar items plus the current page). */
+/** Slices needed to badge `paths` (visible sidebar items, not the open page). */
 export function navSlicesForPaths(paths: readonly string[]): string[] {
   const out = new Set<string>(['dashboard'])
   for (const path of paths) {
