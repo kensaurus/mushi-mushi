@@ -102,7 +102,7 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
 
 /**
  * Classify a Supabase/Postgres error as a transient infrastructure failure
- * (pooler reset, Cloudflare 522 origin timeout) versus a genuine
+ * (pooler reset, Cloudflare gateway HTML) versus a genuine
  * application-level DB error.
  *
  * Transient failures MUST NOT be reported to Sentry as exceptions — they
@@ -132,12 +132,42 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * Pattern sources:
  *   - "delayed connect error: 111" / "upstream connect error" — Supabase pooler
  *     cold-start or transient reset (Supabase Discussions #26769).
- *   - Cloudflare "Error code 522" origin-timeout page (HTML body leaks into
- *     PostgREST error.message).
+ *   - Cloudflare's error document (HTML body leaks into PostgREST
+ *     error.message). The same `<!DOCTYPE html>` / IE-conditional template
+ *     covers every origin failure. 522 was the first one matched; 520, 521,
+ *     523, 524 and gateway 502/503/504 use that template with a different
+ *     title ("520: Web server is returning an unknown error") and, on the
+ *     newer page, an "Error code NNN" label. 525/526 are certificate
+ *     failures and stay reported. A bare "520" is not a match.
  *   - "Could not query the database for the schema cache. Retrying." — the
  *     PGRST002 message, matched verbatim for callers that kept only the text
  *     (MUSHI-MUSHI-SERVER-1M).
  */
+
+/**
+ * Retryable Cloudflare gateway titles and labels. Compared against an
+ * already-lowercased message. "error code 520" must not match "error code
+ * 5200"; title phrases are specific enough on their own.
+ */
+const CLOUDFLARE_GATEWAY_TITLES = [
+  '520: web server is returning an unknown error',
+  '521: web server is down',
+  '522: connection timed out',
+  '523: origin is unreachable',
+  '524: a timeout occurred',
+  '502: bad gateway',
+  '503: service temporarily unavailable',
+  '504: gateway time-out',
+  '504: gateway timeout',
+] as const
+
+const CLOUDFLARE_GATEWAY_CODE_RE = /error code (?:502|503|504|520|521|522|523|524)(?!\d)/
+
+function isCloudflareGatewayMessage(msg: string): boolean {
+  if (CLOUDFLARE_GATEWAY_TITLES.some((title) => msg.includes(title))) return true
+  return CLOUDFLARE_GATEWAY_CODE_RE.test(msg)
+}
+
 export function isTransientDbConnectionError(
   err:
     | { message?: string; code?: string | null; details?: string | null }
@@ -175,10 +205,9 @@ export function isTransientDbConnectionError(
     msg.includes('connection reset by peer') ||
     msg.includes('socket hang up') ||
     msg.includes('server closed the connection unexpectedly') ||
-    // Cloudflare 522 origin-timeout page — anchored to the Cloudflare markers,
-    // not a bare "522" (which would match arbitrary numeric substrings).
-    msg.includes('error code 522') ||
-    msg.includes('522: connection timed out') ||
+    // Cloudflare origin/gateway HTML — title or "Error code NNN" label, not a
+    // bare status number (a bare "522" would match arbitrary numeric substrings).
+    isCloudflareGatewayMessage(msg) ||
     msg.includes('could not query the database for the schema cache')
   )
 }
