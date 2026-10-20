@@ -228,7 +228,7 @@ export function NotificationsPage() {
         <PageHeaderBar
           title={copy?.title ?? 'Reporter updates'}
 
-          helpTitle={copy?.help?.title ?? 'About reporter notifications'}
+          helpTitle={copy?.help?.title ?? 'About reporter updates'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
@@ -286,7 +286,7 @@ export function NotificationsPage() {
         title={copy?.title ?? 'Reporter updates'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About reporter notifications'}
+        helpTitle={copy?.help?.title ?? 'About reporter updates'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'

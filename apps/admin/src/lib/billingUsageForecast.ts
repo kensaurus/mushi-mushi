@@ -16,6 +16,11 @@
 export interface UsageForecast {
   etaDays: number
   etaDate: Date
+  /**
+   * False when, at the current pace, the quota outlasts the billing period.
+   * The label then says so instead of naming a far-future date.
+   */
+  hitsThisPeriod: boolean
   tone: 'danger' | 'warn' | 'muted'
   label: string
   /** Projected total bill at current pace (paid tiers with overage). */
@@ -83,15 +88,25 @@ export function buildUsageForecast(
 
   const projectedUsed = Math.round(used + dailyRate * daysRemaining)
   const etaDays = Math.max(0, Math.ceil((limit - used) / dailyRate))
+  // The date and the day count come from the same `etaDays`, so they always
+  // agree. A quota that outlasts the period is reported as such — a date
+  // years out (e.g. "Nov 24 (2227d away)") read as nonsense.
+  const hitsThisPeriod = etaDays <= Math.ceil(daysRemaining)
   const etaDate = new Date(nowMs + etaDays * 86_400_000)
-  const tone: UsageForecast['tone'] =
-    etaDays < 3 ? 'danger' : etaDays < 7 ? 'warn' : 'muted'
+  const tone: UsageForecast['tone'] = !hitsThisPeriod
+    ? 'muted'
+    : etaDays < 3
+      ? 'danger'
+      : etaDays < 7
+        ? 'warn'
+        : 'muted'
   const dateStr = etaDate.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
   })
-  const label =
-    etaDays === 0
+  const label = !hitsThisPeriod
+    ? `You won't hit your limit this period at the current rate`
+    : etaDays === 0
       ? `At current rate, you'll hit your limit today`
       : `At current rate, you'll hit your limit on ${dateStr} (${etaDays}d away)`
 
@@ -108,11 +123,32 @@ export function buildUsageForecast(
   return {
     etaDays,
     etaDate,
+    hitsThisPeriod,
     tone,
     label,
     projectedCostUsd,
     projectedCostLabel,
   }
+}
+
+/**
+ * Header chip on the Billing page: the active plan and its monthly quota —
+ * "Pro: 2,000 diagnoses / mo", "Hobby: 1,000 reports / mo", "Enterprise:
+ * unlimited". Diagnoses win over reports when the plan meters both.
+ */
+export function formatPlanQuotaChip(
+  planDisplayName: string | null | undefined,
+  diagnosesLimit: number | null | undefined,
+  reportsLimit: number | null | undefined,
+): string {
+  const plan = planDisplayName?.trim() || 'Plan'
+  if (diagnosesLimit != null) {
+    return `${plan}: ${diagnosesLimit.toLocaleString()} diagnoses / mo`
+  }
+  if (reportsLimit != null) {
+    return `${plan}: ${reportsLimit.toLocaleString()} reports / mo`
+  }
+  return `${plan}: unlimited`
 }
 
 /**

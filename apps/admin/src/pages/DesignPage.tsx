@@ -227,7 +227,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
           {
             priority: POSTURE_PRIORITY.status,
             show: data != null,
-            children: data ? <DesignStateBanner design={data} /> : null,
+            children: data ? <DesignStateBanner design={data} tokenIssueCount={data.issues.length} /> : null,
           },
         ]}
       />

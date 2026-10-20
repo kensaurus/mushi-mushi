@@ -8,6 +8,7 @@ import { useMemo } from 'react'
 import type { ZodType } from 'zod'
 import { usePageData } from './usePageData'
 import { ActivationResponseSchema } from './apiSchemas'
+import { deriveHasAnyProject, readRememberedHasAnyProject } from './projectPresence'
 import type { OnboardingStats } from '../components/onboarding/types'
 import type { SetupResponse } from './useSetupStatus'
 
@@ -19,7 +20,7 @@ interface ActivationTopPriority {
   tone: 'plan' | 'do' | 'idle'
 }
 
-export interface ActivationPreflight {
+interface ActivationPreflight {
   ready: boolean
   checks: Array<{ key: string; ready: boolean; label: string }>
 }
@@ -91,7 +92,8 @@ export function useActivationStatus(projectId: string | null) {
     topPriority: query.data?.top_priority ?? null,
     activeProject,
     selectors,
-    hasAnyProject: Boolean(query.data?.setup.has_any_project),
+    hasAnyProject: deriveHasAnyProject(query.data?.setup, readRememberedHasAnyProject()).hasAnyProject,
+    resolved: query.data != null,
     isStepIncomplete: (stepId: string) => {
       const step = activeProject?.steps.find((s) => s.id === stepId)
       return step ? !step.complete : true

@@ -405,7 +405,7 @@ export function ReportsPage() {
 
   usePublishPageContext({
     route: '/reports',
-    title: projectName ? `Reports · ${projectName}` : 'Reports',
+    title: projectName ? `Bugs · ${projectName}` : 'Bugs',
     summary: loading
       ? 'Loading reports…'
       : total === 0
@@ -743,7 +743,7 @@ export function ReportsPage() {
         icon={<IconReports />}
         projectScope={projectName}
         description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
-        helpTitle={copy?.help?.title ?? 'About Reports'}
+        helpTitle={copy?.help?.title ?? 'About bugs'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
         helpUseCases={[
           ...(copy?.help?.useCases ?? [

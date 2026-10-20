@@ -243,7 +243,7 @@ export function McpPage() {
 
   usePublishPageContext({
     route: '/mcp',
-    title: `${activeMeta.label} · MCP`,
+    title: `${activeMeta.label} · Editor agents`,
     summary: activeMeta.description,
     filters: { tab: activeTab, catalog: catalogTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.neverConnectedCount + (stats.endpointMismatch ? 1 : 0),

@@ -276,3 +276,14 @@ describe('plugin dispatch log http_status', () => {
     expect(src.match(/httpStatus = created\.httpStatus/g)).toHaveLength(2)
   })
 })
+
+describe('cursorModelForDispatch', () => {
+  it('a dispatch override beats the project default; other agents get none', async () => {
+    const { cursorModelForDispatch } = await import('../../supabase/functions/_shared/cursor-cloud.ts')
+    const spec = 'grok-4.7?reasoning_effort=xhigh&context=500k'
+    expect(cursorModelForDispatch('cursor_cloud', { model_override: spec }, 'composer-2.5')).toBe(spec)
+    expect(cursorModelForDispatch('cursor_cloud', { model_override: '  ' }, 'composer-2.5')).toBe('composer-2.5')
+    expect(cursorModelForDispatch('cursor_cloud', null, null)).toBeUndefined()
+    expect(cursorModelForDispatch('github_cloud_agent', { model_override: spec }, 'composer-2.5')).toBeUndefined()
+  })
+})

@@ -201,9 +201,9 @@ export function UsersPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-users">
       <PageHeaderBar
-        title="Users"
+        title="All users"
 
-        helpTitle={copy?.help?.title ?? 'About the user directory'}
+        helpTitle={copy?.help?.title ?? 'About all users'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Look up a specific user to check their plan or recent activity',

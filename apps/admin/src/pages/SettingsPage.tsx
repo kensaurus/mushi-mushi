@@ -31,6 +31,7 @@ import { BrowserbasePanel } from '../components/settings/BrowserbasePanel';
 import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
+import { LabsPanel } from '../components/settings/LabsPanel';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
@@ -226,7 +227,7 @@ function SettingsPageBody({
   if (!activeProjectId) {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-settings">
-        <PageHeaderBar title={copy?.title ?? 'Project settings'} />
+        <PageHeaderBar title={copy?.title ?? 'Settings'} />
         <PageScopeHint
           text={
             copy?.description ??
@@ -253,7 +254,7 @@ function SettingsPageBody({
   return (
     <div className="space-y-4" data-testid="mushi-page-settings">
       <PageHeaderBar
-        title={copy?.title ?? 'Project settings'}
+        title={copy?.title ?? 'Settings'}
         icon={<IconSettings />}
         projectScope={projectName ?? stats.projectName}
         helpTitle={copy?.help?.title ?? 'About Settings'}
@@ -340,6 +341,7 @@ function SettingsPageBody({
             </div>
           </>
         )}
+        {active === 'labs' && <LabsPanel />}
       </div>
 
       {stats.projectId ? (

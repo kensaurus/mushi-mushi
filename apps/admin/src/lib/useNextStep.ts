@@ -114,7 +114,7 @@ export function useClaimNextStep(kind: Claim, active: boolean): void {
 const SIGNED_OUT_PREFIXES = ['/login', '/recovery', '/reset-password']
 
 function prerequisiteStep(setup: UseSetupStatusResult, requires: readonly SetupBlocker[]): NextStepModel | null {
-  if (!setup.hasAnyProject) {
+  if ((setup.resolved ?? true) && !setup.hasAnyProject) {
     return {
       tone: 'plan',
       title: 'Create your first project to get started',

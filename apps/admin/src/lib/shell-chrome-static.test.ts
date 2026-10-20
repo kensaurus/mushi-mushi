@@ -23,7 +23,10 @@ describe('shell chrome static contract', () => {
     expect(project).toContain('HeaderContextChip')
     expect(project).toMatch(/inline-flex min-w-0 max-w-full items-center gap-1/)
     expect(project).not.toMatch(/flex-col items-end/)
-    expect(project).toMatch(/<ActiveProjectStatusChip snapshot=\{snapshot\}/)
+    // The header carries no per-project status chips any more (console audit
+    // 2026-10-20): "24 disagree" and "SDK" beside the project name meant
+    // nothing to a newcomer; those numbers live on Home and Checks.
+    expect(project).not.toMatch(/ActiveProjectStatusChip/)
   })
 
   it('OrgSwitcher uses HeaderContextChip with responsive density props', () => {

@@ -84,6 +84,8 @@ interface CardProps {
   style?: React.CSSProperties
   /** Forwarded to the card root for tests and e2e selectors. */
   'data-testid'?: string
+  /** Anchor id on the card root, so a link can jump to it (`#id`). */
+  id?: string
 }
 
 export function Card({
@@ -96,6 +98,7 @@ export function Card({
   title,
   style,
   'data-testid': testId,
+  id,
 }: CardProps) {
   // When the card has an onClick handler we promote it to button semantics so
   // the keyboard story is honest — a div with a click handler isn't reachable.
@@ -124,6 +127,7 @@ export function Card({
         onClick={onClick}
         title={title}
         data-testid={testId}
+        id={id}
         {...interactiveProps}
       >
         {children}
@@ -138,6 +142,7 @@ export function Card({
         onClick={onClick}
         title={title}
         data-testid={testId}
+        id={id}
         {...interactiveProps}
       >
         {children}
@@ -151,6 +156,7 @@ export function Card({
       onClick={onClick}
       title={title}
       data-testid={testId}
+      id={id}
       {...interactiveProps}
     >
       {children}
@@ -319,11 +325,13 @@ interface SectionProps {
    *  `lastFetchedAt`/`isValidating` from `usePageData` plus the realtime
    *  channel state. */
   freshness?: SectionFreshness
+  /** Anchor id so other surfaces can link to this section (`#id`). */
+  id?: string
 }
 
-export function Section({ title, children, className = '', action, icon, freshness }: SectionProps) {
+export function Section({ title, children, className = '', action, icon, freshness, id }: SectionProps) {
   return (
-    <Card className={`p-3 ${className}`}>
+    <Card id={id} className={`p-3 scroll-mt-6 ${className}`}>
       <PanelHeader
         title={title}
         icon={icon}

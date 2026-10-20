@@ -170,7 +170,7 @@ export function ConnectPage() {
   const showSectionDescriptions = connectUx.hideConnectSnapshot
   usePublishPageContext({
     route: '/connect',
-    title: 'Connect & Update',
+    title: 'Connect',
   })
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -243,13 +243,13 @@ export function ConnectPage() {
       )}
 
       <PageHeaderBar
-        title={copy?.title ?? 'Connect & Update'}
+        title={copy?.title ?? 'Connect'}
         icon={<IconLink />}
         description={
           copy?.description ??
           'Connect GitHub, install the SDK, add MCP to your editor, set up the CLI, and keep @mushi-mushi/* packages current.'
         }
-        helpTitle={copy?.help?.title ?? 'About Connect & Update'}
+        helpTitle={copy?.help?.title ?? 'About Connect'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'The install and upgrade cockpit — connect your repo, copy SDK/MCP install commands, and create a PR that bumps @mushi-mushi packages.'

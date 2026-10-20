@@ -159,7 +159,7 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchJob['status'], string> = {
   queued: 'Queued',
   running: 'Running',
   completed: 'Completed',
-  completed_no_pr: 'Fix ready — connect GitHub',
+  completed_no_pr: 'Finished without a PR',
   failed: 'Failed',
   cancelled: 'Cancelled',
   skipped: 'Skipped',

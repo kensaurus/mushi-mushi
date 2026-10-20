@@ -13,6 +13,8 @@ export interface DashboardInsightInput {
   /** Reports whose last auto-fix stopped (counted per report). */
   fixesFailed: number
   integrationIssues: number
+  /** Open critical reports from the last 14 days (the To-do page's first card). */
+  openCritical14d?: number
   /** Names of the integrations whose last health check was not ok. */
   failingIntegrations?: Array<{ kind: string; label: string }>
   /** How many of `integrationIssues` are only degraded (slow, not down). */
@@ -51,6 +53,17 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
       tone: 'danger',
       sentence: `Auto-fix stopped on ${s.fixesFailed} ${plural(s.fixesFailed, 'report', 'reports')}${s.fixesInProgress > 0 ? ` (${s.fixesInProgress} more in progress)` : ''}. Read why the last attempt stopped, then retry or close.`,
       action: stoppedAction,
+    }
+  }
+  // Same number and wording as the To-do page's first card, so Home never
+  // says "nothing waiting" while To-do says "7 critical reports need a
+  // decision" (console audit 2026-10-20, B2).
+  const critical = s.openCritical14d ?? 0
+  if (critical > 0) {
+    return {
+      tone: 'warn',
+      sentence: `${critical} critical ${plural(critical, 'report needs', 'reports need')} a decision${s.openBacklog > 0 ? ` · ${s.openBacklog} new ${plural(s.openBacklog, 'report', 'reports')} not yet triaged` : ''}. Confirm severity on the worst bugs first; auto-fix waits for triage.`,
+      action: { label: 'Open critical queue', to: '/reports?status=open&severity=critical&days=14' },
     }
   }
   if (s.openBacklog > 5) {
@@ -100,7 +113,7 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
     tone: 'ok',
     // Scoped to triage on purpose: openBacklog counts untriaged reports only,
     // so triaged reports still awaiting a fix can exist here.
-    sentence: `Nothing waiting to triage${s.reports14d > 0 ? ` — ${s.reports14d} report${s.reports14d === 1 ? '' : 's'} received in the last 14 days` : ''}.`,
+    sentence: `Nothing needs you right now${s.reports14d > 0 ? ` — ${s.reports14d} report${s.reports14d === 1 ? '' : 's'} received in the last 14 days, all triaged` : ''}.`,
   }
 }
 

@@ -14,6 +14,7 @@ import type { ZodType, ZodTypeDef } from 'zod'
 import { usePageData } from './usePageData'
 import { invalidateApiCache } from './supabase'
 import { SetupResponseSchema } from './apiSchemas'
+import { deriveHasAnyProject, readRememberedHasAnyProject, rememberHasAnyProject } from './projectPresence'
 
 export type SetupStepId =
   | 'project_created'
@@ -118,8 +119,24 @@ export interface UseSetupStatusResult {
   loading: boolean
   error: string | null
   reload: () => void
-  /** True when the current user owns at least one project. */
+  /**
+   * True when the current user owns at least one project.
+   *
+   * Sticky: once a response has said "yes" in this browser, a later failed
+   * or still-pending fetch keeps saying "yes" instead of flipping the whole
+   * shell into the "create your first project" state (console audit
+   * 2026-10-20, B1: one slow `/v1/admin/setup` turned the header into
+   * "Create team / Loading project" and popped the setup guide on a team
+   * with eight apps). Gate any redirect or "no project" copy on
+   * `resolved` as well, never on this flag alone.
+   */
   hasAnyProject: boolean
+  /**
+   * True once a `/v1/admin/setup` response (fresh or last-good cached) is in
+   * hand for this session. While false, `hasAnyProject` is a remembered or
+   * default value and must not drive navigation.
+   */
+  resolved: boolean
   /** The active project: the one matching the active project id, else the first. */
   activeProject: SetupProject | null
   /** Convenience selectors keyed off the active project. */
@@ -217,13 +234,16 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
       : EMPTY_SELECTORS
 
     const stepMap = new Map(activeProject?.steps.map(s => [s.id, s] as const) ?? [])
+    const presence = deriveHasAnyProject(data, readRememberedHasAnyProject())
+    if (data) rememberHasAnyProject(data.has_any_project)
 
     return {
       data,
       loading,
       error,
       reload,
-      hasAnyProject: Boolean(data?.has_any_project),
+      hasAnyProject: presence.hasAnyProject,
+      resolved: presence.resolved,
       activeProject,
       selectors,
       isStepIncomplete: (id: SetupStepId) => {

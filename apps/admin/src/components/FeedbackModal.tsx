@@ -2,9 +2,10 @@
  * FILE: apps/admin/src/components/FeedbackModal.tsx
  * PURPOSE: In-app feedback form — Bug report and Feature request — that
  *          submits to POST /v1/support/contact (JWT auth, rate-limited at
- *          5/hour server-side). Replaces the unreliable mailto: link in
- *          BetaBanner so reports actually arrive even when the user's mail
- *          client isn't configured.
+ *          5/hour server-side). Opened from Help & support, so ideas and
+ *          support questions arrive even when the user's mail client isn't
+ *          configured. Console bugs go to the dogfood SDK widget instead
+ *          (lib/mushi-self.ts `reportMushiBug`).
  *
  *  UX notes:
  *   - Two tabs (Bug / Feature) share a single form shell; switching tabs

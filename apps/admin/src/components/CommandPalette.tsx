@@ -14,7 +14,6 @@ import { overlayTween } from '../lib/motion-tokens'
 import { useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '../lib/useCommandPalette'
-import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
 import {
   STRONG_PAGE_MATCH,
@@ -143,7 +142,6 @@ export function CommandPalette() {
   const { isOpen, close } = useCommandPalette()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { mode, setMode } = useAdminMode()
   const pageCtx = usePageContext()
   const recentEntities = useRecentEntities()
 
@@ -460,20 +458,13 @@ export function CommandPalette() {
       keywords: ['codebase', 'explore', 'understand', 'atlas', 'architecture', 'ask'],
       onSelect: () => handleSelect('action:explore:understand', () => navigate('/explore?tab=ask')),
     },
-    ...(['quickstart', 'beginner', 'advanced'] as AdminMode[])
-      .filter((m) => m !== mode)
-      .map((m) => ({
-        id: `action:mode:${m}`,
-        label: `Switch to ${m === 'quickstart' ? 'Quick' : `${m[0].toUpperCase()}${m.slice(1)}`} mode`,
-        hint:
-          m === 'quickstart'
-            ? 'Core pages: bugs, fixes, apps, connect, settings'
-            : m === 'beginner'
-              ? 'Core pages plus a few next steps'
-              : 'Every page in the console',
-        keywords: ['mode', 'toggle', m, 'sidebar', 'menu'],
-        onSelect: () => handleSelect(`action:mode:${m}`, () => setMode(m)),
-      })),
+    {
+      id: 'action:labs',
+      label: 'Add pages to the sidebar (Labs)',
+      hint: 'Switch on extra pages such as Bug clusters, Pull requests or AI prompts',
+      keywords: ['labs', 'mode', 'advanced', 'sidebar', 'menu', 'more pages', 'all pages'],
+      onSelect: () => handleSelect('action:labs', () => navigate('/settings?tab=labs')),
+    },
   ]
   const visibleActions = actions.filter((a) => matchesQuery(a.label, a.hint, a.keywords))
   const pageActions = (pageCtx?.actions ?? []).filter((a) =>

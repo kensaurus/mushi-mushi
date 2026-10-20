@@ -35,7 +35,7 @@ const GATE_LABELS: Record<GateId, string> = {
   dead_handler: 'Dead handlers (G1)',
   mock_leak: 'Mock data in production (G2)',
   api_contract: 'API contract (G3)',
-  crawl: 'Live route crawl (G4)',
+  crawl: 'Live route crawl',
   status_claim: 'Status claims (G5)',
   spec_drift: 'OpenAPI spec drift (G6)',
   orphan_endpoint: 'Unused backend endpoints (G7)',

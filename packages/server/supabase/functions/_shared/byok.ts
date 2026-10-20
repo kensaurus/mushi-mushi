@@ -53,6 +53,8 @@ export interface ResolvedKey {
   provider?: LlmProvider;
   /** Human label if set on the key row */
   label?: string;
+  /** True for an organization's shared key (ADR 0023), which comes after the app's own credentials. */
+  shared?: boolean;
 }
 
 const ENV_VAR: Record<LlmProvider, string> = {
@@ -260,6 +262,7 @@ async function byokPoolCandidates(
           hint: hint(dereffed),
           baseUrl,
           label: row.label ?? undefined,
+          ...(row.project_id ? {} : { shared: true }),
         });
       }
     }

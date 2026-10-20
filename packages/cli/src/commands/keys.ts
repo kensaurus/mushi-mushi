@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { loadConfig, resolveProfileName, saveConfig } from '../config.js';
 import { syncKeychainAfterKeyChange } from '../keychain.js';
 import { apiCall, printResult } from '../cli-shared.js';
+import { spendDownBody, spendDownStatusLine, type SpendDownFlags, type SpendDownStatusKey } from '../spend-down.js';
 import {
   startDeviceAuth,
   waitForCliToken,
@@ -292,6 +293,70 @@ export function registerKeysCommands(program: Command): void {
         `! Key remains quarantined (${res.data.validation.status}) — id: ${res.data.key.id}`,
       );
       console.log(`  ${res.data.validation.detail}`);
+    });
+
+  keys
+    .command('spend-down [key-id]')
+    .description(
+      'Spend down expiring Cursor credits on open bugs (ADR 0028): show status, or set it for one key',
+    )
+    .option('--on', 'Turn spend-down on (needs --expires once)')
+    .option('--off', 'Turn spend-down off')
+    .option('--expires <date>', 'When the credits expire, YYYY-MM-DD')
+    .option('--model <spec>', "Cursor model, e.g. 'grok-4.7?reasoning_effort=xhigh&context=500k' ('' = app default)")
+    .option('--per-day <n>', 'Fixes per day across the apps this key pays for (1-200)')
+    .option('--window-days <n>', 'Start this many days before the credits expire (1-90)')
+    .option('--json', 'Output as JSON (alias for -o json)')
+    .action(async (keyId: string | undefined, opts: SpendDownFlags & { json?: boolean }) => {
+      const config = loadConfig();
+      if (!config.apiKey || !config.projectId) {
+        console.error('Run `mushi login` first');
+        process.exit(1);
+      }
+      let body: ReturnType<typeof spendDownBody>;
+      try {
+        body = spendDownBody(opts);
+      } catch (err) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+      if (keyId && body) {
+        const res = await apiCall<{ id: string; enabled: boolean; creditsExpireAt: string | null }>(
+          `/v1/admin/byok/keys/${encodeURIComponent(keyId)}/spend-down`,
+          config,
+          { method: 'PATCH', body: JSON.stringify(body) },
+        );
+        if (!res.ok) {
+          console.error(`Error: ${res.error.message}`);
+          process.exit(1);
+        }
+        console.log(
+          `✓ Spend-down ${res.data.enabled ? 'on' : 'off'}${res.data.creditsExpireAt ? `, credits expire ${res.data.creditsExpireAt.slice(0, 10)}` : ''} — id: ${res.data.id}`,
+        );
+        return;
+      }
+      if (keyId && !body) {
+        console.error('Nothing to change: pass --on, --off, --expires, --model, --per-day or --window-days');
+        process.exit(1);
+      }
+      const res = await apiCall<{ keys: SpendDownStatusKey[] }>(
+        `/v1/admin/byok/spend-down?project_id=${encodeURIComponent(config.projectId)}`,
+        config,
+      );
+      if (!res.ok) {
+        console.error(`Error: ${res.error.message}`);
+        process.exit(1);
+      }
+      printResult(res.data, {
+        json: opts.json,
+        render(d) {
+          if (d.keys.length === 0) {
+            console.log('No Cursor key for this project. Add one with `mushi keys add --provider cursor`.');
+            return;
+          }
+          for (const k of d.keys) console.log(spendDownStatusLine(k));
+        },
+      });
     });
 
   keys

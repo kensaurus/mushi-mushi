@@ -22,18 +22,39 @@ const SOURCE_LABEL: Record<RecipeHistoryEntry['source'], string> = {
   connector: 'a connector',
 }
 
-export function DesignStateBanner({ design }: { design: DesignPlaneResponse }) {
+/**
+ * The server's element state only grades the deviance scan. When the token
+ * lint below it lists problems, "OK · Code follows your design tokens" above
+ * "Token issues · 200 found" is a contradiction (console audit 2026-10-20,
+ * B7): the banner then says drift and names the count.
+ * @internal exported for tests
+ */
+export function reconcileDesignState(
+  design: Pick<DesignPlaneResponse, 'state' | 'reason'>,
+  tokenIssueCount: number,
+): { state: DesignPlaneResponse['state']; reason: string } {
+  if (design.state === 'ok' && tokenIssueCount > 0) {
+    return {
+      state: 'drift',
+      reason: `${tokenIssueCount} token issue${tokenIssueCount === 1 ? '' : 's'} to fix in your token files (listed below); the code itself follows the tokens it has.`,
+    }
+  }
+  return { state: design.state, reason: design.reason }
+}
+
+export function DesignStateBanner({ design, tokenIssueCount = 0 }: { design: DesignPlaneResponse; tokenIssueCount?: number }) {
   const snap = design.snapshot
   const snapAt = rel(snap?.capturedAt)
   const errAt = rel(design.lastError?.at)
   const sourceLabel =
     snap && Object.prototype.hasOwnProperty.call(SOURCE_LABEL, snap.source) ? SOURCE_LABEL[snap.source] : snap?.source
+  const shown = reconcileDesignState(design, tokenIssueCount)
 
   return (
     <Card className="flex flex-col gap-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <RecipeStateChip state={design.state} />
-        <span className="text-xs text-fg-secondary">{design.reason}</span>
+        <RecipeStateChip state={shown.state} />
+        <span className="text-xs text-fg-secondary">{shown.reason}</span>
       </div>
       <p className="text-2xs text-fg-muted">
         {snap ? (

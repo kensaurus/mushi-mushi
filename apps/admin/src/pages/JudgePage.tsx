@@ -463,7 +463,7 @@ export function JudgePage() {
   const latestWeek = weeksQuery.data?.weeks?.[0]
   usePublishPageContext({
     route: '/judge',
-    title: projectName ? `Judge · ${projectName}` : 'Judge',
+    title: projectName ? `Triage grading · ${projectName}` : 'Triage grading',
     summary: loading
       ? 'Loading judge scores…'
       : latestWeek
@@ -711,7 +711,7 @@ export function JudgePage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About Fix grading'}
+        helpTitle={copy?.help?.title ?? 'About triage grading'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect when the classifier silently degrades after a model or prompt change',

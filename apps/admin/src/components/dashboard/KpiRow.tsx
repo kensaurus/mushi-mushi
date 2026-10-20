@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react'
-import { KpiTile, formatTokens, type KpiTileProps } from '../charts'
+import { KpiTile, type KpiTileProps } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { DashboardCounts, FixSummary, LlmDay, PdcaStage, ReportDay } from './types'
 
@@ -45,7 +45,7 @@ function pctDelta(last: number, prev: number, opts: { invert?: boolean } = {}): 
   return { value: `${Math.abs(pct)}%`, direction, tone }
 }
 
-export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaStages = [] }: Props) {
+export function KpiRow({ counts, fixSummary, reportsByDay, pdcaStages = [] }: Props) {
   // Each KPI gets a 14d daily series so the tile shows both the current
   // snapshot and the trajectory. The deltas below compare the most recent 7d
   // window against the prior 7d so the chip mirrors what the spark shows.
@@ -58,14 +58,6 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
     return pctDelta(last7, prev7, { invert: true })
   }, [reportsByDay])
 
-  const llmSeries = useMemo(() => llmByDay.map((d) => d.tokens), [llmByDay])
-  const llmDays = useMemo(() => llmByDay.map((d) => d.day), [llmByDay])
-  const llmDelta = useMemo(() => {
-    if (llmByDay.length < 14) return null
-    const last7 = llmByDay.slice(-7).reduce((a, d) => a + d.tokens, 0)
-    const prev7 = llmByDay.slice(0, 7).reduce((a, d) => a + d.tokens, 0)
-    return pctDelta(last7, prev7, { invert: true })
-  }, [llmByDay])
 
   const stage7d = useMemo(() => {
     const days = last7UtcDays()
@@ -89,12 +81,12 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
     <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger panel>
       <KpiTile
         density="flat"
-        label="Triage backlog"
-        value={counts.openBacklog}
-        sublabel="waiting to triage"
-        to="/reports?status=new"
-        accent={counts.openBacklog > 0 ? 'warn' : 'ok'}
-        meaning="Reports still waiting for triage, any age: the same list the tile opens. Daily intake is on the Reports (14d) tile."
+        label="Critical to decide"
+        value={counts.openCritical14d ?? 0}
+        sublabel={`${counts.openBacklog} new, not yet triaged`}
+        to="/reports?status=open&severity=critical&days=14"
+        accent={(counts.openCritical14d ?? 0) > 0 ? 'danger' : counts.openBacklog > 0 ? 'warn' : 'ok'}
+        meaning="Open critical reports from the last 14 days that still need your decision: the same list the To-do page and the banner above count. The small number is reports no one has triaged yet."
         variant={heroIsBacklog ? 'primary' : 'default'}
       />
       <KpiTile
@@ -113,29 +105,25 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
       />
       <KpiTile
         density="flat"
-        label="Auto-fix PRs"
-        value={counts.openPrs}
-        sublabel={`${fixSummary.inProgress} in progress · ${fixSummary.failed} stopped`}
-        to="/fixes?tab=attempts&status=pr_open"
-        accent={fixSummary.failed > 0 ? 'danger' : counts.openPrs > 0 ? 'ok' : 'muted'}
+        label="Fixes in flight"
+        value={fixSummary.inProgress}
+        sublabel={`${counts.openPrs} PR${counts.openPrs === 1 ? '' : 's'} open · ${fixSummary.failed} stopped`}
+        to="/fixes"
+        accent={fixSummary.failed > 0 ? 'danger' : fixSummary.inProgress > 0 || counts.openPrs > 0 ? 'ok' : 'muted'}
         delta={fixDelta}
         series={stage7d.fixes ?? undefined}
         seriesDays={stage7d.fixes ? stage7d.days : undefined}
         seriesAriaLabel="Fix dispatches per day, last 7 days"
-        meaning="Reports with a fix PR waiting for your review or merge: the list the tile opens. The sparkline shows how many fixes were dispatched each day."
+        meaning="Fixes being drafted right now, with how many pull requests wait for your review and how many attempts stopped. The sparkline shows fixes dispatched per day."
       />
       <KpiTile
         density="flat"
-        label="LLM tokens (14d)"
-        value={formatTokens(counts.llmTokens14d)}
-        sublabel={`${counts.llmCalls14d} calls · ${counts.llmFailures14d} failed`}
-        to="/health"
-        accent={counts.llmFailures14d > 0 ? 'warn' : 'ok'}
-        delta={llmDelta}
-        series={llmSeries}
-        seriesDays={llmDays}
-        seriesAriaLabel="LLM tokens per day, last 14 days"
-        meaning="Tokens consumed by the Haiku→Sonnet classification pipeline. Compare against your Anthropic budget; spikes signal noisy intake."
+        label="Fixed"
+        value={fixSummary.completed}
+        sublabel="reports closed by a fix"
+        to="/fixes?status=merged"
+        accent={fixSummary.completed > 0 ? 'ok' : 'muted'}
+        meaning="Reports closed by a fix that landed. AI usage and token spend moved to Team › AI spend."
       />
     </MetricStrip>
   )

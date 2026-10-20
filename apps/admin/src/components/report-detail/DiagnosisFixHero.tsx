@@ -69,7 +69,7 @@ export function DiagnosisFixHero({
     <>
       {/* Part 1 — Diagnosis: "here's why it broke", in plain English.
           `data-tour-id` anchors the FirstRunTour "diagnosis" stop. */}
-      <div data-tour-id="report-diagnosis">
+      <div id="report-diagnosis" data-tour-id="report-diagnosis" className="scroll-mt-6">
       <Card  className="mb-2 p-3">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-fg">
