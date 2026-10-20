@@ -231,24 +231,45 @@ export function createWebhookMiddleware(source: WebhookSource) {
     const bodyHash = await sha256hex(rawBody)
     const sourceIp = extractSourceIp(c)
 
-    const { data, error } = await db
-      .from('webhook_audit_log')
-      .insert({
-        webhook_source: source,
-        delivery_id: deliveryId ?? null,
-        body_hash: bodyHash,
-        outcome: 'pending',
-        source_ip: sourceIp,
-        http_method: c.req.method,
-        http_path: new URL(c.req.url).pathname,
-      })
-      .select('id')
-      .single()
+    // project_id is omitted on purpose: the column is nullable, and the route
+    // stamps it with setProject() after it knows which project the delivery
+    // belongs to. A missing Mushi project is not an insert failure.
+    let data: { id: string } | null = null
+    let error: { message?: string; code?: string | null } | null = null
+    try {
+      const inserted = await db
+        .from('webhook_audit_log')
+        .insert({
+          webhook_source: source,
+          delivery_id: deliveryId ?? null,
+          body_hash: bodyHash,
+          outcome: 'pending',
+          source_ip: sourceIp,
+          http_method: c.req.method,
+          http_path: new URL(c.req.url).pathname,
+        })
+        .select('id')
+        .single()
+      data = inserted.data
+      error = inserted.error
+    } catch (err) {
+      // A thrown client/gateway error is the same class of failure as a
+      // returned PostgREST error: the audit row is best-effort.
+      error = { message: err instanceof Error ? err.message : String(err), code: null }
+    }
 
     if (error || !data) {
       // Audit insert failure is non-fatal — do NOT block the webhook.
       // A compromised logging system should not take down ingest.
-      logDbFailure(log, 'audit insert failed', error, { scope: 'webhook-middleware', err: error?.message })
+      // "Project not specified." is the Supabase API gateway (no project ref
+      // on the host), classified transient in isTransientDbConnectionError so
+      // it stays in logs instead of opening a Sentry issue.
+      logDbFailure(log, 'audit insert failed', error, {
+        scope: 'webhook-middleware',
+        source,
+        delivery_id: deliveryId ?? null,
+        err: error?.message ?? 'insert returned no row',
+      })
       return {
         id: crypto.randomUUID(),
         resolve: async () => {},
