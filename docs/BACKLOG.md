@@ -10,21 +10,21 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 50 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 49 · **Recently closed:** 9 (BL-076 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 10 |
 | test-gap | 7 |
 | tech-debt | 19 |
-| known-bug | 1 |
+| known-bug | 0 |
 | decision-needed | 5 |
 | unfinished-feature | 6 |
 | needs-triage | 2 |
 
 | Status | Open |
 |---|---|
-| relevant | 47 |
+| relevant | 46 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -104,7 +104,6 @@ parked work is visible in one place.
 | BL-072 | tech-debt | Admin primitive consolidation: three next steps marked "not in this pass", plus the RN intent-step and design-token codegen deferrals | relevant | low | `docs/admin/PRIMITIVE-CONSOLIDATION.md:78`-`:82`; `docs/admin/SDK-UI-UNIFICATION-DECISIONS.md:33`; `docs/admin/UX-UNIFICATION-BURNDOWN.md:274` | — |
 | BL-073 | tech-debt | Dead-code categories not run: C6 duplication measured (jscpd 1.7%, 397 clones) but not ratcheted (needs a devDependency and a CI step, housekeep-gates); C7 orphan assets, C8 suppression debt and C9 schema not examined | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-074 | decision-needed | Owner launch gates with no code work left: tester marketplace (26 items incl. KYB, Tremendous keys, OFAC and attorney review), Capacitor-to-RN cutover (9), marketplace and storefront submission checklists, awesome-list submissions (one a week, plus checking the MCP registry `websiteUrl`), VS Code Marketplace deferred 2026-09-21 | relevant | low | `docs/runbooks/tester-marketplace-launch.md`; `docs/migrations/capacitor-to-react-native.md:825`-`:838`; `docs/marketplace/cursor-submission-checklist.md`; `docs/marketing/STOREFRONTS.md:211`; `docs/marketing/GTM-DISTRIBUTION.md`; `docs/marketing/awesome-list-submissions.md:76`-`:81` | #38 |
-| BL-076 | known-bug | Light-mode `text-warn` on `surface` is 2.64:1, under WCAG AA for text. Warn is mostly a fill in light mode, but text uses fail | relevant | med | `docs/design/housekeep-design-state-2026-10-16.md:121` | — |
 | BL-077 | tech-debt | Agent browser sessions on the owner PC (stored playwright profiles glot-guest, testprof, tsumagoi) raised most of glot.it's 2026-10-16 Sentry issues: a minimized window reports `visible` but never paints, so FCP/LCP/TTFB look like 8-16 s. `app.automated` stays false because the window is not webdriver-flagged. Tag these sessions (or the minimized-window signal) so web vitals from them are dropped | relevant | med | glot.it GLOT-IT-D0/CY/CZ/DA/DB/DE-DK closed 2026-10-16 as ours | — |
 | BL-079 | tech-debt | Dark `--color-viz-*` tokens never reach the CSS (Tailwind drops unused `@theme` colours), so `readVizToken()` falls back to the copy in `lib/vizTokens.ts`, a second source for chart colours. `@theme static` would make the stylesheet the one source | relevant | low | `apps/admin/src/lib/vizTokens.ts`; `docs/design/housekeep-design-state-2026-10-16.md` | — |
 | BL-080 | unfinished-feature | PR #338 "feat(observability): metrics, logs & traces as first-class evidence" (+1000/−31, branch `feat/observability-evidence-pillars`) has been open since 2026-07-22, last updated 2026-10-10. Merge it in a batch, rebase it, or close it. The positioning check matters here: AGENTS.md rules out "observability" as our category, so the copy needs that test before it lands | relevant | low | PR #338 | #338 |
@@ -126,6 +125,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-076 | Light-mode `text-warn` on `surface` is 2.64:1, under WCAG AA for text. Warn is mostly a fill in light mode, but text uses fail | 2026-10-20 | Light `--color-warn` deepened from `oklch(0.68 0.18 80)` to `oklch(0.50 0.18 80)` (same hue) in `apps/admin/src/styles/base-and-density.css`. Measured 5.50:1 on surface, 6.00:1 on surface-raised, 4.80:1 on surface-overlay, and 5.87:1 for `warn-fg` on the fill. Locked by `packages/server/src/__tests__/light-warn-contrast.test.ts`. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
