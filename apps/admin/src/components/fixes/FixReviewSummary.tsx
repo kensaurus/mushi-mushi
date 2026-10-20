@@ -35,7 +35,7 @@ export function FixReviewSummary({ review, loading, error, rerunning, onRerun }:
   return (
     <section aria-label="Opus review" className="rounded-sm border border-edge-subtle bg-surface p-2 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${statusChipTone(reviewTone(review.state))}`}>
+        <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${statusChipTone(reviewTone(review))}`}>
           {review.label}
         </span>
         {canRerunReview(review) && (
@@ -50,11 +50,24 @@ export function FixReviewSummary({ review, loading, error, rerunning, onRerun }:
           No independent review of this pull request yet. Read the diff on GitHub before merging.
         </p>
       )}
-      {review.state === 'queued' && (
-        <p className="text-2xs text-fg-muted">Claude Opus is reviewing the diff. This takes a few minutes.</p>
+      {(review.state === 'queued' || review.rerunning) && (
+        <p className="text-2xs text-fg-muted">
+          Claude Opus is reviewing the diff. This takes a few minutes
+          {review.verdict ? '; the last verdict applies until it finishes.' : '.'}
+        </p>
+      )}
+      {review.stale && (
+        <p className="text-2xs text-warn">
+          This verdict is about an older commit. The pull request has changed since; re-run the review.
+        </p>
       )}
       {review.reason && <p className="text-2xs text-fg-muted">{review.reason}</p>}
-      {review.summary && <p className="text-2xs text-fg-secondary leading-relaxed">{review.summary}</p>}
+      {review.summary && (
+        <p className="text-2xs text-fg-secondary leading-relaxed">
+          <span className="text-fg-faint">AI reviewer: </span>
+          {review.summary}
+        </p>
+      )}
 
       {findings.length > 0 && (
         <ul className="max-h-40 overflow-y-auto space-y-1 text-2xs" aria-label="Review findings">

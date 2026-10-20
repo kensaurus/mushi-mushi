@@ -46,13 +46,15 @@ import {
   type FixTimelineEvent,
 } from '../../_shared/fix-timeline.ts';
 import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
-import { mergeGate, toPublicReview } from '../../_shared/fix-review.ts';
+import { REVIEW_RERUNS_PER_HOUR, REVIEW_RUN_STALE_MS, toPublicReview } from '../../_shared/fix-review.ts';
 import { runInBackground } from '../../_shared/background.ts';
-import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
+import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
+import { enqueueFixReview, evaluateMergeGate, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
+  fetchPullRequest,
   installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
@@ -1001,17 +1003,6 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
-    // ADR 0030: an Opus review that says "hold" blocks the merge unless the
-    // caller overrides it. No review (or a failed read) keeps today's
-    // behaviour and reports "not reviewed".
-    const { row: reviewRow, error: reviewErr } = await loadFixReviewRow(db, attempt.id);
-    if (reviewErr) log.warn('fix review read failed; merging as not reviewed', { fixId, err: reviewErr });
-    const gate = mergeGate(reviewRow, { override });
-    const review = toPublicReview(reviewRow);
-    if (!gate.allowed) {
-      return c.json({ ok: false, error: { code: gate.code, message: gate.message }, data: { review } }, 409);
-    }
-
     const installationId = await installationIdForAttempt(db, attempt);
     const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
     if (!token) {
@@ -1027,6 +1018,30 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
 
+    // ADR 0030: the review gate. The PR's head now decides whether the
+    // verdict is about this commit; GitHub then merges only that commit.
+    let currentHead: string | null;
+    try {
+      const pull = await fetchPullRequest(token, ref, attempt.pr_number);
+      if (!pull) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'GitHub did not find the pull request' } }, 404);
+      currentHead = pull.headSha ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ ok: false, error: { code: 'GITHUB_READ_FAILED', message: msg } }, 502);
+    }
+    const gate = await evaluateMergeGate(db, {
+      fixAttemptId: attempt.id,
+      currentHead,
+      override,
+      overrideReason,
+      authMethod: c.get('authMethod') as string | undefined,
+      role: access.role,
+    });
+    if (!gate.ok) {
+      return c.json({ ok: false, error: { code: gate.code, message: gate.message }, data: { review: gate.review } }, gate.status);
+    }
+    const review = gate.review;
+
     let mergeResult;
     try {
       mergeResult = await mergeGithubPullRequest(token, ref, attempt.pr_number, {
@@ -1034,6 +1049,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         commitTitle: attempt.summary
           ? `fix: ${String(attempt.summary).slice(0, 72)}`
           : undefined,
+        sha: gate.expectedHeadSha,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1045,7 +1061,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         {
           ok: false,
           error: {
-            code: 'NOT_MERGEABLE',
+            code: mergeResult.headMoved ? 'HEAD_MOVED' : 'NOT_MERGEABLE',
             message: mergeResult.message ?? 'GitHub rejected the merge',
           },
         },
@@ -1073,6 +1089,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         report_id: attempt.report_id,
         pr_number: attempt.pr_number,
         review_state: review.state,
+        merged_head_sha: gate.expectedHeadSha,
         ...(gate.overridden ? { review_override: true, override_reason: overrideReason } : {}),
       },
     ).catch(() => null);
@@ -1094,9 +1111,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // ---------------------------------------------------------------------------
   // Re-run the agent PR review — POST /v1/admin/fixes/:id/review (ADR 0030)
   //
-  // Queues a fresh Opus review of the attempt's PR (clearing the old verdict,
-  // so a stale "hold" stops gating new commits) and asks agent-pr-review to
-  // run it now. The review itself is billed to the project's Anthropic key.
+  // Queues a fresh Opus review of the attempt's PR and asks agent-pr-review to
+  // run it now. The last completed verdict stays in force until the new
+  // review completes: a re-run never clears a hold. Billed to the project's
+  // Anthropic key, so viewers cannot start one, a review already queued or
+  // running is a 409, and each fix is limited to 3 re-runs an hour.
   // ---------------------------------------------------------------------------
   app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const fixId = c.req.param('id')!;
@@ -1122,6 +1141,40 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json(
         { ok: false, error: { code: 'PR_NOT_OPEN', message: 'The pull request is already merged or closed' } },
         409,
+      );
+    }
+    if (access.role === 'viewer') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Viewers cannot start a review.' } }, 403);
+    }
+
+    const current = await loadFixReviewRow(db, attempt.id);
+    if (current.error) {
+      return c.json({ ok: false, error: { code: 'REVIEW_UNAVAILABLE', message: 'Could not read the current review. Try again in a minute.' } }, 503);
+    }
+    const startedMs = current.row?.started_at ? Date.parse(current.row.started_at) : NaN;
+    const runningFresh = current.row?.status === 'running' && Number.isFinite(startedMs) && Date.now() - startedMs < REVIEW_RUN_STALE_MS;
+    if (current.row?.status === 'queued' || runningFresh) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'REVIEW_IN_PROGRESS', message: 'A review of this pull request is already queued or running.' },
+          data: { review: toPublicReview(current.row) },
+        },
+        409,
+      );
+    }
+    const rate = await claimTenantRateLimit(db, `fix:${attempt.id}:pr_review_rerun`, REVIEW_RERUNS_PER_HOUR, 3600);
+    if (!rate.allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message: `This fix was reviewed ${REVIEW_RERUNS_PER_HOUR} times in the last hour. Try again later.`,
+          },
+        },
+        429,
+        rate.retryAfterSec ? { 'Retry-After': String(rate.retryAfterSec) } : undefined,
       );
     }
 
@@ -1238,7 +1291,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
     const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
     // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
-    const review = await loadFixReview(db, fix.id);
+    // fix_attempts.commit_sha follows the PR head on push (webhooks-github-indexer),
+    // so a verdict about an older commit shows as stale here.
+    const review = await loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null);
 
     if (storedEvents && storedEvents.length > 0) {
       const events = mergeStoredFixTimeline(

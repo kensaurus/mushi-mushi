@@ -7,7 +7,8 @@
 
 import { apiFetch } from './supabase'
 
-export type FixReviewState = 'not_reviewed' | 'queued' | 'merge' | 'fix_first' | 'hold' | 'skipped' | 'failed'
+/** `stale`: the verdict is about an older commit than the PR's head. */
+export type FixReviewState = 'not_reviewed' | 'queued' | 'merge' | 'fix_first' | 'hold' | 'stale' | 'skipped' | 'failed'
 
 interface FixReviewFinding {
   severity: 'blocker' | 'major' | 'minor'
@@ -18,9 +19,16 @@ interface FixReviewFinding {
 }
 
 export interface FixReview {
+  fixAttemptId?: string | null
   state: FixReviewState
   label: string
+  /** The latest completed verdict, also while stale or while a re-review runs. */
   verdict: 'merge' | 'fix_first' | 'hold' | null
+  stale?: boolean
+  /** A new review is queued or running; the verdict above applies until it finishes. */
+  rerunning?: boolean
+  /** Model output written from untrusted input: shown as the reviewer's opinion, never as fact. */
+  untrustedFields?: readonly string[]
   fixesReport: boolean | null
   risk: 'low' | 'med' | 'high' | null
   findings: FixReviewFinding[]
@@ -59,22 +67,26 @@ const NOT_REVIEWED: FixReview = {
   reviewedAt: null,
 }
 
-/** Chip tone per state: hold is the only one that blocks a merge. */
-export function reviewTone(state: FixReviewState): 'ok' | 'warn' | 'danger' | 'neutral' {
-  if (state === 'merge') return 'ok'
-  if (state === 'fix_first') return 'warn'
-  if (state === 'hold') return 'danger'
+/** Chip tone per state: a hold (current or about an older commit) is the only one that blocks a merge. */
+export function reviewTone(review: Pick<FixReview, 'state' | 'verdict'>): 'ok' | 'warn' | 'danger' | 'neutral' {
+  if (review.verdict === 'hold') return 'danger'
+  if (review.state === 'merge') return 'ok'
+  if (review.state === 'fix_first' || review.state === 'stale') return 'warn'
   return 'neutral'
 }
 
-/** True when merging needs the explicit "merge anyway" override. */
-export function reviewBlocksMerge(review: Pick<FixReview, 'state'> | null | undefined): boolean {
-  return review?.state === 'hold'
+/**
+ * True when merging needs the explicit "merge anyway" override: the latest
+ * completed verdict is hold, also when it is about an older commit or a
+ * re-review is running (the server gate reads it the same way).
+ */
+export function reviewBlocksMerge(review: Pick<FixReview, 'verdict'> | null | undefined): boolean {
+  return review?.verdict === 'hold'
 }
 
-/** "Re-run review" is offered unless a review is already running. */
-export function canRerunReview(review: Pick<FixReview, 'state'> | null | undefined): boolean {
-  return review?.state !== 'queued'
+/** "Re-run review" is offered unless a review is already queued or running. */
+export function canRerunReview(review: Pick<FixReview, 'state' | 'rerunning'> | null | undefined): boolean {
+  return review?.state !== 'queued' && review?.rerunning !== true
 }
 
 export async function fetchFixReview(fixId: string): Promise<{ ok: true; review: FixReview } | { ok: false; error: string }> {

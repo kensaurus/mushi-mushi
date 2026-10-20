@@ -24,7 +24,7 @@ Each cloud-agent fix gets a verdict a few minutes after its pull request opens:
 | --- | --- | --- |
 | **merge** | Fixes the bug, nothing else to worry about | Works as usual |
 | **fix first** | Fixes or nearly fixes it; read the findings | Works; the merge dialog lists the findings |
-| **hold** | Does not fix the bug, could break something, removes something users rely on, or needs your decision | Refused until you tick **Merge anyway** (or pass `override: true` / `--override`) |
+| **hold** | Does not fix the bug, could break something, removes something users rely on, needs your decision, or part of the code was too large to read | Refused until a project member ticks **Merge anyway** in the console and gives a reason |
 
 The verdict appears in the fix timeline, in the **Merge PR** dialog, in
 `get_fix_timeline` (`review`), and as one comment on the pull request. Each
@@ -34,6 +34,16 @@ should make yourself.
 
 A pull request with no review merges as it always has. The dialog says
 **Not reviewed** so you know to read the diff yourself.
+
+When the agent pushes new commits, Mushi reviews the new version a few
+minutes later. Until that review finishes, the old verdict still applies: a
+hold keeps blocking, and a "merge" about an older commit reads **older
+commit** and counts as not reviewed. Mushi always merges exactly the commit it
+checked; if the pull request changes in between, nothing is merged.
+
+Overriding a hold is a person's decision: it works only from the console, by
+a project member who is not a viewer, with a reason that goes in the audit
+log. The CLI and MCP tools cannot override.
 
 ## What the review checks
 
@@ -58,18 +68,20 @@ dialog, or run:
 ```bash
 mushi fixes review <fixId>          # start a new review
 mushi fixes review <fixId> --show   # read the current one
-mushi fixes merge <fixId> --override --reason "Checked the resume flow by hand"
 ```
 
-A re-run clears the old verdict, so an old "hold" stops blocking new commits.
+The last verdict stays in force until the new review finishes, so re-running
+never unlocks a hold by itself. A fix can be re-reviewed at most three times
+an hour, and not while a review is already running.
 
 ## Cost and keys
 
 The review runs on your own Anthropic key (Settings → AI keys), or your
 organization's shared one. It never runs on Mushi's platform key. Without a
 key it is skipped, and the fix shows **Review skipped** with the reason. A
-review costs about $0.05 to $0.40, depending on the size of the diff, and
-counts toward your monthly AI budget.
+review usually costs $0.05 to $0.20, depending on the size of the diff; the
+most one review can cost, including retries, is about $0.90. It counts toward
+your monthly AI budget.
 
 Turn it off under **Settings → General → Review cloud agent pull requests**.
 Only owners and admins can change it.
@@ -77,7 +89,7 @@ Only owners and admins can change it.
 ## For operators
 
 The `agent-pr-review` edge function drains a queue in `fix_reviews` every 10
-minutes, three reviews at a time. To review pull requests that were already
+minutes, three reviews at a time and one per project per run. To review pull requests that were already
 open when the feature shipped, call it with `{ "backfill": true, "limit": 50 }`
 using the internal caller token. The design and the rejected alternatives are
 in ADR 0030.

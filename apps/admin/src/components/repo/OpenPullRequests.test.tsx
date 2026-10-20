@@ -94,4 +94,15 @@ describe('OpenPullRequests', () => {
     expect(button('Merge')?.disabled).toBe(true)
     expect(host.textContent).toContain('Required check failing: gate.')
   })
+
+  // ADR 0030: a Mushi fix PR shows its Opus review; a hold blocks Merge here.
+  it('shows the review of a fix PR and keeps Merge off for a hold', () => {
+    const held = { ...pr(9, [check('gate', 'success')]), review: { state: 'hold', label: 'Opus review: hold', fixId: null, verdict: 'hold' } }
+    expect(openPrMergeBlocker(held as never)).toBe('The Opus review says hold: open the fix to read the findings.')
+    render([held, { ...pr(10, [check('gate', 'success')]), review: { state: 'merge', label: 'Opus review: merge', fixId: null, verdict: 'merge' } }])
+    expect(host.textContent).toContain('Opus review: hold')
+    expect(host.textContent).toContain('Opus review: merge')
+    const merges = [...host.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Merge')
+    expect(merges.map((b) => b.disabled)).toEqual([true, false])
+  })
 })

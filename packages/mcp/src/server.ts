@@ -3190,17 +3190,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .enum(['squash', 'merge', 'rebase'])
           .optional()
           .describe('GitHub merge method (default squash)'),
-        override: z
-          .boolean()
-          .optional()
-          .describe(
-            'Merge even though the Opus review says hold. Only after the user has read the findings and chose to merge anyway.',
-          ),
-        overrideReason: z
-          .string()
-          .max(500)
-          .optional()
-          .describe('Why the hold is being overridden; stored in the audit log'),
       }),
       outputSchema: z.object({
         merged: z.boolean().optional().describe('True when GitHub accepted the merge in this call'),
@@ -3216,9 +3205,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
         review: z
           .object({
-            state: z.string().describe('merge | fix_first | hold | queued | skipped | failed | not_reviewed'),
+            state: z.string().describe('merge | fix_first | stale | queued | skipped | failed | not_reviewed (a hold never merges here)'),
             label: z.string().describe('One line, e.g. "Opus review: fix first" or "Not reviewed"'),
-            overridden: z.boolean().describe('True when a hold verdict was overridden by this call'),
+            overridden: z.boolean().describe('Always false from MCP: only a person in the console can override a hold'),
           })
           .optional()
           .describe('The Opus review of the PR at merge time (ADR 0030)'),
@@ -3232,11 +3221,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         reportStatus: string;
       }>(`/v1/admin/fixes/${args.fixId}/merge`, {
         method: 'POST',
-        body: JSON.stringify({
-          mergeMethod: args.mergeMethod ?? 'squash',
-          ...(args.override === true ? { override: true } : {}),
-          ...(args.overrideReason ? { overrideReason: args.overrideReason } : {}),
-        }),
+        body: JSON.stringify({ mergeMethod: args.mergeMethod ?? 'squash' }),
       });
       return jsonResult(data);
     },

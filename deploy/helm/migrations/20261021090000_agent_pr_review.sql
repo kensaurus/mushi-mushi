@@ -21,7 +21,11 @@ ALTER TABLE public.project_settings
 COMMENT ON COLUMN public.project_settings.agent_pr_review_enabled IS
   'Agent PR review (ADR 0030): review every cloud coding agent PR with Claude Opus 5.5 on the project''s Anthropic key; a "hold" verdict blocks merging from Mushi without an override. Default true.';
 
--- One review per fix attempt; a re-run resets the same row.
+-- One review per fix attempt. The verdict columns hold the latest COMPLETED
+-- review: a re-run (manual or after a push) sets status back to 'queued' and
+-- keeps them, so the merge gate keeps reading a hold until the new review
+-- completes. run_id is the claim token of the run that owns the row; every
+-- write of a run is guarded on it, so a superseded run cannot overwrite.
 CREATE TABLE IF NOT EXISTS public.fix_reviews (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   fix_attempt_id        uuid NOT NULL UNIQUE REFERENCES public.fix_attempts(id) ON DELETE CASCADE,
@@ -30,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.fix_reviews (
   status                text NOT NULL DEFAULT 'queued'
                           CHECK (status IN ('queued', 'running', 'completed', 'skipped', 'failed')),
   attempts              integer NOT NULL DEFAULT 0,
+  run_id                uuid,
   skip_reason           text,
   error                 text,
   pr_url                text,
@@ -52,19 +57,23 @@ CREATE TABLE IF NOT EXISTS public.fix_reviews (
   cost_usd              numeric(10, 4),
   comment_id            bigint,
   comment_url           text,
+  reviewed_at           timestamptz,
   queued_at             timestamptz NOT NULL DEFAULT now(),
   started_at            timestamptz,
   completed_at          timestamptz,
   created_at            timestamptz NOT NULL DEFAULT now(),
   updated_at            timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT fix_reviews_completed_has_verdict
-    CHECK (status <> 'completed' OR verdict IS NOT NULL)
+    CHECK (status <> 'completed' OR verdict IS NOT NULL),
+  CONSTRAINT fix_reviews_verdict_has_commit
+    CHECK (verdict IS NULL OR (head_sha IS NOT NULL AND reviewed_at IS NOT NULL))
 );
 
 COMMENT ON TABLE public.fix_reviews IS
   'Independent Claude Opus review of a cloud coding agent''s pull request (ADR 0030): verdict, findings, removed behaviour, model, tokens and cost. Written by agent-pr-review (service role); read by the merge gate, the fix timeline and the console.';
 
--- The worker drains queued rows oldest first.
+-- The worker drains due queued rows (queued_at <= now) oldest first; a retry
+-- or a push pushes queued_at into the future.
 CREATE INDEX IF NOT EXISTS idx_fix_reviews_queue
   ON public.fix_reviews (queued_at)
   WHERE status = 'queued';

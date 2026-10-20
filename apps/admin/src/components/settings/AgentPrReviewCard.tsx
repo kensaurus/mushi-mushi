@@ -73,8 +73,9 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
         purpose={
           <>
             Claude Opus 5.5 reads every pull request that Cursor or a GitHub cloud agent opens as a fix, with the bug
-            report and CI, and answers merge, fix first or hold. A hold stops merging from Mushi until you choose to
-            merge anyway. It runs on your Anthropic key (about $0.10 to $0.40 a review) and is skipped without one.
+            report and CI, and answers merge, fix first or hold. A hold stops merging from Mushi until a member chooses
+            to merge anyway, with a reason. It runs on your Anthropic key (usually $0.05 to $0.20 a review) and is
+            skipped without one.
           </>
         }
         action={

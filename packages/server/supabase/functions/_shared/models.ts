@@ -181,9 +181,12 @@ export const INVENTORY_PROPOSE_EFFORT = 'medium' as const
 export const MISTAKE_EFFORT = 'low' as const
 export const CODEBASE_ASSIST_EFFORT = 'low' as const
 export const NL_QUERY_PLANNER_EFFORT = 'medium' as const
-/** Code review of a whole PR: Opus 5.5 defaults to `medium`; `high` is the
- *  minimum the migration guide gives for intelligence-sensitive work. */
-export const AGENT_PR_REVIEW_EFFORT = 'high' as const
+/** Code review of a whole PR, on Opus 5.5 (whose default is `medium`).
+ *  `high` would suit it better, but the review must finish inside the 150 s
+ *  edge wall clock (100 s per call, 8k output tokens), and deeper thinking
+ *  there is cut off rather than used. Raise it when the review moves to a
+ *  longer-running worker or a streamed call. */
+export const AGENT_PR_REVIEW_EFFORT = 'medium' as const
 
 /** Extra `max_tokens` on top of a reply cap so adaptive thinking (which counts
  *  toward `max_tokens`) cannot truncate a short assistant answer. */

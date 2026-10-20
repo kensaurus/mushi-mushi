@@ -93,6 +93,11 @@ export interface ReviewRuleContext {
   ciFailed: boolean
   /** Part of the diff was not shown to the model. */
   diffTruncated: boolean
+  /**
+   * A source file's change was not shown in full (left out for size, cut, or
+   * GitHub sent no patch). Code nobody read cannot be called safe: hold.
+   */
+  sourceOmitted?: boolean
 }
 
 const MAX_FINDINGS = 30
@@ -115,7 +120,8 @@ function raise(current: ReviewVerdict, to: ReviewVerdict): ReviewVerdict {
  * verdict that contradicts its own fields (a "merge" with a blocker in it):
  *
  *   hold      when the diff does not fix the report, a finding is a blocker,
- *             or a product decision needs the owner;
+ *             a product decision needs the owner, or a source file's change
+ *             was not shown in full;
  *   fix first (at least) when CI failed, behaviour is removed, the diff
  *             strays from the report, a finding is major, risk is high, or
  *             part of the diff went unreviewed.
@@ -151,6 +157,7 @@ export function normalizeReview(raw: AgentPrReviewRaw, ctx: ReviewRuleContext): 
   if (raw.fixes_report !== true) apply('hold', 'The diff does not fix the reported bug.')
   if (findings.some((f) => f.severity === 'blocker')) apply('hold', 'A finding is a blocker.')
   if (decision) apply('hold', 'A product decision needs the owner.')
+  if (ctx.sourceOmitted) apply('hold', 'A source file was too large to review in full.')
   if (ctx.ciFailed) apply('fix_first', 'CI is failing on the PR.')
   if (removes.length > 0) apply('fix_first', 'The diff removes existing behaviour.')
   if (raw.scope_creep === true) apply('fix_first', 'The diff changes more than the report asked for.')
@@ -187,71 +194,101 @@ export interface ReviewDiffFile {
 export interface ReviewDiff {
   /** Rendered file list and patches, ready to wrap in <pr_diff>. */
   text: string
-  /** True when any changed line was not shown (budget, cut patch, or a file list GitHub cut short). */
+  /**
+   * True when any changed line outside a lock file or root build directory
+   * was not shown: left out for the budget, cut, a file GitHub sent no patch
+   * for, or a file list GitHub cut short.
+   */
   truncated: boolean
   totalFiles: number
   /** Files whose patch is shown, fully or cut. */
   shownFiles: number
-  /** Files left out only because of the budget, largest first. */
+  /** Files left out only because of the budget. */
   omittedForBudget: string[]
+  /** Source files whose change was not shown in full (cut, left out, or no patch). */
+  sourceOmitted: string[]
   additions: number
   deletions: number
-  /** Lock files and generated output, listed by name only. */
+  /** Lock files and root build output, listed by name only. */
   generatedFiles: number
   /** GitHub's file list was cut short (over 300 files). */
   fileListIncomplete: boolean
 }
 
-/** Lock files and build output: listed, never reviewed line by line. */
-const GENERATED_RE =
-  /(^|\/)(pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|deno\.lock|Cargo\.lock|Gemfile\.lock|poetry\.lock|composer\.lock|go\.sum|Podfile\.lock)$|(^|\/)(dist|build|\.next|node_modules|vendor|coverage)\/|\.min\.(js|css)$|\.snap$|\.map$|\.generated\.[a-z]+$/i
+/** Lock files, by exact file name, wherever they sit. */
+const LOCK_FILE_NAMES = new Set([
+  'pnpm-lock.yaml',
+  'package-lock.json',
+  'npm-shrinkwrap.json',
+  'yarn.lock',
+  'bun.lock',
+  'bun.lockb',
+  'deno.lock',
+  'Cargo.lock',
+  'Gemfile.lock',
+  'poetry.lock',
+  'composer.lock',
+  'go.sum',
+  'Podfile.lock',
+])
 
+/**
+ * Build output at the repository ROOT only. A `build/` or `vendor/` folder
+ * deeper in the tree (`src/build/auth.ts`, `lib/vendor/session.ts`) is
+ * source an agent can hide a change in, so it is reviewed like any other.
+ */
+const ROOT_BUILD_DIR_RE = /^(dist|build|\.next|node_modules|vendor|coverage)\//
+
+/** Listed by name, never reviewed line by line: lock files and root build output. */
 export function isGeneratedFile(path: string): boolean {
-  return GENERATED_RE.test(path)
+  const base = path.split('/').pop() ?? path
+  return LOCK_FILE_NAMES.has(base) || ROOT_BUILD_DIR_RE.test(path)
+}
+
+/** Files whose change is not code: an unshown one does not hold the review. */
+const NON_SOURCE_RE = /\.(png|jpe?g|gif|webp|avif|ico|bmp|tiff?|pdf|woff2?|ttf|otf|eot|mp3|mp4|mov|webm|wav|zip|gz|tgz|md|mdx|markdown|rst|txt)$/i
+
+function isSourceFile(path: string): boolean {
+  return !isGeneratedFile(path) && !NON_SOURCE_RE.test(path)
 }
 
 export const REVIEW_DIFF_MAX_CHARS = 100_000
-export const REVIEW_DIFF_MAX_FILE_CHARS = 24_000
+
+/** A patch cut to fewer characters than this is left out rather than shown as a stub. */
+const MIN_CUT_CHARS = 400
 
 /**
- * Fit a PR's diff into the review budget. Small diffs go in whole. A diff
- * over budget keeps every file in the list (name, status, +/−) and shows the
- * patches of the largest source changes first, each cut at a per-file cap,
- * until the budget runs out; the rest are named as left out. Patches render
- * in GitHub's file order so the model reads them the way a reviewer would.
+ * Fit a PR's diff into the review budget. A diff that fits goes in whole.
+ * Over budget, every file stays in the list (name, status, +/−) and patches
+ * fill the budget SMALLEST first, so a one-line change to an auth check is
+ * never crowded out by a large rewrite elsewhere; the first patch that no
+ * longer fits is cut, the rest are named as left out. Patches render in
+ * GitHub's file order so the model reads them the way a reviewer would.
  */
 export function buildReviewDiff(
   files: ReviewDiffFile[],
-  opts: { complete: boolean; maxChars?: number; maxFileChars?: number },
+  opts: { complete: boolean; maxChars?: number },
 ): ReviewDiff {
   const maxChars = opts.maxChars ?? REVIEW_DIFF_MAX_CHARS
-  const maxFileChars = opts.maxFileChars ?? REVIEW_DIFF_MAX_FILE_CHARS
   const additions = files.reduce((n, f) => n + (f.additions || 0), 0)
   const deletions = files.reduce((n, f) => n + (f.deletions || 0), 0)
 
   const reviewable = files.filter((f) => f.patch && !isGeneratedFile(f.filename))
-  const total = reviewable.reduce((n, f) => n + (f.patch?.length ?? 0), 0)
   const shown = new Map<string, { patch: string; cut: boolean }>()
   const omitted: string[] = []
 
-  if (total <= maxChars) {
-    for (const f of reviewable) shown.set(f.filename, { patch: f.patch!, cut: false })
-  } else {
-    let budget = maxChars
-    const bySize = [...reviewable].sort(
-      (a, b) => b.additions + b.deletions - (a.additions + a.deletions) || (b.patch!.length - a.patch!.length),
-    )
-    for (const f of bySize) {
-      const cap = Math.min(maxFileChars, budget)
-      if (cap < 400) {
-        omitted.push(f.filename)
-        continue
-      }
-      const patch = f.patch!
-      const cut = patch.length > cap
-      const body = cut ? patch.slice(0, cap) : patch
-      shown.set(f.filename, { patch: body, cut })
-      budget -= body.length
+  let budget = maxChars
+  const bySize = [...reviewable].sort((a, b) => a.patch!.length - b.patch!.length)
+  for (const f of bySize) {
+    const patch = f.patch!
+    if (patch.length <= budget) {
+      shown.set(f.filename, { patch, cut: false })
+      budget -= patch.length
+    } else if (budget >= MIN_CUT_CHARS) {
+      shown.set(f.filename, { patch: patch.slice(0, budget), cut: true })
+      budget = 0
+    } else {
+      omitted.push(f.filename)
     }
   }
 
@@ -262,30 +299,39 @@ export function buildReviewDiff(
     '',
     'Patches:',
   ]
-  let anyCut = false
+  const sourceOmitted: string[] = []
+  let anyUnshown = false
   for (const f of files) {
     const entry = shown.get(f.filename)
     if (entry) {
       lines.push(`--- ${f.filename} (${sign(f)})`, entry.patch)
       if (entry.cut) {
-        anyCut = true
+        anyUnshown = true
+        if (isSourceFile(f.filename)) sourceOmitted.push(f.filename)
         lines.push(`[patch cut here: the rest of this file's change was not shown]`)
       }
-    } else if (isGeneratedFile(f.filename)) {
-      lines.push(`--- ${f.filename}: not shown (lock file or generated output)`)
-    } else if (!f.patch) {
-      lines.push(`--- ${f.filename}: not shown (GitHub returned no patch: binary, renamed without changes, or too large)`)
-    } else {
-      lines.push(`--- ${f.filename}: not shown (over the review budget)`)
+      continue
     }
+    if (isGeneratedFile(f.filename)) {
+      lines.push(`--- ${f.filename}: not shown (lock file or root build output)`)
+      continue
+    }
+    anyUnshown = true
+    if (isSourceFile(f.filename)) sourceOmitted.push(f.filename)
+    lines.push(
+      f.patch
+        ? `--- ${f.filename}: not shown (over the review budget)`
+        : `--- ${f.filename}: not shown (GitHub returned no patch: binary, renamed without changes, or too large)`,
+    )
   }
 
   return {
     text: lines.join('\n'),
-    truncated: omitted.length > 0 || anyCut || !opts.complete,
+    truncated: anyUnshown || !opts.complete,
     totalFiles: files.length,
     shownFiles: shown.size,
     omittedForBudget: omitted,
+    sourceOmitted,
     additions,
     deletions,
     generatedFiles: files.filter((f) => isGeneratedFile(f.filename)).length,
@@ -374,7 +420,7 @@ export function buildReviewPrompt(input: ReviewPromptInput): string {
   const steps = (report.reproductionSteps ?? []).slice(0, 15).map((s, i) => `${i + 1}. ${String(s)}`).join('\n')
   const reportLines = [
     `Summary: ${scrub(report.summary, 500) || '(none)'}`,
-    `Category: ${report.category ?? 'unknown'} · Severity: ${report.severity ?? 'unknown'} · Component: ${scrub(report.component, 200) || 'unknown'}`,
+    `Category: ${scrub(report.category, 60) || 'unknown'} · Severity: ${scrub(report.severity, 30) || 'unknown'} · Component: ${scrub(report.component, 200) || 'unknown'}`,
     '',
     'Description:',
     scrub(report.description, 4000) || '(none)',
@@ -392,8 +438,8 @@ export function buildReviewPrompt(input: ReviewPromptInput): string {
   ]
 
   const coverage = diff.truncated
-    ? `Diff coverage: ${diff.shownFiles} of ${diff.totalFiles} files shown${diff.fileListIncomplete ? '; GitHub listed only part of the file list' : ''}${diff.omittedForBudget.length ? `; left out for size: ${diff.omittedForBudget.slice(0, 20).join(', ')}` : ''}. The rest was not reviewed.`
-    : `Diff coverage: every changed source file is shown (${diff.generatedFiles} lock or generated file(s) listed by name only).`
+    ? `Diff coverage: ${diff.shownFiles} of ${diff.totalFiles} files shown${diff.fileListIncomplete ? '; GitHub listed only part of the file list' : ''}${diff.sourceOmitted.length ? `; source not shown in full: ${diff.sourceOmitted.slice(0, 20).map((f) => fenceUntrusted(f)).join(', ')}` : ''}. The rest was not reviewed.`
+    : `Diff coverage: every changed file is shown (${diff.generatedFiles} lock file(s) or root build output listed by name only).`
 
   return [
     '<bug_report trust="untrusted">',
@@ -445,8 +491,9 @@ const RISK_LABEL: Record<ReviewRisk, string> = { low: 'low', med: 'medium', high
 
 /**
  * Model text going into a GitHub comment: no HTML, no @-mentions (a review
- * of untrusted code must not ping people), no backtick runs that could
- * break the inline-code path formatting.
+ * of untrusted code must not ping people). The comment never carries the
+ * review summary, which can quote the reporter: a PR may be public, the bug
+ * report is not, so the comment links to the report in the console instead.
  */
 export function commentSafe(text: string): string {
   return text
@@ -457,15 +504,20 @@ export function commentSafe(text: string): string {
 
 export function formatReviewComment(
   review: NormalizedReview,
-  meta: { model: string; headSha: string | null; diff: Pick<ReviewDiff, 'shownFiles' | 'totalFiles' | 'truncated'> },
+  meta: {
+    model: string
+    headSha: string | null
+    diff: Pick<ReviewDiff, 'shownFiles' | 'totalFiles' | 'truncated'>
+    /** The report in the Mushi console (members only). */
+    reportUrl: string | null
+  },
 ): string {
   const lines: string[] = [
     `### Mushi review (${meta.model}): ${VERDICT_LABEL[review.verdict]}`,
     '',
-    commentSafe(review.summary),
-    '',
     `**Fixes the report:** ${review.fixes_report ? 'yes' : 'no'} · **Risk:** ${RISK_LABEL[review.risk]} · **Scope creep:** ${review.scope_creep ? 'yes' : 'no'}`,
   ]
+  if (meta.reportUrl) lines.push('', `The full review and the bug report are in the [Mushi console](${meta.reportUrl}).`)
   if (review.findings.length > 0) {
     lines.push('', '**Findings**')
     for (const f of review.findings) {
@@ -498,6 +550,11 @@ export function formatReviewComment(
 // Stored review → what callers see, and the merge gate
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** A run still `running` after this long is presumed dead (killed isolate) and can be re-queued. */
+export const REVIEW_RUN_STALE_MS = 15 * 60_000
+/** Manual re-runs per fix per hour (each one is an Opus call on the project's key). */
+export const REVIEW_RERUNS_PER_HOUR = 3
+
 export const REVIEW_STATUSES = ['queued', 'running', 'completed', 'skipped', 'failed'] as const
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number]
 
@@ -518,7 +575,13 @@ export type ReviewSkipReason = keyof typeof REVIEW_SKIP_REASONS
 export interface FixReviewRow {
   id: string
   fix_attempt_id: string
+  /** The latest run: queued / running / completed / skipped / failed. */
   status: ReviewStatus
+  /**
+   * The latest COMPLETED verdict and its fields. A re-run (manual or a new
+   * push) keeps them until it completes, so a hold stays a hold while the
+   * next review runs; a skipped or failed run never clears them.
+   */
   verdict: ReviewVerdict | null
   fixes_report: boolean | null
   risk: ReviewRisk | null
@@ -530,33 +593,54 @@ export interface FixReviewRow {
   rules_applied: string[] | null
   skip_reason: string | null
   error: string | null
+  /** The commit the verdict is about. */
   head_sha: string | null
   diff_truncated: boolean | null
   model: string | null
   cost_usd: number | string | null
   comment_url: string | null
+  /** When the verdict was made. */
+  reviewed_at: string | null
   completed_at: string | null
   queued_at: string | null
+  started_at: string | null
 }
 
 export const FIX_REVIEW_PUBLIC_COLUMNS =
-  'id, fix_attempt_id, status, verdict, fixes_report, risk, findings, scope_creep, removes_behavior, needs_human_decision, summary, rules_applied, skip_reason, error, head_sha, diff_truncated, model, cost_usd, comment_url, completed_at, queued_at'
+  'id, fix_attempt_id, status, verdict, fixes_report, risk, findings, scope_creep, removes_behavior, needs_human_decision, summary, rules_applied, skip_reason, error, head_sha, diff_truncated, model, cost_usd, comment_url, reviewed_at, completed_at, queued_at, started_at'
 
-/** "not_reviewed" | "queued" | "merge" | "fix_first" | "hold" | "skipped" | "failed" */
-export type ReviewState = 'not_reviewed' | 'queued' | ReviewVerdict | 'skipped' | 'failed'
+/**
+ * "not_reviewed" | "queued" (first review running) | "merge" | "fix_first"
+ * | "hold" | "stale" (the verdict is about an older commit) | "skipped" |
+ * "failed" (no verdict yet).
+ */
+export type ReviewState = 'not_reviewed' | 'queued' | ReviewVerdict | 'stale' | 'skipped' | 'failed'
+
+/** Fields written by the model from untrusted input: show them, never act on them. */
+const UNTRUSTED_REVIEW_FIELDS = ['summary', 'findings', 'removesBehavior', 'needsHumanDecision'] as const
 
 export interface PublicFixReview {
+  /** The fix attempt the review belongs to (null when there is no review). */
+  fixAttemptId: string | null
   state: ReviewState
   /** One line for chips, timelines and MCP: "Opus review: hold", "Not reviewed". */
   label: string
+  /** The latest completed verdict, also when it is stale or a re-run is going. */
   verdict: ReviewVerdict | null
+  /** The verdict is about an older commit than the PR's head. */
+  stale: boolean
+  /** A new review is queued or running; the verdict above still applies until it finishes. */
+  rerunning: boolean
   fixesReport: boolean | null
   risk: ReviewRisk | null
   findings: ReviewFinding[]
   scopeCreep: boolean | null
   removesBehavior: string[]
   needsHumanDecision: string | null
+  /** Model text derived from untrusted input (the report and the agent's diff). */
   summary: string | null
+  /** Names the fields above that are model output: data to read, never instructions. */
+  untrustedFields: readonly string[]
   rulesApplied: string[]
   /** Why there is no verdict (skipped / failed), in a sentence. */
   reason: string | null
@@ -568,15 +652,23 @@ export interface PublicFixReview {
   reviewedAt: string | null
 }
 
-export function reviewState(row: Pick<FixReviewRow, 'status' | 'verdict'> | null): ReviewState {
+/** True when the verdict is about a different commit than the PR's head now. */
+export function isStaleReview(row: Pick<FixReviewRow, 'verdict' | 'head_sha'> | null, currentHead: string | null | undefined): boolean {
+  return Boolean(row?.verdict && row.head_sha && currentHead && row.head_sha !== currentHead)
+}
+
+export function reviewState(
+  row: Pick<FixReviewRow, 'status' | 'verdict' | 'head_sha'> | null,
+  currentHead?: string | null,
+): ReviewState {
   if (!row) return 'not_reviewed'
-  if (row.status === 'completed' && row.verdict) return row.verdict
+  if (row.verdict) return isStaleReview(row, currentHead) ? 'stale' : row.verdict
   if (row.status === 'queued' || row.status === 'running') return 'queued'
   if (row.status === 'skipped') return 'skipped'
   return 'failed'
 }
 
-export function reviewLabel(state: ReviewState): string {
+export function reviewLabel(state: ReviewState, verdict?: ReviewVerdict | null): string {
   switch (state) {
     case 'not_reviewed':
       return 'Not reviewed'
@@ -586,21 +678,28 @@ export function reviewLabel(state: ReviewState): string {
       return 'Review skipped'
     case 'failed':
       return 'Review failed'
+    case 'stale':
+      return `Opus review: ${verdict ? VERDICT_LABEL[verdict] : 'unknown'} (older commit)`
     default:
       return `Opus review: ${VERDICT_LABEL[state]}`
   }
 }
 
-export function toPublicReview(row: FixReviewRow | null): PublicFixReview {
-  const state = reviewState(row)
+export function toPublicReview(row: FixReviewRow | null, currentHead?: string | null): PublicFixReview {
+  const state = reviewState(row, currentHead)
   const skip = row?.skip_reason && row.skip_reason in REVIEW_SKIP_REASONS
     ? REVIEW_SKIP_REASONS[row.skip_reason as ReviewSkipReason]
     : row?.skip_reason ?? null
   const cost = row?.cost_usd == null ? null : Number(row.cost_usd)
+  const verdict = row?.verdict ?? null
+  const rerunning = Boolean(verdict && (row?.status === 'queued' || row?.status === 'running'))
   return {
+    fixAttemptId: row?.fix_attempt_id ?? null,
     state,
-    label: reviewLabel(state),
-    verdict: row?.status === 'completed' ? row.verdict : null,
+    label: reviewLabel(state, verdict) + (rerunning ? ' · re-review in progress' : ''),
+    verdict,
+    stale: state === 'stale',
+    rerunning,
     fixesReport: row?.fixes_report ?? null,
     risk: row?.risk ?? null,
     findings: Array.isArray(row?.findings) ? row!.findings! : [],
@@ -608,36 +707,89 @@ export function toPublicReview(row: FixReviewRow | null): PublicFixReview {
     removesBehavior: Array.isArray(row?.removes_behavior) ? row!.removes_behavior! : [],
     needsHumanDecision: row?.needs_human_decision ?? null,
     summary: row?.summary ?? null,
+    untrustedFields: UNTRUSTED_REVIEW_FIELDS,
     rulesApplied: Array.isArray(row?.rules_applied) ? row!.rules_applied! : [],
-    reason: state === 'skipped' ? skip : state === 'failed' ? (row?.error ?? 'The review did not finish') : null,
+    reason: row?.status === 'skipped' ? skip : row?.status === 'failed' ? (row?.error ?? 'The review did not finish') : null,
     headSha: row?.head_sha ?? null,
     diffTruncated: row?.diff_truncated === true,
     model: row?.model ?? null,
     costUsd: Number.isFinite(cost) ? cost : null,
     commentUrl: row?.comment_url ?? null,
-    reviewedAt: row?.completed_at ?? null,
+    reviewedAt: row?.reviewed_at ?? null,
   }
 }
 
 export type MergeGateResult =
-  | { allowed: true; state: ReviewState; overridden: boolean }
-  | { allowed: false; state: 'hold'; code: 'REVIEW_HOLD'; message: string }
+  | {
+      allowed: true
+      state: ReviewState
+      overridden: boolean
+      /**
+       * The head commit the merge must land: GitHub refuses the merge (409)
+       * if the PR moved after this check, so a verdict cannot be applied to
+       * commits it never saw.
+       */
+      expectedHeadSha: string | null
+    }
+  | { allowed: false; state: 'hold' | 'stale'; code: 'REVIEW_HOLD'; message: string }
 
 /**
- * The merge gate (ADR 0030). Only a "hold" verdict blocks, and an explicit
- * override lets it through. "fix first" merges (the console shows its
- * findings first); no review, a queued, skipped or failed one keep today's
- * behaviour, and callers say "not reviewed".
+ * The merge gate (ADR 0030). It reads the latest COMPLETED verdict, whatever
+ * the current run is doing:
+ *   - hold blocks, also while a re-review runs and also when the PR has moved
+ *     on since (a stale hold blocks until a review of the new head completes);
+ *     an override lets it through;
+ *   - fix first and merge pass; a stale merge or fix first counts as not
+ *     reviewed (the state says "stale");
+ *   - no verdict (none yet, skipped, failed) keeps today's behaviour.
+ * The message never quotes the review: its text is model output from
+ * untrusted input.
  */
-export function mergeGate(review: Pick<FixReviewRow, 'status' | 'verdict' | 'summary'> | null, opts: { override?: boolean }): MergeGateResult {
-  const state = reviewState(review)
-  if (state !== 'hold') return { allowed: true, state, overridden: false }
-  if (opts.override === true) return { allowed: true, state, overridden: true }
-  const why = review?.summary ? ` ${review.summary.slice(0, 400)}` : ''
+export function mergeGate(
+  review: Pick<FixReviewRow, 'status' | 'verdict' | 'head_sha'> | null,
+  opts: { override?: boolean; currentHead?: string | null },
+): MergeGateResult {
+  const state = reviewState(review, opts.currentHead)
+  const verdict = review?.verdict ?? null
+  const expectedHeadSha = opts.currentHead ?? (verdict && state !== 'stale' ? review?.head_sha ?? null : null)
+  if (verdict !== 'hold') return { allowed: true, state, overridden: false, expectedHeadSha }
+  if (opts.override === true) return { allowed: true, state, overridden: true, expectedHeadSha }
   return {
     allowed: false,
-    state: 'hold',
+    state: state === 'stale' ? 'stale' : 'hold',
     code: 'REVIEW_HOLD',
-    message: `The Opus review of this pull request says hold, so Mushi will not merge it.${why} Fix the findings and re-run the review, or merge anyway with override: true.`,
+    message: state === 'stale'
+      ? 'The last Opus review of this pull request said hold, and no review of its newer commits has finished yet, so Mushi will not merge it. Re-run the review, or have a project member override the hold in the Mushi console with a reason.'
+      : 'The Opus review of this pull request says hold, so Mushi will not merge it. Fix the findings and re-run the review, or have a project member override the hold in the Mushi console with a reason.',
   }
+}
+
+export interface OverrideCaller {
+  /** `c.get('authMethod')`: 'jwt' for a signed-in console session, 'apiKey' for keys (CLI, MCP, CI). */
+  authMethod: string | null | undefined
+  /** Organization role from callerCanAccessProject. */
+  role: string | null | undefined
+  reason: string | null | undefined
+}
+
+/**
+ * Who may override a hold: a person in the console. An API key (the CLI,
+ * MCP, CI) cannot, viewers cannot, and the reason is required so the audit
+ * log says why. Null when the override may proceed.
+ */
+export function overrideRefusal(caller: OverrideCaller): { status: 400 | 403; code: string; message: string } | null {
+  if (caller.authMethod !== 'jwt') {
+    return {
+      status: 403,
+      code: 'OVERRIDE_NEEDS_CONSOLE',
+      message: 'Only a person can override a hold: open the fix in the Mushi console, read the findings, and choose Merge anyway with a reason. API keys, the CLI and MCP cannot override.',
+    }
+  }
+  if (caller.role === 'viewer') {
+    return { status: 403, code: 'FORBIDDEN', message: 'Viewers cannot override a hold.' }
+  }
+  if (!caller.reason || !caller.reason.trim()) {
+    return { status: 400, code: 'OVERRIDE_REASON_REQUIRED', message: 'Say why you are overriding the hold (overrideReason); it is kept in the audit log.' }
+  }
+  return null
 }

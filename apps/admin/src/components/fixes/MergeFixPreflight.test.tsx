@@ -108,9 +108,25 @@ describe('MergeFixPreflight — Opus review gate', () => {
 
     const box = document.body.querySelector('input[type="checkbox"]') as HTMLInputElement
     await act(async () => box.click())
+    // A reason is required before the override can be sent.
+    expect(button('Merge anyway').disabled).toBe(true)
+    const reason = document.body.querySelector('input[type="text"], input:not([type])') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(reason, 'Checked the resume flow by hand')
+      reason.dispatchEvent(new Event('input', { bubbles: true }))
+    })
     await act(async () => button('Merge anyway').click())
-    expect(mergeBody()).toEqual({ mergeMethod: 'squash', override: true })
+    expect(mergeBody()).toEqual({ mergeMethod: 'squash', override: true, overrideReason: 'Checked the resume flow by hand' })
     expect(onMerged).toHaveBeenCalledWith('fixed')
+  })
+
+  it('a hold on an older commit, or while a re-review runs, still needs the override', async () => {
+    respond({ ...HOLD, state: 'stale', stale: true, rerunning: true, label: 'Opus review: hold (older commit) · re-review in progress' })
+    await open()
+    expect(document.body.textContent).toContain('This verdict is about an older commit')
+    expect(button('Squash merge').disabled).toBe(true)
+    expect(document.body.querySelector('input[type="checkbox"]')).not.toBeNull()
   })
 
   it('an unreviewed PR says "Not reviewed" and merges without an override', async () => {
@@ -130,12 +146,13 @@ describe('MergeFixPreflight — Opus review gate', () => {
     expect(button('Squash merge').disabled).toBe(false)
   })
 
-  it('re-runs the review on request', async () => {
+  it('re-runs the review on request, and offers no second run while one is going', async () => {
     respond(HOLD)
     await open()
     mocks.apiFetch.mockImplementationOnce(async () => ({ ok: true, data: { review: { ...NOT_REVIEWED, state: 'queued', label: 'Review in progress' } } }))
     await act(async () => button('Re-run review').click())
     expect(mocks.apiFetch).toHaveBeenCalledWith('/v1/admin/fixes/fix-1/review', { method: 'POST' })
     expect(document.body.textContent).toContain('Review in progress')
+    expect([...document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('Re-run review'))).toBe(false)
   })
 })

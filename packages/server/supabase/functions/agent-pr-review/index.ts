@@ -6,15 +6,19 @@
  * The independent review of every cloud coding agent's pull request (ADR
  * 0030). When a cloud agent's PR is accepted as a fix (`applyCloudAgentOutcome`,
  * the one path cursor-webhook, agent-status-poll and the GitHub indexer share)
- * a `fix_reviews` row is queued. Each tick this function:
+ * a `fix_reviews` row is queued; a push to a reviewed PR re-queues it. Each
+ * tick this function:
  *
- *   1. puts reviews stuck in `running` for 15 min back in the queue (failed
- *      after 3 tries);
+ *   1. puts reviews stuck in `running` for 15 min back in the queue, or marks
+ *      them failed (with a timeline event) after 3 tries;
  *   2. on `{ backfill: true, limit }`, queues a review for every open
  *      cloud-agent PR that has none (newest first, at most `limit`);
  *   3. on `{ fixAttemptId, force }`, queues that attempt (again, with force)
  *      and reviews it now;
- *   4. claims up to 3 queued reviews and runs them side by side:
+ *   4. claims up to 3 due reviews, at most one per project per tick, and runs
+ *      them side by side. A claim stamps a fresh `run_id`; every later write
+ *      of that run is guarded on it, so a run that a re-queue or a newer run
+ *      superseded can never overwrite the row.
  *        - skipped, with the reason stored, when the project turned review
  *          off, has no Anthropic key of its own (BYOK; the platform key is
  *          never spent on this), is over its monthly AI budget, or Mushi
@@ -23,12 +27,19 @@
  *          the PR title and description, CI on the head commit and the diff
  *          (budgeted by `buildReviewDiff`) go to Claude Opus 5.5 with
  *          structured output; the verdict is made consistent with its own
- *          findings (`normalizeReview`), stored with model, tokens and cost,
- *          added to the fix timeline ("Opus review: hold"), and posted as
- *          one PR comment that later reviews edit in place.
+ *          findings (`normalizeReview`), stored with the reviewed head SHA,
+ *          model, tokens and cost, added to the fix timeline ("Opus review:
+ *          hold"), and posted as one PR comment (no report text; a link to
+ *          the console) that later reviews edit in place.
+ *   A skipped or failed run keeps the last completed verdict, so a hold stays
+ *   a hold. A model error retries after 10 min × tries.
  *
- * Nothing here merges. A "hold" verdict makes the merge route, `merge_fix`
- * and the console refuse until someone passes `override: true`.
+ * Nothing here merges. A "hold" verdict makes every Mushi merge path refuse
+ * until a person overrides it from the console with a reason.
+ *
+ * Wall clock: the repo assumes 150 s per edge invocation (inventory-propose
+ * keeps a 110 s run budget). Reviews run in parallel, each model call aborts
+ * at 100 s, and usage is recorded as soon as the call returns.
  *
  * Auth: `requireServiceRoleAuth`. Invoked by pg_cron `mushi-agent-pr-review`
  * (migration 20261021090000, `3-53/10 * * * *`) and by
@@ -71,6 +82,7 @@ import {
   describeCi,
   formatReviewComment,
   normalizeReview,
+  REVIEW_RUN_STALE_MS,
   REVIEW_SKIP_REASONS,
   VERDICT_LABEL,
   type AgentPrReviewRaw,
@@ -81,13 +93,27 @@ import {
 
 const log = rootLog.child('agent-pr-review')
 
-/** Reviews run per tick, side by side. Each Opus call can take minutes. */
+/** Reviews run per tick, side by side. */
 export const REVIEW_BATCH = 3
+/** Fairness: one project's backlog cannot take every slot of a tick. */
+export const REVIEW_MAX_PER_PROJECT_PER_TICK = 1
+/** Due rows read per tick to fill the batch fairly. */
+const QUEUE_SCAN = 30
 export const REVIEW_MAX_TRIES = 3
-export const REVIEW_STALE_MS = 15 * 60_000
-export const REVIEW_CALL_TIMEOUT_MS = 240_000
-/** Thinking counts toward max_tokens; a long review must not be cut off. */
-export const REVIEW_MAX_TOKENS = 32_000
+export const REVIEW_STALE_MS = REVIEW_RUN_STALE_MS
+/** A model error waits this long × tries before the next try. */
+export const REVIEW_RETRY_BACKOFF_MS = 10 * 60_000
+/**
+ * Under the 150 s edge wall clock the repo assumes (inventory-propose runs a
+ * 110 s budget), with room left to record usage and store the verdict.
+ */
+export const REVIEW_CALL_TIMEOUT_MS = 100_000
+/**
+ * Thinking counts toward max_tokens. 8k is about what Opus 5.5 writes in the
+ * 100 s window; a larger cap would only be cut off by the timeout. Worst case
+ * per try: ~35k input × $4 + 8k output × $20 per MTok ≈ $0.30.
+ */
+export const REVIEW_MAX_TOKENS = 8_000
 export const BACKFILL_DEFAULT_LIMIT = 50
 export const BACKFILL_MAX_LIMIT = 200
 
@@ -138,6 +164,8 @@ export interface ModelCallResult {
 
 export interface ReviewDeps {
   now?: () => Date
+  /** The claim token for a run; injectable so tests can assert the guarded writes. */
+  newRunId?: () => string
   resolveAnthropicKey?: (db: SupabaseClient, projectId: string) => Promise<ResolvedKey | null>
   resolveGithubToken?: (db: SupabaseClient, attempt: AttemptRow) => Promise<string | null>
   fetchPr?: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
@@ -150,6 +178,7 @@ export interface ReviewDeps {
     body: string,
     existingId: number | null,
   ) => Promise<{ id: number; url: string } | null>
+  consoleBaseUrl?: () => string
 }
 
 export type ReviewOutcome =
@@ -157,6 +186,7 @@ export type ReviewOutcome =
   | { outcome: 'skipped'; reason: ReviewSkipReason }
   | { outcome: 'retry' | 'failed'; error: string }
   | { outcome: 'not_claimed' }
+  | { outcome: 'superseded' }
 
 export interface ReviewRunSummary {
   requeued: number
@@ -167,6 +197,7 @@ export interface ReviewRunSummary {
   skipped: number
   retried: number
   failed: number
+  superseded: number
   verdicts: Record<ReviewVerdict, number>
   results: Array<{ reviewId: string; fixAttemptId: string } & ReviewOutcome>
 }
@@ -200,6 +231,12 @@ async function defaultCallModel(input: ModelCallInput): Promise<ModelCallResult>
     abortSignal: input.abortSignal,
   })
   return result as unknown as ModelCallResult
+}
+
+/** Console base for the report link; ADMIN_BASE_URL wins when it is an https URL. */
+function defaultConsoleBaseUrl(): string {
+  const env = typeof Deno !== 'undefined' ? Deno.env.get('ADMIN_BASE_URL') : undefined
+  return env && /^https:\/\//.test(env) ? env.replace(/\/$/, '') : 'https://kensaur.us/mushi-mushi/admin'
 }
 
 function githubHeaders(token: string): Record<string, string> {
@@ -243,22 +280,55 @@ async function defaultUpsertComment(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Timeline events
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function insertReviewEvent(
+  db: SupabaseClient,
+  target: { id: string; fix_attempt_id: string; project_id: string },
+  ev: { status: 'ok' | 'fail' | 'pending'; label: string; detail: string; dedupe: string; payload: Record<string, unknown> },
+): Promise<void> {
+  const { error } = await db.from('fix_events').insert({
+    fix_attempt_id: target.fix_attempt_id,
+    project_id: target.project_id,
+    kind: 'reviewed',
+    status: ev.status,
+    label: ev.label,
+    detail: ev.detail.slice(0, 500),
+    at: new Date().toISOString(),
+    dedupe_key: ev.dedupe,
+    payload: ev.payload,
+  })
+  if (error && error.code !== '23505') log.warn('fix_events review insert failed (non-fatal)', { reviewId: target.id, err: error.message })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Queue maintenance
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: number; gaveUp: number }> {
   const staleIso = new Date(now.getTime() - REVIEW_STALE_MS).toISOString()
   const at = now.toISOString()
+  const message = `The review did not finish after ${REVIEW_MAX_TRIES} tries.`
   const { data: gaveUp } = await db
     .from('fix_reviews')
-    .update({ status: 'failed', error: `The review did not finish after ${REVIEW_MAX_TRIES} tries.`, updated_at: at })
+    .update({ status: 'failed', run_id: null, error: message, completed_at: at, updated_at: at })
     .eq('status', 'running')
     .lt('started_at', staleIso)
     .gte('attempts', REVIEW_MAX_TRIES)
-    .select('id')
+    .select('id, fix_attempt_id, project_id, attempts')
+  for (const row of (gaveUp ?? []) as Array<{ id: string; fix_attempt_id: string; project_id: string; attempts: number | null }>) {
+    await insertReviewEvent(db, row, {
+      status: 'pending',
+      label: 'Opus review failed',
+      detail: message,
+      dedupe: `review-fail:${row.id}:${row.attempts ?? REVIEW_MAX_TRIES}`,
+      payload: { reviewId: row.id, gaveUp: true },
+    })
+  }
   const { data: requeued } = await db
     .from('fix_reviews')
-    .update({ status: 'queued', updated_at: at })
+    .update({ status: 'queued', run_id: null, queued_at: at, updated_at: at })
     .eq('status', 'running')
     .lt('started_at', staleIso)
     .lt('attempts', REVIEW_MAX_TRIES)
@@ -300,46 +370,23 @@ export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Da
   return queued
 }
 
+/** Oldest due rows first, at most REVIEW_MAX_PER_PROJECT_PER_TICK per project. */
+export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch = REVIEW_BATCH, perProject = REVIEW_MAX_PER_PROJECT_PER_TICK): T[] {
+  const taken = new Map<string, number>()
+  const out: T[] = []
+  for (const row of rows) {
+    if (out.length >= batch) break
+    const n = taken.get(row.project_id) ?? 0
+    if (n >= perProject) continue
+    taken.set(row.project_id, n + 1)
+    out.push(row)
+  }
+  return out
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // One review
 // ─────────────────────────────────────────────────────────────────────────────
-
-async function finishSkipped(db: SupabaseClient, row: QueueRow, attempt: AttemptRow | null, reason: ReviewSkipReason, now: Date) {
-  await db
-    .from('fix_reviews')
-    .update({ status: 'skipped', skip_reason: reason, error: null, completed_at: now.toISOString(), updated_at: now.toISOString() })
-    .eq('id', row.id)
-  // Say why on the fix timeline, except when the project turned review off on purpose.
-  if (attempt && reason !== 'review_off') {
-    await insertReviewEvent(db, row, {
-      status: 'pending',
-      label: 'Opus review skipped',
-      detail: REVIEW_SKIP_REASONS[reason],
-      dedupe: `review-skip:${row.id}:${reason}`,
-      payload: { reviewId: row.id, skipReason: reason },
-    })
-  }
-  return { outcome: 'skipped' as const, reason }
-}
-
-async function insertReviewEvent(
-  db: SupabaseClient,
-  row: QueueRow,
-  ev: { status: 'ok' | 'fail' | 'pending'; label: string; detail: string; dedupe: string; payload: Record<string, unknown> },
-): Promise<void> {
-  const { error } = await db.from('fix_events').insert({
-    fix_attempt_id: row.fix_attempt_id,
-    project_id: row.project_id,
-    kind: 'reviewed',
-    status: ev.status,
-    label: ev.label,
-    detail: ev.detail.slice(0, 500),
-    at: new Date().toISOString(),
-    dedupe_key: ev.dedupe,
-    payload: ev.payload,
-  })
-  if (error && error.code !== '23505') log.warn('fix_events review insert failed (non-fatal)', { reviewId: row.id, err: error.message })
-}
 
 const EVENT_STATUS: Record<ReviewVerdict, 'ok' | 'pending' | 'fail'> = { merge: 'ok', fix_first: 'pending', hold: 'fail' }
 
@@ -362,21 +409,43 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   const now = deps.now?.() ?? new Date()
   const nowIso = now.toISOString()
   const tries = (row.attempts ?? 0) + 1
+  const runId = deps.newRunId?.() ?? crypto.randomUUID()
 
   const { data: claimed, error: claimErr } = await db
     .from('fix_reviews')
-    .update({ status: 'running', started_at: nowIso, attempts: tries, updated_at: nowIso })
+    .update({ status: 'running', run_id: runId, started_at: nowIso, attempts: tries, updated_at: nowIso })
     .eq('id', row.id)
     .eq('status', 'queued')
+    .lte('queued_at', nowIso)
     .select('id')
   if (claimErr || !claimed || claimed.length === 0) return { outcome: 'not_claimed' }
 
+  /** Every write of this run: only while this run still owns the row. */
+  const ownWrite = (patch: Record<string, unknown>) =>
+    db.from('fix_reviews').update({ ...patch, updated_at: nowIso }).eq('id', row.id).eq('status', 'running').eq('run_id', runId).select('id')
+
+  const finishSkipped = async (attempt: AttemptRow | null, reason: ReviewSkipReason): Promise<ReviewOutcome> => {
+    // The last completed verdict (if any) is kept: a skip never clears a hold.
+    const { data } = await ownWrite({ status: 'skipped', skip_reason: reason, error: null, completed_at: nowIso })
+    if (!data || data.length === 0) return { outcome: 'superseded' }
+    if (attempt && reason !== 'review_off') {
+      await insertReviewEvent(db, row, {
+        status: 'pending',
+        label: 'Opus review skipped',
+        detail: REVIEW_SKIP_REASONS[reason],
+        dedupe: `review-skip:${row.id}:${reason}:${tries}`,
+        payload: { reviewId: row.id, skipReason: reason },
+      })
+    }
+    return { outcome: 'skipped', reason }
+  }
+
   const { data: attemptData } = await db.from('fix_attempts').select(ATTEMPT_COLUMNS).eq('id', row.fix_attempt_id).maybeSingle()
   const attempt = (attemptData as AttemptRow | null) ?? null
-  if (!attempt) return finishSkipped(db, row, null, 'attempt_missing', now)
-  if (!attempt.pr_url) return finishSkipped(db, row, attempt, 'no_pr', now)
+  if (!attempt) return finishSkipped(null, 'attempt_missing')
+  if (!attempt.pr_url) return finishSkipped(attempt, 'no_pr')
   if (attempt.merged_at || attempt.pr_state === 'merged' || attempt.pr_state === 'closed') {
-    return finishSkipped(db, row, attempt, 'pr_not_open', now)
+    return finishSkipped(attempt, 'pr_not_open')
   }
 
   // Default on: a missing row or a failed read reviews (the column defaults to true).
@@ -386,7 +455,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     .eq('project_id', attempt.project_id)
     .maybeSingle()
   if ((settings as { agent_pr_review_enabled?: boolean | null } | null)?.agent_pr_review_enabled === false) {
-    return finishSkipped(db, row, attempt, 'review_off', now)
+    return finishSkipped(attempt, 'review_off')
   }
 
   let key: ResolvedKey | null
@@ -394,26 +463,27 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     key = await (deps.resolveAnthropicKey ?? ((d, p) => resolveLlmKey(d, p, 'anthropic')))(db, attempt.project_id)
   } catch (err) {
     if ((err as { name?: string } | null)?.name === 'LlmBudgetExceededError') {
-      return finishSkipped(db, row, attempt, 'llm_budget_exceeded', now)
+      return finishSkipped(attempt, 'llm_budget_exceeded')
     }
     throw err
   }
   // The project's own (or its organization's shared) key only: a review the
   // project did not pay for would be an unbilled Opus call on the platform key.
-  if (!key || key.source !== 'byok') return finishSkipped(db, row, attempt, 'no_anthropic_key', now)
+  if (!key || key.source !== 'byok') return finishSkipped(attempt, 'no_anthropic_key')
 
   const pr = parsePullRequestUrl(attempt.pr_url)
-  if (!pr) return finishSkipped(db, row, attempt, 'pr_not_found', now)
+  if (!pr) return finishSkipped(attempt, 'pr_not_found')
   const ref: GithubRepoRef = { owner: pr.owner, repo: pr.repo }
   const token = await (deps.resolveGithubToken ?? defaultResolveGithubToken)(db, attempt)
-  if (!token) return finishSkipped(db, row, attempt, 'no_github_token', now)
+  if (!token) return finishSkipped(attempt, 'no_github_token')
 
   const details = await (deps.fetchPr ?? fetchPullRequestDetails)(token, ref, pr.number)
-  if (!details) return finishSkipped(db, row, attempt, 'pr_not_found', now)
-  if (details.merged || details.state === 'closed') return finishSkipped(db, row, attempt, 'pr_not_open', now)
+  // A verdict is always about one commit: no head SHA, no review.
+  if (!details || !details.headSha) return finishSkipped(attempt, 'pr_not_found')
+  if (details.merged || details.state === 'closed') return finishSkipped(attempt, 'pr_not_open')
   const listed = await (deps.fetchFiles ?? fetchPullRequestFiles)(token, ref, pr.number)
-  if (!listed) return finishSkipped(db, row, attempt, 'pr_not_found', now)
-  if (listed.files.length === 0) return finishSkipped(db, row, attempt, 'no_files', now)
+  if (!listed) return finishSkipped(attempt, 'pr_not_found')
+  if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
   const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status)
@@ -452,21 +522,23 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
       model: AGENT_PR_REVIEW_MODEL,
       system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
       prompt,
-      abortSignal: AbortSignal.timeout(REVIEW_CALL_TIMEOUT_MS + 10_000),
+      abortSignal: AbortSignal.timeout(REVIEW_CALL_TIMEOUT_MS + 5_000),
     })
   } catch (err) {
+    // A failed call can still have spent tokens (a schema-invalid answer):
+    // record it before anything else.
     void recordLlmUsage(db, usageCtx, { error: err })
     const message = (err instanceof Error ? err.message : String(err)).slice(0, 500)
     const final = isClaudeRefusal(err) || tries >= REVIEW_MAX_TRIES
-    await db
-      .from('fix_reviews')
-      .update({
-        status: final ? 'failed' : 'queued',
-        error: isClaudeRefusal(err) ? 'Claude declined to review this pull request.' : message,
-        ...(final ? { completed_at: nowIso } : {}),
-        updated_at: nowIso,
-      })
-      .eq('id', row.id)
+    const { data } = await ownWrite({
+      status: final ? 'failed' : 'queued',
+      run_id: null,
+      error: isClaudeRefusal(err) ? 'Claude declined to review this pull request.' : message,
+      ...(final
+        ? { completed_at: nowIso }
+        : { queued_at: new Date(now.getTime() + REVIEW_RETRY_BACKOFF_MS * tries).toISOString() }),
+    })
+    if (!data || data.length === 0) return { outcome: 'superseded' }
     if (final) {
       await insertReviewEvent(db, row, {
         status: 'pending',
@@ -478,55 +550,62 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     }
     return final ? { outcome: 'failed', error: message } : { outcome: 'retry', error: message }
   }
+  // Record the spend first: everything below may throw.
   void recordLlmUsage(db, usageCtx, { result })
 
-  const review: NormalizedReview = normalizeReview(result.object, { ciFailed: ci.failed, diffTruncated: diff.truncated })
+  const review: NormalizedReview = normalizeReview(result.object, {
+    ciFailed: ci.failed,
+    diffTruncated: diff.truncated,
+    sourceOmitted: diff.sourceOmitted.length > 0,
+  })
   const model = servedModel(result, AGENT_PR_REVIEW_MODEL)
   const tokens = extractLlmUsage(result)
   const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
 
-  const { error: saveErr } = await db
-    .from('fix_reviews')
-    .update({
-      status: 'completed',
-      verdict: review.verdict,
-      fixes_report: review.fixes_report,
-      risk: review.risk,
-      findings: review.findings,
-      scope_creep: review.scope_creep,
-      removes_behavior: review.removes_behavior,
-      needs_human_decision: review.needs_human_decision,
-      summary: review.summary,
-      rules_applied: review.rules_applied,
-      skip_reason: null,
-      error: null,
-      pr_url: attempt.pr_url,
-      head_sha: details.headSha,
-      diff_truncated: diff.truncated,
-      diff_stats: {
-        files: diff.totalFiles,
-        shownFiles: diff.shownFiles,
-        additions: diff.additions,
-        deletions: diff.deletions,
-        omittedForBudget: diff.omittedForBudget.slice(0, 50),
-        fileListIncomplete: diff.fileListIncomplete,
-      },
-      ci_state: ci.text,
-      model,
-      input_tokens: tokens.inputTokens ?? null,
-      output_tokens: tokens.outputTokens ?? null,
-      cost_usd: Math.round(cost * 10_000) / 10_000,
-      completed_at: nowIso,
-      updated_at: nowIso,
-    })
-    .eq('id', row.id)
+  const { data: saved, error: saveErr } = await ownWrite({
+    status: 'completed',
+    run_id: null,
+    verdict: review.verdict,
+    fixes_report: review.fixes_report,
+    risk: review.risk,
+    findings: review.findings,
+    scope_creep: review.scope_creep,
+    removes_behavior: review.removes_behavior,
+    needs_human_decision: review.needs_human_decision,
+    summary: review.summary,
+    rules_applied: review.rules_applied,
+    skip_reason: null,
+    error: null,
+    pr_url: attempt.pr_url,
+    head_sha: details.headSha,
+    diff_truncated: diff.truncated,
+    diff_stats: {
+      files: diff.totalFiles,
+      shownFiles: diff.shownFiles,
+      additions: diff.additions,
+      deletions: diff.deletions,
+      omittedForBudget: diff.omittedForBudget.slice(0, 50),
+      sourceOmitted: diff.sourceOmitted.slice(0, 50),
+      fileListIncomplete: diff.fileListIncomplete,
+    },
+    ci_state: ci.text,
+    model,
+    input_tokens: tokens.inputTokens ?? null,
+    output_tokens: tokens.outputTokens ?? null,
+    cost_usd: Math.round(cost * 10_000) / 10_000,
+    reviewed_at: nowIso,
+    completed_at: nowIso,
+  })
   if (saveErr) throw new Error(`review save failed: ${saveErr.message}`)
+  // A re-queue (new push, re-run) or a newer run took the row: this verdict is
+  // about a commit nobody is merging any more. Drop it; the next run decides.
+  if (!saved || saved.length === 0) return { outcome: 'superseded' }
 
   await insertReviewEvent(db, row, {
     status: EVENT_STATUS[review.verdict],
     label: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
     detail: review.summary,
-    dedupe: `review:${row.id}:${details.headSha ?? nowIso}`,
+    dedupe: `review:${row.id}:${details.headSha ?? nowIso}:${tries}`,
     payload: {
       reviewId: row.id,
       verdict: review.verdict,
@@ -540,7 +619,8 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   })
 
   try {
-    const body = formatReviewComment(review, { model, headSha: details.headSha, diff })
+    const reportUrl = attempt.report_id ? `${(deps.consoleBaseUrl ?? defaultConsoleBaseUrl)()}/reports/${attempt.report_id}` : null
+    const body = formatReviewComment(review, { model, headSha: details.headSha, diff, reportUrl })
     const existing = row.comment_id == null ? null : Number(row.comment_id) || null
     const posted = await (deps.upsertComment ?? defaultUpsertComment)(token, ref, pr.number, body, existing)
     if (posted) {
@@ -564,6 +644,7 @@ export async function runAgentPrReview(
   deps: ReviewDeps = {},
 ): Promise<ReviewRunSummary> {
   const now = deps.now?.() ?? new Date()
+  const nowIso = now.toISOString()
   const summary: ReviewRunSummary = {
     requeued: 0,
     gaveUp: 0,
@@ -573,6 +654,7 @@ export async function runAgentPrReview(
     skipped: 0,
     retried: 0,
     failed: 0,
+    superseded: 0,
     verdicts: { merge: 0, fix_first: 0, hold: 0 },
     results: [],
   }
@@ -596,7 +678,13 @@ export async function runAgentPrReview(
       { force: opts.force === true, now },
     )
     if (res.queued) summary.enqueued++
-    const { data } = await db.from('fix_reviews').select(QUEUE_COLUMNS).eq('fix_attempt_id', a.id).eq('status', 'queued').limit(1)
+    const { data } = await db
+      .from('fix_reviews')
+      .select(QUEUE_COLUMNS)
+      .eq('fix_attempt_id', a.id)
+      .eq('status', 'queued')
+      .lte('queued_at', nowIso)
+      .limit(1)
     rows = (data ?? []) as QueueRow[]
   } else {
     if (opts.backfill) {
@@ -607,10 +695,11 @@ export async function runAgentPrReview(
       .from('fix_reviews')
       .select(QUEUE_COLUMNS)
       .eq('status', 'queued')
+      .lte('queued_at', nowIso)
       .order('queued_at', { ascending: true })
-      .limit(REVIEW_BATCH)
+      .limit(QUEUE_SCAN)
     if (error) throw new Error(`review queue read failed: ${error.message}`)
-    rows = (data ?? []) as QueueRow[]
+    rows = pickFairBatch((data ?? []) as QueueRow[])
   }
 
   const outcomes = await mapWithConcurrency(rows, REVIEW_BATCH, async (row) => {
@@ -634,6 +723,7 @@ export async function runAgentPrReview(
       summary.verdicts[o.verdict]++
     } else if (o.outcome === 'skipped') summary.skipped++
     else if (o.outcome === 'retry') summary.retried++
+    else if (o.outcome === 'superseded') summary.superseded++
     else summary.failed++
   })
 

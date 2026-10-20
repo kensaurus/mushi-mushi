@@ -30,6 +30,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
+import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
 import { isAdvisoryCheckRun } from '../_shared/github.ts';
@@ -369,7 +370,7 @@ async function handlePullRequestState(
       state?: string;
       closed_at?: string | null;
       delivery_id?: string;
-      head?: { ref?: string };
+      head?: { ref?: string; sha?: string };
     };
     repository?: { full_name?: string };
   },
@@ -434,6 +435,27 @@ async function handlePullRequestState(
         { status: 202, headers: { 'Content-Type': 'application/json' } },
       );
     }
+  }
+
+  // New commits on a reviewed PR (ADR 0030): follow the head and queue a
+  // review of it. The old verdict keeps gating merges (a hold stays a hold)
+  // until the new review completes.
+  if (payload.action === 'synchronize') {
+    const head = payload.pull_request?.head?.sha ?? null;
+    if (head && head !== attempt.commit_sha) {
+      await db.from('fix_attempts').update({ commit_sha: head }).eq('id', attempt.id);
+    }
+    const requeued = await requeueReviewForNewHead(
+      db,
+      { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+      head,
+    );
+    log.info('PR synchronize: agent PR review', { fixAttemptId: attempt.id, head, review: requeued });
+    // A push does not change the PR's lifecycle state: no pr_state event.
+    return new Response(
+      JSON.stringify({ ok: true, fix_attempt_id: attempt.id, synchronize: true, review: requeued }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   // Derive the new lifecycle state.
@@ -2075,7 +2097,7 @@ app.post('/webhooks-github-indexer', async (c) => {
         number?: number;
         draft?: boolean;
         state?: string;
-        head?: { ref?: string };
+        head?: { ref?: string; sha?: string };
       };
       repository?: { full_name?: string };
     };
@@ -2085,6 +2107,8 @@ app.post('/webhooks-github-indexer', async (c) => {
       'ready_for_review',
       'converted_to_draft',
       'closed',
+      // New commits: re-queue the agent PR review of a reviewed fix (ADR 0030).
+      'synchronize',
     ]);
     if (!supportedActions.has(prPayload.action ?? '')) {
       return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202);

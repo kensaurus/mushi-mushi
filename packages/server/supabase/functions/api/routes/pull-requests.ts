@@ -10,6 +10,11 @@
  * rules still refuse a PR whose required checks have not passed. The squash
  * title and message are written here, never GitHub's commit list, which can
  * carry a "[skip ci]" that silences the release workflow.
+ *
+ * A PR that is a Mushi fix goes through the same review gate as
+ * POST /v1/admin/fixes/:id/merge (ADR 0030): a hold is refused unless the
+ * person overrides it with a reason, and GitHub merges only the head commit
+ * the gate saw. The list shows each fix PR's review.
  */
 import type { Hono } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
@@ -22,6 +27,8 @@ import { mergeGithubPullRequest } from '../../_shared/fix-merge.ts'
 import type { GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, githubJsonHeaders, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import { summarizeChecks, type PrChecks } from '../../_shared/ux-runs.ts'
+import { evaluateMergeGate, findFixAttemptForPr, reviewStatesForPrs } from '../../_shared/fix-review-db.ts'
+import type { ReviewState, ReviewVerdict } from '../../_shared/fix-review.ts'
 
 const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/
 /** Open PRs read per repo; the console lists the most recently updated. */
@@ -39,6 +46,8 @@ export interface OpenPullRequest {
   baseRef: string
   updatedAt: string
   checks: PrChecks
+  /** The Opus review when this PR is a Mushi fix (ADR 0030); absent otherwise. */
+  review?: { state: ReviewState; label: string; fixId: string | null; verdict: ReviewVerdict | null }
 }
 
 interface GithubPull {
@@ -93,6 +102,18 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
           }),
         ),
       )
+      const heads = new Map<string, string>(
+        lists.flatMap(({ ref, pulls }) => pulls.map((p): [string, string] => [`${ref.owner}/${ref.repo}#${p.number}`, p.head.sha])),
+      )
+      const reviews = await reviewStatesForPrs(
+        db,
+        projectId,
+        pullRequests.map((p) => ({ repo: p.repo, number: p.number, headSha: heads.get(`${p.repo}#${p.number}`) ?? null })),
+      )
+      for (const pr of pullRequests) {
+        const review = reviews.get(`${pr.repo}#${pr.number}`)
+        if (review) pr.review = { state: review.state, label: review.label, fixId: review.fixAttemptId, verdict: review.verdict }
+      }
       pullRequests.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       return c.json({ ok: true, data: { pullRequests, repos: readable.map(({ ref }) => `${ref.owner}/${ref.repo}`) } })
     } catch (err) {
@@ -111,7 +132,11 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
       return jsonError(c, 'VALIDATION_ERROR', 'Malformed repository or pull request number.')
     }
     const body = z
-      .object({ method: z.enum(['squash', 'merge', 'rebase']).default('squash') })
+      .object({
+        method: z.enum(['squash', 'merge', 'rebase']).default('squash'),
+        override: z.boolean().optional(),
+        overrideReason: z.string().max(500).optional(),
+      })
       .safeParse((await c.req.json().catch(() => ({}))) ?? {})
     if (!body.success) return jsonError(c, 'VALIDATION_ERROR', 'method must be squash, merge or rebase')
     const db = getServiceClient()
@@ -125,14 +150,33 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     const token = await (await repoTokenResolver(db, projectId))(ref)
     if (!token) return jsonError(c, 'GITHUB_NOT_CONNECTED', 'Connect GitHub for this project (App or token) to merge its pull requests.', 409)
     const pull = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${number}`, { headers: githubJsonHeaders(token), signal: AbortSignal.timeout(10_000) })
-      .then(async (r) => (r.ok ? ((await r.json()) as { title?: string; state?: string }) : null))
+      .then(async (r) => (r.ok ? ((await r.json()) as { title?: string; state?: string; head?: { sha?: string } }) : null))
       .catch(() => null)
     if (!pull) return jsonError(c, 'NOT_FOUND', `Pull request #${number} was not found in ${owner}/${repo}.`, 404)
     if (pull.state !== 'open') return jsonError(c, 'NOT_OPEN', `Pull request #${number} is not open.`, 409)
+
+    // ADR 0030: a Mushi fix PR merges through the same review gate as the fix route.
+    const found = await findFixAttemptForPr(db, projectId, `${owner}/${repo}`, number)
+    if (found.error) return jsonError(c, 'REVIEW_UNAVAILABLE', 'Mushi could not check whether this pull request is a reviewed fix, so it will not merge it now. Try again in a minute.', 503)
+    let gate: Awaited<ReturnType<typeof evaluateMergeGate>> | null = null
+    if (found.attempt) {
+      gate = await evaluateMergeGate(db, {
+        fixAttemptId: found.attempt.id,
+        currentHead: pull.head?.sha ?? null,
+        override: body.data.override === true,
+        overrideReason: body.data.overrideReason?.trim() || null,
+        authMethod: c.get('authMethod') as string | undefined,
+        role: access.role,
+      })
+      if (!gate.ok) {
+        return c.json({ ok: false, error: { code: gate.code, message: gate.message }, data: { review: gate.review } }, gate.status)
+      }
+    }
     let result
     try {
       result = await mergeGithubPullRequest(token, ref, number, {
         mergeMethod: body.data.method,
+        ...(gate?.ok ? { sha: gate.expectedHeadSha } : {}),
         ...(body.data.method === 'rebase'
           ? {}
           : {
@@ -143,11 +187,19 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
     } catch (err) {
       return jsonError(c, 'UPSTREAM_ERROR', `GitHub did not merge: ${(err as Error).message.slice(0, 200)}`, 502)
     }
-    if (!result.merged) return jsonError(c, 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
+    if (!result.merged) return jsonError(c, result.headMoved ? 'HEAD_MOVED' : 'MERGE_REJECTED', result.message ?? 'GitHub refused the merge.', 409)
     await logAudit(db, projectId, userId, 'pull_request.merged', 'pull_request', `${owner}/${repo}#${number}`, {
       method: body.data.method,
       already_merged: result.alreadyMerged,
       sha: result.sha ?? null,
+      ...(gate?.ok
+        ? {
+            fix_attempt_id: found.attempt?.id ?? null,
+            review_state: gate.review.state,
+            merged_head_sha: gate.expectedHeadSha,
+            ...(gate.overridden ? { review_override: true, override_reason: body.data.overrideReason?.trim() ?? null } : {}),
+          }
+        : {}),
     }).catch(() => null)
     return c.json({ ok: true, data: { merged: true, alreadyMerged: result.alreadyMerged, sha: result.sha, message: result.message } })
   })

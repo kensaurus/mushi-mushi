@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { mergeFixAttempt, type MergeMethod } from '../../lib/mergeFix'
 import { fetchFixReview, rerunFixReview, reviewBlocksMerge, type FixReview } from '../../lib/fixReview'
-import { Btn, Checkbox } from '../ui'
+import { Btn, Checkbox, Input } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
 import { FixReviewSummary } from './FixReviewSummary'
@@ -52,6 +52,7 @@ export function MergeFixPreflight({
   const [reviewError, setReviewError] = useState<string | null>(null)
   const [rerunning, setRerunning] = useState(false)
   const [overrideHold, setOverrideHold] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
   const popoverId = useId()
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
@@ -94,6 +95,7 @@ export function MergeFixPreflight({
   useEffect(() => {
     if (!open) return
     setOverrideHold(false)
+    setOverrideReason('')
     void loadReview()
   }, [open, loadReview])
 
@@ -109,7 +111,8 @@ export function MergeFixPreflight({
     }
   }
 
-  const holdBlocks = reviewBlocksMerge(review) && !overrideHold
+  // A hold needs "Merge anyway" ticked AND a reason: the server refuses either missing.
+  const holdBlocks = reviewBlocksMerge(review) && (!overrideHold || !overrideReason.trim())
 
   const ciFailed = liveCiConclusion === 'failure' || liveCiConclusion === 'cancelled' || liveCiConclusion === 'timed_out'
   const ciPassed = liveCiConclusion === 'success'
@@ -117,7 +120,11 @@ export function MergeFixPreflight({
   const handleMerge = async (method: MergeMethod) => {
     setMerging(true)
     setError(null)
-    const result = await mergeFixAttempt(fixId, method, { override: overrideHold })
+    const result = await mergeFixAttempt(
+      fixId,
+      method,
+      overrideHold ? { override: true, overrideReason: overrideReason.trim() } : {},
+    )
     setMerging(false)
     if (!result.ok) {
       setError(result.error ?? 'Merge failed')
@@ -197,6 +204,17 @@ export function MergeFixPreflight({
                 review, or merge anyway if you have checked them yourself.
               </p>
               <Checkbox label="Merge anyway (override the hold)" checked={overrideHold} onChange={setOverrideHold} />
+              {overrideHold && (
+                <div className="mt-1.5">
+                  <Input
+                    label="Why (kept in the audit log)"
+                    value={overrideReason}
+                    maxLength={500}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="Checked the findings by hand"
+                  />
+                </div>
+              )}
             </div>
           )}
 

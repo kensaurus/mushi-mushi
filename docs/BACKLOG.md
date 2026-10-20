@@ -9,9 +9,9 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
-- **Added 2026-10-21 (agent PR review):** BL-094, BL-095, parked parts of ADR 0030.
+- **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 51 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 50 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -20,12 +20,12 @@ parked work is visible in one place.
 | tech-debt | 18 |
 | known-bug | 0 |
 | decision-needed | 5 |
-| unfinished-feature | 8 |
+| unfinished-feature | 7 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 48 |
+| relevant | 47 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -107,7 +107,6 @@ parked work is visible in one place.
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
 | BL-089 | unfinished-feature | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing (no app it is first pick for, auto-fix off, every report settled). Today only the console status line and `get_spend_down_status` say so | relevant | low | ADR 0028, `_shared/radar.ts`, plan §4 Console | — |
 | BL-090 | unfinished-feature | Cursor model picker for spend-down and Integrations, fed by Cursor's `GET /v1/models` through a new `/v1/admin/byok/cursor/models`. The console takes a free-text model spec validated by `parseCursorModelSpec` | relevant | low | `apps/admin/src/components/settings/SpendDownSection.tsx`, plan §4 Console | — |
-| BL-094 | unfinished-feature | Re-review an agent PR when new commits land. Today a review covers the head commit it read (`fix_reviews.head_sha`), and someone presses "Re-run review" (console), `mushi fixes review`, or `POST /v1/admin/fixes/:id/review` after the agent pushes fixes. `webhooks-github-indexer` sees `pull_request.synchronize`; it could re-queue the review (force) when the head SHA moves | relevant | low | ADR 0030 (Consequences), `_shared/fix-review-db.ts` `enqueueFixReview`, `webhooks-github-indexer/index.ts` | — |
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 
 ---

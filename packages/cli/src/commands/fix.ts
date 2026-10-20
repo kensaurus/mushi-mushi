@@ -284,13 +284,22 @@ fixes
     'GitHub merge method: squash (default), merge, or rebase',
     'squash',
   )
-  .option('--override', 'Merge even though the Opus review of the PR says hold (ADR 0030)')
-  .option('--reason <text>', 'Why the hold is overridden (stored in the audit log)')
+  .option(
+    '--override',
+    'Not available here: the CLI signs in with an API key, and only a person in the Mushi console can override an Opus "hold" (with a reason)',
+  )
   .option('--json', 'Machine-readable JSON output')
-  .action(async (fixId: string, opts: { method: string; override?: boolean; reason?: string; json?: boolean }) => {
+  .action(async (fixId: string, opts: { method: string; override?: boolean; json?: boolean }) => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    if (opts.override) {
+      console.error(
+        'Overriding an Opus "hold" needs a person in the Mushi console: open the fix, read the findings, and choose Merge anyway with a reason. The CLI signs in with an API key, which cannot override (ADR 0030).',
+      )
+      process.exit(1)
+    }
 
     const method = opts.method as 'squash' | 'merge' | 'rebase'
     if (!['squash', 'merge', 'rebase'].includes(method)) {
@@ -306,11 +315,7 @@ fixes
       review?: { state: string; label: string; overridden: boolean }
     }>(`/v1/admin/fixes/${fixId}/merge`, config, {
       method: 'POST',
-      body: JSON.stringify({
-        mergeMethod: method,
-        ...(opts.override ? { override: true } : {}),
-        ...(opts.reason ? { overrideReason: opts.reason } : {}),
-      }),
+      body: JSON.stringify({ mergeMethod: method }),
     })
 
     if (!result.ok) {
@@ -319,7 +324,7 @@ fixes
       } else {
         console.error('Merge failed:', result.error.message)
         if (result.error.code === 'REVIEW_HOLD') {
-          console.error(`Read the review: mushi fixes review ${fixId} --show. Merge anyway: mushi fixes merge ${fixId} --override`)
+          console.error(`Read the review: mushi fixes review ${fixId} --show. To merge anyway, override the hold in the Mushi console (with a reason).`)
         }
       }
       process.exit(1)
