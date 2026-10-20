@@ -6,7 +6,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { spendDownProjectIds, type SpendDownKey } from './spend-down.ts'
+import { spendDownProjectIds, type CursorPoolKey, type SpendDownKey } from './spend-down.ts'
 
 function utcDayStart(now: Date): string {
   const d = new Date(now)
@@ -30,46 +30,56 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
   settings: Map<string, Record<string, unknown>>
 }> {
   const projectQuery = key.project_id
-    ? db.from('projects').select('id').eq('id', key.project_id)
-    : db.from('projects').select('id').eq('organization_id', key.organization_id ?? '00000000-0000-0000-0000-000000000000')
+    ? db.from('projects').select('id, organization_id').eq('id', key.project_id)
+    : db
+        .from('projects')
+        .select('id, organization_id')
+        .eq('organization_id', key.organization_id ?? '00000000-0000-0000-0000-000000000000')
   const { data: projectRows, error } = await projectQuery
   if (error) throw new Error(`spend-down: projects read failed: ${error.message}`)
-  const allIds = ((projectRows ?? []) as Array<{ id: string }>).map((p) => p.id)
+  const projects = (projectRows ?? []) as Array<{ id: string; organization_id: string | null }>
+  const allIds = projects.map((p) => p.id)
   if (allIds.length === 0) return { ids: [], settings: new Map() }
+  const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((o): o is string => !!o))]
 
-  const [settingsRes, reposRes, ownKeysRes] = await Promise.all([
+  // Every Cursor key that could win for these apps: their own and their
+  // organization's shared ones (the same rows resolveCursorApiKey reads).
+  const ownFilter = `project_id.in.(${allIds.join(',')})`
+  const keyFilter = orgIds.length > 0 ? `${ownFilter},organization_id.in.(${orgIds.join(',')})` : ownFilter
+  const [settingsRes, reposRes, keysRes] = await Promise.all([
     db
       .from('project_settings')
       .select('project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, cursor_api_key_ref')
       .in('project_id', allIds),
     db.from('project_repos').select('project_id').in('project_id', allIds),
-    key.project_id
-      ? Promise.resolve({ data: [] as Array<{ project_id: string }>, error: null })
-      : db
-          .from('byok_keys')
-          .select('project_id')
-          .eq('provider_slug', 'cursor')
-          .eq('status', 'active')
-          .in('project_id', allIds),
+    db
+      .from('byok_keys')
+      .select('id, project_id, organization_id, priority, status, test_status')
+      .eq('provider_slug', 'cursor')
+      .or(keyFilter),
   ])
   if (settingsRes.error) throw new Error(`spend-down: project_settings read failed: ${settingsRes.error.message}`)
   if (reposRes.error) throw new Error(`spend-down: project_repos read failed: ${reposRes.error.message}`)
-  if (ownKeysRes.error) throw new Error(`spend-down: byok_keys read failed: ${ownKeysRes.error.message}`)
+  if (keysRes.error) throw new Error(`spend-down: byok_keys read failed: ${keysRes.error.message}`)
 
   const settings = new Map<string, Record<string, unknown>>()
   for (const s of (settingsRes.data ?? []) as Array<Record<string, unknown>>) settings.set(String(s.project_id), s)
   const withRepo = new Set(((reposRes.data ?? []) as Array<{ project_id: string }>).map((r) => r.project_id))
-  const withOwnKey = new Set(((ownKeysRes.data ?? []) as Array<{ project_id: string }>).map((r) => r.project_id))
-  // A legacy Integrations key is the app's own too, and comes before a shared
-  // key (ADR 0023, resolveCursorApiKey): a shared key never spends there.
-  for (const [id, row] of settings) {
-    if (typeof row.cursor_api_key_ref === 'string' && row.cursor_api_key_ref.trim() !== '') withOwnKey.add(id)
+  const legacy = (id: string) => {
+    const ref = settings.get(id)?.cursor_api_key_ref
+    return typeof ref === 'string' && ref.trim() !== ''
   }
 
   const ids = spendDownProjectIds(
     key,
-    allIds.map((id) => ({ id, autofix_enabled: settings.get(id)?.autofix_enabled === true, has_repo: withRepo.has(id) })),
-    withOwnKey,
+    projects.map((p) => ({
+      id: p.id,
+      organization_id: p.organization_id,
+      autofix_enabled: settings.get(p.id)?.autofix_enabled === true,
+      has_repo: withRepo.has(p.id),
+      has_legacy_key: legacy(p.id),
+    })),
+    (keysRes.data ?? []) as CursorPoolKey[],
   )
   return { ids, settings }
 }

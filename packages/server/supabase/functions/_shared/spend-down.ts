@@ -50,6 +50,28 @@ export const SPEND_DOWN_MAX_OPEN_PER_PROJECT = 3
 /** A report dispatched in this many days is not picked again by spend-down. */
 export const SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS = 7
 
+/**
+ * A report whose latest fix attempt ended with one of these agent verdicts
+ * (_shared/cloud-agent-no-pr.ts) is never picked again by spend-down: a new
+ * run would spend the same credits to reach the same answer. A person can
+ * still dispatch it.
+ */
+const NO_RETRY_VERDICTS = new Set(['already_fixed', 'wrong_repo'])
+
+/** Report ids whose newest attempt carries a no-retry verdict. */
+export function reportsWithNoRetryVerdict(
+  attempts: Array<{ report_id: string; failure_category: string | null; created_at: string }>,
+): Set<string> {
+  const latest = new Map<string, { failure_category: string | null; created_at: string }>()
+  for (const a of attempts) {
+    const cur = latest.get(a.report_id)
+    if (!cur || a.created_at > cur.created_at) latest.set(a.report_id, a)
+  }
+  const out = new Set<string>()
+  for (const [id, a] of latest) if (a.failure_category && NO_RETRY_VERDICTS.has(a.failure_category)) out.add(id)
+  return out
+}
+
 const DAY_MS = 86_400_000
 
 export function spendDownWindow(key: SpendDownKey, now: Date): SpendDownWindow {
@@ -74,24 +96,68 @@ export function remainingToday(key: Pick<SpendDownKey, 'spend_down_daily_limit'>
 
 export interface SpendDownProject {
   id: string
+  organization_id: string | null
   autofix_enabled: boolean
   has_repo: boolean
+  /** project_settings.cursor_api_key_ref is set: the app's legacy Integrations key. */
+  has_legacy_key: boolean
+}
+
+/** A Cursor byok_keys row as the resolver sees it. */
+export interface CursorPoolKey {
+  id: string
+  project_id: string | null
+  organization_id: string | null
+  priority: number | null
+  status: string
+  test_status: string | null
+}
+
+/** Rows the resolver will use (byok.ts byokPoolCandidates); cooldowns are transient and ignored here. */
+function usableForResolver(k: CursorPoolKey): boolean {
+  return (k.status === 'active' || k.status === 'quota_exhausted') && (k.test_status === 'ok' || k.test_status === 'error_quota')
 }
 
 /**
- * The apps a key pays for (ADR 0023): its own app, or for a shared key every
- * app in the organization without a Cursor key of its own. Apps with auto-fix
- * off or no linked repo are left out: a dispatch there would be skipped.
+ * The Cursor key `resolveCursorApiKey` picks first for one app (ADR 0023):
+ * its own pool keys by priority, else its legacy Integrations key
+ * ('legacy'), else its organization's shared keys by priority. Returns null
+ * when nothing is usable, and 'tie' when two keys share the winning priority,
+ * because the resolver's order between them is not defined.
+ */
+export function firstCursorKeyFor(
+  project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key'>,
+  keys: CursorPoolKey[],
+): string | 'legacy' | 'tie' | null {
+  const pick = (rows: CursorPoolKey[]): string | 'tie' | null => {
+    if (rows.length === 0) return null
+    const sorted = [...rows].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
+    if (sorted.length > 1 && (sorted[0].priority ?? 100) === (sorted[1].priority ?? 100)) return 'tie'
+    return sorted[0].id
+  }
+  const usable = keys.filter(usableForResolver)
+  const own = usable.filter((k) => k.project_id === project.id)
+  if (own.length > 0) return pick(own)
+  if (project.has_legacy_key) return 'legacy'
+  if (!project.organization_id) return null
+  return pick(usable.filter((k) => !k.project_id && k.organization_id === project.organization_id))
+}
+
+/**
+ * The apps a key pays for: the apps where it is the resolver's first pick
+ * (ADR 0023), so a spend-down dispatch tagged with this key is billed to it.
+ * Apps with auto-fix off or no linked repo are left out: a dispatch there
+ * would be skipped.
  */
 export function spendDownProjectIds(
-  key: Pick<SpendDownKey, 'project_id' | 'organization_id'>,
+  key: Pick<SpendDownKey, 'id'>,
   projects: SpendDownProject[],
-  projectsWithOwnCursorKey: ReadonlySet<string>,
+  keys: CursorPoolKey[],
 ): string[] {
-  const usable = projects.filter((p) => p.autofix_enabled && p.has_repo)
-  if (key.project_id) return usable.filter((p) => p.id === key.project_id).map((p) => p.id)
-  if (!key.organization_id) return []
-  return usable.filter((p) => !projectsWithOwnCursorKey.has(p.id)).map((p) => p.id)
+  return projects
+    .filter((p) => p.autofix_enabled && p.has_repo)
+    .filter((p) => firstCursorKeyFor(p, keys) === key.id)
+    .map((p) => p.id)
 }
 
 export interface SpendDownCandidate {

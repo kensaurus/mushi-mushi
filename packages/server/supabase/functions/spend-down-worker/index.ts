@@ -7,13 +7,16 @@
  * inside its window (`_shared/spend-down.ts`), dispatch the highest-value open
  * reports of the apps that key already serves, until the key's daily limit:
  *
- *   - apps: the key's own app, or a shared key's apps without a Cursor key of
- *     their own (ADR 0023), with auto-fix on and a linked repo;
+ *   - apps: those where this key is resolveCursorApiKey's first pick (ADR
+ *     0023: own pool key, then legacy key, then shared key, by priority; a
+ *     priority tie counts as not first), with auto-fix on and a linked repo;
  *   - per app: at most 3 cloud agents running, and never past the app's
  *     auto-fix caps (checked here, and again by fix-worker for every
  *     automatic dispatch);
  *   - reports: classified or reopened, not dispatched in the last 7 days,
- *     ranked by severity × judge score × named component, one per group;
+ *     and not settled by an agent verdict (latest attempt already_fixed or
+ *     wrong_repo), ranked by severity × judge score × named component, one
+ *     per group;
  *   - each goes through `dispatchFixForReport` (auto-fix switch, feature
  *     requests, resolved reports, in-flight dedupe) as an automatic
  *     `cursor_cloud` dispatch carrying `spend_down_key_id` and the key's model.
@@ -36,6 +39,7 @@ import {
   SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS,
   projectCapacity,
   rankSpendDownCandidates,
+  reportsWithNoRetryVerdict,
   remainingToday,
   spendDownDispatchMetadata,
   spendDownWindow,
@@ -98,7 +102,17 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
     .gte('created_at', since)
   if (recentErr) throw new Error(`spend-down: recent dispatch read failed: ${recentErr.message}`)
   const recentlyDispatched = new Set(((recent ?? []) as Array<{ report_id: string }>).map((r) => r.report_id))
-  return rankSpendDownCandidates(rows.filter((r) => !recentlyDispatched.has(r.id)))
+
+  const { data: attempts, error: attemptsErr } = await db
+    .from('fix_attempts')
+    .select('report_id, failure_category, created_at')
+    .eq('project_id', projectId)
+    .in('report_id', rows.map((r) => r.id))
+  if (attemptsErr) throw new Error(`spend-down: fix attempts read failed: ${attemptsErr.message}`)
+  const settled = reportsWithNoRetryVerdict(
+    (attempts ?? []) as Array<{ report_id: string; failure_category: string | null; created_at: string }>,
+  )
+  return rankSpendDownCandidates(rows.filter((r) => !recentlyDispatched.has(r.id) && !settled.has(r.id)))
 }
 
 async function openCloudAttempts(db: SupabaseClient, projectId: string): Promise<number> {

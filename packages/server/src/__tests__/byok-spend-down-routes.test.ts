@@ -81,8 +81,8 @@ function setup(): { db: FakeDb; app: FakeApp } {
       project_repos: [{ project_id: P1 }],
       organization_members: [{ organization_id: ORG, user_id: 'u1', role: state.orgRole }],
       byok_keys: [
-        { id: SHARED, provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', label: 'ayako', credits_expire_at: null, spend_down_enabled: false, spend_down_model: null, spend_down_daily_limit: 10, spend_down_window_days: 14 },
-        { id: OWN, provider_slug: 'cursor', project_id: P1, organization_id: null, status: 'active', label: 'hirose', credits_expire_at: null, spend_down_enabled: false, spend_down_model: null, spend_down_daily_limit: 10, spend_down_window_days: 14 },
+        { id: SHARED, provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', test_status: 'ok', priority: 100, label: 'ayako', credits_expire_at: null, spend_down_enabled: false, spend_down_model: null, spend_down_daily_limit: 10, spend_down_window_days: 14 },
+        { id: OWN, provider_slug: 'cursor', project_id: P1, organization_id: null, status: 'active', test_status: 'ok', priority: 100, label: 'hirose', credits_expire_at: null, spend_down_enabled: false, spend_down_model: null, spend_down_daily_limit: 10, spend_down_window_days: 14 },
         { id: OPENAI, provider_slug: 'openai', project_id: P1, organization_id: null, status: 'active' },
       ],
       fix_dispatch_jobs: [],

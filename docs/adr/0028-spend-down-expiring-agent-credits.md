@@ -31,10 +31,11 @@ how much is left.
   date (database check).
 - The `spend-down-worker` (cron `28,58 * * * *`) dispatches, for each key in
   its window, the best open reports of the apps that key **already serves**,
-  using ADR 0023's order without changing the resolver: an app's own key
-  serves that app; a shared key serves apps with no Cursor key of their own,
-  legacy Integrations key included. Apps with auto-fix off or no repo are
-  skipped.
+  using ADR 0023's order without changing the resolver: a key serves an app
+  only where `resolveCursorApiKey` would pick it first (own pool key by
+  priority, then the legacy Integrations key, then shared keys by priority;
+  a priority tie serves nothing), so a dispatch tagged with the key is billed
+  to it. Apps with auto-fix off or no repo are skipped.
 - Every dispatch is `trigger: 'automatic'`, so the app's auto-fix caps apply
   (checked by the worker and again by fix-worker), at most three cloud agents
   run per app, and a report dispatched in the last 7 days is not picked again.
@@ -58,7 +59,15 @@ how much is left.
   Raise the cap to spend faster.
 - **UX runs and QA generation in the same worker.** The cloud UX run is a
   session-only route (ADR 0017's approval posture); QA generation runs on
-  Anthropic/OpenAI keys, not Cursor. Left to a later decision.
+  Anthropic/OpenAI keys, not Cursor. Left to a later decision (BL-087,
+  BL-088).
+- **Excluding every report with a failed attempt** (plan §4 step 2). A
+  failure from a broken key or a Cursor outage says nothing about the report.
+  Instead a report is skipped for 7 days after any dispatch, and for good
+  once its latest attempt carries an agent verdict (`already_fixed`,
+  `wrong_repo`).
+- **A model picker fed by Cursor's model list** for now: the model is a
+  validated free-text spec (BL-090).
 
 ## Consequences
 

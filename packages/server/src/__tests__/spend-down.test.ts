@@ -10,8 +10,11 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 import {
+  firstCursorKeyFor,
   projectCapacity,
   rankSpendDownCandidates,
+  reportsWithNoRetryVerdict,
+  type CursorPoolKey,
   spendDownDispatchMetadata,
   spendDownProjectIds,
   spendDownWindow,
@@ -72,17 +75,51 @@ describe('spendDownWindow', () => {
   })
 })
 
-describe('spendDownProjectIds (ADR 0023)', () => {
-  const projects = [
-    { id: P1, autofix_enabled: true, has_repo: true },
-    { id: P2, autofix_enabled: true, has_repo: true },
-    { id: P3, autofix_enabled: false, has_repo: true },
-  ]
-  it('a shared key serves apps without their own Cursor key, with auto-fix on and a repo', () => {
-    expect(spendDownProjectIds(key(), projects, new Set([P2]))).toEqual([P1])
+describe('spendDownProjectIds: the apps where this key is the resolver\'s first pick (ADR 0023)', () => {
+  const project = (id: string, over: Record<string, unknown> = {}) => ({
+    id, organization_id: ORG, autofix_enabled: true, has_repo: true, has_legacy_key: false, ...over,
   })
-  it("an app's own key serves that app only", () => {
-    expect(spendDownProjectIds(key({ project_id: P2, organization_id: null }), projects, new Set([P2]))).toEqual([P2])
+  const pool = (id: string, over: Partial<CursorPoolKey> = {}): CursorPoolKey => ({
+    id, project_id: null, organization_id: ORG, priority: 100, status: 'active', test_status: 'ok', ...over,
+  })
+  const projects = [project(P1), project(P2), project(P3, { autofix_enabled: false })]
+
+  it('a shared key serves apps without a usable key of their own, with auto-fix on and a repo', () => {
+    const keys = [pool('k1'), pool('own', { project_id: P2, organization_id: null })]
+    expect(spendDownProjectIds(key(), projects, keys)).toEqual([P1])
+  })
+
+  it("an app's own key serves that app only, and a legacy key beats a shared one", () => {
+    const keys = [pool('k1'), pool('own', { project_id: P2, organization_id: null })]
+    expect(spendDownProjectIds({ id: 'own' }, projects, keys)).toEqual([P2])
+    expect(spendDownProjectIds(key(), [project(P1, { has_legacy_key: true })], keys)).toEqual([])
+  })
+
+  it('with two shared keys, only the one the resolver picks first pays (priority), and a tie pays for nothing', () => {
+    const second = pool('k2', { priority: 50 })
+    expect(spendDownProjectIds(key(), [project(P1)], [pool('k1'), second])).toEqual([])
+    expect(spendDownProjectIds({ id: 'k2' }, [project(P1)], [pool('k1'), second])).toEqual([P1])
+    expect(spendDownProjectIds(key(), [project(P1)], [pool('k1'), pool('k2')])).toEqual([])
+  })
+
+  it('two own keys on one app: the lower priority wins; a key that failed its test is skipped', () => {
+    const a = pool('a', { project_id: P1, organization_id: null, priority: 10 })
+    const b = pool('b', { project_id: P1, organization_id: null, priority: 20 })
+    expect(firstCursorKeyFor(project(P1), [a, b])).toBe('a')
+    expect(firstCursorKeyFor(project(P1), [{ ...a, test_status: 'auth_failed' }, b])).toBe('b')
+    expect(firstCursorKeyFor(project(P1), [{ ...a, status: 'disabled' }, pool('k1')])).toBe('k1')
+  })
+})
+
+describe('reportsWithNoRetryVerdict', () => {
+  it('settles a report only when its newest attempt is already_fixed or wrong_repo', () => {
+    const out = reportsWithNoRetryVerdict([
+      { report_id: 'a', failure_category: 'already_fixed', created_at: '2026-10-20T08:00:00Z' },
+      { report_id: 'b', failure_category: 'wrong_repo', created_at: '2026-10-20T07:00:00Z' },
+      { report_id: 'b', failure_category: null, created_at: '2026-10-20T09:00:00Z' },
+      { report_id: 'c', failure_category: 'cursor_api_error', created_at: '2026-10-20T08:00:00Z' },
+    ])
+    expect([...out]).toEqual(['a'])
   })
 })
 
@@ -119,7 +156,10 @@ function seed(extra: Record<string, unknown[]> = {}) {
         { project_id: P2, autofix_enabled: true, autofix_max_dispatches_per_day: 30 },
       ],
       project_repos: [{ project_id: P1 }, { project_id: P2 }],
-      byok_keys: [{ ...key(), vault_secret_id: 'v' }, { id: 'own', provider_slug: 'cursor', status: 'active', project_id: P2 }],
+      byok_keys: [
+        { ...key(), vault_secret_id: 'v', priority: 100, test_status: 'ok' },
+        { id: 'own', provider_slug: 'cursor', status: 'active', test_status: 'ok', priority: 100, project_id: P2, organization_id: null },
+      ],
       reports: [
         { id: 'r1', project_id: P1, status: 'classified', severity: 'high', judge_score: 0.8, component: 'a.ts', report_group_id: null, created_at: '2026-10-19T00:00:00Z' },
         { id: 'r2', project_id: P1, status: 'classified', severity: 'medium', judge_score: 0.7, component: null, report_group_id: null, created_at: '2026-10-18T00:00:00Z' },
@@ -163,6 +203,19 @@ describe('runSpendDownForKey', () => {
       },
     })
     expect(summary).toMatchObject({ state: 'active', dispatched: 2, remainingToday: 8 })
+  })
+
+  it('never picks a report whose last run the agent settled as already fixed or wrong repo', async () => {
+    const db = seed({
+      fix_attempts: [{ id: 'fa', project_id: P1, report_id: 'r1', agent: 'cursor_cloud', status: 'failed', failure_category: 'already_fixed', created_at: '2026-10-01T00:00:00Z' }],
+    })
+    const calls: Array<Record<string, unknown>> = []
+    await worker.runSpendDownForKey(db as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch: async (i) => (calls.push(i as never), { ok: true }),
+    })
+    expect(calls.map((c) => c.reportId)).toEqual(['r2'])
   })
 
   it('stops at the daily limit, counting what it already started today', async () => {
@@ -215,7 +268,7 @@ describe('runSpendDownForKey and legacy keys', () => {
         { project_id: P1, autofix_enabled: true, autofix_max_dispatches_per_day: 30, cursor_api_key_ref: 'vault://legacy' },
         { project_id: P2, autofix_enabled: true, autofix_max_dispatches_per_day: 30 },
       ],
-      byok_keys: [{ ...key(), vault_secret_id: 'v' }],
+      byok_keys: [{ ...key(), vault_secret_id: 'v', priority: 100, test_status: 'ok' }],
     })
     const calls: Array<Record<string, unknown>> = []
     await worker.runSpendDownForKey(db as never, key(), {
