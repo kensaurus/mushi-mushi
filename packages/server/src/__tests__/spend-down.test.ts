@@ -15,7 +15,10 @@ import {
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
   type CursorPoolKey,
+  SPEND_DOWN_STOP_AUTOFIX_OFF,
+  SPEND_DOWN_STOP_NO_REPORT,
   spendDownDispatchMetadata,
+  spendDownIdleReasons,
   spendDownProjectIds,
   spendDownWindow,
   type SpendDownKey,
@@ -108,6 +111,42 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
     expect(firstCursorKeyFor(project(P1), [a, b])).toBe('a')
     expect(firstCursorKeyFor(project(P1), [{ ...a, test_status: 'auth_failed' }, b])).toBe('b')
     expect(firstCursorKeyFor(project(P1), [{ ...a, status: 'disabled' }, pool('k1')])).toBe('k1')
+  })
+})
+
+describe('spendDownIdleReasons', () => {
+  const active = { state: 'active' as const, servedProjectIds: [] as string[], dispatchedToday: 0, lastSummary: null }
+  it('is idle inside the window when no app has this key as first pick', () => {
+    expect(spendDownIdleReasons(active)).toEqual(['no_app'])
+  })
+  it('is idle when the last tick stopped because auto-fix is off or every report is settled', () => {
+    expect(spendDownIdleReasons({
+      ...active,
+      servedProjectIds: [P1],
+      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT }] },
+    })).toEqual(['reports_settled'])
+    expect(spendDownIdleReasons({
+      ...active,
+      servedProjectIds: [P1, P2],
+      lastSummary: {
+        dispatched: 0,
+        projects: [
+          { projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_AUTOFIX_OFF },
+          { projectId: P2, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT },
+        ],
+      },
+    })).toEqual(['autofix_off', 'reports_settled'])
+  })
+  it('is not idle outside the window, after a dispatch today, or when the tick hit a cap', () => {
+    expect(spendDownIdleReasons({ ...active, state: 'not_started' })).toBeNull()
+    expect(spendDownIdleReasons({ ...active, state: 'expired' })).toBeNull()
+    expect(spendDownIdleReasons({ ...active, dispatchedToday: 1 })).toBeNull()
+    expect(spendDownIdleReasons({
+      ...active,
+      servedProjectIds: [P1],
+      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: 'Three fixes already running' }] },
+    })).toBeNull()
+    expect(spendDownIdleReasons({ ...active, servedProjectIds: [P1], lastSummary: null })).toBeNull()
   })
 })
 

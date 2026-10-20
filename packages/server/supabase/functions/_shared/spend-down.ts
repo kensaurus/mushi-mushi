@@ -8,7 +8,9 @@
  *          own to the apps that key already serves, at most
  *          `spend_down_daily_limit` a day, and never past an app's auto-fix
  *          caps (the fix worker checks those again for every automatic
- *          dispatch).
+ *          dispatch). `spendDownIdleReasons` is the same "dispatched nothing"
+ *          the console status line reports, for the radar rule
+ *          `spend_down_idle`.
  *
  *          "Already serves" follows ADR 0023 exactly, so the key resolver does
  *          not change: an app's own key is that app's; a shared key serves the
@@ -158,6 +160,52 @@ export function spendDownProjectIds(
     .filter((p) => p.autofix_enabled && p.has_repo)
     .filter((p) => firstCursorKeyFor(p, keys) === key.id)
     .map((p) => p.id)
+}
+
+/**
+ * Stop lines the worker writes when a tick dispatched nothing for a reason
+ * that will not clear on its own this window: auto-fix is off, or no open
+ * report is left. A cap or a full run queue is not one of these.
+ */
+export const SPEND_DOWN_STOP_NO_REPORT = 'No open report to fix'
+export const SPEND_DOWN_STOP_AUTOFIX_OFF = 'Auto-fix is off'
+
+export type SpendDownIdleReason = 'no_app' | 'autofix_off' | 'reports_settled'
+
+/** The last worker tick, as stored on `byok_keys.spend_down_last_summary`. */
+export interface SpendDownTick {
+  dispatched?: number
+  projects?: Array<{ projectId: string; dispatched: number; stopped?: string }>
+}
+
+/**
+ * Why a key inside its window dispatched nothing, or null when it did not.
+ * `no_app` is the console status line: no app has this key as the resolver's
+ * first pick with auto-fix on and a linked repo. `autofix_off` and
+ * `reports_settled` come from the last tick. A cap or "three fixes already
+ * running" is not idle.
+ */
+export function spendDownIdleReasons(input: {
+  state: SpendDownState
+  servedProjectIds: readonly string[]
+  dispatchedToday: number
+  lastSummary: SpendDownTick | null
+}): SpendDownIdleReason[] | null {
+  if (input.state !== 'active' || input.dispatchedToday > 0) return null
+  if (input.servedProjectIds.length === 0) return ['no_app']
+  const projects = input.lastSummary?.projects
+  if (input.lastSummary?.dispatched !== 0 || !projects?.length) return null
+  const idleStop = (stopped: string | undefined) =>
+    stopped === SPEND_DOWN_STOP_NO_REPORT || stopped === SPEND_DOWN_STOP_AUTOFIX_OFF
+  const covered = input.servedProjectIds.every((id) => {
+    const row = projects.find((p) => p.projectId === id)
+    return row != null && row.dispatched === 0 && idleStop(row.stopped)
+  })
+  if (!covered) return null
+  const reasons: SpendDownIdleReason[] = []
+  if (projects.some((p) => p.stopped === SPEND_DOWN_STOP_AUTOFIX_OFF)) reasons.push('autofix_off')
+  if (projects.some((p) => p.stopped === SPEND_DOWN_STOP_NO_REPORT)) reasons.push('reports_settled')
+  return reasons
 }
 
 export interface SpendDownCandidate {

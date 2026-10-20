@@ -79,6 +79,8 @@ export const RADAR_RULE_IDS = [
   'key_in_client_bundle',
   'paid_feature_no_kill_switch',
   'provider_limit_unset',
+  // ADR 0028 — a Cursor key set to spend down that dispatched nothing.
+  'spend_down_idle',
 ] as const
 export type RadarRuleId = (typeof RADAR_RULE_IDS)[number]
 
@@ -133,6 +135,7 @@ export const RADAR_RULES: Readonly<Record<RadarRuleId, RadarRuleMeta>> = {
   key_in_client_bundle: { id: 'key_in_client_bundle', title: 'No secret keys in the built app', source: 'host_ci', prevents: 'Anyone who opens the app or site reads the key out of the bundle and spends on it.' },
   paid_feature_no_kill_switch: { id: 'paid_feature_no_kill_switch', title: 'Paid features can be switched off', source: 'repo_scan', prevents: 'A runaway paid feature keeps spending until a new build ships.' },
   provider_limit_unset: { id: 'provider_limit_unset', title: 'AI providers have a spending limit', source: 'connector', prevents: 'A leaked key or a loop spends without a ceiling; Mushi cannot cap your own provider keys.' },
+  spend_down_idle: { id: 'spend_down_idle', title: 'Spend-down is not idle', source: 'mushi', prevents: 'A Cursor key set to spend itself down sits inside its window and dispatches nothing, so the credits expire unused.' },
 }
 
 /**
