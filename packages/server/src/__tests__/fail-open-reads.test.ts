@@ -13,7 +13,8 @@
  *     run of each gate, as the findings list does.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { makeFakeDb } from './__stubs__/fake-supabase.ts'
+import { GATE_IDS } from '../../supabase/functions/_shared/gate-ids.ts'
+import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({
   getServiceClient: () => {
@@ -52,6 +53,37 @@ beforeAll(async () => {
 const NOW = new Date('2026-10-03T12:00:00Z').getTime()
 const P = '10000001-0000-4000-8000-000000000000'
 const failing = (...tables: string[]) => ({ failRead: (t: string) => (tables.includes(t) ? 'permission denied' : null) })
+
+/** Peak overlapping reads of `table`. The fake query resolves on a microtask, so a fan-out that starts every read before any finishes records the full width. */
+function countInFlight(db: FakeDb, table: string): { peak: () => number } {
+  let inFlight = 0
+  let peak = 0
+  const orig = db.from.bind(db)
+  db.from = (name: string) => {
+    const q = orig(name)
+    if (name !== table) return q
+    const origThen = q.then.bind(q)
+    q.then = (onfulfilled, onrejected) => {
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      return origThen(
+        (value) => {
+          inFlight -= 1
+          // `never` drops out of the union, so this stays the callback's return type.
+          if (!onfulfilled) return value as never
+          return onfulfilled(value)
+        },
+        (reason) => {
+          inFlight -= 1
+          if (!onrejected) throw reason
+          return onrejected(reason)
+        },
+      )
+    }
+    return q
+  }
+  return { peak: () => peak }
+}
 
 describe('readAllPages', () => {
   const rows = Array.from({ length: 2_350 }, (_, i) => ({ id: `r${String(i).padStart(5, '0')}` }))
@@ -258,6 +290,25 @@ describe('composeRecipe never composes from a failed read', () => {
     const runs = await compose.loadLatestGateRuns(db as never, P, ['design_drift', 'ci_drift', 'env_drift'])
     expect(runs.map((r) => r.id).sort()).toEqual(['ci-done', 'scan-old'])
     await expect(compose.loadLatestGateRuns(makeFakeDb({}, failing('gate_runs')) as never, P, ['ci_drift'])).rejects.toThrow(/gate_runs \(ci_drift\)/)
+  })
+
+  it('reads every live gate without holding one pool connection per gate', async () => {
+    // Inventory stats and the findings list pass GATE_IDS (store_review last).
+    // Promise.all opened one connection per gate and Supavisor timed out on
+    // the gate that lost the race: gate_runs (store_review).
+    const db = makeFakeDb({
+      gate_runs: [
+        { id: 'sr-new', project_id: P, gate: 'store_review', status: 'pass', started_at: '2026-10-02T00:00:00Z' },
+        { id: 'sr-old', project_id: P, gate: 'store_review', status: 'fail', started_at: '2026-09-01T00:00:00Z' },
+        { id: 'running', project_id: P, gate: 'store_review', status: 'running', started_at: '2026-10-03T00:00:00Z' },
+      ],
+    })
+    const flight = countInFlight(db, 'gate_runs')
+    const runs = await compose.loadLatestGateRuns(db as never, P, GATE_IDS)
+    expect(GATE_IDS).toContain('store_review')
+    expect(runs.map((r) => r.id)).toEqual(['sr-new'])
+    expect(flight.peak()).toBe(compose.GATE_RUN_READ_CONCURRENCY)
+    expect(compose.GATE_RUN_READ_CONCURRENCY).toBeLessThan(GATE_IDS.length)
   })
 
   it('the recipe reads every live gate except the radar hole checks', () => {
