@@ -9,13 +9,13 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 45 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 44 · **Recently closed:** 9 (BL-011 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
 | test-gap | 7 |
-| tech-debt | 18 |
+| tech-debt | 17 |
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 4 |
@@ -23,7 +23,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 42 |
+| relevant | 41 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -78,7 +78,6 @@ parked work is visible in one place.
 | BL-008 | test-gap | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | relevant | low | `docs/execplans/PLANS.md:230`, `:233` | — |
 | BL-009 | test-gap | Code-health ingest's ship checklist is unticked. 2026-10-17: the migration is live and 50 `code_health` gate runs plus 156 `bundle.*` / `code_health.*` metric rows from yen-yen are in production (last run 2026-07-16), so the "migration applied" and "one real yen-yen push" boxes are done. Not re-run: `POST /v1/ingest/metrics` 201 / 429, the owner vs non-member RLS spot-check, advisors. Tick those or reopen. Ingest has since stopped (BL-082) | verify-done | med | `docs/execplans/PLANS.md:421`-`:431` | — |
 | BL-010 | tech-debt | knip reports one unresolved import: `packages/server/src/__tests__/explore-tab-navigation.test.ts` imports `../../apps/admin/src/lib/exploreTabNavigation.ts`. Vitest resolves it and the test runs (3 tests pass in CI), but knip cannot follow the path, and `apps/admin` already has its own `exploreTabNavigation.test.ts`. Point the import at a path knip resolves, or drop the duplicate test | relevant | low | `packages/server/src/__tests__/explore-tab-navigation.test.ts:2`; CI run 38518598645 | — |
-| BL-011 | tech-debt | `_shared/storage.ts`: replace the bucket assumption with a pre-flight bucket existence probe | relevant | low | `packages/server/supabase/functions/_shared/storage.ts:87` | — |
 | BL-012 | tech-debt | knip remainder after the 2026-10-17 pass (38 default / 50 production). 14 files: 4 manual tools, 6 design primitives, and 4 decisions (BL-040, BL-041). 7 exports and 1 type, each kept with a stated reason. 5 duplicates (BL-042) | relevant | low | `docs/plan-dead-code-2026-10-16.md`; `docs/execplans/knip-baseline/README.md` | — |
 | BL-013 | tech-debt | knip dependency findings after the 2026-10-16 pass: 2 dependencies and 6 devDependencies kept with a reason (CSS `@import`, vitest alias, peer backing, workspace links, a dynamic import knip misses), plus `@modelcontextprotocol/core` in published `@mushi-mushi/mcp` (BL-042). 2 unlisted: `esbuild` in `packages/web/src/build-strip.test.ts` resolves through tsup, and `@e2b/code-interpreter` is an optional runtime import. Declare `esbuild` as a devDependency of web | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
 | BL-014 | tech-debt | `pnpm build` on clean master rewrites 13 committed `apps/docs/public/llm-md/*.md` files (230 lines). Either the committed copies are stale or the generator is not deterministic on Windows; find which, then regenerate and commit or stop committing generated files (not re-measured 2026-10-17: needs a full build) | relevant | low | baseline build 2026-10-14 | — |
@@ -120,6 +119,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-011 | `_shared/storage.ts` assumed the Supabase bucket existed (hardcoded `mushi-screenshots` → `screenshots`) | 2026-10-20 | `chooseSupabaseBucket` / `probeSupabaseBucket` in `_shared/storage-bucket.ts` call `storage.getBucket` and cache a hit per isolate. A miss is `StorageBucketError` `STORAGE_BUCKET_MISSING` (ingest falls back to `screenshots` after that bucket probes clean; health check fails with that message). A thrown or 5xx probe is `STORAGE_BUCKET_PROBE_FAILED`. Settings save rejects a missing Supabase bucket (`gateSupabaseBucketSave`). Tests: `packages/server/src/__tests__/storage-bucket.test.ts`. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |

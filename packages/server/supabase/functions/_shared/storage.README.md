@@ -22,6 +22,13 @@ Critical properties:
 
 - **Default-safe**: missing config falls back to Supabase, so report ingest
   never breaks because of a misconfigured BYO bucket.
+- **Bucket probe**: before a Supabase upload, `storage.getBucket` confirms the
+  bucket exists (`storage-bucket.ts`). A hit is cached for the isolate. A
+  missing configured name falls back to `screenshots` for ingest, fails the
+  health check with `STORAGE_BUCKET_MISSING`, and is rejected on settings
+  save. The module does not create buckets. A probe error
+  (`STORAGE_BUCKET_PROBE_FAILED`) fails the upload or health check with that
+  message instead of a later opaque Storage error; it does not block the save.
 - **Vault-only secrets**: raw keys are never persisted in `project_storage_settings`;
   only Supabase Vault references. Resolved via the `vault_lookup` SECURITY
   DEFINER helper.

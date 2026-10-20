@@ -6,6 +6,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { currentRegion } from '../../_shared/region.ts';
 import { getStorageAdapter, getStorageAdapterForHealthCheck, invalidateStorageCache } from '../../_shared/storage.ts';
+import { preflightSupabaseBucketSetting } from '../../_shared/storage-bucket.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { requireEeLicense } from '../../_shared/ee-gate.ts';
@@ -50,6 +51,45 @@ interface ContactBody {
 }
 
 const RATE_LIMIT_PER_HOUR = 5;
+
+/**
+ * Reject a Supabase bucket name Storage says is missing. External providers
+ * are not probed. A Storage outage skips the gate so the save still lands;
+ * the runtime probe reports that failure on the next upload or health check.
+ */
+async function gateSupabaseBucketSave(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  patch: Record<string, unknown>,
+): Promise<Response | null> {
+  const setsBucket = typeof patch.bucket === 'string';
+  const setsSupabase = patch.provider === 'supabase';
+  if (!setsBucket && !setsSupabase) return null;
+
+  let provider = typeof patch.provider === 'string' ? patch.provider : null;
+  let bucket = typeof patch.bucket === 'string' ? patch.bucket : null;
+  if (provider === null || bucket === null) {
+    const { data: existing, error } = await db
+      .from('project_storage_settings')
+      .select('provider, bucket')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (error) {
+      log.error('storage bucket probe skipped; settings row unreadable', {
+        projectId,
+        code: error.code,
+      });
+      return null;
+    }
+    if (provider === null) provider = (existing?.provider as string | undefined) ?? 'supabase';
+    if (bucket === null) bucket = (existing?.bucket as string | undefined) ?? 'screenshots';
+  }
+
+  const gate = await preflightSupabaseBucketSetting(db, { provider, bucket });
+  if (gate.ok) return null;
+  return c.json({ ok: false, error: { code: gate.code, message: gate.message } }, 400);
+}
 
 /**
  * Retention windows, legal hold and residency pins decide what the nightly
@@ -1406,6 +1446,9 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: false, error: { code: stored.code, message: stored.message } }, stored.status);
     }
     Object.assign(patch, stored.refs);
+
+    const bucketGate = await gateSupabaseBucketSave(c, db, projectId, patch);
+    if (bucketGate) return bucketGate;
 
     const { error } = await db
       .from('project_storage_settings')

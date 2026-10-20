@@ -12,11 +12,22 @@
  * `project_storage_settings` row — raw access keys are never persisted in
  * application tables. The S3-compatible backends (s3/r2/minio) all use the
  * same SigV4 path; only the endpoint and signing region differ.
+ *
+ * The Supabase adapter probes the bucket with storage.getBucket before use
+ * (storage-bucket.ts). A positive result is cached per isolate. A missing
+ * configured name falls back to the cluster default for ingest and fails the
+ * health check; a probe error is a typed StorageBucketError.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
+import {
+  CLUSTER_DEFAULT_BUCKET,
+  chooseSupabaseBucket,
+  StorageBucketError,
+  type BucketProbeClient,
+} from './storage-bucket.ts'
 import { isProjectStorageSecretRef } from './vault-ref.ts'
 
 const storageLog = log.child('storage')
@@ -81,17 +92,37 @@ export interface StorageAdapter {
 
 const settingsCache = new Map<string, { settings: StorageSettings | null; expiresAt: number }>()
 const SETTINGS_TTL_MS = 60 * 1000
-const CLUSTER_DEFAULT_BUCKET = 'screenshots'
 
-/** Normalize legacy / typo bucket names to the cluster default Supabase bucket.
- * TODO: replace with a pre-flight bucket existence probe so any future
- * misconfigured name is caught at config-save time rather than silently at upload.
+/**
+ * Probe the configured Supabase bucket and return the name to upload into.
+ * A confirmed miss logs STORAGE_BUCKET_MISSING and uses the cluster default
+ * so ingest still stores the object. The cluster default missing, or a probe
+ * that errors, throws StorageBucketError.
  */
-function resolveSupabaseBucket(configured?: string | null): string {
-  if (!configured || configured === CLUSTER_DEFAULT_BUCKET) return CLUSTER_DEFAULT_BUCKET
-  // Admin once seeded mushi-screenshots for glot.it; that bucket was never created.
-  if (configured === 'mushi-screenshots') return CLUSTER_DEFAULT_BUCKET
-  return configured
+async function resolveSupabaseBucket(
+  client: BucketProbeClient,
+  configured: string | null | undefined,
+  projectId: string,
+): Promise<string> {
+  const choice = await chooseSupabaseBucket(client, configured)
+  if (choice.missingConfigured) {
+    storageLog.error('configured supabase bucket does not exist; using cluster default', {
+      projectId,
+      configured: choice.missingConfigured,
+      fallback: choice.bucket,
+      code: 'STORAGE_BUCKET_MISSING',
+    })
+  }
+  return choice.bucket
+}
+
+function unavailableStorageAdapter(message: string): StorageAdapter {
+  return {
+    upload: async () => { throw new Error(message) },
+    signedUrl: async () => { throw new Error(message) },
+    delete: async () => { throw new Error(message) },
+    healthCheck: async () => ({ ok: false, error: message, debug: [] }),
+  }
 }
 
 export async function getStorageSettings(projectId: string): Promise<StorageSettings | null> {
@@ -116,16 +147,18 @@ export function invalidateStorageCache(projectId?: string): void {
 }
 
 /**
- * Top-level factory. Always returns *some* adapter, even on misconfiguration —
- * falls back to the cluster default Supabase bucket so that report ingest
- * never breaks because of a storage settings issue.
+ * Top-level factory. Falls back to the cluster default Supabase bucket when
+ * BYO settings are incomplete, and when a configured Supabase bucket is
+ * confirmed missing, so report ingest still stores the object. The cluster
+ * default missing, or a bucket probe that errors, throws StorageBucketError.
  */
 export async function getStorageAdapter(projectId: string): Promise<StorageAdapter> {
   const settings = await getStorageSettings(projectId)
+  const client = getServiceClient()
   if (!settings || settings.provider === 'supabase') {
     return new SupabaseStorageAdapter(
-      getServiceClient(),
-      resolveSupabaseBucket(settings?.bucket),
+      client,
+      await resolveSupabaseBucket(client, settings?.bucket, projectId),
     )
   }
   try {
@@ -136,7 +169,10 @@ export async function getStorageAdapter(projectId: string): Promise<StorageAdapt
       provider: settings.provider,
       err: String(err),
     })
-    return new SupabaseStorageAdapter(getServiceClient(), CLUSTER_DEFAULT_BUCKET)
+    return new SupabaseStorageAdapter(
+      client,
+      await resolveSupabaseBucket(client, CLUSTER_DEFAULT_BUCKET, projectId),
+    )
   }
 }
 
@@ -162,15 +198,50 @@ export async function getStorageAdapterForHealthCheck(
     ok: settings !== null,
     ms: Date.now() - t0,
     detail: settings
-      ? `provider=${settings.provider} bucket=${resolveSupabaseBucket(settings.bucket)}`
+      ? `provider=${settings.provider} bucket=${settings.bucket}`
       : 'no settings row — using cluster default',
   })
 
   if (!settings || settings.provider === 'supabase') {
-    const bucket = resolveSupabaseBucket(settings?.bucket)
-    return {
-      adapter: new SupabaseStorageAdapter(getServiceClient(), bucket),
-      prefixDebug,
+    const client = getServiceClient()
+    const tProbe = Date.now()
+    try {
+      const choice = await chooseSupabaseBucket(client, settings?.bucket)
+      if (choice.missingConfigured) {
+        const message = `Storage bucket "${choice.missingConfigured}" does not exist`
+        storageLog.error('configured supabase bucket does not exist', {
+          projectId,
+          configured: choice.missingConfigured,
+          fallback: choice.bucket,
+          code: 'STORAGE_BUCKET_MISSING',
+        })
+        prefixDebug.push({
+          step: 'bucket_probe',
+          ok: false,
+          ms: Date.now() - tProbe,
+          detail: message,
+        })
+        return { adapter: unavailableStorageAdapter(message), prefixDebug }
+      }
+      prefixDebug.push({
+        step: 'bucket_probe',
+        ok: true,
+        ms: Date.now() - tProbe,
+        detail: `bucket=${choice.bucket}`,
+      })
+      return {
+        adapter: new SupabaseStorageAdapter(client, choice.bucket),
+        prefixDebug,
+      }
+    } catch (err) {
+      const message = err instanceof StorageBucketError ? err.message : String(err)
+      prefixDebug.push({
+        step: 'bucket_probe',
+        ok: false,
+        ms: Date.now() - tProbe,
+        detail: message.slice(0, 200),
+      })
+      return { adapter: unavailableStorageAdapter(message), prefixDebug }
     }
   }
 
