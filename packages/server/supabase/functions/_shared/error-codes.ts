@@ -11,6 +11,11 @@
  * Client-safe rule: codes are stable and machine-readable; never embed
  * Postgres / stack / secret detail in `message`. Use reportError / Sentry
  * for the full diagnostic.
+ *
+ * NOTES:
+ * - isTransientDbConnectionError treats the hosted API gateway body
+ *   "Project not specified." as transient infrastructure. A coded SQLSTATE
+ *   still reports, including a RAISE that happens to use that sentence.
  */
 
 /** Closed set of well-known API error codes. */
@@ -116,17 +121,21 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * logs by message matching, and the message patterns are anchored to specific
  * pooler/Cloudflare signatures rather than broad tokens (a bare "522" or
  * "connection refused" would false-match IDs, values, or persistent misconfig).
+ * The one exception is the 5-letter prefix `PGRST` on the gateway body below:
+ * that prefix is not a SQLSTATE.
  *
  * Classification order:
- *   1. Valid SQLSTATE present → transient ONLY for the connection_exception
+ *   1. Hosted gateway body "Project not specified." with no SQLSTATE, or with
+ *      the non-state prefix `PGRST`, is transient.
+ *   2. Valid SQLSTATE present → transient ONLY for the connection_exception
  *      family (class 08) and 57P03 cannot_connect_now. Every other coded error
  *      (42703 undefined_column, P0001 raise_exception, 53300 too_many_connections,
  *      57014 statement_timeout, XX000, …) is a REAL error and always reported.
- *   2. PostgREST PGRST002 (it could not load its schema cache from the database
+ *   3. PostgREST PGRST002 (it could not load its schema cache from the database
  *      and is retrying) is transient. Other PGRST codes are not: PGRST202 and
  *      PGRST204 also mention "the schema cache", but they mean a function or
  *      column is missing, which is a real bug.
- *   3. No SQLSTATE (socket-level failures carry none) → match specific transient
+ *   4. No SQLSTATE (socket-level failures carry none) → match specific transient
  *      transport signatures only.
  *
  * Pattern sources:
@@ -137,7 +146,19 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  *   - "Could not query the database for the schema cache. Retrying." — the
  *     PGRST002 message, matched verbatim for callers that kept only the text
  *     (MUSHI-MUSHI-SERVER-1M).
+ *   - "Project not specified." — hosted API gateway plain-text 400 when it
+ *     cannot route the request (Cloudflare / upstream). postgrest-js stores
+ *     a non-JSON body as `{ message }` with no code, or with the 5-letter
+ *     prefix `PGRST`, which is not a SQLSTATE.
  */
+function isSupabaseGatewayProjectUnspecified(message: string): boolean {
+  const text = message.trim().replace(/\.$/, '').toLowerCase()
+  return (
+    text === 'project not specified' ||
+    text === 'bad request - please check your parameters: project not specified'
+  )
+}
+
 export function isTransientDbConnectionError(
   err:
     | { message?: string; code?: string | null; details?: string | null }
@@ -152,6 +173,15 @@ export function isTransientDbConnectionError(
   // 3-char subclass), e.g. 42703, P0001, 22P02, 08006, XX000 — NOT necessarily
   // 5 digits. If a valid SQLSTATE is present, trust it over the message.
   const sqlstate = /^[0-9A-Za-z]{5}$/.test(rawCode) ? rawCode.toUpperCase() : null
+  // Before the SQLSTATE short-circuit: bare `PGRST` is 5 letters, so it would
+  // otherwise hide this gateway body as a "coded" error. Any other SQLSTATE
+  // (including P0001) still wins and is reported.
+  if (
+    isSupabaseGatewayProjectUnspecified(err.message ?? '') &&
+    (sqlstate === null || sqlstate === 'PGRST')
+  ) {
+    return true
+  }
   if (sqlstate) {
     // Class 08 = connection_exception (connection_failure 08006,
     // sqlclient_unable_to_establish_sqlconnection 08001, etc.); 57P03 =

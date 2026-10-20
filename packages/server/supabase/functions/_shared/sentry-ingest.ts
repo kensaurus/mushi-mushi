@@ -13,6 +13,9 @@
  *   - `issue` (action created/resolved/…): `data.issue` carries the grouped
  *     issue summary.
  *
+ * Platform-outage text "Project not specified." is not filed (hosted gateway
+ * 400). A caller's own "project was not specified" sentence still is.
+ *
  * Dedup: one Mushi report per Sentry issue, linked through
  * `report_external_issues (system='sentry', external_id=<issueId>)` — the same
  * table plugin-sentry uses for the outbound mirror, so the resolve loop is
@@ -146,14 +149,15 @@ export function formatSentryExtra(extra: Record<string, unknown> | null | undefi
 }
 
 /**
- * Supabase platform-outage signatures only: the Envoy pooler reset and
- * PostgREST reloading its schema cache (PGRST002). Deliberately narrower than
- * isTransientDbConnectionError: a bare ECONNRESET, "socket hang up" or
- * "connection reset by peer" in a user's own backend is often a real bug (a
- * crashed upstream, a missing retry) and still gets filed.
+ * Supabase platform-outage signatures only: the Envoy pooler reset,
+ * PostgREST reloading its schema cache (PGRST002), and the hosted gateway
+ * body "Project not specified." (the period is part of that body).
+ * Deliberately narrower than isTransientDbConnectionError: a bare ECONNRESET,
+ * "socket hang up" or "connection reset by peer" in a user's own backend is
+ * often a real bug (a crashed upstream, a missing retry) and still gets filed.
  */
 const PLATFORM_OUTAGE_RE =
-  /upstream connect error or disconnect\/reset before headers|delayed connect error: 111|remote connection failure|\bPGRST002\b|could not query the database for the schema cache/i;
+  /upstream connect error or disconnect\/reset before headers|delayed connect error: 111|remote connection failure|\bPGRST002\b|could not query the database for the schema cache|project not specified\./i;
 
 /**
  * True when the issue is a Supabase platform outage (PLATFORM_OUTAGE_RE) in
