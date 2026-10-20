@@ -64,7 +64,7 @@
   },
   "merge_fix": {
     "scope": "mcp:write",
-    "description": "Squash-merge a fix PR into the repo's default branch and mark the report fixed. Destructive and irreversible from Mushi — there is no unmerge endpoint, only a manual revert PR outside this tool. Confirm CI is green and the diff is reviewed before calling.",
+    "description": "Squash-merge a fix PR into the repo's default branch and mark the report fixed. Destructive and irreversible from Mushi — there is no unmerge endpoint, only a manual revert PR outside this tool. A PR whose Opus review says hold is refused; only a person in the console can override it. Confirm CI is green and the diff is reviewed before calling.",
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/merge",
     "required": ["fixId"],

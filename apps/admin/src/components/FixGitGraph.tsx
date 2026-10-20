@@ -47,6 +47,7 @@ export interface FixTimelineEvent {
     | 'ci_started'
     | 'ci_resolved'
     | 'pr_state_changed'
+    | 'reviewed'
     | 'completed'
     | 'failed'
   at: string
@@ -102,6 +103,7 @@ const EVENT_KIND_TONE: Record<FixTimelineEvent['kind'], 'brand' | 'info' | 'ok' 
   ci_started: 'info',
   ci_resolved: 'ok',
   pr_state_changed: 'warn',
+  reviewed: 'info',
   completed: 'ok',
   failed: 'danger',
 }
@@ -131,6 +133,8 @@ function kindLabel(kind: FixTimelineEvent['kind']): string {
       return 'CI finished'
     case 'pr_state_changed':
       return 'PR state changed'
+    case 'reviewed':
+      return 'Opus review'
     case 'completed':
       return 'Fix completed'
     case 'failed':

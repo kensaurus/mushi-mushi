@@ -112,6 +112,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
 | `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl crawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key) and records each broken page (5xx, linked 4xx, load error, judged breakage) as a suspect in `site_watch_pages`. A suspect files as a report with `source = 'site_watch'` only after a second failure (ADR 0029): a confirm scrape on the project's own key (`/v2/scrape`, `waitFor` 10 s, fresh; ≤6 per run shared fairly across watches, never on the platform env key) still sees it broken, or, for 5xx/4xx/load errors only, two checks in a row. Low-severity fallbacks: a confident judged break left inconclusive for 2 checks ("unconfirmed"), a 5xx found healthy 3 times in 7 days ("intermittent"). Judge fail-open is never evidence; a healthy confirm drops the suspect; one open finding per page |
 | `spend-down-worker` | Every 10 minutes (:08 to :58); spend-down mode (ADR 0028): for each Cursor key with spend-down on and inside its window (`byok_keys.credits_expire_at` minus `spend_down_window_days`), dispatches the best open reports of the apps the key already serves (ADR 0023 order) as automatic `cursor_cloud` fixes, up to `spend_down_daily_limit` a day, inside each app's auto-fix caps, ≤3 running per app; writes `spend_down_last_summary` |
+| `agent-pr-review` | Every 10 minutes (:03 to :53), and on `POST /v1/admin/fixes/:id/review`; the agent PR review gate (ADR 0030): claims up to 3 due `fix_reviews`, one per project (queued when a cloud agent's PR is accepted as a fix, and 5 min after a push to a reviewed PR), each under a `run_id` claim token, sends the report, PR description, CI state and a budgeted diff to Claude Opus 5.5 on the project's own Anthropic key (skipped, with the reason stored, without one or when `project_settings.agent_pr_review_enabled` is off), stores the merge / fix_first / hold verdict with tokens and cost, adds a `reviewed` fix event and one PR comment. `{ backfill: true, limit }` queues open cloud-agent PRs that have none |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
@@ -276,7 +277,7 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
-| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
+| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/merge/review`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
@@ -339,7 +340,8 @@ MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup ke
 mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes tail --report-id <reportId>
 mushi fixes refresh-ci <fixId>
-mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed
+mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed (refuses an Opus "hold"; overrides happen in the console)
+mushi fixes review <fixId> --show      # the Opus review of the PR (ADR 0030)
 
 # ── Diagnoses usage + billing ─────────────────────────────────────────────
 mushi usage                            # diagnoses used / limit / cap for this period
@@ -450,6 +452,31 @@ webhook.
 
 Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerge`).
 
+**Review gate (ADR 0030).** Every request merge goes through
+`_shared/gated-merge.ts` (this route, the console's generic PR merge, the
+UX-run merge and the SDK-upgrade merge; a test fails on any other caller of
+GitHub's merge). It reads the PR and keys on GitHub's current `base.repo`, so
+the repo must be one of the project's repos (403 `REPO_NOT_IN_PROJECT`; 409
+`REPO_RENAMED` when only its old name is connected); PR URLs are stored
+canonical (`canonicalPrUrl`, 400 otherwise). It refuses a PR (found by
+`fix_reviews.repo_id` or `repo`, + `pr_number`, across all projects, and PATCH
+cannot rewrite a fix's PR once set) whose
+latest completed Opus review (`fix_reviews`,
+written by `agent-pr-review`) says `hold`, with 409 `REVIEW_HOLD`: also while
+a re-review runs and on newer commits (a re-run never clears a verdict). Only
+a console session of a non-viewer overrides, with `override: true` and an
+`overrideReason` (audited); API keys (CLI, MCP) get 403
+`OVERRIDE_NEEDS_CONSOLE`. GitHub merges only the head SHA the gate saw (409
+`HEAD_MOVED` otherwise); a failed review read is a 503. `fix_first` merges; no
+review merges as before and reports "Not reviewed"; a verdict about an older
+commit reads "stale"; while a fix's first review runs, an API key gets 409
+`REVIEW_PENDING` and a console user confirms first. `POST /v1/admin/fixes/:id/review` re-runs a review
+(non-viewers, 3 an hour per fix, 409 while one runs; a hold on its own
+commit only from the console) and a PR push
+(`pull_request.synchronize`) re-queues it; the verdict rides on
+`GET /v1/admin/fixes/:id/timeline` (`data.review`, MCP `get_fix_timeline`).
+CLI: `mushi fixes review`.
+
 ### Draft → ready → merge
 
 1. `fix-worker` opens a **draft** PR, then calls `markPullRequestReady()` (GraphQL —
@@ -463,6 +490,7 @@ Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerg
 ```bash
 mushi fixes refresh-ci <fixId>
 mushi fixes merge <fixId> [--method squash|merge|rebase]
+mushi fixes review <fixId> [--show]
 ```
 
 Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in

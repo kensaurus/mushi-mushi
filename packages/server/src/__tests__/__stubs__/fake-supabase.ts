@@ -28,8 +28,10 @@ interface FakeDbOptions {
    * Make a read fail the way PostgREST reports an error: return a message to
    * fail `from(table).select(...)`, or null to let it run. Used by the
    * fail-open suites to prove a failed read never renders as "nothing found".
+   * A message fails with code XX000; `{ code, message }` sets the code (e.g.
+   * 42P01 for a table that does not exist yet).
    */
-  failRead?: (table: string) => string | null
+  failRead?: (table: string) => string | { code: string; message: string } | null
   /**
    * PostgREST `max_rows`: no select returns more rows than this, whatever
    * `limit` / `range` ask for (1,000 on Supabase). Unset = no cap.
@@ -256,7 +258,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     switch (this.op) {
       case 'select': {
         const failure = this.db.options.failRead?.(this.table) ?? null
-        if (failure) return { data: null, error: { code: 'XX000', message: failure }, count: null }
+        if (failure) {
+          const error = typeof failure === 'string' ? { code: 'XX000', message: failure } : failure
+          return { data: null, error, count: null }
+        }
         return this.finish(this.matches())
       }
       case 'insert': {

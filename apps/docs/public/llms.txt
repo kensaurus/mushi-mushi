@@ -111,6 +111,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi): Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.
 - [Concepts](https://kensaur.us/mushi-mushi/docs/concepts): Mushi's core ideas in one place — capture, plain-English diagnosis, dedupe into one row, optional agent fixes, verification, and lessons it remembers.
 - [Agent contract](https://kensaur.us/mushi-mushi/docs/concepts/agent-contract): What Mushi expects an agent to read before opening a PR, and what it promises in return.
+- [Agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review): Claude Opus 5.5 reviews every pull request a cloud coding agent opens as a fix, and a "hold" stops Mushi from merging it until you choose to.
 - [Anti-gaming & reputation](https://kensaur.us/mushi-mushi/docs/concepts/anti-gaming): How Mushi keeps bug reports honest — reporter reputation against spam and point farming, and prompt-fatigue limits so real users are not nagged.
 - [App recipe and design system](https://kensaur.us/mushi-mushi/docs/concepts/app-recipe): The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.
 - [Architecture](https://kensaur.us/mushi-mushi/docs/concepts/architecture): How Mushi is built — a Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.

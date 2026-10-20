@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 209 pages, generated from llms.txt. */
+/** 210 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -716,6 +716,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "agent-contract", "agent", "contract"],
     headings: ["The evolution loop (what you're plugging into)", "What the agent reads before opening a PR", "What the agent does after merging the PR", "What Mushi commits to in return", "Self-bootstrap (Claude Code and similar)", "Privacy contract", "Scopes"],
     excerpt: "What Mushi expects an agent to read before opening a PR, and what it promises in return.",
+  },
+  {
+    title: "Agent PR review",
+    url: docUrl("/concepts/agent-pr-review"),
+    route: "/concepts/agent-pr-review",
+    markdown: "concepts/agent-pr-review.md",
+    keywords: ["concepts", "agent-pr-review", "agent", "review", "pr"],
+    headings: ["What you see", "What the review checks", "Re-running a review", "Cost and keys", "For operators"],
+    excerpt: "Claude Opus 5.5 reviews every pull request a cloud coding agent opens as a fix, and a \"hold\" stops Mushi from merging it until you choose to.",
   },
   {
     title: "Anti-gaming & reputation",
