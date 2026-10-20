@@ -7,8 +7,10 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { canonicalPrUrl, parsePullRequestUrl } from './pr-substance.ts'
 import {
   FIX_REVIEW_PUBLIC_COLUMNS,
+  isReviewPending,
   mergeGate,
   overrideRefusal,
   toPublicReview,
@@ -41,11 +43,17 @@ export async function enqueueFixReview(
   const nowDate = opts.now ?? new Date()
   const now = nowDate.toISOString()
   const due = new Date(nowDate.getTime() + Math.max(0, opts.delayMs ?? 0)).toISOString()
+  // repo + pr_number are the PR's identity across projects (C1): the gate
+  // finds every review of a PR by them, whichever project queued it.
+  const canonical = canonicalPrUrl(target.prUrl)
+  const pr = canonical ? parsePullRequestUrl(canonical) : null
   const row = {
     fix_attempt_id: target.fixAttemptId,
     project_id: target.projectId,
     report_id: target.reportId,
-    pr_url: target.prUrl,
+    pr_url: canonical ?? target.prUrl,
+    repo: pr ? `${pr.owner}/${pr.repo}` : null,
+    pr_number: pr?.number ?? null,
     status: 'queued',
     queued_at: due,
   }
@@ -141,26 +149,30 @@ function samePr(prUrl: string | null, repo: string, number: number): boolean {
 }
 
 export interface PrReviews {
-  /** Every review linked to the PR: through a fix attempt OR through fix_reviews.pr_url. */
+  /**
+   * Every review of the PR: by its identity (repo + number) in ANY project,
+   * plus the reviews of this project's fix attempts that name it.
+   */
   rows: FixReviewRow[]
-  /** Fix attempts whose pr_url points at the PR (plus the one the caller named). */
+  /** This project's fix attempts whose pr_url names the PR (plus the one the caller named). */
   attemptIds: string[]
   /** A read failed (other than the table not existing yet): callers fail closed. */
   error: string | null
 }
 
 /**
- * Every review linked to one PR of a project. Two independent links, so a
- * caller cannot unlink a held fix by rewriting `fix_attempts.pr_url`:
- *   - fix attempts whose pr_url names this PR (and `fixAttemptId`, when the
- *     caller merges a known attempt);
- *   - fix_reviews rows whose pr_url names this PR. That column is written only
- *     by the service role (the enqueue and the worker), never by an API.
+ * Every review linked to one PR (ADR 0030). The main link is the PR's
+ * identity, `fix_reviews.repo` + `pr_number`, searched across ALL projects:
+ * another project that queued a review of the same PR (a shared repo, or a
+ * fix attempt pointed at someone else's PR) can hold it, and a caller cannot
+ * unlink a hold by rewriting `fix_attempts.pr_url` or by working from a
+ * second project. Both columns are written only by the service role.
  */
 export async function loadReviewsForPr(
   db: SupabaseClient,
   input: { projectId: string; repo: string; number: number; fixAttemptId?: string | null },
 ): Promise<PrReviews> {
+  const repo = input.repo.toLowerCase()
   const { data: attempts, error: attemptErr } = await db
     .from('fix_attempts')
     .select('id, pr_url')
@@ -170,30 +182,33 @@ export async function loadReviewsForPr(
   if (attemptErr) return { rows: [], attemptIds: [], error: attemptErr.message }
   const attemptIds = new Set(
     ((attempts ?? []) as Array<{ id: string; pr_url: string | null }>)
-      .filter((a) => samePr(a.pr_url, input.repo, input.number))
+      .filter((a) => samePr(a.pr_url, repo, input.number))
       .map((a) => a.id),
   )
   if (input.fixAttemptId) attemptIds.add(input.fixAttemptId)
 
   const rows = new Map<string, FixReviewRow>()
   const missing = (err: { code?: string } | null) => TABLE_MISSING_CODES.has(String(err?.code ?? ''))
+  const { data: byPr, error: prErr } = await db
+    .from('fix_reviews')
+    .select(FIX_REVIEW_PUBLIC_COLUMNS)
+    .eq('repo', repo)
+    .eq('pr_number', input.number)
+    .limit(100)
+  if (prErr && !missing(prErr as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: prErr.message }
+  for (const r of (byPr ?? []) as FixReviewRow[]) rows.set(r.id, r)
   if (attemptIds.size > 0) {
     const { data, error } = await db.from('fix_reviews').select(FIX_REVIEW_PUBLIC_COLUMNS).in('fix_attempt_id', [...attemptIds])
     if (error && !missing(error as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: error.message }
     for (const r of (data ?? []) as FixReviewRow[]) rows.set(r.id, r)
   }
-  // `%/pull/<n>` narrows by number; the repo is matched exactly below.
-  const { data: byUrl, error: urlErr } = await db
-    .from('fix_reviews')
-    .select(`${FIX_REVIEW_PUBLIC_COLUMNS}, pr_url`)
-    .eq('project_id', input.projectId)
-    .like('pr_url', `%/pull/${input.number}`)
-    .limit(50)
-  if (urlErr && !missing(urlErr as { code?: string })) return { rows: [], attemptIds: [...attemptIds], error: urlErr.message }
-  for (const r of (byUrl ?? []) as Array<FixReviewRow & { pr_url: string | null }>) {
-    if (samePr(r.pr_url, input.repo, input.number)) rows.set(r.id, r)
-  }
   return { rows: [...rows.values()], attemptIds: [...attemptIds], error: null }
+}
+
+export interface PrReviewSummary {
+  review: PublicFixReview
+  /** Any linked review is pending (first review, or a newer commit's): the console confirms a merge. */
+  pending: boolean
 }
 
 /** Review state per open PR (`owner/repo#n`), for the console's PR list. Empty on a failed read. */
@@ -201,12 +216,15 @@ export async function reviewStatesForPrs(
   db: SupabaseClient,
   projectId: string,
   prs: Array<{ repo: string; number: number; headSha: string | null }>,
-): Promise<Map<string, PublicFixReview>> {
-  const out = new Map<string, PublicFixReview>()
+): Promise<Map<string, PrReviewSummary>> {
+  const out = new Map<string, PrReviewSummary>()
   for (const pr of prs) {
     const found = await loadReviewsForPr(db, { projectId, repo: pr.repo, number: pr.number })
     if (found.error || found.rows.length === 0) continue
-    out.set(`${pr.repo}#${pr.number}`, toPublicReview(pickDisplayRow(found.rows, null), pr.headSha))
+    out.set(`${pr.repo}#${pr.number}`, {
+      review: toPublicReview(pickDisplayRow(found.rows, null), pr.headSha),
+      pending: found.rows.some((r) => isReviewPending(r, pr.headSha)),
+    })
   }
   return out
 }
@@ -283,7 +301,7 @@ export function decidePrGate(found: PrReviews, currentHead: string | null, calle
     if (refusal) return { ok: false, ...refusal, review }
     return { ok: true, review, overridden: true, mergedBeforeReview: false, expectedHeadSha: currentHead ?? hold.head_sha, ...base }
   }
-  const pending = found.rows.find((r) => !r.verdict && (r.status === 'queued' || r.status === 'running'))
+  const pending = found.rows.find((r) => isReviewPending(r, currentHead))
   if (pending) {
     if (caller.authMethod !== 'jwt') {
       return {

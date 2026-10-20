@@ -112,6 +112,27 @@ export function classifyPrSubstance(files: PrChangedFile[], opts: { complete: bo
   }
 }
 
+const CANONICAL_PR_RE = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/i
+
+/**
+ * The one form Mushi stores a pull request URL in (ADR 0030):
+ * `https://github.com/<owner>/<repo>/pull/<n>`, host, owner and repo
+ * lowercased, no trailing slash, query or fragment. GitHub owner and repo
+ * names are case-insensitive, so this is the same PR GitHub links to; one
+ * spelling per PR is what keeps `uq_fix_attempts_pr_url` and the review
+ * gate's lookups honest (a trailing slash used to make a second attempt for
+ * the same PR). Null for anything else; callers answer 400.
+ */
+export function canonicalPrUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim().replace(/[?#].*$/s, '').replace(/\/+$/, '')
+  const m = CANONICAL_PR_RE.exec(trimmed)
+  if (!m) return null
+  const number = Number(m[3])
+  if (!Number.isSafeInteger(number) || number <= 0) return null
+  return `https://github.com/${m[1].toLowerCase()}/${m[2].toLowerCase()}/pull/${number}`
+}
+
 /** `https://github.com/o/r/pull/12` → { owner, repo, number }. */
 export function parsePullRequestUrl(url: string): { owner: string; repo: string; number: number } | null {
   const m = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)(?:[/?#].*)?$/i.exec(url.trim())

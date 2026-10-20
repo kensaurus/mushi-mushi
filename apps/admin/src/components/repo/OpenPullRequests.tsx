@@ -38,7 +38,14 @@ export interface OpenPullRequest {
   updatedAt: string
   checks: UxPullRequest['checks']
   /** The Opus review when this PR is a Mushi fix (ADR 0030). */
-  review?: { state: FixReviewState; label: string; fixId: string | null; verdict?: 'merge' | 'fix_first' | 'hold' | null }
+  review?: {
+    state: FixReviewState
+    label: string
+    fixId: string | null
+    verdict?: 'merge' | 'fix_first' | 'hold' | null
+    /** ANY review linked to the PR is still running, not only the one shown. */
+    pending?: boolean
+  }
 }
 
 const POLL_MS = 30_000
@@ -104,6 +111,8 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
   const checks = uxRequiredChecks(pr.checks)
   const blocker = openPrMergeBlocker(pr)
   const passed = checks.filter((c) => c.result === 'pass').length
+  // Any linked review still running (the server says which); older servers only send the shown state.
+  const reviewPending = pr.review?.pending === true || pr.review?.state === 'queued'
 
   async function merge() {
     if (inFlight.current) return
@@ -116,7 +125,7 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
       {
         method: 'POST',
         // The fix's first review is still running: confirming here is the person's choice (ADR 0030).
-        body: JSON.stringify(pr.review?.state === 'queued' ? { method, confirmPendingReview: true } : { method }),
+        body: JSON.stringify(reviewPending ? { method, confirmPendingReview: true } : { method }),
       },
     )
     inFlight.current = false
@@ -167,7 +176,7 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
           <div className="flex flex-col gap-2">
             <p className="text-xs text-fg">
               Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}
-              {pr.review?.state === 'queued' ? 'Its Opus review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
+              {reviewPending ? 'Its Opus review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <SelectField label="Merge method" value={method} disabled={merging} onChange={(e) => setMethod(e.target.value as MergeMethod)}>

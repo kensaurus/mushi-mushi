@@ -47,7 +47,14 @@ export interface OpenPullRequest {
   updatedAt: string
   checks: PrChecks
   /** The Opus review when this PR is a Mushi fix (ADR 0030); absent otherwise. */
-  review?: { state: ReviewState; label: string; fixId: string | null; verdict: ReviewVerdict | null }
+  review?: {
+    state: ReviewState
+    label: string
+    fixId: string | null
+    verdict: ReviewVerdict | null
+    /** Any review linked to the PR is still running (first review, or a newer commit's): the console confirms a merge. */
+    pending: boolean
+  }
 }
 
 interface GithubPull {
@@ -111,8 +118,11 @@ export function registerPullRequestRoutes(app: Hono<{ Variables: Variables }>): 
         pullRequests.map((p) => ({ repo: p.repo, number: p.number, headSha: heads.get(`${p.repo}#${p.number}`) ?? null })),
       )
       for (const pr of pullRequests) {
-        const review = reviews.get(`${pr.repo}#${pr.number}`)
-        if (review) pr.review = { state: review.state, label: review.label, fixId: review.fixAttemptId, verdict: review.verdict }
+        const linked = reviews.get(`${pr.repo}#${pr.number}`)
+        if (linked) {
+          const { review, pending } = linked
+          pr.review = { state: review.state, label: review.label, fixId: review.fixAttemptId, verdict: review.verdict, pending }
+        }
       }
       pullRequests.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       return c.json({ ok: true, data: { pullRequests, repos: readable.map(({ ref }) => `${ref.owner}/${ref.repo}`) } })

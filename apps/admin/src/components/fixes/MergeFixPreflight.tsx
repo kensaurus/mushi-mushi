@@ -170,7 +170,7 @@ export function MergeFixPreflight({
           role="dialog"
           aria-label="Merge pull request"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-full mt-1 z-30 w-96 max-w-[calc(100vw-2rem)] rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
+          className="absolute right-0 top-full mt-1 z-30 w-80 sm:w-96 rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
         >
           <div className="text-xs font-medium text-fg mb-1">
             Merge draft PR{prNumber ? ` #${prNumber}` : ''}

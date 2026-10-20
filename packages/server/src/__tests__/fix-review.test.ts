@@ -19,6 +19,7 @@ import {
   fenceUntrusted,
   formatReviewComment,
   isGeneratedFile,
+  isReviewPending,
   mergeGate,
   normalizeReview,
   overrideRefusal,
@@ -29,6 +30,7 @@ import {
   type FixReviewRow,
   type ReviewDiffFile,
 } from '../../supabase/functions/_shared/fix-review.ts'
+import { canonicalPrUrl } from '../../supabase/functions/_shared/pr-substance.ts'
 
 const CLEAN: AgentPrReviewRaw = {
   findings: [],
@@ -394,5 +396,40 @@ describe('merge gate', () => {
     expect(rerun).toMatchObject({ state: 'hold', rerunning: true, label: 'Opus review: hold · re-review in progress' })
     const stale = toPublicReview(row({ verdict: 'merge', head_sha: 'old' }) as FixReviewRow, 'new')
     expect(stale).toMatchObject({ state: 'stale', stale: true, verdict: 'merge', label: 'Opus review: merge (older commit)' })
+  })
+})
+
+describe('one spelling per PR (canonicalPrUrl)', () => {
+  it('drops a trailing slash, query and fragment, and lowercases host, owner and repo', () => {
+    expect(canonicalPrUrl('https://github.com/o/r/pull/5/')).toBe('https://github.com/o/r/pull/5')
+    expect(canonicalPrUrl('  https://GitHub.com/Kensaurus/Glot.it/pull/147?tab=files#diff  ')).toBe('https://github.com/kensaurus/glot.it/pull/147')
+    expect(canonicalPrUrl('https://github.com/o/r/pull/007')).toBe('https://github.com/o/r/pull/7')
+  })
+
+  it('rejects anything that is not exactly a GitHub PR URL', () => {
+    for (const bad of [
+      'http://github.com/o/r/pull/5',
+      'https://github.com/o/r/pulls/5',
+      'https://github.com/o/r/pull/5/files',
+      'https://github.com.evil.example/o/r/pull/5',
+      'https://gitlab.com/o/r/pull/5',
+      'https://github.com/o/pull/5',
+      'https://github.com/o/r/pull/0',
+      'https://github.com/o/r/pull/abc',
+      null,
+      42,
+    ]) {
+      expect(canonicalPrUrl(bad as unknown)).toBeNull()
+    }
+  })
+})
+
+describe('isReviewPending', () => {
+  it('pending: a first review, or a newer commit\'s review; not a re-run of the same head or a finished run', () => {
+    expect(isReviewPending({ status: 'queued', verdict: null, head_sha: null }, 'h1')).toBe(true)
+    expect(isReviewPending({ status: 'running', verdict: 'merge', head_sha: 'h0' }, 'h1')).toBe(true)
+    expect(isReviewPending({ status: 'running', verdict: 'merge', head_sha: 'h1' }, 'h1')).toBe(false)
+    expect(isReviewPending({ status: 'completed', verdict: 'merge', head_sha: 'h0' }, 'h1')).toBe(false)
+    expect(isReviewPending({ status: 'skipped', verdict: null, head_sha: null }, 'h1')).toBe(false)
   })
 })

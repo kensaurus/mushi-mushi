@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS public.fix_reviews (
   skip_reason           text,
   error                 text,
   pr_url                text,
+  -- The PR's identity across projects: lowercased owner/name + number, from
+  -- the canonical PR URL. The merge gate finds every review of a PR by them,
+  -- whichever project queued it.
+  repo                  text CHECK (repo IS NULL OR repo = lower(repo)),
+  pr_number             integer CHECK (pr_number IS NULL OR pr_number > 0),
   head_sha              text,
   verdict               text CHECK (verdict IS NULL OR verdict IN ('merge', 'fix_first', 'hold')),
   fixes_report          boolean,
@@ -83,6 +88,10 @@ CREATE INDEX IF NOT EXISTS idx_fix_reviews_running
   WHERE status = 'running';
 CREATE INDEX IF NOT EXISTS idx_fix_reviews_project
   ON public.fix_reviews (project_id, created_at DESC);
+-- The merge gate's cross-project lookup: every review of one PR.
+CREATE INDEX IF NOT EXISTS idx_fix_reviews_repo_pr
+  ON public.fix_reviews (repo, pr_number)
+  WHERE repo IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_fix_reviews_report_id
   ON public.fix_reviews (report_id)
   WHERE report_id IS NOT NULL;

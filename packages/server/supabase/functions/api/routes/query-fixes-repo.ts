@@ -50,10 +50,12 @@ import { runInBackground } from '../../_shared/background.ts';
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
 import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
 import { gatedMergePullRequest } from '../../_shared/gated-merge.ts';
+import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
 import {
+  fetchPullRequest,
   installationIdForAttempt,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
@@ -1116,7 +1118,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const { data: attempt, error: fetchErr } = await db
       .from('fix_attempts')
-      .select('id, project_id, report_id, pr_url, pr_state, merged_at, commit_sha')
+      .select('id, project_id, report_id, pr_url, pr_state, merged_at, repo_id')
       .eq('id', fixId)
       .maybeSingle();
     if (fetchErr) return dbError(c, fetchErr);
@@ -1147,7 +1149,21 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // request: an API key re-running until the verdict flips would be a way
     // around the hold. New commits re-queue the review on their own (the
     // pull_request.synchronize webhook), so an agent never needs this.
-    const headNow = (attempt.commit_sha as string | null) ?? null;
+    // The head is read LIVE from GitHub (C2): fix_attempts.commit_sha is a
+    // cache a caller could once write. If GitHub cannot be read, assume the
+    // hold is still on the current head.
+    let headNow: string | null = null;
+    if (current.row?.verdict === 'hold') {
+      const prRef = parsePrRepoRef(attempt.pr_url);
+      const prNumber = parsePullRequestUrl(canonicalPrUrl(attempt.pr_url) ?? '')?.number ?? null;
+      if (prRef && prNumber) {
+        const installationId = await installationIdForAttempt(db, attempt);
+        const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
+        if (token) {
+          headNow = await fetchPullRequest(token, prRef, prNumber).then((p) => p?.headSha ?? null).catch(() => null);
+        }
+      }
+    }
     const holdOnHead = current.row?.verdict === 'hold' && (!headNow || headNow === current.row.head_sha);
     if (holdOnHead && c.get('authMethod') !== 'jwt') {
       return c.json(
@@ -1813,6 +1829,27 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       if (allowed[key]) updates[key] = value;
     }
 
+    // ADR 0030: one spelling per PR. A trailing slash, query or odd casing
+    // used to dodge uq_fix_attempts_pr_url and point a second attempt (in
+    // any project) at a PR that already has one.
+    if ('pr_url' in updates && updates.pr_url !== null) {
+      const canonical = canonicalPrUrl(updates.pr_url);
+      if (!canonical) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_PR_URL',
+              message: 'pr_url must be a GitHub pull request URL: https://github.com/<owner>/<repo>/pull/<number>.',
+            },
+          },
+          400,
+        );
+      }
+      updates.pr_url = canonical;
+      updates.pr_number = parsePullRequestUrl(canonical)!.number;
+    }
+
     // ADR 0030: once a PR is attached, its link is fixed. Retargeting or
     // clearing pr_url / commit_sha would unlink the fix from its Opus review
     // and slip a held PR past the merge gate. Setting them while unset (an
@@ -1827,8 +1864,14 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       if (currentErr) return dbError(c, currentErr);
       const row = current as { pr_url: string | null; commit_sha: string | null } | null;
       if (row?.pr_url) {
-        const prChanged = 'pr_url' in updates && updates.pr_url !== row.pr_url;
-        const shaChanged = 'commit_sha' in updates && row.commit_sha != null && updates.commit_sha !== row.commit_sha;
+        const prChanged = 'pr_url' in updates && updates.pr_url !== (canonicalPrUrl(row.pr_url) ?? row.pr_url);
+        // The head the review gate compares against comes from GitHub, but
+        // nothing legitimate writes commit_sha with a key once the PR is
+        // attached (the push webhook does, as the service role): refuse it.
+        const shaChanged =
+          'commit_sha' in updates &&
+          updates.commit_sha !== row.commit_sha &&
+          (row.commit_sha != null || c.get('authMethod') !== 'jwt');
         if (prChanged || shaChanged) {
           return c.json(
             {

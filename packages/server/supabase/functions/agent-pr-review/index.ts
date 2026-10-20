@@ -70,7 +70,7 @@ import {
   type PullRequestDetails,
   type PullRequestFile,
 } from '../_shared/github.ts'
-import { parsePullRequestUrl } from '../_shared/pr-substance.ts'
+import { canonicalPrUrl, parsePullRequestUrl } from '../_shared/pr-substance.ts'
 import { DISPATCHABLE_CLOUD_AGENTS } from '../_shared/agent-adapters.ts'
 import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL } from '../_shared/models.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
@@ -577,7 +577,9 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     rules_applied: review.rules_applied,
     skip_reason: null,
     error: null,
-    pr_url: attempt.pr_url,
+    pr_url: canonicalPrUrl(attempt.pr_url) ?? attempt.pr_url,
+    repo: `${pr.owner}/${pr.repo}`.toLowerCase(),
+    pr_number: pr.number,
     head_sha: details.headSha,
     diff_truncated: diff.truncated,
     diff_stats: {

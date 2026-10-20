@@ -24,6 +24,7 @@ import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { parsePrRepoRef } from '../../_shared/fix-merge.ts'
 import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
+import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts'
 import { fetchPullRequestDetails, type GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, prTitle, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import {
@@ -176,6 +177,15 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     const parsed = Snapshot.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues[0]?.message ?? 'Invalid run snapshot')
     const snap = parsed.data
+    // ADR 0030: one spelling per PR, and the number must be the URL's own;
+    // a run's PR feeds the gated merge, which looks reviews up by repo + number.
+    if (snap.pr) {
+      const canonical = canonicalPrUrl(snap.pr.url)
+      if (!canonical || parsePullRequestUrl(canonical)?.number !== snap.pr.number) {
+        return jsonError(c, 'INVALID_PR_URL', 'pr.url must be https://github.com/<owner>/<repo>/pull/<number>, and pr.number must match it.')
+      }
+      snap.pr = { url: canonical, number: snap.pr.number }
+    }
     const nowIso = new Date().toISOString()
 
     const { data: run, error: runErr } = await db

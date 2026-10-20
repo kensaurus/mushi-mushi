@@ -678,6 +678,22 @@ export function isStaleReview(row: Pick<FixReviewRow, 'verdict' | 'head_sha'> | 
   return Boolean(row?.verdict && row.head_sha && currentHead && row.head_sha !== currentHead)
 }
 
+/**
+ * A review is pending for a merge when a run is queued or running and it is
+ * either the PR's first review or a review of a newer commit than the
+ * verdict (W2: a "merge" about an old head must not wave through new code
+ * whose review is under way). A manual re-run of the same head is not
+ * pending: the verdict still describes the code being merged.
+ */
+export function isReviewPending(
+  row: Pick<FixReviewRow, 'status' | 'verdict' | 'head_sha'>,
+  currentHead: string | null | undefined,
+): boolean {
+  if (row.status !== 'queued' && row.status !== 'running') return false
+  if (!row.verdict) return true
+  return Boolean(currentHead && row.head_sha && currentHead !== row.head_sha)
+}
+
 export function reviewState(
   row: Pick<FixReviewRow, 'status' | 'verdict' | 'head_sha'> | null,
   currentHead?: string | null,

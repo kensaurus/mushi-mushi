@@ -181,7 +181,7 @@ describe('a UX run pull request', () => {
     const { db, app } = setup()
     db.table('fix_attempts').push({ id: 'fa-147', project_id: P, pr_number: 147, pr_url: PR })
     db.table('fix_reviews').push({
-      id: 'rev-147', fix_attempt_id: 'fa-147', project_id: P, pr_url: PR, status: 'completed', verdict: 'hold',
+      id: 'rev-147', fix_attempt_id: 'fa-147', project_id: P, pr_url: PR, repo: 'kensaurus/glot.it', pr_number: 147, status: 'completed', verdict: 'hold',
       head_sha: 'abc1234', reviewed_at: '2026-10-21T00:00:00Z', findings: [], removes_behavior: [], rules_applied: [],
     })
     await app.call('PUT', BASE, snapshot({ url: PR, number: 147 }))
@@ -190,6 +190,15 @@ describe('a UX run pull request', () => {
     expect(res.status).toBe(409)
     expect(res.body.error?.code).toBe('REVIEW_HOLD')
     expect(state.merge).not.toHaveBeenCalled()
+  })
+
+  it('stores the PR URL in one spelling and refuses a number that is not the URL\'s own', async () => {
+    const { db, app } = setup()
+    expect((await app.call('PUT', BASE, snapshot({ url: 'https://github.com/Kensaurus/Glot.it/pull/147', number: 147 }))).status).toBe(200)
+    expect(db.table('ux_runs')[0]).toMatchObject({ pr_url: PR, pr_number: 147 })
+    const mismatch = await app.call('PUT', BASE, snapshot({ url: PR, number: 148 }))
+    expect(mismatch.status).toBe(400)
+    expect(mismatch.body.error?.code).toBe('INVALID_PR_URL')
   })
 
   it('passes on why GitHub refused a merge', async () => {

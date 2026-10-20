@@ -38,8 +38,9 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   is not reviewed automatically; any PR can be reviewed on request
   (`POST /v1/admin/fixes/:id/review`, `mushi fixes review`, the console's
   "Review with Opus"), by a non-viewer, at most 3 times an hour per fix, and
-  not while a review is queued or running. Re-running a hold on the commit it
-  reviewed needs a console session (an API key gets 403
+  not while a review is queued or running. Re-running a hold on the PR's
+  current head, read live from GitHub (never from `fix_attempts.commit_sha`,
+  a cache), needs a console session (an API key gets 403
   `RERUN_NEEDS_CONSOLE`), so a key cannot re-roll a hold until it flips.
 - **Who reviews it.** Claude Opus 5.5 (`ANTHROPIC_OPUS_LATEST`), at effort
   `medium` (the model's default), with structured output, through
@@ -90,18 +91,30 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   report text: a PR can be public, the report is not, so the comment links to
   the report in the console), and is returned by the fix timeline
   (`get_fix_timeline`) with its model-written fields marked untrusted.
+- **One spelling per PR.** Mushi stores PR URLs only as
+  `https://github.com/<owner>/<repo>/pull/<n>`, owner and repo lowercased, no
+  trailing slash, query or fragment (`canonicalPrUrl`), wherever one is
+  accepted: `PATCH /v1/admin/fixes/:id` (`submit_fix_result`), the UX-run
+  snapshot (whose number must match the URL) and the cloud-agent completion
+  path. Anything else is a 400. A trailing slash used to dodge
+  `uq_fix_attempts_pr_url` and attach a second attempt, in another project,
+  to a PR that already had a review.
 - **The merge gate.** Every merge Mushi makes on request goes through one
   helper, `_shared/gated-merge.ts` `gatedMergePullRequest`: the fix merge
   (`POST /v1/admin/fixes/:id/merge`: the console's merge dialog, `merge_fix`,
-  `mushi fixes merge`), the console's generic PR merge and the UX-run merge
-  (whose PR URL comes from an API-key snapshot). A test fails if any other
-  file calls GitHub's merge; the one exception is the SDK upgrade merge,
-  whose PR URL the worker writes for its own bump PR. The helper finds every
-  review linked to the PR, through any fix attempt whose `pr_url` names it
-  and through `fix_reviews.pr_url` (written only by the service role), so a
-  caller cannot unlink a held fix; `PATCH /v1/admin/fixes/:id` also refuses
-  to change `pr_url`, or a set `commit_sha`, once a PR is attached. It reads
-  the latest COMPLETED verdict of each and the PR's head now:
+  `mushi fixes merge`), the console's generic PR merge, the UX-run merge
+  (whose PR URL comes from an API-key snapshot) and the SDK-upgrade merge. A
+  test fails if any other file calls GitHub's merge. The helper:
+  - refuses a PR whose repo is not one of the project's repos (403
+    `REPO_NOT_IN_PROJECT`);
+  - finds every review of the PR by its identity, `fix_reviews.repo` +
+    `pr_number` (lowercased owner/name + number, written only by the service
+    role), across ALL projects, plus the reviews of this project's attempts
+    that name it. A caller cannot unlink a held fix, and a second project
+    cannot merge around another project's hold; `PATCH /v1/admin/fixes/:id`
+    also refuses to change `pr_url` once a PR is attached, and refuses any
+    API-key write of `commit_sha` after that;
+  - reads the latest COMPLETED verdict of each, and the PR's head now:
   - a `hold` is a 409 `REVIEW_HOLD`, also while a re-review is queued or
     running, after a re-run was skipped or failed, and when the PR has new
     commits since (a stale hold blocks until a review of the new head
@@ -111,7 +124,8 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
     (the CLI, MCP, CI) gets 403 `OVERRIDE_NEEDS_CONSOLE`; MCP `merge_fix` has
     no override parameter at all. The override and its reason go to the audit
     log. The 409 message never quotes the review;
-  - while a fix's first review is still queued or running, an API key gets
+  - while a review is pending (a fix's first review, or after a non-hold
+    verdict a review of a newer commit, queued or running), an API key gets
     409 `REVIEW_PENDING`; a console user merges after confirming
     (`confirmPendingReview`, audited);
   - `fix_first` and `merge` pass; a verdict about an older commit is "stale"

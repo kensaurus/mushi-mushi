@@ -282,6 +282,8 @@ describe('a completed review', () => {
       // Opus 5.5: $4 in / $20 out per MTok → 0.048 + 0.12
       cost_usd: 0.168,
       pr_url: ATTEMPT.pr_url,
+      repo: 'acme/app',
+      pr_number: 194,
       run_id: null,
       error: null,
     })

@@ -204,6 +204,7 @@ describe('a Mushi fix PR on the Pull requests page (ADR 0030)', () => {
   const fixAttempt = { id: 'fa-7', project_id: P, pr_number: 7, pr_url: 'https://github.com/kensaurus/sbc-docs/pull/7', created_at: '2026-10-20T00:00:00Z' }
   const hold = {
     id: 'rev-7', fix_attempt_id: 'fa-7', project_id: P, status: 'completed', verdict: 'hold', head_sha: 'abc',
+    repo: 'kensaurus/sbc-docs', pr_number: 7, pr_url: 'https://github.com/kensaurus/sbc-docs/pull/7',
     findings: [], removes_behavior: [], rules_applied: [], summary: 'Removes the resume flow.', reviewed_at: '2026-10-21T00:00:00Z',
   }
 
@@ -213,7 +214,7 @@ describe('a Mushi fix PR on the Pull requests page (ADR 0030)', () => {
     stubGithub()
     const res = await app.call('GET', LIST)
     const pr = (res.body.data?.pullRequests as Array<{ review?: unknown }>)[0]
-    expect(pr.review).toEqual({ state: 'hold', label: 'Opus review: hold', fixId: 'fa-7', verdict: 'hold' })
+    expect(pr.review).toEqual({ state: 'hold', label: 'Opus review: hold', fixId: 'fa-7', verdict: 'hold', pending: false })
   })
 
   it('refuses to merge a held fix PR, and never reaches GitHub', async () => {

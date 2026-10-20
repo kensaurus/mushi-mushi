@@ -42,6 +42,12 @@ const mocks = vi.hoisted(() => ({
 
 let db: FakeDb
 
+/** The project's connected repo, which every gated merge now requires. */
+const REPOS = [{ project_id: '1000000f-0000-4000-8000-0000000000aa', repo_url: 'https://github.com/acme/app', is_primary: true }]
+function makeDb(tables: Record<string, Row[]>, opts?: Parameters<typeof makeFakeDb>[1]): FakeDb {
+  return makeFakeDb({ project_repos: REPOS, ...tables }, opts)
+}
+
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
   return { log: noop }
@@ -140,6 +146,9 @@ function review(over: Row = {}): Row {
     rules_applied: [],
     skip_reason: null,
     error: null,
+    pr_url: 'https://github.com/acme/app/pull/195',
+    repo: 'acme/app',
+    pr_number: 195,
     head_sha: 'sha1',
     diff_truncated: false,
     model: 'claude-opus-5-5',
@@ -180,7 +189,7 @@ beforeEach(() => {
 
 describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   it('refuses a hold, never calls GitHub, and does not quote the review in the message', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     const res = await call('POST', MERGE, { mergeMethod: 'squash' })
     expect(res.status).toBe(409)
     expect(res.json.error.code).toBe('REVIEW_HOLD')
@@ -191,7 +200,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('a console member overrides a hold with a reason: merged at the reviewed commit, audited', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     const res = await call('POST', MERGE, { override: true, overrideReason: 'Checked by hand' })
     expect(res.status).toBe(200)
     expect(res.json.data.review).toEqual({ state: 'hold', label: 'Opus review: hold', overridden: true })
@@ -201,7 +210,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('refuses an override without a reason, from an API key (CLI / MCP), or from a viewer', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     const noReason = await call('POST', MERGE, { override: true })
     expect(noReason.status).toBe(400)
     expect(noReason.json.error.code).toBe('OVERRIDE_REASON_REQUIRED')
@@ -222,7 +231,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('a hold on an older commit keeps blocking until a review of the new head completes', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ head_sha: 'old' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ head_sha: 'old' })] })
     mocks.head.sha = 'new'
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(409)
@@ -231,7 +240,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('a stale merge verdict does not count as reviewed: merged as "stale", at the head the gate saw', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge', head_sha: 'old' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge', head_sha: 'old' })] })
     mocks.head.sha = 'new'
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(200)
@@ -240,7 +249,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('a moved head between the check and the merge is a 409 HEAD_MOVED', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge' })] })
     mocks.merge.mockResolvedValue({ merged: false, alreadyMerged: false, headMoved: true, message: 'new commits' })
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(409)
@@ -249,14 +258,14 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('merges an unreviewed PR as before and says "Not reviewed"', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [] })
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(200)
     expect(res.json.data.review).toEqual({ state: 'not_reviewed', label: 'Not reviewed', overridden: false })
   })
 
   it('merges a fix-first PR without an override, at the reviewed commit', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'fix_first' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'fix_first' })] })
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(200)
     expect(res.json.data.review.state).toBe('fix_first')
@@ -264,7 +273,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('fails closed when the review cannot be read', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()] }, { failRead: (t) => (t === 'fix_reviews' ? 'connection reset' : null) })
+    db = makeDb({ fix_attempts: [attempt()] }, { failRead: (t) => (t === 'fix_reviews' ? 'connection reset' : null) })
     const res = await call('POST', MERGE, {})
     expect(res.status).toBe(503)
     expect(res.json.error.code).toBe('REVIEW_UNAVAILABLE')
@@ -272,7 +281,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
   })
 
   it('merges as "not reviewed" only when the table does not exist yet (before the migration)', async () => {
-    db = makeFakeDb(
+    db = makeDb(
       { fix_attempts: [attempt()] },
       { failRead: (t) => (t === 'fix_reviews' ? { code: '42P01', message: 'relation "fix_reviews" does not exist' } : null) },
     )
@@ -284,7 +293,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
 
 describe('GET /v1/admin/fixes/:id/timeline — carries the review', () => {
   it('returns the review next to the events', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
     const res = await call('GET', `/v1/admin/fixes/${FIX}/timeline`)
     expect(res.status).toBe(200)
     expect(res.json.data.review).toMatchObject({
@@ -296,13 +305,13 @@ describe('GET /v1/admin/fixes/:id/timeline — carries the review', () => {
   })
 
   it('marks a verdict about an older commit stale, from the attempt head the push webhook keeps', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'newer' })], fix_reviews: [review({ verdict: 'merge' })], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
+    db = makeDb({ fix_attempts: [attempt({ commit_sha: 'newer' })], fix_reviews: [review({ verdict: 'merge' })], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
     const res = await call('GET', `/v1/admin/fixes/${FIX}/timeline`)
     expect(res.json.data.review).toMatchObject({ state: 'stale', stale: true, verdict: 'merge' })
   })
 
   it('says "Not reviewed" for an attempt with no review', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [], fix_events: [], fix_dispatch_jobs: [], project_repos: [] })
     const res = await call('GET', `/v1/admin/fixes/${FIX}/timeline`)
     expect(res.json.data.review).toMatchObject({ state: 'not_reviewed', label: 'Not reviewed' })
   })
@@ -310,7 +319,7 @@ describe('GET /v1/admin/fixes/:id/timeline — carries the review', () => {
 
 describe('POST /v1/admin/fixes/:id/review — re-run', () => {
   it('re-queues the review but KEEPS the hold: a merge right after is still a 409', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     const res = await call('POST', RERUN)
     expect(res.status).toBe(202)
     const row = db.tables.fix_reviews.find((r) => r.fix_attempt_id === FIX)!
@@ -325,19 +334,19 @@ describe('POST /v1/admin/fixes/:id/review — re-run', () => {
   })
 
   it('refuses a review that is already queued, or running and not stale', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'queued' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'queued' })] })
     expect((await call('POST', RERUN)).status).toBe(409)
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'running', started_at: new Date().toISOString() })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'running', started_at: new Date().toISOString() })] })
     const running = await call('POST', RERUN)
     expect(running.status).toBe(409)
     expect(running.json.error.code).toBe('REVIEW_IN_PROGRESS')
     // A run that died long ago may be re-queued.
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'running', started_at: '2026-01-01T00:00:00Z' })] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'running', started_at: '2026-01-01T00:00:00Z' })] })
     expect((await call('POST', RERUN)).status).toBe(202)
   })
 
   it('refuses viewers and a burst of re-runs', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     mocks.role.value = 'viewer'
     expect((await call('POST', RERUN)).status).toBe(403)
     mocks.role.value = 'member'
@@ -348,7 +357,7 @@ describe('POST /v1/admin/fixes/:id/review — re-run', () => {
   })
 
   it('refuses a merged PR', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt({ pr_state: 'merged', merged_at: '2026-10-21T00:00:00Z' })], fix_reviews: [] })
+    db = makeDb({ fix_attempts: [attempt({ pr_state: 'merged', merged_at: '2026-10-21T00:00:00Z' })], fix_reviews: [] })
     const res = await call('POST', RERUN)
     expect(res.status).toBe(409)
     expect(res.json.error.code).toBe('PR_NOT_OPEN')
@@ -359,7 +368,7 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
   const OTHER = '3000000f-0000-4000-8000-0000000000bb'
 
   it('PATCH cannot retarget or clear the PR of a fix that has one, but can set it while unset', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })] })
+    db = makeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })] })
     const retarget = await call('PATCH', `/v1/admin/fixes/${FIX}`, { pr_url: 'https://github.com/acme/app/pull/999' })
     expect(retarget.status).toBe(409)
     expect(retarget.json.error.code).toBe('PR_LINK_LOCKED')
@@ -367,16 +376,16 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
     expect((await call('PATCH', `/v1/admin/fixes/${FIX}`, { commit_sha: 'other' })).status).toBe(409)
     expect(db.tables.fix_attempts[0]).toMatchObject({ pr_url: 'https://github.com/acme/app/pull/195', commit_sha: 'sha1' })
 
-    db = makeFakeDb({ fix_attempts: [attempt({ pr_url: null, pr_number: null, commit_sha: null })] })
+    db = makeDb({ fix_attempts: [attempt({ pr_url: null, pr_number: null, commit_sha: null })] })
     const first = await call('PATCH', `/v1/admin/fixes/${FIX}`, { pr_url: 'https://github.com/acme/app/pull/196', commit_sha: 'c1' })
     expect(first.status).toBe(200)
     expect(db.tables.fix_attempts[0]).toMatchObject({ pr_url: 'https://github.com/acme/app/pull/196', commit_sha: 'c1' })
   })
 
-  it('finds a hold through fix_reviews.pr_url even when no fix attempt points at the PR any more', async () => {
+  it('finds a hold by the PR\'s identity (repo + number) even when no fix attempt points at the PR any more', async () => {
     // The held fix was unlinked (its attempt now names another PR); a second
     // attempt with no review points at the held PR and tries to merge it.
-    db = makeFakeDb({
+    db = makeDb({
       fix_attempts: [
         attempt({ pr_url: 'https://github.com/acme/app/pull/999', pr_number: 999 }),
         attempt({ id: OTHER }),
@@ -389,8 +398,9 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
     expect(mocks.merge).not.toHaveBeenCalled()
   })
 
-  it('an API key cannot re-run a hold on the reviewed commit; a person can; a new head re-runs for anyone', async () => {
-    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })], fix_reviews: [review()] })
+  it('an API key cannot re-run a hold on the LIVE head, whatever commit_sha says; a person can; a new live head re-runs for anyone', async () => {
+    // C2: a faked fix_attempts.commit_sha must not unlock a re-run.
+    db = makeDb({ fix_attempts: [attempt({ commit_sha: 'faked-newer' })], fix_reviews: [review()] })
     mocks.auth.method = 'apiKey'
     const key = await call('POST', RERUN)
     expect(key.status).toBe(403)
@@ -400,14 +410,15 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
     mocks.auth.method = 'jwt'
     expect((await call('POST', RERUN)).status).toBe(202)
 
-    db = makeFakeDb({ fix_attempts: [attempt({ commit_sha: 'newer' })], fix_reviews: [review()] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    mocks.head.sha = 'pushed-since'
     mocks.auth.method = 'apiKey'
     expect((await call('POST', RERUN)).status).toBe(202)
   })
 
   it('while the first review runs: an API key gets REVIEW_PENDING, a person merges after confirming', async () => {
     const pending = review({ status: 'running', verdict: null, head_sha: null, reviewed_at: null, started_at: new Date().toISOString() })
-    db = makeFakeDb({ fix_attempts: [attempt()], fix_reviews: [pending] })
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [pending] })
     mocks.auth.method = 'apiKey'
     const key = await call('POST', MERGE, {})
     expect(key.status).toBe(409)
@@ -427,7 +438,7 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
   })
 
   it('a review skipped for no key keeps today\'s behaviour, also for an API key', async () => {
-    db = makeFakeDb({
+    db = makeDb({
       fix_attempts: [attempt()],
       fix_reviews: [review({ status: 'skipped', verdict: null, head_sha: null, reviewed_at: null, skip_reason: 'no_anthropic_key' })],
     })
@@ -437,7 +448,7 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
     expect(res.json.data.review.state).toBe('skipped')
   })
 
-  it('every merge path goes through the gated merge: only gated-merge.ts and the SDK upgrade call GitHub\'s merge', () => {
+  it('every merge path goes through the gated merge: only gated-merge.ts calls GitHub\'s merge', () => {
     const root = resolve(__dirname, '../../supabase/functions')
     const callers: string[] = []
     const walk = (dir: string) => {
@@ -450,7 +461,75 @@ describe('a hold cannot be unlinked, re-rolled or merged before the review (seco
       }
     }
     walk(root)
-    expect(callers.sort()).toEqual(['_shared/gated-merge.ts', 'api/routes/sdk-upgrade.ts'])
-    expect(readFileSync(join(root, 'api/routes/sdk-upgrade.ts'), 'utf8')).toMatch(/Not routed through _shared\/gated-merge\.ts on purpose/)
+    expect(callers).toEqual(['_shared/gated-merge.ts'])
+  })
+})
+
+describe('cross-project and URL spelling (final review of #534)', () => {
+  const X = '9000000f-0000-4000-8000-0000000000cc'
+  const OTHER_FIX = '3000000f-0000-4000-8000-0000000000dd'
+
+  it('the trailing-slash path: a second project cannot attach another spelling of a PR', async () => {
+    db = makeDb({ fix_attempts: [attempt({ id: OTHER_FIX, pr_url: null, pr_number: null, commit_sha: null })] })
+    const slash = await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { status: 'completed', pr_url: 'https://github.com/o/r/pull/5/' })
+    expect(slash.status).toBe(200)
+    // Accepted only in its canonical form, so uq_fix_attempts_pr_url sees the same string as every other spelling.
+    expect(db.tables.fix_attempts[0]).toMatchObject({ pr_url: 'https://github.com/o/r/pull/5', pr_number: 5 })
+
+    for (const bad of ['https://github.com/o/r/pulls/5', 'http://github.com/o/r/pull/5', 'https://gitlab.com/o/r/pull/5', 'https://github.com/o/r/pull/5/files/../x', 'not a url']) {
+      db = makeDb({ fix_attempts: [attempt({ id: OTHER_FIX, pr_url: null, pr_number: null })] })
+      const res = await call('PATCH', `/v1/admin/fixes/${OTHER_FIX}`, { pr_url: bad })
+      expect(res.status).toBe(400)
+      expect(res.json.error.code).toBe('INVALID_PR_URL')
+    }
+  })
+
+  it('a fix attempt pointed at a repo the project does not have cannot merge it (403 REPO_NOT_IN_PROJECT)', async () => {
+    // Project P's attempt names project X's repo o/r (the exact scenario: submit_fix_result
+    // with a trailing slash, refresh_ci fills pr_number, merge_fix).
+    db = makeDb({ fix_attempts: [attempt({ id: OTHER_FIX, pr_url: 'https://github.com/o/r/pull/5', pr_number: 5 })] })
+    const res = await call('POST', `/v1/admin/fixes/${OTHER_FIX}/merge`, {})
+    expect(res.status).toBe(403)
+    expect(res.json.error.code).toBe('REPO_NOT_IN_PROJECT')
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('another project\'s hold on the same PR blocks the merge (shared repo)', async () => {
+    db = makeDb({
+      fix_attempts: [attempt({ id: OTHER_FIX })],
+      fix_reviews: [review({ id: 'rev-x', fix_attempt_id: 'fa-in-x', project_id: X })],
+    })
+    const res = await call('POST', `/v1/admin/fixes/${OTHER_FIX}/merge`, {})
+    expect(res.status).toBe(409)
+    expect(res.json.error.code).toBe('REVIEW_HOLD')
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('an API key cannot write commit_sha once a PR is attached, even from unset (C2)', async () => {
+    db = makeDb({ fix_attempts: [attempt({ commit_sha: null })] })
+    mocks.auth.method = 'apiKey'
+    const res = await call('PATCH', `/v1/admin/fixes/${FIX}`, { commit_sha: 'faked' })
+    expect(res.status).toBe(409)
+    expect(res.json.error.code).toBe('PR_LINK_LOCKED')
+    expect(db.tables.fix_attempts[0].commit_sha).toBeNull()
+  })
+
+  it('W2: a merge verdict for an older head while the newer head\'s review runs is pending for an API key', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge', head_sha: 'old', status: 'queued' })] })
+    mocks.head.sha = 'new'
+    mocks.auth.method = 'apiKey'
+    const key = await call('POST', MERGE, {})
+    expect(key.status).toBe(409)
+    expect(key.json.error.code).toBe('REVIEW_PENDING')
+    mocks.auth.method = 'jwt'
+    const confirmed = await call('POST', MERGE, { confirmPendingReview: true })
+    expect(confirmed.status).toBe(200)
+    expect(mocks.merge.mock.calls[0][3]).toMatchObject({ sha: 'new' })
+  })
+
+  it('a manual re-run of the same head does not block a merge verdict', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge', status: 'running' })] })
+    mocks.auth.method = 'apiKey'
+    expect((await call('POST', MERGE, {})).status).toBe(200)
   })
 })

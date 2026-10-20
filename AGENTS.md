@@ -453,10 +453,12 @@ webhook.
 Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerge`).
 
 **Review gate (ADR 0030).** Every request merge goes through
-`_shared/gated-merge.ts` (this route, the console's generic PR merge and the
-UX-run merge; a test fails on any other caller of GitHub's merge except the
-SDK upgrade). It refuses a PR (found by fix attempt or by
-`fix_reviews.pr_url`, and PATCH cannot rewrite a fix's PR once set) whose
+`_shared/gated-merge.ts` (this route, the console's generic PR merge, the
+UX-run merge and the SDK-upgrade merge; a test fails on any other caller of
+GitHub's merge). The PR's repo must be one of the project's repos (403
+`REPO_NOT_IN_PROJECT`); PR URLs are stored canonical (`canonicalPrUrl`, 400
+otherwise). It refuses a PR (found by `fix_reviews.repo` + `pr_number` across
+all projects, and PATCH cannot rewrite a fix's PR once set) whose
 latest completed Opus review (`fix_reviews`,
 written by `agent-pr-review`) says `hold`, with 409 `REVIEW_HOLD`: also while
 a re-review runs and on newer commits (a re-run never clears a verdict). Only

@@ -45,7 +45,8 @@ import {
   UPGRADE_BRANCH_PREFIX,
 } from '../../_shared/sdk-upgrade-gates.ts'
 import { parseGithubRepoUrl } from '../../_shared/github.ts'
-import { mergeGithubPullRequest, type MergeMethod } from '../../_shared/fix-merge.ts'
+import type { MergeMethod } from '../../_shared/fix-merge.ts'
+import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
 import {
   resolveProjectGithubToken,
   type GithubRepoRef,
@@ -477,11 +478,36 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     await db.from('sdk_upgrade_jobs').update({ release_status: 'merging' }).eq('id', jobId)
 
-    // Not routed through _shared/gated-merge.ts on purpose: the PR URL is the
-    // job's own, written by sdk-upgrade-worker for the bump PR Mushi opened
-    // (never by a caller), and an SDK upgrade PR is never a fix PR, so the
-    // agent PR review gate (ADR 0030) has nothing to say about it.
-    const result = await mergeGithubPullRequest(token, ref, prNumber, { mergeMethod })
+    // ADR 0030: the one gated merge, like every merge path. An SDK upgrade PR
+    // is normally not a fix PR and passes, but the gate is what guarantees
+    // that, not this route's assumptions about where pr_url came from.
+    let outcome
+    try {
+      outcome = await gatedMergePullRequest(db, {
+        projectId,
+        token,
+        ref,
+        number: prNumber,
+        override: false,
+        overrideReason: null,
+        confirmPendingReview: false,
+        authMethod: c.get('authMethod') as string | undefined,
+        role: access.role,
+        merge: { mergeMethod },
+      })
+    } catch (err) {
+      await db.from('sdk_upgrade_jobs')
+        .update({ release_status: 'pr_opened', merge_error: (err as Error).message.slice(0, 500) })
+        .eq('id', jobId)
+      return c.json({ ok: false, error: { code: 'MERGE_FAILED', message: (err as Error).message.slice(0, 200) } }, 502)
+    }
+    if (!outcome.ok) {
+      await db.from('sdk_upgrade_jobs')
+        .update({ release_status: 'pr_opened', merge_error: outcome.message })
+        .eq('id', jobId)
+      return c.json({ ok: false, error: { code: outcome.code, message: outcome.message } }, outcome.status)
+    }
+    const result = outcome.result
 
     if (!result.merged) {
       await db.from('sdk_upgrade_jobs')

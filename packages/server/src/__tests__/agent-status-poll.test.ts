@@ -172,7 +172,26 @@ describe('runAgentStatusPoll — transitions', () => {
     // ADR 0030: the accepted PR is queued for the Opus review, once per attempt.
     const queued = findQueries(queries, 'fix_reviews', 'upsert')
     expect(queued).toHaveLength(1)
-    expect(queued[0].payload).toMatchObject({ fix_attempt_id: 'fa-1', status: 'queued', pr_url: 'https://github.com/o/r/pull/7' })
+    expect(queued[0].payload).toMatchObject({ fix_attempt_id: 'fa-1', status: 'queued', pr_url: 'https://github.com/o/r/pull/7', repo: 'o/r', pr_number: 7 })
+  })
+
+  it('stores a vendor PR URL in one spelling, and does not attach one that is not a GitHub PR (ADR 0030)', async () => {
+    const slash = pollDb([attempt()])
+    await runAgentStatusPoll(slash.db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://github.com/O/R/pull/7/?x=1' })),
+    })
+    const prWrite = findQueries(slash.queries, 'fix_attempts', 'update').find((q) => (q.payload as { pr_url?: string }).pr_url)!
+    expect(prWrite.payload).toMatchObject({ pr_url: 'https://github.com/o/r/pull/7', pr_number: 7 })
+
+    const bad = pollDb([attempt()])
+    const summary = await runAgentStatusPoll(bad.db, {
+      now: NOW,
+      adapterFor: () => fakeAdapter(async () => ({ status: 'completed', prUrl: 'https://evil.example/o/r/pull/7' })),
+    })
+    expect(summary.prOpened).toBe(0)
+    expect(findQueries(bad.queries, 'fix_attempts', 'update').some((q) => (q.payload as { pr_url?: string }).pr_url)).toBe(false)
+    expect(findQueries(bad.queries, 'fix_reviews')).toHaveLength(0)
   })
 
   it('a PR that only adds notes, or a run that ends without a PR, queues no review', async () => {

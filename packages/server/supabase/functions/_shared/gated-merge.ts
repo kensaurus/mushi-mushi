@@ -7,21 +7,22 @@
  *            POST /v1/admin/fixes/:id/merge             (console, merge_fix, CLI)
  *            POST /v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge
  *            POST /v1/admin/projects/:pid/ux-runs/:runId/merge
+ *            POST /v1/admin/projects/:pid/sdk-upgrade/:id/merge
  *
  *          It reads the PR's head, finds every review linked to the PR (by
  *          fix attempt and by the service-role-written fix_reviews.pr_url,
  *          so a rewritten fix_attempts.pr_url cannot unlink a hold), applies
  *          the gate and its override rules, and merges only the head it saw.
  *
- *          The only direct `mergeGithubPullRequest` call left is the SDK
- *          upgrade merge (api/routes/sdk-upgrade.ts): its PR URL is written
- *          by sdk-upgrade-worker for a PR Mushi opened from a bump plan, not
- *          by a caller, and it is never a fix PR.
+ *          No other file calls `mergeGithubPullRequest` (a test scans for
+ *          it). Every merge also requires the PR's repo to be one of the
+ *          project's repos (403 REPO_NOT_IN_PROJECT).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { mergeGithubPullRequest, type MergeMethod } from './fix-merge.ts'
 import { fetchPullRequest, type GithubRepoRef } from './github.ts'
+import { connectedRepoRefs, sameRepo } from './github-pr-checks.ts'
 import { decidePrGate, loadReviewsForPr, type GateCaller, type GateEvaluation } from './fix-review-db.ts'
 
 export interface GatedMergeInput extends GateCaller {
@@ -54,6 +55,20 @@ export type GatedMergeOutcome =
  * errors other than the refusals it maps), so callers keep their 502 path.
  */
 export async function gatedMergePullRequest(db: SupabaseClient, input: GatedMergeInput): Promise<GatedMergeOutcome> {
+  // C1: a project merges only PRs of its own repos. Without this a fix
+  // attempt in project Y pointed at project X's PR could merge X's code
+  // with Y's token and Y's (absent) review.
+  const own = await connectedRepoRefs(db, input.projectId)
+  if (!own.some((r) => sameRepo(r, input.ref))) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'REPO_NOT_IN_PROJECT',
+      message: `${input.ref.owner}/${input.ref.repo} is not one of this project's repositories, so Mushi will not merge its pull requests from here.`,
+      review: null,
+    }
+  }
+
   let currentHead = input.currentHead ?? null
   if (input.currentHead === undefined) {
     try {

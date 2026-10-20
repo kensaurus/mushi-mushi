@@ -31,6 +31,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
+import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
 import { isAdvisoryCheckRun } from '../_shared/github.ts';
@@ -376,15 +377,19 @@ async function handlePullRequestState(
   },
   deliveryId: string,
 ): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  // ADR 0030: Mushi stores PR URLs canonical (lowercase owner/repo); rows
+  // written before that keep GitHub's casing, so match either spelling.
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   let { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
     .maybeSingle();
   if (!attempt) {
     // Cloud-agent fallback: match by head ref while pr_url is still NULL.
@@ -426,7 +431,7 @@ async function handlePullRequestState(
     const reread = await db
       .from('fix_attempts')
       .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-      .eq('pr_url', prUrl)
+      .in('pr_url', prUrlForms)
       .maybeSingle();
     attempt = reread.data;
     if (!attempt) {
@@ -684,9 +689,11 @@ async function handleFixPrMerged(payload: {
   pull_request?: { html_url?: string; number?: number; merged_at?: string | null };
   repository?: { full_name?: string };
 }): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   const { data: attempt } = await db
@@ -694,7 +701,7 @@ async function handleFixPrMerged(payload: {
     .select(
       'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, summary, rationale, files_changed',
     )
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
     .maybeSingle();
 
   if (!attempt) {
