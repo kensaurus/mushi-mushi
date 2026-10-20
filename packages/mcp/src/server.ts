@@ -4285,6 +4285,47 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_spend_down_status',
+    {
+      title: titleOf('get_spend_down_status', TDD_TOOL_CATALOG),
+      description: descOf('get_spend_down_status', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('get_spend_down_status', TDD_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().describe('Project id'),
+      }),
+    },
+    async ({ projectId }) => {
+      const data = await apiCall<unknown>(`/v1/admin/byok/spend-down?project_id=${encodeURIComponent(projectId)}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'set_byok_spend_down',
+    {
+      title: titleOf('set_byok_spend_down', TDD_TOOL_CATALOG),
+      description: descOf('set_byok_spend_down', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('set_byok_spend_down', TDD_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().describe('Project id'),
+        keyId: z.string().uuid().describe('Cursor key id from get_spend_down_status'),
+        enabled: z.boolean().optional().describe('Turn spend-down on or off'),
+        creditsExpireAt: z.string().optional().describe('When the credits expire, YYYY-MM-DD'),
+        model: z.string().max(300).optional().describe('Cursor model spec, e.g. grok-4.7?reasoning_effort=xhigh&context=500k'),
+        dailyLimit: z.number().int().min(1).max(200).optional().describe('Fixes per day across the apps this key pays for'),
+        windowDays: z.number().int().min(1).max(90).optional().describe('Start this many days before the credits expire'),
+      }),
+    },
+    async ({ keyId, enabled, creditsExpireAt, model, dailyLimit, windowDays }) => {
+      const data = await apiCall<unknown>(`/v1/admin/byok/keys/${encodeURIComponent(keyId)}/spend-down`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled, creditsExpireAt, model, dailyLimit, windowDays }),
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
     'list_pending_review_stories',
     {
       title: titleOf('list_pending_review_stories', TDD_TOOL_CATALOG),
