@@ -174,6 +174,8 @@ const CAUSE_LABELS: Record<string, string> = {
   cursor_api_error: 'Cursor API error',
   already_fixed: 'Agent found nothing to change',
   wrong_repo: 'Code is in another repo',
+  not_actionable: 'Nothing to tie to code',
+  needs_human: 'Needs your decision',
   sandbox_timeout: 'Ran out of time',
   scope_blocked: 'Outside allowed files',
   spec_violation: 'Failed the spec check',

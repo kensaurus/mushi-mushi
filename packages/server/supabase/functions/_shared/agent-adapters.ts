@@ -834,7 +834,11 @@ export async function applyCloudAgentOutcome(
         ? 'Agent found nothing to change'
         : noPr?.category === 'wrong_repo'
           ? 'Agent says the code is in another repo'
-          : 'Cloud agent finished without a PR',
+          : noPr?.category === 'not_actionable'
+            ? 'Agent found nothing it can tie to code'
+            : noPr?.category === 'needs_human'
+              ? 'Agent says this needs a person'
+              : 'Cloud agent finished without a PR',
     detail: errorText.slice(0, 500),
     dedupe_key: `cloud-final:${target.attemptId}`,
     payload: { agent: target.agent, ...(noPr?.category ? { verdict: noPr.category } : {}) },
