@@ -609,6 +609,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
       'supabase_project_ref',
+      // Agent PR review (ADR 0030, migration 20261021090000): turning it off
+      // removes the merge gate and stops spending the Anthropic key on
+      // reviews, so project admins only. Validated below.
+      'agent_pr_review_enabled',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract (and the same Vault names)
@@ -688,6 +692,22 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (typeof value !== 'boolean') {
           return c.json(
             { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Reporter updates can only be turned on or off.' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
+      if (key === 'agent_pr_review_enabled') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can turn the agent PR review on or off.',
+        );
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'The agent PR review can only be turned on or off.' } },
             400,
           );
         }

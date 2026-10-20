@@ -272,6 +272,30 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
   },
   {
+    id: 'settings.general.agent_pr_review',
+    label: 'Review cloud agent pull requests',
+    summary:
+      'On by default. Claude Opus 5.5 reviews every pull request a cloud coding agent (Cursor, GitHub) opens as a fix, and a "hold" verdict stops Mushi from merging it until you override.',
+    howItWorks:
+      'When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold unless you choose to merge anyway. Without an Anthropic key the review is skipped and the fix shows "Review skipped". Each review costs about $0.10 to $0.40 on your key.',
+    default: { value: 'true (on; needs an Anthropic key)' },
+    backend: {
+      table: 'project_settings',
+      column: 'agent_pr_review_enabled',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: [
+        'agent-pr-review edge function',
+        'POST /v1/admin/fixes/:id/merge (the hold gate reads fix_reviews)',
+      ],
+    },
+    whenToChange:
+      'Leave it on while cloud agents open pull requests for you, especially in spend-down mode. Turn it off only if another reviewer already checks every agent pull request before it merges.',
+    learnMore: {
+      label: 'Agent PR review',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review',
+    },
+  },
+  {
     id: 'settings.general.stage1_confidence_threshold',
     label: 'Noise filter confidence',
     summary: 'How confident Mushi must be that a report is spam or test noise before dropping it.',

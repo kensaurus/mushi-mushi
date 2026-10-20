@@ -130,7 +130,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_timeline',
     title: 'Fix timeline',
     description:
-      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
+      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, Opus review, completed/failed, with timestamps and the PR URL, plus review: the independent Opus review of a cloud-agent PR (state merge, fix_first, hold or not_reviewed; findings; removed behaviour; decisions that need a person). Returns { events: [{ ts, stage, detail }], review }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -649,7 +649,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'merge_fix',
     title: 'Merge fix PR',
     description:
-      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
+      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. A cloud-agent PR whose Opus review says hold is refused (409 REVIEW_HOLD) unless override is true; read the review with get_fix_timeline first and pass override only after the user has seen the findings and chosen to merge anyway. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Merge the draft PR and notify the reporter.',

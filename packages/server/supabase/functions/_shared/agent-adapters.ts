@@ -33,6 +33,7 @@ import { classifyNoPrSummary, noPrErrorText } from './cloud-agent-no-pr.ts'
 import { generateCursorCloudBranchName, validateFixBranchName } from './github-pr.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
 import { dispatchPluginEventDetached } from './plugins.ts'
+import { enqueueFixReview } from './fix-review-db.ts'
 import {
   CursorApiError,
   buildV0WebhookSecret,
@@ -758,6 +759,20 @@ export async function applyCloudAgentOutcome(
       dedupe_key: `cloud-pr:${target.attemptId}`,
       payload: { agent: target.agent, prUrl: outcome.prUrl, branch: outcome.branch ?? null, contentCheck },
     })
+
+    // ADR 0030: every cloud agent PR accepted as a fix gets an independent
+    // Opus review (agent-pr-review drains the queue). Best-effort: a failed
+    // enqueue never fails the PR bookkeeping, and the merge gate treats a
+    // missing review as "not reviewed".
+    const queued = await enqueueFixReview(db, {
+      fixAttemptId: target.attemptId,
+      projectId: target.projectId,
+      reportId: target.reportId,
+      prUrl: outcome.prUrl,
+    })
+    if (!queued.queued) {
+      alog.warn('Agent PR review not queued (non-fatal)', { attemptId: target.attemptId, err: queued.error ?? null })
+    }
 
     dispatchPluginEventDetached(db, target.projectId, 'fix.proposed', {
       report: { id: target.reportId },

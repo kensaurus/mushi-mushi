@@ -3190,6 +3190,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .enum(['squash', 'merge', 'rebase'])
           .optional()
           .describe('GitHub merge method (default squash)'),
+        override: z
+          .boolean()
+          .optional()
+          .describe(
+            'Merge even though the Opus review says hold. Only after the user has read the findings and chose to merge anyway.',
+          ),
+        overrideReason: z
+          .string()
+          .max(500)
+          .optional()
+          .describe('Why the hold is being overridden; stored in the audit log'),
       }),
       outputSchema: z.object({
         merged: z.boolean().optional().describe('True when GitHub accepted the merge in this call'),
@@ -3203,6 +3214,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         sha: z.string().nullable().optional().describe('Merge commit SHA, when GitHub reported one'),
         reportId: z.string().describe('Report UUID linked to this fix attempt'),
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
+        review: z
+          .object({
+            state: z.string().describe('merge | fix_first | hold | queued | skipped | failed | not_reviewed'),
+            label: z.string().describe('One line, e.g. "Opus review: fix first" or "Not reviewed"'),
+            overridden: z.boolean().describe('True when a hold verdict was overridden by this call'),
+          })
+          .optional()
+          .describe('The Opus review of the PR at merge time (ADR 0030)'),
       }),
     },
     async (args) => {
@@ -3213,7 +3232,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         reportStatus: string;
       }>(`/v1/admin/fixes/${args.fixId}/merge`, {
         method: 'POST',
-        body: JSON.stringify({ mergeMethod: args.mergeMethod ?? 'squash' }),
+        body: JSON.stringify({
+          mergeMethod: args.mergeMethod ?? 'squash',
+          ...(args.override === true ? { override: true } : {}),
+          ...(args.overrideReason ? { overrideReason: args.overrideReason } : {}),
+        }),
       });
       return jsonResult(data);
     },

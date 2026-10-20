@@ -284,8 +284,10 @@ fixes
     'GitHub merge method: squash (default), merge, or rebase',
     'squash',
   )
+  .option('--override', 'Merge even though the Opus review of the PR says hold (ADR 0030)')
+  .option('--reason <text>', 'Why the hold is overridden (stored in the audit log)')
   .option('--json', 'Machine-readable JSON output')
-  .action(async (fixId: string, opts: { method: string; json?: boolean }) => {
+  .action(async (fixId: string, opts: { method: string; override?: boolean; reason?: string; json?: boolean }) => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
@@ -301,9 +303,14 @@ fixes
       alreadyMerged?: boolean
       reportId?: string
       reportStatus?: string | null
+      review?: { state: string; label: string; overridden: boolean }
     }>(`/v1/admin/fixes/${fixId}/merge`, config, {
       method: 'POST',
-      body: JSON.stringify({ mergeMethod: method }),
+      body: JSON.stringify({
+        mergeMethod: method,
+        ...(opts.override ? { override: true } : {}),
+        ...(opts.reason ? { overrideReason: opts.reason } : {}),
+      }),
     })
 
     if (!result.ok) {
@@ -311,6 +318,9 @@ fixes
         console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
       } else {
         console.error('Merge failed:', result.error.message)
+        if (result.error.code === 'REVIEW_HOLD') {
+          console.error(`Read the review: mushi fixes review ${fixId} --show. Merge anyway: mushi fixes merge ${fixId} --override`)
+        }
       }
       process.exit(1)
     }
@@ -326,6 +336,60 @@ fixes
     } else {
       console.log(`Merged successfully. Report status: ${data.reportStatus ?? 'fixed'}`)
     }
+    if (data.review) {
+      console.log(`${data.review.label}${data.review.overridden ? ' (overridden)' : ''}`)
+    }
+  })
+
+interface CliFixReview {
+  state: string
+  label: string
+  summary: string | null
+  reason: string | null
+  findings: Array<{ severity: string; file: string; line: number | null; issue: string; suggested_fix: string }>
+  removesBehavior: string[]
+  needsHumanDecision: string | null
+  commentUrl: string | null
+}
+
+function printReview(review: CliFixReview): void {
+  console.log(review.label)
+  if (review.reason) console.log(review.reason)
+  if (review.summary) console.log(`\n${review.summary}`)
+  for (const f of review.findings) {
+    const where = f.file === '(general)' ? '' : ` ${f.file}${f.line ? `:${f.line}` : ''}`
+    console.log(`  - ${f.severity}${where}: ${f.issue} Fix: ${f.suggested_fix}`)
+  }
+  for (const r of review.removesBehavior) console.log(`  - removes: ${r}`)
+  if (review.needsHumanDecision) console.log(`Needs your decision: ${review.needsHumanDecision}`)
+  if (review.commentUrl) console.log(`On GitHub: ${review.commentUrl}`)
+}
+
+fixes
+  .command('review <fixId>')
+  .description('Re-run the Opus review of a fix PR (ADR 0030), or show the current one with --show')
+  .option('--show', 'Show the current review instead of starting a new one')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { show?: boolean; json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const result = opts.show
+      ? await apiCall<{ review?: CliFixReview }>(`/v1/admin/fixes/${fixId}/timeline`, config)
+      : await apiCall<{ review?: CliFixReview }>(`/v1/admin/fixes/${fixId}/review`, config, { method: 'POST' })
+    if (!result.ok) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error(opts.show ? 'Could not read the review:' : 'Review not started:', result.error.message)
+      process.exit(1)
+    }
+    const review = result.data?.review
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, review: review ?? null }, null, 2))
+      return
+    }
+    if (!opts.show) console.log('Review queued. It takes a few minutes; check with --show.')
+    if (review) printReview(review)
   })
 
 fixes

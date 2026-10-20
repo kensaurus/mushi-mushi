@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_117 configuration knobs across 19 sections · last regenerated 2026-10-20._
+_118 configuration knobs across 19 sections · last regenerated 2026-10-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (13)
+- [Settings → General](#settings-general) (14)
 - [Settings → AI keys (BYOK)](#settings-ai-keys-byok-) (4)
 - [Settings → Web tools (Firecrawl)](#settings-web-tools-firecrawl-) (4)
 - [Settings → SDK & connection (debug logging)](#settings-sdk-connection-debug-logging-) (1)
@@ -184,6 +184,24 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **When to change** — Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
+
+### Review cloud agent pull requests
+
+<a id="settings-general-agent-pr-review"></a>
+
+`settings.general.agent_pr_review`
+
+**Summary** — On by default. Claude Opus 5.5 reviews every pull request a cloud coding agent (Cursor, GitHub) opens as a fix, and a "hold" verdict stops Mushi from merging it until you override.
+
+**How it works** — When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold unless you choose to merge anyway. Without an Anthropic key the review is skipped and the fix shows "Review skipped". Each review costs about $0.10 to $0.40 on your key.
+
+**Default** — `true (on; needs an Anthropic key)`
+
+**Where it lives** — table `project_settings.agent_pr_review_enabled` · endpoint `PATCH /v1/admin/settings` · read by `agent-pr-review edge function`, `POST /v1/admin/fixes/:id/merge (the hold gate reads fix_reviews)`
+
+**When to change** — Leave it on while cloud agents open pull requests for you, especially in spend-down mode. Turn it off only if another reviewer already checks every agent pull request before it merges.
+
+**Learn more** — [Agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review)
 
 ### Noise filter confidence
 

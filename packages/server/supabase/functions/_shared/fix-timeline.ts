@@ -22,6 +22,8 @@ export type FixTimelineKind =
   | 'ci_started'
   | 'ci_resolved'
   | 'pr_state_changed'
+  /** The independent Opus review of a cloud agent's PR (ADR 0030). */
+  | 'reviewed'
   | 'completed'
   | 'failed'
 

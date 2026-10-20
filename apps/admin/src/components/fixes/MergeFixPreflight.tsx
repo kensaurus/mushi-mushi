@@ -2,13 +2,20 @@
 /**
  * Confirm popover for merging a Mushi draft PR from the console.
  * Mirrors DispatchFixPreflight — user stays in control, nothing auto-merges.
+ *
+ * Shows the Opus review of the PR (ADR 0030) before the merge button: a
+ * "fix first" lists its findings, a "hold" needs "Merge anyway" ticked
+ * (the server refuses a hold without `override: true`), and a PR with no
+ * review says "Not reviewed".
  */
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { mergeFixAttempt, type MergeMethod } from '../../lib/mergeFix'
-import { Btn } from '../ui'
+import { fetchFixReview, rerunFixReview, reviewBlocksMerge, type FixReview } from '../../lib/fixReview'
+import { Btn, Checkbox } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
+import { FixReviewSummary } from './FixReviewSummary'
 
 interface Props {
   fixId: string
@@ -40,6 +47,11 @@ export function MergeFixPreflight({
   const [merging, setMerging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [liveCiConclusion, setLiveCiConclusion] = useState(ciConclusion ?? null)
+  const [review, setReview] = useState<FixReview | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  const [rerunning, setRerunning] = useState(false)
+  const [overrideHold, setOverrideHold] = useState(false)
   const popoverId = useId()
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
@@ -67,16 +79,50 @@ export function MergeFixPreflight({
     }
   }, [open])
 
+  const loadReview = useCallback(async () => {
+    setReviewLoading(true)
+    const res = await fetchFixReview(fixId)
+    setReviewLoading(false)
+    if (res.ok) {
+      setReview(res.review)
+      setReviewError(null)
+    } else {
+      setReviewError(res.error)
+    }
+  }, [fixId])
+
+  useEffect(() => {
+    if (!open) return
+    setOverrideHold(false)
+    void loadReview()
+  }, [open, loadReview])
+
+  const handleRerun = async () => {
+    setRerunning(true)
+    const res = await rerunFixReview(fixId)
+    setRerunning(false)
+    if (res.ok) {
+      setReview(res.review)
+      setReviewError(null)
+    } else {
+      setReviewError(res.error)
+    }
+  }
+
+  const holdBlocks = reviewBlocksMerge(review) && !overrideHold
+
   const ciFailed = liveCiConclusion === 'failure' || liveCiConclusion === 'cancelled' || liveCiConclusion === 'timed_out'
   const ciPassed = liveCiConclusion === 'success'
 
   const handleMerge = async (method: MergeMethod) => {
     setMerging(true)
     setError(null)
-    const result = await mergeFixAttempt(fixId, method)
+    const result = await mergeFixAttempt(fixId, method, { override: overrideHold })
     setMerging(false)
     if (!result.ok) {
       setError(result.error ?? 'Merge failed')
+      // A review finished while the popover was open: show it.
+      if (result.code === 'REVIEW_HOLD') void loadReview()
       return
     }
     setOpen(false)
@@ -116,7 +162,7 @@ export function MergeFixPreflight({
           role="dialog"
           aria-label="Merge pull request"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-full mt-1 z-30 w-80 rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
+          className="absolute right-0 top-full mt-1 z-30 w-96 max-w-[calc(100vw-2rem)] rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
         >
           <div className="text-xs font-medium text-fg mb-1">
             Merge draft PR{prNumber ? ` #${prNumber}` : ''}
@@ -132,6 +178,26 @@ export function MergeFixPreflight({
             <p className="mt-2 text-2xs text-fg-secondary line-clamp-2" title={summary}>
               {summary}
             </p>
+          )}
+
+          <div className="mt-2">
+            <FixReviewSummary
+              review={review}
+              loading={reviewLoading}
+              error={reviewError}
+              rerunning={rerunning}
+              onRerun={() => void handleRerun()}
+            />
+          </div>
+
+          {reviewBlocksMerge(review) && (
+            <div className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.dangerSubtle}`}>
+              <p className="mb-1">
+                The review says hold: Mushi will not merge this until you override it. Fix the findings and re-run the
+                review, or merge anyway if you have checked them yourself.
+              </p>
+              <Checkbox label="Merge anyway (override the hold)" checked={overrideHold} onChange={setOverrideHold} />
+            </div>
           )}
 
           <div className="mt-2">
@@ -164,7 +230,7 @@ export function MergeFixPreflight({
             {ciPassed && (
               <li className="flex items-start gap-1 text-ok">
                 <span aria-hidden="true" className="mt-0.5">✓</span>
-                <span>CI passed — safe to merge.</span>
+                <span>CI passed.</span>
               </li>
             )}
             {ciFailed && (
@@ -214,10 +280,10 @@ export function MergeFixPreflight({
               size="sm"
               variant="success"
               onClick={() => void handleMerge('squash')}
-              disabled={merging}
+              disabled={merging || holdBlocks}
               loading={merging}
             >
-              {merging ? 'Merging…' : 'Squash merge →'}
+              {merging ? 'Merging…' : overrideHold ? 'Merge anyway →' : 'Squash merge →'}
             </Btn>
           </div>
         </div>

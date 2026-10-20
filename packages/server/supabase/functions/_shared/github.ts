@@ -213,6 +213,9 @@ export interface PullRequestSnapshot {
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
+  /** PR title and description (agent-written for cloud-agent PRs: untrusted). */
+  title?: string | null
+  body?: string | null
   htmlUrl: string | null
   headRef: string | null
   headSha: string | null
@@ -287,6 +290,8 @@ export async function fetchPullRequestDetails(
     merged?: boolean
     node_id?: string
     html_url?: string
+    title?: string | null
+    body?: string | null
     head?: { ref?: string; sha?: string }
     base?: { ref?: string }
     mergeable?: boolean | null
@@ -298,6 +303,8 @@ export async function fetchPullRequestDetails(
     state: body.state ?? 'open',
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
+    title: typeof body.title === 'string' ? body.title : null,
+    body: typeof body.body === 'string' ? body.body : null,
     htmlUrl: body.html_url ?? null,
     headRef: body.head?.ref ?? null,
     headSha: body.head?.sha ?? null,

@@ -46,6 +46,9 @@ import {
   type FixTimelineEvent,
 } from '../../_shared/fix-timeline.ts';
 import { isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import { mergeGate, toPublicReview } from '../../_shared/fix-review.ts';
+import { runInBackground } from '../../_shared/background.ts';
+import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
 import { resolveUserDisplays } from '../../_shared/user-display.ts';
@@ -941,12 +944,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    let body: { mergeMethod?: MergeMethod } = {};
+    let body: { mergeMethod?: MergeMethod; override?: unknown; overrideReason?: unknown } = {};
     try {
       body = await c.req.json();
     } catch {
       // empty body ok
     }
+    const override = body.override === true;
+    const overrideReason =
+      typeof body.overrideReason === 'string' ? body.overrideReason.trim().slice(0, 500) || null : null;
 
     const { data: attempt, error: fetchErr } = await db
       .from('fix_attempts')
@@ -993,6 +999,17 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         { ok: false, error: { code: 'INVALID_PR_URL', message: 'Could not parse GitHub repo from PR URL' } },
         400,
       );
+    }
+
+    // ADR 0030: an Opus review that says "hold" blocks the merge unless the
+    // caller overrides it. No review (or a failed read) keeps today's
+    // behaviour and reports "not reviewed".
+    const { row: reviewRow, error: reviewErr } = await loadFixReviewRow(db, attempt.id);
+    if (reviewErr) log.warn('fix review read failed; merging as not reviewed', { fixId, err: reviewErr });
+    const gate = mergeGate(reviewRow, { override });
+    const review = toPublicReview(reviewRow);
+    if (!gate.allowed) {
+      return c.json({ ok: false, error: { code: gate.code, message: gate.message }, data: { review } }, 409);
     }
 
     const installationId = await installationIdForAttempt(db, attempt);
@@ -1052,7 +1069,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       'fix.merge',
       'fix_attempt',
       attempt.id,
-      { report_id: attempt.report_id, pr_number: attempt.pr_number },
+      {
+        report_id: attempt.report_id,
+        pr_number: attempt.pr_number,
+        review_state: review.state,
+        ...(gate.overridden ? { review_override: true, override_reason: overrideReason } : {}),
+      },
     ).catch(() => null);
 
     return c.json({
@@ -1064,8 +1086,75 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         reportId: attempt.report_id,
         reportStatus,
         sha: mergeResult.sha ?? null,
+        review: { state: review.state, label: review.label, overridden: gate.overridden },
       },
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Re-run the agent PR review — POST /v1/admin/fixes/:id/review (ADR 0030)
+  //
+  // Queues a fresh Opus review of the attempt's PR (clearing the old verdict,
+  // so a stale "hold" stops gating new commits) and asks agent-pr-review to
+  // run it now. The review itself is billed to the project's Anthropic key.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/fixes/:id/review', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const fixId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const { data: attempt, error: fetchErr } = await db
+      .from('fix_attempts')
+      .select('id, project_id, report_id, pr_url, pr_state, merged_at')
+      .eq('id', fixId)
+      .maybeSingle();
+    if (fetchErr) return dbError(c, fetchErr);
+    if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
+    }
+    if (!attempt.pr_url) {
+      return c.json({ ok: false, error: { code: 'NO_PR', message: 'This fix has no pull request to review' } }, 409);
+    }
+    if (attempt.merged_at || attempt.pr_state === 'merged' || attempt.pr_state === 'closed') {
+      return c.json(
+        { ok: false, error: { code: 'PR_NOT_OPEN', message: 'The pull request is already merged or closed' } },
+        409,
+      );
+    }
+
+    const queued = await enqueueFixReview(
+      db,
+      { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+      { force: true },
+    );
+    if (!queued.queued) {
+      return c.json({ ok: false, error: { code: 'REVIEW_NOT_QUEUED', message: queued.error ?? 'Could not queue the review' } }, 500);
+    }
+
+    // Fire and forget: the cron drains the queue anyway if this call is lost.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const internalSecret =
+      Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && internalSecret) {
+      runInBackground(
+        fetch(`${supabaseUrl}/functions/v1/agent-pr-review`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${internalSecret}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fixAttemptId: attempt.id, trigger: 'manual' }),
+        }),
+        'agent-pr-review re-run',
+      );
+    }
+
+    await logAudit(db, attempt.project_id, userId, 'fix.reviewed', 'fix_attempt', attempt.id, {
+      report_id: attempt.report_id,
+      requested: 'agent_pr_review_rerun',
+    }).catch(() => null);
+
+    return c.json({ ok: true, data: { review: await loadFixReview(db, attempt.id) } }, 202);
   });
 
   // PDCA timeline for a single fix attempt — merges fix_dispatch_jobs +
@@ -1118,7 +1207,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
       if (!fix) {
         const events = pendingDispatchEvents(job);
-        return c.json({ ok: true, data: { fix: null, dispatch: job, events, source: 'synthesized' } });
+        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), source: 'synthesized' } });
       }
     }
 
@@ -1148,6 +1237,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       ? await repoQuery.eq('id', fix.repo_id).maybeSingle()
       : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
     const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
+    // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
+    const review = await loadFixReview(db, fix.id);
 
     if (storedEvents && storedEvents.length > 0) {
       const events = mergeStoredFixTimeline(
@@ -1161,11 +1252,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           status: (e.status ?? undefined) as FixTimelineEvent['status'],
         })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'fix_events' } });
     }
 
     const events = synthesizeFixTimeline(dispatch ?? null, fix);
-    return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'synthesized' } });
+    return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1506,6 +1597,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         | 'ci_started'
         | 'ci_resolved'
         | 'pr_state_changed'
+        | 'reviewed'
         | 'completed'
         | 'failed';
       fix_attempt_id: string;
