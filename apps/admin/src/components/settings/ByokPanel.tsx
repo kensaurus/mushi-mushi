@@ -20,7 +20,7 @@ import { useEntitlements } from '../../lib/useEntitlements';
 import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone';
 import { prepareByokSecret } from '../../lib/byokKeyRules';
-import { describeByokError } from '../../lib/byokErrors';
+import { describeByokError, describeByokTestResult } from '../../lib/byokErrors';
 import { isSharedKey, type KeySharing, type PoolKey, type PoolTestStatus } from './byokPool';
 import { useByokPool } from './ByokPoolContext';
 import { usePageData } from '../../lib/usePageData';
@@ -108,7 +108,7 @@ const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'openrouter', 'cursor', 'firec
 
 type ValidationReply =
   | {
-      validation?: { status?: PoolTestStatus; detail?: string };
+      validation?: { status?: PoolTestStatus; detail?: string; latencyMs?: number | null };
       /** The pooled copy of the legacy key validated, so the legacy slot was cleared. */
       legacyRetired?: boolean;
       /** A working pooled key now shadows a different legacy key. */
@@ -386,14 +386,8 @@ export function ByokPanel() {
       );
       setTestPending(null);
       if (res.ok && res.data) {
-        setNotice({
-          scope: key.id,
-          ok: res.data.status === 'ok',
-          message:
-            res.data.status === 'ok'
-              ? `${name} accepted this key (${res.data.latencyMs} ms).`
-              : `${name} didn't accept this key. ${res.data.detail}`,
-        });
+        const described = describeByokTestResult(res.data, name);
+        setNotice({ scope: key.id, ok: described.ok, message: described.message });
       } else {
         setNotice({
           scope: key.id,
@@ -409,15 +403,24 @@ export function ByokPanel() {
     setTestPending(null);
     if (res.ok) {
       const data = res.data as ValidationReply;
-      const validated = data?.validation?.status === 'ok';
+      const described = describeByokTestResult(
+        {
+          status: data?.validation?.status,
+          detail: data?.validation?.detail,
+          latencyMs: data?.validation?.latencyMs,
+        },
+        name,
+      );
       setNotice({
         scope: key.id,
-        ok: validated,
-        message: validated
-          ? data?.legacySuperseded
-            ? `${name} accepted this key. Your old key is no longer needed; remove it below.`
-            : `${name} accepted this key.`
-          : quarantinedMessage(data, `${name} didn't accept this key, so Mushi won't use it.`),
+        ok: described.ok,
+        // A failed test takes the key out of rotation (auth_failed,
+        // quota_exhausted or pending_validation), so say so.
+        message: !described.ok
+          ? `${described.message} Mushi won't use this key until a test passes.`
+          : data?.legacySuperseded
+            ? `${described.message} Your old key is no longer needed; remove it below.`
+            : described.message,
       });
     } else {
       setNotice({
