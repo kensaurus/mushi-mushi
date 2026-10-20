@@ -170,4 +170,39 @@ describe('dbError transient log line', () => {
     const captured = vi.mocked(reportError).mock.calls[0]![0] as Error
     expect(captured.message).toBe('column x does not exist')
   })
+
+  it('reports a statement timeout under a per-route fingerprint and logs the message', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(reportError).mockClear()
+    const path = '/v1/admin/projects/1000000a-0000-4000-8000-000000000000/reports'
+    const c = {
+      get: (k: string) => (k === 'requestId' ? 'req-9' : undefined),
+      req: { path, method: 'GET' },
+      json: (body: unknown, status?: number) => ({ body, status }),
+    }
+    shared.dbError(c as never, {
+      message: '',
+      code: '57014',
+      details: 'canceling statement due to statement timeout',
+      hint: null,
+    })
+    expect(reportError).toHaveBeenCalledTimes(1)
+    const [captured, ctx] = vi.mocked(reportError).mock.calls[0]!
+    expect(captured).toMatchObject({
+      name: 'DbError',
+      message: 'canceling statement due to statement timeout',
+    })
+    expect(ctx).toMatchObject({
+      tags: { path, method: 'GET', db_code: '57014', error_type: 'db' },
+      fingerprint: ['db-error', '57014', '/v1/admin/projects/:id/reports'],
+      extra: { pg_code: '57014', pg_details: 'canceling statement due to statement timeout' },
+    })
+    const line = JSON.parse(String(error.mock.calls[0]![0]))
+    expect(line).toMatchObject({
+      event: 'db_error',
+      requestId: 'req-9',
+      db_code: '57014',
+      err_message: 'canceling statement due to statement timeout',
+    })
+  })
 })
