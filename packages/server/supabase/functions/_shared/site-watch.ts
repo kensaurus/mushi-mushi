@@ -616,6 +616,12 @@ export interface SettleDeps extends ProcessDeps {
   /** One confirm scrape, on the watch's own Firecrawl key. */
   confirm: (url: string) => Promise<ConfirmScrape>;
   budget: ConfirmBudget;
+  /**
+   * False for a watch on the platform's FIRECRAWL_API_KEY fallback: it never
+   * confirms, so a confident judged break files as unconfirmed after
+   * UNCONFIRMED_AFTER_CHECKS checks that still show it. Default true.
+   */
+  canConfirm?: boolean;
 }
 
 /** How a filed page was seen failing a second time. */
@@ -887,9 +893,14 @@ export async function processCheck(
         status_code: problem.statusCode,
         detail: problem.detail,
         problem: problem.problem,
-        // A suspect a confident judgment ever named stays a confident one.
-        judge_fail_open: hard ? false : Boolean(row.judge_fail_open) && failOpen,
+        // A judged suspect a confident judgment ever named stays a confident
+        // one. A measured failure that turns into a judgment takes the new
+        // judgment's word: its `false` was never a judge's.
+        judge_fail_open: hard ? false : row.problem === 'judged_broken' ? Boolean(row.judge_fail_open) && failOpen : failOpen,
       };
+      // Inconclusive checks count toward "unconfirmed" for one kind of
+      // suspect only; a new kind starts from nothing.
+      if (row.problem !== problem.problem) patch.inconclusive_checks = 0;
       if (!isFiled(row)) {
         result.suspects++;
         if (row.last_failed_check_id !== checkId) {
@@ -998,6 +1009,13 @@ export interface WatchSuspects {
   /** first_seen_at of its oldest pending suspect. */
   oldestPendingAt: string;
   eligible: number;
+  /** Every eligible suspect is a fail-open judgment: served after the rest. */
+  failOpenOnly?: boolean;
+}
+
+/** A judged suspect only a fail-open judge ever named. */
+function isFailOpenSuspect(s: SuspectRow): boolean {
+  return s.problem === 'judged_broken' && Boolean(s.judge_fail_open);
 }
 
 /**
@@ -1027,9 +1045,10 @@ export async function pendingConfirmsByWatch(
     const baseUrl = s.watch_id ? base.get(s.watch_id) : undefined;
     if (!baseUrl || !confirmEligible(s, now, baseUrl)) continue;
     const seen = s.first_seen_at ?? now.toISOString();
-    const w = byWatch.get(s.watch_id!) ?? { watchId: s.watch_id!, oldestPendingAt: seen, eligible: 0 };
+    const w = byWatch.get(s.watch_id!) ?? { watchId: s.watch_id!, oldestPendingAt: seen, eligible: 0, failOpenOnly: true };
     w.eligible++;
     if (seen < w.oldestPendingAt) w.oldestPendingAt = seen;
+    if (!isFailOpenSuspect(s)) w.failOpenOnly = false;
     byWatch.set(s.watch_id!, w);
   }
   return [...byWatch.values()];
@@ -1038,25 +1057,29 @@ export async function pendingConfirmsByWatch(
 /**
  * Share a run's confirm scrapes fairly: watches in order of their oldest
  * pending suspect, each gets one before any gets a second, never more than
- * `perWatch` or than it has eligible suspects.
+ * `perWatch` or than it has eligible suspects. Watches with only fail-open
+ * judgments pending get what is left once every other watch has its share,
+ * so they cannot starve the budget.
  */
 export function allocateConfirms(
   watches: WatchSuspects[],
   total: number,
   perWatch = CONFIRM_SCRAPES_PER_WATCH,
 ): Map<string, number> {
-  const order = watches
-    .slice()
-    .sort((a, b) => (a.oldestPendingAt < b.oldestPendingAt ? -1 : a.oldestPendingAt > b.oldestPendingAt ? 1 : 0));
+  const byAge = (a: WatchSuspects, b: WatchSuspects) =>
+    a.oldestPendingAt < b.oldestPendingAt ? -1 : a.oldestPendingAt > b.oldestPendingAt ? 1 : 0;
   const out = new Map<string, number>();
   let remaining = total;
-  for (let round = 0; round < perWatch && remaining > 0; round++) {
-    for (const w of order) {
-      if (remaining <= 0) break;
-      const have = out.get(w.watchId) ?? 0;
-      if (have >= Math.min(perWatch, w.eligible)) continue;
-      out.set(w.watchId, have + 1);
-      remaining--;
+  for (const tier of [watches.filter((w) => !w.failOpenOnly), watches.filter((w) => w.failOpenOnly)]) {
+    const order = tier.slice().sort(byAge);
+    for (let round = 0; round < perWatch && remaining > 0; round++) {
+      for (const w of order) {
+        if (remaining <= 0) break;
+        const have = out.get(w.watchId) ?? 0;
+        if (have >= Math.min(perWatch, w.eligible)) continue;
+        out.set(w.watchId, have + 1);
+        remaining--;
+      }
     }
   }
   return out;
@@ -1099,9 +1122,12 @@ type Filing = { s: SuspectRow; problem: PageProblem; title: string | null; evide
  *    severity as intermittent. Inconclusive leaves it for the rules below
  *    or a later poll.
  * 3. An HTTP error or load failure seen in two checks in a row files without
- *    a conclusive confirm scrape. A confident judged break whose confirms
- *    stayed inconclusive in UNCONFIRMED_AFTER_CHECKS checks files at low
- *    severity, marked unconfirmed. A fail-open judgment never files here.
+ *    a conclusive confirm scrape. A confident judged break files at low
+ *    severity, marked unconfirmed, after UNCONFIRMED_AFTER_CHECKS checks in
+ *    which every confirm attempt (CONFIRM_ATTEMPTS_PER_CHECK) was
+ *    inconclusive, or, on a watch that cannot confirm (`canConfirm: false`,
+ *    the platform key), after that many checks that still show it. A
+ *    fail-open judgment never files here.
  * 4. Five or more suspects of one kind, with at least two sampled and still
  *    broken and none sampled healthy, file together as one outage.
  *
@@ -1122,12 +1148,11 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
     .is('confirmed_at', null)
     .is('report_id', null);
   if (readErr) throw new Error(`site_watch_pages suspects read failed: ${readErr.message}`);
+  // Measured failures first, then confident judgments, fail-open judgments last.
+  const rank = (s: SuspectRow) => (isHardProblem(s.problem) ? 0 : isFailOpenSuspect(s) ? 2 : 1);
   const suspects = ((rows ?? []) as unknown as SuspectRow[])
     .slice()
-    .sort(
-      (a, b) =>
-        Number(isHardProblem(b.problem)) - Number(isHardProblem(a.problem)) || (b.fail_streak ?? 0) - (a.fail_streak ?? 0),
-    );
+    .sort((a, b) => rank(a) - rank(b) || (b.fail_streak ?? 0) - (a.fail_streak ?? 0));
   if (suspects.length === 0) return result;
 
   // 1. Pick and claim the suspects to confirm.
@@ -1204,10 +1229,13 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
       continue;
     }
     const patch: Record<string, unknown> = { last_confirm: lastConfirm };
-    if (verdict.outcome === 'inconclusive') {
-      // Count each check once, however many confirms ran for it.
-      const counted = s.last_confirm?.outcome === 'inconclusive' && s.last_confirm?.checkId === s.last_failed_check_id;
-      const n = (s.inconclusive_checks ?? 0) + (counted ? 0 : 1);
+    // A check counts as inconclusive for a judged suspect only once all of
+    // its confirm attempts are used up, each inconclusive (a healthy one
+    // drops the suspect, a broken one files it): one 429 is not evidence.
+    // Attempts reset with each new check, so a check counts once.
+    const attemptsUsed = (s.confirm_attempts ?? 0) + 1;
+    if (verdict.outcome === 'inconclusive' && s.problem === 'judged_broken' && attemptsUsed >= CONFIRM_ATTEMPTS_PER_CHECK) {
+      const n = (s.inconclusive_checks ?? 0) + 1;
       inconclusiveChecks.set(s.id, n);
       patch.inconclusive_checks = n;
     }
@@ -1219,6 +1247,31 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
         title: scrape.kind === 'loaded' ? scrape.title : null,
         evidence: { basis: 'confirm_scrape', detail: verdict.detail, statusCode: verdict.statusCode },
       });
+    }
+  }
+
+  // A watch that cannot confirm (it runs on the platform key) counts each
+  // check that still shows a judged break, once, as one without a conclusive
+  // confirm. `last_confirm.checkId` remembers the check already counted.
+  if (deps.canConfirm === false) {
+    for (const s of suspects) {
+      if (s.problem !== 'judged_broken' || !s.last_failed_check_id) continue;
+      if (s.last_confirm?.checkId === s.last_failed_check_id) continue;
+      const n = (s.inconclusive_checks ?? 0) + 1;
+      inconclusiveChecks.set(s.id, n);
+      await db
+        .from('site_watch_pages')
+        .update({
+          inconclusive_checks: n,
+          last_confirm: {
+            outcome: 'inconclusive',
+            detail: 'No confirm scrape: this app has no Firecrawl key of its own.',
+            statusCode: null,
+            at: nowIso,
+            checkId: s.last_failed_check_id,
+          },
+        })
+        .eq('id', s.id);
     }
   }
 
@@ -1243,8 +1296,11 @@ export async function settleSuspects(db: SupabaseClient, watch: SiteWatchRow, de
         evidence: {
           basis: 'unconfirmed',
           detail:
-            `Firecrawl's checker called the page broken, and Mushi could not load it again to confirm in ` +
-            `${inconclusive} checks (the confirm scrapes failed on Firecrawl's side or were blocked).`,
+            deps.canConfirm === false
+              ? `Firecrawl's checker called the page broken in ${inconclusive} checks. This app has no Firecrawl key ` +
+                'of its own, so Mushi did not load the page again to confirm.'
+              : `Firecrawl's checker called the page broken, and Mushi could not load it again to confirm in ` +
+                `${inconclusive} checks (the confirm scrapes failed on Firecrawl's side or were blocked).`,
           statusCode: s.status_code,
         },
       });

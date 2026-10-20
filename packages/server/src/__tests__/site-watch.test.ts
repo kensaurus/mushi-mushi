@@ -365,13 +365,13 @@ const filedRow = (id: string, path: string) => ({
   confirm_attempts: 0,
 })
 
-function harness(seed: Array<Record<string, unknown>> = [], opts: { failReports?: boolean } = {}) {
+function harness(seed: Array<Record<string, unknown>> = [], opts: { failReports?: boolean; canConfirm?: boolean } = {}) {
   const f = makeDb(seed, opts)
   let clock = new Date('2026-10-21T01:35:00Z')
   const confirm = vi.fn(async (_url: string): Promise<Awaited<ReturnType<typeof sw.confirmScrape>>> => ({ kind: 'unavailable', reason: 'not stubbed' }))
   const classify = vi.fn(async () => {})
   const budget = { remaining: 100, deadline: Number.MAX_SAFE_INTEGER }
-  const deps = { now: () => clock, classify, confirm, budget }
+  const deps = { now: () => clock, classify, confirm, budget, canConfirm: opts.canConfirm ?? true }
   return {
     ...f,
     confirm,
@@ -636,20 +636,30 @@ describe('settleSuspects: file only what is seen failing twice', () => {
 describe('review fixes 2026-10-21 (PR #533)', () => {
   const unavailable = { kind: 'unavailable' as const, reason: 'FIRECRAWL_HTTP_502' }
   const same = (path: string): Page => ok(`${BASE}${path}`, 'same')
+  /** Use up a check's confirm attempts, one poll per retry window. */
+  const exhaust = async (h: ReturnType<typeof harness>) => {
+    for (let i = 0; i < sw.CONFIRM_ATTEMPTS_PER_CHECK; i++) {
+      await h.settle()
+      h.later()
+    }
+  }
 
   // Finding 1: a judged break the next check shows unchanged is still broken.
-  it('a persistent judged break survives `same`, gets fresh confirms, and files unconfirmed at low after 2 inconclusive checks', async () => {
+  it('a persistent judged break survives `same`, gets fresh confirms, and files unconfirmed at low after 2 fully inconclusive checks', async () => {
     const h = harness()
     h.confirm.mockResolvedValue(unavailable)
     await h.check([judged('/shop', 'The page renders blank.')], 'c1')
-    await h.settle()
-    expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirm_attempts: 1 })
+    await exhaust(h)
+    expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirm_attempts: sw.CONFIRM_ATTEMPTS_PER_CHECK })
 
-    h.later()
     // The page did not change, so Firecrawl's judge did not run: `same`.
     expect(await h.check([same('/shop')], 'c2')).toEqual({ broken: 1, suspects: 1, resolved: 0 })
     expect(h.pages[0]).toMatchObject({ resolved_at: null, last_failed_check_id: 'c2', confirm_attempts: 0 })
 
+    for (let i = 1; i < sw.CONFIRM_ATTEMPTS_PER_CHECK; i++) {
+      expect(await h.settle()).toMatchObject({ scrapes: 1, filed: 0 })
+      h.later()
+    }
     expect(await h.settle()).toMatchObject({ scrapes: 1, filed: 1 })
     expect(h.reports[0]).toMatchObject({
       title: 'Live site: /help-her-take-photo/shop looks broken (unconfirmed)',
@@ -658,14 +668,21 @@ describe('review fixes 2026-10-21 (PR #533)', () => {
     })
   })
 
-  it('inconclusive confirms within one check count once', async () => {
+  // Re-review finding 3: one inconclusive confirm (a single 429) is not a check's worth of evidence.
+  it('a check counts as inconclusive only once all its confirm attempts came back inconclusive', async () => {
     const h = harness()
-    h.confirm.mockResolvedValue(unavailable)
+    h.confirm.mockResolvedValue({ kind: 'unavailable', reason: 'FIRECRAWL_RATE_LIMITED' })
     await h.check([judged('/shop', 'The page renders blank.')], 'c1')
-    for (let i = 0; i < sw.CONFIRM_ATTEMPTS_PER_CHECK; i++) {
+    for (let i = 1; i < sw.CONFIRM_ATTEMPTS_PER_CHECK; i++) {
       await h.settle()
       h.later()
+      expect(h.pages[0]!.inconclusive_checks).toBe(0)
     }
+    await h.settle()
+    h.later()
+    expect(h.pages[0]!.inconclusive_checks).toBe(1)
+    // No attempts left for this check: no more scrapes, no more counting.
+    expect((await h.settle()).scrapes).toBe(0)
     expect(h.confirm).toHaveBeenCalledTimes(sw.CONFIRM_ATTEMPTS_PER_CHECK)
     expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirmed_at: null })
     expect(h.reports).toHaveLength(0)
@@ -675,15 +692,78 @@ describe('review fixes 2026-10-21 (PR #533)', () => {
     const h = harness()
     h.confirm.mockResolvedValue(unavailable)
     await h.check([judged('/', 'Judge response not valid JSON — defaulting to meaningful')], 'c1')
-    await h.settle()
+    await exhaust(h)
     for (const c of ['c2', 'c3', 'c4']) {
-      h.later()
       await h.check([same('/')], c)
-      await h.settle()
+      await exhaust(h)
     }
     expect(h.reports).toHaveLength(0)
     expect(h.pages[0]).toMatchObject({ judge_fail_open: true, resolved_at: null })
     expect(h.pages[0]!.inconclusive_checks).toBeGreaterThanOrEqual(2)
+  })
+
+  // Re-review finding 1: a measured failure that turns into a fail-open judgment.
+  it('a 500 with an inconclusive confirm, then a fail-open judgment, never files unconfirmed', async () => {
+    const h = harness()
+    h.confirm.mockResolvedValue(unavailable)
+    await h.check([broken('/pair', 500)], 'c1')
+    await exhaust(h)
+    // Only judged suspects count inconclusive checks.
+    expect(h.pages[0]).toMatchObject({ problem: 'http_error', judge_fail_open: false, inconclusive_checks: 0 })
+    // Even a row that carries a count from before this fix starts over on a new kind.
+    h.pages[0]!.inconclusive_checks = 1
+
+    await h.check([judged('/pair', 'Judge response not valid JSON — defaulting to meaningful')], 'c2')
+    expect(h.pages[0]).toMatchObject({ problem: 'judged_broken', judge_fail_open: true, inconclusive_checks: 0 })
+    await exhaust(h)
+    for (const c of ['c3', 'c4']) {
+      await h.check([same('/pair')], c)
+      await exhaust(h)
+    }
+    expect(h.reports).toHaveLength(0)
+    expect(h.pages[0]).toMatchObject({ confirmed_at: null, resolved_at: null })
+  })
+
+  // Re-review finding 2: a watch on the platform key cannot confirm.
+  it('an env-key watch files a confident judged break as unconfirmed after 2 checks that still show it, with no confirm', async () => {
+    const h = harness([], { canConfirm: false })
+    h.budget.remaining = 0
+    await h.check([judged('/shop', 'The page renders blank.')], 'c1')
+    await h.settle()
+    await h.settle()
+    expect(h.pages[0]).toMatchObject({ inconclusive_checks: 1, confirmed_at: null })
+    await h.check([same('/shop')], 'c2')
+    expect(await h.settle()).toMatchObject({ scrapes: 0, filed: 1 })
+    expect(h.confirm).not.toHaveBeenCalled()
+    expect(h.reports[0]).toMatchObject({ severity: 'low', custom_metadata: { confirmation: { basis: 'unconfirmed' } } })
+    expect(String(h.reports[0]!.description)).toMatch(/no Firecrawl key of its own/)
+  })
+
+  it('an env-key watch never files a fail-open judgment, and keeps the two-checks rule for a 5xx', async () => {
+    const h = harness([], { canConfirm: false })
+    h.budget.remaining = 0
+    for (const c of ['c1', 'c2', 'c3']) {
+      await h.check([judged('/', 'Judge response not valid JSON — defaulting to meaningful'), broken('/pair', 502)], c)
+      await h.settle()
+    }
+    expect(h.confirm).not.toHaveBeenCalled()
+    expect(h.reports).toHaveLength(1)
+    expect(h.reports[0]).toMatchObject({ title: 'Live site: /help-her-take-photo/pair returns HTTP 502' })
+    expect(h.pages.find((p) => p.url === `${BASE}/`)).toMatchObject({ confirmed_at: null, judge_fail_open: true })
+  })
+
+  // Re-review finding 4 (optional): fail-open judgments cannot starve the budget.
+  it('confirms go to measured failures and confident judgments before fail-open ones', async () => {
+    const w = (watchId: string, oldestPendingAt: string, failOpenOnly: boolean) => ({ watchId, oldestPendingAt, eligible: 3, failOpenOnly })
+    expect(
+      Object.fromEntries(sw.allocateConfirms([w('noise', '2026-10-01T00:00:00Z', true), w('real', '2026-10-20T00:00:00Z', false)], 2)),
+    ).toEqual({ real: 2 })
+    const h = harness()
+    h.confirm.mockResolvedValue(unavailable)
+    h.budget.remaining = 1
+    await h.check([judged('/noise', 'Judge response not valid JSON — defaulting to meaningful'), judged('/real', 'The page renders blank.')], 'c1')
+    await h.settle()
+    expect(h.confirm).toHaveBeenCalledWith(`${BASE}/real`)
   })
 
   it('a judged break closes on a change the judge does not call broken, or on a healthy confirm', async () => {
@@ -811,8 +891,8 @@ describe('review fixes 2026-10-21 (PR #533)', () => {
       new Date('2026-10-21T01:35:00Z'),
     )
     expect(out.sort((x, y) => x.watchId.localeCompare(y.watchId))).toEqual([
-      { watchId: 'w1', oldestPendingAt: '2026-10-19T00:00:00.000Z', eligible: 1 },
-      { watchId: 'w2', oldestPendingAt: '2026-10-20T00:00:00.000Z', eligible: 1 },
+      { watchId: 'w1', oldestPendingAt: '2026-10-19T00:00:00.000Z', eligible: 1, failOpenOnly: false },
+      { watchId: 'w2', oldestPendingAt: '2026-10-20T00:00:00.000Z', eligible: 1, failOpenOnly: false },
     ])
   })
 

@@ -60,8 +60,21 @@ Every report also carried a 0×0 viewport, which nothing had measured.
   a change the judge does not call broken, on a healthy confirm, or when the
   page is removed. Each later check that still shows it gets fresh confirm
   attempts.
-- **Unconfirmed.** A confident judged break whose confirms stayed inconclusive
-  in 2 checks files at low severity, titled "(unconfirmed)".
+- **Unconfirmed.** A confident judged break files at low severity, titled
+  "(unconfirmed)", after 2 checks in which every confirm attempt for that
+  check (3) came back inconclusive. One inconclusive confirm (a single 429)
+  does not count a check. `inconclusive_checks` counts only for judged
+  suspects, and starts over when the suspect's kind changes.
+- **Watches on the platform key.** A watch whose project has no Firecrawl key
+  of its own runs on the platform's `FIRECRAWL_API_KEY` fallback and never
+  gets a confirm scrape. On such a watch:
+  - a confident judged break files as unconfirmed after 2 checks that still
+    show it (a `changed` page judged broken, or `same` after one), with no
+    confirm;
+  - HTTP errors and load failures keep the two-checks rule;
+  - a site that is down therefore files on its second check, not within the
+    hour;
+  - fail-open judgments never file.
 - **The judge's fail-open is never evidence.** A suspect named only by
   "Defaulting to meaningful" or a `confidence: low` judgment
   (`judge_fail_open`) files only through a confirm that reproduces the break,
@@ -79,6 +92,9 @@ Every report also carried a 0×0 viewport, which nothing had measured.
 - **Spend and wall clock are capped.**
   - 6 confirm scrapes per poll run, shared across watches: oldest pending
     suspect first, and each watch gets one before any gets a second.
+    Watches whose only pending suspects are fail-open judgments get what is
+    left after the others, and within a watch measured failures go first,
+    then confident judgments, then fail-open ones.
   - 3 per watch, run in parallel; 3 per page per check; none within 10 minutes
     of that page's last one.
   - No confirm runs on the platform's `FIRECRAWL_API_KEY` fallback, only on

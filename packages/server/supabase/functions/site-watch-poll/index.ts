@@ -220,6 +220,7 @@ Deno.serve(
             confirm: (url) =>
               confirmKey ? confirmScrape(confirmKey, url) : Promise.resolve({ kind: 'unavailable', reason: 'NO_PROJECT_KEY' }),
             budget,
+            canConfirm: confirmKey !== null,
           })
           results.push({ ...line, filed: settled.filed, confirmScrapes: settled.scrapes, dismissed: settled.dismissed, status: 'ok' })
         } catch (err) {
