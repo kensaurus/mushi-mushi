@@ -125,6 +125,7 @@ describe('ByokPanel turn off', () => {
     await act(async () => button('Test').click())
     const text = document.body.textContent ?? ''
     expect(text).toContain('Anthropic (Claude) rejected the key. Replace it with a new one.')
+    expect(text).toContain("Mushi won't use this key until a test passes.")
     expect(text).not.toContain('error_auth')
     expect(text).not.toContain('Provider rejected the credential')
   })

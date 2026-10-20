@@ -414,8 +414,11 @@ export function ByokPanel() {
       setNotice({
         scope: key.id,
         ok: described.ok,
-        message:
-          described.ok && data?.legacySuperseded
+        // A failed test takes the key out of rotation (auth_failed,
+        // quota_exhausted or pending_validation), so say so.
+        message: !described.ok
+          ? `${described.message} Mushi won't use this key until a test passes.`
+          : data?.legacySuperseded
             ? `${described.message} Your old key is no longer needed; remove it below.`
             : described.message,
       });
