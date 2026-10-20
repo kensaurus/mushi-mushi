@@ -10,13 +10,13 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 50 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 49 · **Recently closed:** 9 (BL-014 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 10 |
 | test-gap | 7 |
-| tech-debt | 19 |
+| tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 6 |
@@ -24,7 +24,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 47 |
+| relevant | 46 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -82,7 +82,6 @@ parked work is visible in one place.
 | BL-011 | tech-debt | `_shared/storage.ts`: replace the bucket assumption with a pre-flight bucket existence probe | relevant | low | `packages/server/supabase/functions/_shared/storage.ts:87` | — |
 | BL-012 | tech-debt | knip remainder after the 2026-10-17 pass (38 default / 50 production). 14 files: 4 manual tools, 6 design primitives, and 4 decisions (BL-040, BL-041). 7 exports and 1 type, each kept with a stated reason. 5 duplicates (BL-042) | relevant | low | `docs/plan-dead-code-2026-10-16.md`; `docs/execplans/knip-baseline/README.md` | — |
 | BL-013 | tech-debt | knip dependency findings after the 2026-10-16 pass: 2 dependencies and 6 devDependencies kept with a reason (CSS `@import`, vitest alias, peer backing, workspace links, a dynamic import knip misses), plus `@modelcontextprotocol/core` in published `@mushi-mushi/mcp` (BL-042). 2 unlisted: `esbuild` in `packages/web/src/build-strip.test.ts` resolves through tsup, and `@e2b/code-interpreter` is an optional runtime import. Declare `esbuild` as a devDependency of web | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
-| BL-014 | tech-debt | `pnpm build` on clean master rewrites 13 committed `apps/docs/public/llm-md/*.md` files (230 lines). Either the committed copies are stale or the generator is not deterministic on Windows; find which, then regenerate and commit or stop committing generated files (not re-measured 2026-10-17: needs a full build) | relevant | low | baseline build 2026-10-14 | — |
 | BL-015 | unfinished-feature | Enterprise tenancy follow-ups (22 items: SSO / MFA / invite-only org policy, verified domains, …). Enterprise work stays in `docs/operators/` and never leads (AGENTS.md positioning), so this is low until an enterprise customer asks | relevant | low | `docs/enterprise-tenancy-backlog.md` | — |
 | BL-016 | decision-needed | Seven July audit plans (`docs/plan-antislop.md`, `plan-docs-sync.md`, `plan-error-handling.md`, `plan-input-validation.md`, `plan-uiux-unification.md`, `plan-uplift-sdk-cli-mcp.md`; `plan-gtm.md` from 2026-09-22) carry open items that were never re-verified against today's code. Triage each: close, carry as rows, or archive | relevant | low | `docs/plan-*.md` | — |
 | BL-017 | deferred-plan-phase | Plan 021 Phase 1 recorded the live judge call, the Cursor/Codex adapters and an `apps/admin` run as not yet verified | verify-done | low | `docs/execplans/PLANS.md:643` | — |
@@ -126,6 +125,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-014 | `pnpm build` on clean master rewrites committed `apps/docs/public/llm-md/*.md` files. Either the copies are stale or the generator is not deterministic; regenerate and commit, or stop committing them, and add a freshness check | 2026-10-20 | Re-measured on `b100bc0b`: `node scripts/generate-llms-full.mjs` changed 5 twins plus `llms-ctx.txt` and `llms-full.txt` (not the 13 files / 230 lines from 2026-10-14). Twins were stale (`@mushi-mushi/mcp` 0.25.0→0.26.1, core/web 1.32.x→1.33.x). The only clock was `Generated:` in `llms-full.txt`; walk order was already sorted and `.gitattributes` forces LF. Stamp removed, copies regenerated, `pnpm check:llms-docs` fails CI on drift, and `version-packages` regenerates after the pin and version-matrix sync. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
