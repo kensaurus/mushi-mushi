@@ -12,6 +12,7 @@ import {
   evaluateKillSwitches,
   evaluateProviderKeys,
   evaluateProviderLimits,
+  evaluateSpendDownIdle,
   evaluateStoreScopes,
   evaluateUnusedKeys,
   integrationObservation,
@@ -22,8 +23,10 @@ import {
   SDK_KEY_USE_TRACKED_SINCE,
   type ByokCredentialRow,
   type CredentialObservation,
+  type SpendDownRadarKey,
   type StoreCredentialState,
 } from '../../supabase/functions/_shared/radar/operator-detectors.ts'
+import type { SpendDownKey } from '../../supabase/functions/_shared/spend-down.ts'
 import { historyHttpStatus } from '../../supabase/functions/_shared/integration-probes.ts'
 
 const NOW = new Date('2026-10-03T12:00:00Z')
@@ -318,6 +321,42 @@ describe('provider_limit_unset', () => {
     expect(close.findings[0]).toMatchObject({ severity: 'warn' })
     expect(close.findings[0].message).toContain('90%')
     expect(evaluateProviderLimits([{ provider: 'openai', via: 'connector', spendUsd30d: 60 }], { openai: 50 }).findings[0].severity).toBe('error')
+  })
+})
+
+describe('spend_down_idle', () => {
+  const cursor = (over: Partial<SpendDownKey> = {}): SpendDownKey => ({
+    id: 'k1', provider_slug: 'cursor', project_id: 'p1', organization_id: null, status: 'active',
+    credits_expire_at: '2026-10-10T00:00:00Z', spend_down_enabled: true, spend_down_model: null,
+    spend_down_daily_limit: 10, spend_down_window_days: 14, ...over,
+  })
+  const row = (over: Partial<SpendDownRadarKey> = {}): SpendDownRadarKey => ({
+    id: 'k1', label: 'expiring', key: cursor(), servedProjectIds: [], dispatchedToday: 0, lastSummary: null, ...over,
+  })
+  it('is unknown when no Cursor key has spend-down on', () => {
+    expect(evaluateSpendDownIdle([], NOW)).toMatchObject({ state: 'unknown', findings: [] })
+  })
+  it('is ok outside the window, and when today already dispatched', () => {
+    expect(evaluateSpendDownIdle([row({ key: cursor({ credits_expire_at: '2026-12-01T00:00:00Z' }) })], NOW).state).toBe('ok')
+    expect(evaluateSpendDownIdle([row({ servedProjectIds: ['p1'], dispatchedToday: 2 })], NOW).state).toBe('ok')
+  })
+  it('finds a key inside its window that no app uses', () => {
+    const r = evaluateSpendDownIdle([row()], NOW)
+    expect(r.state).toBe('finding')
+    expect(r.findings[0]).toMatchObject({ ruleId: 'spend_down_idle', severity: 'warn', target: 'expiring' })
+    expect(r.findings[0].message).toContain('no app uses this key')
+    expect(r.findings[0].fix).toMatch(/auto-fix/i)
+  })
+  it('finds a key whose last tick settled every open report', () => {
+    const r = evaluateSpendDownIdle([row({
+      servedProjectIds: ['p1'],
+      lastSummary: { dispatched: 0, projects: [{ projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }] },
+    })], NOW)
+    expect(r.findings[0].message).toContain('every open report is already settled')
+    expect(r.findings[0].evidence).toMatchObject({ reasons: ['reports_settled'] })
+  })
+  it('cannot tell yet when the key serves an app and the worker has not ticked', () => {
+    expect(evaluateSpendDownIdle([row({ servedProjectIds: ['p1'] })], NOW).state).toBe('unknown')
   })
 })
 

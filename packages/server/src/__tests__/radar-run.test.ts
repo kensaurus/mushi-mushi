@@ -429,12 +429,30 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     const summary = await run.runRadar(db as never, P_A, deps() as never)
     const byId = new Map(summary.results.map((r) => [r.ruleId as string, r]))
     // provider_key_invalid reads the BYOK key tests too, so it cannot answer either.
-    for (const id of ['dead_app_live_spend', 'key_unused_90d', 'provider_limit_unset', 'provider_key_invalid']) {
+    for (const id of ['dead_app_live_spend', 'key_unused_90d', 'provider_limit_unset', 'provider_key_invalid', 'spend_down_idle']) {
       expect(byId.get(id)).toMatchObject({ state: 'error' })
       expect(byId.get(id)!.reason).toMatch(/stored provider keys/)
     }
     expect(byId.get('store_credential_scope_missing')!.state).toBe('unknown')
     expect(summary.status).toBe('error')
+  })
+
+  it('flags a spend-down Cursor key inside its window that no app uses', async () => {
+    const db = seed({
+      byok_keys: [{
+        id: 'cur1', project_id: P_A, organization_id: null, provider_slug: 'cursor', label: 'expiring', key_hint: 'crsr',
+        status: 'active', test_status: 'ok', priority: 100, created_at: ago(2), last_used_at: ago(1), last_tested_at: ago(1),
+        credits_expire_at: '2026-10-10T00:00:00Z', spend_down_enabled: true, spend_down_model: null,
+        spend_down_daily_limit: 10, spend_down_window_days: 14, spend_down_last_summary: null,
+      }],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    expect(summary.results.find((r) => r.ruleId === 'spend_down_idle')).toMatchObject({ state: 'finding' })
+    const f = db.table('gate_findings').find((x) => x.rule_id === 'spend_down_idle')!
+    expect(f.severity).toBe('warn')
+    expect(f.message).toMatch(/expiring/)
+    expect(f.message).toMatch(/no app uses this key/)
+    expect(String((f.suggested_fix as { fix: string }).fix).length).toBeGreaterThan(20)
   })
 
   it('a project whose only credential is a BYOK key the provider rejected gets a provider_key_invalid finding', async () => {
