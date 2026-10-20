@@ -44,14 +44,42 @@ describe('classifyNoPrSummary on real Cursor summaries', () => {
     ).toBe('already_fixed')
   })
 
-  it('skips "No pull request." to keep the reason, and keeps it on an unclassified run', () => {
+  it('skips "No pull request." to keep the reason, and reads a stackless watchdog event as not_actionable', () => {
     const v = classifyNoPrSummary(
       'No pull request. This Sentry event is a heuristic iOS watchdog termination with no stack, no breadcrumbs, and no measured memory reading.\n\n**needsHumanReview:** true',
     )
-    expect(v.category).toBeNull()
+    expect(v.category).toBe('not_actionable')
     expect(noPrErrorText(v)).toBe(
-      'Cloud agent finished without opening a pull request. Its notes: This Sentry event is a heuristic iOS watchdog termination with no stack, no breadcrumbs, and no measured memory reading.',
+      'Agent found nothing it can tie to code: This Sentry event is a heuristic iOS watchdog termination with no stack, no breadcrumbs, and no measured memory reading.',
     )
+  })
+
+  it('reads the third batch (2026-10-20 afternoon), filed as API errors before', () => {
+    const cases: Array<[string, string]> = [
+      ['handleFlowInit is already defined in the same function that passes it to React Flow, so I did not open a pull request.', 'already_fixed'],
+      ['The live page is not blank, so I did not open a pull request.', 'already_fixed'],
+      ['The reported TypeError: network error is already dropped in production, and the event payload is too thin to show a remaining defect.', 'already_fixed'],
+      ['The live /security page is not stuck.', 'already_fixed'],
+      ['The six pages render their content on the live site right now.', 'already_fixed'],
+      ['The live shop page is rendering its catalog.', 'already_fixed'],
+      ['The $3/$12 figure is the backend catalog fallback, and the missing ai_configs row for text-embedding-3-large is already in the database.', 'already_fixed'],
+      ['The report is a real Postgres statement timeout (57014), and the event does not say which query was cancelled.', 'not_actionable'],
+      ["The log line comes from Firecrawl's change-monitor judge, not from this repo, so I did not open a pull request.", 'not_actionable'],
+      ['BL-175 still needs a product decision: the plan forbids flipping SPEND_CAP_ENFORCEMENT_MODE off observe.', 'needs_human'],
+      ['`needsHumanReview=true`.', 'needs_human'],
+    ]
+    for (const [summary, category] of cases) expect(classifyNoPrSummary(summary).category, summary).toBe(category)
+    // A bare review flag is not a reason; the sentence after it is.
+    expect(classifyNoPrSummary("needsHumanReview=true. BL-455 needs the owner's Stripe account, so I changed nothing.").reason).toBe(
+      "BL-455 needs the owner's Stripe account, so I changed nothing.",
+    )
+    expect(noPrErrorText(classifyNoPrSummary(cases[9][0]))).toBe(
+      'Agent says this needs a person: BL-175 still needs a product decision: the plan forbids flipping SPEND_CAP_ENFORCEMENT_MODE off observe.',
+    )
+  })
+
+  it('still files a ledger-bypass explanation with no verdict phrase as no verdict', () => {
+    expect(classifyNoPrSummary('SBC-BE-78 is the S-0 page firing on a registered ledger bypass, not an unsanctioned write.').category).toBeNull()
   })
 
   it('keeps the first sentence, without backticks, as the reason', () => {
@@ -79,8 +107,10 @@ describe('classifyNoPrSummary stays silent when unsure', () => {
     expect(classifyNoPrSummary(long).category).toBeNull()
   })
 
-  it('does not read "fixed" in a plain description as a verdict', () => {
-    expect(classifyNoPrSummary('The fixed header overlaps the button; I need a design decision first.').category).toBeNull()
+  it('does not read "fixed" in a plain description as already fixed', () => {
+    expect(classifyNoPrSummary('The fixed header overlaps the button.').category).toBeNull()
+    // The decision it asks for is the verdict, not the word "fixed".
+    expect(classifyNoPrSummary('The fixed header overlaps the button; I need a design decision first.').category).toBe('needs_human')
   })
 })
 

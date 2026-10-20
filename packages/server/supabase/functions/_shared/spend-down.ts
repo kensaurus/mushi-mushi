@@ -56,7 +56,7 @@ export const SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS = 7
  * run would spend the same credits to reach the same answer. A person can
  * still dispatch it.
  */
-const NO_RETRY_VERDICTS = new Set(['already_fixed', 'wrong_repo'])
+const NO_RETRY_VERDICTS = new Set(['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'])
 
 /** Report ids whose newest attempt carries a no-retry verdict. */
 export function reportsWithNoRetryVerdict(

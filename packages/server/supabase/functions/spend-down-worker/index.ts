@@ -14,8 +14,8 @@
  *     auto-fix caps (checked here, and again by fix-worker for every
  *     automatic dispatch);
  *   - reports: classified or reopened, not dispatched in the last 7 days,
- *     and not settled by an agent verdict (latest attempt already_fixed or
- *     wrong_repo), ranked by severity × judge score × named component, one
+ *     and not settled by an agent verdict (latest attempt already_fixed,
+ *     wrong_repo, not_actionable or needs_human), ranked by severity × judge score × named component, one
  *     per group;
  *   - each goes through `dispatchFixForReport` (auto-fix switch, feature
  *     requests, resolved reports, in-flight dedupe) as an automatic
