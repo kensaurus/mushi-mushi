@@ -29,6 +29,7 @@ import { SentrySecretMissingPanel } from './SentrySecretMissingPanel'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { usePageData } from '../../lib/usePageData'
 import { platformRequiredOk, projectStoredSecretFields, sentryProjectsFromConfig } from '../../lib/platformIntegrationForm'
+import { CursorModelPicker } from '../settings/CursorModelPicker'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -535,7 +536,15 @@ export function PlatformIntegrationCard({
                 {/* Secrets use SecretInput (type="text", CSS-masked, reveal
                     toggle) so password managers never offer to save an API
                     token as the site login. */}
-                {(() => {
+                {field.name === 'cursor_default_model' ? (
+                  <CursorModelPicker
+                    labelled={false}
+                    label={field.label}
+                    value={draft[field.name] ?? ''}
+                    onChange={(spec) => onChangeField(field.name, spec)}
+                    emptyLabel="Account default"
+                  />
+                ) : (() => {
                   const FieldInput = field.type === 'password' ? SecretInput : Input
                   return (
                 <FieldInput

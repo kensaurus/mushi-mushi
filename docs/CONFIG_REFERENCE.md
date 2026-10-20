@@ -737,7 +737,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Cursor model slug for agent runs Mushi starts.
 
-**How it works** — Passed as the model on each Cursor Cloud Agent run. When empty, fix dispatches let Cursor use your account default, skill-pipeline steps use `composer-2.5`, and the story mapper sends `default`.
+**How it works** — Passed as the model on each Cursor Cloud Agent run. The Integrations card lists the models this Cursor account accepts. When empty, fix dispatches let Cursor use your account default, skill-pipeline steps use `composer-2.5`, and the story mapper sends `default`.
 
 **Default** — `composer-2.5 (database default)`
 
@@ -1853,7 +1853,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.
 
-**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges.
+**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges. The model is chosen from that Cursor account's list; leave it empty to keep each app's own model.
 
 **Default** — `off; 10 fixes a day; starts 14 days before expiry`
 

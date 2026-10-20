@@ -4,7 +4,8 @@ Status: Accepted (owner-delegated, 2026-10-20) Date: 2026-10-20
 
 Related: migration `20261020090056_byok_spend_down.sql`, `_shared/spend-down.ts`,
 `_shared/spend-down-db.ts`, `spend-down-worker/`, `api/routes/byok-spend-down.ts`,
-`apps/admin/src/components/settings/SpendDownSection.tsx`, MCP
+`apps/admin/src/components/settings/SpendDownSection.tsx`,
+`GET /v1/admin/byok/cursor/models`, MCP
 `get_spend_down_status` / `set_byok_spend_down`, CLI `mushi keys spend-down`;
 builds on [0023](0023-ai-keys-can-be-shared-by-every-app-in-an-organization.md)
 and [0013](0013-cloud-coding-agents-run-through-edge-adapters.md).
@@ -66,8 +67,6 @@ how much is left.
   Instead a report is skipped for 7 days after any dispatch, and for good
   once its latest attempt carries an agent verdict (`already_fixed`,
   `wrong_repo`).
-- **A model picker fed by Cursor's model list** for now: the model is a
-  validated free-text spec (BL-090).
 
 ## Consequences
 
@@ -75,6 +74,11 @@ how much is left.
   its daily number; the console, `get_spend_down_status` and
   `mushi keys spend-down` show today's count, the apps it pays for and why the
   last tick skipped an app.
+- The console picks the model from Cursor's list
+  (`GET /v1/admin/byok/cursor/models`, which calls Cursor `GET /v1/models`).
+  Spend-down asks with that key; Integrations asks with the key the app
+  would use. The stored value is still the spec `parseCursorModelSpec`
+  accepts (BL-090).
 - Same day, the Cursor key resolver was brought back in line with ADR 0023:
   an app's legacy Integrations key now comes before a shared key
   (`resolveCursorApiKey`); before, a shared key moved such apps onto another
