@@ -72,6 +72,20 @@ describe('humanizeFixError: the agent explained why it opened no PR', () => {
     }
   })
 
+  it('not actionable and needs a person: no Retry, by category or by the error line', () => {
+    const cases: Array<[string, string, string]> = [
+      ['not_actionable', 'Agent found nothing it can tie to code: The event has no stack.', 'The agent found nothing it can tie to code.'],
+      ['needs_human', 'Agent says this needs a person: BL-175 still needs a product decision.', 'The agent needs a decision from you.'],
+    ]
+    for (const [category, line, title] of cases) {
+      for (const h of [humanizeFixError('anything', { category }), humanizeFixError(line)]) {
+        expect(h?.title).toBe(title)
+        expect(h?.severity).toBe('hard')
+        expect(h?.action).toBeUndefined()
+      }
+    }
+  })
+
   it('wrong repo: points at the repos page', () => {
     const h = humanizeFixError('Agent says the code is in another repo: The payout check is not in this repository.')
     expect(h?.title).toBe('The fix belongs in another repo.')

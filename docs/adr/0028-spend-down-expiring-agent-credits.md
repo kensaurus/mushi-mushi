@@ -65,7 +65,7 @@ how much is left.
   failure from a broken key or a Cursor outage says nothing about the report.
   Instead a report is skipped for 7 days after any dispatch, and for good
   once its latest attempt carries an agent verdict (`already_fixed`,
-  `wrong_repo`).
+  `wrong_repo`, `not_actionable`, `needs_human`).
 - **A model picker fed by Cursor's model list** for now: the model is a
   validated free-text spec (BL-090).
 
