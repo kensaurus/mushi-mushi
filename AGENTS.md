@@ -891,7 +891,7 @@ Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
 - **Cloud agents**: `_shared/agent-adapters.ts` (`cursor_cloud` via `_shared/cursor-cloud.ts` v1 API, `github_cloud_agent` via `_shared/github-agent-tasks.ts`, `anthropic_managed` stub); `fix-worker` dispatches and writes `fix_attempts` up front; completion via `cursor-webhook` (v0 callback) or `agent-status-poll` (cron `5-55/5`); unknown agents are a 400 at `POST /v1/admin/fixes/dispatch`.
 - **A2A 1.0 wire format** (`taskPushNotificationConfig`, StreamResponse callbacks, `/.well-known/agent-card.json`) with 0.3 aliases.
 - **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
-- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` runs there with `--warn`, report-only).
+- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` fails the build when a source read is missing from every `.env.example`).
 
 ## ExecPlans
 
