@@ -9,13 +9,13 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 45 · **Recently closed:** 8 (BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 44 · **Recently closed:** 9 (BL-021 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 8 |
 | test-gap | 7 |
-| tech-debt | 18 |
+| tech-debt | 17 |
 | known-bug | 1 |
 | decision-needed | 5 |
 | unfinished-feature | 4 |
@@ -23,7 +23,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 42 |
+| relevant | 41 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -86,7 +86,6 @@ parked work is visible in one place.
 | BL-016 | decision-needed | Seven July audit plans (`docs/plan-antislop.md`, `plan-docs-sync.md`, `plan-error-handling.md`, `plan-input-validation.md`, `plan-uiux-unification.md`, `plan-uplift-sdk-cli-mcp.md`; `plan-gtm.md` from 2026-09-22) carry open items that were never re-verified against today's code. Triage each: close, carry as rows, or archive | relevant | low | `docs/plan-*.md` | — |
 | BL-017 | deferred-plan-phase | Plan 021 Phase 1 recorded the live judge call, the Cursor/Codex adapters and an `apps/admin` run as not yet verified | verify-done | low | `docs/execplans/PLANS.md:643` | — |
 | BL-019 | tech-debt | 169 env names the source reads are in no `.env.example` (221 read, 75 documented; unchanged 2026-10-17), among them `ADMIN_ORIGIN`, the `STRIPE_PRICE_*` set, `TREMENDOUS_*` and the admin `VITE_MUSHI_SELF_*`. CI runs the check with `--warn`, so nothing stops new ones. Template each in its owning `.env.example` (or allowlist the platform builtins), then drop `--warn` | relevant | low | `pnpm check:env-source-parity`; `.github/workflows/ci.yml:412` | — |
-| BL-021 | tech-debt | `packages/vscode-extension/tsconfig.json` uses `"moduleResolution": "node10"` with `"module": "commonjs"`. TypeScript 6 (the repo runs 6.0.3) deprecates `node10`, and `tooling/tsconfig/base.json:20` sets `ignoreDeprecations: "6.0"`. Move to `node16`, which still emits CommonJS for the extension host, before TypeScript 7 | relevant | low | `packages/vscode-extension/tsconfig.json:12` | — |
 | BL-022 | tech-debt | Doc links no gate scans: `docs/red-team-2026-07-02/red-team-defect-report.md` embeds three screenshots that were never committed, and `docs/report-ingest-contract.md` links into a sibling checkout (`../../yen-yen/docs/mushi-integration.md`). Point both at real targets or drop them. The 35 dead links under `docs/archive/` are historical snapshots; leave them | relevant | low | `docs/red-team-2026-07-02/red-team-defect-report.md:48`, `:65`, `:251`; `docs/report-ingest-contract.md:110` | — |
 | BL-040 | decision-needed | Shipped-but-unexported code in published packages. `packages/plugin-jira/src/jira-webhook.ts` is a documented inbound Jira → Mushi bridge that `src/index.ts` never exports. `packages/react-native/src/instance.ts` (`MushiRN.getInstance()`) is announced as exported in the changelog, but nothing exports or registers it. Export each with a test, or delete it | relevant | med | `packages/plugin-jira/src/handler.ts:29`; `packages/react-native/CHANGELOG.md:435` | — |
 | BL-041 | tech-debt | Small dead-code leftovers that need a non-code decision. `apps/admin/src/content/dispatch-prerequisites.mdx`: the console has no MDX loader, so move it into `apps/docs` or delete it. `packages/agents/src/drift-agent.ts`: `_shared/drift-agent.ts` names it the canonical copy; delete it and update that comment on the next edge deploy. `examples/e2e-dogfood`: two comments say msw mocks GitHub, but nothing wires msw (its devDependency was removed) | relevant | low | `docs/plan-dead-code-2026-10-16.md` | — |
@@ -120,6 +119,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-021 | VS Code extension tsconfig `moduleResolution` `node10` (deprecated in TypeScript 6, removed in 7) | 2026-10-20 | `packages/vscode-extension/tsconfig.json` sets `module` and `moduleResolution` to `node16`. `package.json` has no `type` field, so emit stays CommonJS for the extension host (`require("vscode")`, `exports.activate`). `module-resolution.test.mjs` typechecks with `ignoreDeprecations` lowered to `5.0` — a leftover `node10` is TS5107 — and asserts that emit. `ignoreDeprecations: "6.0"` stays in `tooling/tsconfig/base.json` and `tsconfig.base.json` because tsup and rollup-plugin-dts still inject other deprecated options. |
 | BL-018 | `PLANS.md` records an earlier dead-code execute as "needs an owner: nothing committed, no baseline" | 2026-10-17 | Owner decision 2026-10-17: covered by the knip gate. ADR 0007 (Accepted) makes knip the dead-code gate, and `.github/workflows/ci.yml:358`-`:362` ratchets it in the build job (`knip --production --max-issues 232`, `knip --max-issues 39 --treat-config-hints-as-errors`) against the baseline in `docs/execplans/knip-baseline/`. |
 | BL-075 | Unchecked "verify RLS on prefixed tables" (`hhtp_`, `twm_`, `pf_`, `skin_`, `wr_`) and the `user_id` index item in the shared table registry | 2026-10-17 | Checked on the `kenji` project (`jghcferpoaqntpfqvayf`), read-only: RLS is on for all 30 prefixed tables (`hhtp_` 26, `skin_` 2, `twm_` 2), no `pf_` or `wr_` tables exist, and all 3 `user_id` columns lead an index. The boxes in `docs/kenji-table-registry.md:78`-`:83` can be ticked. |
 | BL-078 | `@mushi-mushi/ux` had no npm trusted publisher, so release.yml got E404 on 0.1.1 (run 38908001743, 2026-10-16) | 2026-10-17 | The owner added the trusted publisher. npm has `@mushi-mushi/ux@0.1.1`, published 2026-10-17T01:03:59Z, with SLSA provenance naming `.github/workflows/release.yml` on `refs/heads/master`, run 38925083419 attempt 3; tag `@mushi-mushi/ux@0.1.1` is on `3fc2476d`. |
