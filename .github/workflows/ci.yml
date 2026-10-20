@@ -406,10 +406,10 @@ jobs:
         # run `pnpm sync:helm-migrations` and commit when this fails.
         run: pnpm check:helm-migrations
 
-      - name: Check env names read in source are documented (warn)
-        # Reports env names read by source but absent from every .env.example.
-        # --warn until the backlog is zeroed; then drop the flag to enforce.
-        run: pnpm check:env-source-parity -- --warn
+      - name: Check env names read in source are documented
+        # Every env name read in source must appear in an owning .env.example,
+        # or on the platform-builtin allowlist in the checker.
+        run: pnpm check:env-source-parity
 
       - name: Check config docs are in sync
         # Regression guard: docs/CONFIG_REFERENCE.md is auto-generated from
