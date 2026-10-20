@@ -117,6 +117,7 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit -p ./",
+    "test": "node --test module-resolution.test.mjs",
     "package": "tsc -p ./ && pnpm dlx @vscode/vsce@latest package --no-dependencies",
     "publish:vsce": "pnpm dlx @vscode/vsce@latest publish --no-dependencies",
     "publish:ovsx": "pnpm dlx ovsx@latest publish --no-dependencies"
