@@ -76,7 +76,7 @@ import { ownerUserColumnReady, withOwnerUserColumn } from '../_shared/byok-scope
 
 const log = rootLog.child('spend-down-worker')
 
-/** owner_user_id is added by withOwnerUserColumn once migration 20261021090000 is applied (ADR 0031). */
+/** owner_user_id is added by withOwnerUserColumn once migration 20261021051628 is applied (ADR 0031). */
 export const SPEND_DOWN_KEY_COLUMNS =
   'id, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_summary'
 

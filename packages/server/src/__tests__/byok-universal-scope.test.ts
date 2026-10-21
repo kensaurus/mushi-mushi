@@ -308,7 +308,7 @@ describe('spend-down first pick with a universal Cursor key (ADR 0028, ADR 0031)
 })
 
 /**
- * A database that has not had migration 20261021090000 yet: any byok_keys
+ * A database that has not had migration 20261021051628 yet: any byok_keys
  * read that names owner_user_id answers 42703, as PostgREST does.
  */
 function withoutOwnerColumn(fake: unknown): never {
@@ -441,7 +441,7 @@ describe('spend-down status view of a universal key (ADR 0031)', () => {
 describe('the migration', () => {
   it('adds the column, the three-way owner check, owner-only RLS, the rescoped action and Vault cleanup on delete', () => {
     const sql = readFileSync(
-      resolve(__dirname, '../../supabase/migrations/20261021090000_byok_keys_universal_scope.sql'),
+      resolve(__dirname, '../../supabase/migrations/20261021051628_byok_keys_universal_scope.sql'),
       'utf-8',
     )
     expect(sql).toContain('add column if not exists owner_user_id uuid references auth.users(id) on delete cascade')
