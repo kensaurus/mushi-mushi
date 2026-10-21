@@ -23,16 +23,12 @@ const STEP_STATUS_TOKEN: Record<string, string> = {
 
 const reportedUnset = new Set<string>()
 
-/**
- * Dev-only: every unset token paints the same grey, so name it once.
- * console.error, not warn: console.warn is at its check:residue ceiling,
- * and debugWarn (lib/debug.ts) imports this module.
- */
+/** Dev-only: every unset token paints the same grey, so name it once. */
 function reportUnset(name: string): void {
   if (!import.meta.env.DEV || import.meta.env.MODE === 'test') return
   if (reportedUnset.has(name)) return
   reportedUnset.add(name)
-  console.error(
+  console.warn(
     `[vizTokens] --color-${name} is not set on :root; using ${UNSTYLED}. ` +
       'Declare it in the @theme static block of styles/theme-tokens.css, or read it after the stylesheet loads.',
   )

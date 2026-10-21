@@ -54,18 +54,18 @@ describe('vizTokens', () => {
   it('reports an unset token once in dev', () => {
     vi.stubEnv('DEV', true)
     vi.stubEnv('MODE', 'development')
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     document.documentElement.style.removeProperty('--color-viz-dev-unset-probe')
 
     readVizToken('viz-dev-unset-probe')
     readVizToken('viz-dev-unset-probe')
 
-    expect(error).toHaveBeenCalledTimes(1)
-    expect(String(error.mock.calls[0]?.[0])).toContain('--color-viz-dev-unset-probe')
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('--color-viz-dev-unset-probe')
   })
 
   it('stays quiet for set tokens, explicit fallbacks, tests and production', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const root = document.documentElement
 
     vi.stubEnv('DEV', true)
@@ -85,6 +85,6 @@ describe('vizTokens', () => {
     vi.stubEnv('MODE', 'production')
     readVizToken('viz-prod-probe')
 
-    expect(error).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 })

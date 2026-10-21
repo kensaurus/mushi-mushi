@@ -44,7 +44,10 @@ const METRICS = [
     id: 'console',
     label: 'console.(log|debug|warn)( outside packages/cli',
     pattern: /console\.(log|debug|warn)\(/g,
-    max: 21,
+    // 21 at A0, +1 for the dev-only unset viz token warning in
+    // apps/admin/src/lib/vizTokens.ts (debug.ts, the only admin logger,
+    // imports that module and stays silent unless mushi:debug is set).
+    max: 22,
     exclude: (rel) => rel.startsWith('packages/cli/'),
   },
   {
