@@ -374,6 +374,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Which files are too big to change safely, and is the bundle growing?',
   },
   {
+    name: 'get_ci_overview',
+    title: 'CI runners and why fixes wait',
+    description:
+      'Return where this project\'s tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online | offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats { queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [{ id, severity (high | medium | low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions { jobs, runners } is ok | missing | unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns { generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix\'s CI failed with an infra verdict, re-run the tests instead of changing code.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did my fix fail, or did the test machine stop? Why do my fixes wait to be tested?',
+  },
+  {
     name: 'explain_finding',
     title: 'Explain one finding',
     description:
