@@ -148,14 +148,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
   /**
    * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
-   * `eq` and `neq`. `neq` never matches a NULL / absent column, as in Postgres
+   * `eq`, `neq`, `in`, `lt` and `gt`. `neq` never matches a NULL / absent column, as in Postgres
    * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
    */
   or(filters: string): this {
     // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
     const parts = filters.split(/,(?![^(]*\))/)
     const alternatives = parts.map((part) => {
-      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in)\.(.*)$/.exec(part.trim())
+      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt)\.(.*)$/.exec(part.trim())
       if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
       const [, key, negated, op, raw] = m
       return (r: Row): boolean => {
@@ -171,6 +171,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         if (op === 'in') {
           const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
           hit = values.includes(String(v))
+        } else if (op === 'lt' || op === 'gt') {
+          // String order, as gt()/lt() above: right for ISO timestamps.
+          hit = op === 'lt' ? String(v) < raw : String(v) > raw
         } else {
           hit = op === 'eq' ? String(v) === raw : String(v) !== raw
         }
