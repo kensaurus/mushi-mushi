@@ -435,4 +435,31 @@ fixes
     console.log(`CI status: ${status} · conclusion: ${conclusion} · updated: ${updated}`)
   })
 
+fixes
+  .command('rerun-ci <fixId>')
+  .description('Re-run the failed or cancelled CI runs on a fix PR\'s latest commit (for example after the test machine stopped)')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const result = await apiCall<{ rerun?: Array<{ runId: number }>; headSha?: string }>(
+      `/v1/admin/fixes/${fixId}/ci/rerun`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error('Re-run failed:', result.error.message)
+      process.exit(1)
+    }
+    const runs = result.data?.rerun ?? []
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, ...result.data }, null, 2))
+      return
+    }
+    console.log(`Re-ran ${runs.length} run${runs.length === 1 ? '' : 's'}: ${runs.map((r) => `#${r.runId}`).join(', ')}`)
+  })
+
 }
