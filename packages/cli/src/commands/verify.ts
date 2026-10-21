@@ -14,7 +14,7 @@ import { apiCall, die, outputIsJson, requireConfig } from '../cli-shared.js'
 import { resolveProjectId } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
 
-export const VERIFY_WORKFLOW_PATH = '.github/workflows/mushi-verify.yml'
+const VERIFY_WORKFLOW_PATH = '.github/workflows/mushi-verify.yml'
 
 export function registerVerifyCommands(program: Command): void {
   const verify = program

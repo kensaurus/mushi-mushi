@@ -53,7 +53,7 @@ async function resolveTargetRepoId(repo: string, cfg: CliConfig): Promise<string
 }
 
 /** GET /v1/admin/fixes/:id/verification (Plan 024, ADR 0035). */
-export interface CliVerification {
+interface CliVerification {
   headSha: string | null
   gates: Array<{ id: string; status: string; label: string; detail: string }>
   passed: boolean
@@ -84,7 +84,7 @@ const SIGNAL_WORDS: Record<string, string> = {
 }
 
 /** The gate checklist as lines: glyph, word, label, then what to do. */
-export function renderVerification(v: CliVerification): string[] {
+function renderVerification(v: CliVerification): string[] {
   const lines = [`Head ${v.headSha ? v.headSha.slice(0, 7) : 'unknown'}: ${v.passed ? 'every gate passes' : 'not verified yet'}`]
   for (const g of v.gates ?? []) {
     const [glyph, word] = GATE_MARK[g.status] ?? ['?', g.status]
