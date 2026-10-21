@@ -199,15 +199,27 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
   const all = [...rows.unfinished, ...rows.finished]
   const projectName = new Map(rows.projects.map((p) => [p.id, p.name ?? p.id.slice(0, 8)]))
   const scopedRepos = new Set([...rows.repoBindings.map((r) => r.repo), ...all.map((j) => j.repo), ...rows.runners.map((r) => r.repo)])
-  const scopedRunnerNames = new Set([...rows.runners.map((r) => r.runner_name), ...all.map((j) => j.runner_name).filter((x): x is string => !!x)])
   const projectIds = new Set(rows.projects.map((p) => p.id))
 
-  // Hosts of the caller's organizations that run one of these repos' runners.
+  // Hosts and samples are read per organization, but a member of one project
+  // must not see another project's repos or memory figures on a shared
+  // machine. A host shows when it pushed with one of these projects' keys or
+  // runs one of these repos; only the runner entries of these repos show
+  // (an entry with no repo only when the host is this project's); samples
+  // only for these repos. A runner name is not proof: names repeat.
+  const hostInScope = (h: HostRow) => Boolean(h.project_id && projectIds.has(h.project_id))
+  const runnerEntryInScope = (h: HostRow, r: Record<string, unknown>) => {
+    const repo = str(r.repo)
+    return repo ? scopedRepos.has(repo) : hostInScope(h)
+  }
+  const scopedSamples = rows.samples.filter((s) => scopedRepos.has(s.repo))
+
   const hosts = rows.hosts
-    .filter((h) => {
-      if (h.project_id && projectIds.has(h.project_id)) return true
-      return (h.runners ?? []).some((r) => scopedRunnerNames.has(String(r.name ?? '')) || scopedRepos.has(String(r.repo ?? '')))
-    })
+    .filter((h) => hostInScope(h) || (h.runners ?? []).some((r) => {
+      const repo = str(r.repo)
+      return repo != null && scopedRepos.has(repo)
+    }))
+    .map((h) => ({ ...h, runners: (h.runners ?? []).filter((r) => runnerEntryInScope(h, r)) }))
     .map((h) => {
       const m = h.metrics ?? {}
       return {
@@ -279,7 +291,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
   })
 
   const peakOf = new Map<string, number>()
-  for (const s of rows.samples) {
+  for (const s of scopedSamples) {
     if (s.phase !== 'completed' || s.mem_peak_mb == null) continue
     peakOf.set(`${s.repo}|${s.run_id}|${s.run_attempt}|${s.runner_name}`, s.mem_peak_mb)
   }
@@ -367,7 +379,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       metrics: { swapUsedMb: h.metrics.swapUsedMb, swapTotalMb: h.metrics.swapTotalMb },
       runners: h.runners.map((r) => ({ name: r.name, memCurrentMb: r.memCurrentMb, memMaxMb: r.memMaxMb, oomKills: r.oomKills })),
     })),
-    samples: rows.samples
+    samples: scopedSamples
       .filter((s) => s.phase === 'completed')
       .map((s) => ({ hostId: s.host_id, runnerName: s.runner_name, repo: s.repo, at: s.at, memPeakMb: s.mem_peak_mb, memMaxMb: s.mem_max_mb, oomKills: s.oom_kills })),
     workflows: rows.workflows.map((w) => ({ repo: w.repo, path: w.path, text: w.text })),

@@ -227,6 +227,41 @@ describe('buildCiOverview', () => {
     expect(buildCiOverview(rows({ unfinished: many, finished }), opts).jobs).toHaveLength(230)
   })
 
+  it('shows a caller scoped to one project nothing of another project in the same org', () => {
+    const P2 = '1000000b-0000-4000-8000-000000000000'
+    const OTHER = 'kensaurus/yen-yen'
+    const host = (id: string, projectId: string, runners: Array<Record<string, unknown>>) => ({
+      organization_id: 'o1', project_id: projectId, host_id: id.repeat(64), hostname: `host-${id}`, platform: 'linux' as const, cpu_count: 8, mem_total_mb: 16000,
+      last_heartbeat_at: ago(1), metrics: {}, mushi_version: null, runners,
+    })
+    const o = buildCiOverview(rows({
+      // The loader read every host and sample of the org; the caller reads P1 only.
+      hosts: [
+        // Another project's machine: its repo, and an entry with no repo.
+        host('b', P2, [{ name: 'yen-1', repo: OTHER, active: true, mem_current_mb: 3900, mem_max_mb: 4096, oom_kills: 2 }, { name: 'spare', repo: null, active: true }]),
+        // A shared machine pushed with P2's key that also runs P1's repo.
+        host('c', P2, [
+          { name: 'glot-1', repo: REPO, active: true, mem_current_mb: 900, mem_max_mb: 4096, oom_kills: 0 },
+          { name: 'yen-2', repo: OTHER, active: true, mem_current_mb: 4000, mem_max_mb: 4096, oom_kills: 5 },
+          { name: 'unlabelled', repo: null, active: true },
+        ]),
+        // P1's own machine: its no-repo entry stays.
+        host('d', P1, [{ name: 'spare-1', repo: null, active: true }]),
+      ],
+      samples: [
+        { host_id: 'c'.repeat(64), runner_name: 'glot-1', repo: REPO, run_id: 1, run_attempt: 1, phase: 'completed', at: ago(5), mem_peak_mb: 1000, mem_max_mb: 4096, oom_kills: 0 },
+        { host_id: 'c'.repeat(64), runner_name: 'yen-2', repo: OTHER, run_id: 2, run_attempt: 1, phase: 'completed', at: ago(5), mem_peak_mb: 4090, mem_max_mb: 4096, oom_kills: 3 },
+      ],
+    }), opts)
+    expect(o.hosts.map((h) => h.hostname).sort()).toEqual(['host-c', 'host-d'])
+    expect(o.hosts.find((h) => h.hostname === 'host-c')!.runners.map((r) => r.name)).toEqual(['glot-1'])
+    expect(o.hosts.find((h) => h.hostname === 'host-d')!.runners.map((r) => r.name)).toEqual(['spare-1'])
+    const text = JSON.stringify(o)
+    expect(text).not.toContain(OTHER)
+    expect(text).not.toContain('yen-')
+    expect(o.advice.some((a) => a.id.startsWith('oom_kill') || a.id.startsWith('memory_near_cap'))).toBe(false)
+  })
+
   it('links hosts to runners by name and joins the job memory peak', () => {
     const j = row({ run_id: 77, runner_name: 'kensaurus-local-glot-1' })
     const o = buildCiOverview(rows({
