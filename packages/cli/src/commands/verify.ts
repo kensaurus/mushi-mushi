@@ -14,6 +14,11 @@ import { apiCall, die, outputIsJson, requireConfig } from '../cli-shared.js'
 import { resolveProjectId } from '../command-helpers.js'
 import { MushiCliError } from '../errors.js'
 
+/** The workflow is a few KB; anything larger is not it. */
+const WORKFLOW_MAX_BYTES = 64 * 1024
+/** Every version of the template uses Mushi's fix-verify action. */
+const WORKFLOW_SHAPE = /uses:\s*kensaurus\/mushi-mushi\/\.github\/actions\/fix-verify@/
+
 const VERIFY_WORKFLOW_PATH = '.github/workflows/mushi-verify.yml'
 
 export function registerVerifyCommands(program: Command): void {
@@ -44,7 +49,15 @@ Verified merge. Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge`)
         throw new MushiCliError('E_API_ERROR', 'The server sent no workflow.', 'Update the CLI (mushi upgrade) or copy it from the console: Settings → Fixes → Verified merge.')
       }
       const text = yaml.endsWith('\n') ? yaml : `${yaml}\n`
+      // Write only what is recognisably the Mushi verify workflow: a reply
+      // that is not (a proxy page, a broken server) never lands in a repo.
+      if (text.length > WORKFLOW_MAX_BYTES || !WORKFLOW_SHAPE.test(text) || text.includes('\0')) {
+        throw new MushiCliError('E_API_ERROR', 'The server sent something that is not the Mushi verify workflow.', 'Copy it from the console instead: Settings → Fixes → Verified merge.')
+      }
       const out = opts.out ? resolve(opts.out) : null
+      if (out && !/\.ya?ml$/i.test(out)) {
+        throw new MushiCliError('E_INVALID_INPUT', `--out must be a .yml or .yaml file: ${out}`, 'For example: --out .github/workflows/mushi-verify.yml')
+      }
       if (out) {
         mkdirSync(dirname(out), { recursive: true })
         writeFileSync(out, text)

@@ -161,8 +161,8 @@ test('computeVerdict covers every pair of runs', () => {
 
 test('redactSecrets masks token shapes; tailText keeps the last 4000 characters', () => {
   const log = [
-    'token ghp_abcdefghijklmnopqrstuvwxyz0123',
-    'key sk-ant-api03-abcdefghijklmnopqrstuv',
+    'token ' + 'ghp_' + 'abcdefghijklmnopqrstuvwxyz0123', // built from parts, like the AWS key below
+    'key ' + 'sk-' + 'ant-api03-abcdefghijklmnopqrstuv',
     'mushi_0123456789abcdef0123456789abcdef',
     'Authorization: Bearer abc.def.ghi',
     'AKIA' + 'ABCDEFGHIJKLMNOP', // built so the repo's secret scan does not read the fake key

@@ -11,7 +11,8 @@ vi.mock('../config.js', async (importOriginal) => {
   return { ...actual, loadConfig: () => ({ ...TEST_CONFIG }) }
 })
 
-const YAML = 'name: Mushi verify\njobs:\n  verify:\n    runs-on: [self-hosted, mushi-nuc]\n'
+const YAML =
+  'name: Mushi verify\njobs:\n  verify:\n    runs-on: [self-hosted, mushi-nuc]\n    steps:\n      - uses: kensaurus/mushi-mushi/.github/actions/fix-verify@master\n'
 const OTHER = '22222222-3333-4444-8555-666666666666'
 
 let tmp: string | null = null
@@ -54,5 +55,12 @@ describe('mushi verify workflow', () => {
     const run = await runCli(registerVerifyCommands, ['verify', 'workflow', '--project', 'acme'])
     expect(run.calls).toHaveLength(0)
     expect(run.error?.code).toBe('E_INVALID_INPUT')
+  })
+
+  it('refuses to write a reply that is not the Mushi verify workflow', async () => {
+    const run = await runCli(registerVerifyCommands, ['verify', 'workflow'], () => okReply({ yaml: '<html>proxy login</html>' }))
+    expect(run.error?.code).toBe('E_API_ERROR')
+    expect(run.error?.message).toContain('not the Mushi verify workflow')
+    expect(run.stdout).toBe('')
   })
 })

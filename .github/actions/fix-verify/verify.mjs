@@ -312,7 +312,8 @@ export function buildResult({ headSha, baseSha, tests, head, base, verdict, comm
 }
 
 const short = (sha) => (sha ? String(sha).slice(0, 7) : '—')
-const mdCell = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ')
+// Backslashes first, so an escape in the input cannot undo ours.
+const mdCell = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 
 const RUN_WORDS = { pass: 'passed', fail: 'failed', error: 'error', skipped: 'not run' }
 
