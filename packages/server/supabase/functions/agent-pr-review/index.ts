@@ -394,7 +394,7 @@ export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Da
   return queued
 }
 
-/** Oldest due rows first, at most REVIEW_MAX_PER_PROJECT_PER_TICK per project. */
+/** In the order given (re-reviews, then oldest due), at most REVIEW_MAX_PER_PROJECT_PER_TICK per project. */
 export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch = REVIEW_BATCH, perProject = REVIEW_MAX_PER_PROJECT_PER_TICK): T[] {
   const taken = new Map<string, number>()
   const out: T[] = []
@@ -759,15 +759,17 @@ export async function runAgentPrReview(
       const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? BACKFILL_DEFAULT_LIMIT)), BACKFILL_MAX_LIMIT)
       summary.enqueued = await enqueueBackfill(db, limit, now)
     }
-    const { data, error } = await db
-      .from('fix_reviews')
-      .select(QUEUE_COLUMNS)
-      .eq('status', 'queued')
-      .lte('queued_at', nowIso)
-      .order('queued_at', { ascending: true })
-      .limit(QUEUE_SCAN)
+    // Re-reviews first: a row that already has a verdict was re-queued by a
+    // push (a review follow-up, ADR 0032, or the author), and its verdict
+    // decides a merge. A first-review backfill must not hold it for hours.
+    const due = (rereview: boolean) => {
+      const q = db.from('fix_reviews').select(QUEUE_COLUMNS).eq('status', 'queued').lte('queued_at', nowIso)
+      return (rereview ? q.not('verdict', 'is', null) : q.is('verdict', null)).order('queued_at', { ascending: true }).limit(QUEUE_SCAN)
+    }
+    const [again, first] = await Promise.all([due(true), due(false)])
+    const error = again.error ?? first.error
     if (error) throw new Error(`review queue read failed: ${error.message}`)
-    rows = pickFairBatch((data ?? []) as QueueRow[])
+    rows = pickFairBatch([...((again.data ?? []) as QueueRow[]), ...((first.data ?? []) as QueueRow[])])
   }
 
   const outcomes = await mapWithConcurrency(rows, REVIEW_BATCH, async (row) => {
