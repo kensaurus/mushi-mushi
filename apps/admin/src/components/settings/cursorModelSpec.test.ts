@@ -59,6 +59,13 @@ describe('cursorModelSpec', () => {
     expect(cursorModelSpec('grok-4.7', '', { reasoning_effort: '' }, GROK)).toBe('grok-4.7')
   })
 
+  it('leaves out a param value that would break the spec', () => {
+    expect(
+      cursorModelSpec('grok-4.7', '', { reasoning_effort: 'a&context=1', context: '500k' }, GROK),
+    ).toBe('grok-4.7?context=500k')
+    expect(cursorModelSpec('grok-4.7', '', { reasoning_effort: 'x=y?z' }, GROK)).toBe('grok-4.7')
+  })
+
   it('keeps a typed id when Other is selected', () => {
     expect(cursorModelSpec(CURSOR_MODEL_OTHER, ' composer-2.5 ', {}, undefined)).toBe(
       'composer-2.5',
