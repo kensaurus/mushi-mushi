@@ -4,7 +4,7 @@
  *
  * OVERVIEW:
  * - Present bucket is cached for the isolate
- * - A missing bucket is a typed STORAGE_BUCKET_MISSING error and is not cached
+ * - A missing bucket is a typed STORAGE_BUCKET_MISSING error, cached for the miss TTL
  * - A thrown or 5xx probe is STORAGE_BUCKET_PROBE_FAILED and is not cached
  * - A missing configured name falls back only after the cluster default probes clean
  *
@@ -16,8 +16,9 @@
  * - pnpm --filter @mushi-mushi/server exec vitest run src/__tests__/storage-bucket.test.ts
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  BUCKET_MISS_TTL_MS,
   chooseSupabaseBucket,
   clearBucketProbeCache,
   preflightSupabaseBucketSetting,
@@ -48,7 +49,10 @@ describe('probeSupabaseBucket', () => {
     expect(getBucket).toHaveBeenCalledWith('screenshots')
   })
 
-  it('throws STORAGE_BUCKET_MISSING for a 404 and does not cache the miss', async () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('throws STORAGE_BUCKET_MISSING for a 404 and caches the miss for the TTL', async () => {
+    vi.useFakeTimers()
     const getBucket = vi.fn(async () => ({
       data: null,
       error: { message: 'Bucket not found', status: 400, statusCode: '404' },
@@ -59,9 +63,53 @@ describe('probeSupabaseBucket', () => {
       code: 'STORAGE_BUCKET_MISSING',
       bucket: 'nope',
       message: 'Storage bucket "nope" does not exist',
+      cached: false,
     })
-    await expect(probeSupabaseBucket(c, 'nope')).rejects.toBeInstanceOf(StorageBucketError)
+    await expect(probeSupabaseBucket(c, 'nope')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+      cached: true,
+    })
+    expect(getBucket).toHaveBeenCalledTimes(1)
+
+    await expect(probeSupabaseBucket(c, 'nope', { fresh: true })).rejects.toBeInstanceOf(StorageBucketError)
     expect(getBucket).toHaveBeenCalledTimes(2)
+
+    vi.advanceTimersByTime(BUCKET_MISS_TTL_MS + 1)
+    await expect(probeSupabaseBucket(c, 'nope')).rejects.toMatchObject({ cached: false })
+    expect(getBucket).toHaveBeenCalledTimes(3)
+  })
+
+  it('a fresh probe that finds the bucket clears a cached miss', async () => {
+    let exists = false
+    const getBucket = vi.fn(async (name: string) =>
+      exists ? { data: { name }, error: null } : { data: null, error: { message: 'Bucket not found', status: 404 } },
+    )
+    const c = client(getBucket)
+    await expect(probeSupabaseBucket(c, 'late')).rejects.toBeInstanceOf(StorageBucketError)
+    exists = true
+    await probeSupabaseBucket(c, 'late', { fresh: true })
+    await probeSupabaseBucket(c, 'late')
+    expect(getBucket).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats "not found" as a miss only for a 404 or a status-less "Bucket not found"', async () => {
+    const unrelated = vi.fn(async () => ({
+      data: null,
+      error: { message: 'Object not found', status: 500, statusCode: '500' },
+    }))
+    await expect(probeSupabaseBucket(client(unrelated), 'a')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_PROBE_FAILED',
+    })
+
+    const genericNoStatus = vi.fn(async () => ({ data: null, error: { message: 'tenant not found' } }))
+    await expect(probeSupabaseBucket(client(genericNoStatus), 'b')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_PROBE_FAILED',
+    })
+
+    const bucketNoStatus = vi.fn(async () => ({ data: null, error: { message: 'Bucket not found' } }))
+    await expect(probeSupabaseBucket(client(bucketNoStatus), 'c')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+    })
   })
 
   it('throws STORAGE_BUCKET_PROBE_FAILED when getBucket throws or returns a server error', async () => {
@@ -106,6 +154,7 @@ describe('chooseSupabaseBucket', () => {
     await expect(chooseSupabaseBucket(client(getBucket), 'mushi-screenshots')).resolves.toEqual({
       bucket: 'screenshots',
       missingConfigured: 'mushi-screenshots',
+      missCached: false,
     })
     expect(getBucket).toHaveBeenCalledWith('mushi-screenshots')
     expect(getBucket).toHaveBeenCalledWith('screenshots')
@@ -144,6 +193,19 @@ describe('preflightSupabaseBucketSetting', () => {
       code: 'STORAGE_BUCKET_MISSING',
       message: 'Storage bucket "typo" does not exist',
     })
+  })
+
+  it('re-probes a cached miss so a just-created bucket can be saved', async () => {
+    let exists = false
+    const getBucket = vi.fn(async (name: string) =>
+      exists ? { data: { name }, error: null } : { data: null, error: { message: 'Bucket not found', status: 404 } },
+    )
+    await expect(probeSupabaseBucket(client(getBucket), 'new-shots')).rejects.toBeInstanceOf(StorageBucketError)
+    exists = true
+    await expect(
+      preflightSupabaseBucketSetting(client(getBucket), { provider: 'supabase', bucket: 'new-shots' }),
+    ).resolves.toEqual({ ok: true })
+    expect(getBucket).toHaveBeenCalledTimes(2)
   })
 
   it('accepts a bucket that exists', async () => {

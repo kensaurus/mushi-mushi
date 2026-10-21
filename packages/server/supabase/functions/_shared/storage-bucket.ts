@@ -4,7 +4,7 @@
  *
  * OVERVIEW:
  * - Asks Storage whether a bucket exists before an upload uses the name
- * - Caches a positive answer for the life of this isolate
+ * - Caches a positive answer for the life of this isolate, a confirmed miss for 60 s
  * - A confirmed miss or a failed probe is a typed error, not a later upload failure
  *
  * DEPENDENCIES:
@@ -22,7 +22,7 @@
  *   failure does not, so a Storage outage cannot block a settings write)
  *
  * NOTES:
- * - Misses and probe failures are not cached
+ * - Probe failures are not cached; the save gate and health check bypass the miss cache
  * - This module does not create buckets
  */
 
@@ -33,12 +33,15 @@ export type StorageBucketErrorCode = 'STORAGE_BUCKET_MISSING' | 'STORAGE_BUCKET_
 export class StorageBucketError extends Error {
   readonly code: StorageBucketErrorCode
   readonly bucket: string
+  /** True when a miss was answered from the miss cache without a probe. */
+  readonly cached: boolean
 
-  constructor(code: StorageBucketErrorCode, bucket: string, message: string) {
+  constructor(code: StorageBucketErrorCode, bucket: string, message: string, cached = false) {
     super(message)
     this.name = 'StorageBucketError'
     this.code = code
     this.bucket = bucket
+    this.cached = cached
   }
 }
 
@@ -59,25 +62,56 @@ export interface BucketProbeClient {
 
 /** Bucket names already confirmed to exist in this isolate. */
 const confirmedBuckets = new Set<string>()
+/** Confirmed misses, by bucket name, until the expiry timestamp. */
+const missingBuckets = new Map<string, number>()
+export const BUCKET_MISS_TTL_MS = 60 * 1000
 
 export function clearBucketProbeCache(): void {
   confirmedBuckets.clear()
+  missingBuckets.clear()
 }
 
 function isMissingBucket(error: BucketProbeError | null): boolean {
   if (!error) return true
-  if (error.status === 404) return true
-  if (String(error.statusCode ?? '') === '404') return true
-  const msg = (error.message ?? '').toLowerCase()
-  return msg.includes('not found') || msg.includes('does not exist')
+  const hasStatus = error.status !== undefined || error.statusCode !== undefined
+  if (hasStatus) {
+    return error.status === 404 || String(error.statusCode ?? '') === '404'
+  }
+  return (error.message ?? '').toLowerCase().includes('bucket not found')
+}
+
+function isMissCached(bucket: string): boolean {
+  const expiresAt = missingBuckets.get(bucket)
+  if (expiresAt === undefined) return false
+  if (expiresAt > Date.now()) return true
+  missingBuckets.delete(bucket)
+  return false
+}
+
+export interface BucketProbeOptions {
+  /** Skip the cached-miss shortcut and ask Storage again. */
+  fresh?: boolean
 }
 
 /**
- * Confirm `bucket` exists. A cached hit returns without a network call.
+ * Confirm `bucket` exists. A cached hit returns without a network call; a
+ * cached miss (BUCKET_MISS_TTL_MS) throws without one unless `fresh` is set.
  * Throws StorageBucketError on a miss or when the probe itself fails.
  */
-export async function probeSupabaseBucket(client: BucketProbeClient, bucket: string): Promise<void> {
+export async function probeSupabaseBucket(
+  client: BucketProbeClient,
+  bucket: string,
+  opts: BucketProbeOptions = {},
+): Promise<void> {
   if (confirmedBuckets.has(bucket)) return
+  if (!opts.fresh && isMissCached(bucket)) {
+    throw new StorageBucketError(
+      'STORAGE_BUCKET_MISSING',
+      bucket,
+      `Storage bucket "${bucket}" does not exist`,
+      true,
+    )
+  }
   let result: { data: { id?: string; name?: string } | null; error: BucketProbeError | null }
   try {
     result = await client.storage.getBucket(bucket)
@@ -91,6 +125,7 @@ export async function probeSupabaseBucket(client: BucketProbeClient, bucket: str
   }
   if (!result || result.error || !result.data) {
     if (!result || isMissingBucket(result.error)) {
+      missingBuckets.set(bucket, Date.now() + BUCKET_MISS_TTL_MS)
       throw new StorageBucketError(
         'STORAGE_BUCKET_MISSING',
         bucket,
@@ -104,6 +139,7 @@ export async function probeSupabaseBucket(client: BucketProbeClient, bucket: str
       `Could not verify storage bucket "${bucket}": ${detail}`,
     )
   }
+  missingBuckets.delete(bucket)
   confirmedBuckets.add(bucket)
 }
 
@@ -111,6 +147,8 @@ export interface ChosenSupabaseBucket {
   bucket: string
   /** Set when `configured` was missing and the cluster default was probed clean. */
   missingConfigured?: string
+  /** True when that miss came from the miss cache rather than a fresh probe. */
+  missCached?: boolean
 }
 
 /**
@@ -122,10 +160,11 @@ export interface ChosenSupabaseBucket {
 export async function chooseSupabaseBucket(
   client: BucketProbeClient,
   configured?: string | null,
+  opts: BucketProbeOptions = {},
 ): Promise<ChosenSupabaseBucket> {
   const requested = configured?.trim() ? configured.trim() : CLUSTER_DEFAULT_BUCKET
   try {
-    await probeSupabaseBucket(client, requested)
+    await probeSupabaseBucket(client, requested, opts)
     return { bucket: requested }
   } catch (err) {
     if (
@@ -133,8 +172,8 @@ export async function chooseSupabaseBucket(
       err.code === 'STORAGE_BUCKET_MISSING' &&
       requested !== CLUSTER_DEFAULT_BUCKET
     ) {
-      await probeSupabaseBucket(client, CLUSTER_DEFAULT_BUCKET)
-      return { bucket: CLUSTER_DEFAULT_BUCKET, missingConfigured: requested }
+      await probeSupabaseBucket(client, CLUSTER_DEFAULT_BUCKET, opts)
+      return { bucket: CLUSTER_DEFAULT_BUCKET, missingConfigured: requested, missCached: err.cached }
     }
     throw err
   }
@@ -158,7 +197,7 @@ export async function preflightSupabaseBucketSetting(
   const bucket = input.bucket?.trim()
   if (!bucket) return { ok: true }
   try {
-    await probeSupabaseBucket(client, bucket)
+    await probeSupabaseBucket(client, bucket, { fresh: true })
     return { ok: true }
   } catch (err) {
     if (err instanceof StorageBucketError && err.code === 'STORAGE_BUCKET_MISSING') {

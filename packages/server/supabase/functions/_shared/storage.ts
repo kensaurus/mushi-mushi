@@ -16,7 +16,8 @@
  * The Supabase adapter probes the bucket with storage.getBucket before use
  * (storage-bucket.ts). A positive result is cached per isolate. A missing
  * configured name falls back to the cluster default for ingest and fails the
- * health check; a probe error is a typed StorageBucketError.
+ * health check. A probe error fails the health check; ingest logs it and uses
+ * the bucket unverified.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -95,17 +96,32 @@ const SETTINGS_TTL_MS = 60 * 1000
 
 /**
  * Probe the configured Supabase bucket and return the name to upload into.
- * A confirmed miss logs STORAGE_BUCKET_MISSING and uses the cluster default
- * so ingest still stores the object. The cluster default missing, or a probe
- * that errors, throws StorageBucketError.
+ * A confirmed miss logs STORAGE_BUCKET_MISSING (once per miss-cache interval)
+ * and uses the cluster default so ingest still stores the object. A probe that
+ * errors is logged and the probed bucket is used unverified, so a Storage API
+ * blip cannot fail ingest. The cluster default missing throws StorageBucketError.
  */
 async function resolveSupabaseBucket(
   client: BucketProbeClient,
   configured: string | null | undefined,
   projectId: string,
 ): Promise<string> {
-  const choice = await chooseSupabaseBucket(client, configured)
-  if (choice.missingConfigured) {
+  let choice
+  try {
+    choice = await chooseSupabaseBucket(client, configured)
+  } catch (err) {
+    if (err instanceof StorageBucketError && err.code === 'STORAGE_BUCKET_PROBE_FAILED') {
+      storageLog.warn('supabase bucket probe failed; using bucket unverified', {
+        projectId,
+        bucket: err.bucket,
+        err: err.message,
+        code: err.code,
+      })
+      return err.bucket
+    }
+    throw err
+  }
+  if (choice.missingConfigured && !choice.missCached) {
     storageLog.error('configured supabase bucket does not exist; using cluster default', {
       projectId,
       configured: choice.missingConfigured,
@@ -149,8 +165,9 @@ export function invalidateStorageCache(projectId?: string): void {
 /**
  * Top-level factory. Falls back to the cluster default Supabase bucket when
  * BYO settings are incomplete, and when a configured Supabase bucket is
- * confirmed missing, so report ingest still stores the object. The cluster
- * default missing, or a bucket probe that errors, throws StorageBucketError.
+ * confirmed missing, so report ingest still stores the object. A bucket probe
+ * that errors uses the bucket unverified. Only the cluster default confirmed
+ * missing throws StorageBucketError.
  */
 export async function getStorageAdapter(projectId: string): Promise<StorageAdapter> {
   const settings = await getStorageSettings(projectId)
@@ -206,7 +223,7 @@ export async function getStorageAdapterForHealthCheck(
     const client = getServiceClient()
     const tProbe = Date.now()
     try {
-      const choice = await chooseSupabaseBucket(client, settings?.bucket)
+      const choice = await chooseSupabaseBucket(client, settings?.bucket, { fresh: true })
       if (choice.missingConfigured) {
         const message = `Storage bucket "${choice.missingConfigured}" does not exist`
         storageLog.error('configured supabase bucket does not exist', {

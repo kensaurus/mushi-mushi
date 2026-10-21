@@ -53,26 +53,26 @@ interface ContactBody {
 const RATE_LIMIT_PER_HOUR = 5;
 
 /**
- * Reject a Supabase bucket name Storage says is missing. External providers
- * are not probed. A Storage outage skips the gate so the save still lands;
- * the runtime probe reports that failure on the next upload or health check.
+ * Reject a Supabase bucket name Storage says is missing. Only a non-blank
+ * bucket in the patch itself is probed, so switching provider back to
+ * Supabase (or re-saving other fields) never trips on a stored name. External
+ * providers are not probed. A Storage outage skips the gate so the save still
+ * lands; the runtime probe reports that failure on the next health check.
  */
-async function gateSupabaseBucketSave(
+export async function gateSupabaseBucketSave(
   c: Context,
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   patch: Record<string, unknown>,
 ): Promise<Response | null> {
-  const setsBucket = typeof patch.bucket === 'string';
-  const setsSupabase = patch.provider === 'supabase';
-  if (!setsBucket && !setsSupabase) return null;
+  const bucket = typeof patch.bucket === 'string' ? patch.bucket.trim() : '';
+  if (!bucket) return null;
 
   let provider = typeof patch.provider === 'string' ? patch.provider : null;
-  let bucket = typeof patch.bucket === 'string' ? patch.bucket : null;
-  if (provider === null || bucket === null) {
+  if (provider === null) {
     const { data: existing, error } = await db
       .from('project_storage_settings')
-      .select('provider, bucket')
+      .select('provider')
       .eq('project_id', projectId)
       .maybeSingle();
     if (error) {
@@ -82,8 +82,7 @@ async function gateSupabaseBucketSave(
       });
       return null;
     }
-    if (provider === null) provider = (existing?.provider as string | undefined) ?? 'supabase';
-    if (bucket === null) bucket = (existing?.bucket as string | undefined) ?? 'screenshots';
+    provider = (existing?.provider as string | undefined) ?? 'supabase';
   }
 
   const gate = await preflightSupabaseBucketSetting(db, { provider, bucket });
