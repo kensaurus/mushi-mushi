@@ -233,6 +233,18 @@ const RELATIVE_SPECIFIERS = [
  * file (an import written inside a comment) is skipped; a real missing
  * import still fails the server-side bundle, so nothing ships broken.
  */
+/**
+ * Where the upload starts: the entrypoint, plus the function directory's
+ * non-code files (deno.json, import maps, assets). Code is followed from the
+ * entrypoint, so a module the function no longer imports is not uploaded:
+ * `api` forwards some route groups to `api-ext` (deploy size limit, HTTP 413
+ * on 2026-10-21) while their files stay under api/routes/ for the route
+ * manifest and the surface-parity check.
+ */
+export function functionUploadRoots(fnFiles, entryAbs) {
+  return [entryAbs, ...fnFiles.filter((f) => !/\.(ts|tsx|js|mjs)$/.test(f))]
+}
+
 export function functionUploadFiles(fnFiles) {
   const seen = new Set()
   const visit = (abs) => {
@@ -355,7 +367,9 @@ async function main() {
 
   const fnFiles = await walk(fnDirAbs)
   const sharedFiles = await walk(sharedDirAbs)
-  const allFiles = flag('--all-shared') ? [...fnFiles, ...sharedFiles] : functionUploadFiles(fnFiles)
+  const allFiles = flag('--all-shared')
+    ? [...fnFiles, ...sharedFiles]
+    : functionUploadFiles(functionUploadRoots(fnFiles, join(fnDirAbs, 'index.ts')))
   if (allFiles.length === 0) {
     console.error('error: no source files discovered')
     process.exit(1)

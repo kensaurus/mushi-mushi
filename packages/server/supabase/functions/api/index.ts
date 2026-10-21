@@ -6,7 +6,7 @@ import type { Variables } from './types.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
 import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts';
-import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
+import { proxyToFunction } from '../_shared/edge-proxy.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
@@ -33,7 +33,6 @@ import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
 import { registerReportsDashboardRoutes } from './routes/reports-dashboard.ts';
 import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
-import { registerInventoryRoutes } from './routes/inventory.ts';
 import { registerA2ATaskRoutes } from './routes/a2a-tasks.ts';
 import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
@@ -99,7 +98,6 @@ import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
-import { registerCiRoutes } from './routes/ci.ts';
 
 ensureSentry('api');
 
@@ -108,6 +106,19 @@ ensureSentry('api');
 const app = new Hono<{ Variables: Variables }>().basePath('/api');
 
 app.onError(sentryHonoErrorHandler);
+
+// Route groups that run in the `api-ext` function (deploy size limit, see
+// _shared/edge-proxy.ts). Registered where the groups used to be, so route
+// order is unchanged; the public paths stay on `api`.
+function forwardToApiExt(paths: string[]): void {
+  for (const path of paths) {
+    app.all(path, (c) =>
+      proxyToFunction(c.req.raw, 'api-ext', c.req.path.replace(/^\/api(?=\/)/, ''), {
+        supabaseUrl: Deno.env.get('SUPABASE_URL') ?? '',
+      }),
+    );
+  }
+}
 
 app.use('*', requestLoggingMiddleware());
 // Records tool calls from the stdio MCP server (npx @mushi-mushi/mcp) after the
@@ -603,7 +614,7 @@ registerBillingProjectsQueueGraphRoutes(app);
 
 registerActivationRoutes(app);
 
-registerAskMushiRoutes(app);
+forwardToApiExt(['/v1/admin/ask-mushi', '/v1/admin/ask-mushi/*', '/v1/admin/assist']);
 registerConsoleKnowledgeRoutes(app);
 registerSdkAssistantRoutes(app);
 
@@ -628,7 +639,7 @@ registerBillingChangePlanRoutes(app);
 
 registerDoctorRoutes(app);
 
-registerInventoryRoutes(app);
+forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 
 registerQaCoverageRoutes(app);
 
@@ -703,7 +714,7 @@ registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
 registerSentryImportRoutes(app);
 // CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
-registerCiRoutes(app);
+forwardToApiExt(['/v1/admin/ci/*', '/v1/ingest/runner', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
 
 registerA2ATaskRoutes(app);
 
