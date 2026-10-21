@@ -136,7 +136,7 @@ function minutes(s: number): string {
 }
 
 /** A runner took the job: it has a runner, or one of its steps started. */
-function runnerTookJob(job: CiJobInput): boolean {
+export function runnerTookJob(job: CiJobInput): boolean {
   const name = (job.runner_name ?? '').trim()
   if (name) return true
   if (typeof job.runner_id === 'number' && job.runner_id > 0) return true
