@@ -2644,6 +2644,8 @@ finding names a file and line, what is wrong, and the smallest fix. The review
 also lists any behaviour the change removes, and any decision it took that you
 should make yourself.
 
+When the verdict is **merge** or **fix first**, Mushi also marks the pull request ready for review. Repos that skip CI on drafts then run their checks; a **hold** stays a draft.
+
 A pull request with no review merges as it always has. The dialog says
 **Not reviewed** so you know to read the diff yourself.
 

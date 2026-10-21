@@ -91,6 +91,11 @@ with Opus 5.5". The merge button in the console, `merge_fix` and
   report text: a PR can be public, the report is not, so the comment links to
   the report in the console), and is returned by the fix timeline
   (`get_fix_timeline`) with its model-written fields marked untrusted.
+- **A passing verdict readies the PR.** Host repos may skip CI on draft PRs
+  (glot.it did on 2026-10-20, after 131 agent-PR runs queued on one runner).
+  A `merge` or `fix_first` verdict marks the PR ready for review, which runs
+  CI; a `hold` leaves it a draft. A failure to ready only logs: the verdict
+  gates merges either way.
 - **One spelling per PR.** Mushi stores PR URLs only as
   `https://github.com/<owner>/<repo>/pull/<n>`, owner and repo lowercased, no
   trailing slash, query or fragment (`canonicalPrUrl`; owner and repo
