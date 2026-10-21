@@ -147,6 +147,7 @@ import {
   recordCloudAgentDispatched,
 } from '../_shared/agent-adapters.ts';
 import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
+import { confirmBaseRef } from '../_shared/github-branch.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -1941,6 +1942,21 @@ async function dispatchToCloudAgent(
     );
   }
 
+  const base = await confirmBaseRef({
+    token: await resolveGithubToken(db, null, dispatch.project_id),
+    owner: repo.owner,
+    repo: repo.repo,
+    branch: repo.defaultBranch,
+  });
+  if (base.correctedFrom) {
+    log.warn('Stored base branch not on GitHub; using the repo default for the cloud agent', {
+      repo: `${repo.owner}/${repo.repo}`,
+      storedBranch: base.correctedFrom,
+      branch: base.branch,
+    });
+  }
+  const baseRef = base.branch;
+
   // RAG is a hint for a repo-level agent, never a gate — it has the whole
   // checkout. Best-effort, and an indexing failure must not block dispatch.
   let codeContext = '';
@@ -1972,12 +1988,12 @@ async function dispatchToCloudAgent(
     dispatch.report_id,
     (report.category as string | null | undefined) ?? null,
   );
-  const basePrompt = buildUserPrompt(report, settings, codeContext, repo, [], inventoryAnchor, '');
+  const basePrompt = buildUserPrompt(report, settings, codeContext, { ...repo, defaultBranch: baseRef }, [], inventoryAnchor, '');
   const prompt = buildCloudAgentPrompt(basePrompt, {
     reportId: dispatch.report_id,
     repoOwner: repo.owner,
     repoName: repo.repo,
-    baseRef: repo.defaultBranch,
+    baseRef,
     branchName,
     kind: requestedAgent,
   });
@@ -2000,7 +2016,7 @@ async function dispatchToCloudAgent(
     dispatchId: dispatch.id,
     attemptId: fixAttemptId,
     repoUrl,
-    baseRef: repo.defaultBranch,
+    baseRef,
     prompt,
     branchName,
     model,
