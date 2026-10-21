@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CI_NODE_SIZE, GITHUB_HOST_ID, UNKNOWN_HOST_ID, buildCiMap, type CiHostNodeData, type CiRunnerNodeData } from './ciMapLayout'
+import { CI_NODE_SIZE, buildCiMap, type CiHostNodeData, type CiRunnerNodeData } from './ciMapLayout'
+import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
 import { FIXTURE_JOBS, FIXTURE_NOW, ciOverviewFixture, emptyCiOverview } from './__fixtures__/ciOverview'
 import type { CiJob } from '../../lib/ciTypes'
 

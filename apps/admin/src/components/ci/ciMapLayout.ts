@@ -20,11 +20,10 @@ import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
 import { buildCiQueue, jobOutcome } from '../../lib/ciView'
+import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
 
 export type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
 
-export const UNKNOWN_HOST_ID = 'host:unknown'
-export const GITHUB_HOST_ID = 'host:github'
 
 interface Base extends Record<string, unknown> {
   kind: CiMapNodeKind

@@ -10,7 +10,7 @@ import { StageDrawer } from '../flow-primitives/StageDrawer'
 import { RelativeTime } from '../ui'
 import type { CiJob, CiOverview } from '../../lib/ciTypes'
 import { formatPercent, formatSeconds } from '../../lib/ciView'
-import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapLayout'
+import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 
 interface Props {

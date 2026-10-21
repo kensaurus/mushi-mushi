@@ -7,6 +7,10 @@
 
 import { createContext, useContext } from 'react'
 
+/** Map node ids for the two machines that are not a heartbeat host. */
+export const UNKNOWN_HOST_ID = 'host:unknown'
+export const GITHUB_HOST_ID = 'host:github'
+
 export interface CiMapSelection {
   selectedId: string | null
   onSelect: (nodeId: string) => void
