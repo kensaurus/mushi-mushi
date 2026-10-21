@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-21 · **705** routes.
+> Generated: 2026-10-21 · **706** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 179 |
+| `adminOrApiKey` | 180 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 358 |
 | `jwtOrApiKey` | 3 |
@@ -370,6 +370,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/repo/bootstrap` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | PUT | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
+| POST | `/v1/admin/projects/:id/runner-key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |

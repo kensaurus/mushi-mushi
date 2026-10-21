@@ -1,9 +1,16 @@
 /**
  * ci.ts — CI runners you can see (Plan 022, ADR 0033).
  *
- *   POST /v1/ingest/runner               apiKeyAuth (project key), 60/min
+ *   POST /v1/ingest/runner               apiKeyAuth + scope runner:write, 60/min
  *        `mushi runner heartbeat` (kind 'heartbeat') and the runner job hooks
  *        (kind 'job'). Host ids arrive hashed; raw machine ids are refused.
+ *        Only a runner:write key: the public SDK key (report:write, shipped in
+ *        app bundles) could otherwise forge hosts and memory figures, and an
+ *        mcp:write key must not sit on a runner, where CI jobs run as the
+ *        same user and could read it. runner:write unlocks nothing else.
+ *   POST /v1/admin/projects/:id/runner-key  adminOrApiKey(mcp:write), non-viewers, 10/h
+ *        Mints a NEW project key with scopes exactly ['runner:write'] (label
+ *        `runner:<label>`) and returns the plaintext once.
  *   GET  /v1/admin/ci/overview           adminOrApiKey(mcp:read)
  *        ?project_id=&days=7&refresh=1 — hosts → runners → repos → live jobs,
  *        stats and advice (CiOverview in _shared/ci-overview-types.ts). With
@@ -20,10 +27,12 @@
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
-import { adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { runnerIngestSchema } from '../../_shared/schemas.ts'
+import { mintProjectApiKey } from '../../_shared/api-key-mint.ts'
+import { logAudit } from '../../_shared/audit.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import {
   fetchPullRequest,
@@ -44,6 +53,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const RUNNER_INGEST_PER_MINUTE = 60
 export const CI_RERUNS_PER_HOUR = 6
+export const RUNNER_KEY_MINTS_PER_HOUR = 10
+/** The only scope a runner key carries. */
+export const RUNNER_KEY_SCOPES = ['runner:write'] as const
 /** A job sample may be at most this far in the future (clock skew) or the past. */
 const SAMPLE_FUTURE_MS = 10 * 60_000
 const SAMPLE_PAST_MS = 7 * 24 * 60 * 60_000
@@ -54,6 +66,8 @@ type Db = ReturnType<typeof getServiceClient>
 export interface CiRouteDeps {
   getServiceClient: () => Db
   apiKeyAuth: MiddlewareHandler
+  /** After apiKeyAuth on the runner ingest: the key must carry runner:write. */
+  requireRunnerScope: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
   adminOrApiKeyWrite: MiddlewareHandler
   claimRateLimit: typeof claimTenantRateLimit
@@ -63,6 +77,8 @@ export interface CiRouteDeps {
   /** A GitHub token for a fix attempt's repository (App installation first, then the project's token). */
   resolveAttemptToken: (db: Db, attempt: { project_id: string; repo_id?: string | null; pr_url?: string | null }) => Promise<string | null>
   fetchPullRequest: typeof fetchPullRequest
+  mintKey: typeof mintProjectApiKey
+  logAudit: typeof logAudit
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
 }
@@ -70,6 +86,7 @@ export interface CiRouteDeps {
 export const defaultCiRouteDeps: CiRouteDeps = {
   getServiceClient,
   apiKeyAuth: apiKeyAuth as MiddlewareHandler,
+  requireRunnerScope: requireApiKeyScope('runner:write') as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   claimRateLimit: claimTenantRateLimit,
@@ -82,11 +99,14 @@ export const defaultCiRouteDeps: CiRouteDeps = {
   resolveAttemptToken: async (db, attempt) =>
     resolveProjectGithubToken(db, attempt.project_id, await installationIdForAttempt(db, attempt)),
   fetchPullRequest,
+  mintKey: mintProjectApiKey,
+  logAudit,
   now: () => new Date(),
 }
 
 export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRouteDeps = defaultCiRouteDeps): void {
-  app.post('/v1/ingest/runner', deps.apiKeyAuth, (c) => ingestRunner(c, deps))
+  app.post('/v1/ingest/runner', deps.apiKeyAuth, deps.requireRunnerScope, (c) => ingestRunner(c, deps))
+  app.post('/v1/admin/projects/:id/runner-key', deps.adminOrApiKeyWrite, (c) => mintRunnerKey(c, deps))
   app.get('/v1/admin/ci/overview', deps.adminOrApiKeyRead, (c) => ciOverview(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
 }
@@ -174,6 +194,60 @@ async function ingestRunner(c: Context, deps: CiRouteDeps): Promise<Response> {
     return jsonError(c, 'DB_ERROR', 'The job sample could not be stored.', 500)
   }
   return c.json({ ok: true, data: { kind: 'job', jobKey: body.job_key, phase: body.phase } })
+}
+
+async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
+  const projectId = c.req.param('id') ?? ''
+  if (!UUID_RE.test(projectId)) return jsonError(c, 'VALIDATION_ERROR', 'id must be a uuid', 400)
+  const userId = c.get('userId') as string
+  const db = deps.getServiceClient()
+  const access = await deps.callerCanAccessProject(c, db, userId, projectId)
+  if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Project not found', 404)
+  const viewer = denyViewerWrite(c, access.role, 'mint a runner key')
+  if (viewer) return viewer
+
+  const body = (await c.req.json().catch(() => ({}))) as { label?: unknown }
+  const raw = typeof body.label === 'string' ? body.label.trim() : ''
+  // Keep labels plain: they show in the key list and audit log.
+  const label = (raw.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'host').slice(0, 56)
+
+  const rate = await deps.claimRateLimit(db, `project:${projectId}:runner_key_mint`, RUNNER_KEY_MINTS_PER_HOUR, 3600)
+  if (!rate.allowed) {
+    c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
+    return jsonError(c, 'RATE_LIMITED', `At most ${RUNNER_KEY_MINTS_PER_HOUR} runner keys an hour per project.`, 429)
+  }
+
+  // A narrower key derived from a wider one: the caller already holds
+  // mcp:write (or a console session); the new key can only push runner data.
+  const mint = await deps.mintKey(db, { projectId, label: `runner:${label}`, scopes: RUNNER_KEY_SCOPES })
+  if (!mint.ok) {
+    clog.error('runner key mint failed', { projectId, err: mint.error.message })
+    return jsonError(c, 'DB_ERROR', 'The runner key could not be created.', 500)
+  }
+  void deps.logAudit(
+    db,
+    projectId,
+    userId,
+    'api_key.created',
+    'project_api_key',
+    mint.minted.id ?? undefined,
+    { source: 'runner_key', scopes: [...RUNNER_KEY_SCOPES], key_prefix: mint.minted.prefix, label: `runner:${label}` },
+    { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' },
+  )
+  return c.json(
+    {
+      ok: true,
+      data: {
+        id: mint.minted.id,
+        // Shown once; Mushi keeps only its hash.
+        key: mint.minted.key,
+        prefix: mint.minted.prefix,
+        scopes: [...RUNNER_KEY_SCOPES],
+        label: `runner:${label}`,
+      },
+    },
+    201,
+  )
 }
 
 async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {

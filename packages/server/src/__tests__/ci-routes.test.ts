@@ -9,12 +9,17 @@
  *              sync a minute, refreshedAt and queued jobs come back;
  *            - POST /v1/admin/fixes/:id/ci/rerun: viewers refused, 409 while
  *              CI runs, 403 when the token cannot write Actions, a
- *              "Re-ran tests" fix event on success.
+ *              "Re-ran tests" fix event on success;
+ *            - POST /v1/admin/projects/:id/runner-key: mints a key whose only
+ *              scope is runner:write, plaintext once; viewers refused, 10/h.
+ *          The runner:write gate itself runs on the real middleware in
+ *          ci-runner-scope.test.ts.
  */
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+import { hashApiKey, mintProjectApiKey } from '../../supabase/functions/_shared/api-key-mint.ts'
 
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
@@ -28,7 +33,9 @@ vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, cre
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
   apiKeyAuth: async (_c: unknown, next: () => Promise<void>) => next(),
+  requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }))
+vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => {} }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   jsonError: (c: { json: (b: unknown, s: number) => unknown }, code: string, message: string, status = 400) =>
     c.json({ ok: false, error: { code, message } }, status),
@@ -86,6 +93,7 @@ interface Setup {
   rate: { allowed: boolean }
   role: { value: string | null }
   github: Record<string, { status: number; body: unknown }>
+  audits: unknown[][]
 }
 
 function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup {
@@ -113,6 +121,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
   const rate = { allowed: true }
   const role = { value: 'member' as string | null }
   const github: Setup['github'] = {}
+  const audits: unknown[][] = []
   const fetchImpl = async (url: string, init: RequestInit) => {
     calls.push(`${init.method ?? 'GET'} ${url}`)
     const hit = Object.entries(github).find(([k]) => url.includes(k))
@@ -123,6 +132,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
   ci.registerCiRoutes(app as never, {
     getServiceClient: () => db as never,
     apiKeyAuth: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
+    requireRunnerScope: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyWrite: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     claimRateLimit: async () => ({ allowed: rate.allowed, retryAfterSec: 60 }),
@@ -131,10 +141,12 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
     collector: { resolveToken: async () => 'ghp_test', now: () => clock },
     resolveAttemptToken: async () => 'ghp_test',
     fetchPullRequest: (async () => ({ number: 152, draft: false, state: 'open', merged: false, headSha: 'head1' })) as never,
+    mintKey: mintProjectApiKey,
+    logAudit: (async (...args: unknown[]) => { audits.push(args) }) as never,
     fetchImpl,
     now: () => clock,
   })
-  return Object.assign({ db, app, calls, rate, role, github }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
+  return Object.assign({ db, app, calls, rate, role, github, audits }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
 }
 
 const heartbeat = (over: Record<string, unknown> = {}) => ({
@@ -257,5 +269,37 @@ describe('POST /v1/admin/fixes/:id/ci/rerun', () => {
     expect(res.status).toBe(403)
     expect(res.body.error?.code).toBe('GITHUB_ACTIONS_WRITE_MISSING')
     expect(s.db.table('fix_events')).toHaveLength(0)
+  })
+})
+
+describe('POST /v1/admin/projects/:id/runner-key', () => {
+  const mint = (s: Setup, body: unknown = { label: 'nuc glot' }) =>
+    s.app.call('POST', '/v1/admin/projects/:id/runner-key', { params: { id: P1 }, body })
+
+  it('mints a key whose only scope is runner:write and returns it once', async () => {
+    const s = setup()
+    const res = await mint(s)
+    expect(res.status).toBe(201)
+    expect(res.body.data).toMatchObject({ scopes: ['runner:write'], label: 'runner:nuc-glot' })
+    expect(res.body.data.key).toMatch(/^mushi_[0-9a-f]{32}$/)
+    const rows = s.db.table('project_api_keys')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ project_id: P1, scopes: ['runner:write'], label: 'runner:nuc-glot', is_active: true })
+    // Only the hash is stored, and it is the hash auth.ts looks keys up by.
+    expect(rows[0].key_hash).toBe(await hashApiKey(res.body.data.key))
+    expect(JSON.stringify(rows[0])).not.toContain(res.body.data.key)
+    expect(s.audits[0]?.[3]).toBe('api_key.created')
+  })
+
+  it('refuses viewers, projects the caller cannot reach, and more than 10 an hour', async () => {
+    const s = setup()
+    s.role.value = 'viewer'
+    expect((await mint(s)).status).toBe(403)
+    s.role.value = null
+    expect((await mint(s)).status).toBe(404)
+    s.role.value = 'member'
+    s.rate.allowed = false
+    expect((await mint(s)).status).toBe(429)
+    expect(s.db.table('project_api_keys')).toHaveLength(0)
   })
 })

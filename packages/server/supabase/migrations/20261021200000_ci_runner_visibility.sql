@@ -21,10 +21,34 @@
 -- Retention: the ci-jobs-collector deletes ci_jobs and ci_runner_job_samples
 -- older than 30 days at the end of each tick (bounded batches).
 --
--- ADDITIVE: five tables, one column, one claim function, one cron job.
+-- Host telemetry comes in on a narrow key scope, `runner:write` (the
+-- voice:write precedent, 20260912001000): POST /v1/ingest/runner accepts it
+-- and nothing else does. The public SDK key (report:write, shipped in app
+-- bundles) must not be able to write the CI view, and an mcp:write key must
+-- not have to sit on a runner, where CI jobs run as the same user.
+--
+-- ADDITIVE: five tables, one column, one claim function, one cron job, one
+-- appended project_api_keys.scopes value ('runner:write').
 -- Apply BEFORE deploying ci-sync, ci-jobs-collector, webhooks-github-indexer
 -- and the api function.
 -- ============================================================================
+
+-- project_api_keys.scopes: allow 'runner:write'. Every value the CHECK
+-- allowed before (20260912001000) is kept.
+ALTER TABLE public.project_api_keys
+  DROP CONSTRAINT IF EXISTS project_api_keys_scopes_valid;
+
+ALTER TABLE public.project_api_keys
+  ADD CONSTRAINT project_api_keys_scopes_valid
+  CHECK (
+    scopes <@ array['report:write', 'mcp:read', 'mcp:write', 'activity:write', 'rewards:read', 'voice:write', 'runner:write']::text[]
+    AND cardinality(scopes) > 0
+  );
+
+-- api_key_has_scope(text[], text) is unchanged: `ELSE p_required = ANY(p_scopes)`
+-- grants 'runner:write' only when the key carries it. Refresh the comment only.
+COMMENT ON FUNCTION public.api_key_has_scope(text[], text) IS
+  'True iff p_scopes grants p_required. mcp:write implies mcp:read. Other scopes (activity:write, rewards:read, voice:write, runner:write) must be present verbatim.';
 
 ALTER TABLE public.fix_attempts
   ADD COLUMN IF NOT EXISTS ci_infra jsonb;
