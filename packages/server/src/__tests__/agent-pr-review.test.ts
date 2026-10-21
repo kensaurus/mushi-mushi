@@ -110,6 +110,8 @@ const HOLD: AgentPrReviewRaw = {
 
 interface Script {
   queue?: unknown[]
+  /** Due rows that already have a verdict (re-queued by a push). */
+  rereviews?: unknown[]
   attempt?: unknown
   settings?: unknown
   claim?: boolean
@@ -131,6 +133,7 @@ function scripted(s: Script = {}) {
       if (q.op === 'update' && hasFilter(q, 'eq', 'run_id')) return { data: s.superseded ? [] : [{ id: 'rev-1' }] }
       if (q.op === 'update') return { data: [] }
       if (q.op === 'select' && q.columns === 'fix_attempt_id') return { data: s.existingReviews ?? [] }
+      if (q.op === 'select' && hasFilter(q, 'not', 'verdict')) return { data: s.rereviews ?? [] }
       if (q.op === 'select') return { data: s.queue ?? [QUEUE_ROW] }
       return { data: null }
     }
@@ -465,6 +468,19 @@ describe('fairness', () => {
       { id: 'd1', project_id: 'D' },
     ]
     expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
+  })
+
+  it('reviews a re-queued PR before older first reviews, still one per project', async () => {
+    const row = (id: string, project_id: string) => ({ ...QUEUE_ROW, id, project_id })
+    const { db, queries } = scripted({
+      rereviews: [row('again-a', 'A')],
+      queue: [row('first-a', 'A'), row('first-b', 'B'), row('first-c', 'C'), row('first-d', 'D')],
+    })
+    const s = await runAgentPrReview(db, {}, deps())
+    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c'])
+    const reads = findQueries(queries, 'fix_reviews', 'select').filter((q) => hasFilter(q, 'eq', 'status'))
+    expect(reads.some((q) => hasFilter(q, 'not', 'verdict'))).toBe(true)
+    expect(reads.some((q) => hasFilter(q, 'is', 'verdict'))).toBe(true)
   })
 })
 
