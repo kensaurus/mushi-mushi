@@ -834,7 +834,9 @@ export async function applyCloudAgentOutcome(
   const errorText = isFailure ? outcome.error.slice(0, 1000) : noPrErrorText(noPr!).slice(0, 1000)
   const failureCategory = isFailure
     ? failureCategoryFor(target.agent, outcome.failureCategory)
-    : (noPr?.category ?? failureCategoryFor(target.agent, null))
+    : // A finished run with notes but no verdict is not an API error: the console
+      // would offer Retry and the stop-loss would read it as a Cursor fault.
+      (noPr?.category ?? 'unknown')
   const { data: closed, error: closeErr } = await db
     .from('fix_attempts')
     .update({
