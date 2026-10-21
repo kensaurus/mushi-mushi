@@ -1,6 +1,6 @@
 ---
 title: Open source & licensing
-description: What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.
+description: What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server and console you can self-host, the small commercial enterprise edition, and what the hosted service keeps to itself.
 ---
 
 import { Callout } from 'nextra/components'
@@ -8,13 +8,14 @@ import { Callout } from 'nextra/components'
 # Open source & licensing
 
 Mushi is **open by default**. The cloud product at `kensaur.us/mushi-mushi/` runs the
-exact same code in this repository — there is no closed-source "enterprise"
-fork. What you self-host is what we run.
+same code as this repository — there is no closed-source "enterprise" fork. What you
+self-host is what we run; the hosted service adds only its own tuning data
+([what that means](#what-the-hosted-service-keeps)).
 
 <Callout type="info">
   **TL;DR** — Mushi is **open-core** (the Supabase / Grafana model). The SDKs you
-  embed in your app are **MIT** (use them anywhere, open or closed). The server you
-  self-host is **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
+  embed in your app are **MIT** (use them anywhere, open or closed). The server and
+  console you self-host are **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
   modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)).
   A small **enterprise-edition** boundary (`packages/server/ee/`) is source-available
   but commercial for production use. The wedge — capture, diagnosis, fix, self-host,
@@ -25,8 +26,10 @@ fork. What you self-host is what we run.
 
 | Surface | License | What you can do |
 | --- | --- | --- |
-| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `brand`, `marketing-ui` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
+| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `marketing-ui`, and the code and design tokens in `brand` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
 | **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
+| **Console** — `apps/admin` (and the tester portal, `apps/testers`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/apps/admin/LICENSE) | Same terms as the server. AGPLv3 since Oct 22, 2026; copies from before that date stay MIT. |
+| **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi. Not as your own app's identity. |
 | **Enterprise edition** — `packages/server/ee/` (SAML/OIDC SSO, audit export, retention CRUD, region pinning, SOC 2 evidence pack) | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
 | **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
 
@@ -46,6 +49,39 @@ funded by managed cloud hosting and a small commercial **enterprise edition**
 
 Need to run modified Mushi as multi-tenant SaaS without publishing server changes?
 See [COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+
+### Why AGPLv3 for the console?
+
+The console is the product you look at every day. Under MIT, anyone could put a new
+name on it and ship it closed next to the open server. Under AGPLv3 you can still
+self-host it, change it and fork it; if you offer a modified console to other people
+as a service, you publish your changes. Nothing in the MIT SDKs imports console code,
+so embedding the SDK is unaffected.
+
+## What the hosted service keeps
+
+Mushi Cloud runs the code in this repository. Going forward it also keeps **its own
+tuning data**, as configuration in its database rather than code in the repo:
+
+- prompt wording tuned on live traffic (the [Prompt Lab](/admin/prompt-lab) stores the same
+  kind of override for your project),
+- the evaluation sets that tuning is measured against,
+- judge scoring weights, and later adjustments to spend-down thresholds.
+
+The repository keeps **working default prompts**, the default scoring weights, the
+spend-down defaults and the test fixtures, so a self-hosted stack has every feature and
+runs end to end. Your stack can word a diagnosis a little differently from the hosted one,
+because its prompts are the defaults or your own. We used to say the cloud runs
+"provably the same code"; the exact version is: **the same code; the hosted service
+carries its own tuning data.**
+
+## Contributing
+
+Outside pull requests come in under a [Contributor License Agreement](https://github.com/kensaurus/mushi-mushi/blob/master/CLA.md),
+signed once by replying to the CLA bot on your pull request. You keep the copyright. The CLA
+lets the maintainer keep the licensing above coherent and offer the commercial license,
+and it promises your contribution stays available under MIT or an OSI-approved license.
+See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTRIBUTING.md).
 
 ## No lock-in
 
@@ -80,5 +116,9 @@ Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 class
 ## Trademarks
 
 The code is open source; the **name and logo are not**. "Mushi Mushi", the
-mushi-chan mascot, and the wordmark are trademarks. Fork the code freely, but
-ship your fork under your own brand — don't imply it's the official Mushi.
+mushi-chan mascot, the bug logo and the wordmark are trademarks. They are not
+registered yet. The logo files, app icons and mascot art are all rights reserved.
+You may use the unmodified logo to refer or link to Mushi (an article, a "works with
+Mushi" note, an integrations page). Fork the code freely, but ship your fork under
+your own name and logo — don't imply it's the official Mushi. Details:
+[TRADEMARK.md](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md).
