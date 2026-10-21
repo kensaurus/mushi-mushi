@@ -19,6 +19,9 @@ import {
   queuePositionLine,
   recentInfraFailures,
   repoFromPrUrl,
+  repoShortName,
+  runnerFamily,
+  runnerKey,
   slowestJobs,
   timelinePct,
   waitingHint,
@@ -267,6 +270,78 @@ describe('GitHub-hosted runners in the timeline and labels', () => {
   it('marks days older than the oldest job held as no data', () => {
     const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW, 7, Date.parse('2026-10-20T11:00:00Z'))
     expect(a.days.map((d) => d.covered)).toEqual([false, false, false, false, false, true, true])
+  })
+})
+
+describe('runner families (one-job runners)', () => {
+  it('folds <base>-<8..13 digits> and <base>-<8..13 digits>-<1..6 letters or digits>', () => {
+    expect(runnerFamily('aw-tsumagoi-1022003316-163')).toBe('aw-tsumagoi')
+    expect(runnerFamily('aw-tsumagoi-1022011144-356')).toBe('aw-tsumagoi')
+    expect(runnerFamily('aw-tsumagoi-1022011144-Ab3x')).toBe('aw-tsumagoi')
+    expect(runnerFamily('mushi-nuc-1761040000')).toBe('mushi-nuc')
+    expect(runnerFamily('box-20261022')).toBe('box')
+    expect(runnerFamily('box-1761040000123')).toBe('box')
+    expect(runnerKey('aw-tsumagoi-1022003316-163')).toBe('aw-tsumagoi')
+  })
+
+  it('leaves ordinary runner names alone', () => {
+    for (const name of [
+      'alienware-glot-1',
+      'kensaurus-local-tsumagoi-1',
+      'build-2024',
+      'runner-1234567',
+      'box-12345678901234',
+      'box-1022003316-1234567',
+      'box-1022003316-a_b',
+      '12345678',
+      'aw-tsumagoi',
+      'GitHub Actions 1000079285',
+    ]) {
+      expect(runnerFamily(name)).toBeNull()
+      expect(runnerKey(name)).toBe(name)
+    }
+  })
+
+  it('shortens a repo to its name', () => {
+    expect(repoShortName('kensaurus/tsumagoi')).toBe('tsumagoi')
+    expect(repoShortName('tsumagoi')).toBe('tsumagoi')
+  })
+
+  const oneJob = (id: string, runnerName: string, start: string, end: string): CiJob => ({
+    ...byId('j7'),
+    id,
+    runnerName,
+    runnerKind: 'self_hosted',
+    createdAt: start,
+    startedAt: start,
+    completedAt: end,
+  })
+
+  it("packs a family's jobs into the fewest lanes, never one lane per throwaway runner", () => {
+    const jobs = [
+      oneJob('a', 'aw-tsumagoi-1022100000-163', '2026-10-21T11:00:00Z', '2026-10-21T11:10:00Z'),
+      oneJob('b', 'aw-tsumagoi-1022100500-356', '2026-10-21T11:05:00Z', '2026-10-21T11:15:00Z'),
+      oneJob('c', 'aw-tsumagoi-1022101200-7', '2026-10-21T11:12:00Z', '2026-10-21T11:20:00Z'),
+      oneJob('d', 'aw-tsumagoi-1022101600-81', '2026-10-21T11:16:00Z', '2026-10-21T11:30:00Z'),
+      oneJob('e', 'alienware-glot-1', '2026-10-21T11:00:00Z', '2026-10-21T11:30:00Z'),
+    ]
+    const t = buildCiTimeline(jobs, { now: FIXTURE_NOW, windowMs: 2 * HOUR })
+    expect(t.lanes.map((l) => l.label).sort()).toEqual(['alienware-glot-1', 'aw-tsumagoi 1', 'aw-tsumagoi 2'])
+    expect(t.lanes.find((l) => l.label === 'aw-tsumagoi 1')).toMatchObject({ kind: 'family' })
+    expect(t.lanes.find((l) => l.label === 'alienware-glot-1')).toMatchObject({ kind: 'runner' })
+    // No two bars in a lane overlap.
+    for (const lane of t.lanes) {
+      const spans = lane.bars.map((b) => [b.queue?.start ?? b.run!.start, b.run?.end ?? b.queue!.end]).sort((x, y) => x[0] - y[0])
+      for (let i = 1; i < spans.length; i++) expect(spans[i][0]).toBeGreaterThanOrEqual(spans[i - 1][1])
+    }
+    expect(t.lanes.flatMap((l) => l.bars)).toHaveLength(5)
+  })
+
+  it('names a lone family lane by the family, unless a runner already has that name', () => {
+    const one = [oneJob('a', 'aw-tsumagoi-1022100000-163', '2026-10-21T11:00:00Z', '2026-10-21T11:10:00Z')]
+    expect(buildCiTimeline(one, { now: FIXTURE_NOW, windowMs: 2 * HOUR }).lanes.map((l) => l.label)).toEqual(['aw-tsumagoi'])
+    const clash = [...one, oneJob('b', 'aw-tsumagoi', '2026-10-21T11:20:00Z', '2026-10-21T11:30:00Z')]
+    expect(buildCiTimeline(clash, { now: FIXTURE_NOW, windowMs: 2 * HOUR }).lanes.map((l) => l.label).sort()).toEqual(['aw-tsumagoi', 'aw-tsumagoi 1'])
   })
 })
 
