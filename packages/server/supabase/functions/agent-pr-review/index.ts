@@ -117,6 +117,8 @@ export const REVIEW_CALL_TIMEOUT_MS = 100_000
 export const REVIEW_MAX_TOKENS = 8_000
 export const BACKFILL_DEFAULT_LIMIT = 50
 export const BACKFILL_MAX_LIMIT = 200
+/** Pages of open PRs one backfill reads at most (pageSize = max(limit, default)). */
+const BACKFILL_MAX_PAGES = 10
 
 const ATTEMPT_COLUMNS =
   'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion'
@@ -344,34 +346,47 @@ async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: 
 
 /** Queue a review for each open cloud-agent PR that has none. */
 export async function enqueueBackfill(db: SupabaseClient, limit: number, now: Date): Promise<number> {
-  const { data: open, error } = await db
-    .from('fix_attempts')
-    .select('id, project_id, report_id, pr_url')
-    .in('agent', [...DISPATCHABLE_CLOUD_AGENTS])
-    .eq('status', 'completed')
-    .not('pr_url', 'is', null)
-    .in('pr_state', ['open', 'draft'])
-    .is('merged_at', null)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw new Error(`backfill: open PR read failed: ${error.message}`)
-  const rows = (open ?? []) as Array<{ id: string; project_id: string; report_id: string | null; pr_url: string | null }>
-  if (rows.length === 0) return 0
-  const { data: existing, error: existingErr } = await db
-    .from('fix_reviews')
-    .select('fix_attempt_id')
-    .in('fix_attempt_id', rows.map((r) => r.id))
-  if (existingErr) throw new Error(`backfill: review read failed: ${existingErr.message}`)
-  const have = new Set(((existing ?? []) as Array<{ fix_attempt_id: string }>).map((r) => r.fix_attempt_id))
+  // Page through open cloud-agent PRs newest first, skipping ones that already
+  // have a review, until `limit` new reviews are queued. Reading only the
+  // newest `limit` rows (2026-10-21) never reached older unreviewed PRs once
+  // the newest ones were all reviewed: mushi-mushi #524–#532 stayed unreviewed.
+  const pageSize = Math.max(limit, BACKFILL_DEFAULT_LIMIT)
+  const seen = new Set<string>()
   let queued = 0
-  for (const r of rows) {
-    if (have.has(r.id)) continue
-    const res = await enqueueFixReview(
-      db,
-      { fixAttemptId: r.id, projectId: r.project_id, reportId: r.report_id, prUrl: r.pr_url },
-      { now },
-    )
-    if (res.queued) queued++
+  for (let page = 0; page < BACKFILL_MAX_PAGES && queued < limit; page++) {
+    const from = page * pageSize
+    const { data: open, error } = await db
+      .from('fix_attempts')
+      .select('id, project_id, report_id, pr_url')
+      .in('agent', [...DISPATCHABLE_CLOUD_AGENTS])
+      .eq('status', 'completed')
+      .not('pr_url', 'is', null)
+      .in('pr_state', ['open', 'draft'])
+      .is('merged_at', null)
+      .order('created_at', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (error) throw new Error(`backfill: open PR read failed: ${error.message}`)
+    const fetched = (open ?? []) as Array<{ id: string; project_id: string; report_id: string | null; pr_url: string | null }>
+    const rows = fetched.filter((r) => !seen.has(r.id))
+    for (const r of rows) seen.add(r.id)
+    if (rows.length === 0) break
+    const { data: existing, error: existingErr } = await db
+      .from('fix_reviews')
+      .select('fix_attempt_id')
+      .in('fix_attempt_id', rows.map((r) => r.id))
+    if (existingErr) throw new Error(`backfill: review read failed: ${existingErr.message}`)
+    const have = new Set(((existing ?? []) as Array<{ fix_attempt_id: string }>).map((r) => r.fix_attempt_id))
+    for (const r of rows) {
+      if (queued >= limit) break
+      if (have.has(r.id)) continue
+      const res = await enqueueFixReview(
+        db,
+        { fixAttemptId: r.id, projectId: r.project_id, reportId: r.report_id, prUrl: r.pr_url },
+        { now },
+      )
+      if (res.queued) queued++
+    }
+    if (fetched.length < pageSize) break
   }
   return queued
 }
