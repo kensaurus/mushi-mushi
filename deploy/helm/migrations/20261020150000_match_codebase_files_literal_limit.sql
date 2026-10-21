@@ -18,6 +18,10 @@
 -- text is read afterwards for those rows. The outer ORDER BY distance + 0
 -- keeps the Postgres 17 re-sort from pulling the inner limit into one node.
 
+-- Load pgvector so the ivfflat.* settings below are registered (see 154000).
+-- The halfvec(1536) casts must match idx_codebase_embedding_ivf_half; every
+-- codebase embedding is text-embedding-3-small at 1536 dimensions
+-- (DEFAULT_DIMENSIONS in _shared/embeddings.ts).
 select extensions.vector_dims('[1]'::extensions.vector);
 
 create or replace function public.match_codebase_files(

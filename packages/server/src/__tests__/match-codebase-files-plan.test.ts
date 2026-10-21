@@ -55,6 +55,50 @@ describe('match_codebase_files literal limit', () => {
     expect(sql).toMatch(/set ivfflat\.max_probes to '60'/)
   })
 
+  it('no caller asks for more rows than the 20-row cap', () => {
+    const fns = resolve(__dirname, '../../supabase/functions')
+    const read = (p: string) => readFileSync(resolve(fns, p), 'utf8')
+
+    expect(read('_shared/rag.ts')).toMatch(
+      /rpc\('match_codebase_files', \{[^}]*match_count: 5,/,
+    )
+
+    const understand = read('_shared/codebase-understand.ts')
+    expect(understand).toMatch(/rpc\('match_codebase_files', \{[^}]*match_count: k,/)
+    const askCalls = [...read('api/routes/codebase-understand.ts').matchAll(
+      /retrieveCodeForQuestion\([^)]*?,\s*(\d+)\)/g,
+    )]
+    expect(askCalls.length).toBeGreaterThan(0)
+    for (const call of askCalls) expect(Number(call[1])).toBeLessThanOrEqual(20)
+
+    const search = read('api/routes/project-codebase.ts')
+    expect(search).toMatch(/rpc\('match_codebase_files', \{[^}]*match_count: k,/)
+    expect(search).toContain('const k = Math.min(20, Math.max(1, Number(body.k ?? 8)))')
+
+    const callers = readdirSync(fns, { recursive: true, encoding: 'utf8' })
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) => read(name).includes("rpc('match_codebase_files'"))
+      .sort()
+    expect(callers).toEqual([
+      '_shared/codebase-understand.ts',
+      '_shared/rag.ts',
+      'api/routes/project-codebase.ts',
+    ])
+  })
+
+  it('documents the pgvector load and matches the embedding dimension', () => {
+    expect(sql).toMatch(
+      /-- Load pgvector so the ivfflat\.\* settings[^\n]*\n(--[^\n]*\n)*select extensions\.vector_dims/,
+    )
+    const embeddings = readFileSync(
+      resolve(__dirname, '../../supabase/functions/_shared/embeddings.ts'),
+      'utf8',
+    )
+    expect(embeddings).toContain('const DEFAULT_DIMENSIONS = 1536')
+    const dims = new Set([...sql.matchAll(/halfvec\((\d+)\)/g)].map((m) => m[1]))
+    expect([...dims]).toEqual(['1536'])
+  })
+
   it('the Helm copy is identical', () => {
     const helm = readFileSync(
       resolve(__dirname, '../../../../deploy/helm/migrations', MIGRATION),
