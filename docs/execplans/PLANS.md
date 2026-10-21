@@ -655,3 +655,13 @@ host heartbeat and job hooks, the `/ci` runner map with a speed advisor, and
 `mushi runner add`. Full plan: [`ci-runners.md`](ci-runners.md); decision:
 [ADR 0033](../adr/0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md).
 
+---
+
+## Plan 023 — Verifiably local (2026-10-21) `PLANNED`
+
+`MUSHI_LOCAL_ONLY` egress allowlist with a self-test, local models and
+embeddings, `GITHUB_API_URL`, SMTP, a local fix agent (`mushi agent serve`),
+and a compose profile with no route out but an allowlisting proxy. Full
+plan: [`local-only.md`](local-only.md); decision:
+[ADR 0034](../adr/0034-verifiably-local-mode.md).
+
