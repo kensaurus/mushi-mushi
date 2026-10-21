@@ -355,7 +355,7 @@ export function recentInfraFailures(jobs: CiJob[], limit = 10): CiJob[] {
 }
 
 /** One day of a runner's or machine's finished jobs, by outcome. */
-export interface CiActivityDay {
+interface CiActivityDay {
   /** UTC day, `YYYY-MM-DD`. */
   day: string
   passed: number
