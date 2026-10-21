@@ -1,52 +1,14 @@
 /**
  * FILE: apps/admin/src/components/ci/CiSections.tsx
- * PURPOSE: The read-only sections of /ci under the queue and map: stat tiles,
+ * PURPOSE: The read-only sections of /ci under the queue and map:
  *          "Speed it up" advice, slowest jobs and steps, and recent test
  *          machine failures with links to GitHub. Plain words throughout.
  */
 
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
-import { formatPercent, formatSeconds, recentInfraFailures, runnerDisplayName, slowestJobs } from '../../lib/ciView'
-import { Badge, Card, CopyButton, RelativeTime, StatCard, StatGrid, type BadgeTone } from '../ui'
+import { formatSeconds, recentInfraFailures, runnerDisplayName, slowestJobs } from '../../lib/ciView'
+import { Badge, Card, CopyButton, RelativeTime, type BadgeTone } from '../ui'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
-
-export function CiStatTiles({ stats, days }: { stats: CiOverview['stats']; days: number }) {
-  const failures = stats.infraFailures + stats.codeFailures
-  return (
-    <StatGrid>
-      <StatCard
-        label="Wait for a machine"
-        value={formatSeconds(stats.queueP50s)}
-        detail={`Typical wait; 1 in 20 jobs waits ${formatSeconds(stats.queueP95s)} or more.`}
-        hint="How long a job sits queued before a runner starts it (median and 95th percentile)."
-        accent={stats.queueP95s != null && stats.queueP95s >= 600 ? 'text-warn' : undefined}
-      />
-      <StatCard
-        label="Run time"
-        value={formatSeconds(stats.durationP50s)}
-        detail={`Typical run; the slowest 1 in 20 take ${formatSeconds(stats.durationP95s)} or more.`}
-        hint="How long a job runs once a machine has it (median and 95th percentile)."
-      />
-      <StatCard
-        label="Pass rate"
-        value={formatPercent(stats.passRate)}
-        detail={`${stats.jobs} job${stats.jobs === 1 ? '' : 's'} in ${days} days.`}
-        hint="Finished jobs that passed. Jobs the machine never finished are left out."
-      />
-      <StatCard
-        label="Machine vs code failures"
-        value={`${stats.infraFailures} / ${stats.codeFailures}`}
-        accent={stats.infraFailures > 0 ? 'text-warn' : undefined}
-        detail={
-          failures === 0
-            ? `No failures in ${days} days.`
-            : `${stats.infraFailures} stopped because of the test machine, ${stats.codeFailures} because a check failed on the code.`
-        }
-        hint="A machine failure means the tests never finished: the runner stopped, or no runner picked the job up. Re-run those; fix the code only for code failures."
-      />
-    </StatGrid>
-  )
-}
 
 const SEVERITY: Record<CiAdvice['severity'], { tone: BadgeTone; label: string }> = {
   high: { tone: 'dangerSubtle', label: 'High' },

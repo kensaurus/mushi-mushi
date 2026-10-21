@@ -74,7 +74,7 @@ export const CI_OUTCOME_META: Record<CiJobOutcome, { label: string; glyph: strin
   waiting: { label: 'Waiting', glyph: '◷', tone: 'neutral' },
   running: { label: 'Running', glyph: '▶', tone: 'info' },
   passed: { label: 'Passed', glyph: '✓', tone: 'ok' },
-  code_failure: { label: 'Failed', glyph: '✕', tone: 'danger' },
+  code_failure: { label: 'Tests failed', glyph: '✕', tone: 'danger' },
   infra: { label: 'Test machine stopped', glyph: '⚠', tone: 'warn' },
   cancelled: { label: 'Cancelled', glyph: '⊘', tone: 'neutral' },
   skipped: { label: 'Skipped', glyph: '–', tone: 'neutral' },
@@ -202,20 +202,27 @@ export function repoFromPrUrl(prUrl: string | null | undefined): string | null {
 }
 
 /** Lower-cased `owner/name` plus PR number → id of the report with a fix on that PR. */
-export type CiFixLinks = ReadonlyMap<string, string>
+/** A CI job's fix: the report to open and the fix attempt to re-run. */
+export interface CiFixLink {
+  reportId: string
+  /** Fix attempt id, when the fix list carried one (re-run needs it). */
+  fixId: string | null
+}
+
+export type CiFixLinks = ReadonlyMap<string, CiFixLink>
 
 export function fixLinkKey(repo: string, prNumber: number): string {
   return `${repo.toLowerCase()}#${prNumber}`
 }
 
-/** Map each fix attempt's PR to its report, for "Mushi fix" links on CI jobs. */
-export function buildFixLinks(fixes: ReadonlyArray<{ pr_url?: string | null; pr_number?: number | null; report_id: string }>): CiFixLinks {
-  const out = new Map<string, string>()
+/** Map each fix attempt's PR to its report and attempt, for links on CI jobs. */
+export function buildFixLinks(fixes: ReadonlyArray<{ id?: string | null; pr_url?: string | null; pr_number?: number | null; report_id: string }>): CiFixLinks {
+  const out = new Map<string, CiFixLink>()
   for (const f of fixes) {
     const repo = repoFromPrUrl(f.pr_url)
     if (!repo || f.pr_number == null) continue
     const key = fixLinkKey(repo, f.pr_number)
-    if (!out.has(key)) out.set(key, f.report_id)
+    if (!out.has(key)) out.set(key, { reportId: f.report_id, fixId: f.id ?? null })
   }
   return out
 }
@@ -484,4 +491,83 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
   }
   return null
+}
+
+// ── Summary (top of /ci) ────────────────────────────────────────────────────
+
+/** Finished jobs by outcome over the window, from the server's stats. */
+export interface CiOutcomeCounts {
+  passed: number
+  codeFailures: number
+  infra: number
+  /** Cancelled, skipped, or still waiting or running. */
+  other: number
+  total: number
+}
+
+/**
+ * The server's pass rate is passed ÷ (passed + code failures + machine
+ * stops), so the passed count follows from it exactly enough to draw.
+ */
+export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passRate' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
+  const failed = stats.codeFailures + stats.infraFailures
+  let passed = 0
+  if (stats.passRate != null) {
+    passed = stats.passRate >= 1 ? Math.max(0, stats.jobs - failed) : Math.round((stats.passRate * failed) / (1 - stats.passRate))
+  }
+  passed = Math.min(passed, Math.max(0, stats.jobs - failed))
+  return {
+    passed,
+    codeFailures: stats.codeFailures,
+    infra: stats.infraFailures,
+    other: Math.max(0, stats.jobs - passed - failed),
+    total: stats.jobs,
+  }
+}
+
+export interface CiVerdict {
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  headline: string
+  detail: string
+}
+
+const LONG_WAIT_S = 10 * 60
+
+/** One plain sentence for the top of /ci: does anything need you, and what. */
+export function ciVerdict(o: Pick<CiOverview, 'jobs' | 'stats' | 'window'>, now: number): CiVerdict {
+  const queue = buildCiQueue(o.jobs, now)
+  const oldestWait = queue.waiting.reduce((m, j) => Math.max(m, jobElapsedSeconds(j, now) ?? 0), 0)
+  const c = ciOutcomeCounts(o.stats)
+  const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
+  const live =
+    queue.running.length || queue.waiting.length
+      ? `${queue.running.length} running, ${queue.waiting.length ? `${queue.waiting.length} waiting` : 'none waiting'}. `
+      : ''
+
+  if (queue.waiting.length > 0 && oldestWait >= LONG_WAIT_S) {
+    return {
+      tone: 'warn',
+      headline: `${queue.waiting.length} job${queue.waiting.length === 1 ? ' is' : 's are'} waiting for a test machine, the longest for ${formatSeconds(oldestWait)}.`,
+      detail: `${live}Check that your runners are online, or add a machine (mushi runner add).`,
+    }
+  }
+  if (c.infra > 0 && c.infra >= c.codeFailures) {
+    return {
+      tone: 'warn',
+      headline: 'Most failures are the test machine, not your code.',
+      detail: `${live}${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
+    }
+  }
+  if (c.codeFailures > 0) {
+    return {
+      tone: 'neutral',
+      headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
+      detail: `${live}${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+    }
+  }
+  return {
+    tone: 'ok',
+    headline: c.total ? `CI is healthy: every finished job passed in ${days}.` : `No jobs in ${days}.`,
+    detail: `${live}${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+  }
 }

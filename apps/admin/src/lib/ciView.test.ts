@@ -5,6 +5,9 @@ import {
   buildCiQueue,
   buildCiTimeline,
   ciActivity,
+  ciOutcomeCounts,
+  ciVerdict,
+  buildFixLinks,
   runnerDisplayName,
   formatSeconds,
   isCiOverviewEmpty,
@@ -264,5 +267,35 @@ describe('GitHub-hosted runners in the timeline and labels', () => {
   it('marks days older than the oldest job held as no data', () => {
     const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW, 7, Date.parse('2026-10-20T11:00:00Z'))
     expect(a.days.map((d) => d.covered)).toEqual([false, false, false, false, false, true, true])
+  })
+})
+
+describe('summary: outcome counts and verdict', () => {
+  it('derives passed jobs from the pass rate over passed + failed + stopped', () => {
+    // 40 passed, 10 code failures, 50 stopped: rate 0.4.
+    expect(ciOutcomeCounts({ jobs: 110, passRate: 0.4, codeFailures: 10, infraFailures: 50 })).toEqual({
+      passed: 40,
+      codeFailures: 10,
+      infra: 50,
+      other: 10,
+      total: 110,
+    })
+    expect(ciOutcomeCounts({ jobs: 12, passRate: 1, codeFailures: 0, infraFailures: 0 }).passed).toBe(12)
+    expect(ciOutcomeCounts({ jobs: 0, passRate: null, codeFailures: 0, infraFailures: 0 }).total).toBe(0)
+  })
+
+  it('leads with a long wait, then machine trouble, then code failures, else healthy', () => {
+    const o = ciOverviewFixture()
+    // j2 has waited 30 min in the fixture.
+    expect(ciVerdict(o, FIXTURE_NOW)).toMatchObject({ tone: 'warn', headline: expect.stringContaining('waiting for a test machine') })
+    const noQueue = { ...o, jobs: o.jobs.filter((j) => jobOutcome(j) !== 'waiting') }
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 5, codeFailures: 2 } }, FIXTURE_NOW).headline).toBe('Most failures are the test machine, not your code.')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 1, codeFailures: 3 } }, FIXTURE_NOW).headline).toContain('3 jobs failed on the code')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }, FIXTURE_NOW).tone).toBe('ok')
+  })
+
+  it('links a CI job to its report and fix attempt', () => {
+    const links = buildFixLinks([{ id: 'f1', report_id: 'r1', pr_url: 'https://github.com/Owner/Repo/pull/7', pr_number: 7 }])
+    expect(links.get('owner/repo#7')).toEqual({ reportId: 'r1', fixId: 'f1' })
   })
 })
