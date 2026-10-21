@@ -2,9 +2,10 @@
  * FILE: apps/admin/src/lib/ciTypes.ts
  * PURPOSE: The CI contract the console reads (Plan 022, ADR 0033).
  *
- * Mirrors `GET /v1/admin/ci/overview` (server `api/routes/ci.ts`) and the
- * `fix_attempts.ci_infra` verdict (server `_shared/ci-infra.ts`). Keep the
- * shapes identical to the server; the console never reshapes them.
+ * Copied from the server's `_shared/ci-overview-types.ts` (the source of
+ * truth for `GET /v1/admin/ci/overview`), plus the `fix_attempts.ci_infra`
+ * verdict (`_shared/ci-infra.ts`) and the rerun route (`api/routes/ci.ts`).
+ * Change the server first, then copy; the console never reshapes them.
  */
 
 export type CiJobKind =
@@ -101,8 +102,8 @@ export interface CiJob {
   infraDetail: string | null
   runnerName: string | null
   runnerKind: CiRunnerKind
-  /** Runner labels the job asked for (`runs-on`). Absent on an older server. */
-  labels?: string[]
+  /** The job's runs-on labels: a queued job's say which machine it waits for. */
+  labels: string[]
   queueSeconds: number | null
   durationSeconds: number | null
   createdAt: string
@@ -140,21 +141,24 @@ export interface CiStats {
 
 export interface CiOverview {
   generatedAt: string
-  /** When the server last live-synced GitHub for this scope; null when it has not. */
-  refreshedAt?: string | null
+  /**
+   * When the newest live sync of the scoped projects ran (`refresh=1`, at
+   * most once a minute per project); null when none ever ran.
+   */
+  refreshedAt: string | null
   window: { days: number; from: string }
   permissions: { jobs: CiPermission; runners: CiPermission }
   hosts: CiHost[]
   runners: CiRunner[]
   repos: CiRepo[]
-  /** Every queued and in-progress job first, then the newest finished ones (≤ 200). */
+  /** Every queued / in-progress job first (never cut off), then the newest finished jobs, up to 200. */
   jobs: CiJob[]
   stats: CiStats
   advice: CiAdvice[]
 }
 
-/** `POST /v1/admin/fixes/:id/ci/rerun` success body. */
+/** `POST /v1/admin/fixes/:id/ci/rerun` success body (`data`). */
 export interface CiRerunResult {
-  ok: true
-  runId: number
+  rerun: Array<{ runId: number }>
+  headSha: string
 }

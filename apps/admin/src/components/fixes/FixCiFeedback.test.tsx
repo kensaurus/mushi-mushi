@@ -107,7 +107,7 @@ describe('FixCiFeedback', () => {
   })
 
   it('Re-run posts to the rerun route and says the tests started', async () => {
-    mocks.apiFetchMutate.mockResolvedValue({ ok: true, data: { ok: true, runId: 99 } })
+    mocks.apiFetchMutate.mockResolvedValue({ ok: true, data: { rerun: [{ runId: 99 }], headSha: 'abc123' } })
     await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
     await act(async () => button('Re-run tests')!.click())
     expect(mocks.apiFetchMutate).toHaveBeenCalledWith('/v1/admin/fixes/fix-1/ci/rerun', expect.objectContaining({ method: 'POST' }))
@@ -120,6 +120,13 @@ describe('FixCiFeedback', () => {
     await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
     await act(async () => button('Re-run tests')!.click())
     expect(host.querySelector('[role="alert"]')!.textContent).toBe('Tests are still running on GitHub. Wait for them to finish, then re-run.')
+  })
+
+  it('Re-run past the hourly limit (429) says when to try again', async () => {
+    mocks.apiFetchMutate.mockResolvedValue({ ok: false, error: { code: 'RATE_LIMITED', message: 'Tests can be re-run 6 times an hour per fix.' } })
+    await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
+    await act(async () => button('Re-run tests')!.click())
+    expect(host.querySelector('[role="alert"]')!.textContent).toMatch(/6 times an hour per fix/)
   })
 
   it('Re-run without Actions: write (403) says which permission is missing', async () => {

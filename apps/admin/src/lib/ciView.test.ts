@@ -59,7 +59,6 @@ describe('machine labels', () => {
   it('skips the labels every self-hosted runner has', () => {
     expect(machineLabel(byId('j2'))).toBe('nuc')
     expect(machineLabel({ labels: ['self-hosted', 'Linux', 'X64'] })).toBeNull()
-    expect(machineLabel({ labels: undefined })).toBeNull()
   })
 
   it('names the machine a waiting job wants, else says no machine is free', () => {

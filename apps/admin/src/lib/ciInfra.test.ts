@@ -57,6 +57,10 @@ describe('rerunErrorText', () => {
   it('explains a run still in progress and a missing Actions: write permission', () => {
     expect(rerunErrorText('CI_RUNNING', 'x')).toMatch(/still running/)
     expect(rerunErrorText('GITHUB_ACTIONS_WRITE_MISSING', 'x')).toMatch(/Actions: write/)
+    expect(rerunErrorText('GITHUB_ACTIONS_READ_MISSING', 'x')).toMatch(/Actions: read/)
+    expect(rerunErrorText('RATE_LIMITED', 'x')).toMatch(/6 times an hour/)
+    expect(rerunErrorText('NOTHING_TO_RERUN', 'x')).toMatch(/Nothing to re-run/)
+    expect(rerunErrorText('NO_HEAD', "Mushi does not know the pull request's latest commit yet. Refresh CI first.")).toMatch(/Refresh CI first/)
     expect(rerunErrorText('OTHER', 'GitHub said no')).toBe('GitHub said no')
     expect(rerunErrorText(null, null)).toBe('Could not re-run the tests.')
   })

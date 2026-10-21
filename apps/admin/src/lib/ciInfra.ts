@@ -13,6 +13,7 @@
 
 import type { CiInfraVerdict } from './ciTypes'
 import { formatSeconds } from './ciView'
+import { CI_INFRA_WAITING_LABEL } from './fixReportTruth'
 
 export interface CiSignals {
   check_run_conclusion?: string | null
@@ -62,7 +63,7 @@ export function readFixCi(fix: CiSignals): CiReading {
       return {
         state: 'waiting_for_runner',
         tone: 'warn',
-        label: 'Waiting for a test machine',
+        label: CI_INFRA_WAITING_LABEL,
         detail: `Waiting for a test machine${waited}. Your fix has not been tested yet.`,
         infra: true,
         canRerun: false,
@@ -142,9 +143,19 @@ export function readFixCi(fix: CiSignals): CiReading {
 
 /** Plain message for a failed `POST /v1/admin/fixes/:id/ci/rerun`. */
 export function rerunErrorText(code: string | null | undefined, message: string | null | undefined): string {
-  if (code === 'CI_RUNNING') return 'Tests are still running on GitHub. Wait for them to finish, then re-run.'
-  if (code === 'GITHUB_ACTIONS_WRITE_MISSING') {
-    return "Mushi's GitHub access can't re-run tests. Give the GitHub token Actions: write, or re-run them from GitHub."
+  switch (code) {
+    case 'CI_RUNNING':
+      return 'Tests are still running on GitHub. Wait for them to finish, then re-run.'
+    case 'GITHUB_ACTIONS_WRITE_MISSING':
+      return "Mushi's GitHub access can't re-run tests. Give the GitHub token Actions: write, or re-run them from GitHub."
+    case 'GITHUB_ACTIONS_READ_MISSING':
+      return "Mushi's GitHub access can't read Actions runs. Give the GitHub token Actions: read and write."
+    case 'RATE_LIMITED':
+      return 'Tests can be re-run 6 times an hour per fix. Try again later, or re-run them from GitHub.'
+    case 'NOTHING_TO_RERUN':
+      return 'Nothing to re-run: no failed or cancelled run on the latest commit. Refresh CI status.'
+    case 'NO_GITHUB_TOKEN':
+      return 'Connect GitHub for this project first.'
   }
   return message?.trim() || 'Could not re-run the tests.'
 }

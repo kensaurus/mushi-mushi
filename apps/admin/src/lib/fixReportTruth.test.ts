@@ -14,6 +14,8 @@ import {
   failureCause,
   failureHeadline,
   fixCauseLabel,
+  fixCiInfraLabel,
+  CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
   isSuperseded,
   needsAttention,
@@ -110,8 +112,14 @@ describe('glot.it rows', () => {
     expect(fixCauseLabel('openai_key_rejected')).toBe('OpenAI key rejected')
   })
 
-  it('names the test-machine bucket in plain words (ADR 0033)', () => {
+  it('names the test-machine bucket in the same words as the server (ADR 0033)', () => {
     expect(fixCauseLabel('ci_infra')).toBe('The test machine stopped — your fix was not tested')
+    const at = '2026-10-21T11:20:00Z'
+    const base = { job: null, runner: null, queuedSeconds: null, detail: null, runId: null, at }
+    expect(fixCiInfraLabel({ ci_infra: { ...base, kind: 'runner_lost', infra: true } })).toBe(CI_INFRA_STOPPED_LABEL)
+    expect(fixCiInfraLabel({ ci_infra: { ...base, kind: 'waiting_for_runner', infra: true } })).toBe('Waiting for a test machine')
+    expect(fixCiInfraLabel({ ci_infra: { ...base, kind: 'code_failure', infra: false } })).toBeNull()
+    expect(fixCiInfraLabel({ ci_infra: null })).toBeNull()
   })
 
   it('says "the key is fixed now — retry" once a working key is on file', () => {
