@@ -102,6 +102,20 @@ describe('classifyNoPrSummary stays silent when unsure', () => {
     expect(noPrErrorText(classifyNoPrSummary(null))).toBe('Cloud agent finished without opening a pull request.')
   })
 
+  it('reads the verdict from the opening paragraph, not from a "What I ruled out" section (2026-10-21)', () => {
+    const summary = [
+      "I didn't find a confirmed root cause, so I haven't made any changes or opened a pull request. The evidence fits at least two explanations.",
+      '**What I ruled out**\n- **A false alarm from the watchdog itself:** That was the old cause of this Sentry issue, and it\'s already fixed.',
+    ].join('\n\n')
+    expect(classifyNoPrSummary(summary).category).toBeNull()
+    // The same opening with the review flag is a request for a person.
+    expect(classifyNoPrSummary(summary.replace('two explanations.', 'two explanations. needsHumanReview=true.')).category).toBe('needs_human')
+  })
+
+  it('skips a filler-only opening paragraph and reads the next one', () => {
+    expect(classifyNoPrSummary('No pull request.\n\nThis crash is already fixed on `main`.').category).toBe('already_fixed')
+  })
+
   it('ignores a verdict phrase buried deep in the notes', () => {
     const long = `I could not find the cause. ${'Checked another file. '.repeat(40)} It may be already fixed upstream.`
     expect(classifyNoPrSummary(long).category).toBeNull()
