@@ -43,6 +43,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
+import { vizTokenReads, vizTokensDeclared } from './lib/viz-token-reads.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -828,23 +829,6 @@ if (retiredAliasHits.length > 0) {
 // normal @theme colour is absent from the built CSS. Compile the admin
 // theme with zero class candidates: every viz token declared or read in
 // source has to be in that output, and an unused non-static probe must not.
-// A trailing hyphen (the glob in `--color-viz-layer-*`) is not a token name.
-const VIZ_TOKEN = String.raw`[a-z0-9]+(?:-[a-z0-9]+)*`
-const VIZ_NAME_RE = new RegExp(String.raw`--color-viz-(${VIZ_TOKEN})(?![a-z0-9-])\s*:`, 'g')
-const VIZ_READ_RE = new RegExp(
-  String.raw`['"]viz-(${VIZ_TOKEN})['"]|--color-viz-(${VIZ_TOKEN})(?![a-z0-9-])`,
-  'g',
-)
-
-function vizNamesIn(src, re) {
-  const names = new Set()
-  for (const match of src.matchAll(re)) {
-    const name = match[1] || match[2]
-    if (name && name !== 'probe-dropped') names.add(name)
-  }
-  return names
-}
-
 async function compileAdminThemeUnused() {
   const adminPkg = resolve(ROOT, 'apps/admin/package.json')
   const req = createRequire(adminPkg)
@@ -878,12 +862,14 @@ async function compileAdminThemeUnused() {
 }
 
 const themeTokenCss = readFileSync(resolve(TOKEN_STYLES_DIR, 'theme-tokens.css'), 'utf8')
-const declaredViz = vizNamesIn(themeTokenCss, VIZ_NAME_RE)
+const declaredViz = vizTokensDeclared(themeTokenCss)
 const readViz = new Set()
+const VIZ_READER_FILE = resolve(ADMIN_SRC, 'lib/vizTokens.ts')
 for (const file of files) {
   // Tests probe readVizToken() with made-up names; those are not tokens.
   if (!/\.tsx?$/.test(file) || /\.(test|spec)\.tsx?$/.test(file)) continue
-  for (const name of vizNamesIn(readFileSync(file, 'utf8'), VIZ_READ_RE)) readViz.add(name)
+  const reads = vizTokenReads(readFileSync(file, 'utf8'), { isVizReader: file === VIZ_READER_FILE })
+  for (const name of reads) readViz.add(name)
 }
 
 let compiledViz = new Set()
@@ -891,7 +877,7 @@ let vizCompileError = null
 let vizProbeLeaked = false
 try {
   const compiled = await compileAdminThemeUnused()
-  compiledViz = vizNamesIn(compiled, VIZ_NAME_RE)
+  compiledViz = vizTokensDeclared(compiled)
   vizProbeLeaked = /--color-viz-probe-dropped\s*:/.test(compiled)
 } catch (err) {
   vizCompileError = err instanceof Error ? err.message : String(err)

@@ -48,7 +48,9 @@ const HOOK_BODY = `#!/bin/sh
 # Auto-installed by scripts/install-git-hooks.mjs. Do not edit by hand.
 # Runs fast repo-wide lint guards before every commit:
 #   - secret scanner       (scripts/check-no-secrets.mjs)
-#   - design-token drift   (scripts/check-design-tokens.mjs)
+#   - design-token drift   (scripts/check-design-tokens.mjs; compiles the
+#                           admin theme with apps/admin's tailwindcss, so it
+#                           fails until \`pnpm install\` has run)
 #   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
 #   - config docs drift    (scripts/check-config-docs.mjs)
 #   - community-file drift (scripts/sync-community-files.mjs --check)
