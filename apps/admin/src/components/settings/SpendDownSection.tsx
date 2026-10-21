@@ -7,7 +7,8 @@
  *          dispatching, inside each app's auto-fix caps; fixes open draft PRs.
  *          Each key also shows what its last 7 days produced (runs → PRs →
  *          mergeable → merged, Opus review cost) and the apps the stop-loss
- *          paused, with why.
+ *          paused, with why. A paused app still gets one probe fix a day;
+ *          Resume clears its stop-loss evidence (owner or admin).
  */
 
 import { useState } from 'react';
@@ -54,6 +55,7 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ id: string; ok: boolean; message: string } | null>(null);
+  const [resuming, setResuming] = useState<string | null>(null);
 
   const keys = status.data?.keys ?? [];
   if (status.loading || keys.length === 0) return null;
@@ -85,6 +87,22 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
     }
   }
 
+  async function resume(keyId: string, projectId: string) {
+    setResuming(projectId);
+    const res = await apiFetch(`/v1/admin/byok/spend-down/projects/${projectId}/resume`, { method: 'POST' });
+    setResuming(null);
+    if (res.ok) {
+      setNotice({ id: keyId, ok: true, message: 'Resumed. The app starts again with fresh evidence.' });
+      status.reload();
+    } else {
+      setNotice({
+        id: keyId,
+        ok: false,
+        message: describeByokError(res.error, 'Spend-down was not resumed. Retry in a moment.').message,
+      });
+    }
+  }
+
   return (
     <section aria-label="Spend down expiring credits" className="space-y-2 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Spend down expiring credits</h4>
@@ -109,9 +127,21 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
               </p>
               <p className={`text-xs ${TONE[line.tone]}`}>{line.text}</p>
               {score && <p className="text-xs tabular-nums text-fg-secondary">{score}</p>}
-              {pauses.map((s) => (
-                <p key={s} className="text-xs text-warn">
-                  {s}
+              {k.scoreboardNote && <p className="text-xs text-fg-muted">{k.scoreboardNote}</p>}
+              {k.stopLossNote && <p className="text-xs text-fg-muted">{k.stopLossNote}</p>}
+              {pauses.map((p) => (
+                <p key={p.projectId} className="flex flex-wrap items-center gap-x-2 text-xs text-warn">
+                  <span>{p.text}</span>
+                  <span className="text-fg-muted">· probing 1/day ·</span>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    type="button"
+                    loading={resuming === p.projectId}
+                    onClick={() => void resume(k.id, p.projectId)}
+                  >
+                    Resume
+                  </Btn>
                 </p>
               ))}
               {stops.map((s) => (

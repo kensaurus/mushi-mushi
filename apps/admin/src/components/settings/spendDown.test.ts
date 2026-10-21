@@ -43,6 +43,13 @@ describe('spendDownLine', () => {
     expect(spendDownLine({ ...base, projects: [] }).tone).toBe('warn')
   })
 
+  it('counts the apps of a shared key you cannot open, without naming them', () => {
+    expect(spendDownLine({ ...base, projects: [base.projects[0]], otherApps: 2 }).text).toBe(
+      'Spending down: 3 of 10 fixes today, until Oct 31, 2026. Pays for tsumagoi, 2 other apps.',
+    )
+    expect(spendDownLine({ ...base, projects: [], otherApps: 1 })).toMatchObject({ tone: 'ok' })
+  })
+
   it('names the start date before the window, and stops after expiry', () => {
     expect(spendDownLine({ ...base, state: 'not_started', dailyLimit: 1 }).text).toBe(
       'Starts Oct 17, 2026: up to 1 fix a day until the credits expire on Oct 31, 2026.',
@@ -78,7 +85,7 @@ const totals = (over: Partial<SpendDownCounts> = {}): SpendDownCounts => ({
   reviewed: 66,
   verdicts: { merge: 19, fix_first: 33, hold: 14 },
   merged: 0,
-  reviewCostUsd: 8.0412,
+  latestReviewCostUsd: 8.0412,
   mergeYield: 0,
   mergeableYield: 19 / 258,
   ...over,
@@ -87,7 +94,7 @@ const totals = (over: Partial<SpendDownCounts> = {}): SpendDownCounts => ({
 describe('spendDownScoreLine', () => {
   it('reads runs → PRs → mergeable, merged, and the Opus review cost', () => {
     expect(spendDownScoreLine({ ...base, scoreboard: { days: 7, totals: totals() } })).toBe(
-      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04',
+      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04 (latest review per PR)',
     )
   })
 
@@ -95,7 +102,7 @@ describe('spendDownScoreLine', () => {
     expect(
       spendDownScoreLine({
         ...base,
-        scoreboard: { days: 1, totals: totals({ runs: 1, prsOpened: 1, reviewed: 0, reviewCostUsd: 0, verdicts: { merge: 0, fix_first: 0, hold: 0 } }) },
+        scoreboard: { days: 1, totals: totals({ runs: 1, prsOpened: 1, reviewed: 0, latestReviewCostUsd: 0, verdicts: { merge: 0, fix_first: 0, hold: 0 } }) },
       }),
     ).toBe('Last 1 day: 1 run → 1 PR → 0 mergeable, 0 merged')
   })
@@ -132,7 +139,9 @@ describe('spendDownPauses', () => {
         ],
       },
     }
-    expect(spendDownPauses(k)).toEqual(['tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)'])
+    expect(spendDownPauses(k)).toEqual([
+      { projectId: 'p1', text: 'tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)' },
+    ])
     expect(spendDownStops(k)).toEqual([])
   })
 })

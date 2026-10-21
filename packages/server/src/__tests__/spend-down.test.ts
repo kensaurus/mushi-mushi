@@ -6,25 +6,39 @@
  *          the 3-running bound, the 7-day re-dispatch cooldown, the 1.3
  *          boost for Sentry or stack evidence, and the dispatch metadata
  *          fix-worker reads (cursor_cloud, model, trigger); the stop-loss
- *          (merge / hold / no-PR thresholds, cold start, boundaries, pause and
- *          resume log lines) and the scoreboard rollup.
+ *          (Wilson-bound entry, 20-sample cold start, hysteresis, daily probe,
+ *          probe recovery, 14-day aging, Resume, transition-only log lines,
+ *          carry-forward) and the scoreboard rollup.
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 import {
+  cachedYieldSamples,
+  type SpendDownYieldCache,
+} from '../../supabase/functions/_shared/spend-down-db.ts'
+import {
   classifySpendDownRun,
   firstCursorKeyFor,
-  previouslyPausedProjects,
+  previousPauseStates,
   SPEND_DOWN_MAX_HOLD_RATE,
   SPEND_DOWN_MAX_NO_PR_SHARE,
   SPEND_DOWN_MIN_MERGE_RATE,
   SPEND_DOWN_MIN_SAMPLES,
+  SPEND_DOWN_PROBE_RECOVERY,
+  SPEND_DOWN_PROBES_PER_DAY,
+  SPEND_DOWN_RESUME_HOLD_RATE,
+  SPEND_DOWN_RESUME_MERGE_RATE,
+  SPEND_DOWN_RESUME_NO_PR_SHARE,
+  SPEND_DOWN_SAMPLE_MAX_AGE_DAYS,
+  SPEND_DOWN_WILSON_Z,
   SPEND_DOWN_YIELD_WINDOW,
   spendDownScoreboard,
   spendDownStopLoss,
-  type SpendDownRunOutcome,
+  wilsonInterval,
+  type SpendDownPauseState,
   type SpendDownRunRow,
+  type SpendDownYieldRun,
   projectCapacity,
   rankSpendDownCandidates,
   reportHasCheapEvidence,
@@ -404,92 +418,168 @@ describe('spendDownDispatchMetadata', () => {
   })
 })
 
-describe('stop-loss thresholds', () => {
+describe('stop-loss constants', () => {
   it('are the documented values', () => {
-    expect(SPEND_DOWN_YIELD_WINDOW).toBe(20)
-    expect(SPEND_DOWN_MIN_SAMPLES).toBe(8)
-    expect(SPEND_DOWN_MIN_MERGE_RATE).toBe(0.2)
-    expect(SPEND_DOWN_MAX_HOLD_RATE).toBe(0.35)
-    expect(SPEND_DOWN_MAX_NO_PR_SHARE).toBe(0.5)
+    expect(SPEND_DOWN_SAMPLE_MAX_AGE_DAYS).toBe(14)
+    expect(SPEND_DOWN_YIELD_WINDOW).toBe(40)
+    expect(SPEND_DOWN_MIN_SAMPLES).toBe(20)
+    expect(SPEND_DOWN_WILSON_Z).toBe(1.645)
+    expect([SPEND_DOWN_MIN_MERGE_RATE, SPEND_DOWN_MAX_HOLD_RATE, SPEND_DOWN_MAX_NO_PR_SHARE]).toEqual([0.2, 0.35, 0.5])
+    expect([SPEND_DOWN_RESUME_MERGE_RATE, SPEND_DOWN_RESUME_HOLD_RATE, SPEND_DOWN_RESUME_NO_PR_SHARE]).toEqual([0.25, 0.3, 0.45])
+    expect([SPEND_DOWN_PROBES_PER_DAY, SPEND_DOWN_PROBE_RECOVERY]).toEqual([1, 2])
   })
 })
 
-/** n verdicts, newest first: the first `merge` merge, the next `hold` hold, the rest fix_first. */
-function verdicts(n: number, merge: number, hold = 0): string[] {
-  return Array.from({ length: n }, (_, i) => (i < merge ? 'merge' : i < merge + hold ? 'hold' : 'fix_first'))
+describe('wilsonInterval (one-sided 95%)', () => {
+  it('separates 1 in 20 from 2 in 20 at the 20% line', () => {
+    expect(wilsonInterval(1, 20).upper).toBeLessThan(0.2)
+    expect(wilsonInterval(1, 20).upper).toBeCloseTo(0.196, 3)
+    expect(wilsonInterval(2, 20).upper).toBeGreaterThan(0.2)
+    expect(wilsonInterval(0, 0)).toEqual({ lower: 0, upper: 1 })
+  })
+})
+
+const T0 = Date.parse('2026-10-19T00:00:00Z')
+/**
+ * Runs newest first, one minute apart: `reviews` lists PR verdicts, `noPr`
+ * no-PR verdict runs, `other` other failures, `inFlight` open runs.
+ */
+function sample(spec: {
+  merge?: number
+  hold?: number
+  fixFirst?: number
+  noPr?: number
+  other?: number
+  inFlight?: number
+  probe?: boolean
+  startMin?: number
+}): SpendDownYieldRun[] {
+  const out: SpendDownYieldRun[] = []
+  let i = spec.startMin ?? 0
+  const push = (outcome: SpendDownYieldRun['outcome'], verdict: string | null) => {
+    const at = new Date(T0 - i++ * 60_000).toISOString()
+    out.push({ at, outcome, verdict, reviewedAt: verdict ? at : null, probe: spec.probe ?? false })
+  }
+  for (let n = 0; n < (spec.inFlight ?? 0); n++) push('in_flight', null)
+  for (let n = 0; n < (spec.merge ?? 0); n++) push('pr_opened', 'merge')
+  for (let n = 0; n < (spec.hold ?? 0); n++) push('pr_opened', 'hold')
+  for (let n = 0; n < (spec.fixFirst ?? 0); n++) push('pr_opened', 'fix_first')
+  for (let n = 0; n < (spec.noPr ?? 0); n++) push('no_pr_verdict', null)
+  for (let n = 0; n < (spec.other ?? 0); n++) push('other_failure', null)
+  return out
 }
-function runs(n: number, noPr: number): SpendDownRunOutcome[] {
-  return Array.from({ length: n }, (_, i) => (i < noPr ? 'no_pr_verdict' : 'pr_opened'))
-}
+const PAUSED: SpendDownPauseState = { paused: true, pausedAt: '2026-10-19T12:00:00.000Z' }
+const AT = new Date('2026-10-20T09:00:00Z')
 
-describe('spendDownStopLoss', () => {
-  it('pauses under a 20% merge rate, in plain words', () => {
-    const d = spendDownStopLoss({ verdicts: verdicts(20, 3), runs: runs(20, 0) })
-    expect(d.paused).toBe(true)
-    expect(d.reason).toBe('Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
-    expect(d).toMatchObject({ reviewed: 20, mergeVerdicts: 3, mergeRate: 0.15 })
+describe('spendDownStopLoss: entry', () => {
+  it('does NOT pause an average app (the 2026-10-21 baseline: 29% merge, 22% hold, 25% no-PR)', () => {
+    // 40 reviews: 12 merge (30%), 9 hold (22.5%); 40 finished runs incl. 10 no-PR (25%).
+    const d = spendDownStopLoss({ runs: sample({ merge: 12, hold: 9, fixFirst: 19, noPr: 10 }) }, undefined, AT)
+    expect(d).toMatchObject({ paused: false, transition: null, reviewed: 40, finishedRuns: 40 })
   })
 
-  it('does not pause at exactly 20% merge, 35% hold or 50% no-PR (boundaries)', () => {
-    const d = spendDownStopLoss({ verdicts: verdicts(20, 4, 7), runs: runs(20, 10) })
-    expect(d).toMatchObject({ paused: false, reason: null, mergeRate: 0.2, holdRate: 0.35, noPrShare: 0.5 })
+  it('does NOT pause a below-average but plausible app (glot.it: 23% merge)', () => {
+    expect(spendDownStopLoss({ runs: sample({ merge: 9, hold: 8, fixFirst: 23, noPr: 10 }) }, undefined, AT).paused).toBe(false)
   })
 
-  it('pauses just past each boundary', () => {
-    expect(spendDownStopLoss({ verdicts: verdicts(20, 3, 0), runs: [] }).paused).toBe(true) // 15% merge
-    expect(spendDownStopLoss({ verdicts: verdicts(20, 10, 8), runs: [] }).paused).toBe(true) // 40% hold
-    expect(spendDownStopLoss({ verdicts: [], runs: runs(20, 11) }).paused).toBe(true) // 55% no PR
+  it('pauses a clearly bad app (1 of 20 mergeable), in plain words', () => {
+    const d = spendDownStopLoss({ runs: sample({ merge: 1, fixFirst: 19 }) }, undefined, AT)
+    expect(d).toMatchObject({
+      paused: true,
+      transition: 'paused',
+      pausedAt: AT.toISOString(),
+      reason: 'Paused: 1 of the last 20 reviewed fixes were mergeable (5%)',
+    })
+    expect(d.mergeUpper).toBeLessThan(0.2)
   })
 
-  it('pauses over a 35% hold rate even with a healthy merge rate', () => {
-    const d = spendDownStopLoss({ verdicts: verdicts(20, 6, 8), runs: [] })
-    expect(d.paused).toBe(true)
-    expect(d.reason).toBe('Paused: Opus said hold on 8 of the last 20 reviewed fixes (40%)')
+  it('does not pause 2 of 20 mergeable: not reliably under 20% yet', () => {
+    expect(spendDownStopLoss({ runs: sample({ merge: 2, fixFirst: 18 }) }, undefined, AT).paused).toBe(false)
   })
 
-  it('pauses when over half the finished runs ended with a no-PR verdict; in-flight runs do not count', () => {
-    const d = spendDownStopLoss({ verdicts: [], runs: ['in_flight', 'in_flight', ...runs(20, 11)] })
-    expect(d.paused).toBe(true)
+  it('needs 20 samples for every rule (cold start)', () => {
+    expect(spendDownStopLoss({ runs: sample({ hold: 19 }) }, undefined, AT)).toMatchObject({ paused: false, mergeUpper: null })
+    expect(spendDownStopLoss({ runs: sample({ noPr: 19 }) }, undefined, AT)).toMatchObject({ paused: false, noPrLower: null })
+    expect(spendDownStopLoss({ runs: sample({ fixFirst: 20 }) }, undefined, AT).paused).toBe(true)
+  })
+
+  it('hold: 11 of 20 pauses (lower bound over 35%), 10 of 20 does not', () => {
+    const d = spendDownStopLoss({ runs: sample({ merge: 6, hold: 11, fixFirst: 3 }) }, undefined, AT)
+    expect(d.reason).toBe('Paused: Opus said hold on 11 of the last 20 reviewed fixes (55%)')
+    expect(spendDownStopLoss({ runs: sample({ merge: 6, hold: 10, fixFirst: 4 }) }, undefined, AT).paused).toBe(false)
+  })
+
+  it('no-PR: 14 of 20 finished runs pauses, 13 does not; in-flight runs are not samples', () => {
+    const d = spendDownStopLoss({ runs: sample({ inFlight: 5, merge: 6, noPr: 14 }) }, undefined, AT)
     expect(d.finishedRuns).toBe(20)
-    expect(d.reason).toContain('the agent opened no PR on 11 of the last 20 runs (55%)')
+    expect(d.reason).toContain('the agent opened no PR on 14 of the last 20 runs (70%)')
+    expect(spendDownStopLoss({ runs: sample({ merge: 7, noPr: 13 }) }, undefined, AT).paused).toBe(false)
   })
 
-  it('names every rule that fired', () => {
-    const d = spendDownStopLoss({ verdicts: verdicts(10, 1, 5), runs: runs(10, 6) })
-    expect(d.reason).toMatch(
-      /^Paused: 1 of the last 10 reviewed fixes were mergeable \(10%\); Opus said hold on 5 .*; the agent opened no PR on 6/,
-    )
+  it('reads the newest 40, so older bad runs fall out of the window', () => {
+    const runs = [...sample({ merge: 12, fixFirst: 28 }), ...sample({ fixFirst: 40, startMin: 100 })]
+    expect(spendDownStopLoss({ runs }, undefined, AT)).toMatchObject({ paused: false, reviewed: 40, mergeVerdicts: 12 })
   })
 
-  it('cold start: never pauses below 8 samples per rule, and pauses at exactly 8', () => {
-    expect(spendDownStopLoss({ verdicts: verdicts(7, 0, 7), runs: runs(7, 7) }).paused).toBe(false)
-    expect(spendDownStopLoss({ verdicts: verdicts(8, 0), runs: [] }).paused).toBe(true)
-    expect(spendDownStopLoss({ verdicts: [], runs: runs(8, 5) }).paused).toBe(true)
-    // Plenty of runs but only 7 reviews: the review rules wait, the run rule decides.
-    expect(spendDownStopLoss({ verdicts: verdicts(7, 0), runs: runs(30, 0) }).paused).toBe(false)
+  it('orders reviews by when they were reviewed, not dispatched', () => {
+    // 40 bad reviews dispatched recently but reviewed long ago, and 40 good
+    // ones dispatched earlier but reviewed just now: the good ones are newest.
+    const bad = sample({ fixFirst: 40 }).map((r) => ({ ...r, reviewedAt: '2026-10-10T00:00:00.000Z' }))
+    const good = sample({ merge: 20, fixFirst: 20, startMin: 100 }).map((r) => ({ ...r, reviewedAt: '2026-10-19T23:00:00.000Z' }))
+    expect(spendDownStopLoss({ runs: [...bad, ...good] }, undefined, AT)).toMatchObject({ paused: false, mergeVerdicts: 20 })
   })
+})
 
-  it('reads only the newest 20 of each, so a recovered app resumes', () => {
-    const d = spendDownStopLoss({
-      verdicts: [...verdicts(20, 8), ...verdicts(20, 0, 20)],
-      runs: [...runs(20, 0), ...runs(20, 20)],
-    })
-    expect(d).toMatchObject({ paused: false, reviewed: 20, finishedRuns: 20, mergeRate: 0.4, holdRate: 0, noPrShare: 0 })
-  })
-
-  it('ignores missing or unknown verdicts', () => {
-    expect(spendDownStopLoss({ verdicts: [null, 'weird', ...verdicts(8, 2)], runs: [] })).toMatchObject({
-      reviewed: 8,
+describe('spendDownStopLoss: while paused (hysteresis, probes, aging out)', () => {
+  it('stays paused at exactly 25% merge and resumes above it', () => {
+    const held = spendDownStopLoss({ runs: sample({ merge: 5, fixFirst: 15 }) }, PAUSED, AT)
+    expect(held).toMatchObject({ paused: true, transition: null, pausedAt: PAUSED.pausedAt })
+    expect(held.reason).toBe('Paused: 5 of the last 20 reviewed fixes were mergeable (25%), resumes above 25%')
+    expect(spendDownStopLoss({ runs: sample({ merge: 6, fixFirst: 14 }) }, PAUSED, AT)).toMatchObject({
       paused: false,
+      transition: 'resumed',
+      resumedBy: 'rates',
     })
+  })
+
+  it('a not-paused app at 25% stays running: entry needs the bound, not the point estimate', () => {
+    expect(spendDownStopLoss({ runs: sample({ merge: 5, fixFirst: 15 }) }, undefined, AT).paused).toBe(false)
+  })
+
+  it('stays paused at 30% hold or 45% no-PR', () => {
+    expect(spendDownStopLoss({ runs: sample({ merge: 8, hold: 6, fixFirst: 6 }) }, PAUSED, AT).paused).toBe(true)
+    expect(spendDownStopLoss({ runs: sample({ merge: 8, hold: 5, fixFirst: 7 }) }, PAUSED, AT).paused).toBe(false)
+    expect(spendDownStopLoss({ runs: sample({ merge: 11, noPr: 9 }) }, PAUSED, AT).paused).toBe(true)
+  })
+
+  it('resumes when the old samples age out (under 20 left)', () => {
+    expect(spendDownStopLoss({ runs: sample({ fixFirst: 5 }) }, PAUSED, AT)).toMatchObject({
+      paused: false,
+      transition: 'resumed',
+      resumedBy: 'samples_aged_out',
+    })
+  })
+
+  it('resumes when the newest 2 reviewed probes since the pause both got merge', () => {
+    // Window still bad (2 merges in 40), but both probes after the pause merged.
+    const probes = sample({ merge: 2, probe: true }).map((r, i) => ({
+      ...r,
+      at: `2026-10-20T0${i}:00:00.000Z`,
+      reviewedAt: `2026-10-20T0${i}:30:00.000Z`,
+    }))
+    const runs = [...probes, ...sample({ fixFirst: 38, startMin: 10 })]
+    expect(spendDownStopLoss({ runs }, PAUSED, AT)).toMatchObject({ paused: false, resumedBy: 'probes' })
+    // One merged probe is not enough; probes from before the pause do not count.
+    expect(spendDownStopLoss({ runs: [probes[0], ...sample({ fixFirst: 39, startMin: 10 })] }, PAUSED, AT).paused).toBe(true)
+    const early = probes.map((r) => ({ ...r, at: '2026-10-19T01:00:00.000Z' }))
+    expect(spendDownStopLoss({ runs: [...early, ...sample({ fixFirst: 38, startMin: 10 })] }, PAUSED, AT).paused).toBe(true)
   })
 })
 
 describe('classifySpendDownRun', () => {
   it('sorts a run into PR, no-PR verdict, in flight or other failure', () => {
-    expect(classifySpendDownRun({ status: 'completed' }, { status: 'completed', pr_url: 'https://github.com/a/b/pull/1' })).toBe(
-      'pr_opened',
-    )
+    const pr = 'https://github.com/a/b/pull/1'
+    expect(classifySpendDownRun({ status: 'completed' }, { status: 'completed', pr_url: pr })).toBe('pr_opened')
     expect(classifySpendDownRun({ status: 'skipped' }, { status: 'failed', failure_category: 'needs_human' })).toBe('no_pr_verdict')
     expect(classifySpendDownRun({ status: 'completed' }, { status: 'running' })).toBe('in_flight')
     expect(classifySpendDownRun({ status: 'queued' }, null)).toBe('in_flight')
@@ -498,13 +588,41 @@ describe('classifySpendDownRun', () => {
     )
     expect(classifySpendDownRun({ status: 'failed' }, null)).toBe('other_failure')
   })
+
+  it('a draft PR attached to a running attempt is still in flight (attachPendingPr)', () => {
+    expect(classifySpendDownRun({ status: 'completed' }, { status: 'running', pr_url: 'https://github.com/a/b/pull/2' })).toBe('in_flight')
+  })
+
+  it('a notes-only PR (validation_rejected) is not a PR opened', () => {
+    const pr = 'https://github.com/a/b/pull/3'
+    expect(
+      classifySpendDownRun({ status: 'completed_no_pr', pr_url: pr }, { status: 'failed', pr_url: pr, failure_category: 'validation_rejected' }),
+    ).toBe('other_failure')
+  })
 })
 
-describe('previouslyPausedProjects', () => {
-  it('reads the paused apps from the last summary and tolerates junk', () => {
-    expect([...previouslyPausedProjects({ projects: [{ projectId: 'a', paused: true }, { projectId: 'b' }] })]).toEqual(['a'])
-    expect(previouslyPausedProjects(null).size).toBe(0)
-    expect(previouslyPausedProjects({ projects: 'x' }).size).toBe(0)
+describe('previousPauseStates', () => {
+  const summary = {
+    projects: [
+      { projectId: 'a', paused: true, pausedAt: '2026-10-19T00:00:00Z', stopped: 'Paused: x' },
+      { projectId: 'b', paused: true, pausedAt: '2026-10-19T00:00:00Z' },
+      { projectId: 'c' },
+    ],
+  }
+  it('reads the paused apps with when and why, and tolerates junk', () => {
+    expect([...previousPauseStates(summary).entries()]).toEqual([
+      ['a', { paused: true, pausedAt: '2026-10-19T00:00:00Z', reason: 'Paused: x' }],
+      ['b', { paused: true, pausedAt: '2026-10-19T00:00:00Z', reason: null }],
+    ])
+    expect(previousPauseStates(null).size).toBe(0)
+    expect(previousPauseStates({ projects: 'x' }).size).toBe(0)
+  })
+  it('drops a pause that began before the app was resumed by hand', () => {
+    const resets = new Map([
+      ['a', '2026-10-19T06:00:00Z'],
+      ['b', '2026-10-18T00:00:00Z'],
+    ])
+    expect([...previousPauseStates(summary, resets).keys()]).toEqual(['b'])
   })
 })
 
@@ -518,16 +636,16 @@ describe('spendDownScoreboard', () => {
     noPrVerdict: null,
     verdict: null,
     merged: false,
-    reviewCostUsd: null,
+    latestReviewCostUsd: null,
     ...over,
   })
 
-  it('rolls up per key × app × model × day with yields and review cost', () => {
+  it('rolls up per key × app × model × day with yields and the latest review cost per PR', () => {
     const out = spendDownScoreboard([
-      run({ verdict: 'merge', merged: true, reviewCostUsd: 0.05 }),
-      run({ verdict: 'merge', reviewCostUsd: 0.0512 }),
-      run({ verdict: 'hold', reviewCostUsd: Number.NaN }),
-      run({ verdict: 'fix_first', reviewCostUsd: 0.03 }),
+      run({ verdict: 'merge', merged: true, latestReviewCostUsd: 0.05 }),
+      run({ verdict: 'merge', latestReviewCostUsd: 0.0512 }),
+      run({ verdict: 'hold', latestReviewCostUsd: Number.NaN }),
+      run({ verdict: 'fix_first', latestReviewCostUsd: 0.03 }),
       run({ outcome: 'no_pr_verdict', noPrVerdict: 'needs_human' }),
       run({ outcome: 'other_failure' }),
       run({ outcome: 'in_flight', day: '2026-10-21' }),
@@ -548,7 +666,7 @@ describe('spendDownScoreboard', () => {
       noPrByVerdict: { needs_human: 1, already_fixed: 1, not_actionable: 0, wrong_repo: 0 },
     })
     // A cost that is not a finite number is skipped, never NaN.
-    expect(out.totals.reviewCostUsd).toBe(0.1312)
+    expect(out.totals.latestReviewCostUsd).toBe(0.1312)
     expect(out.rows.map((r) => [r.day, r.projectId, r.model, r.runs])).toEqual([
       ['2026-10-21', P1, 'grok', 1],
       ['2026-10-20', P1, 'grok', 6],
@@ -561,18 +679,22 @@ describe('spendDownScoreboard', () => {
   it('has null yields and no rows with no runs', () => {
     expect(spendDownScoreboard([])).toMatchObject({
       rows: [],
-      totals: { runs: 0, mergeYield: null, mergeableYield: null, reviewCostUsd: 0 },
+      totals: { runs: 0, mergeYield: null, mergeableYield: null, latestReviewCostUsd: 0 },
     })
   })
 })
 
-/** n older spend-down runs on P1, each with a PR: the first `merge` reviewed merge, the next `hold` hold. */
-function yieldRows(n: number, merge: number, hold: number) {
+/**
+ * n spend-down runs on P1 dispatched on 2026-10-19 (inside 14 days, not
+ * today), each with a PR: the first `merge` reviewed merge, the next `hold`
+ * hold, the rest fix_first.
+ */
+function yieldRows(n: number, merge: number, hold: number, meta: Record<string, unknown> = {}) {
   const jobs: Record<string, unknown>[] = []
   const attempts: Record<string, unknown>[] = []
   const reviews: Record<string, unknown>[] = []
   for (let i = 0; i < n; i++) {
-    const at = new Date(Date.UTC(2026, 9, 19, 0, 59 - i)).toISOString()
+    const at = new Date(Date.UTC(2026, 9, 19, 12, 59 - i)).toISOString()
     jobs.push({
       id: `sj${i}`,
       project_id: P1,
@@ -580,7 +702,7 @@ function yieldRows(n: number, merge: number, hold: number) {
       status: 'completed',
       fix_attempt_id: `sa${i}`,
       created_at: at,
-      dispatch_metadata: { source: 'spend_down', spend_down_key_id: 'k1', model_override: 'grok' },
+      dispatch_metadata: { source: 'spend_down', spend_down_key_id: 'k1', model_override: 'grok', ...meta },
     })
     attempts.push({
       id: `sa${i}`,
@@ -605,71 +727,172 @@ function yieldRows(n: number, merge: number, hold: number) {
   return { fix_dispatch_jobs: jobs, fix_attempts: attempts, fix_reviews: reviews }
 }
 
-describe('runSpendDownForKey stop-loss', () => {
-  it('pauses an app with a low merge rate, says why, and logs the decision with rates and samples', async () => {
-    logLines.length = 0
-    const dispatch = vi.fn(async () => ({ ok: true }))
-    const summary = await worker.runSpendDownForKey(seed(yieldRows(20, 3, 0)) as never, key(), {
-      now: NOW,
-      checkBudget: allowAll,
-      dispatch,
+/** A dispatch stub that records calls and writes the job, as fix dispatch does. */
+function recordingDispatch(db: { table: (t: string) => Record<string, unknown>[] }, at: () => Date) {
+  const calls: Array<Record<string, unknown>> = []
+  const fn = async (input: unknown) => {
+    const i = input as { projectId: string; reportId: string; metadata: Record<string, unknown> }
+    calls.push(i as never)
+    db.table('fix_dispatch_jobs').push({
+      id: `new${calls.length}-${at().getTime()}`,
+      project_id: i.projectId,
+      report_id: i.reportId,
+      status: 'running',
+      fix_attempt_id: null,
+      created_at: at().toISOString(),
+      dispatch_metadata: i.metadata,
     })
-    expect(dispatch).not.toHaveBeenCalled()
+    return { ok: true } as never
+  }
+  return { calls, fn }
+}
+
+describe('runSpendDownForKey stop-loss', () => {
+  it('pauses a clearly bad app, logs it once, and still sends it one probe a day', async () => {
+    logLines.length = 0
+    const db = seed(yieldRows(20, 1, 0))
+    const d = recordingDispatch(db, () => NOW)
+    const summary = await worker.runSpendDownForKey(db as never, key(), { now: NOW, checkBudget: allowAll, dispatch: d.fn })
+    expect(d.calls).toHaveLength(1)
+    expect(d.calls[0].metadata).toMatchObject({ source: 'spend_down', spend_down_probe: true })
     expect(summary.projects[0]).toMatchObject({
       projectId: P1,
-      dispatched: 0,
+      dispatched: 1,
       paused: true,
-      stopped: 'Paused: 3 of the last 20 reviewed fixes were mergeable (15%)',
-      yield: { reviewed: 20, mergeRate: 0.15, holdRate: 0, finishedRuns: 20, noPrShare: 0 },
+      probe: true,
+      pausedAt: NOW.toISOString(),
+      stopped: 'Paused: 1 of the last 20 reviewed fixes were mergeable (5%)',
+      yield: { reviewed: 20, mergeRate: 0.05, holdRate: 0, finishedRuns: 20, noPrShare: 0 },
     })
     const lines = logLines.filter((l) => l.msg === 'spend-down.paused')
     expect(lines).toHaveLength(1)
-    expect(lines[0].ctx).toMatchObject({ keyId: 'k1', projectId: P1, reviewed: 20, mergeRate: 0.15, finishedRuns: 20 })
+    expect(lines[0].ctx).toMatchObject({ keyId: 'k1', projectId: P1, reviewed: 20, mergeRate: 0.05, finishedRuns: 20 })
+    expect(lines[0].ctx.mergeUpper as number).toBeLessThan(0.2)
   })
 
-  it('pauses on no-PR verdicts before any review exists', async () => {
-    const rows = yieldRows(10, 0, 0)
-    rows.fix_reviews = []
-    rows.fix_attempts = rows.fix_attempts.map((a, i) => (i < 6 ? { ...a, pr_url: null, status: 'failed', failure_category: 'not_actionable' } : a))
-    const summary = await worker.runSpendDownForKey(seed(rows) as never, key(), {
+  it('successive ticks: probe, then no second probe the same day and no repeat log, then probe-driven recovery', async () => {
+    logLines.length = 0
+    let now = NOW
+    const db = seed(yieldRows(20, 1, 0))
+    const d = recordingDispatch(db, () => now)
+    const k = key({ spend_down_daily_limit: 50 }) as SpendDownKey & { spend_down_last_summary?: unknown }
+
+    const t1 = await worker.runSpendDownForKey(db as never, k, { now, checkBudget: allowAll, dispatch: d.fn })
+    expect(t1.projects[0]).toMatchObject({ paused: true, probe: true, dispatched: 1 })
+
+    now = new Date(NOW.getTime() + 10 * 60_000)
+    const t2 = await worker.runSpendDownForKey(db as never, { ...k, spend_down_last_summary: t1 }, { now, checkBudget: allowAll, dispatch: d.fn })
+    expect(t2.projects[0]).toMatchObject({ paused: true, dispatched: 0, pausedAt: NOW.toISOString() })
+    expect(d.calls).toHaveLength(1)
+    expect(logLines.filter((l) => l.msg === 'spend-down.paused')).toHaveLength(1)
+
+    // Next day: the first probe merged, and a second probe (dispatched later) merged too.
+    const probe1 = db.table('fix_dispatch_jobs').find((j) => (j.dispatch_metadata as Record<string, unknown>)?.spend_down_probe)!
+    Object.assign(probe1, { fix_attempt_id: 'pa1', status: 'completed' })
+    db.table('fix_dispatch_jobs').push({
+      id: 'probe2',
+      project_id: P1,
+      report_id: 'x2',
+      status: 'completed',
+      fix_attempt_id: 'pa2',
+      created_at: '2026-10-21T00:30:00.000Z',
+      dispatch_metadata: { source: 'spend_down', spend_down_key_id: 'k1', spend_down_probe: true },
+    })
+    for (const [id, reviewed] of [['pa1', '2026-10-20T12:00:00.000Z'], ['pa2', '2026-10-21T01:00:00.000Z']]) {
+      db.table('fix_attempts').push({ id, project_id: P1, report_id: id, agent: 'cursor_cloud', status: 'completed', pr_url: `https://github.com/a/b/pull/${id}` })
+      db.table('fix_reviews').push({ fix_attempt_id: id, verdict: 'merge', reviewed_at: reviewed, cost_usd: '0.4' })
+    }
+    now = new Date('2026-10-21T09:00:00Z')
+    const t3 = await worker.runSpendDownForKey(db as never, { ...k, spend_down_last_summary: t2 }, { now, checkBudget: allowAll, dispatch: d.fn })
+    expect(t3.projects[0].paused).toBeUndefined()
+    expect(t3.projects[0].dispatched).toBeGreaterThan(1)
+    expect(logLines.find((l) => l.msg === 'spend-down.resumed')?.ctx).toMatchObject({ projectId: P1, resumedBy: 'probes' })
+  })
+
+  it('a Resume (stop_loss_reset_at) ignores the earlier samples and the earlier pause', async () => {
+    logLines.length = 0
+    const db = seed(yieldRows(20, 1, 0))
+    const settings = db.table('project_settings').find((s) => s.project_id === P1)!
+    settings.spend_down_stop_loss_reset_at = '2026-10-20T08:00:00.000Z'
+    const d = recordingDispatch(db, () => NOW)
+    const summary = await worker.runSpendDownForKey(
+      db as never,
+      { ...key(), spend_down_last_summary: { projects: [{ projectId: P1, paused: true, pausedAt: '2026-10-19T13:00:00.000Z' }] } },
+      { now: NOW, checkBudget: allowAll, dispatch: d.fn },
+    )
+    expect(summary.projects[0]).toMatchObject({ dispatched: 3, yield: { reviewed: 0, finishedRuns: 0 } })
+    expect(summary.projects[0].paused).toBeUndefined()
+    expect(d.calls.every((c) => !(c.metadata as Record<string, unknown>).spend_down_probe)).toBe(true)
+  })
+
+  it('carries a pause forward for an app the tick did not reach', async () => {
+    const db = seed({
+      fix_dispatch_jobs: [
+        { id: 'd1', project_id: P1, report_id: 'x', status: 'running', created_at: '2026-10-20T01:00:00Z', dispatch_metadata: { spend_down_key_id: 'k1' } },
+      ],
+    })
+    const prev = { projects: [{ projectId: P1, paused: true, pausedAt: '2026-10-19T13:00:00.000Z', stopped: 'Paused: x' }] }
+    const summary = await worker.runSpendDownForKey(
+      db as never,
+      { ...key({ spend_down_daily_limit: 1 }), spend_down_last_summary: prev },
+      { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) },
+    )
+    expect(summary.projects).toEqual([
+      { projectId: P1, dispatched: 0, paused: true, pausedAt: '2026-10-19T13:00:00.000Z', stopped: 'Paused: x', carried: true },
+    ])
+  })
+
+  it('samples only spend-down runs: manual dispatches on the same app are not evidence', async () => {
+    const rows = yieldRows(20, 0, 0)
+    rows.fix_dispatch_jobs = rows.fix_dispatch_jobs.map((j) => ({ ...j, dispatch_metadata: { source: 'manual' } }))
+    const summary = await worker.runSpendDownForKey(seed(rows) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
+    expect(summary.projects[0]).toMatchObject({ dispatched: 3, yield: { reviewed: 0 } })
+  })
+
+  it("counts another key's spend-down runs on the same app", async () => {
+    const summary = await worker.runSpendDownForKey(seed(yieldRows(20, 0, 0, { spend_down_key_id: 'old-key' })) as never, key(), {
       now: NOW,
       checkBudget: allowAll,
       dispatch: async () => ({ ok: true }),
     })
-    expect(summary.projects[0].stopped).toContain('the agent opened no PR on 6 of the last 10 runs (60%)')
+    expect(summary.projects[0]).toMatchObject({ paused: true, yield: { reviewed: 20 } })
   })
 
-  it('keeps dispatching a healthy app, and logs a resume when the last tick had paused it', async () => {
-    logLines.length = 0
-    const calls: Array<Record<string, unknown>> = []
-    const summary = await worker.runSpendDownForKey(
-      seed(yieldRows(20, 8, 2)) as never,
-      { ...key(), spend_down_last_summary: { projects: [{ projectId: P1, paused: true }] } },
-      { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) },
-    )
-    expect(calls.map((c) => c.reportId)).toEqual(['r4', 'r1', 'r2'])
+  it('ignores runs older than 14 days', async () => {
+    const rows = yieldRows(20, 0, 0)
+    rows.fix_dispatch_jobs = rows.fix_dispatch_jobs.map((j) => ({ ...j, created_at: '2026-10-05T00:00:00.000Z' }))
+    const summary = await worker.runSpendDownForKey(seed(rows) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
+    expect(summary.projects[0]).toMatchObject({ yield: { reviewed: 0 } })
     expect(summary.projects[0].paused).toBeUndefined()
-    expect(logLines.find((l) => l.msg === 'spend-down.resumed')?.ctx).toMatchObject({ projectId: P1, mergeRate: 0.4, reviewed: 20 })
-    expect(logLines.some((l) => l.msg === 'spend-down.paused')).toBe(false)
   })
 
-  it('stays quiet in cold start: 7 held reviews do not pause', async () => {
+  it('stays quiet in cold start: 19 held reviews do not pause or log', async () => {
     logLines.length = 0
-    const dispatch = vi.fn(async () => ({ ok: true }))
-    const summary = await worker.runSpendDownForKey(seed(yieldRows(7, 0, 7)) as never, key(), {
+    const summary = await worker.runSpendDownForKey(seed(yieldRows(19, 0, 19)) as never, key(), {
       now: NOW,
       checkBudget: allowAll,
-      dispatch,
+      dispatch: async () => ({ ok: true }),
     })
-    expect(dispatch).toHaveBeenCalled()
     expect(summary.projects[0].paused).toBeUndefined()
     expect(logLines.some((l) => l.msg === 'spend-down.paused' || l.msg === 'spend-down.resumed')).toBe(false)
   })
 
-  it('stores the pause on the key summary, so the next tick can tell a resume', async () => {
+  it('stores the pause on the key summary, so the next tick knows', async () => {
     const db = seed(yieldRows(20, 0, 10))
     await worker.runSpendDown(db as never, { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
     const stored = db.table('byok_keys').find((k: Record<string, unknown>) => k.id === 'k1') as Record<string, unknown>
-    expect([...previouslyPausedProjects(stored.spend_down_last_summary)]).toEqual([P1])
+    expect([...previousPauseStates(stored.spend_down_last_summary).keys()]).toEqual([P1])
+  })
+})
+
+describe('cachedYieldSamples', () => {
+  it('reads an app once per tick', async () => {
+    const db = seed(yieldRows(3, 1, 0))
+    const from = vi.spyOn(db, 'from')
+    const cache: SpendDownYieldCache = new Map()
+    const a = await cachedYieldSamples(cache, db as never, P1, NOW, null)
+    const b = await cachedYieldSamples(cache, db as never, P1, NOW, null)
+    expect(b).toBe(a)
+    expect(from.mock.calls.filter(([t]) => t === 'fix_dispatch_jobs')).toHaveLength(1)
   })
 })

@@ -153,7 +153,7 @@ describe('SpendDownSection', () => {
             reviewed: 66,
             verdicts: { merge: 19, fix_first: 33, hold: 14 },
             merged: 0,
-            reviewCostUsd: 8.04,
+            latestReviewCostUsd: 8.04,
             mergeYield: 0,
             mergeableYield: 0.07,
           },
@@ -161,8 +161,22 @@ describe('SpendDownSection', () => {
       },
     ]
     await render(true)
-    expect(document.body.textContent).toContain('Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04')
+    expect(document.body.textContent).toContain(
+      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04 (latest review per PR)',
+    )
     expect(document.body.textContent).toContain('tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
+    expect(document.body.textContent).toContain('probing 1/day')
+    await act(async () => button('Resume').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/spend-down/projects/p1/resume')!
+    expect((call[1] as RequestInit).method).toBe('POST')
+    expect(mocks.reload).toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Resumed.')
+  })
+
+  it('says when the scoreboard could not be read', async () => {
+    mocks.keys = [{ ...KEY, scoreboard: null, scoreboardNote: 'The last 7 days could not be read just now.' }]
+    await render(true)
+    expect(document.body.textContent).toContain('The last 7 days could not be read just now.')
   })
 
   it('renders nothing when the app has no Cursor key', async () => {

@@ -85,6 +85,9 @@ how much is left.
 
 Status: Accepted (owner-delegated, 2026-10-21)
 
+Related: migration `20261021120000_spend_down_stop_loss.sql`,
+`POST /v1/admin/byok/spend-down/projects/:projectId/resume`.
+
 ### Context
 
 Three days in, the live database showed what the spend bought: 258
@@ -99,57 +102,101 @@ nothing to do, was spent on at the same rate as a good one.
 
 ### Decision
 
-- **Stop-loss per app** (`spendDownStopLoss` in `_shared/spend-down.ts`,
-  read by the worker before it dispatches to an app). It reads the app's
-  newest 20 Opus verdicts on spend-down PRs (`fix_reviews` of the attempts of
-  `fix_dispatch_jobs` with `dispatch_metadata.source = 'spend_down'`, any
-  key, from the newest 100 such runs) and its newest 20 finished spend-down
-  runs, and pauses the app when:
-  - fewer than 20% of the reviews are "merge" (baseline 29%);
-  - more than 35% are "hold" (baseline 22%);
-  - more than 50% of the finished runs ended with a no-PR agent verdict
-    (baseline 25%).
-  Each rule needs at least 8 samples (cold start: one or two bad runs are not
-  a rate). Exactly 20%, 35% or 50% does not pause. The pause lifts on its own
-  once newer samples bring the rates back; there is no manual override and no
-  new setting. In-flight runs are not samples.
-- A paused app is in the tick summary (`spend_down_last_summary`) with
-  `paused: true`, its rates, and a plain-words reason, for example
-  "Paused: 3 of the last 20 reviewed fixes were mergeable (15%)". Every pause
-  and every resume (paused last tick, not now) writes one structured log line
-  (`spend-down.paused` / `spend-down.resumed`) with the key, the app, the rates
-  and the sample sizes.
-- **Scoreboard**, computed on read from the existing tables, no new table or
-  view and no new writes (`keyScoreboardRuns` + `spendDownScoreboard`): per
-  key × app × model × UTC day, runs, PRs opened, no-PR verdicts by category,
-  other failures, in-flight, Opus merge / fix_first / hold, merged, Opus review
-  cost (`fix_reviews.cost_usd`), merge yield (merged / runs) and mergeable
-  yield (merge verdicts / runs). `GET /v1/admin/byok/spend-down` and MCP
-  `get_spend_down_status` return each key's last 7 days (totals and rows) and
-  each app's live stop-loss state; the console shows one line per key
-  ("Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review
-  $8.04") and each paused app with its reason.
+**Stop-loss per app** (`spendDownStopLoss` in `_shared/spend-down.ts`, read by
+the worker before it dispatches to an app):
+
+- **Samples.** The app's spend-down runs under any key (never manual or
+  auto-fix dispatches) dispatched in the last 14 days and after its last
+  Resume: the newest 40 Opus verdicts on their PRs (by review time) and the
+  newest 40 finished runs. A run is in flight while its attempt is open (a
+  draft PR attached early does not count as opened); `validation_rejected`
+  (a notes-only PR) is another failure, not a PR.
+- **Entry.** With at least 20 samples for the rule, the app pauses when the
+  one-sided 95% Wilson bound (z = 1.645) says:
+  - the merge rate's upper bound is under 20% (baseline 29%);
+  - the hold rate's lower bound is over 35% (baseline 22%);
+  - the no-PR-verdict share's lower bound is over 50% (baseline 25%).
+  A rule needs 20 samples so 1-in-20 mergeable (bound 19.6%) pauses and
+  2-in-20 (26.2%) does not.
+- **Hysteresis.** A paused app resumes when, for every rule with 20+ samples,
+  the point estimate clears 25% merge, 30% hold and 45% no-PR. So it resumes
+  when newer runs recover, and when its old runs age out of the 14 days.
+- **Probe.** A paused app still gets 1 spend-down dispatch per UTC day
+  (`dispatch_metadata.spend_down_probe`), inside the key's limit and the
+  app's auto-fix caps, so evidence keeps arriving. It resumes at once when its
+  newest 2 reviewed probes since the pause both got "merge".
+- **Resume.** An app's owner or admin can resume it in the console. This sets
+  `project_settings.spend_down_stop_loss_reset_at`; samples before it are
+  ignored, so the app is back in cold start. The reset is per app, not per key
+  × app, because the samples are the app's runs under any key (an app is paid
+  for by one key at a time, ADR 0023). It is console-only (`jwt-only`) because
+  restarting spend is a deliberate decision.
+- **Trace.** A paused app is in the tick summary (`spend_down_last_summary`)
+  with `paused`, `pausedAt`, its rates and bounds, and a plain-words reason
+  (e.g. "Paused: 1 of the last 20 reviewed fixes were mergeable (5%)"). Apps
+  the tick did not reach (the key's limit ran out) are carried forward with
+  `carried: true`. One structured log line (`spend-down.paused` /
+  `spend-down.resumed`, with `resumedBy`) is written per change of state,
+  never per tick.
+
+**Scoreboard**, computed on read from the existing tables, with no new writes
+(`keyScoreboardRuns` + `spendDownScoreboard`). Per key × app × model × UTC day
+it counts:
+
+- runs, in flight, PRs opened;
+- no-PR verdicts by category, other failures;
+- Opus merge / fix_first / hold, merged;
+- the latest review cost per PR (`fix_reviews.cost_usd`; a re-run overwrites
+  it, and usage rows are keyed by report, not attempt, so the sum is the
+  latest review of each PR);
+- merge yield (merged / runs) and mergeable yield (merge verdicts / runs).
+
+`GET /v1/admin/byok/spend-down` and MCP `get_spend_down_status` show:
+
+- each key's last 7 days. Totals are key-wide, like `dispatchedToday`; rows
+  are only for the apps the caller can open.
+- each app the caller can open, with its live stop-loss state.
+- a count of the key's other apps, without their names.
+
+A failed yield or scoreboard read gives `null` and a note, not a 500. The
+console shows one line per key ("Last 7 days: 258 runs → 154 PRs → 19
+mergeable, 0 merged · Opus review $8.04 (latest review per PR)"), and each
+paused app with its reason, "probing 1/day" and Resume.
 
 ### Rejected
 
+- **Fixed-rate thresholds on the newest 20 samples with an 8-sample cold
+  start** (this amendment's first draft). A simulation at the baseline
+  paused 53% of average apps within 20 runs and 97% within 200, and it paused
+  glot.it at 23% merge, where half of all merge verdicts came from. A sliding
+  20-sample window with the Wilson bound still paused 22.6% within 200 runs.
+  The 40-sample window pauses 2.5% (glot-like 23% merge: 13%) and still
+  pauses 98% of 5%-merge apps within 100 runs.
+- **Samples without an age limit, and no probe.** Samples come only from
+  spend-down dispatches, so a paused app would never get new evidence and
+  would stay paused until the credits expired.
 - **A SQL view or materialized rollup.** It would be faster at scale but
   needs a migration applied before the API deploys. At ≤200 runs a day per
-  key, reading 7 days of rows (2 pages, attempts and reviews in chunks of
-  100 ids) is cheap enough; revisit with a view if a key ever runs far more.
-- **Pausing the key instead of the app.** Yield differs by app (on
-  2026-10-21 one app's runs were 65% no-PR while another's PRs were 67%
-  mergeable); pausing the key would starve the apps that work.
+  key, reading 7 days (pages of 1,000; attempts and reviews in chunks of 100
+  ids), served by the new key/time index, is cheap; revisit if a key runs far
+  more.
+- **Pausing the key instead of the app.** Yield differs by app; pausing the
+  key would starve the apps that work.
 - **Counting fix_first as a failure.** A fix_first PR is usually one
-  follow-up from mergeable; the hold rate and the merge rate already bound
-  the bad and the good ends.
+  follow-up from mergeable; the merge and hold rules bound the two ends.
 - **Per-app thresholds as settings.** No evidence yet that apps need
-  different bars; constants with a rationale are easier to reason about and
-  change in review.
+  different bars.
 
 ### Consequences
 
-- On the 2026-10-21 data the rule would pause three of the seven apps
-  (one under 20% mergeable, one over 35% held, one with 65% no-PR runs) and
-  leave the rest running or in cold start.
-- Each tick adds three reads per served app (its newest 100 spend-down runs,
-  their attempts, their reviews).
+- On the 2026-10-21 data (14 days, newest 40), the rule pauses no app:
+  - glot.it (9 of 40 merge, upper bound 34.9%) keeps running;
+  - tsumagoi (19 of 40 runs without a PR, lower bound 35.1%) keeps running;
+  - yen-yen (11 reviews) is still in cold start.
+  The rule targets apps that are reliably bad, not unlucky.
+- Migration `20261021120000_spend_down_stop_loss` adds the reset column and
+  two indexes on `fix_dispatch_jobs`: one by key and time, for the scoreboard
+  and today's count; one by app and time, for the samples. The app index was
+  missing on the live project. Until the migration is applied, the code reads
+  the reset as "never" and Resume answers 503 `MIGRATION_PENDING`.
+- Each tick reads each served app's samples once (cached across keys).

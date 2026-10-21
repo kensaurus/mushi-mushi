@@ -12,6 +12,7 @@ type SpendDownState = 'off' | 'not_started' | 'active' | 'expired' | 'key_unusab
 export interface SpendDownStopLoss {
   paused: boolean
   reason: string | null
+  pausedAt?: string | null
   reviewed: number
   mergeRate: number | null
   holdRate: number | null
@@ -29,7 +30,8 @@ export interface SpendDownCounts {
   reviewed: number
   verdicts: { merge: number; fix_first: number; hold: number }
   merged: number
-  reviewCostUsd: number
+  /** fix_reviews.cost_usd summed: the latest review of each PR (a re-run overwrites). */
+  latestReviewCostUsd: number
   mergeYield: number | null
   mergeableYield: number | null
 }
@@ -49,8 +51,12 @@ export interface SpendDownKeyStatus {
   startsAt: string | null
   dispatchedToday: number
   remainingToday: number
-  projects: Array<{ id: string; name: string; stopLoss?: SpendDownStopLoss }>
+  projects: Array<{ id: string; name: string; stopLoss?: SpendDownStopLoss | null }>
+  /** Apps this key pays for that you cannot open (a shared key). */
+  otherApps?: number
+  stopLossNote?: string | null
   scoreboard?: { days: number; totals: SpendDownCounts } | null
+  scoreboardNote?: string | null
   lastRunAt: string | null
   lastSummary: {
     dispatched?: number
@@ -85,17 +91,21 @@ export function spendDownLine(k: SpendDownKeyStatus): { text: string; tone: 'mut
         text: `Starts ${day(k.startsAt)}: up to ${fixes(k.dailyLimit)} a day until the credits expire on ${day(k.creditsExpireAt)}.`,
         tone: 'muted',
       }
-    case 'active':
-      if (k.projects.length === 0) {
+    case 'active': {
+      const others = k.otherApps ?? 0
+      if (k.projects.length === 0 && others === 0) {
         return {
           text: 'On, but no app uses this key: each app has its own Cursor key, auto-fix is off, or no repo is linked.',
           tone: 'warn',
         }
       }
+      const names = k.projects.map((p) => p.name)
+      if (others > 0) names.push(`${others} other app${others === 1 ? '' : 's'}`)
       return {
-        text: `Spending down: ${k.dispatchedToday} of ${fixes(k.dailyLimit)} today, until ${day(k.creditsExpireAt)}. Pays for ${k.projects.map((p) => p.name).join(', ')}.`,
+        text: `Spending down: ${k.dispatchedToday} of ${fixes(k.dailyLimit)} today, until ${day(k.creditsExpireAt)}. Pays for ${names.join(', ')}.`,
         tone: 'ok',
       }
+    }
   }
 }
 
@@ -104,22 +114,32 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 /**
- * "Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04",
- * or null before the key has run anything in the period.
+ * "Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review
+ * $8.04 (latest review per PR)", or null before the key has run anything in
+ * the period (or when the scoreboard could not be read).
  */
 export function spendDownScoreLine(k: SpendDownKeyStatus): string | null {
   const board = k.scoreboard
   if (!board || board.totals.runs === 0) return null
   const t = board.totals
-  const review = t.reviewed > 0 || t.reviewCostUsd > 0 ? ` · Opus review $${t.reviewCostUsd.toFixed(2)}` : ''
+  const review =
+    t.reviewed > 0 || t.latestReviewCostUsd > 0
+      ? ` · Opus review $${t.latestReviewCostUsd.toFixed(2)} (latest review per PR)`
+      : ''
   return `Last ${plural(board.days, 'day')}: ${plural(t.runs, 'run')} → ${plural(t.prsOpened, 'PR')} → ${t.verdicts.merge} mergeable, ${t.merged} merged${review}`
 }
 
-/** Apps the stop-loss pauses right now, one "app: reason" line each. */
-export function spendDownPauses(k: SpendDownKeyStatus): string[] {
+export interface SpendDownPause {
+  projectId: string
+  /** "app: reason" */
+  text: string
+}
+
+/** Apps the stop-loss pauses right now, with why. */
+export function spendDownPauses(k: SpendDownKeyStatus): SpendDownPause[] {
   return k.projects
     .filter((p) => p.stopLoss?.paused)
-    .map((p) => `${p.name}: ${p.stopLoss?.reason ?? 'Paused: low yield'}`)
+    .map((p) => ({ projectId: p.id, text: `${p.name}: ${p.stopLoss?.reason ?? 'Paused: low yield'}` }))
 }
 
 /**

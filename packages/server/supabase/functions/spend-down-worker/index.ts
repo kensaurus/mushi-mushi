@@ -18,11 +18,14 @@
  *     wrong_repo, not_actionable or needs_human), ranked by severity × judge
  *     score × named component × 1.3 when the report already has Sentry or
  *     stack evidence, one per group;
- *   - stop-loss (ADR 0028 amendment): an app is paused while its newest 20
- *     Opus-reviewed spend-down PRs are under 20% "merge" or over 35% "hold",
- *     or over half of its newest 20 finished runs ended with a no-PR agent
- *     verdict (each rule needs 8 samples first). Every pause and resume is
- *     one structured log line with the rates and sample sizes;
+ *   - stop-loss (ADR 0028 amendment): from its spend-down runs of the last
+ *     14 days (after its last Resume), an app with 20+ samples is paused when
+ *     the one-sided 95% Wilson bound puts its Opus merge rate under 20%, its
+ *     hold rate over 35%, or its no-PR-verdict share over 50%. A paused app
+ *     still gets one probe dispatch a day; it resumes when the rates clear
+ *     25% / 30% / 45%, its newest 2 reviewed probes both got "merge", its
+ *     samples age out, or someone presses Resume. Each pause and resume is
+ *     one structured log line with the rates, bounds and sample sizes;
  *   - each goes through `dispatchFixForReport` (auto-fix switch, feature
  *     requests, resolved reports, in-flight dedupe) as an automatic
  *     `cursor_cloud` dispatch carrying `spend_down_key_id` and the key's model.
@@ -50,28 +53,38 @@ import {
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   spendDownDispatchMetadata,
+  SPEND_DOWN_PROBES_PER_DAY,
   spendDownStopLoss,
   spendDownWindow,
-  previouslyPausedProjects,
+  previousPauseStates,
   type SpendDownCandidate,
   type SpendDownEvidenceRow,
   type SpendDownKey,
   type SpendDownState,
 } from '../_shared/spend-down.ts'
-import { keyDispatchesToday, keyProjects, projectYieldSamples } from '../_shared/spend-down-db.ts'
+import {
+  cachedYieldSamples,
+  keyDispatchesToday,
+  keyProjects,
+  stopLossResets,
+  type SpendDownYieldCache,
+} from '../_shared/spend-down-db.ts'
 
 const log = rootLog.child('spend-down-worker')
 
 export const SPEND_DOWN_KEY_COLUMNS =
   'id, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_summary'
 
-/** The yield the stop-loss read for one app this tick (rates are 0-1). */
+/** The yield the stop-loss read for one app this tick (rates and bounds are 0-1). */
 export interface ProjectYield {
   reviewed: number
   mergeRate: number | null
   holdRate: number | null
+  mergeUpper: number | null
+  holdLower: number | null
   finishedRuns: number
   noPrShare: number | null
+  noPrLower: number | null
 }
 
 export interface ProjectOutcome {
@@ -79,8 +92,14 @@ export interface ProjectOutcome {
   dispatched: number
   /** Why nothing (more) went to this app, when that is the case. */
   stopped?: string
-  /** The stop-loss paused this app this tick; `stopped` says why. */
+  /** The stop-loss has this app paused; `stopped` says why. */
   paused?: boolean
+  /** When the current pause began. */
+  pausedAt?: string
+  /** This tick's dispatch was the paused app's daily probe. */
+  probe?: boolean
+  /** Not reached this tick (the key's limit ran out); the pause is carried from the last tick. */
+  carried?: boolean
   yield?: ProjectYield
 }
 
@@ -102,6 +121,14 @@ export interface SpendDownDeps {
     projectId: string,
     settings: AutofixBudgetSettings,
   ) => Promise<AutofixBudgetCheck>
+  /** Shared across keys within one tick: each app's samples are read once. */
+  yieldCache?: SpendDownYieldCache
+}
+
+function utcDayStart(now: Date): string {
+  const d = new Date(now)
+  d.setUTCHours(0, 0, 0, 0)
+  return d.toISOString()
 }
 
 async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): Promise<SpendDownCandidate[]> {
@@ -156,6 +183,7 @@ export async function runSpendDownForKey(
 ): Promise<KeySummary> {
   const now = deps.now ?? new Date()
   const dispatch = deps.dispatch ?? dispatchFixForReport
+  const yieldCache: SpendDownYieldCache = deps.yieldCache ?? new Map()
   const checkBudget =
     deps.checkBudget ??
     ((d: SupabaseClient, pid: string, s: AutofixBudgetSettings) => checkAutofixBudget(d, pid, s, { trigger: 'automatic' }))
@@ -166,29 +194,56 @@ export async function runSpendDownForKey(
   const dispatchedToday = await keyDispatchesToday(db, key.id, now)
   let remaining = remainingToday(key, dispatchedToday)
   const { ids, settings } = await keyProjects(db, key)
-  const wasPaused = previouslyPausedProjects(key.spend_down_last_summary)
+  const { resets, error: resetErr } = await stopLossResets(db, ids)
+  if (resetErr) {
+    log.warn('spend-down stop-loss resets not read (migration not applied?); using the 14-day limit only', {
+      keyId: key.id,
+      err: resetErr,
+    })
+  }
+  const previous = previousPauseStates(key.spend_down_last_summary, resets)
+  const dayStart = utcDayStart(now)
 
   for (const projectId of ids) {
     if (remaining <= 0) break
     const outcome: ProjectOutcome = { projectId, dispatched: 0 }
     base.projects.push(outcome)
 
-    const stopLoss = spendDownStopLoss(await projectYieldSamples(db, projectId))
+    const samples = await cachedYieldSamples(yieldCache, db, projectId, now, resets.get(projectId) ?? null)
+    const stopLoss = spendDownStopLoss(samples, previous.get(projectId) ?? { paused: false, pausedAt: null }, now)
     outcome.yield = {
       reviewed: stopLoss.reviewed,
       mergeRate: stopLoss.mergeRate,
       holdRate: stopLoss.holdRate,
+      mergeUpper: stopLoss.mergeUpper,
+      holdLower: stopLoss.holdLower,
       finishedRuns: stopLoss.finishedRuns,
       noPrShare: stopLoss.noPrShare,
+      noPrLower: stopLoss.noPrLower,
     }
-    const trace = { keyId: key.id, projectId, ...outcome.yield, reason: stopLoss.reason }
+    if (stopLoss.transition) {
+      // One line per change of state, never per tick.
+      log.info(`spend-down.${stopLoss.transition}`, {
+        keyId: key.id,
+        projectId,
+        ...outcome.yield,
+        reason: stopLoss.reason,
+        resumedBy: stopLoss.resumedBy,
+      })
+    }
+
+    let probe = false
     if (stopLoss.paused) {
-      log.info('spend-down.paused', trace)
       outcome.paused = true
+      if (stopLoss.pausedAt) outcome.pausedAt = stopLoss.pausedAt
       outcome.stopped = stopLoss.reason ?? 'Paused: low yield'
-      continue
+      // The daily probe: one spend-down dispatch a day (any key), so a paused
+      // app keeps producing the evidence that can resume it.
+      const today = samples.runs.filter((r) => r.at >= dayStart).length
+      if (today >= SPEND_DOWN_PROBES_PER_DAY) continue
+      probe = true
     }
-    if (wasPaused.has(projectId)) log.info('spend-down.resumed', trace)
+
     const s = settings.get(projectId) ?? {}
     const budget = await checkBudget(db, projectId, {
       autofix_max_spend_usd: (s.autofix_max_spend_usd as number | null) ?? null,
@@ -196,22 +251,25 @@ export async function runSpendDownForKey(
       autofix_approval_cost_threshold_usd: (s.autofix_approval_cost_threshold_usd as number | null) ?? null,
     })
     if (!budget.allowed) {
-      outcome.stopped = budget.reason ?? 'Auto-fix cap reached'
+      if (!probe) outcome.stopped = budget.reason ?? 'Auto-fix cap reached'
       continue
     }
-    const capacity = projectCapacity({
-      remainingForKey: remaining,
-      openCloudAttempts: await openCloudAttempts(db, projectId),
-      autofixDispatchesToday: budget.dispatchesToday,
-      autofixMaxPerDay: budget.maxDispatchesPerDay,
-    })
+    const capacity = Math.min(
+      probe ? SPEND_DOWN_PROBES_PER_DAY : Number.POSITIVE_INFINITY,
+      projectCapacity({
+        remainingForKey: remaining,
+        openCloudAttempts: await openCloudAttempts(db, projectId),
+        autofixDispatchesToday: budget.dispatchesToday,
+        autofixMaxPerDay: budget.maxDispatchesPerDay,
+      }),
+    )
     if (capacity <= 0) {
-      outcome.stopped = 'Three fixes already running'
+      if (!probe) outcome.stopped = 'Three fixes already running'
       continue
     }
     const candidates = await candidatesFor(db, projectId, now)
     if (candidates.length === 0) {
-      outcome.stopped = 'No open report to fix'
+      if (!probe) outcome.stopped = 'No open report to fix'
       continue
     }
     for (const report of candidates) {
@@ -221,17 +279,34 @@ export async function runSpendDownForKey(
         reportId: report.id,
         skipMembershipCheck: true,
         trigger: 'automatic',
-        metadata: spendDownDispatchMetadata(key),
+        metadata: spendDownDispatchMetadata(key, { probe }),
       })
       if (res.ok) {
         outcome.dispatched++
         base.dispatched++
         remaining--
+        if (probe) outcome.probe = true
       } else if (res.code === 'AUTOFIX_DISABLED') {
-        outcome.stopped = 'Auto-fix is off'
+        if (!probe) outcome.stopped = 'Auto-fix is off'
         break
       }
     }
+  }
+
+  // Carry forward pauses on apps this tick did not reach (the key's limit ran
+  // out first), so the next tick still knows they are paused.
+  const reached = new Set(base.projects.map((p) => p.projectId))
+  for (const projectId of ids) {
+    const prev = previous.get(projectId)
+    if (!prev || reached.has(projectId)) continue
+    base.projects.push({
+      projectId,
+      dispatched: 0,
+      paused: true,
+      ...(prev.pausedAt ? { pausedAt: prev.pausedAt } : {}),
+      stopped: prev.reason ?? 'Paused: low yield',
+      carried: true,
+    })
   }
 
   return { ...base, dispatchedToday: dispatchedToday + base.dispatched, remainingToday: remaining }
@@ -247,10 +322,11 @@ export async function runSpendDown(db: SupabaseClient, deps: SpendDownDeps = {})
   if (error) throw new Error(`spend-down: keys read failed: ${error.message}`)
 
   const summaries: KeySummary[] = []
+  const yieldCache: SpendDownYieldCache = deps.yieldCache ?? new Map()
   for (const key of (data ?? []) as Array<SpendDownKey & { spend_down_last_summary?: unknown }>) {
     let summary: KeySummary
     try {
-      summary = await runSpendDownForKey(db, key, { ...deps, now })
+      summary = await runSpendDownForKey(db, key, { ...deps, now, yieldCache })
     } catch (err) {
       log.warn('spend-down tick failed for key (will retry next tick)', {
         keyId: key.id,

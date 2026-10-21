@@ -9,6 +9,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import {
   classifySpendDownRun,
+  SPEND_DOWN_SAMPLE_MAX_AGE_DAYS,
   SPEND_DOWN_SCOREBOARD_DAYS,
   spendDownProjectIds,
   type CursorPoolKey,
@@ -18,12 +19,11 @@ import {
 } from './spend-down.ts'
 
 /**
- * Newest spend-down dispatches of one app the stop-loss reads. At the
- * 2026-10-21 rates (60% open a PR) 100 runs hold about 60 PRs, well over the
- * 20 reviews and 20 finished runs the rules use; it also keeps the
- * `id=in.(…)` filters under PostgREST's URL limit.
+ * Newest spend-down dispatches of one app the stop-loss reads (inside the
+ * 14-day age limit). At the 2026-10-21 rates (60% open a PR) 150 runs hold
+ * about 90 PRs, over the 40 reviews and 40 finished runs the rules read.
  */
-const YIELD_JOB_LOOKBACK = 100
+const YIELD_JOB_LOOKBACK = 150
 /** Ids per `in.(…)` filter: 100 uuids is about 3.7 KB of URL. */
 const IN_CHUNK = 100
 /** PostgREST max_rows on Supabase. */
@@ -84,15 +84,25 @@ async function readByIds<T>(
 }
 
 /**
- * The stop-loss samples of one app: its newest spend-down runs (any key) with
- * where each ended, and the Opus verdicts of their PRs, newest review first.
+ * The stop-loss samples of one app: its spend-down runs (any key, never a
+ * manual or auto-fix dispatch) dispatched in the last 14 days and after its
+ * last Resume (`resetAt`), newest first, each with where it ended and the
+ * Opus verdict of its PR.
  */
-export async function projectYieldSamples(db: SupabaseClient, projectId: string): Promise<SpendDownYieldSamples> {
+export async function projectYieldSamples(
+  db: SupabaseClient,
+  projectId: string,
+  now: Date,
+  resetAt: string | null = null,
+): Promise<SpendDownYieldSamples> {
+  const ageCutoff = new Date(now.getTime() - SPEND_DOWN_SAMPLE_MAX_AGE_DAYS * 86_400_000).toISOString()
+  const since = resetAt && resetAt > ageCutoff ? resetAt : ageCutoff
   const { data, error } = await db
     .from('fix_dispatch_jobs')
-    .select('id, project_id, status, pr_url, fix_attempt_id, created_at')
+    .select('id, project_id, status, pr_url, fix_attempt_id, created_at, dispatch_metadata')
     .eq('project_id', projectId)
     .eq('dispatch_metadata->>source', 'spend_down')
+    .gt('created_at', since)
     .order('created_at', { ascending: false })
     .limit(YIELD_JOB_LOOKBACK)
   if (error) throw new Error(`spend-down: yield dispatch read failed: ${error.message}`)
@@ -102,14 +112,64 @@ export async function projectYieldSamples(db: SupabaseClient, projectId: string)
     readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', attemptIds, 'yield attempts'),
     readByIds<ReviewRow>(db, 'fix_reviews', 'fix_attempt_id, verdict, reviewed_at', 'fix_attempt_id', attemptIds, 'yield reviews'),
   ])
-  const byId = new Map(attempts.map((a) => [a.id, a]))
+  const attemptById = new Map(attempts.map((a) => [a.id, a]))
+  const reviewByAttempt = new Map(reviews.map((r) => [r.fix_attempt_id, r]))
   return {
-    runs: jobs.map((j) => classifySpendDownRun(j, j.fix_attempt_id ? byId.get(j.fix_attempt_id) ?? null : null)),
-    verdicts: reviews
-      .filter((r) => r.verdict != null)
-      .sort((a, b) => String(b.reviewed_at ?? '').localeCompare(String(a.reviewed_at ?? '')))
-      .map((r) => r.verdict),
+    runs: jobs.map((j) => {
+      const review = j.fix_attempt_id ? reviewByAttempt.get(j.fix_attempt_id) ?? null : null
+      return {
+        at: j.created_at,
+        outcome: classifySpendDownRun(j, j.fix_attempt_id ? attemptById.get(j.fix_attempt_id) ?? null : null),
+        verdict: review?.verdict ?? null,
+        reviewedAt: review?.reviewed_at ?? null,
+        probe: j.dispatch_metadata?.spend_down_probe === true,
+      }
+    }),
   }
+}
+
+/** One read of each app's samples per tick or request (an app can come up under several keys). */
+export type SpendDownYieldCache = Map<string, Promise<SpendDownYieldSamples>>
+
+export function cachedYieldSamples(
+  cache: SpendDownYieldCache,
+  db: SupabaseClient,
+  projectId: string,
+  now: Date,
+  resetAt: string | null,
+): Promise<SpendDownYieldSamples> {
+  const id = `${projectId}\u0000${resetAt ?? ''}`
+  let hit = cache.get(id)
+  if (!hit) {
+    hit = projectYieldSamples(db, projectId, now, resetAt)
+    // A failed read is not cached, so the next caller retries.
+    hit.catch(() => cache.delete(id))
+    cache.set(id, hit)
+  }
+  return hit
+}
+
+/**
+ * When each app was last resumed by hand (`project_settings.
+ * spend_down_stop_loss_reset_at`). Fails open to "never": before the
+ * migration adds the column the read errors, and the stop-loss then simply
+ * uses the 14-day age limit.
+ */
+export async function stopLossResets(
+  db: SupabaseClient,
+  projectIds: string[],
+): Promise<{ resets: Map<string, string>; error: string | null }> {
+  const resets = new Map<string, string>()
+  if (projectIds.length === 0) return { resets, error: null }
+  const { data, error } = await db
+    .from('project_settings')
+    .select('project_id, spend_down_stop_loss_reset_at')
+    .in('project_id', projectIds)
+  if (error) return { resets, error: error.message }
+  for (const row of (data ?? []) as Array<{ project_id: string; spend_down_stop_loss_reset_at?: string | null }>) {
+    if (row.spend_down_stop_loss_reset_at) resets.set(row.project_id, row.spend_down_stop_loss_reset_at)
+  }
+  return { resets, error: null }
 }
 
 function utcDay(iso: string): string {
@@ -173,7 +233,7 @@ export async function keyScoreboardRuns(
       noPrVerdict: outcome === 'no_pr_verdict' ? attempt?.failure_category ?? null : null,
       verdict: review?.verdict ?? null,
       merged: !!attempt?.merged_at,
-      reviewCostUsd: cost != null && Number.isFinite(cost) ? cost : null,
+      latestReviewCostUsd: cost != null && Number.isFinite(cost) ? cost : null,
     }
   })
 }
