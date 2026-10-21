@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261021200000_ci_runner_visibility
+-- 20261021111344_ci_runner_visibility
 --
 -- CI runners you can see (Plan 022, ADR 0033). On 2026-10-21 glot.it's
 -- self-hosted runner was OOM-killed; GitHub cancelled the job and Mushi read

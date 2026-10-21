@@ -133,7 +133,7 @@ describe('runner:write plumbing', () => {
   })
 
   it('is allowed by the CHECK, which keeps every earlier scope', () => {
-    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261021200000_ci_runner_visibility.sql'), 'utf8')
+    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261021111344_ci_runner_visibility.sql'), 'utf8')
     const m = /scopes <@ array\[([^\]]*)\]/.exec(sql)
     expect(m).not.toBeNull()
     for (const s of ['report:write', 'mcp:read', 'mcp:write', 'activity:write', 'rewards:read', 'voice:write', 'runner:write']) {
@@ -143,7 +143,7 @@ describe('runner:write plumbing', () => {
   })
 
   it('keeps the migration\'s function and tables closed to clients', () => {
-    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261021200000_ci_runner_visibility.sql'), 'utf8')
+    const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/20261021111344_ci_runner_visibility.sql'), 'utf8')
     // The only new function: definer rights, pinned search_path, service role only.
     expect(sql.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(1)
     const fn = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION public.ci_claim_live_sync'), sql.indexOf('$$;', sql.indexOf('CREATE OR REPLACE FUNCTION public.ci_claim_live_sync')))

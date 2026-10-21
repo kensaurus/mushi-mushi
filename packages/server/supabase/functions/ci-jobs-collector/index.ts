@@ -3,7 +3,7 @@
 // CI view and the fix loop (Plan 022 Phase 2, ADR 0033).
 //
 // Trigger: pg_cron every 10 minutes at :02 … :52 (migration
-//          20261021200000_ci_runner_visibility), and POST
+//          20261021111344_ci_runner_visibility), and POST
 //          {"projectId": "<uuid>"} from an internal caller.
 // Auth:    requireServiceRoleAuth (internal only).
 //
