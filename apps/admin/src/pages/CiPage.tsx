@@ -114,7 +114,9 @@ export function CiPage() {
     title: 'CI runners',
     summary: stats
       ? `${stats.jobs} jobs in ${data.window.days} days · wait p95 ${formatSeconds(stats.queueP95s)} · ${stats.infraFailures} test machine failures`
-      : 'Loading CI runners',
+      : page.error
+        ? "CI runners couldn't load"
+        : 'Loading CI runners',
     questions: ['Why are my fixes slow to land?', 'Which runner keeps failing?', 'How do I make CI faster?'],
   })
 
