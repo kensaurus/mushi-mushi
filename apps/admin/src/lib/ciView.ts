@@ -74,7 +74,7 @@ export const CI_OUTCOME_META: Record<CiJobOutcome, { label: string; glyph: strin
   waiting: { label: 'Waiting', glyph: '◷', tone: 'neutral' },
   running: { label: 'Running', glyph: '▶', tone: 'info' },
   passed: { label: 'Passed', glyph: '✓', tone: 'ok' },
-  code_failure: { label: 'Failed', glyph: '✕', tone: 'danger' },
+  code_failure: { label: 'Tests failed', glyph: '✕', tone: 'danger' },
   infra: { label: 'Test machine stopped', glyph: '⚠', tone: 'warn' },
   cancelled: { label: 'Cancelled', glyph: '⊘', tone: 'neutral' },
   skipped: { label: 'Skipped', glyph: '–', tone: 'neutral' },
@@ -202,20 +202,27 @@ export function repoFromPrUrl(prUrl: string | null | undefined): string | null {
 }
 
 /** Lower-cased `owner/name` plus PR number → id of the report with a fix on that PR. */
-export type CiFixLinks = ReadonlyMap<string, string>
+/** A CI job's fix: the report to open and the fix attempt to re-run. */
+interface CiFixLink {
+  reportId: string
+  /** Fix attempt id, when the fix list carried one (re-run needs it). */
+  fixId: string | null
+}
+
+export type CiFixLinks = ReadonlyMap<string, CiFixLink>
 
 export function fixLinkKey(repo: string, prNumber: number): string {
   return `${repo.toLowerCase()}#${prNumber}`
 }
 
-/** Map each fix attempt's PR to its report, for "Mushi fix" links on CI jobs. */
-export function buildFixLinks(fixes: ReadonlyArray<{ pr_url?: string | null; pr_number?: number | null; report_id: string }>): CiFixLinks {
-  const out = new Map<string, string>()
+/** Map each fix attempt's PR to its report and attempt, for links on CI jobs. */
+export function buildFixLinks(fixes: ReadonlyArray<{ id?: string | null; pr_url?: string | null; pr_number?: number | null; report_id: string }>): CiFixLinks {
+  const out = new Map<string, CiFixLink>()
   for (const f of fixes) {
     const repo = repoFromPrUrl(f.pr_url)
     if (!repo || f.pr_number == null) continue
     const key = fixLinkKey(repo, f.pr_number)
-    if (!out.has(key)) out.set(key, f.report_id)
+    if (!out.has(key)) out.set(key, { reportId: f.report_id, fixId: f.id ?? null })
   }
   return out
 }
@@ -224,6 +231,17 @@ export function buildFixLinks(fixes: ReadonlyArray<{ pr_url?: string | null; pr_
 
 /** @internal Exported for tests only. */
 export const NO_RUNNER_LANE = 'No runner yet'
+/** Lane label prefix for GitHub's own machines, one lane per concurrent job. */
+const GITHUB_LANE = 'GitHub-hosted'
+
+/**
+ * What to call the machine a job ran on. GitHub names its hosted runners
+ * "GitHub Actions 1000079285", a throwaway VM id that means nothing to a reader.
+ */
+export function runnerDisplayName(job: Pick<CiJob, 'runnerName' | 'runnerKind'>): string | null {
+  if (job.runnerKind === 'github_hosted') return 'a GitHub-hosted machine'
+  return job.runnerName
+}
 const UNKNOWN_RUNNER_LANE = 'Unknown machine'
 
 export interface CiTimelineBar {
@@ -273,8 +291,11 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
   const to = opts.now
   const from = to - opts.windowMs
   const lanes = new Map<string, CiTimelineLane>()
+  // When each GitHub-hosted lane is free again, for packing jobs into lanes.
+  const githubRows: number[] = []
+  const byStart = [...jobs].sort((a, b) => (ms(a.startedAt ?? a.createdAt) ?? 0) - (ms(b.startedAt ?? b.createdAt) ?? 0))
 
-  for (const job of jobs) {
+  for (const job of byStart) {
     const created = ms(job.createdAt)
     if (created == null) continue
     const started = ms(job.startedAt)
@@ -290,8 +311,18 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     if (!queue && !run) continue
 
     const unassigned = started == null && !job.runnerName
-    const label = job.runnerName ?? (unassigned ? NO_RUNNER_LANE : UNKNOWN_RUNNER_LANE)
-    const id = unassigned ? '__none__' : `runner:${label}`
+    let label = job.runnerName ?? (unassigned ? NO_RUNNER_LANE : UNKNOWN_RUNNER_LANE)
+    let id = unassigned ? '__none__' : `runner:${label}`
+    if (!unassigned && job.runnerKind === 'github_hosted') {
+      // One lane per job running at the same time, not one per throwaway VM.
+      const start = (queue ?? run)!.start
+      const finish = (run ?? queue)!.end
+      let row = githubRows.findIndex((busyUntil) => busyUntil <= start)
+      if (row < 0) row = githubRows.push(0) - 1
+      githubRows[row] = finish
+      label = `${GITHUB_LANE} ${row + 1}`
+      id = `github:${row}`
+    }
     let lane = lanes.get(id)
     if (!lane) {
       lane = { id, label, unassigned, busyMs: 0, bars: [] }
@@ -313,6 +344,11 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     })
   }
 
+  // A lone GitHub lane needs no number.
+  if (githubRows.length === 1) {
+    const only = lanes.get('github:0')
+    if (only) only.label = GITHUB_LANE
+  }
   for (const lane of lanes.values()) {
     lane.bars.sort((a, b) => (a.queue?.start ?? a.run?.start ?? 0) - (b.queue?.start ?? b.run?.start ?? 0))
   }
@@ -354,6 +390,98 @@ export function recentInfraFailures(jobs: CiJob[], limit = 10): CiJob[] {
     .slice(0, limit)
 }
 
+/** One day of a runner's or machine's finished jobs, by outcome. */
+interface CiActivityDay {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string
+  /** False before the oldest job Mushi holds: no data, not zero jobs. */
+  covered: boolean
+  passed: number
+  failed: number
+  infra: number
+  other: number
+}
+
+export interface CiActivity {
+  days: CiActivityDay[]
+  /** Finished jobs counted in `days`. */
+  finished: number
+  passRate: number | null
+  waitP50s: number | null
+  runP50s: number | null
+  memPeakMb: number | null
+  lastJobAt: string | null
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const v = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(v.length / 2)
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2
+}
+
+/**
+ * Daily outcomes for the jobs a runner (or machine) ran, oldest day first,
+ * `days` days ending today (UTC). Live jobs count toward `lastJobAt` only.
+ * The overview holds the newest finished jobs, not every one, so callers
+ * label this "recent jobs", never a full history.
+ */
+export function ciActivity(jobs: CiJob[], now: number, days = 7, coveredFrom: number | null = null): CiActivity {
+  const DAY = 86_400_000
+  const today = Math.floor(now / DAY)
+  const buckets: CiActivityDay[] = Array.from({ length: days }, (_, i) => ({
+    day: new Date((today - days + 1 + i) * DAY).toISOString().slice(0, 10),
+    covered: coveredFrom == null || (today - days + 2 + i) * DAY > coveredFrom,
+    passed: 0,
+    failed: 0,
+    infra: 0,
+    other: 0,
+  }))
+  let lastJobAt: string | null = null
+  let lastMs = -Infinity
+  let passed = 0
+  let judged = 0
+  const waits: number[] = []
+  const runs: number[] = []
+  let memPeakMb: number | null = null
+  let finished = 0
+  for (const j of jobs) {
+    const at = ms(j.startedAt ?? j.createdAt)
+    if (at != null && at > lastMs) {
+      lastMs = at
+      lastJobAt = j.startedAt ?? j.createdAt
+    }
+    const outcome = jobOutcome(j)
+    if (outcome === 'waiting' || outcome === 'running') continue
+    const end = ms(j.completedAt ?? j.startedAt ?? j.createdAt)
+    if (end == null) continue
+    const idx = Math.floor(end / DAY) - (today - days + 1)
+    if (idx < 0 || idx >= days) continue
+    finished++
+    const b = buckets[idx]
+    if (outcome === 'passed') b.passed++
+    else if (outcome === 'code_failure') b.failed++
+    else if (outcome === 'infra') b.infra++
+    else b.other++
+    if (outcome === 'passed' || outcome === 'code_failure') {
+      judged++
+      if (outcome === 'passed') passed++
+    }
+    if (j.queueSeconds != null) waits.push(j.queueSeconds)
+    if (j.durationSeconds != null) runs.push(j.durationSeconds)
+    if (j.memPeakMb != null) memPeakMb = Math.max(memPeakMb ?? 0, j.memPeakMb)
+  }
+  return {
+    days: buckets,
+    finished,
+    passRate: judged ? passed / judged : null,
+    waitP50s: median(waits),
+    runP50s: median(runs),
+    memPeakMb,
+    lastJobAt,
+  }
+}
+
 /** The permissions banner text, or null when Mushi can see everything it needs. */
 export function permissionsNotice(p: CiOverview['permissions']): string | null {
   if (p.jobs === 'missing') {
@@ -363,4 +491,83 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
   }
   return null
+}
+
+// ── Summary (top of /ci) ────────────────────────────────────────────────────
+
+/** Finished jobs by outcome over the window, from the server's stats. */
+export interface CiOutcomeCounts {
+  passed: number
+  codeFailures: number
+  infra: number
+  /** Cancelled, skipped, or still waiting or running. */
+  other: number
+  total: number
+}
+
+/**
+ * The server's pass rate is passed ÷ (passed + code failures + machine
+ * stops), so the passed count follows from it exactly enough to draw.
+ */
+export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passRate' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
+  const failed = stats.codeFailures + stats.infraFailures
+  let passed = 0
+  if (stats.passRate != null) {
+    passed = stats.passRate >= 1 ? Math.max(0, stats.jobs - failed) : Math.round((stats.passRate * failed) / (1 - stats.passRate))
+  }
+  passed = Math.min(passed, Math.max(0, stats.jobs - failed))
+  return {
+    passed,
+    codeFailures: stats.codeFailures,
+    infra: stats.infraFailures,
+    other: Math.max(0, stats.jobs - passed - failed),
+    total: stats.jobs,
+  }
+}
+
+export interface CiVerdict {
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  headline: string
+  detail: string
+}
+
+const LONG_WAIT_S = 10 * 60
+
+/** One plain sentence for the top of /ci: does anything need you, and what. */
+export function ciVerdict(o: Pick<CiOverview, 'jobs' | 'stats' | 'window'>, now: number): CiVerdict {
+  const queue = buildCiQueue(o.jobs, now)
+  const oldestWait = queue.waiting.reduce((m, j) => Math.max(m, jobElapsedSeconds(j, now) ?? 0), 0)
+  const c = ciOutcomeCounts(o.stats)
+  const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
+  const live =
+    queue.running.length || queue.waiting.length
+      ? `${queue.running.length} running, ${queue.waiting.length ? `${queue.waiting.length} waiting` : 'none waiting'}. `
+      : ''
+
+  if (queue.waiting.length > 0 && oldestWait >= LONG_WAIT_S) {
+    return {
+      tone: 'warn',
+      headline: `${queue.waiting.length} job${queue.waiting.length === 1 ? ' is' : 's are'} waiting for a test machine, the longest for ${formatSeconds(oldestWait)}.`,
+      detail: `${live}Check that your runners are online, or add a machine (mushi runner add).`,
+    }
+  }
+  if (c.infra > 0 && c.infra >= c.codeFailures) {
+    return {
+      tone: 'warn',
+      headline: 'Most failures are the test machine, not your code.',
+      detail: `${live}${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
+    }
+  }
+  if (c.codeFailures > 0) {
+    return {
+      tone: 'neutral',
+      headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
+      detail: `${live}${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+    }
+  }
+  return {
+    tone: 'ok',
+    headline: c.total ? `CI is healthy: every finished job passed in ${days}.` : `No jobs in ${days}.`,
+    detail: `${live}${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+  }
 }

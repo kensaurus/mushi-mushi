@@ -866,3 +866,49 @@ export function IconDots(p: IconProps) {
 // Zed — bold "Z" letterform.
 
 // Any client — globe / world.
+
+// CI runners (/ci): a rack server, GitHub's cloud machines, a stopped
+// machine, a cancelled job, a re-run.
+export function IconServer(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2.5" y="2.5" width="11" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="11" height="4.5" rx="1" />
+    <circle cx="5" cy="4.75" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="11.25" r="0.6" fill="currentColor" stroke="none" />
+  </>)
+}
+
+export function IconCloud(p: IconProps) {
+  return wrap(p, <>
+    <path d="M4.5 12.5h7a2.75 2.75 0 0 0 .4-5.47A4 4 0 0 0 4.2 7.6 2.5 2.5 0 0 0 4.5 12.5z" />
+  </>)
+}
+
+export function IconServerOff(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2.5" y="2.5" width="11" height="4.5" rx="1" />
+    <path d="M2.5 10a1 1 0 0 1 1-1h3.5M13.5 12.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V10" />
+    <line x1="9.5" y1="9" x2="13.5" y2="13" />
+    <line x1="13.5" y1="9" x2="9.5" y2="13" />
+  </>)
+}
+
+export function IconBan(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="5.5" />
+    <line x1="4.1" y1="11.9" x2="11.9" y2="4.1" />
+  </>)
+}
+
+export function IconRerun(p: IconProps) {
+  return wrap(p, <>
+    <path d="M13 8a5 5 0 1 1-1.46-3.54" />
+    <polyline points="12.5,2 12.5,5 9.5,5" />
+  </>)
+}
+
+export function IconSkip(p: IconProps) {
+  return wrap(p, <>
+    <line x1="3.5" y1="8" x2="12.5" y2="8" />
+  </>)
+}
