@@ -8,6 +8,9 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createEmbedding } from './embeddings.ts'
 import { formatCodeContext, type CodeContext } from './rag.ts'
 import { pathMatchesScope, type CodebaseScopeSettings } from './codebase-scope.ts'
+import { log } from './logger.ts'
+
+const understandLog = log.child('codebase-understand')
 
 export interface CodebaseCitation {
   file_path: string
@@ -396,7 +399,13 @@ export async function retrieveCodeForQuestion(
     match_count: k,
     path_prefix: pathPrefix,
   })
-  if (error) return { files: [], wikiChunks: [], reason: 'rpc_failed' }
+  if (error) {
+    if (error.code === '57014') {
+      understandLog.warn('match_codebase_files hit statement_timeout', { projectId, k, pathPrefix })
+      return { files: [], wikiChunks: [], reason: 'rpc_timeout' }
+    }
+    return { files: [], wikiChunks: [], reason: 'rpc_failed' }
+  }
 
   const mapped = (hits ?? [])
     .map((f: Record<string, unknown>) => ({
