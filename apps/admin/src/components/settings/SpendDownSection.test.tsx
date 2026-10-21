@@ -120,6 +120,81 @@ describe('SpendDownSection', () => {
     expect(Array.from(document.body.querySelectorAll('button')).some((b) => b.textContent?.includes('spend-down'))).toBe(false)
   })
 
+  it('shows the 7-day scoreboard and each paused app with its reason', async () => {
+    mocks.keys = [
+      {
+        ...KEY,
+        enabled: true,
+        state: 'active',
+        creditsExpireAt: '2026-10-31T23:59:59Z',
+        projects: [
+          {
+            id: 'p1',
+            name: 'tsumagoi',
+            canResume: true,
+            stopLoss: {
+              paused: true,
+              reason: 'Paused: 3 of the last 20 reviewed fixes were mergeable (15%)',
+              reviewed: 20,
+              mergeRate: 0.15,
+              holdRate: 0.2,
+              finishedRuns: 20,
+              noPrShare: 0.1,
+            },
+          },
+        ],
+        scoreboard: {
+          days: 7,
+          totals: {
+            runs: 258,
+            inFlight: 0,
+            prsOpened: 154,
+            noPrVerdicts: 64,
+            otherFailures: 40,
+            reviewed: 66,
+            verdicts: { merge: 19, fix_first: 33, hold: 14 },
+            merged: 0,
+            latestReviewCostUsd: 8.04,
+            mergeYield: 0,
+            mergeableYield: 0.07,
+          },
+        },
+      },
+    ]
+    await render(true)
+    expect(document.body.textContent).toContain(
+      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04 (latest review per PR)',
+    )
+    expect(document.body.textContent).toContain('tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
+    expect(document.body.textContent).toContain('probing 1/day')
+    await act(async () => button('Resume').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/spend-down/projects/p1/resume')!
+    expect((call[1] as RequestInit).method).toBe('POST')
+    expect(mocks.reload).toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Resumed.')
+  })
+
+  it('shows Resume only to the app owner or admin', async () => {
+    const stopLoss = { paused: true, reason: 'Paused: x', reviewed: 20, mergeRate: 0, holdRate: 0, finishedRuns: 20, noPrShare: 0 }
+    mocks.keys = [{ ...KEY, enabled: true, state: 'active', projects: [{ id: 'p1', name: 'tsumagoi', canResume: false, stopLoss }] }]
+    await render(true)
+    expect(document.body.textContent).toContain('tsumagoi: Paused: x')
+    expect(document.body.textContent).toContain('probing 1/day')
+    expect(Array.from(document.body.querySelectorAll('button')).some((b) => b.textContent?.trim() === 'Resume')).toBe(false)
+  })
+
+  it('says when the scoreboard or the app list could not be read', async () => {
+    mocks.keys = [{ ...KEY, projectsNote: 'The apps this key pays for could not be read just now.', scoreboard: null, scoreboardNote: 'The last 7 days could not be read just now.' }]
+    await render(true)
+    expect(document.body.textContent).toContain('The apps this key pays for could not be read just now.')
+  })
+
+  it('says when the scoreboard could not be read', async () => {
+    mocks.keys = [{ ...KEY, scoreboard: null, scoreboardNote: 'The last 7 days could not be read just now.' }]
+    await render(true)
+    expect(document.body.textContent).toContain('The last 7 days could not be read just now.')
+  })
+
   it('renders nothing when the app has no Cursor key', async () => {
     mocks.keys = []
     await render(true)
