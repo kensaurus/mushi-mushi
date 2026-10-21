@@ -90,12 +90,15 @@ describe('buildAddPlan (Linux, ephemeral default)', () => {
     expect(step('download').run).toContain(`echo '${SHA}  '"$tmp/runner.tgz" | sha256sum -c -`)
     expect(step('download').run).toContain('v2.329.0/actions-runner-linux-x64-2.329.0.tar.gz')
     expect(step('slice').file!.content).toContain('MemoryMax=8G')
-    expect(step('slice').file!.content).toContain('MemoryHigh=7372M')
+    expect(step('slice').file!.content).not.toContain('MemoryHigh')
+    expect(step('slice').file!.content).toContain('MemorySwapMax=2G')
     const mint = step('mint').file!.content
     expect(mint).toContain('repos/kensaurus/glot.it/actions/runners/generate-jitconfig')
     expect(mint).toContain('-F runner_group_id=1')
     expect(mint).toContain("-f 'labels[]=mushi-nuc'")
     expect(mint).toContain('runuser -u kenji -- gh')
+    // A repo-admin token is only used when root alone can read it.
+    expect(mint).toContain(`[ "$(stat -c '%u %a' '/etc/mushi-runner/mushi-nuc.gh-token')" = "0 600" ]`)
     expect(mint).toContain("rm -rf '/opt/mushi-runner/mushi-nuc/_work'")
     expect(step('start').file!.content).toContain('ACTIONS_RUNNER_INPUT_JITCONFIG=$(cat "$RUNTIME_DIRECTORY/jit")')
     const svc = step('service').file!.content

@@ -353,8 +353,11 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
       '',
       '[Slice]',
       `MemoryMax=${input.memoryMax}`,
-      // Throttle (reclaim) before the hard limit so a build slows down before it is killed.
-      `MemoryHigh=${memoryHigh(input.memoryMax)}`,
+      // No MemoryHigh: reclaim throttling also stalls the runner's own
+      // heartbeat, and GitHub then cancels the job as "lost communication"
+      // (seen on 2026-10-21 at PSI full 71%). A swap cap keeps a leaking
+      // build from paging the whole machine instead.
+      'MemorySwapMax=2G',
       'CPUWeight=50',
       'TasksMax=4096',
       '',
@@ -390,7 +393,11 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
         'umask 077',
         `rm -rf ${q(`${dir}/_work`)}`,
         `NAME="${input.label}-$(date +%s)"`,
-        `if [ -r ${q(tokenFile)} ]; then GH_TOKEN=$(cat ${q(tokenFile)}); export GH_TOKEN; GH=gh; else GH="runuser -u ${input.installUser} -- gh"; fi`,
+        // The token can create runners on the repo: use it only when root alone can read it.
+        `if [ -e ${q(tokenFile)} ]; then`,
+        `  [ "$(stat -c '%u %a' ${q(tokenFile)})" = "0 600" ] || { echo ${q(`${tokenFile} must be owned by root with mode 0600; refusing to use it`)} >&2; exit 1; }`,
+        `  GH_TOKEN=$(cat ${q(tokenFile)}); export GH_TOKEN; GH=gh`,
+        `else GH="runuser -u ${input.installUser} -- gh"; fi`,
         `$GH api -X POST repos/${input.repo}/actions/runners/generate-jitconfig \\`,
         `  -f name="$NAME" -F runner_group_id=1 -f work_folder=_work \\`,
         `  -f 'labels[]=self-hosted' -f 'labels[]=${osLabel}' -f 'labels[]=${archLabel}' -f 'labels[]=${input.label}' \\`,
@@ -602,13 +609,6 @@ export function systemdArgv(argv: string[]): string {
     .map((a) => a.replace(/%/g, '%%'))
     .map((a) => (/[\s"'\\]/.test(a) ? `"${a.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : a))
     .join(' ')
-}
-
-function memoryHigh(max: string): string {
-  const n = Number(max.slice(0, -1))
-  const unit = max.slice(-1)
-  const mb = unit === 'G' ? n * 1024 : n
-  return `${Math.floor(mb * 0.9)}M`
 }
 
 /**
