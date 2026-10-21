@@ -105,6 +105,8 @@ Native SDKs (iOS, Android, Flutter) are a preview and install from this reposito
 
 Full list and maturity: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks). Architecture: [how the pipeline fits together](https://kensaur.us/mushi-mushi/docs/concepts/architecture).
 
+Fix waiting to land? `mushi runner status` shows where your tests run, why they wait, and whether a red check was your code or a test machine that stopped ([CI runners](https://kensaur.us/mushi-mushi/docs/operating/ci-runners)).
+
 ## Why not just Sentry?
 
 > **Sentry is built around what the code threw, with a User Feedback widget and

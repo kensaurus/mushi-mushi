@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 210 pages, generated from llms.txt. */
+/** 211 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -1130,6 +1130,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["operating", "maintainers"],
     headings: ["What lives here", "The four independent deploy paths"],
     excerpt: "Runbooks for maintainers running Mushi Cloud or publishing the open-source packages — deployment, releases and status. Not needed to use the SDK.",
+  },
+  {
+    title: "CI runners",
+    url: docUrl("/operating/ci-runners"),
+    route: "/operating/ci-runners",
+    markdown: "operating/ci-runners.md",
+    keywords: ["operating", "ci-runners", "runners", "ci"],
+    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "Machine health: heartbeat and job hooks", "The runner key", "What is sent, and what never is", "Add your own machine as a runner", "Is it worth it?"],
+    excerpt: "See where your tests run and why a fix waits to land. Tell a broken fix from a stopped test machine, and set up your own machine as a GitHub Actions runner with safe defaults.",
   },
   {
     title: "Deployment & releases",
