@@ -18,6 +18,7 @@
 import {
   spendDownIdleReasons,
   spendDownWindow,
+  todaysSpendDownTick,
   type SpendDownIdleReason,
   type SpendDownKey,
   type SpendDownTick,
@@ -632,9 +633,10 @@ export function evaluateSpendDownIdle(keys: readonly SpendDownRadarKey[], now: D
       servedProjectIds: row.servedProjectIds,
       dispatchedToday: row.dispatchedToday,
       lastSummary: row.lastSummary,
+      now,
     })
     if (!reasons) {
-      if (row.dispatchedToday === 0 && row.servedProjectIds.length > 0 && row.lastSummary == null) awaitingTick = true
+      if (row.dispatchedToday === 0 && row.servedProjectIds.length > 0 && todaysSpendDownTick(row.lastSummary, now) == null) awaitingTick = true
       continue
     }
     const name = row.label?.trim() || 'unnamed'

@@ -115,7 +115,9 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
 })
 
 describe('spendDownIdleReasons', () => {
-  const active = { state: 'active' as const, servedProjectIds: [] as string[], dispatchedToday: 0, lastSummary: null }
+  const now = new Date('2026-10-05T09:00:00Z')
+  const at = '2026-10-05T08:58:00Z'
+  const active = { state: 'active' as const, servedProjectIds: [] as string[], dispatchedToday: 0, lastSummary: null, now }
   it('is idle inside the window when no app has this key as first pick', () => {
     expect(spendDownIdleReasons(active)).toEqual(['no_app'])
   })
@@ -123,7 +125,7 @@ describe('spendDownIdleReasons', () => {
     expect(spendDownIdleReasons({
       ...active,
       servedProjectIds: [P1],
-      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT }] },
+      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT }], at },
     })).toEqual(['reports_settled'])
     expect(spendDownIdleReasons({
       ...active,
@@ -134,6 +136,7 @@ describe('spendDownIdleReasons', () => {
           { projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_AUTOFIX_OFF },
           { projectId: P2, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT },
         ],
+        at,
       },
     })).toEqual(['autofix_off', 'reports_settled'])
   })
@@ -144,9 +147,14 @@ describe('spendDownIdleReasons', () => {
     expect(spendDownIdleReasons({
       ...active,
       servedProjectIds: [P1],
-      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: 'Three fixes already running' }] },
+      lastSummary: { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: 'Three fixes already running' }], at },
     })).toBeNull()
     expect(spendDownIdleReasons({ ...active, servedProjectIds: [P1], lastSummary: null })).toBeNull()
+  })
+  it('ignores a tick from before today (UTC), or one with no time', () => {
+    const settled = { dispatched: 0, projects: [{ projectId: P1, dispatched: 0, stopped: SPEND_DOWN_STOP_NO_REPORT }] }
+    expect(spendDownIdleReasons({ ...active, servedProjectIds: [P1], lastSummary: { ...settled, at: '2026-10-04T23:58:00Z' } })).toBeNull()
+    expect(spendDownIdleReasons({ ...active, servedProjectIds: [P1], lastSummary: settled })).toBeNull()
   })
 })
 

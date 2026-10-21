@@ -455,6 +455,31 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     expect(String((f.suggested_fix as { fix: string }).fix).length).toBeGreaterThan(20)
   })
 
+  it('reports an idle organization spend-down key only on the apps it pays for', async () => {
+    const P_C = '1000000c-0000-4000-8000-000000000000'
+    const db = seed({
+      projects: [
+        { id: P_A, name: 'glot.it', owner_id: 'user-a', organization_id: ORG_A },
+        { id: P_B, name: 'other', owner_id: 'user-b', organization_id: ORG_B },
+        { id: P_C, name: 'served', owner_id: 'user-a', organization_id: ORG_A },
+      ],
+      project_settings: [{ project_id: P_C, autofix_enabled: true }],
+      project_repos: [{ project_id: P_C }],
+      byok_keys: [{
+        id: 'cur-org', project_id: null, organization_id: ORG_A, provider_slug: 'cursor', label: 'org expiring', key_hint: 'crsr',
+        status: 'active', test_status: 'ok', priority: 100, created_at: ago(2), last_used_at: ago(1), last_tested_at: ago(1),
+        credits_expire_at: '2026-10-10T00:00:00Z', spend_down_enabled: true, spend_down_model: null,
+        spend_down_daily_limit: 10, spend_down_window_days: 14,
+        spend_down_last_summary: { dispatched: 0, projects: [{ projectId: P_C, dispatched: 0, stopped: 'No open report to fix' }], at: '2026-10-02T11:58:00Z' },
+      }],
+    })
+    const onA = await run.runRadar(db as never, P_A, deps() as never)
+    expect(onA.results.find((r) => r.ruleId === 'spend_down_idle')).toMatchObject({ state: 'unknown' })
+    const onC = await run.runRadar(db as never, P_C, deps() as never)
+    expect(onC.results.find((r) => r.ruleId === 'spend_down_idle')).toMatchObject({ state: 'finding' })
+    expect(db.table('gate_findings').filter((x) => x.rule_id === 'spend_down_idle')).toHaveLength(1)
+  })
+
   it('a project whose only credential is a BYOK key the provider rejected gets a provider_key_invalid finding', async () => {
     const db = seed({
       byok_keys: [

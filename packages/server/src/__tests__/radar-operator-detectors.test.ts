@@ -350,13 +350,20 @@ describe('spend_down_idle', () => {
   it('finds a key whose last tick settled every open report', () => {
     const r = evaluateSpendDownIdle([row({
       servedProjectIds: ['p1'],
-      lastSummary: { dispatched: 0, projects: [{ projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }] },
+      lastSummary: { dispatched: 0, projects: [{ projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }], at: '2026-10-03T11:58:00Z' },
     })], NOW)
     expect(r.findings[0].message).toContain('every open report is already settled')
     expect(r.findings[0].evidence).toMatchObject({ reasons: ['reports_settled'] })
   })
   it('cannot tell yet when the key serves an app and the worker has not ticked', () => {
     expect(evaluateSpendDownIdle([row({ servedProjectIds: ['p1'] })], NOW).state).toBe('unknown')
+  })
+  it('cannot tell yet when the last tick ran on an earlier day', () => {
+    const r = evaluateSpendDownIdle([row({
+      servedProjectIds: ['p1'],
+      lastSummary: { dispatched: 0, projects: [{ projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }], at: '2026-10-02T23:58:00Z' },
+    })], NOW)
+    expect(r).toMatchObject({ state: 'unknown', findings: [] })
   })
 })
 

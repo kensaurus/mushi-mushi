@@ -176,25 +176,40 @@ export type SpendDownIdleReason = 'no_app' | 'autofix_off' | 'reports_settled'
 export interface SpendDownTick {
   dispatched?: number
   projects?: Array<{ projectId: string; dispatched: number; stopped?: string }>
+  at?: string
+}
+
+/**
+ * The tick when it ran today (UTC), else null. `dispatchedToday` counts from
+ * UTC midnight, so an older tick's stop lines do not describe today.
+ */
+export function todaysSpendDownTick(tick: SpendDownTick | null, now: Date): SpendDownTick | null {
+  const at = tick?.at ? Date.parse(tick.at) : NaN
+  if (!Number.isFinite(at)) return null
+  const dayStart = new Date(now)
+  dayStart.setUTCHours(0, 0, 0, 0)
+  return at >= dayStart.getTime() ? tick : null
 }
 
 /**
  * Why a key inside its window dispatched nothing, or null when it did not.
  * `no_app` is the console status line: no app has this key as the resolver's
  * first pick with auto-fix on and a linked repo. `autofix_off` and
- * `reports_settled` come from the last tick. A cap or "three fixes already
- * running" is not idle.
+ * `reports_settled` come from the last tick, only when it ran today. A cap or
+ * "three fixes already running" is not idle.
  */
 export function spendDownIdleReasons(input: {
   state: SpendDownState
   servedProjectIds: readonly string[]
   dispatchedToday: number
   lastSummary: SpendDownTick | null
+  now: Date
 }): SpendDownIdleReason[] | null {
   if (input.state !== 'active' || input.dispatchedToday > 0) return null
   if (input.servedProjectIds.length === 0) return ['no_app']
-  const projects = input.lastSummary?.projects
-  if (input.lastSummary?.dispatched !== 0 || !projects?.length) return null
+  const tick = todaysSpendDownTick(input.lastSummary, input.now)
+  const projects = tick?.projects
+  if (tick?.dispatched !== 0 || !projects?.length) return null
   const idleStop = (stopped: string | undefined) =>
     stopped === SPEND_DOWN_STOP_NO_REPORT || stopped === SPEND_DOWN_STOP_AUTOFIX_OFF
   const covered = input.servedProjectIds.every((id) => {

@@ -144,7 +144,7 @@ const BYOK_COLS =
 /** A stored tick counts only when it carries today's dispatch count. */
 function spendDownTick(raw: unknown): SpendDownTick | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const o = raw as { dispatched?: unknown; projects?: unknown }
+  const o = raw as { dispatched?: unknown; projects?: unknown; at?: unknown }
   if (typeof o.dispatched !== 'number') return null
   const projects = Array.isArray(o.projects)
     ? o.projects.flatMap((p) => {
@@ -158,7 +158,7 @@ function spendDownTick(raw: unknown): SpendDownTick | null {
         }]
       })
     : []
-  return { dispatched: o.dispatched, projects }
+  return { dispatched: o.dispatched, projects, ...(typeof o.at === 'string' ? { at: o.at } : {}) }
 }
 
 function asSpendDownKey(row: ByokSpendRow): SpendDownKey {
@@ -176,8 +176,13 @@ function asSpendDownKey(row: ByokSpendRow): SpendDownKey {
   }
 }
 
-/** Cursor keys with spend-down on, plus the apps they pay for and today's count. */
-async function loadSpendDownRadarKeys(db: Db, rows: readonly ByokSpendRow[], now: Date): Promise<SpendDownRadarKey[]> {
+/**
+ * Cursor keys with spend-down on, plus the apps they pay for and today's count.
+ * A shared key that pays for other apps but not this one is left out, so its
+ * finding lands on the apps it serves. A shared key that serves no app stays on
+ * every app that can see it: any of them can turn auto-fix on to use it.
+ */
+async function loadSpendDownRadarKeys(db: Db, projectId: string, rows: readonly ByokSpendRow[], now: Date): Promise<SpendDownRadarKey[]> {
   const out: SpendDownRadarKey[] = []
   for (const row of rows) {
     if (row.provider_slug !== 'cursor' || row.spend_down_enabled !== true) continue
@@ -188,6 +193,7 @@ async function loadSpendDownRadarKeys(db: Db, rows: readonly ByokSpendRow[], now
         keyProjects(db as never, key),
         keyDispatchesToday(db as never, key.id, now),
       ])
+      if (row.project_id == null && served.ids.length > 0 && !served.ids.includes(projectId)) continue
       idleFacts.servedProjectIds = served.ids
       idleFacts.dispatchedToday = dispatchedToday
     }
@@ -326,7 +332,7 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   let spendDownError: string | null = null
   if (!errors.byok) {
     try {
-      spendDownKeys = await loadSpendDownRadarKeys(db, byokRows, now)
+      spendDownKeys = await loadSpendDownRadarKeys(db, projectId, byokRows, now)
     } catch (err) {
       spendDownError = `Could not read spend-down: ${err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)}`
     }
