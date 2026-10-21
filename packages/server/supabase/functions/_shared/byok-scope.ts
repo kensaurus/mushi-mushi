@@ -3,7 +3,7 @@
  * PURPOSE: Which byok_keys rows a project may use. One filter for every
  *          reader, so the resolver, the key list and the per-key routes agree.
  *
- *          A row has exactly one owner (migration 20261021090000):
+ *          A row has exactly one owner (migration 20261021051628):
  *            - project_id       the app's own key;
  *            - organization_id  shared by every app in the organization (ADR 0023);
  *            - owner_user_id    universal: every app in every organization
@@ -161,7 +161,7 @@ export async function universalKeysByOrg<T extends { owner_user_id: string }>(
 }
 
 /**
- * Does byok_keys have owner_user_id yet (migration 20261021090000)? Functions
+ * Does byok_keys have owner_user_id yet (migration 20261021051628)? Functions
  * can deploy before `db push`; until then every reader leaves universal keys
  * out instead of failing on an unknown column (PostgREST 42703). Cached per
  * client: a yes for good, a no for a minute so the migration is picked up.
@@ -224,7 +224,7 @@ export function ownKeysFirst<
 /**
  * PostgREST answers 42703 when a filter or select names a column the
  * database does not have yet: functions deployed before migration
- * 20261021090000. Readers on the hot path retry without universal keys.
+ * 20261021051628. Readers on the hot path retry without universal keys.
  */
 export function isMissingOwnerUserColumn(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
