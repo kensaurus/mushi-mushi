@@ -209,6 +209,18 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
 
+### `mushi runner`
+
+Where your tests run and why a fix waits to land. Full guide: [CI runners](/operating/ci-runners).
+
+```bash
+mushi runner status [--days 7] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
+mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
+mushi runner add --repo owner/name --dry-run      # set this machine up as a runner, safe defaults
+mushi runner audit [--repo owner/name | --all]    # list self-hosted runners and flag the odd ones
+```
+
 ---
 
 ## QA coverage & TDD
