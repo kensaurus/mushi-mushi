@@ -203,7 +203,7 @@ export function repoFromPrUrl(prUrl: string | null | undefined): string | null {
 
 /** Lower-cased `owner/name` plus PR number → id of the report with a fix on that PR. */
 /** A CI job's fix: the report to open and the fix attempt to re-run. */
-export interface CiFixLink {
+interface CiFixLink {
   reportId: string
   /** Fix attempt id, when the fix list carried one (re-run needs it). */
   fixId: string | null
