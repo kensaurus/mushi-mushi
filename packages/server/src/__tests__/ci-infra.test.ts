@@ -196,5 +196,22 @@ describe('runner names of one-job runners', () => {
     expect(runnerNameMatches('mushi-nuc', 'mushi-nuc-2')).toBe(false)
     expect(runnerNameMatches('mushi', 'mushi-nuc-1761040000')).toBe(false)
   })
+
+  it('folds a date stamp with a short suffix, and leaves ordinary names alone', async () => {
+    const { runnerBaseName, runnerNameMatches } = await import('../../supabase/functions/_shared/ci-infra.ts')
+    // <base>-<8..13 digits>
+    expect(runnerBaseName('aw-tsumagoi-1022003316')).toBe('aw-tsumagoi')
+    expect(runnerBaseName('box-20261022')).toBe('box')
+    expect(runnerBaseName('box-1761040000123')).toBe('box')
+    // <base>-<8..13 digits>-<1..6 letters or digits>
+    expect(runnerBaseName('aw-tsumagoi-1022003316-163')).toBe('aw-tsumagoi')
+    expect(runnerBaseName('aw-tsumagoi-1022011144-356')).toBe('aw-tsumagoi')
+    expect(runnerBaseName('aw-tsumagoi-1022011144-a1B2c3')).toBe('aw-tsumagoi')
+    expect(runnerNameMatches('aw-tsumagoi', 'aw-tsumagoi-1022003316-163')).toBe(true)
+    // Not one-job names.
+    for (const name of ['alienware-glot-1', 'kensaurus-local-tsumagoi-1', 'build-2024', 'runner-1234567', 'box-12345678901234', 'box-1022003316-1234567', 'box-1022003316-ab_c', '12345678', 'GitHub Actions 1000079285']) {
+      expect(runnerBaseName(name)).toBe(name)
+    }
+  })
 })
 

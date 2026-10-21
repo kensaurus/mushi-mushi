@@ -20,6 +20,9 @@
  *   unknown_runner         a new self-hosted runner no heartbeat lists and no
  *                          `mushi-` label marks
  *
+ * Runner names are folded to their base (runnerBaseName): a one-job runner
+ * setup registers a new name per job, and is one runner here.
+ *
  * The Shai-Hulud 2.0 npm worm (Nov 2025) registered self-hosted runners
  * named SHA1HULUD on developers' repos as a backdoor
  * (https://www.sysdig.com/blog/how-threat-actors-are-using-self-hosted-github-actions-runners-as-backdoors).
@@ -30,7 +33,7 @@
 import { parse as parseYaml } from 'npm:yaml@2'
 import { ciWorkflowDrift } from './recipe-drift.ts'
 import type { CiOverviewAdvice } from './ci-overview-types.ts'
-import { runnerNameMatches } from './ci-infra.ts'
+import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'
 
 export interface AdvisorJob {
   repo: string
@@ -213,18 +216,22 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
   }
 
   const heartbeatRunners = new Set(input.hosts.flatMap((h) => h.runners.map((r) => r.name)))
-  for (const r of input.runners) {
-    if (r.kind !== 'self_hosted' || !r.firstSeenAt || rogue.has(`${r.repo}|${r.name}`)) continue
+  // One-job runners register a new name per job: judge each base name once,
+  // from the first time Mushi saw any of its runners.
+  const selfHostedRunners = input.runners.filter((r) => r.kind === 'self_hosted' && r.firstSeenAt)
+  for (const members of groupBy(selfHostedRunners, (r) => `${r.repo}|${runnerBaseName(r.name)}`).values()) {
+    if (members.some((m) => rogue.has(`${m.repo}|${m.name}`))) continue
+    const r = { ...members[0], name: runnerBaseName(members[0].name), firstSeenAt: members.map((m) => m.firstSeenAt as string).sort()[0], labels: [...new Set(members.flatMap((m) => m.labels))] }
     const first = Date.parse(r.firstSeenAt)
     if (!Number.isFinite(first) || nowMs - first > 7 * DAY_MS) continue
-    if ([...heartbeatRunners].some((n) => runnerNameMatches(n, r.name))) continue
+    if ([...heartbeatRunners].some((n) => members.some((m) => runnerNameMatches(n, m.name)))) continue
     if (r.labels.some((l) => l.toLowerCase().startsWith('mushi-'))) continue
     // Only "new" when Mushi watched the repo for a day before it appeared:
     // on the first collection every runner is first seen at once.
     const watched = Date.parse(input.repoWatchedSince[r.repo] ?? '')
     if (!Number.isFinite(watched) || first - watched < DAY_MS) continue
     const firstJob = input.jobs
-      .filter((j) => j.repo === r.repo && j.runnerName === r.name)
+      .filter((j) => j.repo === r.repo && j.runnerName != null && runnerBaseName(j.runnerName) === r.name)
       .map((j) => j.createdAt)
       .sort()[0]
     advice.push({
@@ -244,8 +251,9 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
   const ooms = new Map<string, { runner: string; hostId: string; count: number; repo: string | null }>()
   for (const s of input.samples) {
     if ((s.oomKills ?? 0) <= 0 || Date.parse(s.at) < weekAgo) continue
-    const k = `${s.hostId}|${s.runnerName}`
-    const cur = ooms.get(k) ?? { runner: s.runnerName, hostId: s.hostId, count: 0, repo: s.repo }
+    const runner = runnerBaseName(s.runnerName)
+    const k = `${s.hostId}|${runner}`
+    const cur = ooms.get(k) ?? { runner, hostId: s.hostId, count: 0, repo: s.repo }
     cur.count += s.oomKills ?? 0
     ooms.set(k, cur)
   }
@@ -274,9 +282,10 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
   for (const s of input.samples) {
     if (Date.parse(s.at) < weekAgo || !s.memPeakMb || !s.memMaxMb) continue
     if (s.memPeakMb < 0.9 * s.memMaxMb) continue
-    const k = `${s.hostId}|${s.runnerName}`
+    const runner = runnerBaseName(s.runnerName)
+    const k = `${s.hostId}|${runner}`
     const cur = nearCap.get(k)
-    if (!cur || s.memPeakMb / s.memMaxMb > cur.peak / cur.cap) nearCap.set(k, { runner: s.runnerName, hostId: s.hostId, peak: s.memPeakMb, cap: s.memMaxMb })
+    if (!cur || s.memPeakMb / s.memMaxMb > cur.peak / cur.cap) nearCap.set(k, { runner, hostId: s.hostId, peak: s.memPeakMb, cap: s.memMaxMb })
   }
   for (const h of input.hosts) {
     for (const r of h.runners) {
@@ -343,7 +352,7 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
 
   const infraJobs = finished.filter((j) => j.infra)
   if (finished.length >= 5 && infraJobs.length / finished.length > 0.1) {
-    const byRunner = [...groupBy(infraJobs, (j) => j.runnerName ?? 'no runner').entries()].sort((a, b) => b[1].length - a[1].length)
+    const byRunner = [...groupBy(infraJobs, (j) => (j.runnerName ? runnerBaseName(j.runnerName) : 'no runner')).entries()].sort((a, b) => b[1].length - a[1].length)
     advice.push({
       id: 'infra_share',
       severity: 'high',
@@ -356,7 +365,8 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
   }
 
   for (const [repo, jobs] of groupBy(selfHosted, (j) => j.repo)) {
-    const names = new Set(jobs.map((j) => j.runnerName).filter(Boolean))
+    // One-job runners of one label are one machine's worth of capacity.
+    const names = new Set(jobs.map((j) => j.runnerName).filter((n): n is string => !!n).map(runnerBaseName))
     const q = jobs.map((j) => j.queueSeconds).filter((x): x is number => typeof x === 'number')
     const p95 = percentile(q, 95)
     if (names.size === 1 && q.length >= 5 && p95 != null && p95 > 15 * MIN) {

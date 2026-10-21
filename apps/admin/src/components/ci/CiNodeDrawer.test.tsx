@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CiOverview } from '../../lib/ciTypes'
 import { CiNodeDrawer } from './CiNodeDrawer'
 import { GITHUB_RUNNER_ID } from './ciMapContext'
-import { ciOverviewFixture } from './__fixtures__/ciOverview'
+import { ciOverviewFixture, oneJobRunnersFixture } from './__fixtures__/ciOverview'
 
 let host: HTMLDivElement
 let root: Root
@@ -72,6 +72,24 @@ describe('CiNodeDrawer', () => {
     expect(text()).toContain('On demand')
     act(() => button('kensaurus/mushi-mushi')!.click())
     expect(onSelect).toHaveBeenCalledWith('repo:kensaurus/mushi-mushi')
+  })
+
+  it('opens a one-job runner family as one runner that lists its members\' runs', () => {
+    const onSelect = open('runner:aw-tsumagoi', oneJobRunnersFixture())
+    expect(text()).toContain('aw-tsumagoi · one-job runners')
+    expect(text()).toContain('3 one-job runners seen')
+    expect(text()).toContain('Runs by its one-job runners')
+    for (const member of ['aw-tsumagoi-1021100000-163', 'aw-tsumagoi-1021100500-356', 'aw-tsumagoi-1021115500-7']) expect(text()).toContain(member)
+    // The ordinary runner on the same repo is not a member.
+    expect(text()).not.toContain('Deploy')
+    act(() => button('E2E')!.click())
+    expect(onSelect).toHaveBeenCalledWith('job:t2')
+  })
+
+  it("opens a member's job with its runner chip pointing at the family card", () => {
+    const onSelect = open('job:t2', oneJobRunnersFixture())
+    act(() => button('aw-tsumagoi-1021100500-356')!.click())
+    expect(onSelect).toHaveBeenCalledWith('runner:aw-tsumagoi')
   })
 
   it("lists a machine's runners as buttons that open them", () => {

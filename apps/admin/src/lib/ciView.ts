@@ -3,7 +3,8 @@
  * PURPOSE: Pure reads of the CI overview for /ci, the Portfolio card and the
  *          fix loop (Plan 022, ADR 0033): job outcome, the Waiting → Running →
  *          Finished queue, the per-runner timeline, queue position for a PR,
- *          and plain-words durations. No React, so every rule is unit-tested.
+ *          runner families, and plain-words durations. No React, so every
+ *          rule is unit-tested.
  */
 
 import type { CiJob, CiOverview } from './ciTypes'
@@ -227,6 +228,32 @@ export function buildFixLinks(fixes: ReadonlyArray<{ id?: string | null; pr_url?
   return out
 }
 
+// ── Runner families (one-job runners) ──────────────────────────────────────
+
+/**
+ * A one-job (JIT) runner registers a new name for every job:
+ * `<base>-<8..13 digits>` or `<base>-<8..13 digits>-<1..6 letters or digits>`
+ * (`aw-tsumagoi-1022003316-163`, `mushi-nuc-1761040000`). Short trailing
+ * numbers are part of an ordinary name (`alienware-glot-1`). Mirrors the
+ * server's `runnerBaseName` (`_shared/ci-infra.ts`); change both together.
+ */
+const ONE_JOB_RUNNER_RE = /^(.+?)-\d{8,13}(?:-[a-z0-9]{1,6})?$/i
+
+/** The family (base name) of a one-job runner, or null for any other runner name. */
+export function runnerFamily(name: string): string | null {
+  return ONE_JOB_RUNNER_RE.exec(name)?.[1] ?? null
+}
+
+/** The name /ci shows one runner as: a one-job runner's family, else the name itself. */
+export function runnerKey(name: string): string {
+  return runnerFamily(name) ?? name
+}
+
+/** `owner/name` → `name`, for tables where the owner repeats on every row. */
+export function repoShortName(repo: string): string {
+  return repo.split('/').pop() || repo
+}
+
 // ── Timeline (one lane per runner) ──────────────────────────────────────────
 
 /** @internal Exported for tests only. */
@@ -263,6 +290,11 @@ export interface CiTimelineBar {
 interface CiTimelineLane {
   id: string
   label: string
+  /**
+   * `runner` = one named runner; `family` = jobs of one-job runners of one
+   * base name, packed like `github` = GitHub's machines; `none` = no runner yet.
+   */
+  kind: 'runner' | 'family' | 'github' | 'none'
   /** True for the "No runner yet" lane. */
   unassigned: boolean
   /** Run time inside the window, used to order lanes. */
@@ -286,14 +318,28 @@ function clip(start: number, end: number, from: number, to: number): { start: nu
  * Lanes and bars for the last `windowMs` before `now`. Wait is created → started
  * (or → finished / now when no runner took it); run is started → completed
  * (or → now while running). Lanes: busiest first, "No runner yet" last.
+ *
+ * Throwaway machines get no lane each: GitHub-hosted jobs, and the jobs of
+ * one-job runners of one family, are packed into the fewest lanes where no
+ * two bars overlap ("GitHub-hosted 2", "aw-tsumagoi 1").
  */
 export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: number }): CiTimeline {
   const to = opts.now
   const from = to - opts.windowMs
   const lanes = new Map<string, CiTimelineLane>()
-  // When each GitHub-hosted lane is free again, for packing jobs into lanes.
-  const githubRows: number[] = []
-  const byStart = [...jobs].sort((a, b) => (ms(a.startedAt ?? a.createdAt) ?? 0) - (ms(b.startedAt ?? b.createdAt) ?? 0))
+  // Per packed group (GitHub, or a runner family): when each of its lanes is
+  // free again. Jobs come in order of their drawn start (creation), so first
+  // fit uses the fewest lanes.
+  const packed = new Map<string, number[]>()
+  const pack = (group: string, start: number, finish: number): number => {
+    const rows = packed.get(group) ?? []
+    packed.set(group, rows)
+    let row = rows.findIndex((busyUntil) => busyUntil <= start)
+    if (row < 0) row = rows.push(0) - 1
+    rows[row] = finish
+    return row
+  }
+  const byStart = [...jobs].sort((a, b) => (ms(a.createdAt) ?? 0) - (ms(b.createdAt) ?? 0))
 
   for (const job of byStart) {
     const created = ms(job.createdAt)
@@ -313,19 +359,25 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     const unassigned = started == null && !job.runnerName
     let label = job.runnerName ?? (unassigned ? NO_RUNNER_LANE : UNKNOWN_RUNNER_LANE)
     let id = unassigned ? '__none__' : `runner:${label}`
+    let kind: CiTimelineLane['kind'] = unassigned ? 'none' : 'runner'
+    // One lane per job running at the same time, not one per throwaway machine.
+    const start = (queue ?? run)!.start
+    const finish = (run ?? queue)!.end
+    const family = !unassigned && job.runnerKind !== 'github_hosted' && job.runnerName ? runnerFamily(job.runnerName) : null
     if (!unassigned && job.runnerKind === 'github_hosted') {
-      // One lane per job running at the same time, not one per throwaway VM.
-      const start = (queue ?? run)!.start
-      const finish = (run ?? queue)!.end
-      let row = githubRows.findIndex((busyUntil) => busyUntil <= start)
-      if (row < 0) row = githubRows.push(0) - 1
-      githubRows[row] = finish
+      const row = pack('github', start, finish)
       label = `${GITHUB_LANE} ${row + 1}`
       id = `github:${row}`
+      kind = 'github'
+    } else if (family) {
+      const row = pack(`family:${family}`, start, finish)
+      label = `${family} ${row + 1}`
+      id = `family:${family}:${row}`
+      kind = 'family'
     }
     let lane = lanes.get(id)
     if (!lane) {
-      lane = { id, label, unassigned, busyMs: 0, bars: [] }
+      lane = { id, label, kind, unassigned, busyMs: 0, bars: [] }
       lanes.set(id, lane)
     }
     if (run) lane.busyMs += run.end - run.start
@@ -344,10 +396,13 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     })
   }
 
-  // A lone GitHub lane needs no number.
-  if (githubRows.length === 1) {
-    const only = lanes.get('github:0')
-    if (only) only.label = GITHUB_LANE
+  // A lone packed lane needs no number, unless a runner lane has that name.
+  const taken = new Set([...lanes.values()].filter((l) => l.kind === 'runner').map((l) => l.label))
+  for (const [group, rows] of packed) {
+    if (rows.length !== 1) continue
+    const only = lanes.get(group === 'github' ? 'github:0' : `${group}:0`)
+    const name = group === 'github' ? GITHUB_LANE : group.slice('family:'.length)
+    if (only && !taken.has(name)) only.label = name
   }
   for (const lane of lanes.values()) {
     lane.bars.sort((a, b) => (a.queue?.start ?? a.run?.start ?? 0) - (b.queue?.start ?? b.run?.start ?? 0))

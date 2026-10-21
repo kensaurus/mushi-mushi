@@ -192,6 +192,42 @@ describe('CiPage', () => {
     expect(q('ci-map-stub')!.textContent).toBe('2 hosts')
   })
 
+  it('shows one advice card per rule, with a chip per workflow and the fix once', async () => {
+    const T = 'kensaurus/tsumagoi'
+    const drafts = (path: string) => ({
+      id: `drafts_not_skipped:${T}:.github/workflows/${path}`,
+      severity: 'low' as const,
+      title: 'Draft pull requests run the full CI',
+      detail: 'Each push runs this workflow before anyone can merge it.',
+      evidence: `${T}/.github/workflows/${path} runs on pull_request and never checks the draft flag.`,
+      fix: 'Add if: github.event.pull_request.draft == false',
+      repo: T,
+    })
+    const slow = { id: 'slow_steps', severity: 'low' as const, title: 'Where your CI spends its time', detail: 'd', evidence: `${T} · build · pnpm install: 3 min (12 runs); ${T} · e2e · playwright: 9 min (4 runs)`, fix: 'Cache it', repo: T }
+    state.overview = ciOverviewFixture({ advice: [drafts('ci-pr.yml'), drafts('pricing-parity.yml'), drafts('mushi-freshness.yml'), slow] })
+    await render()
+    const advice = q('ci-advice')!
+    expect(advice.querySelectorAll(':scope > li')).toHaveLength(2)
+    expect(advice.textContent!.match(/Draft pull requests run the full CI/g)).toHaveLength(1)
+    for (const file of ['ci-pr.yml', 'pricing-parity.yml', 'mushi-freshness.yml']) expect(advice.textContent).toContain(file)
+    expect(advice.querySelectorAll('button[aria-label="Copy the fix"]')).toHaveLength(2)
+    // Evidence joined with "; " reads as a list.
+    expect([...advice.querySelectorAll('ul.list-disc li')].map((li) => li.textContent)).toEqual(expect.arrayContaining([`${T} · e2e · playwright: 9 min (4 runs)`]))
+  })
+
+  it('shows slow jobs and steps in full, with the repo name and a bar against the slowest', async () => {
+    await render()
+    const jobs = q('ci-slow-jobs')!
+    expect(jobs.textContent).toContain('build')
+    expect(jobs.textContent).toContain('CI')
+    expect(jobs.textContent).toMatch(/glot\.it · PR #\d+/)
+    expect(jobs.textContent).not.toContain('kensaurus/')
+    expect(jobs.querySelector('[role="meter"]')!.getAttribute('aria-label')).toBe('build ran 15 min')
+    const steps = q('ci-slow-steps')!
+    expect(steps.textContent).toContain('pnpm install')
+    expect(steps.textContent).toContain('build · glot.it')
+  })
+
   it('shows one sentence and one action when there is nothing yet', async () => {
     state.overview = emptyCiOverview()
     await render()

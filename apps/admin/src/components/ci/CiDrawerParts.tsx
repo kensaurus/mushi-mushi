@@ -11,6 +11,7 @@ import type { CiJob } from '../../lib/ciTypes'
 import { CI_OUTCOME_META, formatSeconds, type CiActivity } from '../../lib/ciView'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 import { Card } from '../ui'
+import { IconExternalLink } from '../icons'
 
 export function DrawerSection({ title, children, hint }: { title: string; children: ReactNode; hint?: ReactNode }) {
   return (
@@ -205,10 +206,27 @@ export function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
   )
 }
 
-export function RecentJobs({ jobs, empty, onSelect }: { jobs: CiJob[]; empty: string; onSelect?: (nodeId: string) => void }) {
-  const recent = [...jobs].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 10)
+export function RecentJobs({
+  jobs,
+  empty,
+  onSelect,
+  title = 'Recent jobs',
+  hint,
+  showRunner = false,
+  limit = 10,
+}: {
+  jobs: CiJob[]
+  empty: string
+  onSelect?: (nodeId: string) => void
+  title?: string
+  hint?: ReactNode
+  /** Name the runner each job ran on (a one-job family's member runs). */
+  showRunner?: boolean
+  limit?: number
+}) {
+  const recent = [...jobs].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, limit)
   return (
-    <DrawerSection title="Recent jobs">
+    <DrawerSection title={title} hint={hint}>
       {recent.length === 0 ? (
         <p className="text-xs text-fg-muted">{empty}</p>
       ) : (
@@ -232,12 +250,14 @@ export function RecentJobs({ jobs, empty, onSelect }: { jobs: CiJob[]; empty: st
               </div>
               <div className="flex min-w-0 items-center gap-2 text-2xs">
                 <span className="min-w-0 flex-1 truncate text-fg-faint">
+                  {showRunner && j.runnerName ? <span className="font-mono text-fg-muted">{j.runnerName} · </span> : null}
                   {j.repo}
                   {j.workflowName ? ` · ${j.workflowName}` : ''}
                 </span>
                 {j.htmlUrl && (
-                  <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-accent hover:underline">
-                    GitHub ↗
+                  <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-0.5 text-accent hover:underline">
+                    GitHub
+                    <IconExternalLink size={10} />
                   </a>
                 )}
               </div>
