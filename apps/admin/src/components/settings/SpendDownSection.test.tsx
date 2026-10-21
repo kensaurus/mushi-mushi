@@ -34,10 +34,11 @@ const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   reload: vi.fn(),
   keys: [] as unknown[],
+  followups: null as unknown,
 }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: { projectId: 'p', keys: mocks.keys }, loading: false, error: null, reload: mocks.reload }),
+  usePageData: () => ({ data: { projectId: 'p', keys: mocks.keys, reviewFollowups: mocks.followups }, loading: false, error: null, reload: mocks.reload }),
 }))
 
 import { SpendDownSection } from './SpendDownSection'
@@ -193,6 +194,29 @@ describe('SpendDownSection', () => {
     mocks.keys = [{ ...KEY, scoreboard: null, scoreboardNote: 'The last 7 days could not be read just now.' }]
     await render(true)
     expect(document.body.textContent).toContain('The last 7 days could not be read just now.')
+  })
+
+  it('shows what review follow-ups made of fix-first PRs (ADR 0032)', async () => {
+    mocks.keys = [KEY]
+    mocks.followups = {
+      days: 7,
+      dispatched: 12,
+      inFlight: 1,
+      finished: 11,
+      completed: 10,
+      failed: 1,
+      pushed: 9,
+      noChange: 2,
+      verdictsAfter: { merge: 4, fix_first: 3, hold: 1 },
+      awaitingReview: 1,
+      conversionRate: 0.5,
+      skipped: 3,
+    }
+    await render(true)
+    expect(document.body.textContent).toContain(
+      'Review follow-ups, last 7 days: 12 sent → 9 pushed, 2 no change, 1 running → Opus after: 4 merge, 3 fix first, 1 hold (50% fix first → merge), 1 awaiting review',
+    )
+    mocks.followups = null
   })
 
   it('renders nothing when the app has no Cursor key', async () => {

@@ -48,7 +48,10 @@ export interface AutofixBudgetCheck {
   trigger: DispatchTrigger
   /** fix-worker LLM spend over the last 30 days (always computed). */
   spendUsd30d: number
-  /** Prior automatic dispatches today (UTC), not counting skipped ones or the one being checked. */
+  /**
+   * Prior automatic dispatches today (UTC), not counting skipped ones or the
+   * one being checked, plus the review follow-ups dispatched today (ADR 0032).
+   */
   dispatchesToday: number
   maxSpendUsd: number | null
   maxDispatchesPerDay: number | null
@@ -63,6 +66,9 @@ export class AutofixBudgetUnavailableError extends Error {
     this.name = 'AutofixBudgetUnavailableError'
   }
 }
+
+/** PostgREST codes for a table that does not exist yet (before its migration). */
+const FOLLOWUP_TABLE_MISSING = new Set(['42P01', 'PGRST205'])
 
 export async function checkAutofixBudget(
   db: SupabaseClient,
@@ -87,7 +93,7 @@ export async function checkAutofixBudget(
   const dayStart = new Date()
   dayStart.setUTCHours(0, 0, 0, 0)
 
-  const [spendRes, countRes] = await Promise.all([
+  const [spendRes, countRes, followupRes] = await Promise.all([
     db
       .from('llm_invocations')
       .select('cost_usd')
@@ -100,11 +106,25 @@ export async function checkAutofixBudget(
       .eq('project_id', projectId)
       .gte('created_at', dayStart.toISOString())
       .limit(1000),
+    // Review follow-ups (ADR 0032) start a cloud agent on their own too, so
+    // each one Mushi dispatched today counts against the same daily cap.
+    // dispatched_at is set only once Cursor accepted the agent.
+    db
+      .from('fix_review_followups')
+      .select('id')
+      .eq('project_id', projectId)
+      .gte('dispatched_at', dayStart.toISOString())
+      .limit(1000),
   ])
   // A failed read used to count as $0 / 0 dispatches, which let every
   // dispatch through behind a cap the owner believed was on.
   if (spendRes.error) throw new AutofixBudgetUnavailableError('30-day spend', spendRes.error.message)
   if (countRes.error) throw new AutofixBudgetUnavailableError('dispatches today', countRes.error.message)
+  // Before the follow-up migration the table does not exist: no follow-ups.
+  const followupErr = followupRes.error as { code?: string; message: string } | null
+  if (followupErr && !FOLLOWUP_TABLE_MISSING.has(String(followupErr.code ?? ''))) {
+    throw new AutofixBudgetUnavailableError('review follow-ups today', followupErr.message)
+  }
 
   const spendUsd30d = (spendRes.data ?? []).reduce(
     (s: number, r: { cost_usd: unknown }) => s + (Number(r.cost_usd) || 0),
@@ -119,7 +139,7 @@ export async function checkAutofixBudget(
       r.id !== opts.excludeDispatchId &&
       r.status !== 'skipped' &&
       dispatchTrigger(r.dispatch_metadata) === 'automatic')
-    .length
+    .length + (followupErr ? 0 : (followupRes.data ?? []).length)
 
   const spendReached = maxSpend != null && spendUsd30d >= maxSpend
   const dailyReached = maxDaily != null && dispatchesToday >= maxDaily

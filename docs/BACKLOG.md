@@ -11,8 +11,9 @@ parked work is visible in one place.
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
+- **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 53 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 55 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -21,12 +22,12 @@ parked work is visible in one place.
 | tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 6 |
-| unfinished-feature | 8 |
+| unfinished-feature | 10 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 50 |
+| relevant | 52 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -112,6 +113,8 @@ parked work is visible in one place.
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
 | BL-098 | known-bug | The legacy single-key routes (`DELETE /v1/admin/byok/:provider`, the Firecrawl and Browserbase panels, and retiring a legacy key after its pooled copy validates) delete the Vault secret by name with `vault_delete_secret`, without asking `private.vault_secret_in_use`. On live data a pool row can share that secret (yen-yen's Anthropic key, 2026-10-21), so removing the legacy credential would break the pool row. Look the secret's id up and call `vault_delete_secret_if_unused` instead | relevant | med | ADR 0031, `api/routes/settings-research.ts` (`clearLegacyByokCredential`, firecrawl/browserbase deletes), migration `20261021090000` | — |
+| BL-099 | unfinished-feature | Send a "hold" agent PR back with its findings once a person approves it in the console (a "Send back with these findings" action that queues a review follow-up). Follow-ups run on fix_first only; a hold needs a person | relevant | low | ADR 0032 (Rejected), `_shared/review-followup.ts` `followupTrigger` | — |
+| BL-100 | unfinished-feature | Per-app review follow-up settings (on/off, key, model) overriding the organization's, plus CLI/MCP to read and change them; today they are per organization and console-only | relevant | low | ADR 0032 (Rejected), `api/routes/byok-review-followups.ts` | — |
 
 ---
 
