@@ -14,7 +14,8 @@
  *   PATCH /v1/admin/byok/keys/:keyId/spend-down     turn it on or off and set
  *         the credit expiry, model, daily limit and window. A shared key is
  *         an organization owner's or admin's call in the console (ADR 0023);
- *         an app's own key is its owner's or admin's. `mcp:write`.
+ *         a universal key only its owner's, in the console (ADR 0031); an
+ *         app's own key is its owner's or admin's. `mcp:write`.
  *
  * The worker (`spend-down-worker`) does the dispatching; these routes only
  * read and store settings.
@@ -28,7 +29,14 @@ import { requireFeature } from '../../_shared/entitlements.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { dbError, resolveOwnedProject, userCanAccessProject } from '../shared.ts'
 import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
-import { canManageSharedKeys, keyOwnerFilter } from '../../_shared/byok-scope.ts'
+import {
+  canManageSharedKeys,
+  keyOwnerFilter,
+  keyOwnerForProject,
+  ownerUserColumnReady,
+  rowScope,
+  withOwnerUserColumn,
+} from '../../_shared/byok-scope.ts'
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts'
 import { parseCursorModelSpec } from '../../_shared/cursor-cloud.ts'
 import {
@@ -40,6 +48,7 @@ import {
   previousPauseStates,
   spendDownScoreboard,
   spendDownStopLoss,
+  scopeSpendDownView,
   spendDownWindow,
   type SpendDownKey,
   type SpendDownStopLoss,
@@ -53,8 +62,23 @@ import {
   type SpendDownYieldCache,
 } from '../../_shared/spend-down-db.ts'
 
+/** owner_user_id is added by withOwnerUserColumn once migration 20261021090000 is applied. */
 const KEY_COLUMNS =
   'id, label, key_hint, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_run_at, spend_down_last_summary'
+
+/**
+ * The apps a caller may see a universal key pay for when they do not own it:
+ * those of the requesting app's organization, or the app alone (ADR 0031).
+ */
+async function sameOrganizationProjectIds(
+  db: ReturnType<typeof getServiceClient>,
+  project: { id: string; organization_id?: string | null },
+): Promise<Set<string>> {
+  const orgId = (project.organization_id as string | null | undefined) ?? null
+  if (!orgId) return new Set([project.id])
+  const { data } = await db.from('projects').select('id').eq('organization_id', orgId)
+  return new Set([project.id, ...((data ?? []) as Array<{ id: string }>).map((p) => p.id)])
+}
 
 type KeyRow = SpendDownKey & {
   label: string | null
@@ -108,9 +132,10 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
 
     const { data, error } = await db
       .from('byok_keys')
-      .select(KEY_COLUMNS)
+      .select(withOwnerUserColumn(KEY_COLUMNS, await ownerUserColumnReady(db)))
       .eq('provider_slug', 'cursor')
-      .or(keyOwnerFilter({ projectId: project.id, organizationId: (project.organization_id as string | null) ?? null }))
+      // Own, organization (ADR 0023) and universal keys of its owners (ADR 0031).
+      .or(keyOwnerFilter(await keyOwnerForProject(db, project)))
     if (error) return dbError(c, error)
 
     // A shared key pays for apps across the organization. Per-app detail
@@ -136,19 +161,28 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
     const now = new Date()
     const yieldCache: SpendDownYieldCache = new Map()
     const keys = []
-    for (const row of (data ?? []) as KeyRow[]) {
+    let sameOrg: Set<string> | null = null
+    for (const row of (data ?? []) as unknown as KeyRow[]) {
       const window = spendDownWindow(row, now)
+      const ownedByMe = Boolean(row.owner_user_id) && c.get('authMethod') === 'jwt' && userId === row.owner_user_id
+      // Someone else's universal key spans its owner's organizations: on top
+      // of the apps this caller can open, they see only this organization's
+      // apps and its share of the counts (ADR 0031).
+      const foreignUniversal = Boolean(row.owner_user_id) && !ownedByMe
+      if (foreignUniversal && !sameOrg) sameOrg = await sameOrganizationProjectIds(db, project)
+      const inScope = (id: string) => !foreignUniversal || (sameOrg?.has(id) ?? false)
       let dispatchedToday = 0
       let served: string[] = []
       try {
-        dispatchedToday = await keyDispatchesToday(db, row.id, now)
         served = (await keyProjects(db, row)).ids
+        dispatchedToday = await keyDispatchesToday(db, row.id, now, foreignUniversal ? [...(sameOrg ?? [])] : undefined)
       } catch (err) {
         return c.json({ ok: false, error: { code: 'DB_ERROR', message: err instanceof Error ? err.message : String(err) } }, 500)
       }
       const visible = new Set<string>()
       const roles = new Map<string, string>()
       for (const id of served) {
+        if (!inScope(id)) continue
         const role = await roleIn(id)
         if (role) {
           visible.add(id)
@@ -187,7 +221,10 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
       let scoreboard: (ReturnType<typeof spendDownScoreboard> & { days: number; since: string }) | null = null
       let scoreboardNote: string | null = null
       try {
-        const board = spendDownScoreboard(await keyScoreboardRuns(db, row.id, now))
+        const runs = await keyScoreboardRuns(db, row.id, now)
+        // Totals stay key-wide, except on someone else's universal key, where
+        // they count this organization's runs only (ADR 0031).
+        const board = spendDownScoreboard(foreignUniversal ? runs.filter((r) => inScope(r.projectId)) : runs)
         scoreboard = {
           days: SPEND_DOWN_SCOREBOARD_DAYS,
           since: new Date(now.getTime() - SPEND_DOWN_SCOREBOARD_DAYS * 86_400_000).toISOString(),
@@ -202,7 +239,9 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         id: row.id,
         label: row.label,
         keyHint: row.key_hint,
-        scope: row.organization_id ? 'organization' : 'project',
+        scope: rowScope(row),
+        // A universal key is changed only by its owner (ADR 0031); never says who that is.
+        ...(row.owner_user_id ? { ownedByMe } : {}),
         status: row.status,
         enabled: row.spend_down_enabled,
         creditsExpireAt: row.credits_expire_at,
@@ -212,16 +251,25 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         state: window.state,
         startsAt: window.startsAt,
         dispatchedToday,
-        remainingToday: window.state === 'active' ? remainingToday(row, dispatchedToday) : 0,
+        // The key-wide remainder is its owner's to see (ADR 0031).
+        remainingToday: foreignUniversal ? null : window.state === 'active' ? remainingToday(row, dispatchedToday) : 0,
         projects,
-        /** Apps this key pays for that the caller cannot open. */
-        otherApps: served.length - visible.size,
+        /** Apps this key pays for that the caller cannot open (in this organization, for someone else's universal key). */
+        otherApps: served.filter(inScope).length - visible.size,
         projectsNote,
         stopLossNote,
         scoreboard,
         scoreboardNote,
         lastRunAt: row.spend_down_last_run_at,
-        lastSummary: visibleSummary(row.spend_down_last_summary, visible),
+        lastSummary: foreignUniversal
+          ? scopeSpendDownView({
+              keyIsUniversal: true,
+              callerOwnsKey: false,
+              visibleProjectIds: visible,
+              projects: [],
+              lastSummary: row.spend_down_last_summary ?? null,
+            }).lastSummary
+          : visibleSummary(row.spend_down_last_summary, visible),
       })
     }
     return c.json({ ok: true, data: { projectId: project.id, keys } })
@@ -320,18 +368,29 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
       const project = resolved.project
       const orgId = (project.organization_id as string | null) ?? null
 
-      const { data: key, error: keyErr } = await db
+      const { data: keyData, error: keyErr } = await db
         .from('byok_keys')
-        .select('id, provider_slug, project_id, organization_id, credits_expire_at')
+        .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, credits_expire_at', await ownerUserColumnReady(db)))
         .eq('id', keyId)
-        .or(keyOwnerFilter({ projectId: project.id, organizationId: orgId }))
+        .or(keyOwnerFilter(await keyOwnerForProject(db, { id: project.id, organization_id: orgId })))
         .maybeSingle()
       if (keyErr) return dbError(c, keyErr)
-      if (!key) return bad(c, 'NOT_FOUND', 'No such key for this app.', 404)
+      if (!keyData) return bad(c, 'NOT_FOUND', 'No such key for this app.', 404)
+      const key = keyData as unknown as {
+        provider_slug: string
+        organization_id: string | null
+        owner_user_id?: string | null
+        credits_expire_at: string | null
+      }
       if (key.provider_slug !== 'cursor') {
         return bad(c, 'NOT_CURSOR_KEY', 'Spend-down works with Cursor keys only.')
       }
-      if (key.organization_id) {
+      if (key.owner_user_id) {
+        // A universal key pays for every app its owner owns: only that owner, in the console.
+        if (c.get('authMethod') !== 'jwt' || userId !== key.owner_user_id) {
+          return bad(c, 'UNIVERSAL_KEY_OWNER_ONLY', 'Only the owner of this key can change it, in the console.', 403)
+        }
+      } else if (key.organization_id) {
         if (!(await canManageOrgKeys(c, db, key.organization_id as string))) {
           return bad(c, 'SHARED_KEY_ADMIN_ONLY', 'Only an organization owner or admin can change a shared key, in the console.', 403)
         }

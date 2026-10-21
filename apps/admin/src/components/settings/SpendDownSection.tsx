@@ -117,7 +117,8 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
           const stops = spendDownStops(k);
           const score = spendDownScoreLine(k);
           const pauses = spendDownPauses(k);
-          const readOnly = k.scope === 'organization' && !canManageShared;
+          const readOnly =
+            (k.scope === 'organization' && !canManageShared) || (k.scope === 'universal' && !k.ownedByMe);
           const open = editing === k.id && draft;
           return (
             <li key={k.id} className="space-y-1.5 py-2">
@@ -153,7 +154,11 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
                 </p>
               ))}
               {readOnly && !open && (
-                <p className="text-xs text-fg-muted">Shared by your organization. An owner or admin can change it.</p>
+                <p className="text-xs text-fg-muted">
+                  {k.scope === 'universal'
+                    ? "Another owner's key for all of their apps. Only they can change it."
+                    : 'Shared by your organization. An owner or admin can change it.'}
+                </p>
               )}
               {!readOnly && !open && (
                 <Btn

@@ -40,6 +40,8 @@ export function registerKeysCommands(program: Command): void {
           last_used_at: string | null;
           cooldown_until: string | null;
           created_at: string;
+          /** project = this app; organization = every app in it; universal = every app its owner owns (ADR 0031). */
+          scope?: 'project' | 'organization' | 'universal';
         }>;
         legacyKeys?: Array<{
           id: string;
@@ -79,8 +81,9 @@ export function registerKeysCommands(program: Command): void {
               : '';
             const baseUrl = k.base_url ? ` base=${k.base_url}` : '';
             const hint = k.key_hint ? ` hint=${k.key_hint}` : '';
+            const scope = ` scope=${k.scope ?? 'project'}`;
             console.log(
-              `${k.provider_slug.padEnd(14)} [${k.status}]${validation} p=${k.priority} ${k.label ?? '(no label)'}${hint}${baseUrl}${cooldown}${lastTested}${lastUsed} created=${new Date(k.created_at).toISOString()} — ${k.id}`,
+              `${k.provider_slug.padEnd(14)} [${k.status}]${validation} p=${k.priority}${scope} ${k.label ?? '(no label)'}${hint}${baseUrl}${cooldown}${lastTested}${lastUsed} created=${new Date(k.created_at).toISOString()} — ${k.id}`,
             );
           }
           for (const k of legacyKeys) {
@@ -191,7 +194,9 @@ export function registerKeysCommands(program: Command): void {
 
   keys
     .command('add')
-    .description('Add a new API key to the pool')
+    .description(
+      'Add a new API key to this app (keys for every app in the organization, or every app you own, are added in the console)',
+    )
     .requiredOption('--provider <p>', 'Provider: anthropic, openai, openrouter, firecrawl, browserbase, cursor, supabase')
     .option(
       '--key <k>',

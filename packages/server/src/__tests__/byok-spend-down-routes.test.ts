@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   projectRole: 'owner' as string | null,
   /** projectId → the caller's role there (userCanAccessProject); absent = no access. */
   access: { '1000000a-0000-4000-8000-000000000000': 'owner' } as Record<string, string>,
+  userId: 'u1',
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -75,7 +76,7 @@ class FakeApp {
   async call(method: string, path: string, params: Record<string, string>, body?: unknown): Promise<Res> {
     const route = this.routes.find((r) => r.method === method && r.path === path)
     if (!route) throw new Error(`no route ${method} ${path}`)
-    const vars: Record<string, unknown> = { userId: 'u1', authMethod: state.authMethod, projectId: P1 }
+    const vars: Record<string, unknown> = { userId: state.userId, authMethod: state.authMethod, projectId: P1 }
     const c = {
       req: { json: async () => body ?? {}, param: (k: string) => params[k], header: () => undefined, query: () => undefined },
       get: (k: string) => vars[k],
@@ -368,6 +369,101 @@ describe('POST spend-down resume', () => {
     ;({ app } = setup())
     expect((await app.call('POST', RESUME, { projectId: P1 })).status).toBe(404)
     expect((await app.call('POST', RESUME, { projectId: 'nope' })).body.error?.code).toBe('INVALID_PROJECT_ID')
+    state.access = { [P1]: 'owner' }
+  })
+})
+
+describe('GET spend-down with a universal key (ADR 0031)', () => {
+  // The key's owner owns two organizations: ORG (this app, tsumagoi) and
+  // ORG_Y (another app). Others looking from ORG must never see ORG_Y's app.
+  const OWNER = 'aaaaaaaa-0000-4000-8000-00000000000a'
+  const VIEWER = 'bbbbbbbb-0000-4000-8000-00000000000b'
+  const ORG_Y = '0000000b-0000-4000-8000-000000000000'
+  const P_Y = '1000000b-0000-4000-8000-000000000000'
+  const UNIVERSAL = '2000000d-0000-4000-8000-000000000000'
+
+  function setupUniversal(): FakeApp {
+    const db = makeFakeDb(
+      {
+        projects: [
+          { id: P1, name: 'tsumagoi', organization_id: ORG },
+          { id: P_Y, name: 'secret-other-org-app', organization_id: ORG_Y },
+        ],
+        project_settings: [
+          { project_id: P1, autofix_enabled: true },
+          { project_id: P_Y, autofix_enabled: true },
+        ],
+        project_repos: [{ project_id: P1 }, { project_id: P_Y }],
+        organization_members: [
+          { organization_id: ORG, user_id: OWNER, role: 'owner' },
+          { organization_id: ORG_Y, user_id: OWNER, role: 'owner' },
+          { organization_id: ORG, user_id: VIEWER, role: 'viewer' },
+        ],
+        byok_keys: [
+          {
+            id: UNIVERSAL, provider_slug: 'cursor', project_id: null, organization_id: null, owner_user_id: OWNER,
+            status: 'active', test_status: 'ok', priority: 100, label: 'all apps', key_hint: '…9999',
+            credits_expire_at: null, spend_down_enabled: false, spend_down_model: null, spend_down_daily_limit: 10, spend_down_window_days: 14,
+            spend_down_last_run_at: '2026-10-21T00:00:00Z',
+            spend_down_last_summary: { keyId: UNIVERSAL, dispatched: 3, projects: [{ projectId: P1, dispatched: 1 }, { projectId: P_Y, dispatched: 2 }] },
+          },
+        ],
+        // Today: one spend-down dispatch in this organization, two in the other.
+        fix_dispatch_jobs: [
+          { id: 'j1', project_id: P1, dispatch_metadata: { spend_down_key_id: UNIVERSAL }, created_at: new Date().toISOString() },
+          { id: 'j2', project_id: P_Y, dispatch_metadata: { spend_down_key_id: UNIVERSAL }, created_at: new Date().toISOString() },
+          { id: 'j3', project_id: P_Y, dispatch_metadata: { spend_down_key_id: UNIVERSAL }, created_at: new Date().toISOString() },
+        ],
+      },
+      { autoId: true },
+    )
+    state.db = db
+    const app = new FakeApp()
+    routes.registerByokSpendDownRoutes(app as never)
+    return app
+  }
+
+  async function universalKey() {
+    const res = await setupUniversal().call('GET', '/v1/admin/byok/spend-down', {})
+    expect(res.status).toBe(200)
+    const key = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === UNIVERSAL)!
+    return { key, raw: JSON.stringify(res.body) }
+  }
+
+  it("a viewer in this organization does not see the other organization's app", async () => {
+    state.authMethod = 'jwt'; state.userId = VIEWER
+    // Even with access to the other app (#538's per-app scoping alone would
+    // show it), someone else's universal key shows this organization only.
+    state.access = { [P1]: 'viewer', [P_Y]: 'member' }
+    const { key, raw } = await universalKey()
+    expect(key).toMatchObject({ scope: 'universal', ownedByMe: false, projects: [{ id: P1, name: 'tsumagoi' }] })
+    expect(key.lastSummary).toMatchObject({ dispatched: 1, projects: [{ projectId: P1, dispatched: 1 }] })
+    // Only this organization's share of today's dispatches, no key-wide remainder.
+    expect(key).toMatchObject({ dispatchedToday: 1, remainingToday: null })
+    expect(key.lastSummary).toMatchObject({ dispatchedToday: null, remainingToday: null })
+    expect(raw).not.toContain(P_Y)
+    expect(raw).not.toContain('secret-other-org-app')
+  })
+
+  it("an mcp:read API key from this organization does not see it either", async () => {
+    // An API key's userId is its project's owner, but an API key never owns a key.
+    state.authMethod = 'apiKey'; state.userId = OWNER
+    state.access = { [P1]: 'owner', [P_Y]: 'owner' }
+    const { key, raw } = await universalKey()
+    expect(key).toMatchObject({ ownedByMe: false, projects: [{ id: P1, name: 'tsumagoi' }], dispatchedToday: 1, remainingToday: null })
+    expect(raw).not.toContain(P_Y)
+    expect(raw).not.toContain('secret-other-org-app')
+  })
+
+  it("the key's owner in the console sees every app it pays for", async () => {
+    state.authMethod = 'jwt'; state.userId = OWNER
+    state.access = { [P1]: 'owner', [P_Y]: 'owner' }
+    const { key } = await universalKey()
+    expect(key.ownedByMe).toBe(true)
+    expect(key.dispatchedToday).toBe(3)
+    expect((key.projects as Array<{ id: string }>).map((p) => p.id).sort()).toEqual([P1, P_Y].sort())
+    expect((key.lastSummary as { projects: unknown[] }).projects).toHaveLength(2)
+    state.userId = 'u1'
     state.access = { [P1]: 'owner' }
   })
 })

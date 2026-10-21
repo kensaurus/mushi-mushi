@@ -81,8 +81,9 @@ on the same commit needs a person in the console.
 
 ## Cost and keys
 
-The review runs on your own Anthropic key (Settings → AI keys), or your
-organization's shared one. It never runs on Mushi's platform key. Without a
+The review runs on your own Anthropic key (Settings → AI keys), your
+organization's shared one, or an owner's all-apps key. It never runs on
+Mushi's platform key. Without a
 key it is skipped, and the fix shows **Review skipped** with the reason. A
 review usually costs $0.05 to $0.20, depending on the size of the diff; the
 most one review can cost, including retries, is about $0.90. It counts toward

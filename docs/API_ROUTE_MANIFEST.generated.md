@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-21 · **698** routes.
+> Generated: 2026-10-21 · **699** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 176 |
+| `adminOrApiKey` | 177 |
 | `apiKeyAuth` | 58 |
 | `jwtAuth` | 355 |
 | `jwtOrApiKey` | 3 |
@@ -78,6 +78,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PATCH | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/keys/:keyId/expiry` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| PATCH | `/v1/admin/byok/keys/:keyId/scope` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/keys/:keyId/scope` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PATCH | `/v1/admin/byok/keys/:keyId/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/keys/:keyId/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

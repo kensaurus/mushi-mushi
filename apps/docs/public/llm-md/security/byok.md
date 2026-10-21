@@ -23,12 +23,14 @@ In the admin console: **Settings → AI keys**.
 
 ## One key for every app
 
-If your apps are in an organization, an owner or admin can add a key once for all of them. In the add form, leave **Use for all N apps in your organization** ticked. To share a key you already added to one app, click **Use in all apps** on its row; **Use in this app only** moves it back.
+A new key is used by **All my apps** by default: every app in every organization you own, so you add it once even when your apps live in several organizations. The add form's **Use this key for** picker also offers **This organization** (every app in it) and **This app only**.
 
-- An app always tries its own keys first. The shared key is used when the app has none for that service, or as its backup.
-- A shared key is marked **All apps** on every app's **AI keys** tab. Other members can see it and use it, but only owners and admins can test, turn off, change or remove it.
-- Turning off or removing a shared key affects every app in the organization, so the confirmation says so.
-- The CLI and MCP `add` commands still add a key to one app.
+- Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, the all-apps keys of its organization's owners, then Mushi's own key. A shared key is a fallback or backup, never a replacement for an app's own key.
+- An all-apps key reaches only organizations where you are an **owner**, never one you only administer or belong to. Only you can test, turn off, change or remove it; other members see it read-only on the apps it serves.
+- A key's row shows where it is used (**All my apps**, **All apps in …**, **This app only**). Change it with the row's **Used by** picker; the move is confirmed first and recorded in the key audit log.
+- An organization key is managed by the organization's owners and admins. Turning off or removing an organization or all-apps key affects every app that uses it, so the confirmation says so.
+- Supabase access tokens always stay with one app.
+- The CLI and MCP `add` commands add a key to one app; organization and all-apps keys are added in the console.
 
   Keys take effect on the **next** LLM call. No Edge Function redeploy is required. If you rotate a key, update it here — stale keys return `401` from Anthropic/OpenAI and the key shows as rejected on **Settings → AI keys**.
 
@@ -44,7 +46,7 @@ If your apps are in an organization, an owner or admin can add a key once for al
 | Search, similar bugs, codebase index | OpenAI `text-embedding-3-small` |
 | Voice reports | OpenAI `gpt-transcribe` |
 
-Your own keys are used first (the app's, then your organization's shared keys); when there are none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
+Your own keys are used first (the app's, then your organization's shared keys, then its owners' all-apps keys); when there are none for a provider, Mushi's platform key is used where the server has one. Set both Anthropic and OpenAI keys to keep every call on your accounts.
 
 ## OpenRouter
 

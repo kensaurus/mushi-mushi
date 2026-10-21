@@ -11,7 +11,8 @@
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
-import { Input, SecretInput, Btn, Checkbox, ErrorAlert, ResultChip, Tooltip } from '../ui';
+import { Input, SecretInput, Btn, ErrorAlert, ResultChip, SegmentedControl, Tooltip } from '../ui';
+import { ConfigHelp } from '../ConfigHelp';
 import { BrandIcon } from '../ui/BrandIcon';
 import { IconPlay, IconTrash } from '../icons';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
@@ -21,7 +22,18 @@ import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone';
 import { prepareByokSecret } from '../../lib/byokKeyRules';
 import { describeByokError, describeByokTestResult } from '../../lib/byokErrors';
-import { isSharedKey, type KeySharing, type PoolKey, type PoolTestStatus } from './byokPool';
+import {
+  defaultAddScope,
+  isSharedKey,
+  isUniversalKey,
+  myAppsPhrase,
+  scopeChipLabel,
+  type KeyScope,
+  type KeySharing,
+  type KeyUniversal,
+  type PoolKey,
+  type PoolTestStatus,
+} from './byokPool';
 import { useByokPool } from './ByokPoolContext';
 import { usePageData } from '../../lib/usePageData';
 import { creditsLine, spendLine, type ByokCreditsResponse } from './byokCredits';
@@ -161,6 +173,36 @@ function sharedWithText(sharing: KeySharing): string {
   return `It is used by ${appsPhrase(sharing)}.`;
 }
 
+/** Where a key with this scope is used, as one sentence. */
+function scopeReach(scope: KeyScope, sharing: KeySharing | null, universal: KeyUniversal | null): string {
+  if (scope === 'universal') return `It is used by ${myAppsPhrase(universal)}.`;
+  if (scope === 'organization' && sharing) return sharedWithText(sharing);
+  return 'Only this app uses it.';
+}
+
+/** The one line under the scope picker: the order each app tries its keys in (ADR 0031). */
+const RESOLUTION_ORDER_HINT =
+  "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi's own.";
+
+/**
+ * The scopes this user can pick for a key here: "All my apps" when they own
+ * this app's organization, "This organization" for owners and admins, and
+ * always "This app only". The current scope stays listed.
+ */
+function scopeOptions(
+  sharing: KeySharing | null,
+  universal: KeyUniversal | null,
+  current?: KeyScope,
+  /** For an existing key: whether the user added it. Only then can it become theirs for all apps. */
+  addedByMe = true,
+): Array<{ id: KeyScope; label: string }> {
+  const out: Array<{ id: KeyScope; label: string }> = [];
+  if ((universal?.canAdd && addedByMe) || current === 'universal') out.push({ id: 'universal', label: 'All my apps' });
+  if (sharing?.canManage || current === 'organization') out.push({ id: 'organization', label: 'This organization' });
+  out.push({ id: 'project', label: 'This app only' });
+  return out;
+}
+
 function formatDay(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const at = Date.parse(iso);
@@ -199,19 +241,28 @@ export function ByokPanel() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ManagedKey | null>(null);
   const [disableTarget, setDisableTarget] = useState<PoolKey | null>(null);
-  // Moving a key changes which key every app in the organization bills to: confirmed first.
-  const [moveTarget, setMoveTarget] = useState<{ key: PoolKey; scope: 'project' | 'organization' } | null>(null);
+  // Moving a key changes which key other apps bill to: confirmed first.
+  const [moveTarget, setMoveTarget] = useState<{ key: PoolKey; scope: KeyScope } | null>(null);
   const [removing, setRemoving] = useState(false);
   const [togglePending, setTogglePending] = useState<string | null>(null);
   const [testPending, setTestPending] = useState<string | null>(null);
   const [expiryEdit, setExpiryEdit] = useState<{ id: string; value: string } | null>(null);
   const [expirySaving, setExpirySaving] = useState(false);
-  // New keys go to every app in the organization unless the owner unticks it.
-  const [newShared, setNewShared] = useState(true);
+  // Null = the default for the provider: "All my apps" where the user may
+  // add one (ADR 0031), else "This organization", else this app.
+  const [newScope, setNewScope] = useState<KeyScope | null>(null);
   const [scopePending, setScopePending] = useState<string | null>(null);
 
   const reload = pool.reload;
   const sharing = pool.data?.sharing ?? null;
+  const universal = pool.data?.universal ?? null;
+
+  /** The scope the add form sends for this provider, never one the user may not pick. */
+  function formScope(provider: string): KeyScope {
+    const picked = newScope ?? defaultAddScope(provider, universal, sharing);
+    if (provider === 'supabase') return 'project';
+    return scopeOptions(sharing, universal).some((o) => o.id === picked) ? picked : 'project';
+  }
 
   function resetAddForm() {
     setNewKeyVal('');
@@ -222,7 +273,7 @@ export function ByokPanel() {
     setKeyError(null);
     setBaseUrlError(null);
     setFormError(null);
-    setNewShared(true);
+    setNewScope(null);
   }
 
   function openAddForm(provider: string) {
@@ -246,7 +297,7 @@ export function ByokPanel() {
     }
     setKeyError(null);
     setAdding(true);
-    const shared = Boolean(sharing?.canManage && newShared);
+    const scope = formScope(provider);
     const res = await apiFetch('/v1/admin/byok/keys', {
       method: 'POST',
       body: JSON.stringify({
@@ -255,7 +306,7 @@ export function ByokPanel() {
         label: newKeyLabel.trim() || null,
         baseUrl: provider === 'openai' ? newBaseUrl.trim() || undefined : undefined,
         expiresAt: newExpiry || undefined,
-        scope: shared ? 'organization' : 'project',
+        scope,
       }),
     });
     setAdding(false);
@@ -269,7 +320,7 @@ export function ByokPanel() {
             ? 'Key checked and in use. Your old key is no longer needed; remove it below.'
             : 'Key checked and in use.'
         : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi won't use it yet.");
-      const where = shared && sharing && validated ? ` ${sharedWithText(sharing)}` : '';
+      const where = scope !== 'project' && validated ? ` ${scopeReach(scope, sharing, universal)}` : '';
       setNotice({
         scope: `provider:${provider}`,
         ok: validated && !data?.expiryWarning,
@@ -331,11 +382,11 @@ export function ByokPanel() {
     reload();
   }
 
-  /** Share a key with every app in the organization, or keep it to this app. */
-  async function moveKey(key: PoolKey, scope: 'project' | 'organization') {
+  /** Change where a key is used: all my apps, this organization, or this app (ADR 0023, ADR 0031). */
+  async function moveKey(key: PoolKey, scope: KeyScope) {
     setScopePending(key.id);
     const res = await apiFetch(`/v1/admin/byok/keys/${key.id}/scope`, {
-      method: 'POST',
+      method: 'PATCH',
       body: JSON.stringify({ scope }),
     });
     setScopePending(null);
@@ -343,9 +394,7 @@ export function ByokPanel() {
       scope: key.id,
       ok: res.ok,
       message: res.ok
-        ? scope === 'organization' && sharing
-          ? `Done. ${sharedWithText(sharing)}`
-          : 'Done. Only this app uses the key now.'
+        ? `Done. ${scopeReach(scope, sharing, universal)}`
         : describeByokError(res.error, 'The key was not moved. Retry in a moment.').message,
     });
     reload();
@@ -467,9 +516,15 @@ export function ByokPanel() {
     const expires = poolKey ? formatDay(poolKey.expires_at) : null;
     const hint = k.key_hint ?? '…****';
     const name = `${legacy ? 'old ' : ''}key ${hint}`;
-    const shared = isSharedKey(poolKey);
-    // A shared key changes every app: only owners and admins manage it.
-    const readOnly = shared && !sharing?.canManage;
+    const keyScope: KeyScope = poolKey?.scope ?? 'project';
+    // An organization key changes every app in it: owners and admins manage
+    // it. A universal key changes every app of its owner: only they do.
+    const readOnly =
+      (keyScope === 'organization' && !sharing?.canManage) || (keyScope === 'universal' && !poolKey?.ownedByMe);
+    const rowScopes =
+      poolKey && !readOnly && sharing?.canManage && poolKey.provider_slug !== 'supabase'
+        ? scopeOptions(sharing, universal, keyScope, poolKey.addedByMe === true)
+        : [];
     return (
       <li
         key={k.id}
@@ -478,9 +533,13 @@ export function ByokPanel() {
         <div className="min-w-0 space-y-1">
           <p className="flex flex-wrap items-center gap-x-2 text-sm">
             <span className="font-mono text-fg-secondary">{hint}</span>
-            {shared && (
-              <span className={`rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
-                All apps{sharing ? ` in ${sharing.organizationName}` : ''}
+            {poolKey && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-2xs font-medium ${
+                  keyScope === 'universal' ? CHIP_TONE.accentSubtle : keyScope === 'organization' ? CHIP_TONE.infoSubtle : CHIP_TONE.neutral
+                }`}
+              >
+                {scopeChipLabel(poolKey, sharing)}
               </span>
             )}
             {legacy ? (
@@ -527,8 +586,28 @@ export function ByokPanel() {
           )}
           {readOnly && (
             <p className="text-xs text-fg-muted">
-              Shared by your organization. An owner or admin can change or remove it.
+              {keyScope === 'universal'
+                ? "Another owner's key for all of their apps. Only they can change or remove it."
+                : 'Shared by your organization. An owner or admin can change or remove it.'}
             </p>
+          )}
+          {poolKey?.scope === 'universal' && poolKey.ownedByMe && poolKey.servesThisApp === false && (
+            <p className="text-xs text-fg-muted">
+              Not used in this app: your all-apps keys serve the organizations you own.
+            </p>
+          )}
+          {poolKey && rowScopes.length > 1 && (
+            <SegmentedControl
+              size="sm"
+              wrap
+              label="Used by"
+              ariaLabel={`Where ${name} is used`}
+              value={keyScope}
+              options={rowScopes}
+              onChange={(next) => {
+                if (next !== keyScope && scopePending !== poolKey.id) setMoveTarget({ key: poolKey, scope: next });
+              }}
+            />
           )}
           {noticeHere(k.id)}
         </div>
@@ -602,25 +681,6 @@ export function ByokPanel() {
               </Btn>
             </Tooltip>
           )}
-          {poolKey && sharing?.canManage && (shared || poolKey.provider_slug !== 'supabase') && (
-            <Tooltip
-              content={
-                shared
-                  ? 'Only this app uses the key; the other apps stop using it.'
-                  : `Every app in ${sharing.organizationName} can use this key. An app's own key is still tried first.`
-              }
-            >
-              <Btn
-                size="sm"
-                variant="ghost"
-                type="button"
-                loading={scopePending === poolKey.id}
-                onClick={() => setMoveTarget({ key: poolKey, scope: shared ? 'project' : 'organization' })}
-              >
-                {shared ? 'Use in this app only' : 'Use in all apps'}
-              </Btn>
-            </Tooltip>
-          )}
         </div>
         )}
       </li>
@@ -632,7 +692,11 @@ export function ByokPanel() {
       <SettingsList
         title="AI keys"
         description={`Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out.${
-          sharing ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.` : ''
+          universal?.canAdd
+            ? ' A key for "All my apps" is added once and used by every app you own.'
+            : sharing
+              ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.`
+              : ''
         }`}
       >
         {DISPLAY_PROVIDERS.map((provider) => {
@@ -768,13 +832,23 @@ export function ByokPanel() {
                       </div>
                     )}
                   </div>
-                  {sharing?.canManage && (
-                    <Checkbox
-                      label={`Use for ${appsPhrase(sharing)}`}
-                      checked={newShared}
-                      onChange={setNewShared}
-                      tooltip="An app's own key is tried first; this key is used where an app has none, or as its backup. Untick to keep the key to this app."
-                    />
+                  {provider !== 'supabase' && scopeOptions(sharing, universal).length > 1 && (
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <SegmentedControl
+                          label="Use this key for"
+                          ariaLabel="Use this key for"
+                          wrap
+                          value={formScope(provider)}
+                          options={scopeOptions(sharing, universal)}
+                          onChange={setNewScope}
+                        />
+                        <ConfigHelp helpId="byok.key_scope" ariaLabel="Help: where a key is used" />
+                      </div>
+                      <p className="text-xs text-fg-muted">
+                        {scopeReach(formScope(provider), sharing, universal)} {RESOLUTION_ORDER_HINT}
+                      </p>
+                    </div>
                   )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Btn type="submit" size="sm" loading={adding}>
@@ -793,19 +867,29 @@ export function ByokPanel() {
         })}
       </SettingsList>
 
-      {moveTarget && sharing && (
+      {moveTarget && (
         <ConfirmDialog
           title={
-            moveTarget.scope === 'organization'
-              ? `Use this key in all ${sharing.appCount} apps?`
-              : 'Use this key in this app only?'
+            moveTarget.scope === 'universal'
+              ? 'Use this key in all your apps?'
+              : moveTarget.scope === 'organization'
+                ? `Use this key in ${sharing ? appsPhrase(sharing) : 'every app in this organization'}?`
+                : 'Use this key in this app only?'
           }
           body={
-            moveTarget.scope === 'organization'
-              ? `Every app in ${sharing.organizationName} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. Apps with no key of their own for this service start billing to it; an app's own key is still tried first.`
-              : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. The other apps in ${sharing.organizationName} stop using it and fall back to their own keys, or Mushi's own key where there is one.`
+            moveTarget.scope === 'universal'
+              ? `${myAppsPhrase(universal).replace(/^./, (c) => c.toUpperCase())} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. An app's own key and its organization's key are still tried first. Only you can change or remove it.`
+              : moveTarget.scope === 'organization'
+                ? `Every app in ${sharing?.organizationName ?? 'this organization'} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. Apps with no key of their own for this service start billing to it; an app's own key is still tried first.${isUniversalKey(moveTarget.key) ? ' Your apps in other organizations stop using it.' : ''}`
+                : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. ${isUniversalKey(moveTarget.key) ? 'Your other apps stop using it' : `The other apps in ${sharing?.organizationName ?? 'the organization'} stop using it`} and fall back to their own keys, or Mushi's own key where there is one.`
           }
-          confirmLabel={moveTarget.scope === 'organization' ? 'Use in all apps' : 'Use in this app only'}
+          confirmLabel={
+            moveTarget.scope === 'universal'
+              ? 'Use in all my apps'
+              : moveTarget.scope === 'organization'
+                ? 'Use in this organization'
+                : 'Use in this app only'
+          }
           cancelLabel="Cancel"
           loading={scopePending === moveTarget.key.id}
           onConfirm={async () => {
@@ -821,7 +905,7 @@ export function ByokPanel() {
       {disableTarget && (
         <ConfirmDialog
           title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
-          body={`${isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
+          body={`${isUniversalKey(disableTarget) ? 'This key is used by all your apps: every one stops using it. ' : isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
           confirmLabel="Turn off key"
           cancelLabel="Keep it on"
           tone="danger"
@@ -839,7 +923,7 @@ export function ByokPanel() {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove this ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
-          body={`${!isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or Mushi's own key where there is one.`}
+          body={`${!isLegacyKey(removeTarget) && isUniversalKey(removeTarget as PoolKey) ? 'This key is used by all your apps: every one loses it. ' : !isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or Mushi's own key where there is one.`}
           confirmLabel="Remove key"
           cancelLabel="Keep key"
           tone="danger"

@@ -2015,6 +2015,27 @@ const SDK_INSTALL: ConfigDoc[] = [
     },
   },
   {
+    id: 'byok.key_scope',
+    label: 'Use this key for',
+    summary:
+      'Where a key is used: all your apps (universal), every app in this organization, or this app only. New keys default to all your apps.',
+    howItWorks:
+      "All my apps: one key for every app in every organization you own, so you add it once even when your apps live in several organizations. It reaches only organizations where you are an owner, never one you only administer or belong to, and only you can change or remove it. This organization: every app in it; owners and admins manage it. This app only: nothing else uses it. Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, its owners' all-apps keys (by priority when an organization has several owners), then Mushi's own key. Change a key's scope from its row; each change is recorded in the key audit log. Supabase access tokens always stay with one app.",
+    default: { value: 'All my apps (when you own this app’s organization); otherwise this organization for owners and admins, else this app' },
+    backend: {
+      table: 'byok_keys',
+      column: 'project_id | organization_id | owner_user_id (exactly one)',
+      endpoint: 'POST /v1/admin/byok/keys (scope), PATCH /v1/admin/byok/keys/:keyId/scope',
+      readBy: ['every AI and web call through _shared/byok.ts resolveLlmKeys', 'resolveCursorApiKey', 'spend-down-worker', 'agent-pr-review'],
+    },
+    whenToChange:
+      'Keep "All my apps" when one account pays for every app you own. Pick "This organization" when a team shares the bill, and "This app only" when one app must bill to its own account.',
+    learnMore: {
+      label: 'ADR 0031',
+      href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0031-universal-ai-keys-serve-every-app-their-owner-owns.md',
+    },
+  },
+  {
     id: 'byok.spend_down',
     label: 'Spend down expiring credits',
     summary:

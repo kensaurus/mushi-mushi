@@ -21,6 +21,7 @@
 
 import type { getServiceClient } from './db.ts'
 import { isOperatorUser } from './operator-gate.ts'
+import { universalKeysByOrg } from './byok-scope.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -155,7 +156,7 @@ export async function loadIntegrationSignals(
 
   const projects = (projectsRes.data ?? []) as Array<{ id: string; organization_id: string | null; owner_id: string | null }>
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((v): v is string => Boolean(v)))]
-  const [orgRes, orgByokRes] = orgIds.length
+  const [orgRes, orgByokRes, universalByOrg] = orgIds.length
     ? await Promise.all([
         db
           .from('organization_integration_settings')
@@ -167,8 +168,15 @@ export async function loadIntegrationSignals(
           .select('organization_id, status, test_status')
           .in('organization_id', orgIds)
           .eq('provider_slug', 'anthropic'),
+        // So does a universal key of one of its owners (ADR 0031).
+        universalKeysByOrg<{ owner_user_id: string; status: string | null; test_status: string | null }>(
+          db as never,
+          orgIds,
+          'status, test_status',
+          'anthropic',
+        ),
       ])
-    : [{ data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, new Map<string, Array<{ status: string | null; test_status: string | null }>>()]
 
   const settingsBy = new Map<string, ProjectIntegrationRow>()
   for (const r of (settingsRes.data ?? []) as Array<ProjectIntegrationRow & { project_id: string }>) {
@@ -210,6 +218,7 @@ export async function loadIntegrationSignals(
         anthropicPoolKeys: [
           ...(byokBy.get(pid) ?? []),
           ...(p?.organization_id ? orgByokBy.get(p.organization_id) ?? [] : []),
+          ...(p?.organization_id ? universalByOrg.get(p.organization_id) ?? [] : []),
         ],
         env,
         operatorProject: isOperatorUser(p?.owner_id ?? null),
