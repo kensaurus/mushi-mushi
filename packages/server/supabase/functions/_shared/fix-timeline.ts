@@ -24,6 +24,8 @@ export type FixTimelineKind =
   | 'pr_state_changed'
   /** The independent Opus review of a cloud agent's PR (ADR 0030). */
   | 'reviewed'
+  /** A review follow-up: a new Cursor agent sent to the PR with the Opus findings (ADR 0032). */
+  | 'followup'
   | 'completed'
   | 'failed'
 

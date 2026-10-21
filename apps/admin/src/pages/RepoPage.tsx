@@ -119,7 +119,7 @@ interface RepoOverview {
 
 interface RepoActivityEvent {
   at: string
-  kind: 'dispatched' | 'branch' | 'commit' | 'pr_opened' | 'ci_resolved' | 'reviewed' | 'completed' | 'failed'
+  kind: 'dispatched' | 'branch' | 'commit' | 'pr_opened' | 'ci_resolved' | 'reviewed' | 'followup' | 'completed' | 'failed'
   fix_attempt_id: string
   report_id: string
   branch: string | null
@@ -167,6 +167,7 @@ const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
   pr_opened: 'PR opened',
   ci_resolved: 'CI result',
   reviewed: 'Opus review',
+  followup: 'Review follow-up',
   completed: 'Completed',
   failed: 'Failed',
 }

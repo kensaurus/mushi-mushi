@@ -6,6 +6,8 @@
  *          paused, with why (ADR 0028 amendment).
  */
 
+import type { ReviewFollowupScoreboard } from './reviewFollowups'
+
 type SpendDownState = 'off' | 'not_started' | 'active' | 'expired' | 'key_unusable'
 
 /** The stop-loss state of one app (server `spendDownStopLoss`). */
@@ -72,6 +74,8 @@ export interface SpendDownKeyStatus {
 export interface SpendDownResponse {
   projectId: string
   keys: SpendDownKeyStatus[]
+  /** Review follow-ups (ADR 0032), last 7 days, over the apps you can access; null when unreadable. */
+  reviewFollowups?: ReviewFollowupScoreboard | null
 }
 
 function day(iso: string | null): string {

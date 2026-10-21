@@ -216,7 +216,8 @@ async function resolveVaultRef(db: SupabaseClient, ref: string | null | undefine
  * Cursor key, in ADR 0023's order: the app's own pool row (`byok_keys`,
  * provider 'cursor') → its legacy `project_settings.cursor_api_key_ref`
  * (vault ref, what the Integrations page writes) → the organization's shared
- * pool row → env `CURSOR_API_KEY` (self-host).
+ * pool row → the universal keys of its organization's owners (ADR 0031) →
+ * env `CURSOR_API_KEY` (self-host).
  *
  * Until 2026-10-20 any pool row, shared included, came first, so adding a
  * shared Cursor key moved every app with a legacy key onto it (mushi-mushi
@@ -224,8 +225,23 @@ async function resolveVaultRef(db: SupabaseClient, ref: string | null | undefine
  * order (`_shared/spend-down-db.ts`).
  */
 export async function resolveCursorApiKey(db: SupabaseClient, projectId: string): Promise<string | null> {
+  return (await resolveCursorApiKeyWithSource(db, projectId))?.key ?? null
+}
+
+/**
+ * The same pick as resolveCursorApiKey, plus where it came from: the
+ * `byok_keys` id for a pool key, 'legacy' for the Integrations key, 'env'
+ * for the self-host fallback. Review follow-ups (ADR 0032) record the key id
+ * and poll the run with the same key.
+ */
+export async function resolveCursorApiKeyWithSource(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ key: string; keyId: string | null; source: 'pool' | 'legacy' | 'env' } | null> {
   const resolved = await resolveLlmKey(db, projectId, 'cursor')
-  if (resolved?.source === 'byok' && resolved.key && !resolved.shared) return resolved.key
+  if (resolved?.source === 'byok' && resolved.key && !resolved.shared) {
+    return { key: resolved.key, keyId: resolved.keyId ?? null, source: 'pool' }
+  }
 
   const { data } = await db
     .from('project_settings')
@@ -234,9 +250,12 @@ export async function resolveCursorApiKey(db: SupabaseClient, projectId: string)
     .maybeSingle()
   const ref = (data as { cursor_api_key_ref?: string | null } | null)?.cursor_api_key_ref ?? null
   const fromRef = await resolveVaultRef(db, ref)
-  if (fromRef) return fromRef
+  if (fromRef) return { key: fromRef, keyId: null, source: 'legacy' }
 
-  return resolved?.key ?? null
+  if (!resolved?.key) return null
+  return resolved.source === 'byok'
+    ? { key: resolved.key, keyId: resolved.keyId ?? null, source: 'pool' }
+    : { key: resolved.key, keyId: null, source: 'env' }
 }
 
 /**

@@ -7,7 +7,9 @@
  *         apps it pays for that the caller can open (each with its stop-loss
  *         state), the last 7 days' scoreboard (key-wide totals; rows for the
  *         caller's apps: runs → PRs → Opus verdicts → merged, latest review
- *         cost per PR) and the last worker tick. `mcp:read`.
+ *         cost per PR) and the last worker tick, plus `reviewFollowups`:
+ *         the last 7 days of review follow-ups (ADR 0032) over the apps the
+ *         caller can access (null when unreadable). `mcp:read`.
  *   POST  /v1/admin/byok/spend-down/projects/:projectId/resume  clear the
  *         stop-loss for one app (samples before now are ignored). Console
  *         only (jwtAuth), the app's owner or admin.
@@ -61,6 +63,8 @@ import {
   stopLossResets,
   type SpendDownYieldCache,
 } from '../../_shared/spend-down-db.ts'
+import { reviewFollowupStats, type ReviewFollowupStats } from './review-followup-stats.ts'
+import { log } from '../../_shared/logger.ts'
 
 /** owner_user_id is added by withOwnerUserColumn once migration 20261021090000 is applied. */
 const KEY_COLUMNS =
@@ -272,7 +276,15 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
           : visibleSummary(row.spend_down_last_summary, visible),
       })
     }
-    return c.json({ ok: true, data: { projectId: project.id, keys } })
+    // Review follow-ups (ADR 0032), over the apps the caller can access. Kept
+    // apart from the keys: a failed read shows null, never fails the status.
+    let reviewFollowups: ReviewFollowupStats | null = null
+    try {
+      reviewFollowups = await reviewFollowupStats(c, db, project, now)
+    } catch (err) {
+      log.warn('review follow-up stats unavailable', { projectId: project.id, err: err instanceof Error ? err.message : String(err) })
+    }
+    return c.json({ ok: true, data: { projectId: project.id, keys, reviewFollowups } })
   })
 
   /**

@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_119 configuration knobs across 19 sections · last regenerated 2026-10-21._
+_120 configuration knobs across 19 sections · last regenerated 2026-10-21._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (15)
+- [SDK install card](#sdk-install-card) (16)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -1898,6 +1898,24 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **When to change** — Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.
 
 **Learn more** — [ADR 0028](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0028-spend-down-expiring-agent-credits.md)
+
+### Review follow-ups
+
+<a id="byok-review-followups"></a>
+
+`byok.review_followups`
+
+**Summary** — When the Opus review of an agent's pull request says "fix first", Mushi sends it back to a new Cursor agent once with the review's findings, and Opus reviews the push.
+
+**How it works** — Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi cloud agent opened (never a person's pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request's branch with the report's summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app's auto-fix is off. Each follow-up counts against the app's auto-fix daily limit and the organization's follow-ups per day. Before each one, the model is checked against the Cursor key's model list (read at most once an hour); a model the key cannot run waits instead of dispatching. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.
+
+**Default** — `off; the key and model each app's fixes use; 30 a day` · range `1-200 a day`
+
+**Where it lives** — table `organizations.review_followup_enabled, review_followup_key_id, review_followup_model, review_followup_daily_limit` · endpoint `PATCH /v1/admin/byok/review-followups` · read by `review-followup edge function (cron every 10 minutes, :06 to :56)`, `GET /v1/admin/byok/review-followups`, `GET /v1/admin/byok/spend-down (reviewFollowups)`, `MCP get_spend_down_status`
+
+**When to change** — Pick a key when one Cursor account's credits should pay for every app's follow-ups (for example credits about to expire). Pick a model the reviews say writes mergeable fixes. Turn it off if follow-ups keep ending with no change pushed.
+
+**Learn more** — [ADR 0032](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0032-review-follow-ups-send-fix-first-prs-back-once.md)
 
 ### Framework tab
 

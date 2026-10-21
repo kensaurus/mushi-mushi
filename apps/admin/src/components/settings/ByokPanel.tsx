@@ -47,6 +47,7 @@ import {
 } from './keyStatus';
 import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
 import { SpendDownSection } from './SpendDownSection';
+import { ReviewFollowupsSection } from './ReviewFollowupsSection';
 
 interface ProviderMeta {
   name: string;
@@ -768,6 +769,7 @@ export function ByokPanel() {
               {provider === 'cursor' && providerKeys.length > 0 && (
                 <SpendDownSection canManageShared={Boolean(sharing?.canManage)} />
               )}
+              {provider === 'cursor' && providerKeys.length > 0 && <ReviewFollowupsSection />}
               {isOpen && (
                 <form
                   onSubmit={(e) => {
