@@ -18,7 +18,7 @@
 
 import type { Command } from 'commander'
 import { spawnSync } from 'node:child_process'
-import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync, fchownSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync, fchownSync, fstatSync, ftruncateSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync, writeSync } from 'node:fs'
 import { arch as nodeArch, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import * as p from '@clack/prompts'
@@ -339,7 +339,21 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
       const keyPath = join(hooksDir, 'key')
       writeFileSync(keyPath, `${runnerKey}\n`, { mode: 0o600 })
       console.log(source === 'env' ? 'Using the runner key from MUSHI_RUNNER_KEY.' : 'Created a runner key (runner:write: it can only report runner health).')
-      if (merged.text) writeFileSync(envPath, merged.text)
+      if (merged.text) {
+        // Read and rewrite .env through one descriptor (no symlinks), merging
+        // against what is there now, not what was read before the key was minted.
+        const fd = openSync(envPath, fsConstants.O_RDWR | fsConstants.O_CREAT | (fsConstants.O_NOFOLLOW ?? 0), 0o644)
+        try {
+          const now = mergeRunnerEnv(readFileSync(fd, 'utf8'), files, opts.force)
+          if (now.conflicts.length) throw new MushiCliError('E_INVALID_INPUT', "The runner's .env changed and now sets a job hook.", 'run the command again')
+          if (now.text) {
+            ftruncateSync(fd, 0)
+            writeSync(fd, now.text, 0)
+          }
+        } finally {
+          closeSync(fd)
+        }
+      }
       // The runner service usually runs as another user: hand it the files.
       // Owner read and chown go through open descriptors, so a path swapped
       // in between cannot redirect the chown (CodeQL js/file-system-race).
