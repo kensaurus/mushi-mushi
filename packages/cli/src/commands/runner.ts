@@ -280,7 +280,7 @@ Create one with \`mushi runner key\`.`)
     .requiredOption('--dir <path>', 'The runner folder (where config.sh and .runner live)')
     .option('--force', "Replace hooks the runner's .env already points somewhere else")
     .option('--project <id>', 'Project the runner key is for (defaults to the configured project)')
-    .option('--label <name>', 'Label of the runner key (default runner-<host>)')
+    .option('--label <name>', 'Label of the runner key (default: this host; shown as runner:<label>)')
     .option('--dry-run', 'Show what would be written and change nothing')
     .addHelpText('after', `
 The hooks read the runner's own cgroup (memory.peak, memory.max, oom_kill), swap
@@ -347,7 +347,7 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
     .command('key')
     .description('Create a runner key (runner:write) and save it for the heartbeat; it is never printed')
     .option('--project <id>', 'Project the key is for (defaults to the configured project)')
-    .option('--label <name>', 'Key label shown in the console (default runner-<host>)')
+    .option('--label <name>', 'Key label shown in the console (default: this host; shown as runner:<label>)')
     .option('--out <path>', 'Where to save it (mode 0600)', RUNNER_KEY_PATH)
     .addHelpText('after', `
 A runner key can only report runner health. CI jobs on a self-hosted runner can

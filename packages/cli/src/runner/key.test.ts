@@ -17,8 +17,9 @@ describe('runner key', () => {
     expect(() => assertNotCliKey(RUNNER, CLI)).not.toThrow()
   })
 
-  it('labels the key runner-<short host>', () => {
-    expect(defaultRunnerKeyLabel('NUC.local')).toBe('runner-nuc')
+  it('labels the key with the short host (the server adds runner:)', () => {
+    expect(defaultRunnerKeyLabel('NUC.local')).toBe('nuc')
+    expect(defaultRunnerKeyLabel('Kenji_Alienware')).toBe('kenji-alienware')
   })
 
   it('prefers MUSHI_RUNNER_KEY and needs a project only to mint', async () => {

@@ -23,10 +23,10 @@ export const RUNNER_KEY_CREDENTIAL = 'runner-key'
 
 const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,39}$/
 
-/** `runner-<short host>`: the server's key label rule (1-40, lowercase, digits, hyphens). */
+/** The short hostname (1-40, lowercase, digits, hyphens); the server stores it as `runner:<label>`. */
 export function defaultRunnerKeyLabel(hostname: string): string {
   const short = hostname.split('.')[0]!.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
-  return `runner-${short || 'host'}`.slice(0, 40).replace(/-+$/, '')
+  return (short || 'host').slice(0, 40).replace(/-+$/, '')
 }
 
 /** The plaintext key from the mint response, whatever the field is called. */

@@ -60,7 +60,7 @@ function fakeGh(table: Record<string, string | Error>): { gh: GhExec; calls: str
 /** A runner:write key, different from the CLI key (TEST_API_KEY, which may hold mcp:write). */
 const RUNNER_KEY = 'mushi_runner_key_fake_0001' // gitleaks:allow — fake key for the CLI test harness
 const MINT_PATH = `/v1/admin/projects/${TEST_PROJECT_ID}/runner-key`
-const mintReply = (call: { path: string }) => (call.path === MINT_PATH ? okReply({ key: RUNNER_KEY, label: 'runner-ci-box' }) : okReply({ status: 'ok' }))
+const mintReply = (call: { path: string }) => (call.path === MINT_PATH ? okReply({ key: RUNNER_KEY, label: 'runner:ci-box' }) : okReply({ status: 'ok' }))
 
 let restore: (() => void) | null = null
 let tmp: string | null = null
@@ -301,7 +301,7 @@ describe('mushi runner add', () => {
       expect(run.exitCode).toBe(0)
       expect(seen.map((s) => s.id)).toContain('enable')
       // One runner key, minted once, goes only to the two key steps.
-      expect(run.calls.filter((c) => c.path === MINT_PATH)).toHaveLength(1)
+      expect(run.calls.filter((c) => c.path === MINT_PATH).map((c) => c.body)).toEqual([{ label: 'ci-box' }])
       expect(seen.filter((s) => s.stdin?.includes(RUNNER_KEY)).map((s) => s.id)).toEqual(['hook-key', 'heartbeat-key'])
       // The CLI key never reaches the machine: no step gets it on stdin.
       expect(seen.filter((s) => s.stdin?.includes(TEST_API_KEY))).toEqual([])
