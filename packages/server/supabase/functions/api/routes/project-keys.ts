@@ -8,6 +8,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
 import { parseRotateBody, pickRotationTarget, type RotatableKeyRow } from '../../_shared/api-key-rotation.ts';
+import { mintProjectApiKey } from '../../_shared/api-key-mint.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,8 +18,10 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // rejects bad input with a 400 and a helpful message, rather than letting
   // Postgres surface a noisy `23514` error.
   // `voice:write` is the phone-resident scope for POST /v1/intake/voice
-  // (migration 20260912001000). It unlocks that route only.
-  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write'] as const;
+  // (migration 20260912001000). It unlocks that route only. `runner:write`
+  // is the same for POST /v1/ingest/runner, the key that lives on a CI runner
+  // host (migration 20261021200000, Plan 022).
+  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write'] as const;
   type AllowedScope = (typeof ALLOWED_KEY_SCOPES)[number];
 
   function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {
@@ -213,15 +216,6 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       );
     }
 
-    const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
-    const prefix = rawKey.slice(0, 12);
-
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey));
-    const keyHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
     const label =
       typeof body.label === 'string' && body.label.trim().length > 0
         ? body.label.trim().slice(0, 64)
@@ -231,20 +225,10 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
             ? 'mcp-readonly'
             : 'default';
 
-    const { data: inserted, error } = await db
-      .from('project_api_keys')
-      .insert({
-        project_id: projectId,
-        key_hash: keyHash,
-        key_prefix: prefix,
-        label,
-        scopes,
-        is_active: true,
-      })
-      .select('id')
-      .single();
-
-    if (error) return dbError(c, error);
+    const mint = await mintProjectApiKey(db, { projectId, label, scopes });
+    if (!mint.ok) return dbError(c, mint.error);
+    const { key: rawKey, prefix } = mint.minted;
+    const inserted = { id: mint.minted.id };
     // Company funnel (mushi-self): fire-and-forget. The prefix is the 12-char
     // head of a fresh UUID-derived key, unique enough for an idempotency key.
     void emitProductEvent(db, {

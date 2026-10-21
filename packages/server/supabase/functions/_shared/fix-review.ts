@@ -4,7 +4,8 @@
  *          (ADR 0030). Pure: the verdict schema, the rules that keep a
  *          verdict consistent with its own findings, the diff budget, the
  *          prompt, the PR comment, and the merge gate. No Deno globals; the
- *          only import is zod (aliased to the installed package under vitest).
+ *          only imports are zod (aliased to the installed package under
+ *          vitest) and the pure ci-infra.ts.
  *
  * WHY (2026-10-20): spend-down sends dozens of reports a day to Cursor Cloud
  * (Grok 4.7 xhigh), and nothing graded the patches. A human-run Opus review
@@ -25,6 +26,7 @@
  */
 
 import { z } from 'npm:zod@3'
+import { describeCiInfra, readFixCiInfra } from './ci-infra.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Verdict schema
@@ -476,8 +478,22 @@ export function buildReviewPrompt(input: ReviewPromptInput): string {
   ].join('\n')
 }
 
-/** CI as the prompt states it, from the attempt's stored check-run columns. */
-export function describeCi(conclusion: string | null | undefined, status: string | null | undefined): { text: string; failed: boolean } {
+/**
+ * CI as the prompt states it, from the attempt's stored check-run columns
+ * and its `ci_infra` verdict (Plan 022). A test machine that died, or a job
+ * no runner took, reads "did not finish (…)" with failed: false: the review
+ * never holds or sends back a fix for a runner problem (ADR 0033). A plain
+ * cancel (superseded, cancelled by a person) still reads as failed.
+ */
+export function describeCi(
+  conclusion: string | null | undefined,
+  status: string | null | undefined,
+  ciInfra?: unknown,
+): { text: string; failed: boolean; infra?: true } {
+  const infra = readFixCiInfra(ciInfra)
+  if (infra?.infra) {
+    return { text: `did not finish (${describeCiInfra(infra)})`, failed: false, infra: true }
+  }
   const c = (conclusion ?? '').toLowerCase()
   if (c === 'success') return { text: 'passed', failed: false }
   if (c === 'failure' || c === 'timed_out' || c === 'cancelled' || c === 'action_required') {
@@ -487,6 +503,12 @@ export function describeCi(conclusion: string | null | undefined, status: string
   const s = (status ?? '').toLowerCase()
   if (s === 'queued' || s === 'in_progress' || s === 'pending') return { text: 'still running', failed: false }
   return { text: 'unknown (Mushi has not seen a check run)', failed: false }
+}
+
+/** The CI line of the review prompt: an infra verdict says the tests never ran. */
+export function ciPromptText(ci: { text: string; infra?: true }): string {
+  if (!ci.infra) return ci.text
+  return `${ci.text}. The tests did not run because the test machine failed, not because of this code; judge the diff on its own and do not ask for CI fixes.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
