@@ -40,7 +40,9 @@ export interface SpendDownKeyStatus {
   id: string
   label: string | null
   keyHint: string | null
-  scope: 'organization' | 'project'
+  scope: 'organization' | 'project' | 'universal'
+  /** Universal keys: the signed-in user owns it, so they may change it (ADR 0031). */
+  ownedByMe?: boolean
   status: string
   enabled: boolean
   creditsExpireAt: string | null
@@ -50,7 +52,8 @@ export interface SpendDownKeyStatus {
   state: SpendDownState
   startsAt: string | null
   dispatchedToday: number
-  remainingToday: number
+  /** Null for someone else's universal key: the key-wide remainder is its owner's (ADR 0031). */
+  remainingToday: number | null
   /** canResume: you are this app's owner or admin (Resume is theirs to press). */
   projects: Array<{ id: string; name: string; canResume?: boolean; stopLoss?: SpendDownStopLoss | null }>
   projectsNote?: string | null

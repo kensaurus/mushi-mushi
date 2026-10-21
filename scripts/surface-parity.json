@@ -344,6 +344,7 @@
     "GET /v1/tester/wallet": {"allow": "jwt-only"},
     "PATCH /v1/admin/anomalies/:id": {"allow": "jwt-only"},
     "PATCH /v1/admin/byok/keys/:keyId": {"allow": "parity-debt"},
+    "PATCH /v1/admin/byok/keys/:keyId/scope": {"allow": "parity-debt", "note": "Moving a key between app, organization and universal scope changes what other apps bill to, so the route refuses API keys (ADR 0023, ADR 0031); the console is the surface."},
     "PATCH /v1/admin/byok/keys/:keyId/spend-down": {"mcp": ["set_byok_spend_down"], "cli": ["keys spend-down"]},
     "PATCH /v1/admin/compliance/dsars/:id": {"allow": "jwt-only"},
     "PATCH /v1/admin/drift/:id": {"allow": "jwt-only"},

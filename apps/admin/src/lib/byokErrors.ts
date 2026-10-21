@@ -90,6 +90,31 @@ export function describeByokError(
           'This key is shared by every app in your organization, so only an owner or admin can change it.',
         where: 'form',
       };
+    case 'UNIVERSAL_KEY_OWNER_ONLY':
+      return {
+        message:
+          'This key belongs to another owner and is used in all of their apps, so only they can change it.',
+        where: 'form',
+      };
+    case 'UNIVERSAL_KEY_NEEDS_OWNER':
+      return {
+        message:
+          "A key for all your apps works in the organizations you own. You don't own this one, so use the key in this organization or this app instead.",
+        where: 'form',
+      };
+    case 'UNIVERSAL_KEY_NOT_YOURS':
+      return {
+        message:
+          'Someone else added this key, so it can\u2019t become a key for all your apps. Add your own key and choose "All my apps".',
+        where: 'form',
+      };
+    case 'UNIVERSAL_KEYS_UNAVAILABLE':
+      return {
+        message: 'Keys for all your apps aren\u2019t available yet. Use the key in this organization or this app for now.',
+        where: 'form',
+      };
+    case 'UNIVERSAL_KEY_CONSOLE_ONLY':
+      return { message: 'A key for all your apps is added here in the console.', where: 'form' };
     case 'NO_ORGANIZATION':
       return {
         message: 'This app is not in an organization, so the key can only be used here.',

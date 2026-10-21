@@ -280,14 +280,14 @@
   },
   "list_byok_keys": {
     "scope": "mcp:read",
-    "description": "List validated and quarantined pooled BYOK keys plus read-only legacy credential metadata for the authenticated project.",
+    "description": "List validated and quarantined pooled BYOK keys this project uses, each with its scope (project, organization or universal), plus read-only legacy credential metadata for the authenticated project.",
     "method": "GET",
     "path": "/v1/admin/byok/keys",
     "hints": { "destructive": false, "idempotent": true }
   },
   "add_byok_key": {
     "scope": "mcp:write",
-    "description": "Store and validate a pooled BYOK key before runtime activation.",
+    "description": "Store and validate a pooled BYOK key for this project before runtime activation. Organization and universal keys are added in the console.",
     "method": "POST",
     "path": "/v1/admin/byok/keys",
     "body": {

@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_118 configuration knobs across 19 sections · last regenerated 2026-10-21._
+_119 configuration knobs across 19 sections · last regenerated 2026-10-21._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (14)
+- [SDK install card](#sdk-install-card) (15)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -1862,6 +1862,24 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
 **Learn more** — [Screenshot preview docs](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+### Use this key for
+
+<a id="byok-key-scope"></a>
+
+`byok.key_scope`
+
+**Summary** — Where a key is used: all your apps (universal), every app in this organization, or this app only. New keys default to all your apps.
+
+**How it works** — All my apps: one key for every app in every organization you own, so you add it once even when your apps live in several organizations. It reaches only organizations where you are an owner, never one you only administer or belong to, and only you can change or remove it. This organization: every app in it; owners and admins manage it. This app only: nothing else uses it. Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, its owners' all-apps keys (by priority when an organization has several owners), then Mushi's own key. Change a key's scope from its row; each change is recorded in the key audit log. Supabase access tokens always stay with one app.
+
+**Default** — `All my apps (when you own this app’s organization); otherwise this organization for owners and admins, else this app`
+
+**Where it lives** — table `byok_keys.project_id | organization_id | owner_user_id (exactly one)` · endpoint `POST /v1/admin/byok/keys (scope), PATCH /v1/admin/byok/keys/:keyId/scope` · read by `every AI and web call through _shared/byok.ts resolveLlmKeys`, `resolveCursorApiKey`, `spend-down-worker`, `agent-pr-review`
+
+**When to change** — Keep "All my apps" when one account pays for every app you own. Pick "This organization" when a team shares the bill, and "This app only" when one app must bill to its own account.
+
+**Learn more** — [ADR 0031](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0031-universal-ai-keys-serve-every-app-their-owner-owns.md)
 
 ### Spend down expiring credits
 
