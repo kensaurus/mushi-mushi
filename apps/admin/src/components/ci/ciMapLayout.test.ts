@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CI_NODE_SIZE, buildCiMap, type CiHostNodeData, type CiRunnerNodeData } from './ciMapLayout'
 import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
-import { FIXTURE_JOBS, FIXTURE_NOW, ciOverviewFixture, emptyCiOverview } from './__fixtures__/ciOverview'
+import { FIXTURE_JOBS, FIXTURE_NOW, ciOverviewFixture, emptyCiOverview, oneJobRunnersFixture } from './__fixtures__/ciOverview'
 import type { CiJob } from '../../lib/ciTypes'
 
 const map = buildCiMap(ciOverviewFixture(), { now: FIXTURE_NOW })
@@ -78,6 +78,32 @@ describe('buildCiMap', () => {
     // Oldest first: the longest waits make the cut.
     expect(jobs.map((n) => n.id)).toContain('job:q0')
     expect(jobs.map((n) => n.id)).not.toContain('job:q29')
+  })
+
+  it('shows one card per one-job runner family, and keeps ordinary runners apart', () => {
+    const fam = buildCiMap(oneJobRunnersFixture(), { now: FIXTURE_NOW })
+    const runners = fam.nodes.filter((n) => n.data.kind === 'runner').map((n) => n.data as CiRunnerNodeData)
+    expect(runners.map((r) => r.name).sort()).toEqual(['alienware-glot-1', 'aw-tsumagoi'])
+    const card = runners.find((r) => r.name === 'aw-tsumagoi')!
+    expect(card).toMatchObject({
+      title: 'aw-tsumagoi · one-job runners',
+      oneJob: true,
+      members: 3,
+      busy: true,
+      jobs24h: 3,
+      lastJobAt: '2026-10-21T11:56:00Z',
+      repos: ['kensaurus/tsumagoi'],
+    })
+    expect(runners.find((r) => r.name === 'alienware-glot-1')).toMatchObject({ oneJob: false, members: 0, title: 'alienware-glot-1' })
+    // The running member makes the family edge carry dots.
+    expect(fam.edges.find((e) => e.source === 'runner:aw-tsumagoi' && e.target === 'repo:kensaurus/tsumagoi')?.data?.running).toBe(true)
+  })
+
+  it("does not call a family offline because its finished runners are gone", () => {
+    const o = oneJobRunnersFixture()
+    const idle = buildCiMap({ ...o, jobs: o.jobs.filter((j) => j.id !== 't3'), runners: o.runners.filter((r) => !r.name.endsWith('-7')) }, { now: FIXTURE_NOW })
+    const card = idle.nodes.find((n) => n.id === 'runner:aw-tsumagoi')!.data as CiRunnerNodeData
+    expect(card).toMatchObject({ busy: false, status: 'unknown', oneJob: true, members: 2 })
   })
 
   it('returns an empty map for an empty overview', () => {

@@ -138,3 +138,32 @@ export function emptyCiOverview(): CiOverview {
     stats: { jobs: 0, passRate: null, queueP50s: null, queueP95s: null, durationP50s: null, durationP95s: null, infraFailures: 0, codeFailures: 0, byRunner: [], byWorkflow: [], slowSteps: [] },
   })
 }
+
+/**
+ * The tsumagoi day: one-job runners named `aw-tsumagoi-<MMDDhhmmss>-<n>`, one
+ * busy, plus an ordinary runner that must stay its own card.
+ */
+export function oneJobRunnersFixture(): CiOverview {
+  const T = 'kensaurus/tsumagoi'
+  const base = ciOverviewFixture()
+  const jobs: CiJob[] = [
+    job({ id: 't1', repo: T, jobName: 'Build + unit tests', workflowName: 'ci-pr.yml', status: 'completed', conclusion: 'success', ciKind: 'passed', runnerName: 'aw-tsumagoi-1021100000-163', createdAt: '2026-10-21T10:00:00Z', startedAt: '2026-10-21T10:01:00Z', completedAt: '2026-10-21T10:20:00Z', durationSeconds: 1140 }),
+    job({ id: 't2', repo: T, jobName: 'E2E', workflowName: 'ci-pr.yml', status: 'completed', conclusion: 'failure', ciKind: 'code_failure', runnerName: 'aw-tsumagoi-1021100500-356', createdAt: '2026-10-21T10:05:00Z', startedAt: '2026-10-21T10:06:00Z', completedAt: '2026-10-21T10:30:00Z', durationSeconds: 1440 }),
+    job({ id: 't3', repo: T, jobName: 'Lint', workflowName: 'ci-pr.yml', status: 'in_progress', ciKind: 'running', runnerName: 'aw-tsumagoi-1021115500-7', createdAt: '2026-10-21T11:55:00Z', startedAt: '2026-10-21T11:56:00Z' }),
+    job({ id: 't4', repo: T, jobName: 'Deploy', workflowName: 'deploy.yml', status: 'completed', conclusion: 'success', ciKind: 'passed', runnerName: 'alienware-glot-1', createdAt: '2026-10-21T09:00:00Z', startedAt: '2026-10-21T09:01:00Z', completedAt: '2026-10-21T09:05:00Z', durationSeconds: 240 }),
+  ]
+  const P = base.runners[0].projectId
+  const row = (name: string, lastJobAt: string, status: 'online' | 'offline', busy: boolean, jobs24h: number) =>
+    ({ projectId: P, repo: T, name, status, busy, labels: ['self-hosted', 'tsumagoi'], kind: 'self_hosted' as const, hostId: null, lastJobAt, jobs24h, infraFailures7d: 0 })
+  return ciOverviewFixture({
+    hosts: [],
+    runners: [
+      row('aw-tsumagoi-1021100000-163', '2026-10-21T10:01:00Z', 'offline', false, 1),
+      row('aw-tsumagoi-1021100500-356', '2026-10-21T10:06:00Z', 'offline', false, 1),
+      row('aw-tsumagoi-1021115500-7', '2026-10-21T11:56:00Z', 'online', true, 1),
+      row('alienware-glot-1', '2026-10-21T09:01:00Z', 'online', false, 1),
+    ],
+    repos: [{ projectId: P, projectName: 'tsumagoi', repo: T, queued: 0, running: 1, jobs7d: 4, passRate: 0.67, queueP95s: 60, durationP50s: 600 }],
+    jobs,
+  })
+}
