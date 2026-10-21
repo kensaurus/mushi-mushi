@@ -6,9 +6,11 @@
  *          the three paths agree on what "closed unmerged" means and where
  *          the report goes next.
  *
- * No imports and no env reads: the Deno CI test runs without permissions
- * and the vitest suite imports this file directly.
+ * No env reads and only the pure ci-infra.ts: the Deno CI test runs without
+ * permissions and the vitest suite imports this file directly.
  */
+
+import { readFixCiInfra } from './ci-infra.ts'
 
 /** GitHub PR lifecycle as stored in `fix_attempts.pr_state` (CHECK-constrained). */
 export type PrLifecycle = 'open' | 'closed' | 'merged' | 'draft'
@@ -151,15 +153,36 @@ export function isFixCountedFailed(a: {
   return CI_HARD_FAIL.has((a.check_run_conclusion ?? '').toLowerCase())
 }
 
-/** Breakdown key for a counted failure: the worker's category, else why the PR is blocked. */
+/**
+ * Breakdown key for a counted failure: the worker's category, else why the
+ * PR is blocked. A PR whose CI stopped because the test machine did (runner
+ * lost, no runner picked the job up) is `ci_infra`, not `ci_failed`: the fix
+ * was never tested, and the next step is to re-run the tests, not to change
+ * the code (Plan 022, ADR 0033).
+ */
 export function fixFailureBucket(a: {
   status?: string | null
   pr_url?: string | null
   pr_state?: string | null
   failure_category?: string | null
+  ci_infra?: unknown
 }): string {
   if (typeof a.failure_category === 'string' && a.failure_category) return a.failure_category
   if (a.pr_state === 'closed') return 'pr_closed_unmerged'
-  if (a.pr_url && a.status === 'completed') return 'ci_failed'
+  if (a.pr_url && a.status === 'completed') return readFixCiInfra(a.ci_infra)?.infra ? 'ci_infra' : 'ci_failed'
   return 'unknown'
+}
+
+export const CI_INFRA_STOPPED_LABEL = 'The test machine stopped — your fix was not tested'
+export const CI_INFRA_WAITING_LABEL = 'Waiting for a test machine'
+
+/**
+ * Plain words for an attempt's CI-machine state, or null when its CI has no
+ * infra verdict. Waiting is not a failure (nothing is counted failed while
+ * a job waits); the other infra kinds are.
+ */
+export function fixCiInfraLabel(a: { ci_infra?: unknown }): string | null {
+  const ci = readFixCiInfra(a.ci_infra)
+  if (!ci?.infra) return null
+  return ci.kind === 'waiting_for_runner' ? CI_INFRA_WAITING_LABEL : CI_INFRA_STOPPED_LABEL
 }

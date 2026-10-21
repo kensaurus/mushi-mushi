@@ -365,6 +365,11 @@ verify_jwt = false
 [functions.review-followup]
 verify_jwt = false
 
+# ci-jobs-collector is invoked by pg_cron (mushi-ci-jobs-collector, 2-52/10)
+# through the internal caller token; requireServiceRoleAuth inside (Plan 022).
+[functions.ci-jobs-collector]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on

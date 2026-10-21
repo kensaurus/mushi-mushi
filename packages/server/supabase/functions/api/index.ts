@@ -99,6 +99,7 @@ import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
+import { registerCiRoutes } from './routes/ci.ts';
 
 ensureSentry('api');
 
@@ -701,6 +702,8 @@ registerTelegramAdminRoutes(app);
 registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
 registerSentryImportRoutes(app);
+// CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
+registerCiRoutes(app);
 
 registerA2ATaskRoutes(app);
 

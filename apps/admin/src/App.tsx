@@ -53,6 +53,7 @@ const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
 const ChecksPage = lazy(() => import('./pages/ChecksPage').then(m => ({ default: m.ChecksPage })))
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
+const CiPage = lazy(() => import('./pages/CiPage').then(m => ({ default: m.CiPage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
@@ -390,6 +391,7 @@ export function App() {
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
                   <Route path="/checks" element={<ChecksPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
+                  <Route path="/ci" element={<CiPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />

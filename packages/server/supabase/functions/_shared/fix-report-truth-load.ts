@@ -20,7 +20,7 @@ import { universalKeysByOrg } from './byok-scope.ts'
 
 /** Columns every truth derivation needs from fix_attempts. */
 export const TRUTH_ATTEMPT_COLUMNS =
-  'id, report_id, project_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, failure_category, error, created_at, started_at'
+  'id, report_id, project_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, ci_infra, failure_category, error, created_at, started_at'
 
 const ID_CHUNK = 100
 

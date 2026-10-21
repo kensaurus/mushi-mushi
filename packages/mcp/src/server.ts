@@ -1685,6 +1685,56 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // CI runners (Plan 022, ADR 0033). Loose objects: the rows mirror database
+  // columns and grow; only the top-level shape is the contract.
+  const CI_ADVICE_OUTPUT = z.looseObject({
+    id: z.string(),
+    severity: z.string(),
+    title: z.string(),
+    detail: z.string().nullable().optional(),
+    evidence: z.unknown().optional(),
+    fix: z.string().nullable().optional(),
+  });
+  server.registerTool(
+    'get_ci_overview',
+    {
+      title: titleOf('get_ci_overview'),
+      description: descOf('get_ci_overview'),
+      annotations: annotationsFor('get_ci_overview'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 7)'),
+        refresh: z.boolean().optional().describe('Read GitHub first instead of the last 10-minute sync (at most once a minute per project)'),
+      }),
+      outputSchema: z.looseObject({
+        generatedAt: z.string().optional(),
+        refreshedAt: z.string().nullable().optional(),
+        window: z.unknown().optional(),
+        permissions: z.unknown().optional(),
+        hosts: z.array(z.looseObject({})).optional().describe('Machines that send a runner heartbeat'),
+        runners: z.array(z.looseObject({})).optional().describe('GitHub runners seen, with status'),
+        repos: z.array(z.looseObject({})).optional(),
+        jobs: z.array(z.looseObject({})).optional().describe('Latest jobs with their infra or code verdict'),
+        stats: z.looseObject({}).nullable().optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional().describe('Rule-based advice with evidence, most severe first'),
+      }),
+    },
+    async (args) => {
+      // An explicit id is checked against a project-bound key; with none, the
+      // configured project, and with an account key no project (portfolio map).
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 7) });
+      if (pid) qs.set('project_id', pid);
+      if (args.refresh) qs.set('refresh', '1');
+      return jsonResult(
+        await apiCall(`/v1/admin/ci/overview?${qs}`, undefined, args.refresh ? { minTimeoutMs: 60_000 } : undefined),
+      );
+    },
+  );
+
   server.registerTool(
     'explain_finding',
     {

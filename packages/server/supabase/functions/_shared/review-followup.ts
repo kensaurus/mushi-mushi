@@ -369,7 +369,7 @@ export interface FollowupPromptInput {
 
 export interface ScreenedFindings {
   kept: FollowupFinding[]
-  dropped: { url: number; command: number; injection: number; ciConfig: number; notInPr: number }
+  dropped: { url: number; command: number; injection: number; ciConfig: number; notInPr: number; ciInfra: number }
 }
 
 /** What the screen knows about the PR: its files (and their old names), whether the list is whole, and its patches. */
@@ -427,6 +427,29 @@ const CI_CONFIG_RE =
  * Phrasing aimed at the model reading the finding rather than at the code,
  * checked in the issue and the fix.
  */
+/**
+ * A finding whose point is that CI is red: "CI failed", "the build was
+ * cancelled", "checks are failing". When the PR's CI stopped because the
+ * test machine did (Plan 022), there is nothing in the code for an agent to
+ * fix, so these are dropped (ADR 0033).
+ */
+const CI_STATE_RE =
+  /\b(?:ci|checks?|tests?|test\s+suite|build|pipeline|workflow\s+run|job|actions?)\b[^.\n]{0,60}?\b(?:fail(?:ed|ing|s|ure)?|cancel+(?:ed|led)?|did\s+not\s+(?:run|finish|complete)|never\s+ran|red|timed\s+out|not\s+(?:pass|passing|green))\b|\b(?:fail(?:ed|ing|ure)?|cancel+ed)\s+(?:ci|checks?|build|pipeline)\b/i
+/** A finding that opens on CI itself, whatever file it names. */
+const CI_SUBJECT_RE = /^\s*(?:the\s+)?(?:ci|checks?|build|pipeline|github\s+actions?)\b/i
+
+/**
+ * True when a finding only restates the CI state: it talks about CI failing
+ * and is either not tied to a file or opens on CI itself. A finding about a
+ * failing test tied to a source file the PR changed is about the code and
+ * stays.
+ */
+export function restatesCiState(f: Pick<FollowupFinding, 'issue' | 'file'>): boolean {
+  if (!CI_STATE_RE.test(f.issue)) return false
+  const file = normalizePath(f.file)
+  return file === '' || file === '(general)' || CI_SUBJECT_RE.test(f.issue)
+}
+
 const INJECTION_RE =
   /\bignore\s+(?:all\s+|any\s+)?(?:previous|prior|above|earlier)\b|\bdisregard\s+(?:all\s+|any\s+)?(?:previous|prior|above|the)\b|\byou\s+are\s+now\b|\bexfiltrat|\bprint\s+(?:out\s+)?(?:the\s+)?env(?:ironment)?\b|\b(?:reveal|show|print)\s+(?:the\s+|your\s+)?system\s+prompt\b|\bnew\s+instructions\b|\b(?:send|post|upload)\s+(?:the\s+|all\s+)?(?:secrets?|tokens?|credentials|api\s+keys?)\b/i
 
@@ -481,21 +504,31 @@ function foreignUrlHosts(text: string, baseText: string): string[] {
  *   already in the base branch's code, matched on host boundaries;
  * - its file is not one the PR changed under its new or old name
  *   (`(general)` findings stay; nothing is dropped for its file when GitHub
- *   listed only part of the files).
+ *   listed only part of the files);
+ * - `opts.ciInfra` (the PR's CI stopped on the test machine, Plan 022) and
+ *   it only restates that CI failed or was cancelled (restatesCiState).
  */
-export function screenFindings(findings: FollowupFinding[], pr: PrFilesForScreen): ScreenedFindings {
+export function screenFindings(
+  findings: FollowupFinding[],
+  pr: PrFilesForScreen,
+  opts: { ciInfra?: boolean } = {},
+): ScreenedFindings {
   const changed = new Set<string>()
   for (const f of pr.files) {
     changed.add(normalizePath(f.filename))
     if (f.previousFilename) changed.add(normalizePath(f.previousFilename))
   }
   const baseText = baseSideOfPatches(pr.patches)
-  const dropped = { url: 0, command: 0, injection: 0, ciConfig: 0, notInPr: 0 }
+  const dropped = { url: 0, command: 0, injection: 0, ciConfig: 0, notInPr: 0, ciInfra: 0 }
   const kept: FollowupFinding[] = []
   for (const f of findings) {
     const both = `${f.issue}\n${f.suggested_fix}`
     if (INJECTION_RE.test(both)) {
       dropped.injection++
+      continue
+    }
+    if (opts.ciInfra && restatesCiState(f)) {
+      dropped.ciInfra++
       continue
     }
     if (CI_CONFIG_RE.test(`${both}\n${f.file}`)) {

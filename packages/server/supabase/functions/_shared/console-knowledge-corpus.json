@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-20T05:05:18.718Z",
+  "generatedAt": "2026-10-21T11:27:40.640Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -244,6 +244,15 @@
       "route_path": "/recipe",
       "kind": "page",
       "content_hash": "5dee8b49078a7d61b216d6bae02417d4235a5bd221562e85caff0648963e71b7"
+    },
+    {
+      "doc_path": "pages/ci.md",
+      "section": "main",
+      "title": "CI runners",
+      "body": "# CI runners\n\nWhere your tests run, how long they wait for a machine, and what slows your fixes down.\n\nRoute: /ci\nSection: Check\n\nKeywords: ci, ci runners, runners, self-hosted, github actions, actions, queue, build queue, test machine, runner, slow ci, jobs\n\nUse this page when the user asks about: ci, ci runners, runners, self-hosted, github actions, actions",
+      "route_path": "/ci",
+      "kind": "page",
+      "content_hash": "065ce88af30e0b627cb54bb0c2eede80d67aa943f55991482936336b946740a3"
     },
     {
       "doc_path": "pages/health.md",

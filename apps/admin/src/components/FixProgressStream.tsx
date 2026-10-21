@@ -14,6 +14,8 @@ import { Card, Skeleton } from './ui'
 import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/ReportSurface'
 import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'
+import { readFixCi } from '../lib/ciInfra'
+import type { CiInfraVerdict } from '../lib/ciTypes'
 
 interface FixAttempt {
   id: string
@@ -32,6 +34,7 @@ interface FixAttempt {
   langfuse_trace_id?: string | null
   check_run_status?: string | null
   check_run_conclusion?: string | null
+  ci_infra?: CiInfraVerdict | null
   review_passed?: boolean
   error?: string
   started_at: string
@@ -229,11 +232,15 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
             Langfuse trace ↗
           </ActionPill>
         )}
-        {latest?.check_run_conclusion && (
-          <ActionPill tone={latest.check_run_conclusion === 'success' ? 'ok' : 'danger'}>
-            CI: {latest.check_run_conclusion}
-          </ActionPill>
-        )}
+        {(latest?.check_run_conclusion || latest?.ci_infra?.infra) && (() => {
+          // An infra stop is a warning and a plain cancel is neutral (ADR 0033).
+          const ci = readFixCi(latest)
+          return (
+            <ActionPill tone={ci.tone} to={ci.infra ? '/ci' : undefined}>
+              {ci.label}
+            </ActionPill>
+          )
+        })()}
         {latest?.review_passed === false && (
           <ActionPill tone="warn">Extra review flagged</ActionPill>
         )}

@@ -680,7 +680,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       db
         .from('fix_attempts')
         .select(
-          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
+          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, ci_infra, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
         )
         .eq('report_id', reportId)
         .order('created_at', { ascending: false })

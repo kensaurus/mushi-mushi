@@ -453,6 +453,13 @@
     "method": "GET",
     "path": "/v1/admin/code-health?project_id={projectId}&days={days|30}"
   },
+  "get_ci_overview": {
+    "scope": "mcp:read",
+    "description": "Where tests run and why fixes wait: machines, runners, jobs with infra vs code verdicts, queue and run times, and advice.",
+    "method": "GET",
+    "path": "/v1/admin/ci/overview?project_id={projectId}&days={days|7}&refresh={refresh}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "explain_finding": {
     "scope": "mcp:read",
     "description": "Explain one gate finding by id: the check, why it fired, file and line, the fix, and whether it is still open.",

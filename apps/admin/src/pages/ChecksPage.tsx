@@ -27,7 +27,7 @@ import { useEntitlements } from '../lib/useEntitlements'
 const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
+    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content'],
   },
   { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
 ]

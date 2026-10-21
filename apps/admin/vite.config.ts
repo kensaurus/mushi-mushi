@@ -266,6 +266,9 @@ export default defineConfig({
           if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-') || id.includes('shiki') || id.includes('highlight.js')) {
             return 'vendor-markdown'
           }
+          // Graph layout (dagre) — only by the /ci runner map, which is lazy.
+          // Kept out of vendor-misc, which index.html preloads on every page.
+          if (id.includes('@dagrejs/')) return 'vendor-graph-layout'
           // Data table runtime — only by list pages.
           if (id.includes('@tanstack/react-table') || id.includes('@tanstack/react-virtual')) {
             return 'vendor-table'

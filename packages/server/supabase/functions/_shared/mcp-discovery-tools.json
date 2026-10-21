@@ -897,6 +897,150 @@
       },
       "returnsUntrusted": true
     },
+    "get_ci_overview": {
+      "title": "CI runners and why fixes wait",
+      "description": "Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online | offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats { queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [{ id, severity (high | medium | low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions { jobs, runners } is ok | missing | unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns { generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "CI runners and why fixes wait",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "days": {
+            "description": "Window in days (default 7)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "refresh": {
+            "description": "Read GitHub first instead of the last 10-minute sync (at most once a minute per project)",
+            "type": "boolean"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string"
+          },
+          "refreshedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "window": {},
+          "permissions": {},
+          "hosts": {
+            "description": "Machines that send a runner heartbeat",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "runners": {
+            "description": "GitHub runners seen, with status",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "repos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "jobs": {
+            "description": "Latest jobs with their infra or code verdict",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "advice": {
+            "description": "Rule-based advice with evidence, most severe first",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "detail": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "evidence": {},
+                "fix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "returnsUntrusted": true
+    },
     "get_code_health": {
       "title": "Code health",
       "description": "Return the code health your CI pushed for one project: files over the size budget (god files) from the latest code_health run, each with severity, file, line, message and suggested fix, the bundle-size and largest-file trends, and a summary { error_count, warn_count, max_loc, latest_bundle_kb }. latestRunAt null means CI has never pushed (add MUSHI_INGEST_KEY to CI). Optional projectId and days (trend window, 1–365, default 30); a project-bound key reads its own project, an account-level key must pass projectId (400 PROJECT_REQUIRED otherwise). Returns { trends, godFiles, latestRunAt, latestRunStatus, summary }. Read-only. Use explain_finding with a god-file id for its fix; split the file before adding to it.",

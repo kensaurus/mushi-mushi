@@ -21,6 +21,7 @@ Mushi into your app, start at [Quickstart](/quickstart) instead.
 | Page | Audience | Covers |
 | --- | --- | --- |
 | [Deployment & releases](/operating/deployment) | Maintainers | npm SDK publish (Changesets + OIDC), edge functions, admin SPA, docs, DB migrations |
+| [CI runners](/operating/ci-runners) | Anyone running GitHub Actions | Where your tests run and why a fix waits, a broken fix vs a stopped test machine, and `mushi runner add` |
 
 ## The four independent deploy paths
 
