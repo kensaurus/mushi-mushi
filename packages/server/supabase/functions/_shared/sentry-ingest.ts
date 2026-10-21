@@ -107,6 +107,24 @@ function tagValue(tags: Array<[string, string]> | undefined, key: string): strin
   return hit?.[1] ?? null;
 }
 
+/**
+ * Tags that say where a handled server error happened. A shared handler such
+ * as `dbError` is called from hundreds of routes, so its stack frame alone
+ * does not locate the failing query; the `path` tag does (MUSHI-MUSHI-SERVER-2E:
+ * the fix agent could not find the route because intake dropped it).
+ * Allow-listed: user, IP and device tags never reach the report.
+ */
+const LOCATION_TAGS = ['transaction', 'route', 'path', 'method', 'url', 'scope', 'error_type', 'db_code'] as const;
+
+export function sentryLocationTags(tags: Array<[string, string]> | undefined): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const key of LOCATION_TAGS) {
+    const value = tagValue(tags, key);
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim().slice(0, 300);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /** Render the first exception's stack as compact text for `console_logs` —
  *  the same evidence bucket the SDK fills, so Stage 1/2 triage reads it with
  *  zero special-casing. Bounded to the last 10 frames. */
@@ -293,10 +311,12 @@ export async function ingestSentryError(
   const environment = event?.environment ?? tagValue(event?.tags, 'environment');
 
   const extraText = formatSentryExtra(event?.extra);
+  const location = sentryLocationTags(event?.tags);
   const description = [
     [title, culprit ? `in ${culprit}` : null, '(captured by Sentry — no user description)']
       .filter(Boolean)
       .join(' '),
+    location ? `Where: ${Object.entries(location).map(([k, v]) => `${k}=${v}`).join(' ')}` : null,
     extraText ? `Event extra:\n${extraText}` : null,
   ]
     .filter(Boolean)
@@ -329,6 +349,7 @@ export async function ingestSentryError(
       sentryIssueId,
       sentryShortId: issue?.shortId ?? null,
       sentryFrames: framePaths,
+      sentryLocation: location,
       culprit,
       platform: event?.platform ?? issue?.platform ?? null,
     },
