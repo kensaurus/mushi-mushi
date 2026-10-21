@@ -1,6 +1,58 @@
 {
   "entries": [
     {
+      "id": "2026-10-21-ci-runners",
+      "date": "2026-10-21",
+      "title": "CI runners: see where your tests run and why a fix waits",
+      "summary": "A new CI runners page shows the waiting, running and finished jobs, a timeline per machine, and a map from machines to runners to repos. A stopped test machine is no longer reported as a failed fix.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Queue board and timeline: every waiting, running and finished job, with the wait and run time, and a link to its fix."
+        },
+        {
+          "tone": "feature",
+          "text": "Runner map: click a machine, runner, repo or job to see its health, a 7-day outcome chart, memory, and the jobs it ran."
+        },
+        {
+          "tone": "feature",
+          "text": "Speed advice in plain words, for example \"many jobs stop because of the machine, not the code\"."
+        },
+        {
+          "tone": "feature",
+          "text": "`mushi runner add` sets up your own machine as a runner with safe defaults; `mushi runner status` and the MCP tool get_ci_overview show the same view."
+        },
+        {
+          "tone": "fix",
+          "text": "A job cancelled because its runner died or nobody picked it up now reads \"your fix was not tested\" with a Re-run button, never \"CI failed\". The Opus review no longer holds a PR for it."
+        }
+      ]
+    },
+    {
+      "id": "2026-10-21-agent-pr-review",
+      "date": "2026-10-21",
+      "title": "Agent pull requests get an independent review",
+      "summary": "Claude Opus reviews every pull request a cloud coding agent opens as a fix, on your own Anthropic key. The verdict is merge, fix first or hold, and Mushi will not merge a held PR unless a person overrides it in the console.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "The verdict, findings and removed behaviour appear in the fix timeline, the Merge dialog and as one PR comment. A merge or fix-first verdict also marks the PR ready, so CI runs."
+        },
+        {
+          "tone": "feature",
+          "text": "Review follow-ups (Settings → AI keys → Cursor): a fix-first PR goes back to a new agent once, with the findings. Off until an owner turns it on."
+        },
+        {
+          "tone": "feature",
+          "text": "All-apps keys: a key you own can serve every app in the organizations you own. Add it once under Settings → AI keys."
+        },
+        {
+          "tone": "feature",
+          "text": "Spend-down pauses an app whose agent PRs review poorly, sends one test fix a day until they recover, and shows a 7-day scoreboard per key."
+        }
+      ]
+    },
+    {
       "id": "2026-06-17-sidebar-micro-chrome",
       "date": "2026-06-17",
       "title": "Sidebar micro chrome — sliding pill toggles with calmer motion",
