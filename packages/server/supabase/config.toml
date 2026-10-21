@@ -63,6 +63,12 @@ verify_jwt = false
 [functions.api]
 verify_jwt = false
 
+# The overflow half of the admin API (deploy size limit, 2026-10-21). `api`
+# forwards CI runner, inventory and Ask Mushi paths here with the caller's
+# headers; each route runs its own auth, like in `api`.
+[functions.api-ext]
+verify_jwt = false
+
 # Internal pipeline functions invoked server-to-server from `api` using the
 # service-role key. After Supabase rotated to the new sb_secret_* key format,
 # the platform gateway started rejecting these inter-function calls with
