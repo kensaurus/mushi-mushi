@@ -72,9 +72,11 @@ import {
   writeStopLossReset,
   type SpendDownYieldCache,
 } from '../_shared/spend-down-db.ts'
+import { ownerUserColumnReady, withOwnerUserColumn } from '../_shared/byok-scope.ts'
 
 const log = rootLog.child('spend-down-worker')
 
+/** owner_user_id is added by withOwnerUserColumn once migration 20261021090000 is applied (ADR 0031). */
 export const SPEND_DOWN_KEY_COLUMNS =
   'id, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_summary'
 
@@ -370,14 +372,14 @@ export async function runSpendDown(db: SupabaseClient, deps: SpendDownDeps = {})
   const now = deps.now ?? new Date()
   const { data, error } = await db
     .from('byok_keys')
-    .select(SPEND_DOWN_KEY_COLUMNS)
+    .select(withOwnerUserColumn(SPEND_DOWN_KEY_COLUMNS, await ownerUserColumnReady(db)))
     .eq('spend_down_enabled', true)
     .eq('provider_slug', 'cursor')
   if (error) throw new Error(`spend-down: keys read failed: ${error.message}`)
 
   const summaries: KeySummary[] = []
   const yieldCache: SpendDownYieldCache = deps.yieldCache ?? new Map()
-  for (const key of (data ?? []) as Array<SpendDownKey & { spend_down_last_summary?: unknown }>) {
+  for (const key of (data ?? []) as unknown as Array<SpendDownKey & { spend_down_last_summary?: unknown }>) {
     // One tick per key at a time: an overlapping run would probe twice and
     // spend the daily limit twice.
     const claim = await claimKeyTick(db, key.id, now)

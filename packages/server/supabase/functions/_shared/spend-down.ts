@@ -10,9 +10,11 @@
  *          caps (the fix worker checks those again for every automatic
  *          dispatch).
  *
- *          "Already serves" follows ADR 0023 exactly, so the key resolver does
- *          not change: an app's own key is that app's; a shared key serves the
- *          organization's apps that have no Cursor key of their own.
+ *          "Already serves" follows the resolver order exactly (ADR 0023,
+ *          extended by ADR 0031): an app's own key is that app's; a shared key
+ *          serves the organization's apps that have no Cursor key of their
+ *          own; a universal key serves the apps of the organizations its owner
+ *          owns that have neither.
  *
  *          Cursor has no API for remaining credit, so the limit is a count of
  *          dispatches, not dollars. Open reports rank by severity, the judge
@@ -36,6 +38,8 @@ export interface SpendDownKey {
   provider_slug: string
   project_id: string | null
   organization_id: string | null
+  /** Set for a universal key (ADR 0031); absent before migration 20261021090000. */
+  owner_user_id?: string | null
   status: string
   credits_expire_at: string | null
   spend_down_enabled: boolean
@@ -111,6 +115,8 @@ export interface SpendDownProject {
   has_repo: boolean
   /** project_settings.cursor_api_key_ref is set: the app's legacy Integrations key. */
   has_legacy_key: boolean
+  /** Owners of the app's organization: whose universal keys it may use (ADR 0031). */
+  org_owner_ids?: string[]
 }
 
 /** A Cursor byok_keys row as the resolver sees it. */
@@ -118,6 +124,7 @@ export interface CursorPoolKey {
   id: string
   project_id: string | null
   organization_id: string | null
+  owner_user_id?: string | null
   priority: number | null
   status: string
   test_status: string | null
@@ -129,14 +136,15 @@ function usableForResolver(k: CursorPoolKey): boolean {
 }
 
 /**
- * The Cursor key `resolveCursorApiKey` picks first for one app (ADR 0023):
- * its own pool keys by priority, else its legacy Integrations key
- * ('legacy'), else its organization's shared keys by priority. Returns null
- * when nothing is usable, and 'tie' when two keys share the winning priority,
+ * The Cursor key `resolveCursorApiKey` picks first for one app (ADR 0023,
+ * ADR 0031): its own pool keys by priority, else its legacy Integrations key
+ * ('legacy'), else its organization's shared keys by priority, else the
+ * universal keys of its organization's owners by priority. Returns null when
+ * nothing is usable, and 'tie' when two keys share the winning priority,
  * because the resolver's order between them is not defined.
  */
 export function firstCursorKeyFor(
-  project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key'>,
+  project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key' | 'org_owner_ids'>,
   keys: CursorPoolKey[],
 ): string | 'legacy' | 'tie' | null {
   const pick = (rows: CursorPoolKey[]): string | 'tie' | null => {
@@ -150,12 +158,15 @@ export function firstCursorKeyFor(
   if (own.length > 0) return pick(own)
   if (project.has_legacy_key) return 'legacy'
   if (!project.organization_id) return null
-  return pick(usable.filter((k) => !k.project_id && k.organization_id === project.organization_id))
+  const shared = usable.filter((k) => !k.project_id && k.organization_id === project.organization_id)
+  if (shared.length > 0) return pick(shared)
+  const owners = project.org_owner_ids ?? []
+  return pick(usable.filter((k) => !k.project_id && !k.organization_id && !!k.owner_user_id && owners.includes(k.owner_user_id)))
 }
 
 /**
  * The apps a key pays for: the apps where it is the resolver's first pick
- * (ADR 0023), so a spend-down dispatch tagged with this key is billed to it.
+ * (ADR 0023, ADR 0031), so a spend-down dispatch tagged with this key is billed to it.
  * Apps with auto-fix off or no linked repo are left out: a dispatch there
  * would be skipped.
  */
@@ -709,4 +720,40 @@ export function spendDownScoreboard(runs: SpendDownRunRow[]): { totals: SpendDow
         a.model.localeCompare(b.model),
     )
   return { totals: finishCounts(totals), rows }
+}
+
+/**
+ * What a caller may see of the apps a key pays for (ADR 0031). A universal
+ * key spans every organization its owner owns, so anyone but its owner (a
+ * co-owner, admin, member, viewer, or any API key) sees only the apps of the
+ * requesting app's organization, both in `projects` and in the worker's last
+ * summary. App and organization keys serve one organization and pass through.
+ */
+export function scopeSpendDownView<P extends { id: string }>(args: {
+  keyIsUniversal: boolean
+  callerOwnsKey: boolean
+  /** Ids of the apps in the requesting app's organization (or the app alone). */
+  visibleProjectIds: ReadonlySet<string>
+  projects: P[]
+  lastSummary: unknown
+}): { projects: P[]; lastSummary: unknown } {
+  if (!args.keyIsUniversal || args.callerOwnsKey) return { projects: args.projects, lastSummary: args.lastSummary ?? null }
+  const projects = args.projects.filter((p) => args.visibleProjectIds.has(p.id))
+  const summary = args.lastSummary
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return { projects, lastSummary: summary ?? null }
+  const raw = summary as Record<string, unknown>
+  const visible = (p: unknown) => args.visibleProjectIds.has(String((p as { projectId?: unknown } | null)?.projectId))
+  const summaryProjects = Array.isArray(raw.projects) ? raw.projects.filter(visible) : []
+  return {
+    projects,
+    lastSummary: {
+      ...raw,
+      projects: summaryProjects,
+      // Totals would count other organizations' dispatches: report this
+      // organization's share of the tick, and no key-wide day totals.
+      dispatched: summaryProjects.reduce((n, p) => n + Number((p as { dispatched?: unknown }).dispatched ?? 0), 0),
+      dispatchedToday: null,
+      remainingToday: null,
+    },
+  }
 }

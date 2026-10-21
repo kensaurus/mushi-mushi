@@ -196,9 +196,12 @@ The admin console `/code-health` page reads the data back via `GET /v1/admin/cod
 
 Project-level API keys are stored encrypted in the `byok_keys` table via
 Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
-`resolveLlmKey(provider, projectId)` function in `_shared/byok.ts` reads from
-`byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
-columns for backwards compatibility, then falls back to the environment variable.
+`resolveLlmKey(provider, projectId)` function in `_shared/byok.ts` tries, in
+order: the project's own `byok_keys` rows, the legacy
+`project_settings.byok_<provider>_key_ref` column, its organization's shared
+rows (ADR 0023), the universal rows of its organization's owners (ADR 0031),
+then the environment variable. A row has exactly one owner (`project_id`,
+`organization_id` or `owner_user_id`); new console keys default to universal.
 
 Keys are managed self-service in the admin console. **Settings → AI keys**
 (`ByokPanel`) lists the key pool for every slug below and adds keys through

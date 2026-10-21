@@ -1,7 +1,8 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/spend-down-db.ts
  * PURPOSE: The spend-down reads the worker and the status route share: the
- *          apps a key pays for, how many dispatches it started today, an
+ *          apps a key pays for (own, organization or universal scope, ADR
+ *          0031), how many dispatches it started today, an
  *          app's recent yield (the stop-loss samples), and the runs behind a
  *          key's scoreboard. Rules live in spend-down.ts; this file only reads.
  */
@@ -17,6 +18,7 @@ import {
   type SpendDownRunRow,
   type SpendDownYieldSamples,
 } from './spend-down.ts'
+import { organizationOwnersByOrg, ownerUserColumnReady, withOwnerUserColumn } from './byok-scope.ts'
 
 /**
  * Newest spend-down dispatches of one app the stop-loss reads (inside the
@@ -288,38 +290,76 @@ function utcDayStart(now: Date): string {
   return d.toISOString()
 }
 
-/** Dispatches this key started today (UTC), any status. */
-export async function keyDispatchesToday(db: SupabaseClient, keyId: string, now: Date): Promise<number> {
-  const { count, error } = await db
+/**
+ * Dispatches this key started today (UTC), any status. `projectIds` limits
+ * the count to those apps: a universal key's non-owner sees only their own
+ * organization's share (ADR 0031).
+ */
+export async function keyDispatchesToday(
+  db: SupabaseClient,
+  keyId: string,
+  now: Date,
+  projectIds?: string[],
+): Promise<number> {
+  let query = db
     .from('fix_dispatch_jobs')
     .select('id', { count: 'exact', head: true })
     .eq('dispatch_metadata->>spend_down_key_id', keyId)
     .gte('created_at', utcDayStart(now))
+  if (projectIds) query = query.in('project_id', projectIds)
+  const { count, error } = await query
   if (error) throw new Error(`spend-down: could not count today's dispatches: ${error.message}`)
   return count ?? 0
 }
 
+/**
+ * The apps a key pays for (spendDownProjectIds). Candidate apps: the key's own
+ * app, its organization's apps, or, for a universal key (ADR 0031), the apps
+ * of every organization where its owner has role owner.
+ */
 export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promise<{
   ids: string[]
   settings: Map<string, Record<string, unknown>>
 }> {
-  const projectQuery = key.project_id
-    ? db.from('projects').select('id, organization_id').eq('id', key.project_id)
-    : db
-        .from('projects')
-        .select('id, organization_id')
-        .eq('organization_id', key.organization_id ?? '00000000-0000-0000-0000-000000000000')
+  let projectQuery
+  if (key.project_id) {
+    projectQuery = db.from('projects').select('id, organization_id').eq('id', key.project_id)
+  } else if (key.organization_id) {
+    projectQuery = db.from('projects').select('id, organization_id').eq('organization_id', key.organization_id)
+  } else if (key.owner_user_id) {
+    const { data: owned, error: ownedErr } = await db
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', key.owner_user_id)
+      .eq('role', 'owner')
+    if (ownedErr) throw new Error(`spend-down: organization_members read failed: ${ownedErr.message}`)
+    const ownedOrgIds = ((owned ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id)
+    if (ownedOrgIds.length === 0) return { ids: [], settings: new Map() }
+    projectQuery = db.from('projects').select('id, organization_id').in('organization_id', ownedOrgIds)
+  } else {
+    return { ids: [], settings: new Map() }
+  }
   const { data: projectRows, error } = await projectQuery
   if (error) throw new Error(`spend-down: projects read failed: ${error.message}`)
   const projects = (projectRows ?? []) as Array<{ id: string; organization_id: string | null }>
   const allIds = projects.map((p) => p.id)
   if (allIds.length === 0) return { ids: [], settings: new Map() }
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((o): o is string => !!o))]
+  // Before migration 20261021090000 there are no universal keys to weigh.
+  const columnReady = await ownerUserColumnReady(db)
+  const ownersByOrg = columnReady ? await organizationOwnersByOrg(db, orgIds) : new Map<string, string[]>()
+  const ownerIds = [...new Set([...ownersByOrg.values()].flat())]
+  if (key.owner_user_id && !ownerIds.includes(key.owner_user_id)) {
+    // Its owner no longer owns any of these organizations: it serves none.
+    return { ids: [], settings: new Map() }
+  }
 
-  // Every Cursor key that could win for these apps: their own and their
-  // organization's shared ones (the same rows resolveCursorApiKey reads).
-  const ownFilter = `project_id.in.(${allIds.join(',')})`
-  const keyFilter = orgIds.length > 0 ? `${ownFilter},organization_id.in.(${orgIds.join(',')})` : ownFilter
+  // Every Cursor key that could win for these apps: their own, their
+  // organization's shared ones and their owners' universal ones (the same rows
+  // resolveCursorApiKey reads).
+  const filters = [`project_id.in.(${allIds.join(',')})`]
+  if (orgIds.length > 0) filters.push(`organization_id.in.(${orgIds.join(',')})`)
+  if (ownerIds.length > 0) filters.push(`owner_user_id.in.(${ownerIds.join(',')})`)
   const [settingsRes, reposRes, keysRes] = await Promise.all([
     db
       .from('project_settings')
@@ -328,9 +368,9 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
     db.from('project_repos').select('project_id').in('project_id', allIds),
     db
       .from('byok_keys')
-      .select('id, project_id, organization_id, priority, status, test_status')
+      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status', columnReady))
       .eq('provider_slug', 'cursor')
-      .or(keyFilter),
+      .or(filters.join(',')),
   ])
   if (settingsRes.error) throw new Error(`spend-down: project_settings read failed: ${settingsRes.error.message}`)
   if (reposRes.error) throw new Error(`spend-down: project_repos read failed: ${reposRes.error.message}`)
@@ -352,8 +392,9 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
       autofix_enabled: settings.get(p.id)?.autofix_enabled === true,
       has_repo: withRepo.has(p.id),
       has_legacy_key: legacy(p.id),
+      org_owner_ids: p.organization_id ? (ownersByOrg.get(p.organization_id) ?? []) : [],
     })),
-    (keysRes.data ?? []) as CursorPoolKey[],
+    (keysRes.data ?? []) as unknown as CursorPoolKey[],
   )
   return { ids, settings }
 }
