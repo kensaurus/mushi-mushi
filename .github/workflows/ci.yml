@@ -198,6 +198,13 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          # Full history for "Check the release version step": on a shallow
+          # clone `changeset version` deepens 50 commits at a time (~17k
+          # objects per fetch) to find the commit that added each changeset,
+          # and on a slow network that ran past its 300 s limit twice on
+          # 2026-10-21 (#536) while master passed. One full fetch is bounded.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v4.1.0
 

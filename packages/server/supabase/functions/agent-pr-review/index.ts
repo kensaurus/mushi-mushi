@@ -65,6 +65,7 @@ import {
   fetchPullRequestDetails,
   fetchPullRequestFiles,
   installationIdForAttempt,
+  markPullRequestReady,
   resolveProjectGithubToken,
   type GithubRepoRef,
   type PullRequestDetails,
@@ -178,6 +179,11 @@ export interface ReviewDeps {
     body: string,
     existingId: number | null,
   ) => Promise<{ id: number; url: string } | null>
+  markReady?: (
+    token: string,
+    ref: GithubRepoRef,
+    n: number,
+  ) => Promise<{ ok: boolean; alreadyReady: boolean; message?: string }>
   consoleBaseUrl?: () => string
 }
 
@@ -634,6 +640,29 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   } catch (err) {
     // The verdict is stored and gates merges either way; the comment is a courtesy.
     log.warn('review comment not posted', { reviewId: row.id, err: err instanceof Error ? err.message : String(err) })
+  }
+
+  // Host repos skip CI on draft PRs and run it on ready_for_review (glot.it,
+  // 2026-10-20: 131 queued runs on one runner). A PR the review would let
+  // through is marked ready so its CI runs; a hold stays a draft.
+  if (review.verdict === 'merge' || review.verdict === 'fix_first') {
+    try {
+      const ready = await (deps.markReady ?? markPullRequestReady)(token, ref, pr.number)
+      if (ready.ok && !ready.alreadyReady) {
+        await insertReviewEvent(db, row, {
+          status: 'ok',
+          label: 'Marked ready for review (CI runs)',
+          detail: `Opus review: ${VERDICT_LABEL[review.verdict]}`,
+          dedupe: `review-ready:${row.id}:${details.headSha ?? nowIso}`,
+          payload: { reviewId: row.id, verdict: review.verdict, headSha: details.headSha },
+        })
+      } else if (!ready.ok) {
+        log.warn('PR not marked ready', { reviewId: row.id, message: ready.message })
+      }
+    } catch (err) {
+      // The verdict gates merges either way; readying the PR only starts CI.
+      log.warn('PR not marked ready', { reviewId: row.id, err: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   return { outcome: 'completed', verdict: review.verdict }
