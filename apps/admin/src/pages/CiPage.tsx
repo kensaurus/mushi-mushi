@@ -22,12 +22,13 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconGauge } from '../components/icons'
+import { IconBolt, IconClock, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
 import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
-import { CiAdviceList, CiInfraFailures, CiSlowJobs, CiStatTiles } from '../components/ci/CiSections'
+import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
+import { CiSummary } from '../components/ci/CiSummary'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -153,7 +154,12 @@ export function CiPage() {
             show: notice != null,
             children: (
               <Callout tone="warn" label="GitHub access">
-                <span>{notice}</span>
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>{notice}</span>
+                  <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
+                    How to give Mushi access ↗
+                  </a>
+                </span>
               </Callout>
             ),
           },
@@ -175,18 +181,20 @@ export function CiPage() {
 
       {data && !empty && (
         <>
-          <Section title="Queue" id="ci-queue">
+          <CiSummary overview={data} />
+
+          <Section title="Queue" id="ci-queue" icon={<IconQueue />}>
+            <p className="mb-2 text-xs text-fg-muted">Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
             <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
           </Section>
 
-          <Section title="Timeline" id="ci-timeline">
+          <Section title="Timeline" id="ci-timeline" icon={<IconClock />}>
+            <p className="mb-2 text-xs text-fg-muted">One row per test machine. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
 
-          <CiStatTiles stats={data.stats} days={data.window.days} />
-
-          <Section title="Runner map" id="ci-map">
-            <p className="mb-2 text-xs text-fg-muted">Machines, then runners, then repositories, then the jobs waiting or running now. Click a card for details.</p>
+          <Section title="Runner map" id="ci-map" icon={<IconNetwork />}>
+            <p className="mb-2 text-xs text-fg-muted">Your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click any card for its health and recent jobs.</p>
             <PanelErrorBoundary label="Runner map">
               <Suspense fallback={<Loading text="Loading the map…" />}>
                 <CiRunnerMap overview={data} selectedId={selected} onSelect={onSelect} />
@@ -194,19 +202,21 @@ export function CiPage() {
             </PanelErrorBoundary>
           </Section>
 
-          <Section title="Speed it up" id="ci-advice">
+          <Section title="Speed it up" id="ci-advice" icon={<IconBolt />}>
+            <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
           </Section>
 
-          <Section title="Slow jobs" id="ci-slow">
+          <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>
             <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} />
           </Section>
 
-          <Section title="Test machine failures" id="ci-infra">
+          <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
+            <p className="mb-2 text-xs text-fg-muted">These jobs never finished testing. They are not code failures: re-run them.</p>
             <CiInfraFailures jobs={data.jobs} />
           </Section>
 
-          <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} />
+          <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} onSelect={setSelected} />
         </>
       )}
     </div>

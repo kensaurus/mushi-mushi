@@ -10,6 +10,9 @@ import { createContext, useContext } from 'react'
 /** Map node ids for the two machines that are not a heartbeat host. */
 export const UNKNOWN_HOST_ID = 'host:unknown'
 export const GITHUB_HOST_ID = 'host:github'
+/** The one runner card that stands for every GitHub-hosted runner. */
+export const GITHUB_RUNNERS_NAME = 'GitHub-hosted runners'
+export const GITHUB_RUNNER_ID = `runner:${GITHUB_RUNNERS_NAME}`
 
 export interface CiMapSelection {
   selectedId: string | null
