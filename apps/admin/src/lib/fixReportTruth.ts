@@ -162,6 +162,20 @@ export function fixReportLabel(fix: FixAttempt): string {
   return fix.report_title?.trim() || 'Untitled report'
 }
 
+/** Same words as the server's `_shared/fix-loop-status.ts` (ADR 0033). */
+export const CI_INFRA_STOPPED_LABEL = 'The test machine stopped — your fix was not tested'
+export const CI_INFRA_WAITING_LABEL = 'Waiting for a test machine'
+
+/**
+ * Plain words for an attempt's CI-machine state, or null when its CI has no
+ * infra verdict. Mirrors the server's `fixCiInfraLabel`: waiting is not a
+ * failure; the other infra kinds are.
+ */
+export function fixCiInfraLabel(fix: Pick<FixAttempt, 'ci_infra'>): string | null {
+  if (!fix.ci_infra?.infra) return null
+  return fix.ci_infra.kind === 'waiting_for_runner' ? CI_INFRA_WAITING_LABEL : CI_INFRA_STOPPED_LABEL
+}
+
 const CAUSE_LABELS: Record<string, string> = {
   openai_key_rejected: 'OpenAI key rejected',
   anthropic_key_rejected: 'Anthropic key rejected',
@@ -182,6 +196,7 @@ const CAUSE_LABELS: Record<string, string> = {
   no_relevant_code: 'No matching code found',
   context_assembly_failed: 'Code lookup failed',
   ci_failed: 'CI failed',
+  ci_infra: CI_INFRA_STOPPED_LABEL,
   pr_closed_unmerged: 'PR closed without merge',
   unknown: 'Unrecognised error',
 }

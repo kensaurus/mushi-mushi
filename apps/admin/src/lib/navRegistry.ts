@@ -419,6 +419,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    id: 'nav:ci',
+    path: '/ci',
+    label: 'CI runners',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'gauge',
+    paletteDescription: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.',
+    paletteKeywords: ['ci', 'ci runners', 'runners', 'self-hosted', 'github actions', 'actions', 'queue', 'build queue', 'test machine', 'runner', 'slow ci', 'jobs'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:health',
     path: '/health',
     label: 'App health',
