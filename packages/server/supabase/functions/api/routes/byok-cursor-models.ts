@@ -19,6 +19,9 @@ import { byokKeyIdSchema } from '../../_shared/byok-validation.ts'
 import { keyOwnerFilter } from '../../_shared/byok-scope.ts'
 import { resolveCursorApiKey } from '../../_shared/agent-adapters.ts'
 import { CursorApiError, listCursorModelsV1 } from '../../_shared/cursor-cloud.ts'
+import { log } from '../../_shared/logger.ts'
+
+const mlog = log.child('byok-cursor-models')
 
 function bad(c: Context, code: string, message: string, status: 400 | 404 = 400) {
   return c.json({ ok: false, error: { code, message } }, status)
@@ -30,13 +33,16 @@ async function sendModels(c: Context, apiKey: string) {
     return c.json({ ok: true, data: { models } })
   } catch (err) {
     const status = err instanceof CursorApiError ? err.status : 0
-    const message = err instanceof Error ? err.message : String(err)
+    mlog.warn('cursor model list failed', {
+      status,
+      err: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+    })
     return c.json(
       {
         ok: false,
         error: {
           code: 'CURSOR_MODELS_FAILED',
-          message: `Cursor did not return its models (${status || 'network'}): ${message.slice(0, 200)}`,
+          message: `Cursor did not return its models (${status || 'network'}). Check the key under Settings → AI keys.`,
         },
       },
       502,

@@ -165,10 +165,13 @@ describe('GET /v1/admin/byok/cursor/models', () => {
 
   it('reports a Cursor failure without calling it success', async () => {
     const { app } = setup()
-    state.list.mockRejectedValue(new state.CursorApiError(401, 'unauthorized', 'bad key'))
+    state.list.mockRejectedValue(
+      new state.CursorApiError(401, 'unauthorized', 'upstream says <script>bad key</script>'),
+    )
     const res = await app.call({ keyId: OWN })
     expect(res.status).toBe(502)
     expect(res.body.error?.code).toBe('CURSOR_MODELS_FAILED')
     expect(res.body.error?.message).toContain('401')
+    expect(res.body.error?.message).not.toContain('bad key')
   })
 })
