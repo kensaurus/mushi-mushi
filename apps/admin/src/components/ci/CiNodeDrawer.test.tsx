@@ -61,6 +61,12 @@ describe('CiNodeDrawer', () => {
     expect(text()).not.toContain('Not seen')
   })
 
+  it('does not call a runner listed by GitHub when its rows only come from jobs', () => {
+    const o = ciOverviewFixture()
+    open('runner:aw-1', { ...o, runners: o.runners.map((r) => ({ ...r, status: 'unknown' as const })), hosts: [] })
+    expect(text()).toContain('No (seen on jobs only)')
+  })
+
   it('opens the GitHub-hosted runner card with the repos that used it', () => {
     const onSelect = open(GITHUB_RUNNER_ID)
     expect(text()).toContain('On demand')

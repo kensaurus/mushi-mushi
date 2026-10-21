@@ -6,7 +6,7 @@
  */
 
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
-import { formatPercent, formatSeconds, recentInfraFailures, slowestJobs } from '../../lib/ciView'
+import { formatPercent, formatSeconds, recentInfraFailures, runnerDisplayName, slowestJobs } from '../../lib/ciView'
 import { Badge, Card, CopyButton, RelativeTime, StatCard, StatGrid, type BadgeTone } from '../ui'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 
@@ -174,7 +174,7 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
           <span className="text-fg-faint">
             {j.repo}
             {j.prNumber ? ` · PR #${j.prNumber}` : ''}
-            {j.runnerName ? ` · ${j.runnerName}` : ''}
+            {runnerDisplayName(j) ? ` · ${runnerDisplayName(j)}` : ''}
           </span>
           <span className="ml-auto text-2xs text-fg-muted">
             <RelativeTime value={j.completedAt ?? j.createdAt} />

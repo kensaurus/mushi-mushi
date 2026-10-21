@@ -46,7 +46,11 @@ function runnerNodeId(j: Pick<CiJob, 'runnerName' | 'runnerKind'>): string | nul
 
 /** The activity chart, stat tiles and recent jobs every runner-like node shares. */
 function JobsPanel({ o, jobs, empty, onSelect, jobsToday }: { o: CiOverview; jobs: CiJob[]; empty: string; onSelect: Select; jobsToday?: number }) {
-  const a = ciActivity(jobs, now(o))
+  const oldest = o.jobs.reduce<number | null>((m, j) => {
+    const t = Date.parse(j.createdAt)
+    return Number.isFinite(t) && (m == null || t < m) ? t : m
+  }, null)
+  const a = ciActivity(jobs, now(o), 7, oldest)
   const today = a.days[a.days.length - 1]
   const finishedToday = today.passed + today.failed + today.infra + today.other
   return (
@@ -55,13 +59,13 @@ function JobsPanel({ o, jobs, empty, onSelect, jobsToday }: { o: CiOverview; job
         <StatTiles
           tiles={[
             { label: 'Jobs today', value: String(jobsToday ?? finishedToday) },
-            { label: 'Pass rate', value: formatPercent(a.passRate), hint: 'passed ÷ passed + failed' },
-            { label: 'Wait (median)', value: formatSeconds(a.waitP50s), hint: 'for a machine' },
-            { label: 'Run (median)', value: formatSeconds(a.runP50s) },
+            { label: 'Pass rate', value: formatPercent(a.passRate), hint: 'of passed and failed jobs' },
+            { label: 'Typical wait', value: formatSeconds(a.waitP50s), hint: 'for a machine (median)' },
+            { label: 'Typical run', value: formatSeconds(a.runP50s), hint: 'median' },
           ]}
         />
       </DrawerSection>
-      <DrawerSection title="Last 7 days">
+      <DrawerSection title="Last 7 days" hint={a.days.some((d) => !d.covered) ? 'shaded days are older than the jobs Mushi holds' : undefined}>
         <ActivityBars activity={a} />
       </DrawerSection>
       <RecentJobs jobs={jobs} empty={empty} onSelect={onSelect} />
@@ -98,7 +102,8 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
   const host = o.hosts.find((h) => rows.some((r) => r.hostId === h.hostId)) ?? o.hosts.find((h) => h.runners.some((r) => r.name === key)) ?? null
   const hr = host?.runners.find((r) => r.name === key) ?? null
   const jobs = o.jobs.filter((j) => j.runnerName === key)
-  const listed = rows.length > 0
+  // Rows also come from jobs; only a known status means GitHub listed it.
+  const listed = rows.some((r) => r.status !== 'unknown')
   const status = rows.some((r) => r.status === 'online') ? 'online' : rows.some((r) => r.status === 'offline') ? 'offline' : hr ? (hr.active ? 'online' : 'offline') : 'unknown'
   const busy = rows.some((r) => r.busy) || jobs.some((j) => j.status === 'in_progress')
   const st = runnerStatus({ busy, status, runnerKind: 'self_hosted' })
@@ -278,8 +283,8 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
             tiles={[
               { label: 'Waiting now', value: String(r?.queued ?? 0) },
               { label: 'Running now', value: String(r?.running ?? 0) },
-              { label: 'Wait (p95)', value: formatSeconds(r?.queueP95s), hint: 'for a machine' },
-              { label: 'Run (median)', value: formatSeconds(r?.durationP50s) },
+              { label: 'Slow wait', value: formatSeconds(r?.queueP95s), hint: '1 job in 20 waits longer' },
+              { label: 'Typical run', value: formatSeconds(r?.durationP50s), hint: 'median' },
             ]}
           />
           <DrawerSection title="Runs on">

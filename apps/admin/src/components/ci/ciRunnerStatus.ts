@@ -14,13 +14,14 @@ const RUNNER_STATUS = {
   // last-job line says when it was last seen working.
   unknown: {
     word: 'Status unknown',
+    short: 'Unknown',
     dot: 'bg-fg-faint',
     why: 'GitHub did not list this runner, so Mushi knows it only from its jobs. Give the GitHub token Administration: read to see idle and offline runners.',
   },
   on_demand: { word: 'On demand', dot: 'bg-ok', why: 'GitHub starts a fresh machine for each job and deletes it afterwards.' },
 } as const
 
-export type RunnerStatusMeta = (typeof RUNNER_STATUS)[keyof typeof RUNNER_STATUS]
+export type RunnerStatusMeta = { word: string; dot: string; why: string; short?: string }
 
 export function runnerStatus(d: Pick<CiRunnerNodeData, 'busy' | 'status' | 'runnerKind'>): RunnerStatusMeta {
   if (d.busy) return RUNNER_STATUS.busy

@@ -224,6 +224,17 @@ export function buildFixLinks(fixes: ReadonlyArray<{ pr_url?: string | null; pr_
 
 /** @internal Exported for tests only. */
 export const NO_RUNNER_LANE = 'No runner yet'
+/** Lane label prefix for GitHub's own machines, one lane per concurrent job. */
+const GITHUB_LANE = 'GitHub-hosted'
+
+/**
+ * What to call the machine a job ran on. GitHub names its hosted runners
+ * "GitHub Actions 1000079285", a throwaway VM id that means nothing to a reader.
+ */
+export function runnerDisplayName(job: Pick<CiJob, 'runnerName' | 'runnerKind'>): string | null {
+  if (job.runnerKind === 'github_hosted') return 'a GitHub-hosted machine'
+  return job.runnerName
+}
 const UNKNOWN_RUNNER_LANE = 'Unknown machine'
 
 export interface CiTimelineBar {
@@ -273,8 +284,11 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
   const to = opts.now
   const from = to - opts.windowMs
   const lanes = new Map<string, CiTimelineLane>()
+  // When each GitHub-hosted lane is free again, for packing jobs into lanes.
+  const githubRows: number[] = []
+  const byStart = [...jobs].sort((a, b) => (ms(a.startedAt ?? a.createdAt) ?? 0) - (ms(b.startedAt ?? b.createdAt) ?? 0))
 
-  for (const job of jobs) {
+  for (const job of byStart) {
     const created = ms(job.createdAt)
     if (created == null) continue
     const started = ms(job.startedAt)
@@ -290,8 +304,18 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     if (!queue && !run) continue
 
     const unassigned = started == null && !job.runnerName
-    const label = job.runnerName ?? (unassigned ? NO_RUNNER_LANE : UNKNOWN_RUNNER_LANE)
-    const id = unassigned ? '__none__' : `runner:${label}`
+    let label = job.runnerName ?? (unassigned ? NO_RUNNER_LANE : UNKNOWN_RUNNER_LANE)
+    let id = unassigned ? '__none__' : `runner:${label}`
+    if (!unassigned && job.runnerKind === 'github_hosted') {
+      // One lane per job running at the same time, not one per throwaway VM.
+      const start = (queue ?? run)!.start
+      const finish = (run ?? queue)!.end
+      let row = githubRows.findIndex((busyUntil) => busyUntil <= start)
+      if (row < 0) row = githubRows.push(0) - 1
+      githubRows[row] = finish
+      label = `${GITHUB_LANE} ${row + 1}`
+      id = `github:${row}`
+    }
     let lane = lanes.get(id)
     if (!lane) {
       lane = { id, label, unassigned, busyMs: 0, bars: [] }
@@ -313,6 +337,11 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
     })
   }
 
+  // A lone GitHub lane needs no number.
+  if (githubRows.length === 1) {
+    const only = lanes.get('github:0')
+    if (only) only.label = GITHUB_LANE
+  }
   for (const lane of lanes.values()) {
     lane.bars.sort((a, b) => (a.queue?.start ?? a.run?.start ?? 0) - (b.queue?.start ?? b.run?.start ?? 0))
   }
@@ -358,6 +387,8 @@ export function recentInfraFailures(jobs: CiJob[], limit = 10): CiJob[] {
 interface CiActivityDay {
   /** UTC day, `YYYY-MM-DD`. */
   day: string
+  /** False before the oldest job Mushi holds: no data, not zero jobs. */
+  covered: boolean
   passed: number
   failed: number
   infra: number
@@ -388,11 +419,12 @@ function median(values: number[]): number | null {
  * The overview holds the newest finished jobs, not every one, so callers
  * label this "recent jobs", never a full history.
  */
-export function ciActivity(jobs: CiJob[], now: number, days = 7): CiActivity {
+export function ciActivity(jobs: CiJob[], now: number, days = 7, coveredFrom: number | null = null): CiActivity {
   const DAY = 86_400_000
   const today = Math.floor(now / DAY)
   const buckets: CiActivityDay[] = Array.from({ length: days }, (_, i) => ({
     day: new Date((today - days + 1 + i) * DAY).toISOString().slice(0, 10),
+    covered: coveredFrom == null || (today - days + 2 + i) * DAY > coveredFrom,
     passed: 0,
     failed: 0,
     infra: 0,
