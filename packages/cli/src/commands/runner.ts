@@ -62,6 +62,22 @@ export interface RunnerDeps {
   ghAuthText: () => string
 }
 
+/** A file's text through one descriptor (no symlinks), or '' when it does not exist. */
+function readIfPresent(path: string): string {
+  let fd: number
+  try {
+    fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return ''
+    throw err
+  }
+  try {
+    return readFileSync(fd, 'utf8')
+  } finally {
+    closeSync(fd)
+  }
+}
+
 /** Run `fn` on an open read descriptor of `path` (O_NOFOLLOW: never through a symlink). */
 function withFd<T>(path: string, fn: (fd: number) => T): T {
   const fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
@@ -316,7 +332,7 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
         completed: join(hooksDir, 'job-completed.sh'),
       }
       const envPath = join(dir, '.env')
-      const envBefore = existsSync(envPath) ? readFileSync(envPath, 'utf8') : ''
+      const envBefore = readIfPresent(envPath)
       const merged = mergeRunnerEnv(envBefore, files, opts.force)
       if (merged.conflicts.length) {
         for (const c of merged.conflicts) process.stderr.write(`${c.key} already runs ${c.current}\n`)
