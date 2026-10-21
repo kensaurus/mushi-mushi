@@ -118,4 +118,11 @@ describe('PlatformIntegrationCard — Remove key', () => {
     await act(async () => select!.dispatchEvent(new Event('change', { bubbles: true })))
     expect(onChangeField).toHaveBeenCalledWith('cursor_default_model', 'composer-2.5')
   })
+
+  it('says the model list is from the saved key while a new key is typed', async () => {
+    await render({ isEditing: true, draft: { cursor_default_model: '' } })
+    expect(container.textContent).not.toContain('Save the new API key first')
+    await render({ isEditing: true, draft: { cursor_api_key_ref: 'crsr_new', cursor_default_model: '' } })
+    expect(container.textContent).toContain('Save the new API key first')
+  })
 })

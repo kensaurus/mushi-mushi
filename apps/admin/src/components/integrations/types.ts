@@ -336,7 +336,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     ],
     fields: [
       { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_…', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
-      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Pick a model from this Cursor account. Its settings appear under the list. Leave blank for the account default, or choose Other and type an id such as grok-4.7?reasoning_effort=xhigh&context=500k.', helpId: 'integrations.cursor_cloud.default_model' },
+      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Pick a model from the Cursor account of the saved API key. Its settings appear under the list. Leave blank for the account default, or choose Other and type an id such as grok-4.7?reasoning_effort=xhigh&context=500k.', helpId: 'integrations.cursor_cloud.default_model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
     ],
   },
