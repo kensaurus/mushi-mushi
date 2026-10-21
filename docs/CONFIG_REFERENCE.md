@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_117 configuration knobs across 19 sections · last regenerated 2026-10-20._
+_117 configuration knobs across 19 sections · last regenerated 2026-10-21._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1857,7 +1857,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `off; 10 fixes a day; starts 14 days before expiry`
 
-**Where it lives** — table `byok_keys.spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days` · endpoint `PATCH /v1/admin/byok/keys/:keyId/spend-down` · read by `spend-down-worker edge function (cron :28 and :58)`, `GET /v1/admin/byok/spend-down`, `MCP get_spend_down_status`, `mushi keys spend-down`
+**Where it lives** — table `byok_keys.spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days` · endpoint `PATCH /v1/admin/byok/keys/:keyId/spend-down` · read by `spend-down-worker edge function (cron :28 and :58)`, `GET /v1/admin/byok/spend-down`, `MCP get_spend_down_status`, `mushi keys spend-down`, `radar rule spend_down_idle`
 
 **When to change** — Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.
 
