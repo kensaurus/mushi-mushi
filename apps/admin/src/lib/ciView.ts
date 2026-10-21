@@ -354,6 +354,95 @@ export function recentInfraFailures(jobs: CiJob[], limit = 10): CiJob[] {
     .slice(0, limit)
 }
 
+/** One day of a runner's or machine's finished jobs, by outcome. */
+export interface CiActivityDay {
+  /** UTC day, `YYYY-MM-DD`. */
+  day: string
+  passed: number
+  failed: number
+  infra: number
+  other: number
+}
+
+export interface CiActivity {
+  days: CiActivityDay[]
+  /** Finished jobs counted in `days`. */
+  finished: number
+  passRate: number | null
+  waitP50s: number | null
+  runP50s: number | null
+  memPeakMb: number | null
+  lastJobAt: string | null
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const v = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(v.length / 2)
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2
+}
+
+/**
+ * Daily outcomes for the jobs a runner (or machine) ran, oldest day first,
+ * `days` days ending today (UTC). Live jobs count toward `lastJobAt` only.
+ * The overview holds the newest finished jobs, not every one, so callers
+ * label this "recent jobs", never a full history.
+ */
+export function ciActivity(jobs: CiJob[], now: number, days = 7): CiActivity {
+  const DAY = 86_400_000
+  const today = Math.floor(now / DAY)
+  const buckets: CiActivityDay[] = Array.from({ length: days }, (_, i) => ({
+    day: new Date((today - days + 1 + i) * DAY).toISOString().slice(0, 10),
+    passed: 0,
+    failed: 0,
+    infra: 0,
+    other: 0,
+  }))
+  let lastJobAt: string | null = null
+  let lastMs = -Infinity
+  let passed = 0
+  let judged = 0
+  const waits: number[] = []
+  const runs: number[] = []
+  let memPeakMb: number | null = null
+  let finished = 0
+  for (const j of jobs) {
+    const at = ms(j.startedAt ?? j.createdAt)
+    if (at != null && at > lastMs) {
+      lastMs = at
+      lastJobAt = j.startedAt ?? j.createdAt
+    }
+    const outcome = jobOutcome(j)
+    if (outcome === 'waiting' || outcome === 'running') continue
+    const end = ms(j.completedAt ?? j.startedAt ?? j.createdAt)
+    if (end == null) continue
+    const idx = Math.floor(end / DAY) - (today - days + 1)
+    if (idx < 0 || idx >= days) continue
+    finished++
+    const b = buckets[idx]
+    if (outcome === 'passed') b.passed++
+    else if (outcome === 'code_failure') b.failed++
+    else if (outcome === 'infra') b.infra++
+    else b.other++
+    if (outcome === 'passed' || outcome === 'code_failure') {
+      judged++
+      if (outcome === 'passed') passed++
+    }
+    if (j.queueSeconds != null) waits.push(j.queueSeconds)
+    if (j.durationSeconds != null) runs.push(j.durationSeconds)
+    if (j.memPeakMb != null) memPeakMb = Math.max(memPeakMb ?? 0, j.memPeakMb)
+  }
+  return {
+    days: buckets,
+    finished,
+    passRate: judged ? passed / judged : null,
+    waitP50s: median(waits),
+    runP50s: median(runs),
+    memPeakMb,
+    lastJobAt,
+  }
+}
+
 /** The permissions banner text, or null when Mushi can see everything it needs. */
 export function permissionsNotice(p: CiOverview['permissions']): string | null {
   if (p.jobs === 'missing') {

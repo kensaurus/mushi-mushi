@@ -7,8 +7,12 @@
  * Rules:
  * - A runner attaches to the machine whose heartbeat lists it (or its
  *   `hostId`); runners with no heartbeat attach to one "Unknown machine".
- * - GitHub-hosted runners collapse into one "GitHub-hosted" machine that
- *   links straight to the repos that used it.
+ * - GitHub-hosted runners collapse into one "GitHub-hosted" machine with one
+ *   "GitHub-hosted runners" runner, so its edges never cross behind a
+ *   self-hosted runner card on the way to a repo.
+ * - `lastJobAt` is the newest job start Mushi holds for the runner, from the
+ *   runner list or from jobs; without Administration: read it is the only
+ *   sign of life the console has.
  * - Live jobs are the waiting and running ones, oldest first, at most
  *   `maxJobs`; an edge into a running job carries traveling dots.
  * - dagre (rankdir LR) orders nodes to cut crossings; each column is then
@@ -20,7 +24,7 @@ import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
 import { buildCiQueue, jobOutcome } from '../../lib/ciView'
-import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
+import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 
 type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
 
@@ -61,6 +65,8 @@ export interface CiRunnerNodeData extends Base {
   memMaxMb: number | null
   jobs24h: number
   infraFailures7d: number
+  /** Newest job this runner ran; the only liveness signal without Administration: read. */
+  lastJobAt: string | null
 }
 
 export interface CiRepoNodeData extends Base {
@@ -208,12 +214,12 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
   }
 
   // Runners, merged by name across the repos they serve.
-  type Acc = { name: string; repos: Set<string>; labels: Set<string>; status: CiRunnerNodeData['status']; busy: boolean; kind: CiRunnerKind; hostId: string | null; jobs24h: number; infra7d: number }
+  type Acc = { name: string; repos: Set<string>; labels: Set<string>; status: CiRunnerNodeData['status']; busy: boolean; kind: CiRunnerKind; hostId: string | null; jobs24h: number; infra7d: number; lastJobAt: string | null }
   const runners = new Map<string, Acc>()
   const touch = (name: string, kind: CiRunnerKind, hostId: string | null): Acc => {
     let acc = runners.get(name)
     if (!acc) {
-      acc = { name, repos: new Set(), labels: new Set(), status: 'unknown', busy: false, kind, hostId, jobs24h: 0, infra7d: 0 }
+      acc = { name, repos: new Set(), labels: new Set(), status: 'unknown', busy: false, kind, hostId, jobs24h: 0, infra7d: 0, lastJobAt: null }
       runners.set(name, acc)
     }
     if (acc.kind === 'unknown' && kind !== 'unknown') acc.kind = kind
@@ -228,6 +234,7 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
     acc.busy = acc.busy || r.busy === true
     acc.jobs24h += r.jobs24h
     acc.infra7d += r.infraFailures7d
+    if (r.lastJobAt && (!acc.lastJobAt || r.lastJobAt > acc.lastJobAt)) acc.lastJobAt = r.lastJobAt
   }
   // Runners known only from a heartbeat.
   for (const h of overview.hosts) {
@@ -241,12 +248,47 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
     if (!j.runnerName) continue
     const acc = touch(j.runnerName, j.runnerKind, null)
     acc.repos.add(j.repo)
+    const at = j.startedAt ?? j.createdAt
+    if (!acc.lastJobAt || at > acc.lastJobAt) acc.lastJobAt = at
   }
 
+  // GitHub-hosted runners are one node in the runner column, so every edge
+  // goes machine -> runner -> repo and none crosses behind a runner card.
+  const ghRunnerId = nodeId('runner', GITHUB_RUNNERS_NAME)
   for (const acc of runners.values()) {
     if (acc.kind === 'github_hosted') {
       const gh = specialHost('github')
-      for (const repo of acc.repos) addEdge(gh, repoNode(repo), runningOn.has(`${acc.name}\u0000${repo}`))
+      const existing = nodes.get(ghRunnerId) as CiRunnerNodeData | undefined
+      const busyHere = [...acc.repos].some((repo) => runningOn.has(`${acc.name}\u0000${repo}`))
+      const merged: CiRunnerNodeData = existing ?? {
+        kind: 'runner',
+        title: GITHUB_RUNNERS_NAME,
+        name: GITHUB_RUNNERS_NAME,
+        status: 'online',
+        busy: false,
+        runnerKind: 'github_hosted',
+        repos: [],
+        labels: [],
+        restarts: null,
+        oomKills: null,
+        memCurrentMb: null,
+        memMaxMb: null,
+        jobs24h: 0,
+        infraFailures7d: 0,
+        lastJobAt: null,
+      }
+      merged.busy = merged.busy || busyHere
+      merged.repos = [...new Set([...merged.repos, ...acc.repos])].sort()
+      merged.labels = [...new Set([...merged.labels, ...acc.labels])].sort()
+      merged.jobs24h += acc.jobs24h
+      merged.infraFailures7d += acc.infra7d
+      if (acc.lastJobAt && (!merged.lastJobAt || acc.lastJobAt > merged.lastJobAt)) merged.lastJobAt = acc.lastJobAt
+      if (!existing) {
+        nodes.set(ghRunnerId, merged)
+        ;(nodes.get(gh) as CiHostNodeData).runnerCount += 1
+      }
+      addEdge(gh, ghRunnerId, merged.busy)
+      for (const repo of acc.repos) addEdge(ghRunnerId, repoNode(repo), runningOn.has(`${acc.name}\u0000${repo}`))
       continue
     }
     const host = hostOfRunner(overview.hosts, acc.name, acc.hostId)
@@ -272,6 +314,7 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
       memMaxMb: hr?.memMaxMb ?? null,
       jobs24h: acc.jobs24h,
       infraFailures7d: acc.infra7d,
+      lastJobAt: acc.lastJobAt,
     })
     addEdge(hostNodeId, id, busy)
     for (const repo of acc.repos) addEdge(id, repoNode(repo), runningOn.has(`${acc.name}\u0000${repo}`))

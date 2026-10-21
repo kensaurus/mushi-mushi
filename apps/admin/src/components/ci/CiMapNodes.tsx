@@ -15,8 +15,9 @@ import { readVizToken } from '../../lib/vizTokens'
 import { formatPercent, formatSeconds } from '../../lib/ciView'
 import { usePrefersReducedMotion } from '../../lib/useMotionTransition'
 import { useCiMapSelection } from './ciMapContext'
+import { runnerStatus } from './ciRunnerStatus'
 import type { CiHostNodeData, CiJobNodeData, CiMapEdgeData, CiRepoNodeData, CiRunnerNodeData } from './ciMapLayout'
-import { RelativeTime } from '../ui'
+import { RelativeTime, formatRelative } from '../ui'
 
 const HANDLE_CLS = '!h-1.5 !w-1.5 !min-h-0 !min-w-0 !border-0 !bg-transparent'
 
@@ -49,7 +50,7 @@ function MeterRow({ label, used, total, unit = 'GB' }: { label: string; used: nu
   if (used == null || total == null || total <= 0) {
     return (
       <div className="flex items-center gap-1.5 text-3xs text-fg-faint">
-        <span className="w-9 shrink-0">{label}</span>
+        <span className="w-12 shrink-0">{label}</span>
         <span>not reported</span>
       </div>
     )
@@ -59,7 +60,7 @@ function MeterRow({ label, used, total, unit = 'GB' }: { label: string; used: nu
   const fmt = (mb: number) => (unit === 'GB' ? (mb / 1024).toFixed(1) : String(Math.round(mb)))
   return (
     <div className="flex items-center gap-1.5 text-3xs text-fg-muted">
-      <span className="w-9 shrink-0">{label}</span>
+      <span className="w-12 shrink-0">{label}</span>
       <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
         <span className={`block h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
       </span>
@@ -103,16 +104,16 @@ function HostNodeInner({ id, data }: NodeProps) {
   )
 }
 
-const RUNNER_STATUS: Record<string, { word: string; dot: string }> = {
-  busy: { word: 'Busy', dot: 'bg-info' },
-  online: { word: 'Idle', dot: 'bg-ok' },
-  offline: { word: 'Offline', dot: 'bg-danger' },
-  unknown: { word: 'Not seen', dot: 'bg-fg-faint' },
-}
-
 function RunnerNodeInner({ id, data }: NodeProps) {
   const d = data as CiRunnerNodeData
-  const status = RUNNER_STATUS[d.busy ? 'busy' : d.status]
+  const status = runnerStatus(d)
+  const warnings = [
+    d.oomKills ? `ran out of memory ${d.oomKills}×` : null,
+    d.infraFailures7d ? `${d.infraFailures7d} machine stop${d.infraFailures7d === 1 ? '' : 's'} this week` : null,
+    d.restarts ? `${d.restarts} restart${d.restarts === 1 ? '' : 's'}` : null,
+  ].filter(Boolean)
+  const hasMemory = d.memCurrentMb != null || d.memMaxMb != null
+  const labels = d.labels.filter((l) => l !== 'self-hosted').join(', ')
   return (
     <NodeShell id={id} label={`Runner ${d.name}, ${status.word}. Open details.`}>
       <div className="flex items-center gap-1.5 min-w-0">
@@ -120,18 +121,24 @@ function RunnerNodeInner({ id, data }: NodeProps) {
         <span className="truncate text-xs font-semibold text-fg">{d.name}</span>
         <span className="ml-auto shrink-0 text-3xs font-medium text-fg-secondary">{status.word}</span>
       </div>
-      <p className="text-3xs text-fg-muted">
+      <p className="truncate text-3xs text-fg-muted">
         {d.jobs24h} job{d.jobs24h === 1 ? '' : 's'} today
-        {d.restarts ? ` · ${d.restarts} restart${d.restarts === 1 ? '' : 's'}` : ''}
+        {d.lastJobAt ? ` · last ${formatRelative(d.lastJobAt)}` : ' · no jobs seen'}
       </p>
-      {d.oomKills ? (
-        <p className="text-3xs font-medium text-danger">
+      {warnings.length > 0 && (
+        <p className={`truncate text-3xs font-medium ${d.oomKills ? 'text-danger' : 'text-warn-foreground'}`}>
           <span aria-hidden="true">⚠ </span>
-          Ran out of memory {d.oomKills}×
+          {warnings.join(' · ')}
         </p>
-      ) : null}
+      )}
       <div className="mt-auto">
-        <MeterRow label="Memory" used={d.memCurrentMb} total={d.memMaxMb} />
+        {hasMemory ? (
+          <MeterRow label="Memory" used={d.memCurrentMb} total={d.memMaxMb} />
+        ) : (
+          <p className="truncate text-3xs text-fg-faint" title={d.labels.join(', ')}>
+            {labels ? `Labels: ${labels}` : d.runnerKind === 'github_hosted' ? 'GitHub picks the machine' : 'No labels reported'}
+          </p>
+        )}
       </div>
     </NodeShell>
   )
