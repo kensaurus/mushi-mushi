@@ -157,10 +157,14 @@ function scripted(s: Script = {}) {
   })
 }
 
-function deps(over: Partial<ReviewDeps> = {}): ReviewDeps & { calls: { model: number; comment: string[] } } {
-  const calls = { model: 0, comment: [] as string[] }
+function deps(over: Partial<ReviewDeps> = {}): ReviewDeps & { calls: { model: number; comment: string[]; ready: number[] } } {
+  const calls = { model: 0, comment: [] as string[], ready: [] as number[] }
   return {
     calls,
+    markReady: async (_t, _r, n) => {
+      calls.ready.push(n)
+      return { ok: true, alreadyReady: false }
+    },
     now: () => NOW,
     newRunId: () => RUN,
     consoleBaseUrl: () => 'https://console.example',
@@ -358,6 +362,41 @@ describe('a completed review', () => {
     expect(prompt).toContain('Lesson page crashes for new learners')
     expect(prompt).toContain("Mushi's diagnosis of the likely cause:")
     expect(prompt).toContain('-export function ResumeBanner() {}')
+    expect(payloads(queries).some((u) => u.status === 'completed')).toBe(true)
+  })
+})
+
+describe('readying the PR so host CI runs (drafts skip CI)', () => {
+  const MERGE = { ...HOLD, findings: [], removes_behavior: [], scope_creep: false, risk: 'low', verdict: 'merge' }
+
+  it('marks a "merge" PR ready and records it on the timeline', async () => {
+    const { db, queries } = scripted()
+    const d = deps({ callModel: async () => ({ object: MERGE, usage: { promptTokens: 1, completionTokens: 1 } }) })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'merge' })
+    expect(d.calls.ready).toEqual([194])
+    const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)
+    expect(labels).toContain('Marked ready for review (CI runs)')
+  })
+
+  it('leaves a "hold" PR a draft', async () => {
+    const { db } = scripted()
+    const d = deps()
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'hold' })
+    expect(d.calls.ready).toEqual([])
+  })
+
+  it('keeps the verdict when readying fails', async () => {
+    const { db, queries } = scripted()
+    const d = deps({
+      callModel: async () => ({ object: MERGE, usage: { promptTokens: 1, completionTokens: 1 } }),
+      markReady: async () => {
+        throw new Error('GraphQL 403')
+      },
+    })
+    const summary = await runAgentPrReview(db, {}, d)
+    expect(summary.results[0]).toMatchObject({ outcome: 'completed', verdict: 'merge' })
     expect(payloads(queries).some((u) => u.status === 'completed')).toBe(true)
   })
 })
