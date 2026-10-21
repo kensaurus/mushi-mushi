@@ -22,7 +22,7 @@
  *   failure does not, so a Storage outage cannot block a settings write)
  *
  * NOTES:
- * - Probe failures are not cached; the save gate and health check bypass the miss cache
+ * - Probe failures are not cached; the save gate and health check bypass both caches
  * - This module does not create buckets
  */
 
@@ -74,9 +74,12 @@ export function clearBucketProbeCache(): void {
 function isMissingBucket(error: BucketProbeError | null): boolean {
   if (!error) return true
   const hasStatus = error.status !== undefined || error.statusCode !== undefined
-  if (hasStatus) {
-    return error.status === 404 || String(error.statusCode ?? '') === '404'
-  }
+  const statusCode = String(error.statusCode ?? '')
+  if (error.status === 404 || statusCode === '404' || statusCode === 'NoSuchBucket') return true
+  // Storage answers a missing bucket with HTTP 400 and the body's statusCode
+  // "404" (or code "NoSuchBucket"); without either, only the message is left.
+  const serverError = (error.status ?? 0) >= 500 || Number(error.statusCode ?? 0) >= 500
+  if (hasStatus && serverError) return false
   return (error.message ?? '').toLowerCase().includes('bucket not found')
 }
 
@@ -89,13 +92,13 @@ function isMissCached(bucket: string): boolean {
 }
 
 export interface BucketProbeOptions {
-  /** Skip the cached-miss shortcut and ask Storage again. */
+  /** Skip both cached shortcuts (hit and miss) and ask Storage again. */
   fresh?: boolean
 }
 
 /**
- * Confirm `bucket` exists. A cached hit returns without a network call; a
- * cached miss (BUCKET_MISS_TTL_MS) throws without one unless `fresh` is set.
+ * Confirm `bucket` exists. Unless `fresh` is set, a cached hit returns without
+ * a network call and a cached miss (BUCKET_MISS_TTL_MS) throws without one.
  * Throws StorageBucketError on a miss or when the probe itself fails.
  */
 export async function probeSupabaseBucket(
@@ -103,7 +106,7 @@ export async function probeSupabaseBucket(
   bucket: string,
   opts: BucketProbeOptions = {},
 ): Promise<void> {
-  if (confirmedBuckets.has(bucket)) return
+  if (!opts.fresh && confirmedBuckets.has(bucket)) return
   if (!opts.fresh && isMissCached(bucket)) {
     throw new StorageBucketError(
       'STORAGE_BUCKET_MISSING',
@@ -125,6 +128,7 @@ export async function probeSupabaseBucket(
   }
   if (!result || result.error || !result.data) {
     if (!result || isMissingBucket(result.error)) {
+      confirmedBuckets.delete(bucket)
       missingBuckets.set(bucket, Date.now() + BUCKET_MISS_TTL_MS)
       throw new StorageBucketError(
         'STORAGE_BUCKET_MISSING',

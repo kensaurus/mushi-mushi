@@ -92,7 +92,39 @@ describe('probeSupabaseBucket', () => {
     expect(getBucket).toHaveBeenCalledTimes(2)
   })
 
-  it('treats "not found" as a miss only for a 404 or a status-less "Bucket not found"', async () => {
+  it('a fresh probe re-checks a confirmed bucket and drops it from the cache when it is gone', async () => {
+    let exists = true
+    const getBucket = vi.fn(async (name: string) =>
+      exists ? { data: { name }, error: null } : { data: null, error: { message: 'Bucket not found', status: 404 } },
+    )
+    const c = client(getBucket)
+    await probeSupabaseBucket(c, 'deleted-later')
+    exists = false
+    await expect(probeSupabaseBucket(c, 'deleted-later', { fresh: true })).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+    })
+    await expect(probeSupabaseBucket(c, 'deleted-later')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+      cached: true,
+    })
+    expect(getBucket).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats a 400 "Bucket not found" without statusCode 404 as a miss', async () => {
+    const noStatusCode = vi.fn(async () => ({ data: null, error: { message: 'Bucket not found', status: 400 } }))
+    await expect(probeSupabaseBucket(client(noStatusCode), 'd')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+    })
+    const noSuchBucket = vi.fn(async () => ({
+      data: null,
+      error: { message: 'The resource was not found', status: 400, statusCode: 'NoSuchBucket' },
+    }))
+    await expect(probeSupabaseBucket(client(noSuchBucket), 'e')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_MISSING',
+    })
+  })
+
+  it('treats "not found" as a miss only for a 404 or a non-5xx "Bucket not found"', async () => {
     const unrelated = vi.fn(async () => ({
       data: null,
       error: { message: 'Object not found', status: 500, statusCode: '500' },
@@ -103,6 +135,11 @@ describe('probeSupabaseBucket', () => {
 
     const genericNoStatus = vi.fn(async () => ({ data: null, error: { message: 'tenant not found' } }))
     await expect(probeSupabaseBucket(client(genericNoStatus), 'b')).rejects.toMatchObject({
+      code: 'STORAGE_BUCKET_PROBE_FAILED',
+    })
+
+    const bucketServerError = vi.fn(async () => ({ data: null, error: { message: 'Bucket not found', status: 503 } }))
+    await expect(probeSupabaseBucket(client(bucketServerError), 'f')).rejects.toMatchObject({
       code: 'STORAGE_BUCKET_PROBE_FAILED',
     })
 

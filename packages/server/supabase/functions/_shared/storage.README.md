@@ -24,11 +24,15 @@ Critical properties:
   never breaks because of a misconfigured BYO bucket.
 - **Bucket probe**: before a Supabase upload, `storage.getBucket` confirms the
   bucket exists (`storage-bucket.ts`). A hit is cached for the isolate, a miss
-  for 60 s. A missing configured name falls back to `screenshots` for ingest,
-  fails the health check with `STORAGE_BUCKET_MISSING`, and is rejected on
-  settings save. The module does not create buckets. A probe error
-  (`STORAGE_BUCKET_PROBE_FAILED`) fails the health check; ingest logs it and
-  uses the bucket unverified, and it does not block the save.
+  for 60 s; the health check and settings save probe fresh. A missing
+  configured name falls back to `screenshots` for ingest, marks the health
+  check `degraded` with `STORAGE_BUCKET_MISSING` (it then checks the fallback
+  bucket), and is rejected on settings save. The module does not create
+  buckets. A probe error (`STORAGE_BUCKET_PROBE_FAILED`) fails the health
+  check; ingest logs it and uses the bucket unverified (legacy
+  `mushi-screenshots` maps to `screenshots`), and it does not block the save.
+  `getStorageAdapter` never throws: with no usable bucket it returns an adapter
+  whose calls fail with that error.
 - **Vault-only secrets**: raw keys are never persisted in `project_storage_settings`;
   only Supabase Vault references. Resolved via the `vault_lookup` SECURITY
   DEFINER helper.

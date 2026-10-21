@@ -5,7 +5,8 @@
  * OVERVIEW:
  * - getStorageAdapter never fails ingest on a probe error; it uses the bucket unverified
  * - A confirmed miss falls back to the cluster default and logs once per miss TTL
- * - The health check's bucket_probe step fails on a miss or a probe error
+ * - The health check's bucket_probe step fails on a miss or a probe error;
+ *   a configured miss with a healthy fallback stores degraded
  * - gateSupabaseBucketSave probes only a bucket the patch itself sets
  *
  * DEPENDENCIES:
@@ -52,6 +53,7 @@ function fakeDb() {
           return { error: null }
         },
         createSignedUrl: async () => ({ data: { signedUrl: `https://signed/${bucket}` }, error: null }),
+        list: async () => ({ data: [], error: null }),
       }),
     },
   }
@@ -117,6 +119,26 @@ describe('getStorageAdapter', () => {
     )
   })
 
+  it('maps the legacy mushi-screenshots name to the cluster default when the probe errors', async () => {
+    state.settings = supabaseSettings('mushi-screenshots')
+    state.getBucket = vi.fn(async () => serverError)
+    await expect(uploadedBucket()).resolves.toBe('screenshots')
+  })
+
+  it('returns an adapter that fails on use, rather than throwing, when the cluster default is missing', async () => {
+    state.settings = supabaseSettings('screenshots')
+    state.getBucket = vi.fn(async () => missing)
+    const adapter = await storage.getStorageAdapter(PROJECT)
+    await expect(
+      adapter.upload({ key: 'k.png', body: new Uint8Array([1]), contentType: 'image/png' }),
+    ).rejects.toThrow('Storage bucket "screenshots" does not exist')
+    expect(state.uploads).toHaveLength(0)
+
+    state.settings = { project_id: PROJECT, provider: 's3', bucket: 'ext', path_prefix: '' }
+    storage.invalidateStorageCache()
+    await expect(storage.getStorageAdapter(PROJECT)).resolves.toBeDefined()
+  })
+
   it('uses the cluster default unverified when its probe throws after a confirmed miss', async () => {
     state.settings = supabaseSettings('gone')
     state.getBucket = vi.fn(async (name: string) => {
@@ -155,7 +177,7 @@ describe('getStorageAdapterForHealthCheck bucket_probe', () => {
     expect(prefixDebug.find((s) => s.step === 'bucket_probe')).toMatchObject({ ok: true, detail: 'bucket=screenshots' })
   })
 
-  it('fails on a missing configured bucket even when the miss is cached', async () => {
+  it('warns on a missing configured bucket, even when cached, and checks the fallback bucket', async () => {
     state.settings = supabaseSettings('typo')
     const getBucket = vi.fn(async (name: string) => (name === 'screenshots' ? found(name) : missing))
     state.getBucket = getBucket
@@ -163,10 +185,31 @@ describe('getStorageAdapterForHealthCheck bucket_probe', () => {
     const { adapter, prefixDebug } = await storage.getStorageAdapterForHealthCheck(PROJECT)
     expect(prefixDebug.find((s) => s.step === 'bucket_probe')).toMatchObject({
       ok: false,
-      detail: 'Storage bucket "typo" does not exist',
+      detail: 'Storage bucket "typo" does not exist; uploads use bucket=screenshots',
+    })
+    const probe = await adapter.healthCheck()
+    expect(probe).toMatchObject({ ok: true })
+    expect(routes.storageHealthStatus(probe, prefixDebug)).toEqual({
+      status: 'degraded',
+      error: 'Storage bucket "typo" does not exist; uploads use bucket=screenshots',
+    })
+    expect(getBucket.mock.calls.filter(([n]) => n === 'typo')).toHaveLength(2)
+  })
+
+  it('re-probes a bucket confirmed earlier in the isolate and fails once it is gone', async () => {
+    state.settings = supabaseSettings('screenshots')
+    let exists = true
+    const getBucket = vi.fn(async (name: string) => (exists ? found(name) : missing))
+    state.getBucket = getBucket
+    await storage.getStorageAdapter(PROJECT)
+    exists = false
+    const { adapter, prefixDebug } = await storage.getStorageAdapterForHealthCheck(PROJECT)
+    expect(prefixDebug.find((s) => s.step === 'bucket_probe')).toMatchObject({
+      ok: false,
+      detail: 'Storage bucket "screenshots" does not exist',
     })
     await expect(adapter.healthCheck()).resolves.toMatchObject({ ok: false })
-    expect(getBucket.mock.calls.filter(([n]) => n === 'typo')).toHaveLength(2)
+    expect(getBucket).toHaveBeenCalledTimes(2)
   })
 
   it('fails when the probe errors', async () => {
@@ -178,6 +221,21 @@ describe('getStorageAdapterForHealthCheck bucket_probe', () => {
       detail: 'Could not verify storage bucket "screenshots": upstream timeout',
     })
     await expect(adapter.healthCheck()).resolves.toMatchObject({ ok: false })
+  })
+
+  it('stores healthy and failing as before', () => {
+    expect(routes.storageHealthStatus({ ok: true }, [{ step: 'bucket_probe', ok: true }])).toEqual({
+      status: 'healthy',
+      error: null,
+    })
+    expect(routes.storageHealthStatus({ ok: true }, [{ step: 'settings_lookup', ok: false }])).toEqual({
+      status: 'healthy',
+      error: null,
+    })
+    expect(routes.storageHealthStatus({ ok: false, error: 'boom' }, [])).toEqual({
+      status: 'failing',
+      error: 'boom',
+    })
   })
 })
 

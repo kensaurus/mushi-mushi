@@ -53,6 +53,21 @@ interface ContactBody {
 const RATE_LIMIT_PER_HOUR = 5;
 
 /**
+ * Stored health for a storage probe. A passing adapter probe with a failed
+ * bucket_probe step (configured bucket missing, ingest on the cluster default)
+ * is degraded, with that step's detail as the error.
+ */
+export function storageHealthStatus(
+  probe: { ok: boolean; error?: string },
+  prefixDebug: Array<{ step: string; ok: boolean; detail?: string }>,
+): { status: 'healthy' | 'degraded' | 'failing'; error: string | null } {
+  if (!probe.ok) return { status: 'failing', error: probe.error ?? null };
+  const bucketWarning = prefixDebug.find((s) => s.step === 'bucket_probe' && !s.ok);
+  if (bucketWarning) return { status: 'degraded', error: bucketWarning.detail ?? null };
+  return { status: 'healthy', error: null };
+}
+
+/**
  * Reject a Supabase bucket name Storage says is missing. Only a non-blank
  * bucket in the patch itself is probed, so switching provider back to
  * Supabase (or re-saving other fields) never trips on a stored name. External
@@ -1485,12 +1500,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       { step: 'total', ok: probeResult.ok, ms: totalMs },
     ];
 
+    const health = storageHealthStatus(probeResult, prefixDebug);
     const { error: persistErr } = await db
       .from('project_storage_settings')
       .update({
-        health_status: probeResult.ok ? 'healthy' : 'failing',
+        health_status: health.status,
         last_health_check_at: new Date().toISOString(),
-        last_health_error: probeResult.ok ? null : (probeResult.error ?? null),
+        last_health_error: health.error,
         last_health_debug: fullDebug,
       })
       .eq('project_id', projectId);
