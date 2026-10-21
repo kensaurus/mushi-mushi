@@ -6,12 +6,14 @@
  *          app would use. A failed or empty list falls back to the text field.
  */
 
+import { useState } from 'react'
 import { Input, SelectField } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import {
   CURSOR_MODEL_OTHER,
   cursorModelSelection,
   cursorModelSpec,
+  isPlainParam,
   type CursorModelOption,
   type CursorModelParam,
 } from './cursorModelSpec'
@@ -30,10 +32,11 @@ interface Props {
 }
 
 function paramValues(param: CursorModelParam, current: string) {
-  if (current && !param.values.some((v) => v.value === current)) {
-    return [{ value: current, displayName: current }, ...param.values]
+  const values = param.values.filter((v) => isPlainParam(v.value))
+  if (current && !values.some((v) => v.value === current)) {
+    return [{ value: current, displayName: current }, ...values]
   }
-  return param.values
+  return values
 }
 
 export function CursorModelPicker({
@@ -52,7 +55,14 @@ export function CursorModelPicker({
   const models = usePageData<{ models: CursorModelOption[] }>(path, { deps: [keyId ?? ''] })
   const list = models.data?.models ?? []
   const listReady = !models.loading && !models.error && models.data != null
-  const selection = cursorModelSelection(value, list, listReady)
+  const [otherPicked, setOtherPicked] = useState(false)
+  const parsed = cursorModelSelection(value, list, listReady)
+  // A blank or listed value maps back to its own option, so Other needs its
+  // own flag to keep the typed-id field open.
+  const selection =
+    otherPicked && parsed.modelId !== CURSOR_MODEL_OTHER
+      ? { modelId: CURSOR_MODEL_OTHER, custom: value, params: {} }
+      : parsed
   const chosen = list.find((m) => m.id === selection.modelId)
   const visibleLabel = labelled ? label : undefined
 
@@ -87,6 +97,7 @@ export function CursorModelPicker({
         value={selection.modelId}
         onChange={(e) => {
           const id = e.target.value
+          setOtherPicked(id === CURSOR_MODEL_OTHER)
           if (id === CURSOR_MODEL_OTHER)
             onChange(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
           else onChange(id)

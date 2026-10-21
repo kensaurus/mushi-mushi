@@ -163,6 +163,18 @@ describe('SpendDownSection', () => {
     expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe('composer-2.5')
   })
 
+  it('picks Other from a blank model and types an id', async () => {
+    mocks.keys = [KEY]
+    await render(true)
+    await act(async () => button('Set up spend-down').click())
+    await act(async () => setInput('Credits expire on', '2026-10-31'))
+    await act(async () => setSelect('Model (optional)', '__other'))
+    await act(async () => setInput('Model id', 'custom-1?effort=high'))
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/keys/key-1/spend-down')!
+    expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe('custom-1?effort=high')
+  })
+
   it('renders nothing when the app has no Cursor key', async () => {
     mocks.keys = []
     await render(true)
