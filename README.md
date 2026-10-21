@@ -37,7 +37,7 @@ flowchart LR
 
 1. **Capture.** A user taps the widget. Mushi records a screenshot, the route, their note, and the last console and network events.
 2. **Diagnose.** Mushi writes the root cause in plain English with a fix prompt. Twenty reports of the same broken button become one row.
-3. **Fix.** Your editor reads the diagnosis over MCP. If you want, an agent opens a **draft** PR that you review like any other.
+3. **Fix.** Your editor reads the diagnosis over MCP. If you want, an agent opens a **draft** PR that you review like any other. A second model (Claude Opus, on your own key) reviews each agent PR first, and Mushi will not merge one it says to hold.
 
 It catches the bugs that never throw an error: the pay button hidden under the keyboard, the Save button tapped twice because nothing happened, the dashboard that takes 12 seconds.
 
@@ -105,6 +105,8 @@ Native SDKs (iOS, Android, Flutter) are a preview and install from this reposito
 
 Full list and maturity: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks). Architecture: [how the pipeline fits together](https://kensaur.us/mushi-mushi/docs/concepts/architecture).
 
+Agent PRs get an independent review before anyone merges them: **merge**, **fix first** or **hold**, with findings on the PR. A "fix first" PR can go back to the agent once with those findings ([agent PR review](https://kensaur.us/mushi-mushi/docs/concepts/agent-pr-review)).
+
 Fix waiting to land? `mushi runner status` shows where your tests run, why they wait, and whether a red check was your code or a test machine that stopped ([CI runners](https://kensaur.us/mushi-mushi/docs/operating/ci-runners)).
 
 ## Why not just Sentry?
@@ -142,7 +144,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~538K TS lines · 2,424 source files · 45 workspace / 37 npm packages · 71 edge functions · 486 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~539K TS lines · 2,428 source files · 45 workspace / 37 npm packages · 71 edge functions · 486 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 
