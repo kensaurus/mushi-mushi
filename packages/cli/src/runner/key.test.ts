@@ -30,3 +30,14 @@ describe('runner key', () => {
     await expect(resolveRunnerKey({}, { projectId: 'p', label: 'runner-x', env: {} })).rejects.toThrow(/No runner key/)
   })
 })
+
+describe('assertRunnerKeyShape', () => {
+  it('writes only text shaped like a Mushi key', async () => {
+    const { assertRunnerKeyShape } = await import('./key.js')
+    expect(assertRunnerKeyShape('mushi_0123456789abcdef0123456789abcdef')).toBe('mushi_0123456789abcdef0123456789abcdef')
+    for (const bad of ['', 'mushi_short', 'sk-ant-api03-xyz', 'mushi_0123456789abcdef0123456789abcdef\nExecStart=/bin/sh', 'mushi_../../etc/passwd0000000000000000']) {
+      expect(() => assertRunnerKeyShape(bad), bad).toThrow(/does not look like a Mushi key/)
+    }
+  })
+})
+

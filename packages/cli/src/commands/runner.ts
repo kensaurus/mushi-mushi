@@ -18,7 +18,7 @@
 
 import type { Command } from 'commander'
 import { spawnSync } from 'node:child_process'
-import { accessSync, chmodSync, chownSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync, fchownSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { arch as nodeArch, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import * as p from '@clack/prompts'
@@ -60,6 +60,16 @@ export interface RunnerDeps {
   systemdRunning: () => boolean
   /** `gh auth status` text, to tell whether gh keeps its token in a desktop keyring. */
   ghAuthText: () => string
+}
+
+/** Run `fn` on an open read descriptor of `path` (O_NOFOLLOW: never through a symlink). */
+function withFd<T>(path: string, fn: (fd: number) => T): T {
+  const fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+  try {
+    return fn(fd)
+  } finally {
+    closeSync(fd)
+  }
 }
 
 const defaultRunStep: RunnerDeps['runStep'] = (step, stdin) => {
@@ -331,10 +341,14 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
       console.log(source === 'env' ? 'Using the runner key from MUSHI_RUNNER_KEY.' : 'Created a runner key (runner:write: it can only report runner health).')
       if (merged.text) writeFileSync(envPath, merged.text)
       // The runner service usually runs as another user: hand it the files.
-      const owner = statSync(dir)
+      // Owner read and chown go through open descriptors, so a path swapped
+      // in between cannot redirect the chown (CodeQL js/file-system-race).
+      const owner = withFd(dir, (fd) => fstatSync(fd))
       const me = process.getuid?.()
       if (me === 0 && owner.uid !== 0) {
-        for (const path of [hooksDir, files.started, files.completed, keyPath, envPath]) chownSync(path, owner.uid, owner.gid)
+        for (const path of [hooksDir, files.started, files.completed, keyPath, envPath]) {
+          withFd(path, (fd) => fchownSync(fd, owner.uid, owner.gid))
+        }
       } else if (me !== undefined && owner.uid !== me) {
         console.log(`The runner folder belongs to uid ${owner.uid}. Give it the hook files: sudo chown -R ${owner.uid}:${owner.gid} ${hooksDir}`)
       }

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/ci-runners
 
 ---
 title: CI runners
-description: See where your tests run and why a fix waits to land. Tell a broken fix from a stopped test machine, and set up your own machine as a GitHub Actions runner with safe defaults.
+description: See where your tests run and why a fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.
 ---
 
 # CI runners

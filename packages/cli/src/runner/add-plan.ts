@@ -240,6 +240,10 @@ function validate(input: AddPlanInput): string | null {
   if (!MEMORY_RE.test(input.memoryMax)) return `Memory "${input.memoryMax}" must look like 8G or 6144M.`
   if (!/^[0-9a-f]{64}$/.test(input.hostId)) return 'Could not hash a machine id for this host.'
   if (input.wsl?.distro && !/^[A-Za-z0-9._-]+$/.test(input.wsl.distro)) return 'Unexpected WSL distro name.'
+  // Values read from GitHub and the machine reach shell steps too: allowlist them like the arguments.
+  if (input.release && !/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(input.release.version)) return `Unexpected actions/runner version "${input.release.version}".`
+  if (input.release && !/^[0-9a-f]{64}$/.test(input.release.sha256)) return 'Unexpected actions/runner checksum.'
+  if (input.resolvers.some((ip) => !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip))) return 'Unexpected DNS resolver address.'
   return null
 }
 

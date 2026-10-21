@@ -223,3 +223,15 @@ describe('helpers', () => {
     expect(systemdArgv(['/usr/bin/node', '/a b/c.js', '100%'])).toBe('/usr/bin/node "/a b/c.js" 100%%')
   })
 })
+
+describe('values from GitHub and the machine are allowlisted before they reach a shell step', () => {
+  it('refuses an odd runner version, checksum or resolver', async () => {
+    const { buildAddPlan } = await import('./add-plan.js')
+    const ok = input()
+    expect(buildAddPlan({ ...ok, release: { version: "2.338.0'; rm -rf / #", sha256: ok.release!.sha256 } }).refused).toMatch(/Unexpected actions\/runner version/)
+    expect(buildAddPlan({ ...ok, release: { version: '2.338.0', sha256: 'abc' } }).refused).toMatch(/checksum/)
+    expect(buildAddPlan({ ...ok, resolvers: ['1.1.1.1; reboot'] }).refused).toMatch(/resolver/)
+    expect(buildAddPlan(ok).refused).toBeNull()
+  })
+})
+

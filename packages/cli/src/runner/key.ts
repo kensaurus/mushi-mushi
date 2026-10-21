@@ -50,6 +50,20 @@ export function assertNotCliKey(runnerKey: string, cliKey: string | undefined): 
   }
 }
 
+/**
+ * Shape of a Mushi project key (`mushi_` + hex, `_shared/api-key-mint.ts`).
+ * A key is written to disk only when it has this shape, so a confused or
+ * hostile response can never put arbitrary text in a root-owned file.
+ */
+export const RUNNER_KEY_SHAPE = /^mushi_[A-Za-z0-9_-]{8,128}$/
+
+export function assertRunnerKeyShape(key: string): string {
+  if (!RUNNER_KEY_SHAPE.test(key)) {
+    throw new MushiCliError('E_INVALID_INPUT', 'That does not look like a Mushi key (mushi_…).', 'mint one with `mushi runner key`, or check MUSHI_RUNNER_KEY')
+  }
+  return key
+}
+
 export async function mintRunnerKey(config: CliConfig, projectId: string, label: string): Promise<string> {
   if (!LABEL_RE.test(label)) {
     throw new MushiCliError('E_INVALID_INPUT', `Key label "${label}" must be 1-40 lowercase letters, digits and hyphens.`)
@@ -70,7 +84,7 @@ export async function mintRunnerKey(config: CliConfig, projectId: string, label:
   const key = keyFromMintResponse(result.data)
   if (!key) throw new MushiCliError('E_INVALID_INPUT', 'The server answered without a runner key.')
   assertNotCliKey(key, config.apiKey)
-  return key
+  return assertRunnerKeyShape(key)
 }
 
 /** MUSHI_RUNNER_KEY, or mint one. Never the CLI key. */
@@ -81,7 +95,7 @@ export async function resolveRunnerKey(
   const fromEnv = (opts.env ?? process.env)['MUSHI_RUNNER_KEY']?.trim()
   if (fromEnv) {
     assertNotCliKey(fromEnv, config.apiKey)
-    return { key: fromEnv, source: 'env' }
+    return { key: assertRunnerKeyShape(fromEnv), source: 'env' }
   }
   if (!config.apiKey) {
     throw new MushiCliError('E_AUTH_MISSING', 'No runner key and no CLI key to create one.', 'set MUSHI_RUNNER_KEY, or run `mushi login` first')
