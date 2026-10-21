@@ -12,6 +12,7 @@ import type { CiJob, CiOverview } from '../../lib/ciTypes'
 import { formatPercent, formatSeconds } from '../../lib/ciView'
 import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
+import { MUSHI_VERIFY_JOB_NOTE, isMushiVerifyJob } from '../../lib/verifyView'
 
 interface Props {
   overview: CiOverview
@@ -189,6 +190,7 @@ function content(o: CiOverview, nodeId: string): { title: string; subtitle: stri
             ]}
           />
           {j.infraDetail && <p className="mt-3 text-xs text-fg-secondary">{j.infraDetail}</p>}
+          {isMushiVerifyJob(j) && <p className="mt-3 text-xs text-fg-secondary">{MUSHI_VERIFY_JOB_NOTE}</p>}
           {j.htmlUrl && (
             <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-medium text-accent hover:underline">
               Open on GitHub ↗
