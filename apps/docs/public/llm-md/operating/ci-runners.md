@@ -47,6 +47,7 @@ The console's **CI** page, `mushi runner status` and the MCP tool
 
 ```bash
 mushi runner status            # this project, last 7 days
+mushi runner status --refresh  # read GitHub now instead of the last 10-minute sync
 mushi runner status --all      # every project your account key can read
 mushi runner status --json
 ```

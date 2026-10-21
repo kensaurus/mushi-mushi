@@ -134,8 +134,10 @@ describe('collectHeartbeat', () => {
     const body = collectHeartbeat(io, '0.33.0')
     expect(body).toEqual({
       kind: 'heartbeat',
-      host: { host_id: hashHostId('deadbeef'), hostname: 'nuc.local', platform: 'wsl2', cpu_count: 8, mem_total_mb: 15922, mushi_version: '0.33.0' },
-      metrics: { load1: 3.2, mem_used_mb: 15922 - 6156, swap_used_mb: 1024, swap_total_mb: 4096, disk_free_gb: 120 },
+      host: {
+        host_id: hashHostId('deadbeef'), hostname: 'nuc.local', platform: 'wsl2', cpu_count: 8, mem_total_mb: 15922, mushi_version: '0.33.0',
+        metrics: { load1: 3.2, mem_used_mb: 15922 - 6156, swap_used_mb: 1024, swap_total_mb: 4096, disk_free_gb: 120 },
+      },
       runners: [
         { name: 'nuc-1', repo: 'kensaurus/glot.it', service: UNIT, active: true, restarts: 4, mem_current_mb: 1024, mem_max_mb: 6144, oom_kills: 1 },
         { name: 'mushi-nuc', repo: 'my-org/my-repo', service: 'mushi-runner-mushi-nuc.service', active: false, restarts: 12, mem_current_mb: null, mem_max_mb: null, oom_kills: null },

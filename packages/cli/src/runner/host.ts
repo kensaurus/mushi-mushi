@@ -88,13 +88,14 @@ export interface HeartbeatBody {
     cpu_count: number
     mem_total_mb: number
     mushi_version: string
-  }
-  metrics: {
-    load1: number
-    mem_used_mb: number
-    swap_used_mb: number
-    swap_total_mb: number
-    disk_free_gb: number
+    /** Inside `host`, as runnerHeartbeatSchema (strict) in _shared/schemas.ts expects. */
+    metrics: {
+      load1: number
+      mem_used_mb: number
+      swap_used_mb: number
+      swap_total_mb: number
+      disk_free_gb: number
+    }
   }
   runners: RunnerSample[]
 }
@@ -373,14 +374,14 @@ export function collectHeartbeat(io: HostIO, mushiVersion: string): HeartbeatBod
       platform,
       cpu_count: io.cpuCount,
       mem_total_mb: memTotalMb,
-      mushi_version: mushiVersion,
-    },
-    metrics: {
-      load1: round1(load1),
-      mem_used_mb: Math.max(0, memUsedMb),
-      swap_used_mb: Math.max(0, swapUsedMb),
-      swap_total_mb: swapTotalMb,
-      disk_free_gb: diskFree == null ? 0 : round1(diskFree / 1024 ** 3),
+      mushi_version: mushiVersion.slice(0, 40),
+      metrics: {
+        load1: round1(load1),
+        mem_used_mb: Math.max(0, memUsedMb),
+        swap_used_mb: Math.max(0, swapUsedMb),
+        swap_total_mb: swapTotalMb,
+        disk_free_gb: diskFree == null ? 0 : round1(diskFree / 1024 ** 3),
+      },
     },
     runners: platform === 'macos' ? macRunners(io) : linuxRunners(io),
   }

@@ -80,8 +80,8 @@ describe('mushi runner status', () => {
   })
 
   it('--all leaves the project out (portfolio map), and --json prints the payload', async () => {
-    const run = await runCli(registerRunnerCommands, ['runner', 'status', '--all', '--days', '14', '--json'], () => okReply({ hosts: [], advice: [] }))
-    expect(run.calls[0]!.path).toBe('/v1/admin/ci/overview?days=14')
+    const run = await runCli(registerRunnerCommands, ['runner', 'status', '--all', '--days', '14', '--refresh', '--json'], () => okReply({ hosts: [], advice: [] }))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/overview?days=14&refresh=1')
     expect(JSON.parse(run.stdout)).toEqual({ hosts: [], advice: [] })
   })
 

@@ -44,6 +44,7 @@ ENDPOINT=${shSingleQuoted(opts.endpoint.replace(/\/+$/, ''))}
 HOST_ID=${opts.hostId}
 
 safe() { printf '%s' "$1" | tr -cd 'A-Za-z0-9._/-' | cut -c1-100; }
+safe_name() { printf '%s' "$1" | tr -cd 'A-Za-z0-9._/ -' | cut -c1-100; }
 digits() { printf '%s' "$1" | tr -cd '0-9' | cut -c1-20; }
 num_or_null() { case "$1" in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$1" ;; esac; }
 mb() { case "$1" in ''|max|*[!0-9]*) printf '' ;; *) printf '%s' $(( $1 / 1048576 )) ;; esac; }
@@ -63,7 +64,7 @@ mushi_hook() {
   LOAD=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null)
 
   REPO=$(safe "$GITHUB_REPOSITORY")
-  RUNNER=$(safe "$RUNNER_NAME")
+  RUNNER=$(safe_name "$RUNNER_NAME")
   JOB=$(safe "$GITHUB_JOB")
   RUN_ID=$(digits "$GITHUB_RUN_ID")
   ATTEMPT=$(digits "$GITHUB_RUN_ATTEMPT")

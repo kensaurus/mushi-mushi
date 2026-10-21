@@ -163,8 +163,9 @@ export function registerRunnerCommands(program: Command): void {
     .option('--project <id>', 'Same as --project-id')
     .option('--all', 'Every project your key can read (account-level key)')
     .option('--days <n>', 'Window in days (1-30)', '7')
+    .option('--refresh', 'Read GitHub first instead of the last 10-minute sync (at most once a minute per project)')
     .option('--json', 'Machine-readable JSON output')
-    .action(async (opts: { projectId?: string; project?: string; all?: boolean; days: string; json?: boolean }) => {
+    .action(async (opts: { projectId?: string; project?: string; all?: boolean; days: string; refresh?: boolean; json?: boolean }) => {
       const config = requireConfig()
       const days = Number(opts.days)
       if (!Number.isInteger(days) || days < 1 || days > 30) {
@@ -174,7 +175,8 @@ export function registerRunnerCommands(program: Command): void {
       const raw = opts.all ? undefined : (opts.projectId ?? opts.project ?? config.projectId)
       if (raw) qs.set('project_id', requireUuid(raw, 'project id'))
       qs.set('days', String(days))
-      const result = await apiCall<CiOverview>(`/v1/admin/ci/overview?${qs}`, config)
+      if (opts.refresh) qs.set('refresh', '1')
+      const result = await apiCall<CiOverview>(`/v1/admin/ci/overview?${qs}`, config, {}, { timeoutMs: opts.refresh ? 60_000 : undefined })
       if (!result.ok) die(result)
       if (outputIsJson(opts.json)) {
         console.log(JSON.stringify(result.data, null, 2))

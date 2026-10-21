@@ -85,7 +85,8 @@ describe('hookScript', () => {
     const lines = argv!.trim().split('\n')
     const body = JSON.parse(lines[lines.indexOf('--data') + 1]!)
     expect(body.job_key).toBe('buildxy')
-    expect(body.runner_name).toBe('nuc1')
+    // Spaces survive (GitHub runner names may have them); the backslash does not.
+    expect(body.runner_name).toBe('nuc 1')
     expect(body.x).toBeUndefined()
   })
 

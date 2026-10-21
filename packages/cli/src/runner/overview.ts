@@ -13,17 +13,24 @@ import { oneLine } from '../command-helpers.js'
 
 export interface CiAdvice {
   id: string
-  severity: 'info' | 'warn' | 'error' | string
+  /** 'high' | 'medium' | 'low' (server _shared/ci-overview-types.ts). */
+  severity: string
   title: string
   detail?: string | null
   evidence?: unknown
   fix?: string | null
 }
 
+/**
+ * A tolerant copy of CiOverview in packages/server/supabase/functions/_shared/
+ * ci-overview-types.ts (the source of truth): every field optional so an older
+ * or newer server still renders.
+ */
 export interface CiOverview {
   generatedAt?: string
-  window?: { days?: number; since?: string } | number | null
-  permissions?: Record<string, unknown> | null
+  refreshedAt?: string | null
+  window?: { days?: number; from?: string } | number | null
+  permissions?: { jobs?: 'ok' | 'missing' | 'unknown'; runners?: 'ok' | 'missing' | 'unknown' } | null
   hosts?: Array<Record<string, unknown>>
   runners?: Array<Record<string, unknown>>
   repos?: Array<Record<string, unknown>>
@@ -135,7 +142,7 @@ export function renderOverview(data: CiOverview, now = new Date()): string[] {
     const metrics = (field(h, 'metrics') ?? null) as Row | null
     const parts = [
       `${platform}${cpu != null ? `, ${cpu} CPU` : ''}${memTotal != null ? `, ${fmtMb(memTotal)}` : ''}`,
-      `last heartbeat ${fmtAgo(str(h, 'lastHeartbeatAt', 'last_heartbeat_at'), now)}`,
+      `last heartbeat ${fmtAgo(str(h, 'lastHeartbeatAt', 'last_heartbeat_at'), now)}${field(h, 'stale') === true ? ' (stale: is the machine off?)' : ''}`,
     ]
     const load = num(metrics, 'load1')
     if (load != null) parts.push(`load ${load.toFixed(1)}`)
@@ -177,7 +184,10 @@ export function renderOverview(data: CiOverview, now = new Date()): string[] {
   lines.push(`Failures: ${infra} where the test machine stopped (your fix was not tested), ${code} in your code.${pass}`)
 
   const perms = data.permissions ?? null
-  if (perms && field(perms, 'administrationRead', 'administration_read', 'runnersList') === false) {
+  if (perms?.jobs === 'missing') {
+    lines.push('Mushi cannot read your CI jobs: give its GitHub connection the Actions: read permission.')
+  }
+  if (perms?.runners === 'missing') {
     lines.push('Runner online/offline status needs the Administration: read permission on GitHub; showing runners seen in jobs instead.')
   }
 
@@ -188,7 +198,7 @@ export function renderOverview(data: CiOverview, now = new Date()): string[] {
   } else {
     lines.push('What to do first')
     for (const a of advice.slice(0, 3)) {
-      lines.push(`  ${String(a.severity).toUpperCase().padEnd(5)} ${oneLine(a.title, 110)}`)
+      lines.push(`  ${String(a.severity).toUpperCase().padEnd(6)} ${oneLine(a.title, 110)}`)
       if (a.detail) lines.push(`        ${oneLine(a.detail, 140)}`)
       if (a.fix) lines.push(`        Fix: ${oneLine(a.fix, 140)}`)
     }
