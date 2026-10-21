@@ -31,7 +31,12 @@ export type NoPrVerdict =
   | { category: 'needs_human'; reason: string }
   | { category: null; reason: string | null }
 
-/** Only the opening of the summary counts: agents state the verdict first. */
+/**
+ * Only the opening paragraph counts: agents state the verdict first, and later
+ * sections ("What I ruled out") say "already fixed" about other causes. On
+ * 2026-10-21 "I didn't find a confirmed root cause" was filed as already_fixed
+ * because a ruled-out bullet said the old cause was "already fixed".
+ */
 const HEAD_CHARS = 600
 
 const WRONG_REPO = [
@@ -88,10 +93,23 @@ export function firstSentence(summary: string, max = 240): string {
   return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence
 }
 
+/** The first paragraph that is more than filler ("No pull request."), markdown stripped. */
+function openingParagraph(text: string): string {
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/`|\*\*/g, '').trim())
+    .filter(Boolean)
+  const isFillerOnly = (p: string) =>
+    p
+      .split(/(?<=[.!?])\s+/)
+      .every((sentence) => FILLER.test(sentence.trim()))
+  return paragraphs.find((p) => !isFillerOnly(p)) ?? paragraphs[0] ?? ''
+}
+
 export function classifyNoPrSummary(summary: string | null | undefined): NoPrVerdict {
   const text = (summary ?? '').trim()
   if (!text) return { category: null, reason: null }
-  const head = text.slice(0, HEAD_CHARS).replace(/`|\*\*/g, '')
+  const head = openingParagraph(text).slice(0, HEAD_CHARS)
   const reason = firstSentence(text)
   if (WRONG_REPO.some((re) => re.test(head))) return { category: 'wrong_repo', reason }
   if (ALREADY_FIXED.some((re) => re.test(head))) return { category: 'already_fixed', reason }
