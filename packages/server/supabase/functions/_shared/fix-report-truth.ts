@@ -45,6 +45,8 @@ export interface TruthAttempt {
   pr_state?: string | null
   merged_at?: string | null
   check_run_conclusion?: string | null
+  /** CI verdict for the PR head (Plan 022): an infra stop buckets as `ci_infra`. */
+  ci_infra?: unknown
   failure_category?: string | null
   error?: string | null
   created_at?: string | null

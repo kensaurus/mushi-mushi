@@ -31,6 +31,7 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'voice-reports', label: 'Voice reports', description: 'File a bug or a fix request by talking, from your phone or the console.', paths: ['/voice'], group: 'bugs' },
   { id: 'spam-abuse', label: 'Spam & abuse', description: 'Devices and tokens that flood the queue or game tester rewards.', paths: ['/anti-gaming'], group: 'bugs' },
   { id: 'pull-requests', label: 'Pull requests', description: 'Every fix branch and pull request in your repo with its CI status.', paths: ['/repo'], group: 'fixing' },
+  { id: 'ci-runners', label: 'CI runners', description: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.', paths: ['/ci'], group: 'fixing' },
   { id: 'code-map', label: 'Code map', description: 'A map of your indexed repository you can ask questions about.', paths: ['/explore'], group: 'fixing' },
   { id: 'ux-runs', label: 'UX runs', description: 'A coding agent works through your screens; you see what improved.', paths: ['/ux-runs'], group: 'fixing' },
   { id: 'improvement-runs', label: 'Improvement runs', description: 'One AI drafts a change and a second AI critiques it until it passes.', paths: ['/iterate'], group: 'fixing' },

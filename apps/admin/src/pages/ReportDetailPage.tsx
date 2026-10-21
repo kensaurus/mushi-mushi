@@ -545,6 +545,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
                     ciConclusion={latestFix.check_run_conclusion}
                     ciStatus={latestFix.check_run_status}
                     ciUpdatedAt={latestFix.check_run_updated_at}
+                    ciInfra={latestFix.ci_infra}
+                    projectId={report.project_id}
                     compact
                   />
                 ) : null}
@@ -613,6 +615,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             ciConclusion={mergeTarget.check_run_conclusion}
             ciStatus={mergeTarget.check_run_status}
             ciUpdatedAt={mergeTarget.check_run_updated_at}
+            ciInfra={mergeTarget.ci_infra}
+            projectId={report.project_id}
             onMerged={handleMerged}
           />
         </div>

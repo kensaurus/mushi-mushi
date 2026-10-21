@@ -519,7 +519,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const [attemptsRes, integrationRes, codebaseRes, inflightRes] = await Promise.all([
       db.from('fix_attempts')
-        .select('id, report_id, check_run_conclusion, spec_validation_warnings')
+        .select('id, report_id, check_run_conclusion, ci_infra, spec_validation_warnings')
         .eq('project_id', pid)
         .gte('created_at', since.toISOString())
         .limit(500),
@@ -666,7 +666,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select(
         // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
         // agent badges, links, artifacts gallery and "CI synced" (QA #89).
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -783,7 +783,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { data: rows } = await db
       .from('fix_attempts')
       .select(
-        'id, report_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
+        'id, report_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, ci_infra, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
       )
       .in('project_id', projectIds)
       .gte('created_at', since.toISOString())
@@ -924,7 +924,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
       const { data: refreshed } = await db
         .from('fix_attempts')
-        .select('check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at')
+        .select('check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at, ci_infra')
         .eq('id', fixId)
         .maybeSingle();
 
@@ -1248,7 +1248,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
 
     const FIX_ATTEMPT_COLUMNS =
-      'id, report_id, project_id, repo_id, agent, branch, pr_url, pr_number, pr_state, merged_at, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
+      'id, report_id, project_id, repo_id, agent, branch, pr_url, pr_number, pr_state, merged_at, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, error';
     let { data: fix } = await db
       .from('fix_attempts')
       .select(FIX_ATTEMPT_COLUMNS)
@@ -1400,7 +1400,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       // Same window and rule as /repo/overview (repo-branch-counts.ts), so the
       // snapshot tiles and the header chips cannot disagree (console QA #243).
       db.from('fix_attempts')
-        .select('id, report_id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, created_at')
+        .select('id, report_id, branch, status, pr_url, pr_state, merged_at, check_run_conclusion, ci_infra, created_at')
         .eq('project_id', pid)
         .order('created_at', { ascending: false })
         .limit(REPO_BRANCH_WINDOW),
@@ -1545,7 +1545,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db
         .from('fix_attempts')
         .select(
-          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, merged_at, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary',
+          'id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, merged_at, agent, llm_model, status, check_run_status, check_run_conclusion, ci_infra, files_changed, lines_changed, started_at, completed_at, created_at, summary',
         )
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
@@ -1586,6 +1586,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         status: f.status,
         check_run_status: f.check_run_status,
         check_run_conclusion: f.check_run_conclusion,
+        ci_infra: f.ci_infra ?? null,
         files_changed: f.files_changed ?? null,
         lines_changed: f.lines_changed,
         started_at: f.started_at,
@@ -1661,7 +1662,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { data: fixes } = await db
       .from('fix_attempts')
       .select(
-        'id, report_id, branch, pr_url, pr_number, status, check_run_status, check_run_conclusion, commit_sha, started_at, completed_at, created_at, check_run_updated_at',
+        'id, report_id, branch, pr_url, pr_number, status, check_run_status, check_run_conclusion, ci_infra, commit_sha, started_at, completed_at, created_at, check_run_updated_at',
       )
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })

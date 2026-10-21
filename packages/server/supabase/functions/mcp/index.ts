@@ -2135,6 +2135,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'run_store_review',
   'get_release_calendar',
   'get_code_health',
+  'get_ci_overview',
   'explain_finding',
   'get_repo_diagram',
   'get_recipe_sources',

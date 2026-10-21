@@ -15,6 +15,7 @@ import type { PdcaStageId } from '../../lib/pdca'
 import type { FixAttempt } from './types'
 import { isFixMerged } from '../../lib/mergeFix'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
+import { readFixCi } from '../../lib/ciInfra'
 
 export type FixStageStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped'
 
@@ -130,10 +131,15 @@ export function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> 
         : pr === 'done'
           ? 'active'
           : 'pending'
+  // ADR 0033: a test machine that stopped is not a failed fix — the tests
+  // never ran, so Ship waits (pending) instead of turning red.
+  const infra = fix.ci_infra?.infra === true
   const act: FixStageStatus =
     isFixMerged(fix)
       ? 'done'
-      : ci === 'success'
+      : infra
+        ? 'pending'
+        : ci === 'success'
         ? 'pending'
         : ci === 'failure' || ci === 'timed_out'
           ? 'failed'
@@ -156,6 +162,9 @@ function subLabelFor(key: string, fix: FixAttempt): string | undefined {
       return fix.review_passed === true ? 'passed' : fix.review_passed === false ? 'flagged' : undefined
     case 'act':
       if (isFixMerged(fix)) return 'merged'
+      if (fix.ci_infra?.infra) {
+        return readFixCi(fix).state === 'waiting_for_runner' ? 'waiting for a machine' : 'not tested'
+      }
       return fix.check_run_conclusion ?? fix.check_run_status ?? undefined
   }
   return undefined

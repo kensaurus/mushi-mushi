@@ -49,6 +49,7 @@ import { registerSpendCommands } from './commands/spend.js'
 import { registerDesignCommands } from './commands/design.js'
 import { registerUxCommands } from './commands/ux.js'
 import { registerUxRunsCommands } from './commands/ux-runs.js'
+import { registerRunnerCommands } from './commands/runner.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
@@ -143,6 +144,7 @@ registerSpendCommands(program)
 registerDesignCommands(program)
 registerUxCommands(program)
 registerUxRunsCommands(program)
+registerRunnerCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

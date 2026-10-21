@@ -66,6 +66,7 @@ import {
   type PullRequestFile,
 } from '../_shared/github.ts'
 import { parsePullRequestUrl } from '../_shared/pr-substance.ts'
+import { readFixCiInfra } from '../_shared/ci-infra.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
 import {
   cancelCursorRun,
@@ -129,7 +130,7 @@ const AGENT_RESULT_MAX = 2_000
 
 const ROW_COLUMNS =
   'id, fix_review_id, fix_attempt_id, project_id, report_id, pr_url, head_sha_before, status, attempts, cursor_failures, queued_at, created_at, cursor_agent_id, cursor_run_id, key_id, key_kind, dispatched_at'
-const ATTEMPT_COLUMNS = 'id, project_id, report_id, agent, branch_name, pr_url, pr_state, merged_at, repo_id'
+const ATTEMPT_COLUMNS = 'id, project_id, report_id, agent, branch_name, pr_url, pr_state, merged_at, repo_id, ci_infra'
 
 export interface FollowupRow {
   id: string
@@ -165,6 +166,8 @@ interface AttemptRow {
   pr_state: string | null
   merged_at: string | null
   repo_id: string | null
+  /** CI verdict for the PR head (Plan 022): findings that only restate an infra stop are dropped. */
+  ci_infra?: unknown
 }
 
 export interface FollowupDeps {
@@ -558,16 +561,16 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
   if (!files) return wait('pr_unreadable', 'The changed-file list could not be read.')
   const allFindings = asFindings(review!.findings)
   if (allFindings.length === 0) return finish({ action: 'skip', reason: 'no_findings' })
-  const screened = screenFindings(allFindings, files)
+  const screened = screenFindings(allFindings, files, { ciInfra: readFixCiInfra(attempt!.ci_infra)?.infra === true })
   const droppedCount =
-    screened.dropped.url + screened.dropped.command + screened.dropped.injection + screened.dropped.ciConfig + screened.dropped.notInPr
+    screened.dropped.url + screened.dropped.command + screened.dropped.injection + screened.dropped.ciConfig + screened.dropped.notInPr + screened.dropped.ciInfra
   if (droppedCount > 0) log.info('review-followup.findings_dropped', { followupId: row.id, ...screened.dropped })
   if (screened.kept.length === 0) {
     return finish(
       {
         action: 'skip',
         reason: 'no_usable_findings',
-        detail: `${droppedCount} dropped: ${screened.dropped.injection} reading as instructions, ${screened.dropped.ciConfig} about CI or deploy config, ${screened.dropped.command} with a command or a leak, ${screened.dropped.url} with a foreign URL, ${screened.dropped.notInPr} outside the PR.`,
+        detail: `${droppedCount} dropped: ${screened.dropped.injection} reading as instructions, ${screened.dropped.ciConfig} about CI or deploy config, ${screened.dropped.command} with a command or a leak, ${screened.dropped.url} with a foreign URL, ${screened.dropped.notInPr} outside the PR, ${screened.dropped.ciInfra} only saying CI stopped on the test machine.`,
       },
       { findings_dropped: droppedCount },
     )

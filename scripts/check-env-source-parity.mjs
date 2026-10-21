@@ -57,6 +57,9 @@ const BUILTIN_ALLOWLIST = new Set([
   'LOCALAPPDATA',
   // Supabase edge runtime: region where this isolate is actually running.
   'SB_REGION',
+  // systemd (LoadCredential) and WSL set these; `mushi runner` reads them.
+  'CREDENTIALS_DIRECTORY',
+  'WSL_DISTRO_NAME',
 ])
 
 /** Names that match a read regex but are sample copy, not configuration this repo reads. */

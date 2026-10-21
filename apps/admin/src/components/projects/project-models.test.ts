@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canDeleteProject, canManageProject, projectKeyCounts, type Project } from './project-models'
+import { SCOPE_PRESETS, canDeleteProject, canManageProject, isScopePresetId, projectKeyCounts, scopeBadgeTone, type Project } from './project-models'
 
 const base = { organization_id: 'org1', organization_role: null } as unknown as Project
 
@@ -30,5 +30,15 @@ describe('projectKeyCounts', () => {
         { is_active: false, last_seen_at: null },
       ]),
     ).toEqual({ active: 2, neverSeen: 1 })
+  })
+})
+
+describe('runner health key template', () => {
+  it('mints a runner:write key with the same chip tone as a voice key', () => {
+    const runner = SCOPE_PRESETS.find((p) => p.id === 'runner')!
+    expect(runner).toMatchObject({ label: 'Runner health', scopes: ['runner:write'] })
+    expect(runner.hint).toMatch(/can only report runner health/)
+    expect(isScopePresetId('runner')).toBe(true)
+    expect(scopeBadgeTone('runner:write')).toBe(scopeBadgeTone('voice:write'))
   })
 })

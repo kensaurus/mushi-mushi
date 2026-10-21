@@ -105,6 +105,8 @@ Native SDKs (iOS, Android, Flutter) are a preview and install from this reposito
 
 Full list and maturity: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks). Architecture: [how the pipeline fits together](https://kensaur.us/mushi-mushi/docs/concepts/architecture).
 
+Fix waiting to land? `mushi runner status` shows where your tests run, why they wait, and whether a red check was your code or a test machine that stopped ([CI runners](https://kensaur.us/mushi-mushi/docs/operating/ci-runners)).
+
 ## Why not just Sentry?
 
 > **Sentry is built around what the code threw, with a User Feedback widget and
@@ -140,7 +142,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~524K TS lines · 2,378 source files · 45 workspace / 37 npm packages · 68 edge functions · 484 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~532K TS lines · 2,410 source files · 45 workspace / 37 npm packages · 69 edge functions · 485 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 
