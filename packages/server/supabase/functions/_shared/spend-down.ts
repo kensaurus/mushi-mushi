@@ -38,7 +38,7 @@ export interface SpendDownKey {
   provider_slug: string
   project_id: string | null
   organization_id: string | null
-  /** Set for a universal key (ADR 0031); absent before migration 20261021090000. */
+  /** Set for a universal key (ADR 0031); absent before migration 20261021051628. */
   owner_user_id?: string | null
   status: string
   credits_expire_at: string | null

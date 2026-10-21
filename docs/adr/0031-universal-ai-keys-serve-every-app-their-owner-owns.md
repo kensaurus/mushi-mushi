@@ -2,7 +2,7 @@
 
 Status: Proposed Date: 2026-10-21
 
-Related: migration `20261021090000_byok_keys_universal_scope.sql`,
+Related: migration `20261021051628_byok_keys_universal_scope.sql`,
 `_shared/byok-scope.ts`, `_shared/byok.ts` (`resolveLlmKeys`,
 `orderCandidates`), `_shared/spend-down.ts` (`firstCursorKeyFor`),
 `_shared/spend-down-db.ts` (`keyProjects`), `api/routes/settings-research.ts`

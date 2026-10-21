@@ -66,7 +66,7 @@ import {
 import { reviewFollowupStats, type ReviewFollowupStats } from './review-followup-stats.ts'
 import { log } from '../../_shared/logger.ts'
 
-/** owner_user_id is added by withOwnerUserColumn once migration 20261021090000 is applied. */
+/** owner_user_id is added by withOwnerUserColumn once migration 20261021051628 is applied. */
 const KEY_COLUMNS =
   'id, label, key_hint, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_run_at, spend_down_last_summary'
 
@@ -320,7 +320,7 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
     if (error) {
       if (error.code === '42703' || error.code === 'PGRST204') {
         return c.json(
-          { ok: false, error: { code: 'MIGRATION_PENDING', message: 'Resume needs migration 20261021120000_spend_down_stop_loss. Apply it, then retry.' } },
+          { ok: false, error: { code: 'MIGRATION_PENDING', message: 'Resume needs migration 20261021043903_spend_down_stop_loss. Apply it, then retry.' } },
           503,
         )
       }

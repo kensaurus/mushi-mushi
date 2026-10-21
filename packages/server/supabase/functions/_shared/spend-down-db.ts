@@ -345,7 +345,7 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
   const allIds = projects.map((p) => p.id)
   if (allIds.length === 0) return { ids: [], settings: new Map() }
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((o): o is string => !!o))]
-  // Before migration 20261021090000 there are no universal keys to weigh.
+  // Before migration 20261021051628 there are no universal keys to weigh.
   const columnReady = await ownerUserColumnReady(db)
   const ownersByOrg = columnReady ? await organizationOwnersByOrg(db, orgIds) : new Map<string, string[]>()
   const ownerIds = [...new Set([...ownersByOrg.values()].flat())]
