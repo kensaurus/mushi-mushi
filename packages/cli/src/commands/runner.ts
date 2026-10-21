@@ -48,10 +48,10 @@ import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId
 import { renderOverview, type CiOverview } from '../runner/overview.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
-export const HEARTBEAT_INTERVAL_MS = 120_000
+const HEARTBEAT_INTERVAL_MS = 120_000
 
 /** Test seams: the host, gh and the step runner. */
-export interface RunnerDeps {
+interface RunnerDeps {
   host: HostIO
   gh: GhExec
   /** Runs one step; returns its exit code. */

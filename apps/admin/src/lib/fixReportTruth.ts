@@ -162,7 +162,10 @@ export function fixReportLabel(fix: FixAttempt): string {
   return fix.report_title?.trim() || 'Untitled report'
 }
 
-/** Same words as the server's `_shared/fix-loop-status.ts` (ADR 0033). */
+/**
+ * Same words as the server's `_shared/fix-loop-status.ts` (ADR 0033).
+ * @internal Exported for tests only.
+ */
 export const CI_INFRA_STOPPED_LABEL = 'The test machine stopped — your fix was not tested'
 export const CI_INFRA_WAITING_LABEL = 'Waiting for a test machine'
 
@@ -170,6 +173,7 @@ export const CI_INFRA_WAITING_LABEL = 'Waiting for a test machine'
  * Plain words for an attempt's CI-machine state, or null when its CI has no
  * infra verdict. Mirrors the server's `fixCiInfraLabel`: waiting is not a
  * failure; the other infra kinds are.
+ * @internal Exported for tests only.
  */
 export function fixCiInfraLabel(fix: Pick<FixAttempt, 'ci_infra'>): string | null {
   if (!fix.ci_infra?.infra) return null

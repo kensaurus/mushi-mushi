@@ -22,7 +22,7 @@ import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../
 import { buildCiQueue, jobOutcome } from '../../lib/ciView'
 import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
 
-export type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
+type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
 
 
 interface Base extends Record<string, unknown> {
@@ -84,12 +84,13 @@ export interface CiJobNodeData extends Base {
   prNumber: number | null
 }
 
-export type CiMapNodeData = CiHostNodeData | CiRunnerNodeData | CiRepoNodeData | CiJobNodeData
+type CiMapNodeData = CiHostNodeData | CiRunnerNodeData | CiRepoNodeData | CiJobNodeData
 
 export interface CiMapEdgeData extends Record<string, unknown> {
   running: boolean
 }
 
+/** @internal Exported for tests only. */
 export const CI_NODE_SIZE: Record<CiMapNodeKind, { width: number; height: number }> = {
   host: { width: 232, height: 124 },
   runner: { width: 216, height: 104 },

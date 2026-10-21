@@ -30,7 +30,7 @@ export interface RepoAuditInput {
   isPublic: boolean | null
 }
 
-export interface AuditFinding {
+interface AuditFinding {
   severity: 'critical' | 'warn' | 'info'
   message: string
 }

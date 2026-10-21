@@ -21,7 +21,7 @@ export interface CiSignals {
   ci_infra?: CiInfraVerdict | null
 }
 
-export type CiState =
+type CiState =
   | 'passed'
   | 'running'
   | 'waiting_for_runner'

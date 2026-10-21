@@ -11,7 +11,7 @@
 
 import { oneLine } from '../command-helpers.js'
 
-export interface CiAdvice {
+interface CiAdvice {
   id: string
   /** 'high' | 'medium' | 'low' (server _shared/ci-overview-types.ts). */
   severity: string
@@ -69,7 +69,10 @@ function str(row: Row | null | undefined, ...keys: string[]): string | null {
   return typeof v === 'string' && v ? v : null
 }
 
-/** Seconds as "45 s", "8 min", "2.5 h". */
+/**
+ * Seconds as "45 s", "8 min", "2.5 h".
+ * @internal Exported for tests only.
+ */
 export function fmtSeconds(s: number | null | undefined): string {
   if (s == null || !Number.isFinite(s)) return 'unknown'
   if (s < 90) return `${Math.round(s)} s`
@@ -83,7 +86,7 @@ function fmtMb(mb: number | null): string {
 }
 
 /** "3 min ago" from an ISO time and now. */
-export function fmtAgo(iso: string | null, now: Date): string {
+function fmtAgo(iso: string | null, now: Date): string {
   if (!iso) return 'never'
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return 'unknown'

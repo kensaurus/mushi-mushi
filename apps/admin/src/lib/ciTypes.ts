@@ -8,7 +8,7 @@
  * Change the server first, then copy; the console never reshapes them.
  */
 
-export type CiJobKind =
+type CiJobKind =
   | 'passed'
   | 'skipped'
   | 'running'
@@ -31,11 +31,11 @@ export interface CiInfraVerdict {
   at: string
 }
 
-export type CiPermission = 'ok' | 'missing' | 'unknown'
+type CiPermission = 'ok' | 'missing' | 'unknown'
 export type CiRunnerKind = 'self_hosted' | 'github_hosted' | 'unknown'
 export type CiPlatform = 'linux' | 'wsl2' | 'macos' | 'windows'
 
-export interface CiHostRunner {
+interface CiHostRunner {
   name: string
   repo: string | null
   service: string | null
@@ -59,7 +59,7 @@ export interface CiHost {
   runners: CiHostRunner[]
 }
 
-export interface CiRunner {
+interface CiRunner {
   projectId: string
   repo: string
   name: string
@@ -73,7 +73,7 @@ export interface CiRunner {
   infraFailures7d: number
 }
 
-export interface CiRepo {
+interface CiRepo {
   projectId: string
   projectName: string
   repo: string
@@ -125,7 +125,7 @@ export interface CiAdvice {
   hostId?: string | null
 }
 
-export interface CiStats {
+interface CiStats {
   jobs: number
   passRate: number | null
   queueP50s: number | null

@@ -29,7 +29,10 @@ export function defaultRunnerKeyLabel(hostname: string): string {
   return (short || 'host').slice(0, 40).replace(/-+$/, '')
 }
 
-/** The plaintext key from the mint response, whatever the field is called. */
+/**
+ * The plaintext key from the mint response, whatever the field is called.
+ * @internal Exported for tests only.
+ */
 export function keyFromMintResponse(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
@@ -55,8 +58,9 @@ export function assertNotCliKey(runnerKey: string, cliKey: string | undefined): 
  * A key is written to disk only when it has this shape, so a confused or
  * hostile response can never put arbitrary text in a root-owned file.
  */
-export const RUNNER_KEY_SHAPE = /^mushi_[A-Za-z0-9_-]{8,128}$/
+const RUNNER_KEY_SHAPE = /^mushi_[A-Za-z0-9_-]{8,128}$/
 
+/** @internal Exported for tests only. */
 export function assertRunnerKeyShape(key: string): string {
   if (!RUNNER_KEY_SHAPE.test(key)) {
     throw new MushiCliError('E_INVALID_INPUT', 'That does not look like a Mushi key (mushi_…).', 'mint one with `mushi runner key`, or check MUSHI_RUNNER_KEY')
@@ -64,7 +68,7 @@ export function assertRunnerKeyShape(key: string): string {
   return key
 }
 
-export async function mintRunnerKey(config: CliConfig, projectId: string, label: string): Promise<string> {
+async function mintRunnerKey(config: CliConfig, projectId: string, label: string): Promise<string> {
   if (!LABEL_RE.test(label)) {
     throw new MushiCliError('E_INVALID_INPUT', `Key label "${label}" must be 1-40 lowercase letters, digits and hyphens.`)
   }

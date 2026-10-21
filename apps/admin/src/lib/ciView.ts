@@ -83,7 +83,10 @@ export const CI_OUTCOME_META: Record<CiJobOutcome, { label: string; glyph: strin
 /** Labels every self-hosted runner carries; they say nothing about which machine a job wants. */
 const GENERIC_LABELS = new Set(['self-hosted', 'linux', 'x64'])
 
-/** The runner label that names the machine a job is waiting for, if it asked for one. */
+/**
+ * The runner label that names the machine a job is waiting for, if it asked for one.
+ * @internal Exported for tests only.
+ */
 export function machineLabel(job: Pick<CiJob, 'labels'>): string | null {
   for (const label of job.labels ?? []) {
     if (!GENERIC_LABELS.has(label.toLowerCase())) return label
@@ -102,7 +105,7 @@ export function waitingHint(job: Pick<CiJob, 'labels' | 'ciKind' | 'runnerName'>
 
 // ── Queue (Waiting → Running → Finished) ────────────────────────────────────
 
-export const FINISHED_WINDOW_MS = 2 * 60 * 60 * 1000
+const FINISHED_WINDOW_MS = 2 * 60 * 60 * 1000
 
 export interface CiQueue {
   waiting: CiJob[]
@@ -219,8 +222,9 @@ export function buildFixLinks(fixes: ReadonlyArray<{ pr_url?: string | null; pr_
 
 // ── Timeline (one lane per runner) ──────────────────────────────────────────
 
+/** @internal Exported for tests only. */
 export const NO_RUNNER_LANE = 'No runner yet'
-export const UNKNOWN_RUNNER_LANE = 'Unknown machine'
+const UNKNOWN_RUNNER_LANE = 'Unknown machine'
 
 export interface CiTimelineBar {
   jobId: string
@@ -238,7 +242,7 @@ export interface CiTimelineBar {
   memPeakMb: number | null
 }
 
-export interface CiTimelineLane {
+interface CiTimelineLane {
   id: string
   label: string
   /** True for the "No runner yet" lane. */

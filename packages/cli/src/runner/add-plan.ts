@@ -38,7 +38,7 @@ import type { RunnerPlatform } from './host.js'
 import { HOOKS_DIR_NAME, HOOK_ENV_COMPLETED, HOOK_ENV_STARTED, hookScript } from './hooks.js'
 import { RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from './key.js'
 
-export type RunnerMode = 'ephemeral' | 'persistent'
+type RunnerMode = 'ephemeral' | 'persistent'
 export type RunnerArch = 'x64' | 'arm64'
 
 export interface AddPlanInput {
@@ -102,11 +102,11 @@ const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,39}$/
 const USER_RE = /^[a-z_][a-z0-9_-]{0,31}$/
 const MEMORY_RE = /^\d+(?:\.\d+)?[MG]$/
 
-export const RUNNER_ROOT = '/opt/mushi-runner'
-export const LIB_DIR = '/usr/local/lib/mushi-runner'
-export const ETC_DIR = '/etc/mushi-runner'
-export const UNIT_DIR = '/etc/systemd/system'
-export const SLICE = 'mushi-runner.slice'
+const RUNNER_ROOT = '/opt/mushi-runner'
+const LIB_DIR = '/usr/local/lib/mushi-runner'
+const ETC_DIR = '/etc/mushi-runner'
+const UNIT_DIR = '/etc/systemd/system'
+const SLICE = 'mushi-runner.slice'
 
 /** `mushi-<short hostname>`: lowercase letters, digits and dashes, ≤ 40 chars. */
 export function defaultLabel(hostname: string): string {
@@ -146,6 +146,7 @@ export function parseResolvers(resolvConf: string): string[] {
 /**
  * Set keys in an INI file (/etc/wsl.conf), keeping everything else. Returns
  * the new text, or null when every key already has the wanted value.
+ * @internal Exported for tests only.
  */
 export function mergeIni(existing: string, wanted: Record<string, Record<string, string>>): string | null {
   const lines = existing.replace(/\r\n/g, '\n').split('\n')
@@ -264,7 +265,7 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
       `${input.repo} is public. A pull request from a fork would run its code on this machine, and GitHub says self-hosted runners "should almost never be used for public repositories" (https://docs.github.com/en/actions/reference/security/secure-use). Use GitHub-hosted runners for it (public repos run free), or pass --allow-public if you accept that risk.`,
     )
   }
-  if (input.isPublic === true) warnings.push(`${input.repo} is public and --allow-public is set: any fork pull request your settings let run will run on this machine.`)
+  if (input.isPublic === true) warnings.push(`${input.repo} is public and --allow-public is set, so every fork pull request your settings let run will run on this machine.`)
   if (input.isPublic === null) warnings.push(`Could not read whether ${input.repo} is public; check it is private before you point workflows here.`)
   if (input.forkApproval === null) {
     warnings.push('Could not read the fork pull request approval setting (Settings → Actions → General).')
@@ -607,7 +608,10 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
   return { refused: null, steps, warnings, notes }
 }
 
-/** argv as a systemd ExecStart line: % doubled, arguments with spaces or quotes double-quoted. */
+/**
+ * argv as a systemd ExecStart line: % doubled, arguments with spaces or quotes double-quoted.
+ * @internal Exported for tests only.
+ */
 export function systemdArgv(argv: string[]): string {
   return argv
     .map((a) => a.replace(/%/g, '%%'))
@@ -618,6 +622,7 @@ export function systemdArgv(argv: string[]): string {
 /**
  * nftables rules that keep one uid off private networks. Its own table, made
  * idempotent with `table … {}` + `delete table …`; never `flush ruleset`.
+ * @internal Exported for tests only.
  */
 export function egressRules(uid: number, resolvers: string[]): string {
   const table = `mushi_runner_egress_${uid}`

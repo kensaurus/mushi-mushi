@@ -68,7 +68,7 @@ export const nodeHostIO: HostIO = {
   get hostname() { return hostname() },
 }
 
-export interface RunnerSample {
+interface RunnerSample {
   name: string
   repo: string | null
   service: string | null
@@ -100,8 +100,8 @@ export interface HeartbeatBody {
   runners: RunnerSample[]
 }
 
-export const HOST_ID_SALT = 'mushi-runner'
-export const MAX_RUNNERS = 40
+const HOST_ID_SALT = 'mushi-runner'
+const MAX_RUNNERS = 40
 
 export function detectPlatform(io: Pick<HostIO, 'platform' | 'readFile'>): RunnerPlatform {
   if (io.platform === 'darwin') return 'macos'
@@ -128,13 +128,14 @@ export function hashHostId(rawId: string): string {
   return createHash('sha256').update(`${rawId.trim()}${HOST_ID_SALT}`).digest('hex')
 }
 
-export interface MemInfo {
+interface MemInfo {
   totalMb: number
   availableMb: number
   swapTotalMb: number
   swapFreeMb: number
 }
 
+/** @internal Exported for tests only. */
 export function parseMeminfo(text: string): MemInfo | null {
   const kb = (key: string): number | null => {
     const m = text.match(new RegExp(`^${key}:\\s+(\\d+)\\s*kB`, 'm'))
@@ -151,13 +152,13 @@ export function parseMeminfo(text: string): MemInfo | null {
   }
 }
 
-export function parseLoadavg(text: string): number | null {
+function parseLoadavg(text: string): number | null {
   const v = Number(text.trim().split(/\s+/)[0])
   return Number.isFinite(v) ? v : null
 }
 
 /** macOS `sysctl vm.swapusage`: "total = 2048.00M  used = 1024.50M  free = ..." */
-export function parseSwapUsage(text: string): { totalMb: number; usedMb: number } | null {
+function parseSwapUsage(text: string): { totalMb: number; usedMb: number } | null {
   const total = text.match(/total\s*=\s*([\d.]+)M/)
   const used = text.match(/used\s*=\s*([\d.]+)M/)
   if (!total || !used) return null
@@ -171,6 +172,7 @@ const MUSHI_HELPER_UNITS = new Set(['mushi-runner-heartbeat.service', 'mushi-run
  * Runner unit names from `systemctl list-units --all 'actions.runner.*'
  * 'mushi-runner-*' --no-legend --plain`: GitHub's own svc.sh units and the
  * ones `mushi runner add` writes (mushi-runner-<label>.service).
+ * @internal Exported for tests only.
  */
 export function parseSystemctlUnits(text: string): string[] {
   const out: string[] = []
@@ -183,12 +185,15 @@ export function parseSystemctlUnits(text: string): string[] {
 }
 
 /** Label and repo from the Description `mushi runner add` writes: "Mushi GitHub Actions runner <label> for <owner/repo> …". */
-export function parseMushiUnitDescription(description: string | undefined): { name: string; repo: string } | null {
+function parseMushiUnitDescription(description: string | undefined): { name: string; repo: string } | null {
   const m = description?.match(/^Mushi GitHub Actions runner (\S+) for ([\w.-]+\/[\w.-]+)/)
   return m ? { name: m[1]!, repo: m[2]! } : null
 }
 
-/** `systemctl show <unit> -p A -p B` → { A: '...', B: '...' }. */
+/**
+ * `systemctl show <unit> -p A -p B` → { A: '...', B: '...' }.
+ * @internal Exported for tests only.
+ */
 export function parseSystemctlShow(text: string): Record<string, string> {
   const out: Record<string, string> = {}
   for (const line of text.split('\n')) {
@@ -202,6 +207,7 @@ export function parseSystemctlShow(text: string): Record<string, string> {
  * Runner name and repo from `actions.runner.<owner>-<repo>.<name>.service`.
  * The owner/repo split is ambiguous when either contains '-', so repo is
  * null unless exactly one '-' separates them. Prefer the runner's .runner file.
+ * @internal Exported for tests only.
  */
 export function parseUnitName(unit: string): { name: string; repo: string | null } | null {
   const m = unit.match(/^actions\.runner\.(.+)\.service$/)
@@ -217,7 +223,10 @@ export function parseUnitName(unit: string): { name: string; repo: string | null
   return { name, repo: owner && repo ? `${owner}/${repo}` : null }
 }
 
-/** The runner folder: WorkingDirectory, else the folder of ExecStart's program. */
+/**
+ * The runner folder: WorkingDirectory, else the folder of ExecStart's program.
+ * @internal Exported for tests only.
+ */
 export function runnerDirFromShow(props: Record<string, string>): string | null {
   const wd = props['WorkingDirectory']
   if (wd && wd.startsWith('/')) return wd
@@ -225,7 +234,10 @@ export function runnerDirFromShow(props: Record<string, string>): string | null 
   return path && path.startsWith('/') ? dirname(path) : null
 }
 
-/** The runner's own `.runner` file: { agentName, gitHubUrl }. Org-level runners have no repo. */
+/**
+ * The runner's own `.runner` file: { agentName, gitHubUrl }. Org-level runners have no repo.
+ * @internal Exported for tests only.
+ */
 export function parseRunnerFile(text: string): { name: string | null; repo: string | null } | null {
   let data: unknown
   try {
@@ -257,12 +269,15 @@ function bytesToMb(text: string | null): number | null {
   return Number.isFinite(n) ? Math.round(n / MB) : null
 }
 
-export function parseOomKills(eventsText: string | null): number | null {
+function parseOomKills(eventsText: string | null): number | null {
   const m = eventsText?.match(/^oom_kill\s+(\d+)/m)
   return m ? Number(m[1]) : null
 }
 
-/** Memory use, limit and OOM kills of a cgroup v2 path; the limit falls back to the parent slice. */
+/**
+ * Memory use, limit and OOM kills of a cgroup v2 path; the limit falls back to the parent slice.
+ * @internal Exported for tests only.
+ */
 export function readCgroupMemory(io: Pick<HostIO, 'readFile'>, controlGroup: string | undefined): {
   mem_current_mb: number | null
   mem_max_mb: number | null
@@ -304,7 +319,10 @@ function linuxRunners(io: HostIO): RunnerSample[] {
   return out
 }
 
-/** macOS, best effort: `launchctl list` rows "PID Status Label" for actions.runner.* agents. */
+/**
+ * macOS, best effort: `launchctl list` rows "PID Status Label" for actions.runner.* agents.
+ * @internal Exported for tests only.
+ */
 export function parseLaunchctlList(text: string): Array<{ label: string; running: boolean }> {
   const out: Array<{ label: string; running: boolean }> = []
   for (const line of text.split('\n')) {
