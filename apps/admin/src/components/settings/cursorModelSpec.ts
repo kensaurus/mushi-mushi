@@ -65,7 +65,17 @@ export function cursorModelSelection(
   return { modelId: id, custom: '', params }
 }
 
-/** Spec for a list choice. Parameter order follows the model's own list. */
+/** What parseCursorModelSpec on the server accepts as a param key or value. */
+const PLAIN_PARAM = /^[A-Za-z0-9_.-]{1,40}$/
+
+export function isPlainParam(text: string): boolean {
+  return PLAIN_PARAM.test(text)
+}
+
+/**
+ * Spec for a list choice. Parameter order follows the model's own list.
+ * A key or value the server would refuse (e.g. containing & = ?) is left out.
+ */
 export function cursorModelSpec(
   modelId: string,
   custom: string,
@@ -75,7 +85,7 @@ export function cursorModelSpec(
   if (!modelId) return ''
   if (modelId === CURSOR_MODEL_OTHER) return custom.trim()
   const q = (model?.parameters ?? [])
-    .filter((p) => params[p.id])
+    .filter((p) => params[p.id] && isPlainParam(p.id) && isPlainParam(params[p.id]))
     .map((p) => `${p.id}=${params[p.id]}`)
   return q.length > 0 ? `${modelId}?${q.join('&')}` : modelId
 }
