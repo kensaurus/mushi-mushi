@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   overview: null as unknown,
   projectId: 'p1' as string | null,
   paths: [] as Array<{ path: string | null; scope?: string }>,
+  error: null as unknown,
+  summary: '' as string,
 }))
 
 vi.mock('../lib/usePageData', () => ({
@@ -28,11 +30,16 @@ vi.mock('../lib/usePageData', () => ({
       : path?.startsWith('/v1/admin/fixes')
         ? { fixes: [{ id: 'f1', report_id: 'report-142', pr_url: 'https://github.com/kensaurus/glot.it/pull/142', pr_number: 142 }] }
         : null
-    return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    const error = path?.startsWith('/v1/admin/ci/overview') ? state.error : null
+    return { data, loading: false, error, isValidating: false, reload: () => {}, lastFetchedAt: null }
   },
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
-vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
+vi.mock('../lib/pageContext', () => ({
+  usePublishPageContext: (ctx: { summary: string }) => {
+    state.summary = ctx.summary
+  },
+}))
 vi.mock('../components/PageHeaderBar', async () => {
   const { createElement: h } = await import('react')
   return {
@@ -61,6 +68,8 @@ beforeEach(() => {
   state.overview = ciOverviewFixture()
   state.projectId = 'p1'
   state.paths = []
+  state.error = null
+  state.summary = ''
 })
 
 afterEach(() => {
@@ -175,5 +184,12 @@ describe('CiPage', () => {
     state.projectId = null
     await render()
     expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+  })
+
+  it('says the page could not load, not that it is still loading, when the overview fails', async () => {
+    state.overview = null
+    state.error = 'HTTP_ERROR: 404 Not Found'
+    await render()
+    expect(state.summary).toBe("CI runners couldn't load")
   })
 })
