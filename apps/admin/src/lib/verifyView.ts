@@ -32,7 +32,9 @@ export interface StatusMeta {
   tone: StatusSeverity
 }
 
-/** Glyph + word per gate status: the tone only repeats what the word says. */
+/** Glyph + word per gate status: the tone only repeats what the word says.
+ * @internal Exported for tests only.
+ */
 export const GATE_STATUS_META: Record<VerifyGateStatus, StatusMeta> = {
   pass: { glyph: '✓', word: 'Passed', tone: 'ok' },
   fail: { glyph: '✕', word: 'Failed', tone: 'danger' },
@@ -80,7 +82,7 @@ export function autoMergeView(state: string, detail: string | null | undefined):
   return { ...meta, sentence: extra ? `${meta.sentence} ${extra}` : meta.sentence }
 }
 
-export const REGRESSION_SIGNAL_LABEL: Record<RegressionSignal, string> = {
+const REGRESSION_SIGNAL_LABEL: Record<RegressionSignal, string> = {
   ci_failed_on_merge: 'CI failed on the merged commit',
   report_reopened: 'The bug report was reopened',
   new_report_in_changed_file: 'A new bug report points at a file this fix changed',
@@ -110,7 +112,9 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v : null
 }
 
-/** A regression row in either the API's camelCase or the table's snake_case. */
+/** A regression row in either the API's camelCase or the table's snake_case.
+ * @internal Exported for tests only.
+ */
 export function normalizeRegression(raw: unknown, index = 0): FixRegression | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -160,7 +164,7 @@ export const VERIFY_BOUNDS = {
   globMax: 200,
 } as const
 
-export const RUNNER_LABEL_RE = /^[A-Za-z0-9._-]{1,64}$/
+const RUNNER_LABEL_RE = /^[A-Za-z0-9._-]{1,64}$/
 
 export const SECOND_JUDGE_CHOICES: ReadonlyArray<{ value: SecondJudgeChoice; label: string }> = [
   { value: 'auto', label: 'Automatic: OpenAI, then OpenRouter' },
@@ -193,7 +197,7 @@ export interface VerifyDraft {
   auto_revert: AutoRevertChoice
 }
 
-export type VerifyField = keyof VerifyDraft
+type VerifyField = keyof VerifyDraft
 
 export type VerifyErrors = Partial<Record<VerifyField, string>>
 

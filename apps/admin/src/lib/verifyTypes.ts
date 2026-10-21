@@ -10,7 +10,7 @@
  * then copy; the console never reshapes them.
  */
 
-export type VerifyGateId = 'review' | 'second_review' | 'ci' | 'fail_to_pass' | 'protected' | 'budget'
+type VerifyGateId = 'review' | 'second_review' | 'ci' | 'fail_to_pass' | 'protected' | 'budget'
 
 export type VerifyGateStatus = 'pass' | 'fail' | 'pending' | 'unavailable' | 'not_set_up'
 
@@ -69,7 +69,7 @@ export interface VerifyWorkflowPrResponse {
 }
 
 /** `fix_verifications.second_judge`. */
-export interface SecondJudgeResult {
+interface SecondJudgeResult {
   provider: string
   model: string
   verdict: 'merge' | 'fix_first' | 'hold' | null
