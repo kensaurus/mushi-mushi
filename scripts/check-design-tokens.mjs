@@ -881,7 +881,8 @@ const themeTokenCss = readFileSync(resolve(TOKEN_STYLES_DIR, 'theme-tokens.css')
 const declaredViz = vizNamesIn(themeTokenCss, VIZ_NAME_RE)
 const readViz = new Set()
 for (const file of files) {
-  if (!/\.tsx?$/.test(file)) continue
+  // Tests probe readVizToken() with made-up names; those are not tokens.
+  if (!/\.tsx?$/.test(file) || /\.(test|spec)\.tsx?$/.test(file)) continue
   for (const name of vizNamesIn(readFileSync(file, 'utf8'), VIZ_READ_RE)) readViz.add(name)
 }
 
