@@ -46,9 +46,14 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // re-run route their terminal path (surface parity), with the runner setup plan
 // builder, host probes and job hook scripts. No new dependencies; the growth is
 // that code, measured at cli 204.0/776.3 kB packed/unpacked.
+//
+// Raised 2026-10-22 (Plan 024, ADR 0035): `mushi fixes verify` and `mushi
+// verify workflow` give the verified-merge gates and the mushi-verify workflow
+// their terminal path (surface parity). No new dependencies; the growth is the
+// gate renderer and the workflow writer, measured at cli 205.7/782.1 kB.
 export const BUDGETS = [
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 205_000, unpacked: 790_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 210_000, unpacked: 800_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`
