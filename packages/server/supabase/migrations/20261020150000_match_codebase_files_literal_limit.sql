@@ -59,10 +59,14 @@ begin
 
   if path_prefix is not null then
     select count(*) into prefix_rows
-    from project_codebase_files pcf
-    where pcf.project_id = match_project
-      and pcf.tombstoned_at is null
-      and (pcf.file_path = path_prefix or pcf.file_path like path_prefix || '/%');
+    from (
+      select 1
+      from project_codebase_files pcf
+      where pcf.project_id = match_project
+        and pcf.tombstoned_at is null
+        and (pcf.file_path = path_prefix or pcf.file_path like path_prefix || '/%')
+      limit 2001
+    ) bounded;
   end if;
 
   if path_prefix is not null and prefix_rows <= 2000 then
@@ -144,5 +148,8 @@ begin
   using query_embedding, match_project, path_prefix;
 end;
 $function$;
+
+comment on function public.match_codebase_files(extensions.vector, uuid, integer, text) is
+  'Nearest codebase files by embedding. match_count is clamped to 1..20: larger values return at most 20 rows, 0 or negative returns 1, null returns 5.';
 
 notify pgrst, 'reload schema';

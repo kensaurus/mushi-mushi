@@ -55,6 +55,19 @@ describe('match_codebase_files literal limit', () => {
     expect(sql).toMatch(/set ivfflat\.max_probes to '60'/)
   })
 
+  it('stops the prefix count once it passes the 2000-row threshold', () => {
+    const count = sliceBetween(sql, 'select count(*) into prefix_rows', 'end if;')
+    expect(count).toMatch(/from \(\s*select 1\s+from project_codebase_files pcf/)
+    expect(count).toMatch(/limit 2001\s*\) bounded;/)
+    expect(sql).toContain('prefix_rows <= 2000')
+  })
+
+  it('documents the 20-row ceiling on the function', () => {
+    expect(sql).toMatch(
+      /comment on function public\.match_codebase_files\(extensions\.vector, uuid, integer, text\) is\s+'[^']*clamped to 1\.\.20[^']*'/,
+    )
+  })
+
   it('no caller asks for more rows than the 20-row cap', () => {
     const fns = resolve(__dirname, '../../supabase/functions')
     const read = (p: string) => readFileSync(resolve(fns, p), 'utf8')
