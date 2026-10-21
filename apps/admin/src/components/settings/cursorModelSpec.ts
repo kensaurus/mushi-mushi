@@ -5,7 +5,7 @@
  *          (`id` or `id?param=value&…`). Used by CursorModelPicker.
  */
 
-export interface CursorModelParamValue {
+interface CursorModelParamValue {
   value: string
   displayName?: string
 }
