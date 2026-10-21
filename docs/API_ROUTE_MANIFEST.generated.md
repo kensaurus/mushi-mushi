@@ -2,14 +2,14 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-21 · **702** routes.
+> Generated: 2026-10-21 · **705** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 177 |
-| `apiKeyAuth` | 58 |
+| `adminOrApiKey` | 179 |
+| `apiKeyAuth` | 59 |
 | `jwtAuth` | 358 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
@@ -88,6 +88,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/byok/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/spend-down/projects/:projectId/resume` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
+| GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/clusters` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | GET | `/v1/admin/clusters/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | POST | `/v1/admin/clusters/:id/promote` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
@@ -136,6 +137,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | GET | `/v1/admin/fixes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | PATCH | `/v1/admin/fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| POST | `/v1/admin/fixes/:id/ci/rerun` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | POST | `/v1/admin/fixes/:id/merge` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/refresh-ci` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
@@ -585,6 +587,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/ingest/recipe` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
 | POST | `/v1/ingest/recipe/csv` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
 | POST | `/v1/ingest/recipe/events` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
+| POST | `/v1/ingest/runner` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | POST | `/v1/ingest/spans` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/intake/voice` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | GET | `/v1/intake/voice/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
