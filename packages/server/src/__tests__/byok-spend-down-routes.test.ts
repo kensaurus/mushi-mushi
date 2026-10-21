@@ -3,18 +3,24 @@
  * PURPOSE: GET /v1/admin/byok/spend-down and PATCH
  *          /v1/admin/byok/keys/:keyId/spend-down (ADR 0028), through the real
  *          handlers on an in-memory database: validation, who may change a
- *          shared key (ADR 0023), Cursor keys only, the expiry rule, and the
- *          status the console and MCP read.
+ *          shared key (ADR 0023), Cursor keys only, the expiry rule, the
+ *          status the console and MCP read (scoreboard, stop-loss, limited to
+ *          the apps the caller can open, degrading to null on a failed read),
+ *          and Resume.
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
+
+type FakeDbOptions = NonNullable<Parameters<typeof makeFakeDb>[1]>
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
   authMethod: 'jwt' as 'jwt' | 'apiKey',
   orgRole: 'owner' as string | null,
   projectRole: 'owner' as string | null,
+  /** projectId → the caller's role there (userCanAccessProject); absent = no access. */
+  access: { '1000000a-0000-4000-8000-000000000000': 'owner' } as Record<string, string>,
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -28,6 +34,7 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, createLogger: () => fakeLog }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 vi.mock('../../supabase/functions/_shared/entitlements.ts', () => ({
   requireFeature: () => async (_c: unknown, next: () => Promise<void>) => next(),
@@ -39,6 +46,10 @@ vi.mock('../../supabase/functions/api/shared.ts', () => ({
   resolveOwnedProject: async () => ({
     project: { id: P1, name: 'app', organization_id: ORG, organization_role: state.projectRole },
   }),
+  userCanAccessProject: async (_db: unknown, _user: string, projectId: string) => ({
+    allowed: !!state.access[projectId],
+    role: state.access[projectId] ?? null,
+  }),
 }))
 
 let routes: typeof import('../../supabase/functions/api/routes/byok-spend-down.ts')
@@ -48,6 +59,7 @@ beforeAll(async () => {
 
 const ORG = '0000000a-0000-4000-8000-000000000000'
 const P1 = '1000000a-0000-4000-8000-000000000000'
+const P2 = '1000000b-0000-4000-8000-000000000000'
 const SHARED = '2000000a-0000-4000-8000-000000000000'
 const OWN = '2000000b-0000-4000-8000-000000000000'
 const OPENAI = '2000000c-0000-4000-8000-000000000000'
@@ -59,6 +71,7 @@ class FakeApp {
   routes: Array<{ method: string; path: string; handlers: Handler[] }> = []
   get(path: string, ...h: Handler[]) { this.routes.push({ method: 'GET', path, handlers: h }) }
   patch(path: string, ...h: Handler[]) { this.routes.push({ method: 'PATCH', path, handlers: h }) }
+  post(path: string, ...h: Handler[]) { this.routes.push({ method: 'POST', path, handlers: h }) }
   async call(method: string, path: string, params: Record<string, string>, body?: unknown): Promise<Res> {
     const route = this.routes.find((r) => r.method === method && r.path === path)
     if (!route) throw new Error(`no route ${method} ${path}`)
@@ -73,7 +86,7 @@ class FakeApp {
   }
 }
 
-function setup(): { db: FakeDb; app: FakeApp } {
+function setup(options: Partial<FakeDbOptions> = {}): { db: FakeDb; app: FakeApp } {
   const db = makeFakeDb(
     {
       projects: [{ id: P1, name: 'tsumagoi', organization_id: ORG }],
@@ -87,7 +100,7 @@ function setup(): { db: FakeDb; app: FakeApp } {
       ],
       fix_dispatch_jobs: [],
     },
-    { autoId: true },
+    { autoId: true, ...options },
   )
   state.db = db
   const app = new FakeApp()
@@ -172,5 +185,189 @@ describe('GET spend-down', () => {
     expect(s).toMatchObject({ scope: 'organization', state: 'active', dispatchedToday: 0, remainingToday: 10, projects: [] })
     const own = keys.find((k) => k.id === OWN)!
     expect(own).toMatchObject({ scope: 'project', state: 'off', projects: [{ id: P1, name: 'tsumagoi' }] })
+    expect(own.scoreboard).toMatchObject({ days: 7, rows: [], totals: { runs: 0, mergeableYield: null } })
+  })
+
+  it("returns each key's last-7-days scoreboard and each app's stop-loss state", async () => {
+    state.authMethod = 'jwt'
+    const { db, app } = setup()
+    const at = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString()
+    const meta = { source: 'spend_down', spend_down_key_id: OWN, model_override: 'grok-4.7' }
+    // 10 PRs reviewed: 1 merge (merged), 2 hold, 7 fix_first, plus 2 no-PR runs, 1 Cursor error,
+    // and one 8 days old that the scoreboard leaves out (the stop-loss, 14 days, still reads it).
+    for (let i = 0; i < 14; i++) {
+      const id = `00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}`
+      const old = i === 13
+      db.table('fix_dispatch_jobs').push({
+        id: `j${i}`, project_id: P1, report_id: `r${i}`, status: 'completed', fix_attempt_id: id,
+        created_at: old ? at(8 * 24 * 60) : at(i + 1), dispatch_metadata: meta,
+      })
+      const noPr = i === 10 || i === 11
+      const apiError = i === 12
+      db.table('fix_attempts').push({
+        id, project_id: P1, report_id: `r${i}`, agent: 'cursor_cloud',
+        status: noPr || apiError ? 'failed' : 'completed',
+        pr_url: noPr || apiError ? null : `https://github.com/a/b/pull/${i + 1}`,
+        failure_category: noPr ? 'needs_human' : apiError ? 'cursor_api_error' : null,
+        merged_at: i === 0 ? at(0) : null,
+      })
+      if (i < 10 || old) {
+        db.table('fix_reviews').push({
+          fix_attempt_id: id, verdict: i === 0 ? 'merge' : i < 3 ? 'hold' : 'fix_first',
+          reviewed_at: at(i), cost_usd: '0.5000',
+        })
+      }
+    }
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect((own.scoreboard as { totals: unknown }).totals).toMatchObject({
+      runs: 13, prsOpened: 10, noPrVerdicts: 2, otherFailures: 1, reviewed: 10,
+      verdicts: { merge: 1, fix_first: 7, hold: 2 }, merged: 1, latestReviewCostUsd: 5,
+      mergeYield: 1 / 13, mergeableYield: 1 / 13,
+    })
+    expect((own.scoreboard as { rows: Array<Record<string, unknown>> }).rows[0]).toMatchObject({ keyId: OWN, projectId: P1, model: 'grok-4.7' })
+    const [project] = own.projects as Array<{ id: string; stopLoss: Record<string, unknown> }>
+    expect(project.id).toBe(P1)
+    // 11 reviews (the 8-day-old one counts): under 20, so cold start.
+    expect(project.stopLoss).toMatchObject({ paused: false, reviewed: 11, mergeVerdicts: 1, mergeUpper: null })
+    expect(own).toMatchObject({ otherApps: 0, projectsNote: null, stopLossNote: null, scoreboardNote: null })
+    expect(own.projects).toMatchObject([{ id: P1, canResume: true }])
+  })
+
+  it('a member sees the pause but cannot Resume; a failed app-name read is a note, not a silent empty list', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'member' }
+    let { app } = setup()
+    let own = ((await app.call('GET', '/v1/admin/byok/spend-down', {})).body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect(own.projects).toMatchObject([{ id: P1, canResume: false }])
+
+    state.access = { [P1]: 'owner' }
+    // `projects` reads, in order: the shared key's served apps, OWN's served
+    // apps, then OWN's app names; fail only the names.
+    let reads = 0
+    ;({ app } = setup({ failRead: (t) => (t === 'projects' && ++reads === 3 ? 'boom' : null) }))
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    expect(res.status).toBe(200)
+    own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect(own).toMatchObject({ projects: [], projectsNote: 'The apps this key pays for could not be read just now.' })
+  })
+
+  it('shows a paused app with its reason', async () => {
+    state.authMethod = 'jwt'
+    const { db, app } = setup()
+    for (let i = 0; i < 20; i++) {
+      const id = `00000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`
+      const created = new Date(Date.now() - (i + 1) * 60_000).toISOString()
+      db.table('fix_dispatch_jobs').push({ id: `p${i}`, project_id: P1, report_id: `r${i}`, status: 'completed', fix_attempt_id: id, created_at: created, dispatch_metadata: { source: 'spend_down', spend_down_key_id: OWN } })
+      db.table('fix_attempts').push({ id, project_id: P1, status: 'completed', pr_url: `https://github.com/a/b/pull/${i}` })
+      db.table('fix_reviews').push({ fix_attempt_id: id, verdict: i === 0 ? 'merge' : 'fix_first', reviewed_at: created })
+    }
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect((own.projects as Array<{ stopLoss: Record<string, unknown> }>)[0].stopLoss).toMatchObject({
+      paused: true,
+      reason: 'Paused: 1 of the last 20 reviewed fixes were mergeable (5%)',
+    })
+  })
+})
+
+describe('GET spend-down: who sees what (a shared key pays for apps the caller cannot open)', () => {
+  function sharedSetup() {
+    const { db, app } = setup()
+    db.table('byok_keys').splice(db.table('byok_keys').findIndex((k) => k.id === OWN), 1)
+    Object.assign(db.table('byok_keys').find((k) => k.id === SHARED)!, {
+      spend_down_enabled: true,
+      credits_expire_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      spend_down_last_summary: {
+        projects: [
+          { projectId: P1, dispatched: 1 },
+          { projectId: P2, dispatched: 0, stopped: 'No open report to fix' },
+        ],
+      },
+    })
+    db.table('projects').push({ id: P2, name: 'secret-app', organization_id: ORG })
+    db.table('project_settings').push({ project_id: P2, autofix_enabled: true })
+    db.table('project_repos').push({ project_id: P2 })
+    const meta = { source: 'spend_down', spend_down_key_id: SHARED, model_override: 'grok' }
+    const created = new Date(Date.now() - 60_000).toISOString()
+    for (const [pid, n] of [[P1, 2], [P2, 3]] as const) {
+      for (let i = 0; i < n; i++) {
+        db.table('fix_dispatch_jobs').push({ id: `${pid}-${i}`, project_id: pid, report_id: `r${i}`, status: 'failed', fix_attempt_id: null, created_at: created, dispatch_metadata: meta })
+      }
+    }
+    return { db, app }
+  }
+
+  it('a console user sees only the apps they can open; totals stay key-wide', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'member' }
+    const { app } = sharedSetup()
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const shared = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === SHARED)!
+    expect((shared.projects as Array<{ id: string }>).map((p) => p.id)).toEqual([P1])
+    expect(shared.otherApps).toBe(1)
+    const board = shared.scoreboard as { totals: { runs: number }; rows: Array<{ projectId: string }> }
+    expect(board.totals.runs).toBe(5)
+    expect(board.rows.map((r) => r.projectId)).toEqual([P1])
+    expect((shared.lastSummary as { projects: Array<{ projectId: string }> }).projects.map((p) => p.projectId)).toEqual([P1])
+    expect(JSON.stringify(res.body)).not.toContain('secret-app')
+    state.access = { [P1]: 'owner' }
+  })
+
+  it('an API key sees its own app only, even when its user could open more', async () => {
+    state.authMethod = 'apiKey'
+    state.access = { [P1]: 'owner', [P2]: 'owner' }
+    const { app } = sharedSetup()
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const shared = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === SHARED)!
+    expect((shared.projects as Array<{ id: string }>).map((p) => p.id)).toEqual([P1])
+    expect((shared.scoreboard as { rows: Array<{ projectId: string }> }).rows.map((r) => r.projectId)).toEqual([P1])
+    state.access = { [P1]: 'owner' }
+  })
+})
+
+describe('GET spend-down degrades instead of failing', () => {
+  it('a failed yield or scoreboard read gives nulls with a note and keeps the rest', async () => {
+    state.authMethod = 'jwt'
+    const { db, app } = setup({ failRead: (t) => (t === 'fix_reviews' ? 'boom' : null) })
+    const aid = '00000000-0000-4000-8000-000000000999'
+    db.table('fix_dispatch_jobs').push({ id: 'jx', project_id: P1, report_id: 'rx', status: 'completed', fix_attempt_id: aid, created_at: new Date(Date.now() - 60_000).toISOString(), dispatch_metadata: { source: 'spend_down', spend_down_key_id: OWN } })
+    db.table('fix_attempts').push({ id: aid, project_id: P1, status: 'completed', pr_url: 'https://github.com/a/b/pull/9' })
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    expect(res.status).toBe(200)
+    const own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect(own).toMatchObject({
+      dispatchedToday: 1,
+      projects: [{ id: P1, stopLoss: null }],
+      scoreboard: null,
+      scoreboardNote: 'The last 7 days could not be read just now.',
+      stopLossNote: 'The yield of some apps could not be read just now.',
+    })
+  })
+})
+
+describe('POST spend-down resume', () => {
+  const RESUME = '/v1/admin/byok/spend-down/projects/:projectId/resume'
+  it("an app's owner or admin stamps the reset time", async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'admin' }
+    const { db, app } = setup()
+    const res = await app.call('POST', RESUME, { projectId: P1 })
+    expect(res.status).toBe(200)
+    const row = db.table('project_settings').find((s) => s.project_id === P1)!
+    expect(row.spend_down_stop_loss_reset_at).toBe((res.body.data as { resetAt: string }).resetAt)
+    state.access = { [P1]: 'owner' }
+  })
+
+  it('a member or viewer may not; an app the caller cannot open is not found; ids are checked', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'viewer' }
+    let { app } = setup()
+    expect((await app.call('POST', RESUME, { projectId: P1 })).body.error?.code).toBe('FORBIDDEN')
+    state.access = {}
+    ;({ app } = setup())
+    expect((await app.call('POST', RESUME, { projectId: P1 })).status).toBe(404)
+    expect((await app.call('POST', RESUME, { projectId: 'nope' })).body.error?.code).toBe('INVALID_PROJECT_ID')
+    state.access = { [P1]: 'owner' }
   })
 })
