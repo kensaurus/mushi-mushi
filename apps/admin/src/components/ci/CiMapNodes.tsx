@@ -77,7 +77,7 @@ function HostNodeInner({ id, data }: NodeProps) {
     d.variant === 'github'
       ? 'GitHub runs these machines; Mushi sees their jobs only.'
       : d.variant === 'unknown'
-        ? 'Runners with no heartbeat. Run mushi runner heartbeat on the machine.'
+        ? 'Runners with no heartbeat. Run mushi runner key on the machine to set one up.'
         : `${platform ?? 'Machine'}${d.cpuCount ? ` · ${d.cpuCount} CPUs` : ''}${d.load1 != null ? ` · load ${d.load1.toFixed(1)}` : ''}`
   return (
     <NodeShell id={id} label={`Machine ${d.title}. ${sub}. Open details.`}>

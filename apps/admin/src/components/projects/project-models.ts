@@ -5,7 +5,7 @@
 import { CHIP_TONE } from '../../lib/chipTone'
 import type { SdkStatus } from '../SdkVersionBadge'
 
-export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice'
+export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice' | 'runner'
 
 export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
   {
@@ -32,6 +32,12 @@ export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: st
     scopes: ['voice:write'],
     hint: 'For a phone (iPhone Shortcut) — submit voice transcripts and confirm them, nothing else.',
   },
+  {
+    id: 'runner',
+    label: 'Runner health',
+    scopes: ['runner:write'],
+    hint: "For mushi runner on a CI machine. It can only report runner health, so a stolen key can't read or change anything.",
+  },
 ]
 
 export function isScopePresetId(value: string | null | undefined): value is ScopePresetId {
@@ -41,7 +47,8 @@ export function isScopePresetId(value: string | null | undefined): value is Scop
 export function scopeBadgeTone(scope: string): string {
   if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
   if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
-  if (scope === 'voice:write') return CHIP_TONE.warnSubtle
+  // Narrow write-only keys (a phone, a CI machine) share one tone.
+  if (scope === 'voice:write' || scope === 'runner:write') return CHIP_TONE.warnSubtle
   return CHIP_TONE.neutral
 }
 

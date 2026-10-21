@@ -161,7 +161,8 @@ export function CiPage() {
       {data && empty && (
         <EmptyState
           title="No CI jobs seen yet"
-          description="Mushi shows runners once GitHub reports a job for this app's repositories, or once you run “mushi runner heartbeat” on a machine that runs your tests."
+          description="Mushi shows runners once GitHub reports a job for this app's repositories, or once a machine that runs your tests reports in: run these two commands on it."
+          hints={['mushi runner key', 'mushi runner hooks install --dir <runner dir>']}
           action={
             <Btn size="sm" variant="ghost" href={docsUrl('/operating/ci-runners')}>
               How to set up CI runners

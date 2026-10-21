@@ -86,7 +86,8 @@ function content(o: CiOverview, nodeId: string): { title: string; subtitle: stri
       body: (
         <>
           <p className="text-xs text-fg-secondary">
-            Run <code className="font-mono">mushi runner heartbeat</code> on the machine that hosts them to fill this in.
+            On the machine that hosts them, run <code className="font-mono">mushi runner key</code>, then{' '}
+            <code className="font-mono">mushi runner hooks install --dir &lt;runner dir&gt;</code>, to fill this in.
           </p>
           <RecentJobs jobs={o.jobs.filter((j) => j.runnerName && names.has(j.runnerName))} empty="No recent jobs on these runners." />
         </>
