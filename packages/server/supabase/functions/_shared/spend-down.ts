@@ -400,6 +400,13 @@ export interface SpendDownStopLoss {
   resumedBy: SpendDownResumedBy | null
   /** When the current pause began (kept across ticks), else null. */
   pausedAt: string | null
+  /**
+   * Set on a probe-driven resume: the dispatch time of the oldest resuming
+   * probe. The caller stores it as the app's stop-loss reset, so later ticks
+   * count only the probes and what follows, not the old window that paused
+   * the app (which would pause it again on the next tick).
+   */
+  resetAt: string | null
   reviewed: number
   mergeVerdicts: number
   holdVerdicts: number
@@ -492,7 +499,7 @@ export function spendDownStopLoss(
     if (holdLower != null && holdLower > SPEND_DOWN_MAX_HOLD_RATE) reasons.push(holdLine)
     if (noPrLower != null && noPrLower > SPEND_DOWN_MAX_NO_PR_SHARE) reasons.push(noPrLine)
     if (reasons.length === 0) {
-      return { paused: false, reason: null, transition: null, resumedBy: null, pausedAt: null, ...stats }
+      return { paused: false, reason: null, transition: null, resumedBy: null, pausedAt: null, resetAt: null, ...stats }
     }
     return {
       paused: true,
@@ -500,18 +507,17 @@ export function spendDownStopLoss(
       transition: 'paused',
       resumedBy: null,
       pausedAt: now.toISOString(),
+      resetAt: null,
       ...stats,
     }
   }
 
   // Paused: probe-driven recovery first, then the hysteresis lines.
   const pausedAt = previous.pausedAt
-  const probeVerdicts = reviews.filter((r) => r.probe && (!pausedAt || r.at >= pausedAt)).map((r) => r.verdict)
-  if (
-    probeVerdicts.length >= SPEND_DOWN_PROBE_RECOVERY &&
-    probeVerdicts.slice(0, SPEND_DOWN_PROBE_RECOVERY).every((v) => v === 'merge')
-  ) {
-    return { paused: false, reason: null, transition: 'resumed', resumedBy: 'probes', pausedAt: null, ...stats }
+  const probes = reviews.filter((r) => r.probe && (!pausedAt || r.at >= pausedAt)).slice(0, SPEND_DOWN_PROBE_RECOVERY)
+  if (probes.length >= SPEND_DOWN_PROBE_RECOVERY && probes.every((r) => r.verdict === 'merge')) {
+    const resetAt = probes.map((r) => r.at).sort()[0]
+    return { paused: false, reason: null, transition: 'resumed', resumedBy: 'probes', pausedAt: null, resetAt, ...stats }
   }
   const holding: string[] = []
   if (enoughReviews && (mergeRate ?? 0) <= SPEND_DOWN_RESUME_MERGE_RATE) {
@@ -524,10 +530,44 @@ export function spendDownStopLoss(
     holding.push(`${noPrLine}, resumes under ${pct(SPEND_DOWN_RESUME_NO_PR_SHARE)}`)
   }
   if (holding.length > 0) {
-    return { paused: true, reason: `Paused: ${holding.join('; ')}`, transition: null, resumedBy: null, pausedAt, ...stats }
+    return {
+      paused: true,
+      reason: `Paused: ${holding.join('; ')}`,
+      transition: null,
+      resumedBy: null,
+      pausedAt,
+      resetAt: null,
+      ...stats,
+    }
   }
   const resumedBy: SpendDownResumedBy = enoughReviews || enoughRuns ? 'rates' : 'samples_aged_out'
-  return { paused: false, reason: null, transition: 'resumed', resumedBy, pausedAt: null, ...stats }
+  return { paused: false, reason: null, transition: 'resumed', resumedBy, pausedAt: null, resetAt: null, ...stats }
+}
+
+/** The later of two ISO times (either may be missing). */
+function laterIso(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null
+  if (!b) return a
+  return a > b ? a : b
+}
+
+/**
+ * Each app's effective stop-loss reset: the later of the console Resume
+ * (`project_settings.spend_down_stop_loss_reset_at`) and the reset the worker
+ * carried in the last tick's summary (`stopLossResetAt`, written on a
+ * probe-driven resume and kept every tick, so it holds even before the
+ * column exists).
+ */
+export function effectiveStopLossResets(dbResets: Map<string, string>, summary: unknown): Map<string, string> {
+  const out = new Map(dbResets)
+  const projects = (summary as { projects?: unknown } | null | undefined)?.projects
+  if (!Array.isArray(projects)) return out
+  for (const p of projects as Array<{ projectId?: unknown; stopLossResetAt?: unknown }>) {
+    if (typeof p?.projectId !== 'string' || typeof p.stopLossResetAt !== 'string') continue
+    const later = laterIso(out.get(p.projectId), p.stopLossResetAt)
+    if (later) out.set(p.projectId, later)
+  }
+  return out
 }
 
 /**

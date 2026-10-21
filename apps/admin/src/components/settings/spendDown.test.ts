@@ -4,7 +4,6 @@ import {
   spendDownPauses,
   spendDownScoreLine,
   spendDownStops,
-  type SpendDownCounts,
   type SpendDownKeyStatus,
 } from './spendDown'
 
@@ -76,6 +75,8 @@ describe('spendDownStops', () => {
   })
 })
 
+type SpendDownCounts = NonNullable<SpendDownKeyStatus['scoreboard']>['totals']
+
 const totals = (over: Partial<SpendDownCounts> = {}): SpendDownCounts => ({
   runs: 258,
   inFlight: 0,
@@ -140,7 +141,7 @@ describe('spendDownPauses', () => {
       },
     }
     expect(spendDownPauses(k)).toEqual([
-      { projectId: 'p1', text: 'tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)' },
+      { projectId: 'p1', text: 'tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)', canResume: false },
     ])
     expect(spendDownStops(k)).toEqual([])
   })

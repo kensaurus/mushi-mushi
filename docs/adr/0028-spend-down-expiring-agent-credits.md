@@ -124,7 +124,12 @@ the worker before it dispatches to an app):
 - **Probe.** A paused app still gets 1 spend-down dispatch per UTC day
   (`dispatch_metadata.spend_down_probe`), inside the key's limit and the
   app's auto-fix caps, so evidence keeps arriving. It resumes at once when its
-  newest 2 reviewed probes since the pause both got "merge".
+  newest 2 reviewed probes since the pause both got "merge". That resume
+  acts as a reset at the older resuming probe's dispatch time: the worker
+  writes it to `spend_down_stop_loss_reset_at` (service role) and also keeps
+  it in the tick summary (`stopLossResetAt`). Without it, the next tick would
+  read the same window again and pause again (for example 1 merge in 38 old
+  reviews plus 2 merged probes is still an upper bound of 17%).
 - **Resume.** An app's owner or admin can resume it in the console. This sets
   `project_settings.spend_down_stop_loss_reset_at`; samples before it are
   ignored, so the app is back in cold start. The reset is per app, not per key
@@ -134,10 +139,18 @@ the worker before it dispatches to an app):
 - **Trace.** A paused app is in the tick summary (`spend_down_last_summary`)
   with `paused`, `pausedAt`, its rates and bounds, and a plain-words reason
   (e.g. "Paused: 1 of the last 20 reviewed fixes were mergeable (5%)"). Apps
-  the tick did not reach (the key's limit ran out) are carried forward with
-  `carried: true`. One structured log line (`spend-down.paused` /
+  the tick did not reach (the key's limit ran out), and every app while the
+  key is out of its window or unusable, are carried forward with
+  `carried: true`, pause and reset included. One structured log line (`spend-down.paused` /
   `spend-down.resumed`, with `resumedBy`) is written per change of state,
   never per tick.
+
+**One tick per key.** Before a tick the worker claims the key with a
+conditional update of `byok_keys.spend_down_claimed_until` (only when NULL
+or expired, lease 9 minutes) and clears it with the tick summary, so two
+overlapping runs cannot both probe or both spend the daily limit. Before
+the column exists the claim is skipped (the cron is single-flight in
+practice).
 
 **Scoreboard**, computed on read from the existing tables, with no new writes
 (`keyScoreboardRuns` + `spendDownScoreboard`). Per key × app × model × UTC day
@@ -172,6 +185,9 @@ paused app with its reason, "probing 1/day" and Resume.
   20-sample window with the Wilson bound still paused 22.6% within 200 runs.
   The 40-sample window pauses 2.5% (glot-like 23% merge: 13%) and still
   pauses 98% of 5%-merge apps within 100 runs.
+- **A transaction-scoped advisory lock** (`pg_try_advisory_xact_lock` over
+  an RPC) for the tick. Each PostgREST request is its own transaction, so
+  the lock would be released before the first dispatch.
 - **Samples without an age limit, and no probe.** Samples come only from
   spend-down dispatches, so a paused app would never get new evidence and
   would stay paused until the credits expired.
@@ -194,8 +210,9 @@ paused app with its reason, "probing 1/day" and Resume.
   - tsumagoi (19 of 40 runs without a PR, lower bound 35.1%) keeps running;
   - yen-yen (11 reviews) is still in cold start.
   The rule targets apps that are reliably bad, not unlucky.
-- Migration `20261021120000_spend_down_stop_loss` adds the reset column and
-  two indexes on `fix_dispatch_jobs`: one by key and time, for the scoreboard
+- Migration `20261021120000_spend_down_stop_loss` adds the reset column,
+  the tick lease column (`byok_keys.spend_down_claimed_until`) and two
+  indexes on `fix_dispatch_jobs`: one by key and time, for the scoreboard
   and today's count; one by app and time, for the samples. The app index was
   missing on the live project. Until the migration is applied, the code reads
   the reset as "never" and Resume answers 503 `MIGRATION_PENDING`.

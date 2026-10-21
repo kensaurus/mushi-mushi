@@ -102,7 +102,9 @@ export async function projectYieldSamples(
     .select('id, project_id, status, pr_url, fix_attempt_id, created_at, dispatch_metadata')
     .eq('project_id', projectId)
     .eq('dispatch_metadata->>source', 'spend_down')
-    .gt('created_at', since)
+    // gte: after a probe-driven resume the reset is the first resuming
+    // probe's dispatch time, and that probe is evidence for the new window.
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(YIELD_JOB_LOOKBACK)
   if (error) throw new Error(`spend-down: yield dispatch read failed: ${error.message}`)
@@ -147,6 +149,48 @@ export function cachedYieldSamples(
     cache.set(id, hit)
   }
   return hit
+}
+
+/**
+ * Persist a probe-driven resume as the app's stop-loss reset (service role),
+ * so the next tick's window starts at the resuming probes. Returns the error
+ * text, or null; before the migration the column is missing and the caller
+ * relies on the reset it also carries in the tick summary.
+ */
+export async function writeStopLossReset(db: SupabaseClient, projectId: string, resetAt: string): Promise<string | null> {
+  const { error } = await db
+    .from('project_settings')
+    .update({ spend_down_stop_loss_reset_at: resetAt })
+    .eq('project_id', projectId)
+  return error ? error.message : null
+}
+
+/** How long one tick may hold a key (the cron runs every 10 minutes). */
+export const SPEND_DOWN_TICK_LEASE_MS = 9 * 60_000
+
+/**
+ * Claim a key for one tick, so two overlapping runs cannot both dispatch on
+ * it (double probes, double-spent daily limit). A conditional update on
+ * `byok_keys.spend_down_claimed_until`: it succeeds only when no other tick
+ * holds an unexpired lease. A transaction-scoped advisory lock would not do:
+ * each PostgREST request is its own transaction, so the lock would be gone
+ * before the dispatches. Before the migration adds the column the claim
+ * reports 'unsupported' and the caller proceeds (the cron is single-flight
+ * in practice).
+ */
+export async function claimKeyTick(
+  db: SupabaseClient,
+  keyId: string,
+  now: Date,
+): Promise<'claimed' | 'busy' | 'unsupported'> {
+  const { data, error } = await db
+    .from('byok_keys')
+    .update({ spend_down_claimed_until: new Date(now.getTime() + SPEND_DOWN_TICK_LEASE_MS).toISOString() })
+    .eq('id', keyId)
+    .or(`spend_down_claimed_until.is.null,spend_down_claimed_until.lt.${now.toISOString()}`)
+    .select('id')
+  if (error) return 'unsupported'
+  return Array.isArray(data) && data.length > 0 ? 'claimed' : 'busy'
 }
 
 /**

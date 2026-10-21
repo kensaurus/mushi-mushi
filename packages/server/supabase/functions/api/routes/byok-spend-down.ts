@@ -36,6 +36,7 @@ import {
   SPEND_DOWN_DEFAULT_WINDOW_DAYS,
   SPEND_DOWN_SCOREBOARD_DAYS,
   remainingToday,
+  effectiveStopLossResets,
   previousPauseStates,
   spendDownScoreboard,
   spendDownStopLoss,
@@ -118,14 +119,15 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
     // the apps they own or are a member of. Key-wide counts (today's
     // dispatches, the scoreboard totals) stay key-wide, as dispatchedToday
     // always was.
-    const access = new Map<string, Promise<boolean>>()
-    const canOpen = (projectId: string): Promise<boolean> => {
-      if (isApiKey) return Promise.resolve(projectId === (apiKeyProjectId ?? project.id))
+    // Role per app, for a console user: Resume is shown to owners and admins only.
+    const access = new Map<string, Promise<string | null>>()
+    const roleIn = (projectId: string): Promise<string | null> => {
+      if (isApiKey) return Promise.resolve(projectId === (apiKeyProjectId ?? project.id) ? 'api_key' : null)
       let hit = access.get(projectId)
       if (!hit) {
         hit = userCanAccessProject(db, userId, projectId)
-          .then((r) => r.allowed)
-          .catch(() => false)
+          .then((r) => (r.allowed ? r.role ?? 'member' : null))
+          .catch(() => null)
         access.set(projectId, hit)
       }
       return hit
@@ -145,26 +147,38 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         return c.json({ ok: false, error: { code: 'DB_ERROR', message: err instanceof Error ? err.message : String(err) } }, 500)
       }
       const visible = new Set<string>()
-      for (const id of served) if (await canOpen(id)) visible.add(id)
+      const roles = new Map<string, string>()
+      for (const id of served) {
+        const role = await roleIn(id)
+        if (role) {
+          visible.add(id)
+          roles.set(id, role)
+        }
+      }
 
       // Stop-loss and scoreboard are evidence, not settings: a failed read
       // degrades that part of this key to null with a note, never the page.
-      let projects: Array<{ id: string; name: string; stopLoss: SpendDownStopLoss | null }> = []
+      let projects: Array<{ id: string; name: string; canResume: boolean; stopLoss: SpendDownStopLoss | null }> = []
       let stopLossNote: string | null = null
+      let projectsNote: string | null = null
       if (visible.size > 0) {
-        const { data: names } = await db.from('projects').select('id, name').in('id', [...visible])
+        const { data: names, error: namesErr } = await db.from('projects').select('id, name').in('id', [...visible])
+        if (namesErr) projectsNote = 'The apps this key pays for could not be read just now.'
         const { resets, error: resetErr } = await stopLossResets(db, [...visible])
         if (resetErr) stopLossNote = 'Resume times could not be read; the 14-day limit still applies.'
-        const previous = previousPauseStates(row.spend_down_last_summary, resets)
+        const effective = effectiveStopLossResets(resets, row.spend_down_last_summary)
+        const previous = previousPauseStates(row.spend_down_last_summary, effective)
         projects = await Promise.all(
           ((names ?? []) as Array<{ id: string; name: string }>).map(async (p) => {
+            const role = roles.get(p.id)
+            const canResume = role === 'owner' || role === 'admin'
             try {
-              const samples = await cachedYieldSamples(yieldCache, db, p.id, now, resets.get(p.id) ?? null)
+              const samples = await cachedYieldSamples(yieldCache, db, p.id, now, effective.get(p.id) ?? null)
               const prev = previous.get(p.id) ?? { paused: false, pausedAt: null }
-              return { id: p.id, name: p.name, stopLoss: spendDownStopLoss(samples, prev, now) }
+              return { id: p.id, name: p.name, canResume, stopLoss: spendDownStopLoss(samples, prev, now) }
             } catch {
               stopLossNote = 'The yield of some apps could not be read just now.'
-              return { id: p.id, name: p.name, stopLoss: null }
+              return { id: p.id, name: p.name, canResume, stopLoss: null }
             }
           }),
         )
@@ -202,6 +216,7 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         projects,
         /** Apps this key pays for that the caller cannot open. */
         otherApps: served.length - visible.size,
+        projectsNote,
         stopLossNote,
         scoreboard,
         scoreboardNote,
@@ -220,7 +235,7 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
    * spend-down runs under any key, so the reset belongs to the app. A
    * decision to spend again, so console only, by the app's owner or admin.
    */
-  app.post('/v1/admin/byok/spend-down/projects/:projectId/resume', jwtAuth, async (c) => {
+  app.post('/v1/admin/byok/spend-down/projects/:projectId/resume', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string
     const projectId = c.req.param('projectId')!
     if (!byokKeyIdSchema.safeParse(projectId).success) return bad(c, 'INVALID_PROJECT_ID', 'projectId must be a UUID.')

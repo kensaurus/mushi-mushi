@@ -19,6 +19,7 @@ import {
 } from '../../supabase/functions/_shared/spend-down-db.ts'
 import {
   classifySpendDownRun,
+  effectiveStopLossResets,
   firstCursorKeyFor,
   previousPauseStates,
   SPEND_DOWN_MAX_HOLD_RATE,
@@ -568,7 +569,12 @@ describe('spendDownStopLoss: while paused (hysteresis, probes, aging out)', () =
       reviewedAt: `2026-10-20T0${i}:30:00.000Z`,
     }))
     const runs = [...probes, ...sample({ fixFirst: 38, startMin: 10 })]
-    expect(spendDownStopLoss({ runs }, PAUSED, AT)).toMatchObject({ paused: false, resumedBy: 'probes' })
+    // The resume restarts the window at the older resuming probe's dispatch.
+    expect(spendDownStopLoss({ runs }, PAUSED, AT)).toMatchObject({
+      paused: false,
+      resumedBy: 'probes',
+      resetAt: '2026-10-20T00:00:00.000Z',
+    })
     // One merged probe is not enough; probes from before the pause do not count.
     expect(spendDownStopLoss({ runs: [probes[0], ...sample({ fixFirst: 39, startMin: 10 })] }, PAUSED, AT).paused).toBe(true)
     const early = probes.map((r) => ({ ...r, at: '2026-10-19T01:00:00.000Z' }))
@@ -598,6 +604,27 @@ describe('classifySpendDownRun', () => {
     expect(
       classifySpendDownRun({ status: 'completed_no_pr', pr_url: pr }, { status: 'failed', pr_url: pr, failure_category: 'validation_rejected' }),
     ).toBe('other_failure')
+  })
+})
+
+describe('effectiveStopLossResets', () => {
+  it('takes the later of the console Resume and the reset carried in the summary', () => {
+    const summary = {
+      projects: [
+        { projectId: 'a', stopLossResetAt: '2026-10-20T00:00:00Z' },
+        { projectId: 'b', stopLossResetAt: '2026-10-18T00:00:00Z' },
+        { projectId: 'c' },
+      ],
+    }
+    const db = new Map([
+      ['a', '2026-10-19T00:00:00Z'],
+      ['b', '2026-10-19T00:00:00Z'],
+    ])
+    expect([...effectiveStopLossResets(db, summary).entries()]).toEqual([
+      ['a', '2026-10-20T00:00:00Z'],
+      ['b', '2026-10-19T00:00:00Z'],
+    ])
+    expect(effectiveStopLossResets(new Map(), null).size).toBe(0)
   })
 })
 
@@ -773,7 +800,9 @@ describe('runSpendDownForKey stop-loss', () => {
   it('successive ticks: probe, then no second probe the same day and no repeat log, then probe-driven recovery', async () => {
     logLines.length = 0
     let now = NOW
-    const db = seed(yieldRows(20, 1, 0))
+    // 38 old runs with 1 merge: after 2 merged probes the newest 40 hold 3
+    // merges (upper bound 0.17), which would pause again without the reset.
+    const db = seed(yieldRows(38, 1, 0))
     const d = recordingDispatch(db, () => now)
     const k = key({ spend_down_daily_limit: 50 }) as SpendDownKey & { spend_down_last_summary?: unknown }
 
@@ -807,6 +836,46 @@ describe('runSpendDownForKey stop-loss', () => {
     expect(t3.projects[0].paused).toBeUndefined()
     expect(t3.projects[0].dispatched).toBeGreaterThan(1)
     expect(logLines.find((l) => l.msg === 'spend-down.resumed')?.ctx).toMatchObject({ projectId: P1, resumedBy: 'probes' })
+    // The resume acts as a reset at the first resuming probe's dispatch:
+    // stored on the app (service role) and carried in the summary.
+    const settings = db.table('project_settings').find((r) => r.project_id === P1)!
+    expect(settings.spend_down_stop_loss_reset_at).toBe(NOW.toISOString())
+    expect(t3.projects[0].stopLossResetAt).toBe(NOW.toISOString())
+
+    // The tick AFTER the resume: the old window no longer counts, so the app
+    // stays running in cold start instead of pausing again. Drop the column
+    // value to prove the summary alone holds it (before the migration).
+    delete settings.spend_down_stop_loss_reset_at
+    logLines.length = 0
+    now = new Date('2026-10-21T09:10:00Z')
+    const t4 = await worker.runSpendDownForKey(db as never, { ...k, spend_down_last_summary: t3 }, { now, checkBudget: allowAll, dispatch: d.fn })
+    expect(t4.projects[0].paused).toBeUndefined()
+    expect(t4.projects[0]).toMatchObject({ stopLossResetAt: NOW.toISOString(), yield: { reviewed: 2, mergeRate: 1, mergeUpper: null } })
+    // Running, not paused: it only stops because every open report was tried this week.
+    expect(t4.projects[0].stopped).toBe('No open report to fix')
+    expect(logLines.some((l) => l.msg === 'spend-down.paused')).toBe(false)
+  })
+
+  it('keeps pauses and resets while the key is out of its window', async () => {
+    const prev = {
+      projects: [
+        { projectId: P1, dispatched: 0, paused: true, pausedAt: '2026-10-19T13:00:00.000Z', stopped: 'Paused: x', yield: { reviewed: 20 } },
+        { projectId: P2, dispatched: 2, stopLossResetAt: '2026-10-19T00:00:00.000Z' },
+        { projectId: P3, dispatched: 1 },
+      ],
+    }
+    const dispatch = vi.fn(async () => ({ ok: true }))
+    const s = await worker.runSpendDownForKey(
+      seed() as never,
+      { ...key({ credits_expire_at: '2026-10-20T08:00:00Z' }), spend_down_last_summary: prev },
+      { now: NOW, dispatch },
+    )
+    expect(s.state).toBe('expired')
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(s.projects).toEqual([
+      { projectId: P1, dispatched: 0, paused: true, pausedAt: '2026-10-19T13:00:00.000Z', stopped: 'Paused: x', carried: true },
+      { projectId: P2, dispatched: 0, stopLossResetAt: '2026-10-19T00:00:00.000Z', carried: true },
+    ])
   })
 
   it('a Resume (stop_loss_reset_at) ignores the earlier samples and the earlier pause', async () => {
@@ -882,6 +951,27 @@ describe('runSpendDownForKey stop-loss', () => {
     await worker.runSpendDown(db as never, { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
     const stored = db.table('byok_keys').find((k: Record<string, unknown>) => k.id === 'k1') as Record<string, unknown>
     expect([...previousPauseStates(stored.spend_down_last_summary).keys()]).toEqual([P1])
+  })
+})
+
+describe('runSpendDown tick lease', () => {
+  const run = (db: ReturnType<typeof seed>) =>
+    worker.runSpendDown(db as never, { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
+  const k1 = (db: ReturnType<typeof seed>) => db.table('byok_keys').find((k) => k.id === 'k1') as Record<string, unknown>
+
+  it('skips a key another tick holds, and frees the lease after its own tick', async () => {
+    logLines.length = 0
+    const db = seed()
+    k1(db).spend_down_claimed_until = new Date(NOW.getTime() + 60_000).toISOString()
+    expect(await run(db)).toEqual([])
+    expect(k1(db).spend_down_last_run_at).toBeUndefined()
+    expect(logLines.some((l) => l.msg === 'spend-down.key_busy')).toBe(true)
+
+    k1(db).spend_down_claimed_until = new Date(NOW.getTime() - 60_000).toISOString()
+    const out = await run(db)
+    expect(out).toHaveLength(1)
+    expect(k1(db).spend_down_claimed_until).toBeNull()
+    expect(k1(db).spend_down_last_run_at).toBe(NOW.toISOString())
   })
 })
 

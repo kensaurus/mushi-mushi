@@ -9,7 +9,7 @@
 type SpendDownState = 'off' | 'not_started' | 'active' | 'expired' | 'key_unusable'
 
 /** The stop-loss state of one app (server `spendDownStopLoss`). */
-export interface SpendDownStopLoss {
+interface SpendDownStopLoss {
   paused: boolean
   reason: string | null
   pausedAt?: string | null
@@ -21,7 +21,7 @@ export interface SpendDownStopLoss {
 }
 
 /** The last-7-days rollup for one key (server `spendDownScoreboard` totals). */
-export interface SpendDownCounts {
+interface SpendDownCounts {
   runs: number
   inFlight: number
   prsOpened: number
@@ -51,7 +51,9 @@ export interface SpendDownKeyStatus {
   startsAt: string | null
   dispatchedToday: number
   remainingToday: number
-  projects: Array<{ id: string; name: string; stopLoss?: SpendDownStopLoss | null }>
+  /** canResume: you are this app's owner or admin (Resume is theirs to press). */
+  projects: Array<{ id: string; name: string; canResume?: boolean; stopLoss?: SpendDownStopLoss | null }>
+  projectsNote?: string | null
   /** Apps this key pays for that you cannot open (a shared key). */
   otherApps?: number
   stopLossNote?: string | null
@@ -129,17 +131,22 @@ export function spendDownScoreLine(k: SpendDownKeyStatus): string | null {
   return `Last ${plural(board.days, 'day')}: ${plural(t.runs, 'run')} → ${plural(t.prsOpened, 'PR')} → ${t.verdicts.merge} mergeable, ${t.merged} merged${review}`
 }
 
-export interface SpendDownPause {
+interface SpendDownPause {
   projectId: string
   /** "app: reason" */
   text: string
+  canResume: boolean
 }
 
 /** Apps the stop-loss pauses right now, with why. */
 export function spendDownPauses(k: SpendDownKeyStatus): SpendDownPause[] {
   return k.projects
     .filter((p) => p.stopLoss?.paused)
-    .map((p) => ({ projectId: p.id, text: `${p.name}: ${p.stopLoss?.reason ?? 'Paused: low yield'}` }))
+    .map((p) => ({
+      projectId: p.id,
+      text: `${p.name}: ${p.stopLoss?.reason ?? 'Paused: low yield'}`,
+      canResume: p.canResume === true,
+    }))
 }
 
 /**

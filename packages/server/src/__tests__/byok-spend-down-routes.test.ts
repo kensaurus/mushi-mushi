@@ -230,7 +230,26 @@ describe('GET spend-down', () => {
     expect(project.id).toBe(P1)
     // 11 reviews (the 8-day-old one counts): under 20, so cold start.
     expect(project.stopLoss).toMatchObject({ paused: false, reviewed: 11, mergeVerdicts: 1, mergeUpper: null })
-    expect(own).toMatchObject({ otherApps: 0, stopLossNote: null, scoreboardNote: null })
+    expect(own).toMatchObject({ otherApps: 0, projectsNote: null, stopLossNote: null, scoreboardNote: null })
+    expect(own.projects).toMatchObject([{ id: P1, canResume: true }])
+  })
+
+  it('a member sees the pause but cannot Resume; a failed app-name read is a note, not a silent empty list', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'member' }
+    let { app } = setup()
+    let own = ((await app.call('GET', '/v1/admin/byok/spend-down', {})).body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect(own.projects).toMatchObject([{ id: P1, canResume: false }])
+
+    state.access = { [P1]: 'owner' }
+    // `projects` reads, in order: the shared key's served apps, OWN's served
+    // apps, then OWN's app names; fail only the names.
+    let reads = 0
+    ;({ app } = setup({ failRead: (t) => (t === 'projects' && ++reads === 3 ? 'boom' : null) }))
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    expect(res.status).toBe(200)
+    own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect(own).toMatchObject({ projects: [], projectsNote: 'The apps this key pays for could not be read just now.' })
   })
 
   it('shows a paused app with its reason', async () => {

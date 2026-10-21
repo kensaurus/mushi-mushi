@@ -54,6 +54,7 @@ import {
   spendDownCandidateFromReport,
   spendDownDispatchMetadata,
   SPEND_DOWN_PROBES_PER_DAY,
+  effectiveStopLossResets,
   spendDownStopLoss,
   spendDownWindow,
   previousPauseStates,
@@ -64,9 +65,11 @@ import {
 } from '../_shared/spend-down.ts'
 import {
   cachedYieldSamples,
+  claimKeyTick,
   keyDispatchesToday,
   keyProjects,
   stopLossResets,
+  writeStopLossReset,
   type SpendDownYieldCache,
 } from '../_shared/spend-down-db.ts'
 
@@ -98,8 +101,14 @@ export interface ProjectOutcome {
   pausedAt?: string
   /** This tick's dispatch was the paused app's daily probe. */
   probe?: boolean
-  /** Not reached this tick (the key's limit ran out); the pause is carried from the last tick. */
+  /** Not reached this tick (the key's limit ran out, or the key is out of its window); carried from the last tick. */
   carried?: boolean
+  /**
+   * The app's stop-loss reset (a probe-driven resume, or the console's
+   * Resume), kept every tick so the window stays restarted even before the
+   * project_settings column exists.
+   */
+  stopLossResetAt?: string
   yield?: ProjectYield
 }
 
@@ -123,6 +132,31 @@ export interface SpendDownDeps {
   ) => Promise<AutofixBudgetCheck>
   /** Shared across keys within one tick: each app's samples are read once. */
   yieldCache?: SpendDownYieldCache
+}
+
+/**
+ * The last tick's pause and reset state, carried unchanged into this tick's
+ * summary for apps it does not evaluate, so nothing is forgotten while a key
+ * is out of its window or out of fixes for the day.
+ */
+function carriedOutcome(previous: unknown): ProjectOutcome | null {
+  const p = previous as Partial<ProjectOutcome> | null | undefined
+  if (!p || typeof p.projectId !== 'string') return null
+  if (p.paused !== true && typeof p.stopLossResetAt !== 'string') return null
+  return {
+    projectId: p.projectId,
+    dispatched: 0,
+    ...(p.paused === true ? { paused: true } : {}),
+    ...(typeof p.pausedAt === 'string' ? { pausedAt: p.pausedAt } : {}),
+    ...(p.paused === true && typeof p.stopped === 'string' ? { stopped: p.stopped } : {}),
+    ...(typeof p.stopLossResetAt === 'string' ? { stopLossResetAt: p.stopLossResetAt } : {}),
+    carried: true,
+  }
+}
+
+function previousProjects(summary: unknown): unknown[] {
+  const projects = (summary as { projects?: unknown } | null | undefined)?.projects
+  return Array.isArray(projects) ? projects : []
 }
 
 function utcDayStart(now: Date): string {
@@ -189,7 +223,14 @@ export async function runSpendDownForKey(
     ((d: SupabaseClient, pid: string, s: AutofixBudgetSettings) => checkAutofixBudget(d, pid, s, { trigger: 'automatic' }))
   const window = spendDownWindow(key, now)
   const base = { keyId: key.id, state: window.state, dispatched: 0, projects: [] as ProjectOutcome[], at: now.toISOString() }
-  if (window.state !== 'active') return { ...base, dispatchedToday: 0, remainingToday: 0 }
+  if (window.state !== 'active') {
+    // Out of the window or unusable: dispatch nothing, but keep every pause
+    // and reset, so the stop-loss picks up where it was if the key returns.
+    const carried = previousProjects(key.spend_down_last_summary)
+      .map(carriedOutcome)
+      .filter((o): o is ProjectOutcome => o != null)
+    return { ...base, projects: carried, dispatchedToday: 0, remainingToday: 0 }
+  }
 
   const dispatchedToday = await keyDispatchesToday(db, key.id, now)
   let remaining = remainingToday(key, dispatchedToday)
@@ -201,7 +242,8 @@ export async function runSpendDownForKey(
       err: resetErr,
     })
   }
-  const previous = previousPauseStates(key.spend_down_last_summary, resets)
+  const effective = effectiveStopLossResets(resets, key.spend_down_last_summary)
+  const previous = previousPauseStates(key.spend_down_last_summary, effective)
   const dayStart = utcDayStart(now)
 
   for (const projectId of ids) {
@@ -209,8 +251,17 @@ export async function runSpendDownForKey(
     const outcome: ProjectOutcome = { projectId, dispatched: 0 }
     base.projects.push(outcome)
 
-    const samples = await cachedYieldSamples(yieldCache, db, projectId, now, resets.get(projectId) ?? null)
+    const samples = await cachedYieldSamples(yieldCache, db, projectId, now, effective.get(projectId) ?? null)
     const stopLoss = spendDownStopLoss(samples, previous.get(projectId) ?? { paused: false, pausedAt: null }, now)
+    if (stopLoss.resetAt) {
+      // A probe-driven resume restarts the window at the resuming probes;
+      // otherwise the next tick would read the old window and pause again.
+      const err = await writeStopLossReset(db, projectId, stopLoss.resetAt)
+      if (err) log.warn('spend-down probe resume not stored on the app; kept in the tick summary', { keyId: key.id, projectId, err })
+      effective.set(projectId, stopLoss.resetAt)
+    }
+    const resetAt = effective.get(projectId)
+    if (resetAt) outcome.stopLossResetAt = resetAt
     outcome.yield = {
       reviewed: stopLoss.reviewed,
       mergeRate: stopLoss.mergeRate,
@@ -293,18 +344,21 @@ export async function runSpendDownForKey(
     }
   }
 
-  // Carry forward pauses on apps this tick did not reach (the key's limit ran
-  // out first), so the next tick still knows they are paused.
+  // Carry forward pauses and resets on apps this tick did not reach (the
+  // key's limit ran out first), so the next tick still knows them.
   const reached = new Set(base.projects.map((p) => p.projectId))
   for (const projectId of ids) {
+    if (reached.has(projectId)) continue
     const prev = previous.get(projectId)
-    if (!prev || reached.has(projectId)) continue
+    const resetAt = effective.get(projectId)
+    if (!prev && !resetAt) continue
     base.projects.push({
       projectId,
       dispatched: 0,
-      paused: true,
-      ...(prev.pausedAt ? { pausedAt: prev.pausedAt } : {}),
-      stopped: prev.reason ?? 'Paused: low yield',
+      ...(prev ? { paused: true } : {}),
+      ...(prev?.pausedAt ? { pausedAt: prev.pausedAt } : {}),
+      ...(prev ? { stopped: prev.reason ?? 'Paused: low yield' } : {}),
+      ...(resetAt ? { stopLossResetAt: resetAt } : {}),
       carried: true,
     })
   }
@@ -324,6 +378,14 @@ export async function runSpendDown(db: SupabaseClient, deps: SpendDownDeps = {})
   const summaries: KeySummary[] = []
   const yieldCache: SpendDownYieldCache = deps.yieldCache ?? new Map()
   for (const key of (data ?? []) as Array<SpendDownKey & { spend_down_last_summary?: unknown }>) {
+    // One tick per key at a time: an overlapping run would probe twice and
+    // spend the daily limit twice.
+    const claim = await claimKeyTick(db, key.id, now)
+    if (claim === 'busy') {
+      log.info('spend-down.key_busy', { keyId: key.id })
+      continue
+    }
+    const release = claim === 'claimed' ? { spend_down_claimed_until: null } : {}
     let summary: KeySummary
     try {
       summary = await runSpendDownForKey(db, key, { ...deps, now, yieldCache })
@@ -332,12 +394,13 @@ export async function runSpendDown(db: SupabaseClient, deps: SpendDownDeps = {})
         keyId: key.id,
         err: err instanceof Error ? err.message : String(err),
       })
+      if (claim === 'claimed') await db.from('byok_keys').update(release).eq('id', key.id)
       continue
     }
     summaries.push(summary)
     const { error: writeErr } = await db
       .from('byok_keys')
-      .update({ spend_down_last_run_at: now.toISOString(), spend_down_last_summary: summary })
+      .update({ spend_down_last_run_at: now.toISOString(), spend_down_last_summary: summary, ...release })
       .eq('id', key.id)
     if (writeErr) log.warn('spend-down summary not stored', { keyId: key.id, err: writeErr.message })
   }

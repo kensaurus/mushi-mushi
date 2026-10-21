@@ -131,6 +131,7 @@ describe('SpendDownSection', () => {
           {
             id: 'p1',
             name: 'tsumagoi',
+            canResume: true,
             stopLoss: {
               paused: true,
               reason: 'Paused: 3 of the last 20 reviewed fixes were mergeable (15%)',
@@ -171,6 +172,21 @@ describe('SpendDownSection', () => {
     expect((call[1] as RequestInit).method).toBe('POST')
     expect(mocks.reload).toHaveBeenCalled()
     expect(document.body.textContent).toContain('Resumed.')
+  })
+
+  it('shows Resume only to the app owner or admin', async () => {
+    const stopLoss = { paused: true, reason: 'Paused: x', reviewed: 20, mergeRate: 0, holdRate: 0, finishedRuns: 20, noPrShare: 0 }
+    mocks.keys = [{ ...KEY, enabled: true, state: 'active', projects: [{ id: 'p1', name: 'tsumagoi', canResume: false, stopLoss }] }]
+    await render(true)
+    expect(document.body.textContent).toContain('tsumagoi: Paused: x')
+    expect(document.body.textContent).toContain('probing 1/day')
+    expect(Array.from(document.body.querySelectorAll('button')).some((b) => b.textContent?.trim() === 'Resume')).toBe(false)
+  })
+
+  it('says when the scoreboard or the app list could not be read', async () => {
+    mocks.keys = [{ ...KEY, projectsNote: 'The apps this key pays for could not be read just now.', scoreboard: null, scoreboardNote: 'The last 7 days could not be read just now.' }]
+    await render(true)
+    expect(document.body.textContent).toContain('The apps this key pays for could not be read just now.')
   })
 
   it('says when the scoreboard could not be read', async () => {

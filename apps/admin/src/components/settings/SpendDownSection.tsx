@@ -127,21 +127,24 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
               </p>
               <p className={`text-xs ${TONE[line.tone]}`}>{line.text}</p>
               {score && <p className="text-xs tabular-nums text-fg-secondary">{score}</p>}
+              {k.projectsNote && <p className="text-xs text-fg-muted">{k.projectsNote}</p>}
               {k.scoreboardNote && <p className="text-xs text-fg-muted">{k.scoreboardNote}</p>}
               {k.stopLossNote && <p className="text-xs text-fg-muted">{k.stopLossNote}</p>}
               {pauses.map((p) => (
                 <p key={p.projectId} className="flex flex-wrap items-center gap-x-2 text-xs text-warn">
                   <span>{p.text}</span>
-                  <span className="text-fg-muted">· probing 1/day ·</span>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    type="button"
-                    loading={resuming === p.projectId}
-                    onClick={() => void resume(k.id, p.projectId)}
-                  >
-                    Resume
-                  </Btn>
+                  <span className="text-fg-muted">· probing 1/day{p.canResume ? ' ·' : ''}</span>
+                  {p.canResume && (
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      type="button"
+                      loading={resuming === p.projectId}
+                      onClick={() => void resume(k.id, p.projectId)}
+                    >
+                      Resume
+                    </Btn>
+                  )}
                 </p>
               ))}
               {stops.map((s) => (
