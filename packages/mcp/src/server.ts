@@ -1119,6 +1119,26 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_fix_verification',
+    {
+      title: titleOf('get_fix_verification'),
+      description: descOf('get_fix_verification'),
+      annotations: annotationsFor('get_fix_verification'),
+      inputSchema: z.object({
+        fixId: z.string().describe('fix_attempt UUID'),
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — required for org-scoped keys with multiple projects.'),
+      }),
+    },
+    async (args) => {
+      const { headers } = await projectScopeHeaders(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/fixes/${encodeURIComponent(args.fixId)}/verification`, { headers }));
+    },
+  );
+
+  server.registerTool(
     'get_blast_radius',
     {
       title: titleOf('get_blast_radius'),
