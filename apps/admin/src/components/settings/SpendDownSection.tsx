@@ -8,7 +8,9 @@
  *          Each key also shows what its last 7 days produced (runs → PRs →
  *          mergeable → merged, Opus review cost) and the apps the stop-loss
  *          paused, with why. A paused app still gets one probe fix a day;
- *          Resume clears its stop-loss evidence (owner or admin).
+ *          Resume clears its stop-loss evidence (owner or admin). One line
+ *          above the keys shows what review follow-ups (ADR 0032) made of
+ *          fix-first PRs in the same period.
  */
 
 import { useState } from 'react';
@@ -24,6 +26,7 @@ import {
   type SpendDownKeyStatus,
   type SpendDownResponse,
 } from './spendDown';
+import { followupScoreLine } from './reviewFollowups';
 
 interface Draft {
   enabled: boolean;
@@ -58,6 +61,8 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
   const [resuming, setResuming] = useState<string | null>(null);
 
   const keys = status.data?.keys ?? [];
+  // What the review follow-ups (ADR 0032) turned fix-first PRs into.
+  const followups = followupScoreLine(status.data?.reviewFollowups);
   if (status.loading || keys.length === 0) return null;
 
   async function save(k: SpendDownKeyStatus) {
@@ -111,6 +116,7 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
         fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
         every fix opens a draft pull request for you to review.
       </p>
+      {followups && <p className="text-xs tabular-nums text-fg-secondary">{followups}</p>}
       <ul className="divide-y divide-edge-subtle">
         {keys.map((k) => {
           const line = spendDownLine(k);

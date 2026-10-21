@@ -360,6 +360,11 @@ verify_jwt = false
 [functions.agent-pr-review]
 verify_jwt = false
 
+# review-followup is invoked by pg_cron (mushi-review-followup, 6-56/10)
+# through the internal caller token; requireServiceRoleAuth inside (ADR 0032).
+[functions.review-followup]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on

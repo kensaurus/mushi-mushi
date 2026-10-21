@@ -30,7 +30,9 @@
  *          findings (`normalizeReview`), stored with the reviewed head SHA,
  *          model, tokens and cost, added to the fix timeline ("Opus review:
  *          hold"), and posted as one PR comment (no report text; a link to
- *          the console) that later reviews edit in place.
+ *          the console) that later reviews edit in place. A "fix_first"
+ *          verdict also queues one review follow-up (ADR 0032,
+ *          `review-followup`).
  *   A skipped or failed run keeps the last completed verdict, so a hold stays
  *   a hold. A model error retries after 10 min × tries.
  *
@@ -75,6 +77,7 @@ import { canonicalPrUrl, parsePullRequestUrl } from '../_shared/pr-substance.ts'
 import { DISPATCHABLE_CLOUD_AGENTS } from '../_shared/agent-adapters.ts'
 import { AGENT_PR_REVIEW_EFFORT, AGENT_PR_REVIEW_MODEL } from '../_shared/models.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
+import { enqueueReviewFollowup } from '../_shared/review-followup-db.ts'
 import {
   AGENT_PR_REVIEW_SYSTEM_PROMPT,
   agentPrReviewSchema,
@@ -643,6 +646,22 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
       headSha: details.headSha,
     },
   })
+
+  // A "fix first" verdict on this head earns one follow-up (ADR 0032): a new
+  // Cursor agent on the PR with these findings. The review-followup worker
+  // also discovers it, so a failed enqueue here only delays it a tick.
+  if (review.verdict === 'fix_first') {
+    const queued = await enqueueReviewFollowup(
+      db,
+      {
+        review: { id: row.id, fix_attempt_id: row.fix_attempt_id, project_id: attempt.project_id, report_id: attempt.report_id, status: 'completed', verdict: 'fix_first', head_sha: details.headSha },
+        attempt,
+        requireEnabled: true,
+      },
+      now,
+    )
+    if (queued.error) log.warn('review follow-up not queued (worker discovery retries)', { reviewId: row.id, err: queued.error })
+  }
 
   try {
     const reportUrl = attempt.report_id ? `${(deps.consoleBaseUrl ?? defaultConsoleBaseUrl)()}/reports/${attempt.report_id}` : null

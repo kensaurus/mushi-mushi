@@ -1679,6 +1679,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         | 'ci_resolved'
         | 'pr_state_changed'
         | 'reviewed'
+        | 'followup'
         | 'completed'
         | 'failed';
       fix_attempt_id: string;

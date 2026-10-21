@@ -227,6 +227,13 @@ export interface PullRequestDetails extends PullRequestSnapshot {
   headRef: string | null
   headSha: string | null
   baseRef: string | null
+  /**
+   * The head repository (`head.repo`). A PR from a fork has a head repo
+   * different from its base repo; review follow-ups (ADR 0032) refuse those.
+   * Null when GitHub sends none (a deleted fork).
+   */
+  headRepoId?: number | null
+  headRepoFullName?: string | null
   mergeable: boolean | null
   mergeableState: string | null
 }
@@ -313,7 +320,7 @@ export async function fetchPullRequestDetails(
     html_url?: string
     title?: string | null
     body?: string | null
-    head?: { ref?: string; sha?: string }
+    head?: { ref?: string; sha?: string; repo?: { id?: number; full_name?: string } | null }
     base?: BaseRepoBody
     mergeable?: boolean | null
     mergeable_state?: string | null
@@ -331,6 +338,10 @@ export async function fetchPullRequestDetails(
     headSha: body.head?.sha ?? null,
     baseRef: body.base?.ref ?? null,
     ...baseRepoOf(body.base),
+    ...(() => {
+      const head = baseRepoOf({ repo: body.head?.repo ?? null })
+      return { headRepoId: head.baseRepoId, headRepoFullName: head.baseRepoFullName }
+    })(),
     mergeable: body.mergeable ?? null,
     mergeableState: body.mergeable_state ?? null,
   }
@@ -338,6 +349,8 @@ export async function fetchPullRequestDetails(
 
 export interface PullRequestFile {
   filename: string
+  /** The path before a rename (`previous_filename`), when GitHub sends one. */
+  previousFilename?: string | null
   status: string
   additions: number
   deletions: number
@@ -370,12 +383,14 @@ export async function fetchPullRequestFiles(
       additions?: number
       deletions?: number
       patch?: string
+      previous_filename?: string
     }>
     if (!Array.isArray(body)) throw new Error('pull files fetch returned a non-array body')
     for (const f of body) {
       if (typeof f.filename !== 'string') continue
       files.push({
         filename: f.filename,
+        previousFilename: typeof f.previous_filename === 'string' ? f.previous_filename : null,
         status: f.status ?? 'modified',
         additions: f.additions ?? 0,
         deletions: f.deletions ?? 0,
