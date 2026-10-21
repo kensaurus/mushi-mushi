@@ -5,13 +5,26 @@
  *          for (ADR 0023), the window, the daily limit, the auto-fix caps,
  *          the 3-running bound, the 7-day re-dispatch cooldown, the 1.3
  *          boost for Sentry or stack evidence, and the dispatch metadata
- *          fix-worker reads (cursor_cloud, model, trigger).
+ *          fix-worker reads (cursor_cloud, model, trigger); the stop-loss
+ *          (merge / hold / no-PR thresholds, cold start, boundaries, pause and
+ *          resume log lines) and the scoreboard rollup.
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 import {
+  classifySpendDownRun,
   firstCursorKeyFor,
+  previouslyPausedProjects,
+  SPEND_DOWN_MAX_HOLD_RATE,
+  SPEND_DOWN_MAX_NO_PR_SHARE,
+  SPEND_DOWN_MIN_MERGE_RATE,
+  SPEND_DOWN_MIN_SAMPLES,
+  SPEND_DOWN_YIELD_WINDOW,
+  spendDownScoreboard,
+  spendDownStopLoss,
+  type SpendDownRunOutcome,
+  type SpendDownRunRow,
   projectCapacity,
   rankSpendDownCandidates,
   reportHasCheapEvidence,
@@ -25,9 +38,12 @@ import {
   type SpendDownKey,
 } from '../../supabase/functions/_shared/spend-down.ts'
 
+const logLines = vi.hoisted(() => [] as Array<{ msg: string; ctx: Record<string, unknown> }>)
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
-  for (const level of ['debug', 'info', 'warn', 'error', 'fatal', 'audit']) logger[level] = () => {}
+  for (const level of ['debug', 'info', 'warn', 'error', 'fatal', 'audit']) {
+    logger[level] = (msg: string, ctx: Record<string, unknown> = {}) => logLines.push({ msg, ctx })
+  }
   logger.child = () => logger
   return logger
 })
@@ -385,5 +401,275 @@ describe('spendDownDispatchMetadata', () => {
       agent_override: 'cursor_cloud',
       spend_down_key_id: 'k',
     })
+  })
+})
+
+describe('stop-loss thresholds', () => {
+  it('are the documented values', () => {
+    expect(SPEND_DOWN_YIELD_WINDOW).toBe(20)
+    expect(SPEND_DOWN_MIN_SAMPLES).toBe(8)
+    expect(SPEND_DOWN_MIN_MERGE_RATE).toBe(0.2)
+    expect(SPEND_DOWN_MAX_HOLD_RATE).toBe(0.35)
+    expect(SPEND_DOWN_MAX_NO_PR_SHARE).toBe(0.5)
+  })
+})
+
+/** n verdicts, newest first: the first `merge` merge, the next `hold` hold, the rest fix_first. */
+function verdicts(n: number, merge: number, hold = 0): string[] {
+  return Array.from({ length: n }, (_, i) => (i < merge ? 'merge' : i < merge + hold ? 'hold' : 'fix_first'))
+}
+function runs(n: number, noPr: number): SpendDownRunOutcome[] {
+  return Array.from({ length: n }, (_, i) => (i < noPr ? 'no_pr_verdict' : 'pr_opened'))
+}
+
+describe('spendDownStopLoss', () => {
+  it('pauses under a 20% merge rate, in plain words', () => {
+    const d = spendDownStopLoss({ verdicts: verdicts(20, 3), runs: runs(20, 0) })
+    expect(d.paused).toBe(true)
+    expect(d.reason).toBe('Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
+    expect(d).toMatchObject({ reviewed: 20, mergeVerdicts: 3, mergeRate: 0.15 })
+  })
+
+  it('does not pause at exactly 20% merge, 35% hold or 50% no-PR (boundaries)', () => {
+    const d = spendDownStopLoss({ verdicts: verdicts(20, 4, 7), runs: runs(20, 10) })
+    expect(d).toMatchObject({ paused: false, reason: null, mergeRate: 0.2, holdRate: 0.35, noPrShare: 0.5 })
+  })
+
+  it('pauses just past each boundary', () => {
+    expect(spendDownStopLoss({ verdicts: verdicts(20, 3, 0), runs: [] }).paused).toBe(true) // 15% merge
+    expect(spendDownStopLoss({ verdicts: verdicts(20, 10, 8), runs: [] }).paused).toBe(true) // 40% hold
+    expect(spendDownStopLoss({ verdicts: [], runs: runs(20, 11) }).paused).toBe(true) // 55% no PR
+  })
+
+  it('pauses over a 35% hold rate even with a healthy merge rate', () => {
+    const d = spendDownStopLoss({ verdicts: verdicts(20, 6, 8), runs: [] })
+    expect(d.paused).toBe(true)
+    expect(d.reason).toBe('Paused: Opus said hold on 8 of the last 20 reviewed fixes (40%)')
+  })
+
+  it('pauses when over half the finished runs ended with a no-PR verdict; in-flight runs do not count', () => {
+    const d = spendDownStopLoss({ verdicts: [], runs: ['in_flight', 'in_flight', ...runs(20, 11)] })
+    expect(d.paused).toBe(true)
+    expect(d.finishedRuns).toBe(20)
+    expect(d.reason).toContain('the agent opened no PR on 11 of the last 20 runs (55%)')
+  })
+
+  it('names every rule that fired', () => {
+    const d = spendDownStopLoss({ verdicts: verdicts(10, 1, 5), runs: runs(10, 6) })
+    expect(d.reason).toMatch(
+      /^Paused: 1 of the last 10 reviewed fixes were mergeable \(10%\); Opus said hold on 5 .*; the agent opened no PR on 6/,
+    )
+  })
+
+  it('cold start: never pauses below 8 samples per rule, and pauses at exactly 8', () => {
+    expect(spendDownStopLoss({ verdicts: verdicts(7, 0, 7), runs: runs(7, 7) }).paused).toBe(false)
+    expect(spendDownStopLoss({ verdicts: verdicts(8, 0), runs: [] }).paused).toBe(true)
+    expect(spendDownStopLoss({ verdicts: [], runs: runs(8, 5) }).paused).toBe(true)
+    // Plenty of runs but only 7 reviews: the review rules wait, the run rule decides.
+    expect(spendDownStopLoss({ verdicts: verdicts(7, 0), runs: runs(30, 0) }).paused).toBe(false)
+  })
+
+  it('reads only the newest 20 of each, so a recovered app resumes', () => {
+    const d = spendDownStopLoss({
+      verdicts: [...verdicts(20, 8), ...verdicts(20, 0, 20)],
+      runs: [...runs(20, 0), ...runs(20, 20)],
+    })
+    expect(d).toMatchObject({ paused: false, reviewed: 20, finishedRuns: 20, mergeRate: 0.4, holdRate: 0, noPrShare: 0 })
+  })
+
+  it('ignores missing or unknown verdicts', () => {
+    expect(spendDownStopLoss({ verdicts: [null, 'weird', ...verdicts(8, 2)], runs: [] })).toMatchObject({
+      reviewed: 8,
+      paused: false,
+    })
+  })
+})
+
+describe('classifySpendDownRun', () => {
+  it('sorts a run into PR, no-PR verdict, in flight or other failure', () => {
+    expect(classifySpendDownRun({ status: 'completed' }, { status: 'completed', pr_url: 'https://github.com/a/b/pull/1' })).toBe(
+      'pr_opened',
+    )
+    expect(classifySpendDownRun({ status: 'skipped' }, { status: 'failed', failure_category: 'needs_human' })).toBe('no_pr_verdict')
+    expect(classifySpendDownRun({ status: 'completed' }, { status: 'running' })).toBe('in_flight')
+    expect(classifySpendDownRun({ status: 'queued' }, null)).toBe('in_flight')
+    expect(classifySpendDownRun({ status: 'completed_no_pr' }, { status: 'failed', failure_category: 'cursor_api_error' })).toBe(
+      'other_failure',
+    )
+    expect(classifySpendDownRun({ status: 'failed' }, null)).toBe('other_failure')
+  })
+})
+
+describe('previouslyPausedProjects', () => {
+  it('reads the paused apps from the last summary and tolerates junk', () => {
+    expect([...previouslyPausedProjects({ projects: [{ projectId: 'a', paused: true }, { projectId: 'b' }] })]).toEqual(['a'])
+    expect(previouslyPausedProjects(null).size).toBe(0)
+    expect(previouslyPausedProjects({ projects: 'x' }).size).toBe(0)
+  })
+})
+
+describe('spendDownScoreboard', () => {
+  const run = (over: Partial<SpendDownRunRow>): SpendDownRunRow => ({
+    keyId: 'k1',
+    projectId: P1,
+    model: 'grok',
+    day: '2026-10-20',
+    outcome: 'pr_opened',
+    noPrVerdict: null,
+    verdict: null,
+    merged: false,
+    reviewCostUsd: null,
+    ...over,
+  })
+
+  it('rolls up per key × app × model × day with yields and review cost', () => {
+    const out = spendDownScoreboard([
+      run({ verdict: 'merge', merged: true, reviewCostUsd: 0.05 }),
+      run({ verdict: 'merge', reviewCostUsd: 0.0512 }),
+      run({ verdict: 'hold', reviewCostUsd: Number.NaN }),
+      run({ verdict: 'fix_first', reviewCostUsd: 0.03 }),
+      run({ outcome: 'no_pr_verdict', noPrVerdict: 'needs_human' }),
+      run({ outcome: 'other_failure' }),
+      run({ outcome: 'in_flight', day: '2026-10-21' }),
+      run({ projectId: P2, outcome: 'no_pr_verdict', noPrVerdict: 'already_fixed' }),
+      run({ projectId: P2, model: 'other', outcome: 'other_failure' }),
+    ])
+    expect(out.totals).toMatchObject({
+      runs: 9,
+      inFlight: 1,
+      prsOpened: 4,
+      noPrVerdicts: 2,
+      otherFailures: 2,
+      reviewed: 4,
+      verdicts: { merge: 2, fix_first: 1, hold: 1 },
+      merged: 1,
+      mergeYield: 1 / 9,
+      mergeableYield: 2 / 9,
+      noPrByVerdict: { needs_human: 1, already_fixed: 1, not_actionable: 0, wrong_repo: 0 },
+    })
+    // A cost that is not a finite number is skipped, never NaN.
+    expect(out.totals.reviewCostUsd).toBe(0.1312)
+    expect(out.rows.map((r) => [r.day, r.projectId, r.model, r.runs])).toEqual([
+      ['2026-10-21', P1, 'grok', 1],
+      ['2026-10-20', P1, 'grok', 6],
+      ['2026-10-20', P2, 'grok', 1],
+      ['2026-10-20', P2, 'other', 1],
+    ])
+    expect(out.rows[1]).toMatchObject({ prsOpened: 4, mergeableYield: 2 / 6, mergeYield: 1 / 6 })
+  })
+
+  it('has null yields and no rows with no runs', () => {
+    expect(spendDownScoreboard([])).toMatchObject({
+      rows: [],
+      totals: { runs: 0, mergeYield: null, mergeableYield: null, reviewCostUsd: 0 },
+    })
+  })
+})
+
+/** n older spend-down runs on P1, each with a PR: the first `merge` reviewed merge, the next `hold` hold. */
+function yieldRows(n: number, merge: number, hold: number) {
+  const jobs: Record<string, unknown>[] = []
+  const attempts: Record<string, unknown>[] = []
+  const reviews: Record<string, unknown>[] = []
+  for (let i = 0; i < n; i++) {
+    const at = new Date(Date.UTC(2026, 9, 19, 0, 59 - i)).toISOString()
+    jobs.push({
+      id: `sj${i}`,
+      project_id: P1,
+      report_id: `old${i}`,
+      status: 'completed',
+      fix_attempt_id: `sa${i}`,
+      created_at: at,
+      dispatch_metadata: { source: 'spend_down', spend_down_key_id: 'k1', model_override: 'grok' },
+    })
+    attempts.push({
+      id: `sa${i}`,
+      project_id: P1,
+      report_id: `old${i}`,
+      agent: 'cursor_cloud',
+      status: 'completed',
+      pr_url: `https://github.com/a/b/pull/${i + 1}`,
+      failure_category: null,
+      created_at: at,
+      merged_at: i === 0 ? at : null,
+      llm_model: 'grok-4.7',
+    })
+    reviews.push({
+      id: `sr${i}`,
+      fix_attempt_id: `sa${i}`,
+      verdict: i < merge ? 'merge' : i < merge + hold ? 'hold' : 'fix_first',
+      reviewed_at: at,
+      cost_usd: '0.4000',
+    })
+  }
+  return { fix_dispatch_jobs: jobs, fix_attempts: attempts, fix_reviews: reviews }
+}
+
+describe('runSpendDownForKey stop-loss', () => {
+  it('pauses an app with a low merge rate, says why, and logs the decision with rates and samples', async () => {
+    logLines.length = 0
+    const dispatch = vi.fn(async () => ({ ok: true }))
+    const summary = await worker.runSpendDownForKey(seed(yieldRows(20, 3, 0)) as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch,
+    })
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(summary.projects[0]).toMatchObject({
+      projectId: P1,
+      dispatched: 0,
+      paused: true,
+      stopped: 'Paused: 3 of the last 20 reviewed fixes were mergeable (15%)',
+      yield: { reviewed: 20, mergeRate: 0.15, holdRate: 0, finishedRuns: 20, noPrShare: 0 },
+    })
+    const lines = logLines.filter((l) => l.msg === 'spend-down.paused')
+    expect(lines).toHaveLength(1)
+    expect(lines[0].ctx).toMatchObject({ keyId: 'k1', projectId: P1, reviewed: 20, mergeRate: 0.15, finishedRuns: 20 })
+  })
+
+  it('pauses on no-PR verdicts before any review exists', async () => {
+    const rows = yieldRows(10, 0, 0)
+    rows.fix_reviews = []
+    rows.fix_attempts = rows.fix_attempts.map((a, i) => (i < 6 ? { ...a, pr_url: null, status: 'failed', failure_category: 'not_actionable' } : a))
+    const summary = await worker.runSpendDownForKey(seed(rows) as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch: async () => ({ ok: true }),
+    })
+    expect(summary.projects[0].stopped).toContain('the agent opened no PR on 6 of the last 10 runs (60%)')
+  })
+
+  it('keeps dispatching a healthy app, and logs a resume when the last tick had paused it', async () => {
+    logLines.length = 0
+    const calls: Array<Record<string, unknown>> = []
+    const summary = await worker.runSpendDownForKey(
+      seed(yieldRows(20, 8, 2)) as never,
+      { ...key(), spend_down_last_summary: { projects: [{ projectId: P1, paused: true }] } },
+      { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) },
+    )
+    expect(calls.map((c) => c.reportId)).toEqual(['r4', 'r1', 'r2'])
+    expect(summary.projects[0].paused).toBeUndefined()
+    expect(logLines.find((l) => l.msg === 'spend-down.resumed')?.ctx).toMatchObject({ projectId: P1, mergeRate: 0.4, reviewed: 20 })
+    expect(logLines.some((l) => l.msg === 'spend-down.paused')).toBe(false)
+  })
+
+  it('stays quiet in cold start: 7 held reviews do not pause', async () => {
+    logLines.length = 0
+    const dispatch = vi.fn(async () => ({ ok: true }))
+    const summary = await worker.runSpendDownForKey(seed(yieldRows(7, 0, 7)) as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch,
+    })
+    expect(dispatch).toHaveBeenCalled()
+    expect(summary.projects[0].paused).toBeUndefined()
+    expect(logLines.some((l) => l.msg === 'spend-down.paused' || l.msg === 'spend-down.resumed')).toBe(false)
+  })
+
+  it('stores the pause on the key summary, so the next tick can tell a resume', async () => {
+    const db = seed(yieldRows(20, 0, 10))
+    await worker.runSpendDown(db as never, { now: NOW, checkBudget: allowAll, dispatch: async () => ({ ok: true }) })
+    const stored = db.table('byok_keys').find((k: Record<string, unknown>) => k.id === 'k1') as Record<string, unknown>
+    expect([...previouslyPausedProjects(stored.spend_down_last_summary)]).toEqual([P1])
   })
 })

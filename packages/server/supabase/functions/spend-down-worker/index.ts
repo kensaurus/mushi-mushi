@@ -18,6 +18,11 @@
  *     wrong_repo, not_actionable or needs_human), ranked by severity × judge
  *     score × named component × 1.3 when the report already has Sentry or
  *     stack evidence, one per group;
+ *   - stop-loss (ADR 0028 amendment): an app is paused while its newest 20
+ *     Opus-reviewed spend-down PRs are under 20% "merge" or over 35% "hold",
+ *     or over half of its newest 20 finished runs ended with a no-PR agent
+ *     verdict (each rule needs 8 samples first). Every pause and resume is
+ *     one structured log line with the rates and sample sizes;
  *   - each goes through `dispatchFixForReport` (auto-fix switch, feature
  *     requests, resolved reports, in-flight dedupe) as an automatic
  *     `cursor_cloud` dispatch carrying `spend_down_key_id` and the key's model.
@@ -45,24 +50,38 @@ import {
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   spendDownDispatchMetadata,
+  spendDownStopLoss,
   spendDownWindow,
+  previouslyPausedProjects,
   type SpendDownCandidate,
   type SpendDownEvidenceRow,
   type SpendDownKey,
   type SpendDownState,
 } from '../_shared/spend-down.ts'
-import { keyDispatchesToday, keyProjects } from '../_shared/spend-down-db.ts'
+import { keyDispatchesToday, keyProjects, projectYieldSamples } from '../_shared/spend-down-db.ts'
 
 const log = rootLog.child('spend-down-worker')
 
 export const SPEND_DOWN_KEY_COLUMNS =
-  'id, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days'
+  'id, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_summary'
+
+/** The yield the stop-loss read for one app this tick (rates are 0-1). */
+export interface ProjectYield {
+  reviewed: number
+  mergeRate: number | null
+  holdRate: number | null
+  finishedRuns: number
+  noPrShare: number | null
+}
 
 export interface ProjectOutcome {
   projectId: string
   dispatched: number
   /** Why nothing (more) went to this app, when that is the case. */
   stopped?: string
+  /** The stop-loss paused this app this tick; `stopped` says why. */
+  paused?: boolean
+  yield?: ProjectYield
 }
 
 export interface KeySummary {
@@ -132,7 +151,7 @@ async function openCloudAttempts(db: SupabaseClient, projectId: string): Promise
 
 export async function runSpendDownForKey(
   db: SupabaseClient,
-  key: SpendDownKey,
+  key: SpendDownKey & { spend_down_last_summary?: unknown },
   deps: SpendDownDeps = {},
 ): Promise<KeySummary> {
   const now = deps.now ?? new Date()
@@ -147,11 +166,29 @@ export async function runSpendDownForKey(
   const dispatchedToday = await keyDispatchesToday(db, key.id, now)
   let remaining = remainingToday(key, dispatchedToday)
   const { ids, settings } = await keyProjects(db, key)
+  const wasPaused = previouslyPausedProjects(key.spend_down_last_summary)
 
   for (const projectId of ids) {
     if (remaining <= 0) break
     const outcome: ProjectOutcome = { projectId, dispatched: 0 }
     base.projects.push(outcome)
+
+    const stopLoss = spendDownStopLoss(await projectYieldSamples(db, projectId))
+    outcome.yield = {
+      reviewed: stopLoss.reviewed,
+      mergeRate: stopLoss.mergeRate,
+      holdRate: stopLoss.holdRate,
+      finishedRuns: stopLoss.finishedRuns,
+      noPrShare: stopLoss.noPrShare,
+    }
+    const trace = { keyId: key.id, projectId, ...outcome.yield, reason: stopLoss.reason }
+    if (stopLoss.paused) {
+      log.info('spend-down.paused', trace)
+      outcome.paused = true
+      outcome.stopped = stopLoss.reason ?? 'Paused: low yield'
+      continue
+    }
+    if (wasPaused.has(projectId)) log.info('spend-down.resumed', trace)
     const s = settings.get(projectId) ?? {}
     const budget = await checkBudget(db, projectId, {
       autofix_max_spend_usd: (s.autofix_max_spend_usd as number | null) ?? null,
@@ -210,7 +247,7 @@ export async function runSpendDown(db: SupabaseClient, deps: SpendDownDeps = {})
   if (error) throw new Error(`spend-down: keys read failed: ${error.message}`)
 
   const summaries: KeySummary[] = []
-  for (const key of (data ?? []) as SpendDownKey[]) {
+  for (const key of (data ?? []) as Array<SpendDownKey & { spend_down_last_summary?: unknown }>) {
     let summary: KeySummary
     try {
       summary = await runSpendDownForKey(db, key, { ...deps, now })

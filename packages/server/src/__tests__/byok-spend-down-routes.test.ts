@@ -172,5 +172,51 @@ describe('GET spend-down', () => {
     expect(s).toMatchObject({ scope: 'organization', state: 'active', dispatchedToday: 0, remainingToday: 10, projects: [] })
     const own = keys.find((k) => k.id === OWN)!
     expect(own).toMatchObject({ scope: 'project', state: 'off', projects: [{ id: P1, name: 'tsumagoi' }] })
+    expect(own.scoreboard).toMatchObject({ days: 7, rows: [], totals: { runs: 0, mergeableYield: null } })
+  })
+
+  it("returns each key's last-7-days scoreboard and each app's stop-loss state", async () => {
+    state.authMethod = 'jwt'
+    const { db, app } = setup()
+    const at = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString()
+    const meta = { source: 'spend_down', spend_down_key_id: OWN, model_override: 'grok-4.7' }
+    // 10 PRs reviewed: 1 merge (merged), 2 hold, 7 fix_first, plus 2 no-PR runs, 1 Cursor error,
+    // and one 8 days old that the scoreboard leaves out (the stop-loss still reads it).
+    for (let i = 0; i < 14; i++) {
+      const id = `00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}`
+      const old = i === 13
+      db.table('fix_dispatch_jobs').push({
+        id: `j${i}`, project_id: P1, report_id: `r${i}`, status: 'completed', fix_attempt_id: id,
+        created_at: old ? at(8 * 24 * 60) : at(i + 1), dispatch_metadata: meta,
+      })
+      const noPr = i === 10 || i === 11
+      const apiError = i === 12
+      db.table('fix_attempts').push({
+        id, project_id: P1, report_id: `r${i}`, agent: 'cursor_cloud',
+        status: noPr || apiError ? 'failed' : 'completed',
+        pr_url: noPr || apiError ? null : `https://github.com/a/b/pull/${i + 1}`,
+        failure_category: noPr ? 'needs_human' : apiError ? 'cursor_api_error' : null,
+        merged_at: i === 0 ? at(0) : null,
+      })
+      if (i < 10 || old) {
+        db.table('fix_reviews').push({
+          fix_attempt_id: id, verdict: i === 0 ? 'merge' : i < 3 ? 'hold' : 'fix_first',
+          reviewed_at: at(i), cost_usd: '0.5000',
+        })
+      }
+    }
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const own = (res.body.data?.keys as Array<Record<string, unknown>>).find((k) => k.id === OWN)!
+    expect((own.scoreboard as { totals: unknown }).totals).toMatchObject({
+      runs: 13, prsOpened: 10, noPrVerdicts: 2, otherFailures: 1, reviewed: 10,
+      verdicts: { merge: 1, fix_first: 7, hold: 2 }, merged: 1, reviewCostUsd: 5,
+      mergeYield: 1 / 13, mergeableYield: 1 / 13,
+    })
+    expect((own.scoreboard as { rows: Array<Record<string, unknown>> }).rows[0]).toMatchObject({ keyId: OWN, projectId: P1, model: 'grok-4.7' })
+    const [project] = own.projects as Array<{ id: string; stopLoss: Record<string, unknown> }>
+    expect(project.id).toBe(P1)
+    // 11 reviews (the old one counts here): 1 merge = 9%.
+    expect(project.stopLoss).toMatchObject({ paused: true, reviewed: 11, mergeVerdicts: 1 })
+    expect(project.stopLoss.reason).toBe('Paused: 1 of the last 11 reviewed fixes were mergeable (9%)')
   })
 })

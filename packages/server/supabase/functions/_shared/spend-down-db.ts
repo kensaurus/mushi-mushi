@@ -1,12 +1,182 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/spend-down-db.ts
- * PURPOSE: The two spend-down reads the worker and the status route share:
- *          the apps a key pays for, and how many dispatches it started today.
- *          Rules live in spend-down.ts; this file only reads.
+ * PURPOSE: The spend-down reads the worker and the status route share: the
+ *          apps a key pays for, how many dispatches it started today, an
+ *          app's recent yield (the stop-loss samples), and the runs behind a
+ *          key's scoreboard. Rules live in spend-down.ts; this file only reads.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { spendDownProjectIds, type CursorPoolKey, type SpendDownKey } from './spend-down.ts'
+import {
+  classifySpendDownRun,
+  SPEND_DOWN_SCOREBOARD_DAYS,
+  spendDownProjectIds,
+  type CursorPoolKey,
+  type SpendDownKey,
+  type SpendDownRunRow,
+  type SpendDownYieldSamples,
+} from './spend-down.ts'
+
+/**
+ * Newest spend-down dispatches of one app the stop-loss reads. At the
+ * 2026-10-21 rates (60% open a PR) 100 runs hold about 60 PRs, well over the
+ * 20 reviews and 20 finished runs the rules use; it also keeps the
+ * `id=in.(…)` filters under PostgREST's URL limit.
+ */
+const YIELD_JOB_LOOKBACK = 100
+/** Ids per `in.(…)` filter: 100 uuids is about 3.7 KB of URL. */
+const IN_CHUNK = 100
+/** PostgREST max_rows on Supabase. */
+const PAGE = 1000
+/** 200 fixes a day (the daily-limit maximum) × 7 days fits in 2 pages; 10 is a guard. */
+const MAX_PAGES = 10
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+interface JobRow {
+  id: string
+  project_id: string
+  status: string | null
+  pr_url: string | null
+  fix_attempt_id: string | null
+  created_at: string
+  dispatch_metadata?: Record<string, unknown> | null
+}
+
+interface AttemptRow {
+  id: string
+  status: string | null
+  pr_url: string | null
+  failure_category: string | null
+  merged_at?: string | null
+  llm_model?: string | null
+}
+
+interface ReviewRow {
+  fix_attempt_id: string
+  verdict: string | null
+  reviewed_at?: string | null
+  cost_usd?: number | string | null
+}
+
+async function readByIds<T>(
+  db: SupabaseClient,
+  table: string,
+  columns: string,
+  column: string,
+  ids: string[],
+  what: string,
+): Promise<T[]> {
+  if (ids.length === 0) return []
+  const results = await Promise.all(
+    chunks(ids, IN_CHUNK).map((part) => db.from(table).select(columns).in(column, part)),
+  )
+  const out: T[] = []
+  for (const { data, error } of results) {
+    if (error) throw new Error(`spend-down: ${what} read failed: ${error.message}`)
+    out.push(...((data ?? []) as T[]))
+  }
+  return out
+}
+
+/**
+ * The stop-loss samples of one app: its newest spend-down runs (any key) with
+ * where each ended, and the Opus verdicts of their PRs, newest review first.
+ */
+export async function projectYieldSamples(db: SupabaseClient, projectId: string): Promise<SpendDownYieldSamples> {
+  const { data, error } = await db
+    .from('fix_dispatch_jobs')
+    .select('id, project_id, status, pr_url, fix_attempt_id, created_at')
+    .eq('project_id', projectId)
+    .eq('dispatch_metadata->>source', 'spend_down')
+    .order('created_at', { ascending: false })
+    .limit(YIELD_JOB_LOOKBACK)
+  if (error) throw new Error(`spend-down: yield dispatch read failed: ${error.message}`)
+  const jobs = (data ?? []) as JobRow[]
+  const attemptIds = jobs.map((j) => j.fix_attempt_id).filter((id): id is string => !!id)
+  const [attempts, reviews] = await Promise.all([
+    readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', attemptIds, 'yield attempts'),
+    readByIds<ReviewRow>(db, 'fix_reviews', 'fix_attempt_id, verdict, reviewed_at', 'fix_attempt_id', attemptIds, 'yield reviews'),
+  ])
+  const byId = new Map(attempts.map((a) => [a.id, a]))
+  return {
+    runs: jobs.map((j) => classifySpendDownRun(j, j.fix_attempt_id ? byId.get(j.fix_attempt_id) ?? null : null)),
+    verdicts: reviews
+      .filter((r) => r.verdict != null)
+      .sort((a, b) => String(b.reviewed_at ?? '').localeCompare(String(a.reviewed_at ?? '')))
+      .map((r) => r.verdict),
+  }
+}
+
+function utcDay(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10)
+}
+
+/**
+ * Every spend-down run one key paid for in the last `days` days, joined to
+ * its attempt (outcome, merged, model) and its Opus review (verdict, cost).
+ * Reads existing tables only; the rollup is spendDownScoreboard().
+ */
+export async function keyScoreboardRuns(
+  db: SupabaseClient,
+  keyId: string,
+  now: Date,
+  days: number = SPEND_DOWN_SCOREBOARD_DAYS,
+): Promise<SpendDownRunRow[]> {
+  const since = new Date(now.getTime() - days * 86_400_000).toISOString()
+  const jobs: JobRow[] = []
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await db
+      .from('fix_dispatch_jobs')
+      .select('id, project_id, status, pr_url, fix_attempt_id, created_at, dispatch_metadata')
+      .eq('dispatch_metadata->>spend_down_key_id', keyId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(page * PAGE, page * PAGE + PAGE - 1)
+    if (error) throw new Error(`spend-down: scoreboard dispatch read failed: ${error.message}`)
+    const rows = (data ?? []) as JobRow[]
+    jobs.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  const attemptIds = jobs.map((j) => j.fix_attempt_id).filter((id): id is string => !!id)
+  const [attempts, reviews] = await Promise.all([
+    readByIds<AttemptRow>(
+      db,
+      'fix_attempts',
+      'id, status, pr_url, failure_category, merged_at, llm_model',
+      'id',
+      attemptIds,
+      'scoreboard attempts',
+    ),
+    readByIds<ReviewRow>(db, 'fix_reviews', 'fix_attempt_id, verdict, cost_usd', 'fix_attempt_id', attemptIds, 'scoreboard reviews'),
+  ])
+  const attemptById = new Map(attempts.map((a) => [a.id, a]))
+  const reviewByAttempt = new Map(reviews.map((r) => [r.fix_attempt_id, r]))
+  return jobs.map((j) => {
+    const attempt = j.fix_attempt_id ? attemptById.get(j.fix_attempt_id) ?? null : null
+    const review = j.fix_attempt_id ? reviewByAttempt.get(j.fix_attempt_id) ?? null : null
+    const outcome = classifySpendDownRun(j, attempt)
+    const override = j.dispatch_metadata?.model_override
+    const cost = review?.cost_usd == null ? null : Number(review.cost_usd)
+    return {
+      keyId,
+      projectId: j.project_id,
+      // The model the dispatch asked for, so a run groups the same before and after it finishes.
+      model: (typeof override === 'string' && override.trim()) || attempt?.llm_model?.trim() || 'app default',
+      day: utcDay(j.created_at),
+      outcome,
+      noPrVerdict: outcome === 'no_pr_verdict' ? attempt?.failure_category ?? null : null,
+      verdict: review?.verdict ?? null,
+      merged: !!attempt?.merged_at,
+      reviewCostUsd: cost != null && Number.isFinite(cost) ? cost : null,
+    }
+  })
+}
 
 function utcDayStart(now: Date): string {
   const d = new Date(now)

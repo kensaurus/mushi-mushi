@@ -120,6 +120,51 @@ describe('SpendDownSection', () => {
     expect(Array.from(document.body.querySelectorAll('button')).some((b) => b.textContent?.includes('spend-down'))).toBe(false)
   })
 
+  it('shows the 7-day scoreboard and each paused app with its reason', async () => {
+    mocks.keys = [
+      {
+        ...KEY,
+        enabled: true,
+        state: 'active',
+        creditsExpireAt: '2026-10-31T23:59:59Z',
+        projects: [
+          {
+            id: 'p1',
+            name: 'tsumagoi',
+            stopLoss: {
+              paused: true,
+              reason: 'Paused: 3 of the last 20 reviewed fixes were mergeable (15%)',
+              reviewed: 20,
+              mergeRate: 0.15,
+              holdRate: 0.2,
+              finishedRuns: 20,
+              noPrShare: 0.1,
+            },
+          },
+        ],
+        scoreboard: {
+          days: 7,
+          totals: {
+            runs: 258,
+            inFlight: 0,
+            prsOpened: 154,
+            noPrVerdicts: 64,
+            otherFailures: 40,
+            reviewed: 66,
+            verdicts: { merge: 19, fix_first: 33, hold: 14 },
+            merged: 0,
+            reviewCostUsd: 8.04,
+            mergeYield: 0,
+            mergeableYield: 0.07,
+          },
+        },
+      },
+    ]
+    await render(true)
+    expect(document.body.textContent).toContain('Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04')
+    expect(document.body.textContent).toContain('tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
+  })
+
   it('renders nothing when the app has no Cursor key', async () => {
     mocks.keys = []
     await render(true)

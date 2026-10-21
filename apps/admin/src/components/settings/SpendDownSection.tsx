@@ -5,6 +5,9 @@
  *          a small form for the credit expiry date, the model, fixes per day
  *          and how many days ahead to start. The spend-down worker does the
  *          dispatching, inside each app's auto-fix caps; fixes open draft PRs.
+ *          Each key also shows what its last 7 days produced (runs → PRs →
+ *          mergeable → merged, Opus review cost) and the apps the stop-loss
+ *          paused, with why.
  */
 
 import { useState } from 'react';
@@ -12,7 +15,14 @@ import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
 import { Btn, Checkbox, Input, ResultChip } from '../ui';
-import { spendDownLine, spendDownStops, type SpendDownKeyStatus, type SpendDownResponse } from './spendDown';
+import {
+  spendDownLine,
+  spendDownPauses,
+  spendDownScoreLine,
+  spendDownStops,
+  type SpendDownKeyStatus,
+  type SpendDownResponse,
+} from './spendDown';
 
 interface Draft {
   enabled: boolean;
@@ -87,6 +97,8 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
         {keys.map((k) => {
           const line = spendDownLine(k);
           const stops = spendDownStops(k);
+          const score = spendDownScoreLine(k);
+          const pauses = spendDownPauses(k);
           const readOnly = k.scope === 'organization' && !canManageShared;
           const open = editing === k.id && draft;
           return (
@@ -96,6 +108,12 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
                 {k.label && <span className="text-fg-muted">{k.label}</span>}
               </p>
               <p className={`text-xs ${TONE[line.tone]}`}>{line.text}</p>
+              {score && <p className="text-xs tabular-nums text-fg-secondary">{score}</p>}
+              {pauses.map((s) => (
+                <p key={s} className="text-xs text-warn">
+                  {s}
+                </p>
+              ))}
               {stops.map((s) => (
                 <p key={s} className="text-xs text-fg-muted">
                   {s}

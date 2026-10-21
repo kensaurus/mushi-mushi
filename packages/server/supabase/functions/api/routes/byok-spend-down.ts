@@ -4,7 +4,9 @@
  *
  *   GET   /v1/admin/byok/spend-down                 every Cursor key this app
  *         can use, with its spend-down settings, window, today's count, the
- *         apps it pays for and the last worker tick. `mcp:read`.
+ *         apps it pays for (each with its stop-loss pause state), the last
+ *         7 days' scoreboard (runs → PRs → Opus verdicts → merged, review
+ *         cost) and the last worker tick. `mcp:read`.
  *   PATCH /v1/admin/byok/keys/:keyId/spend-down     turn it on or off and set
  *         the credit expiry, model, daily limit and window. A shared key is
  *         an organization owner's or admin's call in the console (ADR 0023);
@@ -28,11 +30,15 @@ import { parseCursorModelSpec } from '../../_shared/cursor-cloud.ts'
 import {
   SPEND_DOWN_DEFAULT_DAILY_LIMIT,
   SPEND_DOWN_DEFAULT_WINDOW_DAYS,
+  SPEND_DOWN_SCOREBOARD_DAYS,
   remainingToday,
+  spendDownScoreboard,
+  spendDownStopLoss,
   spendDownWindow,
   type SpendDownKey,
+  type SpendDownStopLoss,
 } from '../../_shared/spend-down.ts'
-import { keyDispatchesToday, keyProjects } from '../../_shared/spend-down-db.ts'
+import { keyDispatchesToday, keyProjects, keyScoreboardRuns, projectYieldSamples } from '../../_shared/spend-down-db.ts'
 
 const KEY_COLUMNS =
   'id, label, key_hint, provider_slug, project_id, organization_id, status, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_run_at, spend_down_last_summary'
@@ -87,13 +93,25 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
     for (const row of (data ?? []) as KeyRow[]) {
       const window = spendDownWindow(row, now)
       let dispatchedToday = 0
-      let projects: Array<{ id: string; name: string }> = []
+      let projects: Array<{ id: string; name: string; stopLoss: SpendDownStopLoss }> = []
+      let scoreboard: ReturnType<typeof spendDownScoreboard> & { days: number; since: string }
       try {
         dispatchedToday = await keyDispatchesToday(db, row.id, now)
         const served = await keyProjects(db, row)
         if (served.ids.length > 0) {
           const { data: names } = await db.from('projects').select('id, name').in('id', served.ids)
-          projects = ((names ?? []) as Array<{ id: string; name: string }>).map((p) => ({ id: p.id, name: p.name }))
+          projects = await Promise.all(
+            ((names ?? []) as Array<{ id: string; name: string }>).map(async (p) => ({
+              id: p.id,
+              name: p.name,
+              stopLoss: spendDownStopLoss(await projectYieldSamples(db, p.id)),
+            })),
+          )
+        }
+        scoreboard = {
+          days: SPEND_DOWN_SCOREBOARD_DAYS,
+          since: new Date(now.getTime() - SPEND_DOWN_SCOREBOARD_DAYS * 86_400_000).toISOString(),
+          ...spendDownScoreboard(await keyScoreboardRuns(db, row.id, now)),
         }
       } catch (err) {
         return c.json({ ok: false, error: { code: 'DB_ERROR', message: err instanceof Error ? err.message : String(err) } }, 500)
@@ -114,6 +132,7 @@ export function registerByokSpendDownRoutes(app: Hono<{ Variables: Variables }>)
         dispatchedToday,
         remainingToday: window.state === 'active' ? remainingToday(row, dispatchedToday) : 0,
         projects,
+        scoreboard,
         lastRunAt: row.spend_down_last_run_at,
         lastSummary: row.spend_down_last_summary ?? null,
       })

@@ -80,3 +80,76 @@ how much is left.
   an app's legacy Integrations key now comes before a shared key
   (`resolveCursorApiKey`); before, a shared key moved such apps onto another
   account.
+
+## Amendment (2026-10-21): stop-loss and scoreboard
+
+Status: Accepted (owner-delegated, 2026-10-21)
+
+### Context
+
+Three days in, the live database showed what the spend bought: 258
+spend-down runs, 154 opened a PR (60%), 64 ended with a no-PR agent verdict
+(25%: already fixed, not actionable, needs a person, wrong repo), 40 failed
+some other way (16%), none merged yet. The Opus reviews of those PRs (ADR
+0030) said merge on 29%, fix_first on 49%, hold on 22%. The owner asked that
+every token be traced, evaluated and proved, and that spending stop where it
+does not produce mergeable work. The rule counted dispatches and nothing
+else, so an app whose agent kept opening unmergeable PRs, or kept finding
+nothing to do, was spent on at the same rate as a good one.
+
+### Decision
+
+- **Stop-loss per app** (`spendDownStopLoss` in `_shared/spend-down.ts`,
+  read by the worker before it dispatches to an app). It reads the app's
+  newest 20 Opus verdicts on spend-down PRs (`fix_reviews` of the attempts of
+  `fix_dispatch_jobs` with `dispatch_metadata.source = 'spend_down'`, any
+  key, from the newest 100 such runs) and its newest 20 finished spend-down
+  runs, and pauses the app when:
+  - fewer than 20% of the reviews are "merge" (baseline 29%);
+  - more than 35% are "hold" (baseline 22%);
+  - more than 50% of the finished runs ended with a no-PR agent verdict
+    (baseline 25%).
+  Each rule needs at least 8 samples (cold start: one or two bad runs are not
+  a rate). Exactly 20%, 35% or 50% does not pause. The pause lifts on its own
+  once newer samples bring the rates back; there is no manual override and no
+  new setting. In-flight runs are not samples.
+- A paused app is in the tick summary (`spend_down_last_summary`) with
+  `paused: true`, its rates, and a plain-words reason, for example
+  "Paused: 3 of the last 20 reviewed fixes were mergeable (15%)". Every pause
+  and every resume (paused last tick, not now) writes one structured log line
+  (`spend-down.paused` / `spend-down.resumed`) with the key, the app, the rates
+  and the sample sizes.
+- **Scoreboard**, computed on read from the existing tables, no new table or
+  view and no new writes (`keyScoreboardRuns` + `spendDownScoreboard`): per
+  key × app × model × UTC day, runs, PRs opened, no-PR verdicts by category,
+  other failures, in-flight, Opus merge / fix_first / hold, merged, Opus review
+  cost (`fix_reviews.cost_usd`), merge yield (merged / runs) and mergeable
+  yield (merge verdicts / runs). `GET /v1/admin/byok/spend-down` and MCP
+  `get_spend_down_status` return each key's last 7 days (totals and rows) and
+  each app's live stop-loss state; the console shows one line per key
+  ("Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review
+  $8.04") and each paused app with its reason.
+
+### Rejected
+
+- **A SQL view or materialized rollup.** It would be faster at scale but
+  needs a migration applied before the API deploys. At ≤200 runs a day per
+  key, reading 7 days of rows (2 pages, attempts and reviews in chunks of
+  100 ids) is cheap enough; revisit with a view if a key ever runs far more.
+- **Pausing the key instead of the app.** Yield differs by app (on
+  2026-10-21 one app's runs were 65% no-PR while another's PRs were 67%
+  mergeable); pausing the key would starve the apps that work.
+- **Counting fix_first as a failure.** A fix_first PR is usually one
+  follow-up from mergeable; the hold rate and the merge rate already bound
+  the bad and the good ends.
+- **Per-app thresholds as settings.** No evidence yet that apps need
+  different bars; constants with a rationale are easier to reason about and
+  change in review.
+
+### Consequences
+
+- On the 2026-10-21 data the rule would pause three of the seven apps
+  (one under 20% mergeable, one over 35% held, one with 65% no-PR runs) and
+  leave the rest running or in cold start.
+- Each tick adds three reads per served app (its newest 100 spend-down runs,
+  their attempts, their reviews).

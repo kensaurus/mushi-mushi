@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_118 configuration knobs across 19 sections · last regenerated 2026-10-20._
+_118 configuration knobs across 19 sections · last regenerated 2026-10-21._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1871,7 +1871,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.
 
-**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 30 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. Every fix opens a draft pull request; nothing merges.
+**How it works** — From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 10 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. It also pauses an app whose spend is not producing mergeable work: under 20% of its last 20 reviewed fixes got an Opus "merge", over 35% got a "hold", or over half of its last 20 runs ended without a pull request. Each rule waits for 8 samples, and the pause lifts on its own when newer runs do better. Every fix opens a draft pull request; nothing merges. The section shows what the last 7 days bought: runs, pull requests, mergeable, merged, and the Opus review cost.
 
 **Default** — `off; 10 fixes a day; starts 14 days before expiry`
 
