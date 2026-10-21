@@ -293,3 +293,18 @@ export function describeCiInfra(ci: Pick<FixCiInfra, 'kind' | 'runner'>): string
       return ci.kind.replace(/_/g, ' ')
   }
 }
+
+/**
+ * One-job (JIT) runners register as `<label>-<unix seconds>` (`mushi runner
+ * add`), so every job is a new runner name. The base name is what a host
+ * heartbeat lists and what the map shows as one runner.
+ */
+export function runnerBaseName(name: string): string {
+  return name.replace(/-\d{9,}$/, '')
+}
+
+/** True when a GitHub runner name is the heartbeat's runner, or a one-job runner of it. */
+export function runnerNameMatches(heartbeatName: string, githubName: string): boolean {
+  return githubName === heartbeatName || runnerBaseName(githubName) === heartbeatName
+}
+

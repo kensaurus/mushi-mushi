@@ -30,6 +30,7 @@
 import { parse as parseYaml } from 'npm:yaml@2'
 import { ciWorkflowDrift } from './recipe-drift.ts'
 import type { CiOverviewAdvice } from './ci-overview-types.ts'
+import { runnerNameMatches } from './ci-infra.ts'
 
 export interface AdvisorJob {
   repo: string
@@ -216,7 +217,7 @@ export function adviseCi(input: AdvisorInput): CiOverviewAdvice[] {
     if (r.kind !== 'self_hosted' || !r.firstSeenAt || rogue.has(`${r.repo}|${r.name}`)) continue
     const first = Date.parse(r.firstSeenAt)
     if (!Number.isFinite(first) || nowMs - first > 7 * DAY_MS) continue
-    if (heartbeatRunners.has(r.name)) continue
+    if ([...heartbeatRunners].some((n) => runnerNameMatches(n, r.name))) continue
     if (r.labels.some((l) => l.toLowerCase().startsWith('mushi-'))) continue
     // Only "new" when Mushi watched the repo for a day before it appeared:
     // on the first collection every runner is first seen at once.

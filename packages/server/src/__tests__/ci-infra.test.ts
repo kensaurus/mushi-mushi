@@ -184,3 +184,17 @@ describe('stored ci_infra', () => {
     expect(describeCiInfra({ kind: 'queue_expired', runner: null })).toBe('no runner picked the job up')
   })
 })
+
+describe('runner names of one-job runners', () => {
+  it('strips the unix-seconds suffix and matches the heartbeat label', async () => {
+    const { runnerBaseName, runnerNameMatches } = await import('../../supabase/functions/_shared/ci-infra.ts')
+    expect(runnerBaseName('mushi-nuc-1761040000')).toBe('mushi-nuc')
+    expect(runnerBaseName('kensaurus-local-glot-1')).toBe('kensaurus-local-glot-1')
+    expect(runnerBaseName('build-2024')).toBe('build-2024')
+    expect(runnerNameMatches('mushi-nuc', 'mushi-nuc-1761040000')).toBe(true)
+    expect(runnerNameMatches('mushi-nuc', 'mushi-nuc')).toBe(true)
+    expect(runnerNameMatches('mushi-nuc', 'mushi-nuc-2')).toBe(false)
+    expect(runnerNameMatches('mushi', 'mushi-nuc-1761040000')).toBe(false)
+  })
+})
+

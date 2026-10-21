@@ -14,6 +14,7 @@
  */
 
 import { adviseCi, percentile, slowSteps, STALE_HEARTBEAT_MS, type AdvisorJob } from './ci-advisor.ts'
+import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'
 import type { CiJobKind, CiOverview } from './ci-overview-types.ts'
 import type { RepoPermissions } from './ci-collector.ts'
 
@@ -249,24 +250,34 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       }
     })
   const hostOfRunner = (name: string, repo: string): string | null => {
-    const exact = hosts.find((h) => h.runners.some((r) => r.name === name && (!r.repo || r.repo === repo)))
+    const exact = hosts.find((h) => h.runners.some((r) => runnerNameMatches(r.name, name) && (!r.repo || r.repo === repo)))
     return exact?.hostId ?? null
   }
 
   const dayAgo = nowMs - 24 * 60 * 60_000
   const weekAgo = nowMs - 7 * 24 * 60 * 60_000
-  const runners = rows.runners.map((r) => {
-    const mine = all.filter((j) => j.repo === r.repo && j.runner_name === r.runner_name && j.project_id === r.project_id)
+  // One-job runners (`<label>-<unix seconds>`) fold into one runner per label.
+  const grouped = new Map<string, typeof rows.runners>()
+  for (const r of rows.runners) {
+    const key = `${r.project_id}|${r.repo}|${runnerBaseName(r.runner_name)}`
+    grouped.set(key, [...(grouped.get(key) ?? []), r])
+  }
+  const runners = [...grouped.values()].map((group) => {
+    const r = group[0]
+    const name = runnerBaseName(r.runner_name)
+    const mine = all.filter((j) => j.repo === r.repo && j.project_id === r.project_id && j.runner_name != null && runnerBaseName(j.runner_name) === name)
+    const status = group.some((g) => g.status === 'online') ? 'online' : group.some((g) => g.status === 'offline') ? 'offline' : r.status
+    const lastJobAt = group.map((g) => g.last_job_at).filter((x): x is string => !!x).sort().at(-1) ?? null
     return {
       projectId: r.project_id,
       repo: r.repo,
-      name: r.runner_name,
-      status: r.status,
-      busy: r.busy,
-      labels: r.labels ?? [],
+      name,
+      status,
+      busy: group.some((g) => g.busy === true) ? true : group.every((g) => g.busy === false) ? false : null,
+      labels: [...new Set(group.flatMap((g) => g.labels ?? []))],
       kind: r.kind,
-      hostId: hostOfRunner(r.runner_name, r.repo),
-      lastJobAt: r.last_job_at,
+      hostId: hostOfRunner(name, r.repo),
+      lastJobAt,
       jobs24h: mine.filter((j) => Date.parse(j.gh_created_at) >= dayAgo).length,
       infraFailures7d: mine.filter((j) => j.infra && Date.parse(j.gh_created_at) >= weekAgo).length,
     }

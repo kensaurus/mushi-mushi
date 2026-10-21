@@ -155,6 +155,9 @@ describe('adviseCi', () => {
       expect(ids(base({ runners: [{ ...newRunner, firstSeenAt: ago(9 * DAY) }], repoWatchedSince: watched }))).not.toContain('unknown_runner')
       expect(ids(base({ runners: [newRunner], repoWatchedSince: { [REPO]: newRunner.firstSeenAt } }))).not.toContain('unknown_runner')
       expect(ids(base({ runners: [{ ...newRunner, kind: 'github_hosted' }], repoWatchedSince: watched }))).not.toContain('unknown_runner')
+      // A one-job runner registers as <label>-<unix seconds>; the heartbeat lists the label.
+      const oneJob = { ...newRunner, name: 'build-box-7-1761040000', labels: ['self-hosted', 'kensaurus-local'] }
+      expect(ids(base({ runners: [oneJob], hosts: [host], repoWatchedSince: watched }))).not.toContain('unknown_runner')
     })
   })
 })
@@ -283,5 +286,21 @@ describe('buildCiOverview', () => {
     expect(o.jobs.find((x) => x.runId === 77)?.memPeakMb).toBe(3500)
     expect(o.stats).toMatchObject({ jobs: 3, infraFailures: 1, codeFailures: 1, passRate: 0.333 })
     expect(o.advice.map((a) => a.id)).toContain(`host_stale:${'a'.repeat(64)}`)
+  })
+
+  it('folds one-job runners (<label>-<unix seconds>) into one runner linked to the heartbeat label', () => {
+    const runner = (name: string, status: 'online' | 'offline', busy: boolean) =>
+      ({ project_id: P1, repo: REPO, runner_name: name, status, busy, labels: ['self-hosted', 'mushi-nuc'], kind: 'self_hosted' as const, first_seen_at: ago(60), last_job_at: ago(5) })
+    const o = buildCiOverview(rows({
+      finished: [row({ runner_name: 'mushi-nuc-1761040000' }), row({ runner_name: 'mushi-nuc-1761040300' })],
+      runners: [runner('mushi-nuc-1761040000', 'offline', false), runner('mushi-nuc-1761040300', 'online', true)],
+      hosts: [{
+        organization_id: 'o1', project_id: P1, host_id: 'c'.repeat(64), hostname: 'nuc', platform: 'linux', cpu_count: 8, mem_total_mb: 16000,
+        last_heartbeat_at: ago(1), metrics: {}, mushi_version: null,
+        runners: [{ name: 'mushi-nuc', repo: REPO, service: 'mushi-runner-mushi-nuc.service', active: true, restarts: 0, mem_current_mb: 500, mem_max_mb: 8192, oom_kills: 0 }],
+      }],
+    }), opts)
+    expect(o.runners).toHaveLength(1)
+    expect(o.runners[0]).toMatchObject({ name: 'mushi-nuc', status: 'online', busy: true, hostId: 'c'.repeat(64), jobs24h: 2 })
   })
 })
