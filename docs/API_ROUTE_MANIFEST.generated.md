@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-21 · **699** routes.
+> Generated: 2026-10-21 · **702** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 177 |
 | `apiKeyAuth` | 58 |
-| `jwtAuth` | 355 |
+| `jwtAuth` | 358 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -68,6 +68,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/browserbase/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/credits` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/cursor/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
 | DELETE | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -82,6 +83,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/byok/keys/:keyId/scope` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PATCH | `/v1/admin/byok/keys/:keyId/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/keys/:keyId/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/review-followups` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
+| PATCH | `/v1/admin/byok/review-followups` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
 | GET | `/v1/admin/byok/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/spend-down/projects/:projectId/resume` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
