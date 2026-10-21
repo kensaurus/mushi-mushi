@@ -182,6 +182,7 @@ const CAUSE_LABELS: Record<string, string> = {
   no_relevant_code: 'No matching code found',
   context_assembly_failed: 'Code lookup failed',
   ci_failed: 'CI failed',
+  ci_infra: 'The test machine stopped — your fix was not tested',
   pr_closed_unmerged: 'PR closed without merge',
   unknown: 'Unrecognised error',
 }

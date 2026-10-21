@@ -110,6 +110,10 @@ describe('glot.it rows', () => {
     expect(fixCauseLabel('openai_key_rejected')).toBe('OpenAI key rejected')
   })
 
+  it('names the test-machine bucket in plain words (ADR 0033)', () => {
+    expect(fixCauseLabel('ci_infra')).toBe('The test machine stopped — your fix was not tested')
+  })
+
   it('says "the key is fixed now — retry" once a working key is on file', () => {
     const healed = { ...AUDIO_SKIPPED, retryable: true, credential_block: { provider: 'openai', keyHealthy: true } }
     expect(credentialAdvice(healed)).toMatchObject({
