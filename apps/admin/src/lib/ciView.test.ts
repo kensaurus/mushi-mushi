@@ -4,6 +4,7 @@ import {
   NO_RUNNER_LANE,
   buildCiQueue,
   buildCiTimeline,
+  ciActivity,
   formatSeconds,
   isCiOverviewEmpty,
   jobElapsedSeconds,
@@ -194,5 +195,35 @@ describe('overview helpers', () => {
     expect(permissionsNotice({ jobs: 'ok', runners: 'ok' })).toBeNull()
     expect(permissionsNotice({ jobs: 'ok', runners: 'missing' })).toContain('Administration: read')
     expect(permissionsNotice({ jobs: 'missing', runners: 'missing' })).toContain('Actions: read')
+  })
+})
+
+describe('ciActivity', () => {
+  it('buckets finished jobs by UTC day and outcome, oldest day first', () => {
+    const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW)
+    expect(a.days).toHaveLength(7)
+    expect(a.days[0].day).toBe('2026-10-15')
+    expect(a.days[6]).toEqual({ day: '2026-10-21', passed: 1, failed: 1, infra: 2, other: 1 })
+    expect(a.finished).toBe(5)
+  })
+
+  it('reads pass rate from passed vs failed only, and medians from finished jobs', () => {
+    const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW)
+    expect(a.passRate).toBe(0.5)
+    expect(a.waitP50s).toBe(60)
+    expect(a.runP50s).toBe(540)
+    expect(a.memPeakMb).toBe(10100)
+  })
+
+  it('takes the last job time from live jobs too, and drops jobs older than the window', () => {
+    const old: CiJob = { ...byId('j5'), id: 'old', createdAt: '2026-10-10T10:00:00Z', startedAt: '2026-10-10T10:01:00Z', completedAt: '2026-10-10T10:09:00Z' }
+    const a = ciActivity([...FIXTURE_JOBS, old], FIXTURE_NOW)
+    expect(a.lastJobAt).toBe('2026-10-21T11:58:00Z')
+    expect(a.finished).toBe(5)
+  })
+
+  it('is empty for no jobs', () => {
+    const a = ciActivity([], FIXTURE_NOW)
+    expect(a).toMatchObject({ finished: 0, passRate: null, waitP50s: null, runP50s: null, memPeakMb: null, lastJobAt: null })
   })
 })

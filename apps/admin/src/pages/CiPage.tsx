@@ -204,7 +204,7 @@ export function CiPage() {
             <CiInfraFailures jobs={data.jobs} />
           </Section>
 
-          <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} />
+          <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} onSelect={setSelected} />
         </>
       )}
     </div>
