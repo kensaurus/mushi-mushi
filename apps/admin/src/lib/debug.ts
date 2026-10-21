@@ -25,7 +25,7 @@ export function setDebugEnabled(enabled: boolean): void {
 import { readVizToken } from './vizTokens'
 
 const PREFIX = '%c[mushi:debug]'
-const STYLE = `color: ${readVizToken('accent')}; font-weight: bold;`
+const prefixStyle = () => `color: ${readVizToken('accent')}; font-weight: bold;`
 const RESET_STYLE = 'color: inherit;'
 
 // `category` and `message` are passed as `%s` data arguments (never
@@ -37,18 +37,18 @@ export function debugLog(category: string, message: string, data?: Record<string
   if (!isDebugEnabled()) return
   const catStyle = `color: ${readVizToken('accent-foreground')}; font-weight: 600;`
   if (data) {
-    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message, data)
+    console.log(FORMAT, prefixStyle(), catStyle, category, RESET_STYLE, message, data)
   } else {
-    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message)
+    console.log(FORMAT, prefixStyle(), catStyle, category, RESET_STYLE, message)
   }
 }
 
 export function debugWarn(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.warn(FORMAT, STYLE, `color: ${readVizToken('viz-score-warn')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
+  console.warn(FORMAT, prefixStyle(), `color: ${readVizToken('viz-score-warn')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }
 
 export function debugError(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.error(FORMAT, STYLE, `color: ${readVizToken('viz-flow-danger')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
+  console.error(FORMAT, prefixStyle(), `color: ${readVizToken('viz-flow-danger')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }

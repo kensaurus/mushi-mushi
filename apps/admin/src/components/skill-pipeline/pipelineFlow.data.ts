@@ -15,11 +15,11 @@ import { readVizToken, stepStatusColor } from '../../lib/vizTokens'
 
 // ── Step status colours ───────────────────────────────────────────────────────
 const STEP_STATUS_HEX: Record<string, string> = {
-  pending: readVizToken('viz-step-pending'),
-  running: readVizToken('viz-step-running'),
-  passed: readVizToken('viz-step-passed'),
-  failed: readVizToken('viz-step-failed'),
-  skipped: readVizToken('viz-step-skipped'),
+  get pending() { return readVizToken('viz-step-pending') },
+  get running() { return readVizToken('viz-step-running') },
+  get passed() { return readVizToken('viz-step-passed') },
+  get failed() { return readVizToken('viz-step-failed') },
+  get skipped() { return readVizToken('viz-step-skipped') },
 }
 
 /** Runtime reader — prefers live CSS token over module-init fallback. */

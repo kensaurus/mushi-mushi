@@ -17,19 +17,19 @@ export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
  *  TS so a theme tweak only touches one file. Aligned with the dashboard
  *  flow's `flowTokens.ts` so the two flows feel like one system. */
 export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = {
-  ok: readVizToken('viz-score-ok'),
-  info: readVizToken('viz-flow-info'),
-  warn: readVizToken('viz-score-warn'),
-  crit: readVizToken('viz-flow-danger'),
-  neutral: readVizToken('viz-neutral'),
+  get ok() { return readVizToken('viz-score-ok') },
+  get info() { return readVizToken('viz-flow-info') },
+  get warn() { return readVizToken('viz-score-warn') },
+  get crit() { return readVizToken('viz-flow-danger') },
+  get neutral() { return readVizToken('viz-neutral') },
 }
 
 export const HERO_ACTION_TONE_HEX: Record<PageAction['tone'], string> = {
-  plan: readVizToken('viz-flow-info'),
-  do: readVizToken('viz-flow-brand'),
-  check: readVizToken('viz-score-warn'),
-  act: readVizToken('viz-score-ok'),
-  idle: readVizToken('viz-neutral'),
+  get plan() { return readVizToken('viz-flow-info') },
+  get do() { return readVizToken('viz-flow-brand') },
+  get check() { return readVizToken('viz-score-warn') },
+  get act() { return readVizToken('viz-score-ok') },
+  get idle() { return readVizToken('viz-neutral') },
 }
 
 export interface HeroDecideData {

@@ -45,8 +45,8 @@ const DOT_RADIUS = 6
  * If the favicon is ever recoloured back to a neutral surface, swap these
  * back to a warning red — there's nothing in the API that needs to change.
  */
-const DOT_COLOR = readVizToken('viz-lang-javascript')
-const DOT_RING_COLOR = readVizToken('viz-terminal-bg')
+const DOT_TOKEN = 'viz-lang-javascript'
+const DOT_RING_TOKEN = 'viz-terminal-bg'
 const BASE_SRC = '/favicon.svg'
 
 let baseImage: HTMLImageElement | null = null
@@ -151,11 +151,11 @@ async function updateFaviconBadge(count: number): Promise<void> {
     const cy = DOT_RADIUS + 1
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS + 1, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_RING_COLOR
+    ctx.fillStyle = readVizToken(DOT_RING_TOKEN)
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_COLOR
+    ctx.fillStyle = readVizToken(DOT_TOKEN)
     ctx.fill()
 
     link.type = 'image/png'
