@@ -78,6 +78,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | --- | --- |
 | `fast-filter` | Stage-1 cheap triage before `classify-report` (invoked by `api`) |
 | `ci-sync` | Polls GitHub check-runs for open fix PRs |
+| `ci-jobs-collector` | Every 10 minutes (:02 to :52; Plan 022, ADR 0033): reads GitHub Actions runs updated in the last 2 h on every branch of each project's repos (≤40 calls a tick, fair across projects), classifies each job (`_shared/ci-infra.ts`: runner lost, waiting for a runner and queue expired are infra, never code failures) into `ci_jobs`, derives `ci_runners` (one-job `<label>-<seconds>` runners fold into their label), reads the repo runner list when the token has Administration: read, and deletes job rows and samples older than 30 days. `GET /v1/admin/ci/overview?refresh=1` live-syncs queued and running jobs at most once a minute per project. Host health arrives through `POST /v1/ingest/runner` with a `runner:write` key only (`mushi runner heartbeat` / job hooks) |
 | `retention-sweep` | Applies data-retention policies |
 | `stripe-webhooks` | Stripe subscription + invoice events |
 | `slack-interactions` | Slack interactive payloads + threaded replies |
@@ -281,9 +282,10 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
-| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/merge/review`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
+| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
+| **CI runners** (ADR 0033) | `mushi runner status/heartbeat/hooks install/key/add/audit` |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
 | **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
 | **Billing** | `mushi usage`, `mushi billing status/cap`, `mushi budgets show/autofix` |
@@ -357,7 +359,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **119 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **120 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 

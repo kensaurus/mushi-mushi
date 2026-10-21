@@ -40,9 +40,15 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // groups` give the new UX runs page and project groups their terminal path
 // (surface parity). Playwright stays in @mushi-mushi/ux, not here; the growth is
 // the command code, measured at cli 185.3/700.4 kB packed/unpacked.
+//
+// Raised 2026-10-21 (Plan 022, ADR 0033): `mushi runner status/heartbeat/hooks/
+// key/add/audit` and `mushi fixes rerun-ci` give the CI runners page and the
+// re-run route their terminal path (surface parity), with the runner setup plan
+// builder, host probes and job hook scripts. No new dependencies; the growth is
+// that code, measured at cli 204.0/776.3 kB packed/unpacked.
 export const BUDGETS = [
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 186_000, unpacked: 715_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 205_000, unpacked: 790_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

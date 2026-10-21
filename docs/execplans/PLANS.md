@@ -645,3 +645,23 @@ A local, npm-installed loop that maps a running app's pages, tabs and dialogs in
 - [ ] Phase 3: Home / App health / Team page hubs with redirects and one setup path are built; the single `NextStep` component waits on an owner decision (see ux-loop.md)
 - [x] Phase 4: cloud mode on the host's GitHub Actions (`--agent cursor-cloud`, `.github/actions/ux-loop`, "Run in the cloud"); live dispatch and Cursor run owed
 - [x] Phase 5: A/B outline (in ux-loop.md; not built)
+
+---
+
+## Plan 022 — CI runners you can see (2026-10-21) `IN PROGRESS`
+
+Infra vs code CI verdicts in the fix loop, `ci_jobs` / `ci_runners` collection,
+host heartbeat and job hooks, the `/ci` runner map with a speed advisor, and
+`mushi runner add`. Full plan: [`ci-runners.md`](ci-runners.md); decision:
+[ADR 0033](../adr/0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md).
+
+---
+
+## Plan 023 — Verifiably local (2026-10-21) `PLANNED`
+
+`MUSHI_LOCAL_ONLY` egress allowlist with a self-test, local models and
+embeddings, `GITHUB_API_URL`, SMTP, a local fix agent (`mushi agent serve`),
+and a compose profile with no route out but an allowlisting proxy. Full
+plan: [`local-only.md`](local-only.md); decision:
+[ADR 0034](../adr/0034-verifiably-local-mode.md).
+
