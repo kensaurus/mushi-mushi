@@ -291,7 +291,7 @@ describe('GET /v1/admin/byok/credits', () => {
   })
 })
 
-describe('before migration 20261021090000 (no owner_user_id column)', () => {
+describe('before migration 20261021051628 (no owner_user_id column)', () => {
   /** Every byok_keys read or write naming owner_user_id answers 42703, as PostgREST does. */
   function dropOwnerColumn() {
     const real = db as unknown as { from: (t: string) => Record<string, unknown> }

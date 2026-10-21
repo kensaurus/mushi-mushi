@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261021153000_review_followups
+-- 20261021063310_review_followups
 --
 -- Review follow-up loop (ADR 0032). When the Opus review of a cloud agent's
 -- PR (ADR 0030, fix_reviews) says "fix_first" on the PR's current head, Mushi
@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_organizations_review_followup_key
 -- of the foreign key's ON DELETE SET NULL. It also fires when a universal
 -- key (ADR 0031) goes because its owner's account is deleted (the
 -- owner_user_id cascade). It only updates organizations and never touches
--- Vault, so it is independent of 20261021090000's AFTER DELETE trigger
+-- Vault, so it is independent of 20261021051628's AFTER DELETE trigger
 -- trg_byok_keys_delete_vault_secret (which runs after the row is gone and
 -- deletes the secret when nothing else uses it): BEFORE and AFTER row
 -- triggers never interleave, whatever their names.

@@ -7,7 +7,7 @@
  *       that function takes a secret NAME. PostgREST had no such signature,
  *       so every removed pool key left its secret in Vault. Pool rows keep
  *       the id, so they now call vault_delete_secret_if_unused (migration
- *       20261021090000), which keeps a secret something else still uses:
+ *       20261021051628), which keeps a secret something else still uses:
  *       on live data a pool row shared its secret with the project's legacy
  *       byok_<provider>_key_ref, which the resolver uses (review 2026-10-21).
  *   E1  An optional "expires on" date for a key (Supabase tokens have one
@@ -169,9 +169,9 @@ describe('V1: removing a pool key deletes its Vault secret by id, unless somethi
   })
 })
 
-describe('private.vault_secret_in_use (migration 20261021090000)', () => {
+describe('private.vault_secret_in_use (migration 20261021051628)', () => {
   const sql = readFileSync(
-    resolve(__dirname, '../../supabase/migrations/20261021090000_byok_keys_universal_scope.sql'),
+    resolve(__dirname, '../../supabase/migrations/20261021051628_byok_keys_universal_scope.sql'),
     'utf-8',
   )
   const fn = (name: string) => sql.slice(sql.indexOf(`create or replace function ${name}(`), sql.indexOf('$$;', sql.indexOf(`create or replace function ${name}(`)))

@@ -45,7 +45,7 @@
  * bills the account that created it, so a follow-up is always a new agent.
  *
  * Auth: `requireServiceRoleAuth`. Invoked by pg_cron `mushi-review-followup`
- * (migration 20261021153000, `6-56/10 * * * *`).
+ * (migration 20261021063310, `6-56/10 * * * *`).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'

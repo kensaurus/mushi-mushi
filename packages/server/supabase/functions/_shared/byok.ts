@@ -271,7 +271,7 @@ async function byokPoolCandidates(
       .order('priority', { ascending: true });
   let { data: rawRows, error: poolError } = await readPool(owner, await ownerUserColumnReady(db));
   if (poolError && isMissingOwnerUserColumn(poolError)) {
-    // Functions deployed before migration 20261021090000: no universal keys yet.
+    // Functions deployed before migration 20261021051628: no universal keys yet.
     ({ data: rawRows, error: poolError } = await readPool({ ...owner, universalUserIds: [] }, false));
   }
   if (poolError) log.warn('byok_keys read failed', { projectId, provider, error: poolError.message });

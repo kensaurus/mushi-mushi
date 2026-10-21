@@ -85,7 +85,7 @@ how much is left.
 
 Status: Accepted (owner-delegated, 2026-10-21)
 
-Related: migration `20261021120000_spend_down_stop_loss.sql`,
+Related: migration `20261021043903_spend_down_stop_loss.sql`,
 `POST /v1/admin/byok/spend-down/projects/:projectId/resume`.
 
 ### Context
@@ -210,7 +210,7 @@ paused app with its reason, "probing 1/day" and Resume.
   - tsumagoi (19 of 40 runs without a PR, lower bound 35.1%) keeps running;
   - yen-yen (11 reviews) is still in cold start.
   The rule targets apps that are reliably bad, not unlucky.
-- Migration `20261021120000_spend_down_stop_loss` adds the reset column,
+- Migration `20261021043903_spend_down_stop_loss` adds the reset column,
   the tick lease column (`byok_keys.spend_down_claimed_until`) and two
   indexes on `fix_dispatch_jobs`: one by key and time, for the scoreboard
   and today's count; one by app and time, for the samples. The app index was

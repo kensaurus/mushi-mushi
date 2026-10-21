@@ -74,7 +74,7 @@ async function manageKeyOwner(
 ): Promise<KeyOwner> {
   const owner = await keyOwnerForProject(db, project);
   const userId = c.get('authMethod') === 'jwt' ? (c.get('userId') as string | undefined) : undefined;
-  // Before migration 20261021090000 the filter must not name owner_user_id.
+  // Before migration 20261021051628 the filter must not name owner_user_id.
   if (userId && (await ownerUserColumnReady(db)) && !(owner.universalUserIds ?? []).includes(userId)) {
     owner.universalUserIds = [...(owner.universalUserIds ?? []), userId];
   }
@@ -4175,7 +4175,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // share its secret with the project's legacy `byok_<provider>_key_ref`,
       // which the resolver still uses (review 2026-10-21: yen-yen's Anthropic
       // key). vault_delete_secret_by_id deleted it regardless. Before
-      // migration 20261021090000 this RPC is missing and the secret is left in
+      // migration 20261021051628 this RPC is missing and the secret is left in
       // Vault, never deleted unchecked.
       const { error: vaultDeleteError } = await db.rpc('vault_delete_secret_if_unused', {
         secret_id: keyRow.vault_secret_id,
