@@ -135,7 +135,12 @@ function scripted(s: Script = {}) {
       return { data: null }
     }
     if (q.table === 'fix_attempts' && q.op === 'select') {
-      if (hasFilter(q, 'in', 'agent')) return { data: s.openAttempts ?? [] }
+      if (hasFilter(q, 'in', 'agent')) {
+        // Honour .range() like PostgREST, so backfill paging is exercised.
+        const r = q.filters.find((f) => f.method === 'range')
+        const all = s.openAttempts ?? []
+        return { data: r ? all.slice(r.args[0] as number, (r.args[1] as number) + 1) : all }
+      }
       return { data: 'attempt' in s ? s.attempt : ATTEMPT }
     }
     if (q.table === 'project_settings') return { data: 'settings' in s ? s.settings : { agent_pr_review_enabled: true } }
@@ -480,11 +485,29 @@ describe('backfill', () => {
       expect.arrayContaining([
         { method: 'in', args: ['agent', ['cursor_cloud', 'github_cloud_agent']] },
         { method: 'in', args: ['pr_state', ['open', 'draft']] },
-        { method: 'limit', args: [10] },
+        { method: 'range', args: [0, 49] },
       ]),
     )
     const upserts = findQueries(queries, 'fix_reviews', 'upsert')
     expect(upserts).toHaveLength(1)
     expect(upserts[0].payload).toMatchObject({ fix_attempt_id: 'fa-b', status: 'queued' })
+  })
+
+  it('pages past already-reviewed PRs to reach older unreviewed ones', async () => {
+    // 60 open PRs, newest first; the newest 50 are reviewed, the older 10 are not.
+    const openAttempts = Array.from({ length: 60 }, (_, i) => ({
+      id: `fa-${i}`,
+      project_id: PROJECT,
+      report_id: REPORT,
+      pr_url: `https://github.com/acme/app/pull/${1000 - i}`,
+    }))
+    const existingReviews = openAttempts.slice(0, 50).map((a) => ({ fix_attempt_id: a.id }))
+    const { db, queries } = scripted({ queue: [], openAttempts, existingReviews })
+    const summary = await runAgentPrReview(db, { backfill: true, limit: 5 }, deps())
+    expect(summary.enqueued).toBe(5)
+    const queuedIds = findQueries(queries, 'fix_reviews', 'upsert').map((q) => (q.payload as { fix_attempt_id: string }).fix_attempt_id)
+    expect(queuedIds).toEqual(['fa-50', 'fa-51', 'fa-52', 'fa-53', 'fa-54'])
+    const pages = findQueries(queries, 'fix_attempts', 'select').filter((q) => hasFilter(q, 'in', 'agent'))
+    expect(pages).toHaveLength(2)
   })
 })
