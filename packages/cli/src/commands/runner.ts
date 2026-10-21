@@ -18,12 +18,12 @@
 
 import type { Command } from 'commander'
 import { spawnSync } from 'node:child_process'
-import { chownSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, chownSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { arch as nodeArch, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import * as p from '@clack/prompts'
 import { apiCall, die, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js'
-import { loadConfig } from '../config.js'
+import { loadConfig, type CliConfig } from '../config.js'
 import { CLOUD_API_ENDPOINT } from '../endpoint.js'
 import { MushiCliError } from '../errors.js'
 import { getAbortSignal } from '../signals.js'
@@ -46,6 +46,7 @@ import {
 import { HOOKS_DIR_NAME, hookScript, mergeRunnerEnv } from '../runner/hooks.js'
 import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId, UnsupportedHostError, type HostIO } from '../runner/host.js'
 import { renderOverview, type CiOverview } from '../runner/overview.js'
+import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 export const HEARTBEAT_INTERVAL_MS = 120_000
 
@@ -93,6 +94,39 @@ function hostIdOrThrow(): string {
   return hashHostId(raw)
 }
 
+/**
+ * The heartbeat's runner key: MUSHI_RUNNER_KEY, the systemd credential, then
+ * --key-file or the default path. Never the CLI key.
+ */
+function readRunnerKeyForHeartbeat(keyFile: string | undefined): string {
+  const fromEnv = process.env['MUSHI_RUNNER_KEY']?.trim()
+  if (fromEnv) return fromEnv
+  const credDir = process.env['CREDENTIALS_DIRECTORY']
+  const paths = [
+    ...(credDir ? [join(credDir, RUNNER_KEY_CREDENTIAL)] : []),
+    keyFile ? resolve(keyFile) : RUNNER_KEY_PATH,
+  ]
+  for (const path of paths) {
+    const key = deps.host.readFile(path)?.trim()
+    if (key) return key
+  }
+  throw new MushiCliError(
+    'E_AUTH_MISSING',
+    `No runner key (MUSHI_RUNNER_KEY, or a readable ${keyFile ?? RUNNER_KEY_PATH}).`,
+    'create one with `mushi runner key` (it can only report runner health; your CLI key is never used here)',
+  )
+}
+
+/** `mushi runner key` always creates a new key (MUSHI_RUNNER_KEY is for the other commands). */
+async function mintRunnerKeyOnly(config: CliConfig, project: string | undefined, label: string | undefined): Promise<string> {
+  const { key } = await resolveRunnerKey(config, {
+    projectId: project ? requireUuid(project, 'project id') : config.projectId,
+    label: label ?? defaultRunnerKeyLabel(deps.host.hostname),
+    env: {},
+  })
+  return key
+}
+
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((done) => {
     if (signal.aborted) return done()
@@ -110,7 +144,7 @@ function printPlan(plan: AddPlan, dryRun: boolean): void {
   plan.steps.forEach((step, i) => {
     console.log(`[${i + 1}/${plan.steps.length}] ${step.title}`)
     console.log(`  $ ${step.sudo ? 'sudo ' : ''}sh -c ${JSON.stringify(step.run)}`)
-    if (step.stdinSecret) console.log(`    (stdin: the ${step.stdinSecret === 'api-key' ? 'Mushi API key' : 'registration token'}, not shown)`)
+    if (step.stdinSecret) console.log(`    (stdin: the ${step.stdinSecret === 'runner-key' ? 'runner key (runner:write)' : 'registration token'}, not shown)`)
     if (step.file && dryRun) {
       console.log(`    ${step.file.path}:`)
       for (const line of step.file.content.replace(/\n$/, '').split('\n')) console.log(`      ${line}`)
@@ -190,13 +224,19 @@ export function registerRunnerCommands(program: Command): void {
     .description("Send this machine's memory, swap, load and runner services to Mushi (every 2 minutes, or once)")
     .option('--once', 'Send one heartbeat and exit (for a systemd timer or cron)')
     .option('--dry-run', 'Print the heartbeat JSON and send nothing')
+    .option('--key-file <path>', `File holding the runner key (default ${RUNNER_KEY_PATH})`)
     .addHelpText('after', `
 What is sent: the hostname, platform, CPU count, total memory, a sha256 hash of
 the machine id (never the id), load, memory and swap in use, free disk, and for
 each GitHub runner service: its name, repo, unit name, whether it runs, restarts,
 memory use, memory limit and out-of-memory kills.
-Never sent: file contents, environment values, process arguments, secrets.`)
-    .action(async (opts: { once?: boolean; dryRun?: boolean }) => {
+Never sent: file contents, environment values, process arguments, secrets.
+
+It sends with a runner key (scope runner:write), which can only report runner
+health, never your CLI key. The key is read from MUSHI_RUNNER_KEY, the systemd
+credential "${RUNNER_KEY_CREDENTIAL}", --key-file, or ${RUNNER_KEY_PATH}.
+Create one with \`mushi runner key\`.`)
+    .action(async (opts: { once?: boolean; dryRun?: boolean; keyFile?: string }) => {
       const build = () => {
         try {
           return collectHeartbeat(deps.host, MUSHI_CLI_VERSION)
@@ -209,7 +249,11 @@ Never sent: file contents, environment values, process arguments, secrets.`)
         console.log(JSON.stringify(build(), null, 2))
         return
       }
-      const config = requireConfig()
+      const cli = loadConfig()
+      const runnerKey = readRunnerKeyForHeartbeat(opts.keyFile)
+      assertNotCliKey(runnerKey, cli.apiKey)
+      // Only the endpoint comes from the CLI config; the key is the runner key.
+      const config = { ...cli, apiKey: runnerKey, endpoint: cli.endpoint ?? CLOUD_API_ENDPOINT }
       const signal = getAbortSignal()
       for (;;) {
         const body = build()
@@ -235,19 +279,25 @@ Never sent: file contents, environment values, process arguments, secrets.`)
     .description("Write job hooks into a runner folder and turn them on in its .env")
     .requiredOption('--dir <path>', 'The runner folder (where config.sh and .runner live)')
     .option('--force', "Replace hooks the runner's .env already points somewhere else")
+    .option('--project <id>', 'Project the runner key is for (defaults to the configured project)')
+    .option('--label <name>', 'Label of the runner key (default runner-<host>)')
     .option('--dry-run', 'Show what would be written and change nothing')
     .addHelpText('after', `
 The hooks read the runner's own cgroup (memory.peak, memory.max, oom_kill), swap
 and load, and send one sample per job. They always exit 0, so they never fail a
-job. The API key (MUSHI_API_KEY, or your mushi login key) is saved in
-<dir>/${HOOKS_DIR_NAME}/key with mode 0600; it is not written into the scripts.
+job. They send with a runner key (scope runner:write): a key that can only report
+runner health. CI jobs run as the same user as the hooks and could read it; if
+one steals it, all it can do is send fake numbers. Your CLI key never goes here.
+The key comes from MUSHI_RUNNER_KEY, or a new one is created with your CLI key
+(needs mcp:write). It is saved in <dir>/${HOOKS_DIR_NAME}/key with mode 0600,
+never in the scripts, and never printed.
 GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts`)
-    .action((opts: { dir: string; force?: boolean; dryRun?: boolean }) => {
+    .action(async (opts: { dir: string; force?: boolean; project?: string; label?: string; dryRun?: boolean }) => {
       const dir = resolve(opts.dir)
       if (!existsSync(join(dir, 'config.sh')) && !existsSync(join(dir, 'run.sh'))) {
         throw new MushiCliError('E_INVALID_INPUT', `${dir} does not look like a runner folder (no config.sh or run.sh).`)
       }
-      const config = opts.dryRun ? loadConfig() : requireConfig()
+      const config = loadConfig()
       const endpoint = config.endpoint ?? CLOUD_API_ENDPOINT
       const hostId = hostIdOrThrow()
       const hooksDir = join(dir, HOOKS_DIR_NAME)
@@ -263,17 +313,22 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
         throw new MushiCliError('E_INVALID_INPUT', "The runner's .env already sets a job hook.", 'chain it from the Mushi hook yourself, or pass --force to replace it')
       }
       if (opts.dryRun) {
-        console.log(`Would write ${files.started} and ${files.completed} (mode 0755), and ${join(hooksDir, 'key')} (mode 0600, the API key, not shown).`)
+        console.log(`Would write ${files.started} and ${files.completed} (mode 0755), and ${join(hooksDir, 'key')} (mode 0600, a runner:write key, not shown).`)
         const added = (merged.text ?? '').split('\n').filter((l) => l && !envBefore.split(/\r?\n/).includes(l))
         console.log(added.length ? `Would add to ${envPath}:\n${added.map((l) => `  ${l}`).join('\n')}` : `${envPath} already has the hooks.`)
         return
       }
+      const { key: runnerKey, source } = await resolveRunnerKey(config, {
+        projectId: opts.project ? requireUuid(opts.project, 'project id') : config.projectId,
+        label: opts.label ?? defaultRunnerKeyLabel(deps.host.hostname),
+      })
       mkdirSync(hooksDir, { recursive: true, mode: 0o755 })
       for (const phase of ['started', 'completed'] as const) {
         writeFileSync(files[phase], hookScript({ phase, endpoint, hostId }), { mode: 0o755 })
       }
       const keyPath = join(hooksDir, 'key')
-      writeFileSync(keyPath, `${config.apiKey}\n`, { mode: 0o600 })
+      writeFileSync(keyPath, `${runnerKey}\n`, { mode: 0o600 })
+      console.log(source === 'env' ? 'Using the runner key from MUSHI_RUNNER_KEY.' : 'Created a runner key (runner:write: it can only report runner health).')
       if (merged.text) writeFileSync(envPath, merged.text)
       // The runner service usually runs as another user: hand it the files.
       const owner = statSync(dir)
@@ -286,6 +341,50 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
       console.log(`Installed the job hooks in ${hooksDir}.`)
       console.log('Restart the runner service so it reads its .env again, for example:')
       console.log(`  cd ${dir} && sudo ./svc.sh stop && sudo ./svc.sh start`)
+    })
+
+  runner
+    .command('key')
+    .description('Create a runner key (runner:write) and save it for the heartbeat; it is never printed')
+    .option('--project <id>', 'Project the key is for (defaults to the configured project)')
+    .option('--label <name>', 'Key label shown in the console (default runner-<host>)')
+    .option('--out <path>', 'Where to save it (mode 0600)', RUNNER_KEY_PATH)
+    .addHelpText('after', `
+A runner key can only report runner health. CI jobs on a self-hosted runner can
+read files the runner user can read; if a job steals this key, all it can do is
+send fake numbers. Your CLI key (which can merge pull requests) never goes on a
+runner. Creating one needs a CLI key with mcp:write (mushi login --upgrade-scope).
+${RUNNER_KEY_PATH} is root-only; the heartbeat timer gets it from systemd.`)
+    .action(async (opts: { project?: string; label?: string; out: string }) => {
+      const config = requireConfig()
+      const key = await mintRunnerKeyOnly(config, opts.project, opts.label)
+      const out = resolve(opts.out)
+      const dir = dirname(out)
+      const writable = (() => {
+        try {
+          accessSync(existsSync(dir) ? dir : dirname(dir), fsConstants.W_OK)
+          return existsSync(dir) || process.getuid?.() === 0
+        } catch {
+          return false
+        }
+      })()
+      if (writable) {
+        mkdirSync(dir, { recursive: true, mode: 0o700 })
+        writeFileSync(out, `${key}\n`, { mode: 0o600 })
+        chmodSync(out, 0o600)
+      } else {
+        const step: PlanStep = {
+          id: 'runner-key',
+          title: `Save the runner key to ${out} (root, mode 0600)`,
+          sudo: true,
+          stdinSecret: 'runner-key',
+          run: `install -d -m 0700 '${dir.replace(/'/g, `'"'"'`)}' && umask 077 && IFS= read -r k && printf '%s\\n' "$k" > '${out.replace(/'/g, `'"'"'`)}'`,
+        }
+        console.log(`$ sudo sh -c ${JSON.stringify(step.run)}   (stdin: the runner key, not shown)`)
+        const code = deps.runStep(step, `${key}\n`)
+        if (code !== 0) throw new MushiCliError('E_INVALID_INPUT', `Could not save the runner key to ${out} (exit ${code}).`, 'the new key was not shown; revoke it in the console and run this again')
+      }
+      console.log(`Saved a runner key to ${out}. It can only report runner health.`)
     })
 
   runner
@@ -302,6 +401,7 @@ GitHub docs: https://docs.github.com/en/actions/how-tos/manage-runners/self-host
     .option('--set-variable', 'Set the LINUX_RUNNER repo variable to the label')
     .option('--uid <n>', 'uid for the runner user', '1990')
     .option('--user <name>', 'Name of the runner user', 'gha-runner')
+    .option('--project <id>', 'Mushi project the runner key is for (defaults to the configured project)')
     .option('--yes', 'Run the steps without asking')
     .option('--dry-run', 'Print the whole plan and change nothing')
     .addHelpText('after', `
@@ -315,12 +415,13 @@ Docs: https://kensaur.us/mushi-mushi/docs/operating/ci-runners`)
     .action(async (opts: {
       repo: string; label?: string; memory?: string; ephemeral?: boolean; persistent?: boolean
       allowPublic?: boolean; blockLan?: boolean; wslIsolate?: boolean; setVariable?: boolean
-      uid: string; user: string; yes?: boolean; dryRun?: boolean
+      uid: string; user: string; project?: string; yes?: boolean; dryRun?: boolean
     }) => {
       if (opts.ephemeral && opts.persistent) throw new MushiCliError('E_INVALID_INPUT', 'Pick --ephemeral or --persistent, not both.')
       const host = deps.host
       const platform = detectPlatform(host)
-      const config = opts.dryRun ? loadConfig() : requireConfig()
+      // The CLI key only creates the runner key; it is never written to the machine.
+      const config = loadConfig()
       const endpoint = config.endpoint ?? CLOUD_API_ENDPOINT
       const archName = runnerArch(nodeArch())
       const gh = deps.gh
@@ -388,11 +489,21 @@ Docs: https://kensaur.us/mushi-mushi/docs/operating/ci-runners`)
           return
         }
       }
+      // One runner key (runner:write) for the hooks and the heartbeat, before any step runs.
+      let runnerKey: string | null = null
+      if (plan.steps.some((s) => s.stdinSecret === 'runner-key')) {
+        const resolved = await resolveRunnerKey(config, {
+          projectId: opts.project ? requireUuid(opts.project, 'project id') : config.projectId,
+          label: defaultRunnerKeyLabel(host.hostname),
+        })
+        runnerKey = resolved.key
+        console.log(resolved.source === 'env' ? 'Using the runner key from MUSHI_RUNNER_KEY.' : 'Created a runner key (runner:write: it can only report runner health).')
+      }
       for (const [i, step] of plan.steps.entries()) {
         console.log(`\n[${i + 1}/${plan.steps.length}] ${step.title}`)
         let stdin: string | undefined
         if (step.file) stdin = step.file.content
-        if (step.stdinSecret === 'api-key') stdin = `${config.apiKey}\n`
+        if (step.stdinSecret === 'runner-key') stdin = `${runnerKey}\n`
         if (step.stdinSecret === 'registration-token') {
           const tok = registrationToken(gh, repo)
           if (!tok.ok) throw new MushiCliError('E_INVALID_INPUT', `Could not get a registration token: ${tok.error}`, 'your gh login needs Administration: write on the repo')

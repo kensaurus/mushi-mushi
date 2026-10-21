@@ -67,6 +67,23 @@ so.
 GitHub does not report a runner's memory or CPU. To see them, run a small
 reporter on the machine.
 
+### The runner key
+
+The reporter sends with a **runner key**: a key that can only report runner
+health. CI jobs run as the same user as the job hooks, so a pull request's code
+could read the key file. If a job steals a runner key, all it can do is send
+fake numbers. Your CLI key, which can merge pull requests, never goes on a
+runner.
+
+```bash
+mushi runner key    # create one and save it to /etc/mushi/runner.key (root only); it is never printed
+```
+
+Creating a runner key needs a CLI key with `mcp:write` (`mushi login --upgrade-scope`).
+`mushi runner hooks install` and `mushi runner add` create one for you unless
+`MUSHI_RUNNER_KEY` is set. `mushi runner status` keeps using your CLI key; it
+only reads.
+
 **Heartbeat**, every 2 minutes:
 
 ```bash
@@ -74,6 +91,9 @@ mushi runner heartbeat --dry-run   # print what would be sent
 mushi runner heartbeat --once      # send one (for a timer or cron)
 mushi runner heartbeat             # send one every 2 minutes
 ```
+
+It reads the runner key from `MUSHI_RUNNER_KEY`, the systemd credential that
+`mushi runner add` sets up, or `/etc/mushi/runner.key`.
 
 It finds GitHub runner services in systemd (`actions.runner.*`, and the ones
 `mushi runner add` creates) and reads each one's memory use, memory limit and
@@ -83,7 +103,7 @@ reports the machine and its runner agents only.
 **Job hooks**, once per job:
 
 ```bash
-MUSHI_API_KEY=<project key> mushi runner hooks install --dir ~/actions-runner
+mushi runner hooks install --dir ~/actions-runner
 ```
 
 This writes `job-started.sh` and `job-completed.sh` into `mushi-hooks/` and
@@ -91,8 +111,8 @@ turns them on in the runner's `.env` with GitHub's
 [job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts).
 They send the job's memory peak, memory limit, out-of-memory kills, swap and
 load. Restart the runner service afterwards. The hooks always exit 0, give up
-after 5 seconds, and never fail a job. The key sits in `mushi-hooks/key` with
-mode 0600; it is not in the scripts and never on a command line.
+after 5 seconds, and never fail a job. The runner key sits in `mushi-hooks/key`
+with mode 0600; it is not in the scripts and never on a command line.
 
 ### What is sent, and what never is
 
@@ -139,6 +159,7 @@ A machine you already own keeps them tested.
 | **A label of its own**: `mushi-` (`--label` to change it). | Only workflows that ask for it run there. GitHub-hosted runners stay the fallback. |
 | **Download checked**: the official `actions/runner` release, checked against the SHA-256 GitHub publishes in the release notes. | You run what GitHub shipped. |
 | **Hooks and heartbeat** installed with it. | The CI view sees the machine from the first job. |
+| **A runner key**, not your CLI key, on the machine. The heartbeat gets it from systemd; it is not in any unit file. | A job that reads it can only send fake numbers, not merge your pull requests. |
 
 Before it registers, it also checks the repo's fork pull request approval
 setting (it warns unless it is "Require approval for all external

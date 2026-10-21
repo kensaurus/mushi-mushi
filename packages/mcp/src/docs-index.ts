@@ -1137,7 +1137,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/operating/ci-runners",
     markdown: "operating/ci-runners.md",
     keywords: ["operating", "ci-runners", "runners", "ci"],
-    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "Machine health: heartbeat and job hooks", "What is sent, and what never is", "Add your own machine as a runner", "Is it worth it?", "The safe defaults, and why"],
+    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "Machine health: heartbeat and job hooks", "The runner key", "What is sent, and what never is", "Add your own machine as a runner", "Is it worth it?"],
     excerpt: "See where your tests run and why a fix waits to land. Tell a broken fix from a stopped test machine, and set up your own machine as a GitHub Actions runner with safe defaults.",
   },
   {

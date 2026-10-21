@@ -215,6 +215,7 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
 mushi runner add --repo owner/name --dry-run      # set this machine up as a runner, safe defaults

@@ -26,13 +26,17 @@
  *            distros share the VM's netfilter).
  *
  *          Secrets never appear in a step: the registration token and the
- *          Mushi API key reach their step on stdin (`stdinSecret`), and the
+ *          runner key reach their step on stdin (`stdinSecret`), and the
  *          runner reads its token from ACTIONS_RUNNER_INPUT_* environment
- *          variables, not from process arguments.
+ *          variables, not from process arguments. The hooks and heartbeat get
+ *          a `runner:write` key (runner/key.ts), never the CLI's own key: a
+ *          job can read the hook key file, and that key can only report
+ *          runner health.
  */
 
 import type { RunnerPlatform } from './host.js'
 import { HOOKS_DIR_NAME, HOOK_ENV_COMPLETED, HOOK_ENV_STARTED, hookScript } from './hooks.js'
+import { RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from './key.js'
 
 export type RunnerMode = 'ephemeral' | 'persistent'
 export type RunnerArch = 'x64' | 'arm64'
@@ -81,7 +85,7 @@ export interface PlanStep {
   /** A file this step writes; its content goes to the command on stdin and is shown in the plan. */
   file?: { path: string; content: string }
   /** A secret the executor pipes to `run` on stdin. Never printed, never in argv. */
-  stdinSecret?: 'registration-token' | 'api-key'
+  stdinSecret?: 'registration-token' | 'runner-key'
 }
 
 export interface AddPlan {
@@ -484,9 +488,9 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
   }
   steps.push({
     id: 'hook-key',
-    title: `Save the Mushi API key for the hooks (${hooksDir}/key, mode 0600, owned by ${ru})`,
+    title: `Save the runner key (runner:write, can only report runner health) for the hooks (${hooksDir}/key, mode 0600, owned by ${ru})`,
     sudo: true,
-    stdinSecret: 'api-key',
+    stdinSecret: 'runner-key',
     run: `umask 077 && IFS= read -r k && printf '%s\\n' "$k" > ${q(`${hooksDir}/key`)} && chown ${ru}:${ru} ${q(`${hooksDir}/key`)}`,
   })
   steps.push({
@@ -501,12 +505,13 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
     ].join(' && '),
   })
 
+  const keyDir = RUNNER_KEY_PATH.slice(0, RUNNER_KEY_PATH.lastIndexOf('/'))
   steps.push({
-    id: 'heartbeat-env',
-    title: `Save the Mushi API key for the heartbeat (${ETC_DIR}/heartbeat.env, root only)`,
+    id: 'heartbeat-key',
+    title: `Save the runner key for the heartbeat (${RUNNER_KEY_PATH}, root only, handed to the service by systemd)`,
     sudo: true,
-    stdinSecret: 'api-key',
-    run: `install -d -m 0700 ${ETC_DIR} && umask 077 && IFS= read -r k && printf 'MUSHI_API_KEY=%s\\nMUSHI_API_ENDPOINT=%s\\n' "$k" ${q(input.endpoint)} > ${ETC_DIR}/heartbeat.env`,
+    stdinSecret: 'runner-key',
+    run: `install -d -m 0700 ${keyDir} && umask 077 && IFS= read -r k && printf '%s\\n' "$k" > ${RUNNER_KEY_PATH}`,
   })
   steps.push(fileStep('heartbeat-service', 'Write the heartbeat service (runs as you, reads systemd and cgroups only)', `${UNIT_DIR}/mushi-runner-heartbeat.service`, [
     '[Unit]',
@@ -516,7 +521,10 @@ export function buildAddPlan(input: AddPlanInput): AddPlan {
     '[Service]',
     'Type=oneshot',
     `User=${input.installUser}`,
-    `EnvironmentFile=${ETC_DIR}/heartbeat.env`,
+    // systemd reads the root-only key and exposes it to this service alone
+    // at $CREDENTIALS_DIRECTORY/runner-key; it is never in the unit or env.
+    `LoadCredential=${RUNNER_KEY_CREDENTIAL}:${RUNNER_KEY_PATH}`,
+    `Environment=MUSHI_API_ENDPOINT=${input.endpoint.replace(/%/g, '%%')}`,
     `ExecStart=${systemdArgv(input.heartbeatCommand)}`,
     'NoNewPrivileges=yes',
     '',

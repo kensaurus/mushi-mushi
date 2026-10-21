@@ -57,13 +57,21 @@ function fakeGh(table: Record<string, string | Error>): { gh: GhExec; calls: str
   return { gh, calls }
 }
 
+/** A runner:write key, different from the CLI key (TEST_API_KEY, which may hold mcp:write). */
+const RUNNER_KEY = 'mushi_runner_key_fake_0001' // gitleaks:allow — fake key for the CLI test harness
+const MINT_PATH = `/v1/admin/projects/${TEST_PROJECT_ID}/runner-key`
+const mintReply = (call: { path: string }) => (call.path === MINT_PATH ? okReply({ key: RUNNER_KEY, label: 'runner-ci-box' }) : okReply({ status: 'ok' }))
+
 let restore: (() => void) | null = null
 let tmp: string | null = null
 beforeEach(() => {
+  vi.stubEnv('MUSHI_RUNNER_KEY', '')
+  vi.stubEnv('CREDENTIALS_DIRECTORY', '')
   restore = __setRunnerDeps({ host: fakeHost(), systemdRunning: () => true, ghAuthText: () => 'Logged in to github.com account acme (/home/u/.config/gh/hosts.yml)' })
 })
 afterEach(() => {
   restore?.()
+  vi.unstubAllEnvs()
   if (tmp) rmSync(tmp, { recursive: true, force: true })
   tmp = null
 })
@@ -106,20 +114,72 @@ describe('mushi runner heartbeat', () => {
     expect(run.stdout).not.toContain('raw-machine-id')
   })
 
-  it('--once posts one heartbeat to the ingest route', async () => {
+  it('--once posts one heartbeat with the runner key, never the CLI key', async () => {
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => okReply({ status: 'ok' }))
     expect(run.calls).toHaveLength(1)
     expect(run.calls[0]!.method).toBe('POST')
     expect(run.calls[0]!.path).toBe('/v1/ingest/runner')
-    expect(run.calls[0]!.headers['X-Mushi-Api-Key']).toBe(TEST_API_KEY)
+    expect(run.calls[0]!.headers['X-Mushi-Api-Key']).toBe(RUNNER_KEY)
+    expect(JSON.stringify(run.calls[0]!.headers)).not.toContain(TEST_API_KEY)
     expect((run.calls[0]!.body as { kind: string }).kind).toBe('heartbeat')
     expect(run.stdout).toContain('Sent a heartbeat for ci-box with 1 runner(s).')
   })
 
+  it('reads the key from the systemd credential, then the default file', async () => {
+    vi.stubEnv('CREDENTIALS_DIRECTORY', '/run/credentials/mushi-runner-heartbeat.service')
+    __setRunnerDeps({ host: fakeHost({ '/run/credentials/mushi-runner-heartbeat.service/runner-key': `${RUNNER_KEY}\n` }) })
+    const fromCred = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => okReply({}))
+    expect(fromCred.calls[0]!.headers['X-Mushi-Api-Key']).toBe(RUNNER_KEY)
+    vi.stubEnv('CREDENTIALS_DIRECTORY', '')
+    __setRunnerDeps({ host: fakeHost({ '/etc/mushi/runner.key': `${RUNNER_KEY}\n` }) })
+    const fromFile = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => okReply({}))
+    expect(fromFile.calls[0]!.headers['X-Mushi-Api-Key']).toBe(RUNNER_KEY)
+  })
+
+  it('refuses without a runner key, and refuses the CLI key passed as one', async () => {
+    const none = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'])
+    expect(none.error?.message).toMatch(/No runner key/)
+    expect(none.calls).toEqual([])
+    vi.stubEnv('MUSHI_RUNNER_KEY', TEST_API_KEY)
+    const cli = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'])
+    expect(cli.error?.message).toMatch(/That is your CLI key/)
+    expect(cli.calls).toEqual([])
+  })
+
   it('--once exits non-zero when the server refuses', async () => {
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--once'], () => errorReply(429, 'RATE_LIMITED', 'slow down'))
     expect(run.exitCode).toBe(1)
     expect(run.stderr).toContain('RATE_LIMITED')
+  })
+})
+
+describe('mushi runner key', () => {
+  it('creates a runner key with the CLI key and saves it 0600 without printing it', async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'mushi-key-'))
+    const out = join(tmp, 'runner.key')
+    const run = await runCli(registerRunnerCommands, ['runner', 'key', '--out', out, '--label', 'runner-nuc'], mintReply)
+    expect(run.calls).toEqual([expect.objectContaining({ method: 'POST', path: MINT_PATH, body: { label: 'runner-nuc' } })])
+    expect(run.calls[0]!.headers['X-Mushi-Api-Key']).toBe(TEST_API_KEY)
+    expect(readFileSync(out, 'utf8')).toBe(`${RUNNER_KEY}\n`)
+    expect(statSync(out).mode & 0o777).toBe(0o600)
+    expect(run.stdout + run.stderr).not.toContain(RUNNER_KEY)
+  })
+
+  it('explains the scope needed when the CLI key cannot mint', async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'mushi-key-'))
+    const run = await runCli(registerRunnerCommands, ['runner', 'key', '--out', join(tmp, 'k')], () => errorReply(403, 'INSUFFICIENT_SCOPE', 'needs mcp:write'))
+    expect(run.error?.message).toMatch(/Could not create a runner key/)
+    expect(run.error?.hint ?? '').toMatch(/--upgrade-scope/)
+    expect(existsSync(join(tmp, 'k'))).toBe(false)
+  })
+
+  it('refuses a server answer that is the CLI key itself', async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'mushi-key-'))
+    const run = await runCli(registerRunnerCommands, ['runner', 'key', '--out', join(tmp, 'k')], () => okReply({ key: TEST_API_KEY }))
+    expect(run.error?.message).toMatch(/That is your CLI key/)
+    expect(existsSync(join(tmp, 'k'))).toBe(false)
   })
 })
 
@@ -131,21 +191,42 @@ describe('mushi runner hooks install', () => {
     return tmp
   }
 
-  it('writes both hooks, a 0600 key file and the .env lines, idempotently', async () => {
+  it('writes both hooks, a 0600 runner key file (never the CLI key) and the .env lines, idempotently', async () => {
     const dir = runnerDir('LANG=C.UTF-8\n')
-    const run = await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir])
+    const run = await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir], mintReply)
     expect(run.exitCode).toBe(0)
-    const started = readFileSync(join(dir, 'mushi-hooks', 'job-started.sh'), 'utf8')
-    expect(started).toContain('PHASE=started')
-    expect(started).not.toContain(TEST_API_KEY)
+    expect(run.calls.map((c) => c.path)).toEqual([MINT_PATH])
+    for (const phase of ['started', 'completed']) {
+      const script = readFileSync(join(dir, 'mushi-hooks', `job-${phase}.sh`), 'utf8')
+      expect(script).toContain(`PHASE=${phase}`)
+      // The hook never carries a key inline.
+      expect(script).not.toContain(TEST_API_KEY)
+      expect(script).not.toContain(RUNNER_KEY)
+    }
+    const keyFile = readFileSync(join(dir, 'mushi-hooks', 'key'), 'utf8')
+    expect(keyFile).toBe(`${RUNNER_KEY}\n`)
+    expect(keyFile).not.toContain(TEST_API_KEY)
     expect(statSync(join(dir, 'mushi-hooks', 'key')).mode & 0o777).toBe(0o600)
-    expect(readFileSync(join(dir, 'mushi-hooks', 'key'), 'utf8')).toBe(`${TEST_API_KEY}\n`)
     const env = readFileSync(join(dir, '.env'), 'utf8')
     expect(env).toContain(`ACTIONS_RUNNER_HOOK_JOB_STARTED=${join(dir, 'mushi-hooks', 'job-started.sh')}`)
     expect(run.stdout).not.toContain(TEST_API_KEY)
+    expect(run.stdout).not.toContain(RUNNER_KEY)
     expect(run.stdout).toContain('Restart the runner service')
-    await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir])
+    await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir], mintReply)
     expect(readFileSync(join(dir, '.env'), 'utf8')).toBe(env)
+  })
+
+  it('uses MUSHI_RUNNER_KEY without minting, and refuses the CLI key there', async () => {
+    const dir = runnerDir()
+    vi.stubEnv('MUSHI_RUNNER_KEY', RUNNER_KEY)
+    const run = await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir])
+    expect(run.calls).toEqual([])
+    expect(readFileSync(join(dir, 'mushi-hooks', 'key'), 'utf8')).toBe(`${RUNNER_KEY}\n`)
+    const dir2 = runnerDir()
+    vi.stubEnv('MUSHI_RUNNER_KEY', TEST_API_KEY)
+    const refused = await runCli(registerRunnerCommands, ['runner', 'hooks', 'install', '--dir', dir2])
+    expect(refused.error?.message).toMatch(/That is your CLI key/)
+    expect(existsSync(join(dir2, 'mushi-hooks', 'key'))).toBe(false)
   })
 
   it('refuses to replace another hook without --force, and --dry-run writes nothing', async () => {
@@ -185,7 +266,8 @@ describe('mushi runner add', () => {
       expect(runStep).not.toHaveBeenCalled()
       expect(run.stdout).toContain('Download actions/runner 2.329.0 and check its SHA-256')
       expect(run.stdout).toContain('$ sudo sh -c')
-      expect(run.stdout).toContain('(stdin: the Mushi API key, not shown)')
+      expect(run.stdout).toContain('(stdin: the runner key (runner:write), not shown)')
+      expect(run.calls.filter((c) => c.path === MINT_PATH)).toEqual([])
       expect(run.stdout).toContain('runs-on: [self-hosted, mushi-ci]')
       expect(run.stdout).toContain('Dry run: nothing was changed.')
       expect(run.stdout).not.toContain(TEST_API_KEY)
@@ -215,12 +297,16 @@ describe('mushi runner add', () => {
     const seen: Array<{ id: string; stdin: string | undefined }> = []
     const undo = __setRunnerDeps({ gh, runStep: (step, stdin) => { seen.push({ id: step.id, stdin }); return 0 } })
     try {
-      const run = await runCli(registerRunnerCommands, ['runner', 'add', '--repo', 'acme/api', '--label', 'mushi-ci', '--memory', '8G', '--yes'])
+      const run = await runCli(registerRunnerCommands, ['runner', 'add', '--repo', 'acme/api', '--label', 'mushi-ci', '--memory', '8G', '--yes'], mintReply)
       expect(run.exitCode).toBe(0)
       expect(seen.map((s) => s.id)).toContain('enable')
-      const withKey = seen.filter((s) => s.stdin?.includes(TEST_API_KEY)).map((s) => s.id)
-      expect(withKey).toEqual(['hook-key', 'heartbeat-env'])
+      // One runner key, minted once, goes only to the two key steps.
+      expect(run.calls.filter((c) => c.path === MINT_PATH)).toHaveLength(1)
+      expect(seen.filter((s) => s.stdin?.includes(RUNNER_KEY)).map((s) => s.id)).toEqual(['hook-key', 'heartbeat-key'])
+      // The CLI key never reaches the machine: no step gets it on stdin.
+      expect(seen.filter((s) => s.stdin?.includes(TEST_API_KEY))).toEqual([])
       expect(run.stdout).not.toContain(TEST_API_KEY)
+      expect(run.stdout).not.toContain(RUNNER_KEY)
       expect(run.stdout).toContain('Done.')
     } finally {
       undo()
@@ -232,7 +318,7 @@ describe('mushi runner add', () => {
     const seen: string[] = []
     const undo = __setRunnerDeps({ gh, runStep: (step) => { seen.push(step.id); return step.id === 'download' ? 1 : 0 } })
     try {
-      const run = await runCli(registerRunnerCommands, ['runner', 'add', '--repo', 'acme/api', '--label', 'mushi-ci', '--memory', '8G', '--yes'])
+      const run = await runCli(registerRunnerCommands, ['runner', 'add', '--repo', 'acme/api', '--label', 'mushi-ci', '--memory', '8G', '--yes'], mintReply)
       expect(run.error?.message).toMatch(/Step 2 \(download\) failed/)
       expect(seen).toEqual(['user', 'download'])
     } finally {

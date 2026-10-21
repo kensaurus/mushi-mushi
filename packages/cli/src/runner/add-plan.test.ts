@@ -82,7 +82,7 @@ describe('buildAddPlan (Linux, ephemeral default)', () => {
     expect(ids(plan)).toEqual([
       'user', 'download', 'deps', 'slice', 'mint', 'start', 'service',
       'hook-started', 'hook-completed', 'hook-key', 'hook-env',
-      'heartbeat-env', 'heartbeat-service', 'heartbeat-timer', 'enable',
+      'heartbeat-key', 'heartbeat-service', 'heartbeat-timer', 'enable',
     ])
     const step = (id: string) => plan.steps.find((s) => s.id === id)!
     expect(step('user').run).toContain('useradd --system --uid 1990')
@@ -109,10 +109,15 @@ describe('buildAddPlan (Linux, ephemeral default)', () => {
 
   it('pipes secrets on stdin and never puts them in a step', () => {
     expect(plan.steps.filter((s) => s.stdinSecret).map((s) => [s.id, s.stdinSecret])).toEqual([
-      ['hook-key', 'api-key'],
-      ['heartbeat-env', 'api-key'],
+      ['hook-key', 'runner-key'],
+      ['heartbeat-key', 'runner-key'],
     ])
     expect(all).not.toContain(KEY)
+    // The heartbeat gets its runner key from systemd, never from the unit or an env file.
+    const hb = plan.steps.find((s) => s.id === 'heartbeat-service')!.file!.content
+    expect(hb).toContain('LoadCredential=runner-key:/etc/mushi/runner.key')
+    expect(hb).not.toMatch(/EnvironmentFile|MUSHI_API_KEY|MUSHI_RUNNER_KEY/)
+    expect(plan.steps.find((s) => s.id === 'heartbeat-key')!.run).toContain("> /etc/mushi/runner.key")
     expect(all).not.toMatch(/--token\s/)
     for (const s of plan.steps) expect(s.run).not.toMatch(/flush ruleset/)
   })
