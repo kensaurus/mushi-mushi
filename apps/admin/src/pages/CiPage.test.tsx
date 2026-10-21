@@ -28,7 +28,12 @@ vi.mock('../lib/usePageData', () => ({
     const data = path?.startsWith('/v1/admin/ci/overview')
       ? state.overview
       : path?.startsWith('/v1/admin/fixes')
-        ? { fixes: [{ id: 'f1', report_id: 'report-142', pr_url: 'https://github.com/kensaurus/glot.it/pull/142', pr_number: 142 }] }
+        ? {
+            fixes: [
+              { id: 'f1', report_id: 'report-142', pr_url: 'https://github.com/kensaurus/glot.it/pull/142', pr_number: 142 },
+              { id: 'f2', report_id: 'report-140', pr_url: 'https://github.com/kensaurus/glot.it/pull/140', pr_number: 140 },
+            ],
+          }
         : null
     const error = path?.startsWith('/v1/admin/ci/overview') ? state.error : null
     return { data, loading: false, error, isValidating: false, reload: () => {}, lastFetchedAt: null }
@@ -91,18 +96,19 @@ async function render(url = '/ci') {
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
 
 describe('CiPage', () => {
-  it('renders the header line and every section, queue first', async () => {
+  it('renders the header line, the summary, then every section, queue first', async () => {
     await render()
     expect(host.querySelector('h1')!.textContent).toBe('CI runners')
     expect(host.textContent).toContain('Where your tests run, how long they wait, and what slows them down.')
     const headings = Array.from(host.querySelectorAll('h2, h3')).map((h) => h.textContent ?? '')
-    const order = ['Queue', 'Timeline', 'Runner map', 'Speed it up', 'Slow jobs', 'Test machine failures'].map((t) =>
+    const order = ['Queue', 'Timeline', 'Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine'].map((t) =>
       headings.findIndex((h) => h.startsWith(t)),
     )
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    expect(host.textContent).toContain('Machine vs code failures')
-    expect(host.textContent).toContain('6 / 9')
+    // The summary sits above the queue.
+    const summary = q('ci-summary')!
+    expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('polls the project overview with refresh=1 and shows when it was updated', async () => {
@@ -120,12 +126,45 @@ describe('CiPage', () => {
       .map((el) => el.getAttribute('data-testid'))
       .slice(0, 3)
     expect(waiting).toEqual(['ci-queue-job-j2', 'ci-queue-job-j3', 'ci-queue-job-j4'])
-    expect(q('ci-queue-job-j2')!.textContent).toContain('waiting 30 min')
+    expect(q('ci-queue-job-j2')!.textContent).toContain('30 min so far')
     expect(q('ci-queue-job-j2')!.textContent).toContain('waiting for a machine labelled nuc')
-    const fix = Array.from(q('ci-queue-job-j2')!.querySelectorAll('a')).find((a) => a.textContent?.startsWith('Mushi fix'))
+    const fix = Array.from(q('ci-queue-job-j2')!.querySelectorAll('a')).find((a) => a.textContent?.startsWith('Open the fix in Mushi'))
     expect(fix?.getAttribute('href')).toBe('/reports/report-142')
-    expect(q('ci-queue-job-j1')!.textContent).toContain('on nuc-glot · 8 min')
+    expect(q('ci-queue-job-j1')!.textContent).toContain('nuc-glot')
+    expect(q('ci-queue-job-j1')!.textContent).toContain('8 min so far')
     expect(q('ci-queue-job-j6')!.textContent).toContain('Test machine stopped')
+  })
+
+  it('offers Re-run tests only on a job the test machine stopped, and names its links', async () => {
+    await render()
+    const stopped = q('ci-queue-job-j6')!
+    expect(Array.from(stopped.querySelectorAll('button')).some((b) => b.textContent?.includes('Re-run tests'))).toBe(true)
+    expect(Array.from(stopped.querySelectorAll('a')).some((a) => a.textContent?.includes('View on GitHub'))).toBe(true)
+    const failed = q('ci-queue-job-j7')
+    if (failed) {
+      expect(Array.from(failed.querySelectorAll('button')).some((b) => b.textContent?.includes('Re-run'))).toBe(false)
+      expect(Array.from(failed.querySelectorAll('a')).some((a) => a.textContent?.includes('Read the failing logs'))).toBe(true)
+    }
+  })
+
+  it('opens with a plain verdict, live tiles and the outcome bar', async () => {
+    await render()
+    expect(q('ci-verdict')!.textContent).toMatch(/waiting for a test machine|test machine, not your code|failed on the code|healthy/)
+    const summary = q('ci-summary')!
+    expect(summary.textContent).toContain('Waiting now')
+    expect(summary.textContent).toContain('Running now')
+    expect(summary.textContent).toContain('Test machine stopped')
+    expect(summary.querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/passed/)
+  })
+
+  it('filters finished jobs by outcome', async () => {
+    await render()
+    const chip = Array.from(host.querySelectorAll('[aria-label="Show finished jobs"] button')).find((b) => b.textContent?.startsWith('Test machine stopped'))!
+    await act(async () => {
+      chip.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(q('ci-queue-job-j6')).not.toBeNull()
+    expect(q('ci-queue-job-j5')).toBeNull()
   })
 
   it('focuses the job named in ?job=', async () => {

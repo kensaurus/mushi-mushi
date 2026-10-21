@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CI_NODE_SIZE, buildCiMap, type CiHostNodeData, type CiRunnerNodeData } from './ciMapLayout'
-import { GITHUB_HOST_ID, UNKNOWN_HOST_ID } from './ciMapContext'
+import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 import { FIXTURE_JOBS, FIXTURE_NOW, ciOverviewFixture, emptyCiOverview } from './__fixtures__/ciOverview'
 import type { CiJob } from '../../lib/ciTypes'
 
@@ -38,10 +38,24 @@ describe('buildCiMap', () => {
     expect(edge(UNKNOWN_HOST_ID, 'runner:mystery')).toBeDefined()
   })
 
-  it('collapses GitHub-hosted runners into one node linked to their repos', () => {
+  it('collapses GitHub-hosted runners into one runner card, so no edge skips the runner column', () => {
     expect(node('runner:GitHub Actions 2')).toBeUndefined()
     expect((node(GITHUB_HOST_ID)!.data as CiHostNodeData).title).toBe('GitHub-hosted')
-    expect(edge(GITHUB_HOST_ID, 'repo:kensaurus/mushi-mushi')).toBeDefined()
+    const gh = node(`runner:${GITHUB_RUNNERS_NAME}`)!.data as CiRunnerNodeData
+    expect(gh).toMatchObject({ runnerKind: 'github_hosted', repos: ['kensaurus/mushi-mushi'], lastJobAt: '2026-10-21T11:09:00Z' })
+    expect(edge(GITHUB_HOST_ID, `runner:${GITHUB_RUNNERS_NAME}`)).toBeDefined()
+    expect(edge(`runner:${GITHUB_RUNNERS_NAME}`, 'repo:kensaurus/mushi-mushi')).toBeDefined()
+    // Every edge goes one column to the right.
+    const col = { host: 0, runner: 1, repo: 2, job: 3 } as const
+    for (const e of map.edges) {
+      expect(col[node(e.target)!.data.kind] - col[node(e.source)!.data.kind]).toBe(1)
+    }
+  })
+
+  it("keeps a runner's last job time when GitHub does not list the runner", () => {
+    const listless = buildCiMap(ciOverviewFixture({ runners: [], permissions: { jobs: 'ok', runners: 'missing' } }), { now: FIXTURE_NOW })
+    const aw = listless.nodes.find((n) => n.id === 'runner:aw-1')!.data as CiRunnerNodeData
+    expect(aw.lastJobAt).toBe('2026-10-21T10:30:00Z')
   })
 
   it('shows only waiting and running jobs, with moving dots into running ones', () => {

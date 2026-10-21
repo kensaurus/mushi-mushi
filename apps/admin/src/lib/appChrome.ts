@@ -11,13 +11,19 @@ export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
  * Desktop sub-header height (Search + toolbar row in Layout).
  * @internal Exported for tests only.
  */
-export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height, 2.5rem)'
+export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height,2.5rem)'
 
-/** Tailwind top offset shared by every fixed overlay below persistent chrome. */
-const topBelowAppChromeClass = [
-  'top-[var(--mushi-beta-banner-offset,0px)]',
-  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
-].join(' ')
+/**
+ * Tailwind top offset shared by every fixed overlay below persistent chrome.
+ *
+ * Written out in full, with no spaces inside the brackets: Tailwind reads
+ * class names from the source text, so a class built with `${…}` or holding
+ * a space is never generated. Until 2026-10-22 the md: offset was built that
+ * way, so every desktop drawer started at the top of the window and the
+ * header covered its title.
+ */
+const topBelowAppChromeClass =
+  'top-[var(--mushi-beta-banner-offset,0px)] md:top-[calc(var(--mushi-beta-banner-offset,0px)+var(--chrome-row-height,2.5rem))]'
 
 /**
  * Stacking order for the authenticated shell.
