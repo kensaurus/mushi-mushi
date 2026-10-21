@@ -21,10 +21,10 @@ interface Props {
 
 function Facts({ rows }: { rows: Array<[string, ReactNode]> }) {
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+    <dl className="flex flex-col gap-1 text-xs">
       {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="text-fg-muted">{k}</dt>
+        <div key={k} className="flex gap-3">
+          <dt className="w-40 shrink-0 text-fg-muted">{k}</dt>
           <dd className="min-w-0 text-fg tabular-nums">{v}</dd>
         </div>
       ))}

@@ -7,7 +7,7 @@
 
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
 import { formatPercent, formatSeconds, recentInfraFailures, slowestJobs } from '../../lib/ciView'
-import { Badge, CopyButton, RelativeTime, StatCard, StatGrid, type BadgeTone } from '../ui'
+import { Badge, Card, CopyButton, RelativeTime, StatCard, StatGrid, type BadgeTone } from '../ui'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 
 export function CiStatTiles({ stats, days }: { stats: CiOverview['stats']; days: number }) {
@@ -63,7 +63,8 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="ci-advice">
       {sorted.map((a) => (
-        <li key={a.id} className="flex flex-col gap-1.5 rounded-md border border-edge-subtle bg-surface-raised p-3">
+        <li key={a.id}>
+          <Card className="flex flex-col gap-1.5 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={SEVERITY[a.severity].tone}>{SEVERITY[a.severity].label}</Badge>
             <span className="text-sm font-medium text-fg">{a.title}</span>
@@ -77,6 +78,7 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
             <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-2xs text-fg">{a.fix}</pre>
             <CopyButton value={a.fix} label="Copy the fix" />
           </div>
+          </Card>
         </li>
       ))}
     </ul>

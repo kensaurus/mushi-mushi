@@ -18,6 +18,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
@@ -142,11 +143,20 @@ export function CiPage() {
       {page.error && <PageLoadError error={page.error} resource="CI runners" endpoint={path} onRetry={reload} />}
       {page.loading && !data && <Loading text="Reading your CI…" />}
 
-      {notice && (
-        <Callout tone="warn" label="GitHub access">
-          <span>{notice}</span>
-        </Callout>
-      )}
+      <PagePosture
+        slots={[
+          {
+            id: 'ci-permissions',
+            priority: POSTURE_PRIORITY.status,
+            show: notice != null,
+            children: (
+              <Callout tone="warn" label="GitHub access">
+                <span>{notice}</span>
+              </Callout>
+            ),
+          },
+        ]}
+      />
 
       {data && empty && (
         <EmptyState

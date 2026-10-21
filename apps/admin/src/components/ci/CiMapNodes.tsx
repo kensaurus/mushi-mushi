@@ -23,14 +23,14 @@ const HANDLE_CLS = '!h-1.5 !w-1.5 !min-h-0 !min-w-0 !border-0 !bg-transparent'
 const PLATFORM_LABEL: Record<string, string> = { linux: 'Linux', wsl2: 'WSL 2', macos: 'macOS', windows: 'Windows' }
 
 function NodeShell({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  const { selectedId, onSelect } = useCiMapSelection()
-  const selected = selectedId === id
+  const selection = useCiMapSelection()
+  const selected = selection?.selectedId === id
   return (
     <div className="relative h-full w-full">
       <Handle type="target" position={Position.Left} className={HANDLE_CLS} isConnectable={false} />
       <button
         type="button"
-        onClick={() => onSelect(id)}
+        onClick={() => selection?.onSelect(id)}
         aria-pressed={selected}
         aria-label={label}
         className={`nodrag nopan flex h-full w-full flex-col gap-1 overflow-hidden rounded-md border bg-surface-raised px-2.5 py-2 text-left shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${

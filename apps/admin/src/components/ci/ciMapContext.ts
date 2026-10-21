@@ -12,8 +12,9 @@ export interface CiMapSelection {
   onSelect: (nodeId: string) => void
 }
 
-export const CiMapSelectContext = createContext<CiMapSelection>({ selectedId: null, onSelect: () => {} })
+/** Null outside CiRunnerMap: nodes then render unselected and inert. */
+export const CiMapSelectContext = createContext<CiMapSelection | null>(null)
 
-export function useCiMapSelection(): CiMapSelection {
+export function useCiMapSelection(): CiMapSelection | null {
   return useContext(CiMapSelectContext)
 }
