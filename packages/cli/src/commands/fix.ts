@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig, type CliConfig } from '../config.js';
-import { apiCall, requireUuid } from '../cli-shared.js';
+import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared.js';
 import { MushiCliError } from '../errors.js';
 
 /** `owner/name` of a GitHub repo URL, lower-cased; null when it is not one. */
@@ -50,6 +50,59 @@ async function resolveTargetRepoId(repo: string, cfg: CliConfig): Promise<string
       : `${repo} matches ${matches.length} linked repos; pass the repo id`,
     `linked repos: ${names}`,
   );
+}
+
+/** GET /v1/admin/fixes/:id/verification (Plan 024, ADR 0035). */
+export interface CliVerification {
+  headSha: string | null
+  gates: Array<{ id: string; status: string; label: string; detail: string }>
+  passed: boolean
+  autoMerge?: { state: string; detail: string | null } | null
+  regressions?: Array<Record<string, unknown>>
+}
+
+const GATE_MARK: Record<string, [string, string]> = {
+  pass: ['✓', 'pass'],
+  fail: ['✗', 'fail'],
+  pending: ['…', 'pending'],
+  unavailable: ['–', 'unavailable'],
+  not_set_up: ['○', 'not set up'],
+}
+
+const AUTO_MERGE_WORDS: Record<string, string> = {
+  none: 'not merged by Mushi',
+  eligible: 'eligible, waiting for the next run',
+  merged: 'merged by Mushi',
+  skipped: 'skipped',
+  failed: 'failed',
+}
+
+const SIGNAL_WORDS: Record<string, string> = {
+  ci_failed_on_merge: 'CI failed on the merge commit',
+  report_reopened: 'the report was reopened',
+  new_report_in_changed_file: 'a new report names a file this fix changed',
+}
+
+/** The gate checklist as lines: glyph, word, label, then what to do. */
+export function renderVerification(v: CliVerification): string[] {
+  const lines = [`Head ${v.headSha ? v.headSha.slice(0, 7) : 'unknown'}: ${v.passed ? 'every gate passes' : 'not verified yet'}`]
+  for (const g of v.gates ?? []) {
+    const [glyph, word] = GATE_MARK[g.status] ?? ['?', g.status]
+    lines.push(`  ${glyph} ${word.padEnd(11)} ${g.label}`)
+    if (g.detail && g.status !== 'pass') lines.push(`                ${g.detail}`)
+  }
+  const am = v.autoMerge
+  if (am) lines.push(`Automatic merge: ${AUTO_MERGE_WORDS[am.state] ?? am.state}${am.detail ? `. ${am.detail}` : ''}`)
+  for (const r of v.regressions ?? []) {
+    const signal = String(r['signal'] ?? '')
+    const revertUrl = (r['revertPrUrl'] ?? r['revert_pr_url']) as string | null | undefined
+    const revertState = String(r['revertState'] ?? r['revert_state'] ?? 'none')
+    const detail = typeof r['detail'] === 'string' && r['detail'] ? `: ${r['detail']}` : ''
+    lines.push(`Regression: ${SIGNAL_WORDS[signal] ?? signal}${detail}`)
+    if (revertUrl) lines.push(`  Revert PR: ${revertUrl}`)
+    else if (revertState === 'not_safe') lines.push('  No revert PR: later commits changed the same files. Revert by hand.')
+  }
+  return lines
 }
 
 export function registerFixCommands(program: Command): void {
@@ -395,6 +448,45 @@ fixes
     }
     if (!opts.show) console.log('Review queued. It takes a few minutes; check with --show.')
     if (review) printReview(review)
+  })
+
+fixes
+  .command('verify <fixId>')
+  .description("Show the verified-merge gates for a fix PR's current head (ADR 0035), or re-check them with --rerun")
+  .option('--rerun', 'Re-check the gates now, then show them')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Gates: Opus review, CI, a test that fails without the fix, no tests weakened,
+a small change, and a second review. Mushi merges on its own only when every
+gate passes and Verified merge is on for the project.
+Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge`)
+  .action(async (fixId: string, opts: { rerun?: boolean; json?: boolean }) => {
+    requireUuid(fixId, 'fixId')
+    const config = requireConfig()
+    const json = outputIsJson(opts.json)
+    if (opts.rerun) {
+      const started = await apiCall(`/v1/admin/fixes/${fixId}/verify`, config, { method: 'POST' })
+      if (!started.ok) {
+        if (json) console.log(JSON.stringify({ ok: false, error: started.error }, null, 2))
+        else console.error('Re-check not started:', started.error.message)
+        process.exit(1)
+      }
+    }
+    const result = await apiCall<CliVerification>(`/v1/admin/fixes/${fixId}/verification`, config)
+    if (!result.ok) {
+      if (json) console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      else console.error('Could not read the verification:', result.error.message)
+      process.exit(1)
+    }
+    if (json) {
+      console.log(JSON.stringify({ ok: true, verification: result.data ?? null }, null, 2))
+      return
+    }
+    if (!result.data) {
+      console.log('No verification for this fix yet. Mushi checks open agent PRs every 10 minutes after their review.')
+      return
+    }
+    for (const line of renderVerification(result.data)) console.log(line)
   })
 
 fixes
