@@ -23,7 +23,7 @@
 import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
-import { buildCiQueue, jobOutcome } from '../../lib/ciView'
+import { buildCiQueue, jobOutcome, runnerDisplayName } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 
 type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
@@ -85,6 +85,8 @@ export interface CiJobNodeData extends Base {
   repo: string
   running: boolean
   runnerName: string | null
+  /** How to name the runner to a reader (GitHub's VM ids are not names). */
+  runnerLabel: string | null
   createdAt: string
   startedAt: string | null
   prNumber: number | null
@@ -335,6 +337,7 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
       repo: j.repo,
       running,
       runnerName: j.runnerName,
+      runnerLabel: runnerDisplayName(j),
       createdAt: j.createdAt,
       startedAt: j.startedAt,
       prNumber: j.prNumber,

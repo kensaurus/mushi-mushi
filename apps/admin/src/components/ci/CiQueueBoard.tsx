@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { LayoutGroup, motion } from 'framer-motion'
 import type { CiJob } from '../../lib/ciTypes'
-import { buildCiQueue, fixLinkKey, formatSeconds, jobElapsedSeconds, waitingHint, type CiFixLinks } from '../../lib/ciView'
+import { buildCiQueue, fixLinkKey, formatSeconds, jobElapsedSeconds, runnerDisplayName, waitingHint, type CiFixLinks } from '../../lib/ciView'
 import { useNow } from '../../lib/useNow'
 import { useMotionTransition } from '../../lib/useMotionTransition'
 import { RelativeTime } from '../ui'
@@ -73,7 +73,7 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
         {column === 'waiting' && <>waiting {formatSeconds(elapsed)}</>}
         {column === 'running' && (
           <>
-            on {job.runnerName ?? 'a runner'} · {formatSeconds(elapsed)}
+            on {runnerDisplayName(job) ?? 'a runner'} · {formatSeconds(elapsed)}
           </>
         )}
         {column === 'finished' && (

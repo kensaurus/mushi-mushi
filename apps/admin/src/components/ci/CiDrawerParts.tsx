@@ -38,7 +38,7 @@ export function StatusLine({ dot, word, why }: { dot: string; word: string; why:
 
 export function StatTiles({ tiles }: { tiles: Array<{ label: string; value: string; hint?: string }> }) {
   return (
-    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-2">
       {tiles.map((t) => (
         <div key={t.label} className="min-w-0 rounded-md border border-edge-subtle bg-surface-raised px-2.5 py-2">
           <dt className="truncate text-3xs uppercase tracking-wide text-fg-muted">{t.label}</dt>
@@ -109,6 +109,16 @@ export function ActivityBars({ activity }: { activity: CiActivity }) {
       <ol className="flex h-24 items-end gap-1.5" aria-label="Finished jobs per day, last 7 days">
         {activity.days.map((d) => {
           const total = d.passed + d.failed + d.infra + d.other
+          if (!d.covered) {
+            const none = `${weekday(d.day)} ${d.day}: no data (older than the jobs Mushi holds)`
+            return (
+              <li key={d.day} className="flex h-full min-w-0 flex-1 flex-col items-center gap-1" title={none} aria-label={none}>
+                <span className="text-3xs text-fg-faint">–</span>
+                <div className="w-full flex-1 rounded-sm border border-dashed border-edge-subtle" />
+                <span className="text-3xs text-fg-faint">{weekday(d.day)}</span>
+              </li>
+            )
+          }
           const words = `${weekday(d.day)} ${d.day}: ${total} job${total === 1 ? '' : 's'} (${d.passed} passed, ${d.failed} failed, ${d.infra} machine stopped, ${d.other} cancelled or skipped)`
           return (
             <li key={d.day} className="flex h-full min-w-0 flex-1 flex-col items-center gap-1" title={words} aria-label={words}>
@@ -204,27 +214,34 @@ export function RecentJobs({ jobs, empty, onSelect }: { jobs: CiJob[]; empty: st
       ) : (
         <ul className="flex flex-col divide-y divide-edge-subtle">
           {recent.map((j) => (
-            <li key={j.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-xs">
-              <CiJobOutcomeChip job={j} />
-              {onSelect ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(`job:${j.id}`)}
-                  className="min-w-0 truncate font-medium text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                >
-                  {j.jobName}
-                </button>
-              ) : (
-                <span className="min-w-0 truncate font-medium text-fg">{j.jobName}</span>
-              )}
-              <span className="text-fg-faint">{j.repo}</span>
-              <span className="ml-auto text-fg-muted tabular-nums">{formatSeconds(j.durationSeconds)}</span>
-              {j.htmlUrl && (
-                <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                  GitHub ↗
-                </a>
-              )}
-              {j.infraDetail && <p className="w-full text-2xs text-fg-muted">{j.infraDetail}</p>}
+            <li key={j.id} className="flex flex-col gap-0.5 py-1.5 text-xs">
+              <div className="flex min-w-0 items-center gap-2">
+                <CiJobOutcomeChip job={j} />
+                {onSelect ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelect(`job:${j.id}`)}
+                    className="min-w-0 flex-1 truncate text-left font-medium text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                  >
+                    {j.jobName}
+                  </button>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate font-medium text-fg">{j.jobName}</span>
+                )}
+                <span className="shrink-0 text-fg-muted tabular-nums">{formatSeconds(j.durationSeconds)}</span>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 text-2xs">
+                <span className="min-w-0 flex-1 truncate text-fg-faint">
+                  {j.repo}
+                  {j.workflowName ? ` · ${j.workflowName}` : ''}
+                </span>
+                {j.htmlUrl && (
+                  <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-accent hover:underline">
+                    GitHub ↗
+                  </a>
+                )}
+              </div>
+              {j.infraDetail && <p className="text-2xs text-fg-muted">{j.infraDetail}</p>}
             </li>
           ))}
         </ul>

@@ -119,7 +119,9 @@ function RunnerNodeInner({ id, data }: NodeProps) {
       <div className="flex items-center gap-1.5 min-w-0">
         <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
         <span className="truncate text-xs font-semibold text-fg">{d.name}</span>
-        <span className="ml-auto shrink-0 text-3xs font-medium text-fg-secondary">{status.word}</span>
+        <span className="ml-auto shrink-0 text-3xs font-medium text-fg-secondary" title={status.word}>
+          {status.short ?? status.word}
+        </span>
       </div>
       <p className="truncate text-3xs text-fg-muted">
         {d.jobs24h} job{d.jobs24h === 1 ? '' : 's'} today
@@ -173,7 +175,7 @@ function JobNodeInner({ id, data }: NodeProps) {
       </div>
       <p className="text-3xs text-fg-muted">
         {word}
-        {d.running && d.runnerName ? ` on ${d.runnerName}` : ''} · since{' '}
+        {d.running && d.runnerLabel ? ` on ${d.runnerLabel}` : ''} · since{' '}
         <RelativeTime value={d.running && d.startedAt ? d.startedAt : d.createdAt} />
       </p>
     </NodeShell>

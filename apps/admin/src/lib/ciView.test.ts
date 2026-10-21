@@ -5,6 +5,7 @@ import {
   buildCiQueue,
   buildCiTimeline,
   ciActivity,
+  runnerDisplayName,
   formatSeconds,
   isCiOverviewEmpty,
   jobElapsedSeconds,
@@ -203,7 +204,7 @@ describe('ciActivity', () => {
     const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW)
     expect(a.days).toHaveLength(7)
     expect(a.days[0].day).toBe('2026-10-15')
-    expect(a.days[6]).toEqual({ day: '2026-10-21', passed: 1, failed: 1, infra: 2, other: 1 })
+    expect(a.days[6]).toEqual({ day: '2026-10-21', covered: true, passed: 1, failed: 1, infra: 2, other: 1 })
     expect(a.finished).toBe(5)
   })
 
@@ -225,5 +226,43 @@ describe('ciActivity', () => {
   it('is empty for no jobs', () => {
     const a = ciActivity([], FIXTURE_NOW)
     expect(a).toMatchObject({ finished: 0, passRate: null, waitP50s: null, runP50s: null, memPeakMb: null, lastJobAt: null })
+  })
+})
+
+describe('GitHub-hosted runners in the timeline and labels', () => {
+  const gh = (id: string, start: string, end: string): CiJob => ({
+    ...byId('j5'),
+    id,
+    runnerName: `GitHub Actions ${id}`,
+    createdAt: start,
+    startedAt: start,
+    completedAt: end,
+  })
+
+  it('packs GitHub jobs into one lane per job running at once, never one per VM id', () => {
+    const jobs = [
+      gh('a', '2026-10-21T11:00:00Z', '2026-10-21T11:10:00Z'),
+      gh('b', '2026-10-21T11:05:00Z', '2026-10-21T11:15:00Z'),
+      gh('c', '2026-10-21T11:12:00Z', '2026-10-21T11:20:00Z'),
+    ]
+    const t = buildCiTimeline(jobs, { now: FIXTURE_NOW, windowMs: 2 * HOUR })
+    expect(t.lanes.map((l) => l.label).sort()).toEqual(['GitHub-hosted 1', 'GitHub-hosted 2'])
+    expect(t.lanes.flatMap((l) => l.bars)).toHaveLength(3)
+    expect(t.lanes.some((l) => l.label.includes('GitHub Actions'))).toBe(false)
+  })
+
+  it('names a single GitHub lane without a number', () => {
+    const t = buildCiTimeline([gh('a', '2026-10-21T11:00:00Z', '2026-10-21T11:10:00Z')], { now: FIXTURE_NOW, windowMs: 2 * HOUR })
+    expect(t.lanes.map((l) => l.label)).toEqual(['GitHub-hosted'])
+  })
+
+  it('calls a GitHub runner "a GitHub-hosted machine", and keeps self-hosted names', () => {
+    expect(runnerDisplayName({ runnerName: 'GitHub Actions 1000079285', runnerKind: 'github_hosted' })).toBe('a GitHub-hosted machine')
+    expect(runnerDisplayName({ runnerName: 'alienware-glot-1', runnerKind: 'self_hosted' })).toBe('alienware-glot-1')
+  })
+
+  it('marks days older than the oldest job held as no data', () => {
+    const a = ciActivity(FIXTURE_JOBS, FIXTURE_NOW, 7, Date.parse('2026-10-20T11:00:00Z'))
+    expect(a.days.map((d) => d.covered)).toEqual([false, false, false, false, false, true, true])
   })
 })
