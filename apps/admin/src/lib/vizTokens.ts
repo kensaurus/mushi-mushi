@@ -21,12 +21,31 @@ const STEP_STATUS_TOKEN: Record<string, string> = {
   skipped: 'viz-step-skipped',
 }
 
+const reportedUnset = new Set<string>()
+
+/**
+ * Dev-only: every unset token paints the same grey, so name it once.
+ * console.error, not warn: console.warn is at its check:residue ceiling,
+ * and debugWarn (lib/debug.ts) imports this module.
+ */
+function reportUnset(name: string): void {
+  if (!import.meta.env.DEV || import.meta.env.MODE === 'test') return
+  if (reportedUnset.has(name)) return
+  reportedUnset.add(name)
+  console.error(
+    `[vizTokens] --color-${name} is not set on :root; using ${UNSTYLED}. ` +
+      'Declare it in the @theme static block of styles/theme-tokens.css, or read it after the stylesheet loads.',
+  )
+}
+
 /** Read a `--color-*` token from the document root. */
 export function readVizToken(name: string, fallback?: string): string {
   const unset = fallback ?? UNSTYLED
   if (typeof document === 'undefined') return unset
   const v = getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim()
-  return v || unset
+  if (v) return v
+  if (fallback === undefined) reportUnset(name)
+  return unset
 }
 
 export function stepStatusColor(status: string): string {
