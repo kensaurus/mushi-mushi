@@ -2691,6 +2691,44 @@ never unlocks a hold by itself. A fix can be re-reviewed at most three times
 an hour, and not while a review is already running. Asking again about a hold
 on the same commit needs a person in the console.
 
+## When the review says "fix first"
+
+A **fix first** verdict means the change is close but has findings. Mushi can
+send the pull request back to a cloud agent once, with those findings, so you
+don't have to copy them over yourself.
+
+- Turn it on under **Settings → AI keys → Cursor → Review follow-ups**. It is
+  off until an owner or admin turns it on, and it applies to every app in the
+  organization.
+- Mushi starts a new Cursor agent on the same pull request. The agent gets the
+  bug's summary and diagnosis and every finding. It is told to fix exactly
+  those, add tests, and push to the same branch.
+- Each pull request is sent back at most twice, and only once per commit. A
+  **hold**, a **merge**, a closed pull request, or auto-fix turned off sends
+  nothing.
+- Findings are filtered first. A finding about a file the pull request did not
+  change, a finding that reads like an instruction to the agent, and a
+  suggested fix that carries an outside link or a shell command are all left
+  out.
+- When the agent pushes, Mushi reviews the new commit. The settings card shows
+  the latest follow-ups and the verdict each one got after.
+- Each follow-up counts toward the app's daily auto-fix limit. The organization
+  limit defaults to 30 a day. Pick which Cursor key and model to use, or let
+  each app use the key its fixes already use. Mushi's own platform key is never
+  used.
+
+## Spend-down and its safety stop
+
+Spend-down mode (**Settings → AI keys → Cursor**, or `mushi keys spend-down`)
+uses a Cursor key's credits before they expire, by sending the best open bugs
+to cloud agents. It watches the review verdicts as it goes. When an app's
+recent spend-down pull requests are clearly poor (too few **merge** verdicts,
+too many **hold** verdicts, or too many runs with no pull request), Mushi
+pauses spend-down for that app and sends one test fix a day until the results
+recover. Press **Resume** in the console to restart it sooner. The settings
+card shows a 7-day scoreboard per key: runs, pull requests, verdicts, merges,
+and what the reviews cost.
+
 ## Cost and keys
 
 The review runs on your own Anthropic key (Settings → AI keys), your
@@ -6884,6 +6922,9 @@ Spend-down mode starts `--window-days` (default 14) before the credits expire
 and dispatches the best open reports of the apps the key already pays for,
 inside each app's auto-fix limits. A key shared by the whole organization is
 changed by an owner or admin in the console (Settings, AI keys, Cursor).
+It pauses an app on its own when that app's recent agent pull requests review
+poorly, then sends one test fix a day until they recover
+([agent PR review](/concepts/agent-pr-review#spend-down-and-its-safety-stop)).
 
 ---
 
@@ -14547,6 +14588,18 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 | Frictionless onboarding | 🔄 In-flight | GitHub/Google OAuth signup, auto-provisioned project+key; **`mushi login` device flow shipped** (Jul 2026) |
 | Self-hosting one-click | 🔄 In-flight | Railway / Render deploy button, `MUSHI_INIT_*` headless bootstrap |
 | Launch Week | ⏭ Next | Public Show HN + Product Hunt + Reddit coordinated launch |
+
+## Agent fixes you can trust (October 2026)
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| [Agent PR review](/concepts/agent-pr-review) | ✅ Shipped | Claude Opus reviews every cloud-agent pull request on your own key; a **hold** blocks merging from Mushi |
+| Review follow-ups | ✅ Shipped | A "fix first" pull request goes back to a new agent once, with the findings |
+| Spend-down safety stop | ✅ Shipped | Spend-down pauses an app whose agent pull requests review poorly; 7-day scoreboard per key |
+| All-apps AI keys | ✅ Shipped | One key you own serves every app in the organizations you own ([BYOK](/security/byok)) |
+| [CI runners](/operating/ci-runners) | ✅ Shipped | `/ci` shows where tests run and why a fix waits; a stopped test machine is never called a failed fix; `mushi runner add` |
+| Verified merge | 🔄 In progress | An agent pull request merges on its own only with proof: a test that fails without the fix and passes with it, no weakened tests, a small diff, and two AI reviews that can stop it. Off by default |
+| Run Mushi on your own machines | ⏭ Planned | A local-only mode with a self-test that proves nothing leaves your network (`mushi local verify`) |
 
 ## Wave D highlights (shipped)
 

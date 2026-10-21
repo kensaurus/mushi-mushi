@@ -723,7 +723,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/agent-pr-review",
     markdown: "concepts/agent-pr-review.md",
     keywords: ["concepts", "agent-pr-review", "agent", "review", "pr"],
-    headings: ["What you see", "What the review checks", "Re-running a review", "Cost and keys", "For operators"],
+    headings: ["What you see", "What the review checks", "Re-running a review", "When the review says \"fix first\"", "Spend-down and its safety stop", "Cost and keys", "For operators"],
     excerpt: "Claude Opus 5.5 reviews every pull request a cloud coding agent opens as a fix, and a \"hold\" stops Mushi from merging it until you choose to.",
   },
   {
@@ -1452,7 +1452,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/roadmap",
     markdown: "roadmap.md",
     keywords: ["roadmap"],
-    headings: ["Live boards", "Release waves", "Wave E details (in-flight)", "Wave D highlights (shipped)", "Completed highlights (Wave C, v0.8.0)"],
+    headings: ["Live boards", "Release waves", "Wave E details (in-flight)", "Agent fixes you can trust (October 2026)", "Wave D highlights (shipped)", "Completed highlights (Wave C, v0.8.0)"],
     excerpt: "Where Mushi Mushi is headed — upcoming SDK platforms, diagnosis speed targets, and console features, updated as work lands.",
   },
   {
