@@ -34,7 +34,20 @@ import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
-import { isAdvisoryCheckRun } from '../_shared/github.ts';
+import { isAdvisoryCheckRun, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import {
+  ciGithub,
+  ciJobRow,
+  fetchJob,
+  fetchJobAnnotations,
+  fixCiInfraFromRows,
+  needsAnnotations,
+  noteRunnersFromJobs,
+  repoFullName,
+  upsertCiJobs,
+  type GhJob,
+} from '../_shared/ci-jobs.ts';
+import { describeCiInfra, type FixCiInfra } from '../_shared/ci-infra.ts';
 import { extractRelativeImports } from '../_shared/codebase-graph-build.ts';
 import {
   chunkKey,
@@ -540,6 +553,7 @@ async function handleCheckRun(
       pull_requests?: Array<{ head?: { ref?: string } }>;
     };
     repository?: { full_name?: string };
+    installation?: { id?: number };
   },
   deliveryId: string,
 ): Promise<Response> {
@@ -585,12 +599,26 @@ async function handleCheckRun(
   const conclusion = (run.conclusion ?? '').toLowerCase();
   const resolved = conclusion.length > 0;
 
+  // A cancelled / failed job may be the machine, not the code (Plan 022,
+  // ADR 0033): read the job and its annotations (two calls at most) before
+  // telling the timeline "CI failed".
+  const infra =
+    resolved && (conclusion === 'cancelled' || conclusion === 'failure')
+      ? await classifyCheckRunJob(db, {
+          projectId: attempt.project_id,
+          repo: payload.repository?.full_name ?? null,
+          checkRunId: run.id ?? null,
+          installationId: payload.installation?.id ?? null,
+        })
+      : null;
+
   await db
     .from('fix_attempts')
     .update({
       check_run_status: status || null,
       check_run_conclusion: conclusion || null,
       check_run_updated_at: new Date().toISOString(),
+      ...(infra ? { ci_infra: infra } : {}),
     })
     .eq('id', attempt.id);
 
@@ -598,8 +626,12 @@ async function handleCheckRun(
     fix_attempt_id: attempt.id,
     project_id: attempt.project_id,
     kind: resolved ? 'ci_resolved' : 'ci_started',
-    status: resolved ? (conclusion === 'success' ? 'ok' : 'fail') : 'pending',
-    label: resolved ? `CI ${conclusion}` : `CI ${status.replace(/_/g, ' ') || 'running'}`,
+    status: resolved ? (conclusion === 'success' ? 'ok' : infra?.infra ? 'pending' : 'fail') : 'pending',
+    label: resolved
+      ? infra?.infra
+        ? `Tests did not run — ${describeCiInfra(infra)}`
+        : `CI ${conclusion}`
+      : `CI ${status.replace(/_/g, ' ') || 'running'}`,
     detail: run.name ?? null,
     at: run.completed_at ?? run.started_at ?? new Date().toISOString(),
     dedupe_key: `check_run:${run.id ?? deliveryId}:${resolved ? 'done' : 'start'}`,
@@ -608,6 +640,94 @@ async function handleCheckRun(
 
   return new Response(
     JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: resolved ? conclusion : status }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+/**
+ * Classify the job behind a cancelled / failed Actions check run (an
+ * Actions check run's id is its job id): one job read and one annotation
+ * read, stored in ci_jobs. Returns the verdict in `fix_attempts.ci_infra`
+ * shape, or null when the job could not be read (not an Actions check, no
+ * token, no Actions: read). Never throws: the webhook still records CI.
+ */
+async function classifyCheckRunJob(
+  db: ReturnType<typeof getDb>,
+  input: { projectId: string; repo: string | null; checkRunId: number | null; installationId: number | null },
+): Promise<FixCiInfra | null> {
+  const repo = repoFullName(input.repo);
+  if (!repo || !input.checkRunId) return null;
+  try {
+    const token = await resolveCiGithubToken(db, input.projectId, input.installationId);
+    if (!token) return null;
+    const gh = ciGithub(token, 2);
+    const job = await fetchJob(gh, repo, input.checkRunId);
+    if (!job) return null;
+    const annotations = needsAnnotations(job) ? await fetchJobAnnotations(gh, job.check_run_url) : null;
+    const now = new Date();
+    const row = ciJobRow({ projectId: input.projectId, repo, job, annotations, source: 'webhook', now });
+    if (!row) return null;
+    await upsertCiJobs(db, [row]);
+    await noteRunnersFromJobs(db, [row], now);
+    return fixCiInfraFromRows([row], now);
+  } catch (err) {
+    log.warn('check_run job classification failed (non-fatal)', {
+      repo,
+      checkRunId: input.checkRunId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * Handle `workflow_job.*` (queued, waiting, in_progress, completed): store
+ * the job in ci_jobs for every project bound to the repository, through
+ * the same mapper as the poll (Plan 022). A completed cancelled / failed job
+ * gets one annotation read so a lost runner is told apart from a code
+ * failure. Deliveries need the App (or a repo webhook) subscribed to
+ * workflow_job; without them the 10-minute ci-jobs-collector covers it.
+ */
+async function handleWorkflowJob(
+  payload: { action?: string; workflow_job?: GhJob; repository?: { full_name?: string }; installation?: { id?: number } },
+): Promise<Response> {
+  const job = payload.workflow_job;
+  const repo = repoFullName(payload.repository?.full_name ?? null);
+  if (!job || !repo) {
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_workflow_job' }), { status: 202 });
+  }
+  const db = getDb();
+  const projectIds = await projectIdsForRepo(db, repo);
+  if (projectIds.length === 0) {
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_project_for_repo', repo }), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  let annotations: string[] | null = null;
+  if (needsAnnotations(job)) {
+    try {
+      const token = await resolveCiGithubToken(db, projectIds[0], payload.installation?.id ?? null);
+      if (token) annotations = await fetchJobAnnotations(ciGithub(token, 1), job.check_run_url);
+    } catch (err) {
+      log.warn('workflow_job annotation read failed (non-fatal)', { repo, err: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const now = new Date();
+  const rows = projectIds
+    .map((projectId) => ciJobRow({ projectId, repo, job, annotations, source: 'webhook', now }))
+    .filter((r): r is NonNullable<typeof r> => r != null);
+  const stored = await upsertCiJobs(db, rows);
+  if (stored.error) {
+    log.warn('workflow_job upsert failed', { repo, err: stored.error });
+    return new Response(JSON.stringify({ ok: false, error: { code: 'DB_ERROR', message: stored.error } }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  await noteRunnersFromJobs(db, rows, now);
+  return new Response(
+    JSON.stringify({ ok: true, stored: stored.written, ci: rows[0]?.ci_kind ?? null }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 }
@@ -2150,8 +2270,16 @@ app.post('/webhooks-github-indexer', async (c) => {
         pull_requests?: Array<{ head?: { ref?: string } }>;
       };
       repository?: { full_name?: string };
+      installation?: { id?: number };
     };
     return await handleCheckRun(crPayload, deliveryId);
+  }
+
+  // workflow_job.*: job timing and runner for the CI view (Plan 022).
+  if (event === 'workflow_job') {
+    return await handleWorkflowJob(
+      JSON.parse(raw) as { action?: string; workflow_job?: GhJob; repository?: { full_name?: string }; installation?: { id?: number } },
+    );
   }
 
   // release.published / deployment_status success (production): the host

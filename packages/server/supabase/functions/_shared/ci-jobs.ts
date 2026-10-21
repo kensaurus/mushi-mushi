@@ -16,7 +16,17 @@
  */
 
 import { fetchWithTimeout } from './http.ts'
-import { classifyCiJob, runnerKindOf, runnerTookJob, type CiJobInput, type CiJobKind, type CiRunnerKind } from './ci-infra.ts'
+import {
+  classifyCiJob,
+  runnerKindOf,
+  runnerTookJob,
+  summarizeCiJobs,
+  type CiJobInput,
+  type CiJobKind,
+  type CiJobVerdict,
+  type CiRunnerKind,
+  type FixCiInfra,
+} from './ci-infra.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any }
@@ -439,4 +449,72 @@ export async function collectRunJobs(
   const stored = await upsertCiJobs(db, rows)
   if (!stored.error) await noteRunnersFromJobs(db, rows, input.now)
   return { rows, complete, forbidden, error: stored.error }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fix loop: the verdict for one PR head
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `fix_attempts.ci_infra` from the jobs of a PR head: the summary verdict
+ * (a code failure wins over infra, infra over a plain cancel) with the job
+ * and runner that decided it. Null when the head is green, skipped or has no
+ * jobs, so a green head clears the column.
+ */
+export function fixCiInfraFromRows(rows: readonly CiJobRow[], now: Date): FixCiInfra | null {
+  const verdicts: Array<CiJobVerdict & { job: string; runId: number }> = rows.map((r) => ({
+    kind: r.ci_kind,
+    infra: r.infra,
+    runner: r.runner_name,
+    queuedSeconds: r.queue_seconds,
+    durationSeconds: r.duration_seconds,
+    detail: r.infra_detail,
+    job: r.job_name,
+    runId: r.run_id,
+  }))
+  const summary = summarizeCiJobs(verdicts)
+  if (!summary.worst || summary.kind === 'passed' || summary.kind === 'skipped') return null
+  const w = summary.worst
+  return {
+    kind: summary.kind,
+    infra: summary.infra,
+    job: w.job,
+    runner: w.runner,
+    queuedSeconds: w.queuedSeconds,
+    detail: w.detail,
+    runId: w.runId,
+    at: now.toISOString(),
+  }
+}
+
+/**
+ * Read the runs and jobs of a PR head (≤ 5 runs, ≤ 3 annotation reads), store
+ * the jobs, and return the head's verdict. `read: false` when GitHub could
+ * not be read (no Actions: read, budget spent): the caller then leaves the
+ * stored verdict alone instead of clearing it.
+ */
+export async function refreshFixCiInfra(
+  db: Db,
+  gh: CiGithub,
+  input: { projectId: string; repo: string; headSha: string; now: Date },
+): Promise<{ verdict: FixCiInfra | null; read: boolean; rows: CiJobRow[] }> {
+  const runs = await listRunsForHeadSha(gh, input.repo, input.headSha)
+  if (runs.status !== 200 || !runs.body) return { verdict: null, read: false, rows: [] }
+  if (runs.body.length === 0) return { verdict: null, read: true, rows: [] }
+  const out = await collectRunJobs(db, gh, {
+    projectId: input.projectId,
+    repo: input.repo,
+    runs: runs.body,
+    source: 'poll',
+    now: input.now,
+    maxAnnotationCalls: MAX_ANNOTATION_CALLS_PER_SHA,
+  })
+  if (out.rows.length === 0 && (!out.complete || out.forbidden)) return { verdict: null, read: false, rows: [] }
+  return { verdict: fixCiInfraFromRows(out.rows, input.now), read: true, rows: out.rows }
+}
+
+/** One job by id (`GET /actions/jobs/{id}`); an Actions check run's id is its job id. */
+export async function fetchJob(gh: CiGithub, repo: string, jobId: number): Promise<GhJob | null> {
+  const res = await ghRequest<GhJob>(gh, `${API}/repos/${repo}/actions/jobs/${jobId}`)
+  return res.status === 200 && res.body && typeof res.body.id === 'number' ? res.body : null
 }

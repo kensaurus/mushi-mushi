@@ -83,6 +83,7 @@ import {
   agentPrReviewSchema,
   buildReviewDiff,
   buildReviewPrompt,
+  ciPromptText,
   describeCi,
   formatReviewComment,
   normalizeReview,
@@ -124,7 +125,7 @@ export const BACKFILL_MAX_LIMIT = 200
 const BACKFILL_MAX_PAGES = 10
 
 const ATTEMPT_COLUMNS =
-  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion'
+  'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, branch, branch_name, repo_id, check_run_status, check_run_conclusion, ci_infra'
 const REPORT_COLUMNS = 'id, summary, description, category, severity, component, reproduction_steps, stage2_analysis'
 const QUEUE_COLUMNS = 'id, fix_attempt_id, project_id, report_id, attempts, comment_id'
 
@@ -152,6 +153,8 @@ interface AttemptRow {
   repo_id: string | null
   check_run_status: string | null
   check_run_conclusion: string | null
+  /** The CI verdict for the PR head (Plan 022); an infra verdict never holds a merge. */
+  ci_infra?: unknown
 }
 
 export interface ModelCallInput {
@@ -510,7 +513,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
-  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status)
+  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra)
   let report: Record<string, unknown> | null = null
   if (attempt.report_id) {
     const { data } = await db.from('reports').select(REPORT_COLUMNS).eq('id', attempt.report_id).maybeSingle()
@@ -525,7 +528,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
       branch: details.headRef ?? attempt.branch_name ?? attempt.branch,
       headSha: details.headSha,
     },
-    ci: ci.text,
+    ci: ciPromptText(ci),
     diff,
     scrub: (t) => sanitizeForLLM(t).text,
   })
