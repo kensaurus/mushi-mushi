@@ -273,17 +273,6 @@ BEGIN
   PERFORM cron.schedule(
     'mushi-fix-verifier',
     '4-54/10 * * * *',
-    $cron$
-      SELECT net.http_post(
-        url     := public.mushi_runtime_supabase_url() || '/functions/v1/fix-verifier',
-        headers := jsonb_build_object(
-          'Content-Type',  'application/json',
-          'Authorization', public.mushi_internal_auth_header()
-        ),
-        body    := '{"trigger":"cron"}'::jsonb
-      )
-      WHERE public.mushi_runtime_supabase_url() IS NOT NULL
-        AND public.mushi_internal_auth_header() IS NOT NULL;
-    $cron$
+    $cron$select mushi.cron_http_post('fix-verifier', jsonb_build_object('trigger', 'cron'));$cron$
   );
 END $$;
