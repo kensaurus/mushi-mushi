@@ -498,6 +498,9 @@ Spend-down mode starts `--window-days` (default 14) before the credits expire
 and dispatches the best open reports of the apps the key already pays for,
 inside each app's auto-fix limits. A key shared by the whole organization is
 changed by an owner or admin in the console (Settings, AI keys, Cursor).
+It pauses an app on its own when that app's recent agent pull requests review
+poorly, then sends one test fix a day until they recover
+([agent PR review](/concepts/agent-pr-review#spend-down-and-its-safety-stop)).
 
 ---
 

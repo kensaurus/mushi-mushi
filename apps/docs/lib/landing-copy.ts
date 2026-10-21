@@ -98,7 +98,7 @@ export const LANDING_HOW_IT_WORKS = {
     },
     {
       title: 'Mushi diagnoses it and opens a fix you review',
-      desc: 'You get the likely cause in plain English and a ready fix in your editor, or a draft pull request with its checks. You review it and merge.',
+      desc: 'You get the likely cause in plain English and a ready fix in your editor, or a draft pull request with its checks. A second AI reviews an agent\'s pull request first; you review it and merge.',
     },
   ],
 } as const
@@ -373,7 +373,7 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
     step: 'Step 4',
     name: 'Draft PR',
     glyph: 'ship',
-    role: 'Optional: an agent opens a PR on your repo. You merge, edit, or ignore it.',
+    role: 'Optional: an agent opens a PR on your repo, and a second AI reviews it. You merge, edit, or ignore it.',
   },
 ] as const
 
