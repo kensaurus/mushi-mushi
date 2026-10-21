@@ -574,6 +574,12 @@ export function PlatformIntegrationCard({
                     ↳ Inherited from org defaults — leave empty to keep using it, or enter a value to set a project override.
                   </p>
                 )}
+                {field.name === 'cursor_default_model' &&
+                  (draft.cursor_api_key_ref ?? '').trim() !== '' && (
+                    <p className="mt-0.5 text-2xs text-fg-faint leading-snug">
+                      ↳ This list is from the saved key. Save the new API key first to pick from its models.
+                    </p>
+                  )}
                 {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
               </div>
             )
