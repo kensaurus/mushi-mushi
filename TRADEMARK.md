@@ -1,12 +1,16 @@
 # Mushi Mushi Trademark Policy
 
-> _Last updated: May 2026 — version 1.0_
+> _Last updated: October 2026 — version 1.1_
 
 ## TL;DR
 
-The **code** in this repository is open source under MIT (SDKs / CLI /
-adapters / brand) and BSL 1.1 (server / agents / verify, see
-`packages/server/LICENSE`). The **brand** is not.
+The **code** in this repository is open source: MIT for the SDKs, CLI,
+MCP server, plugins, adapters and the code and tokens in `packages/brand`;
+AGPL-3.0-only for the server (`packages/server`, `packages/agents`,
+`packages/verify`) and the console (`apps/admin`); a source-available
+Enterprise Edition license for `packages/server/ee/`. The root
+[`LICENSE`](./LICENSE) states the split. The **brand** is not open source:
+no license in this repository covers the Mushi Mushi name, logo or marks.
 
 If you fork this project, build a derivative product, or run a public
 service from it, you **must rename it** and remove the Mushi Mushi name,
@@ -17,8 +21,12 @@ permission for the few cases where you might want to use the marks.
 
 ## What's covered
 
-The following are the unregistered trademarks of Kenji Sakuramoto
-("the Trademark Owner"):
+The following are trademarks of Kenji Sakuramoto / Kensaurus 合同会社
+("the Trademark Owner"). **They are not registered.** No registration has
+issued in any country; the Trademark Owner plans to apply in Japan first
+and then extend abroad. When an application or registration exists, this
+page will list its number. Until then they are unregistered marks, protected
+only as far as the law protects unregistered marks where you are.
 
 | Mark                                          | Type       |
 | --------------------------------------------- | ---------- |
@@ -26,14 +34,16 @@ The following are the unregistered trademarks of Kenji Sakuramoto
 | **Mushi**                                     | word mark  |
 | **虫** (the kanji used standalone)            | word mark  |
 | The Mushi Mushi bug logo (any color variant)  | logo mark  |
-| The "Sentry catches what your code throws…"   | trade dress|
-| tagline + adjacent visual identity            |            |
+| The tagline "Your AI wrote it. Mushi tells you why it broke." + adjacent visual identity | trade dress |
 | `mushi-mushi.dev`, `mushimushi.dev`,          | domain     |
 | `kensaur.us/mushi-mushi/*`                    | identity   |
 
-Trademarks are property rights independent of copyright. The MIT and BSL
-1.1 licenses both grant rights to the **software**; neither grants rights
-to the **trademarks**. This is normal — Mozilla, Apache, Linux, Postgres,
+Trademarks are property rights independent of copyright. The MIT,
+AGPL-3.0 and Enterprise Edition licenses grant rights to the **software**;
+none of them grants rights to the **trademarks**. The logo and mark image
+files (`packages/brand/src/logo*`, the favicons and app icons, the mascot
+art in `docs/mascot/`) are also not licensed for copying beyond what this
+policy allows: they are all rights reserved. This is normal — Mozilla, Apache, Linux, Postgres,
 Redis, Elasticsearch and most other major projects do the same.
 
 ## What you may do without asking
@@ -54,8 +64,32 @@ You may, without separate permission:
    tools** (e.g. `acme-mushi-import`, `mushi-for-vscode`) — provided the
    add-on name makes the secondary status clear (using "for", "by", or
    "compatible with" is fine; using "Mushi" as the dominant name is not).
-5. **Run an unmodified self-hosted instance** for your organization's
-   internal use under the BSL 1.1 Additional Use Grant.
+5. **Self-host Mushi for your own organization and keep the name** on
+   that instance, modified or not, as long as only your organization uses
+   it. The AGPL already lets you run and change the code; this item lets
+   you keep calling your internal instance "Mushi". Once people outside
+   your organization use it, "What you may not do" applies.
+
+## Using the logo
+
+The logo files live in [`packages/brand/src/`](./packages/brand/src/)
+(`logo.svg`, `logo-dark.svg`, `logo-wide.svg`, `logo-mark.svg`,
+`logo-mark-512.png`). You may use them without asking when all of these hold:
+
+- **You are referring or linking to Mushi Mushi**: an article, a talk, a
+  "Works with Mushi Mushi" note in your README, an integrations page that
+  lists Mushi beside other tools, or a link to this repository or the docs.
+- **The file is unmodified**: no recoloring beyond the light and dark
+  variants provided, no stretching, cropping, animation, or combining it
+  with your own logo.
+- **It is not your identity**: not your app icon, favicon, product logo,
+  social avatar, or part of your product or company name.
+- **It does not suggest endorsement or partnership** that does not exist.
+
+Forks of the server or the console (`apps/admin`) must replace the
+favicons, app icons and logo before anyone outside their own organization
+sees them. Anything else, such as merchandise, co-branding, or a modified
+mark, needs written permission (see "Asking for permission").
 
 ## What you may not do
 
@@ -75,7 +109,7 @@ authorization from the Trademark Owner:
    service that violates third-party terms of service** (including
    scraping operations against vendors whose webhooks Mushi consumes).
    This use is treated as bad-faith infringement and will be enforced
-   against under the Lanham Act and applicable foreign trademark law.
+   against under applicable trademark and unfair-competition law.
 4. **Registering a domain, npm scope, GitHub organization, social media
    handle, app-store listing, or company name** that includes "mushi",
    "mushimushi", "mushi-mushi", "虫", or any confusingly similar string,
@@ -90,8 +124,8 @@ authorization from the Trademark Owner:
 ## Why we have this policy
 
 Mushi Mushi is a small, single-maintainer open source project. The MIT
-and BSL 1.1 licenses are deliberately permissive on the code so the
-ecosystem can grow. The trademarks exist for one reason only: so end
+and AGPL-3.0 licenses are deliberately open on the code so the ecosystem
+can grow. The trademarks exist for one reason only: so end
 users can trust that "Mushi Mushi" means the upstream project, with the
 upstream project's security posture, supply-chain controls, and bug-fix
 loop.

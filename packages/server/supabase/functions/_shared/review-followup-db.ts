@@ -23,6 +23,8 @@ import {
   FOLLOWUP_MODELS_CACHE_MS,
   FOLLOWUP_SCOREBOARD_DAYS,
   followupTrigger,
+  type CiHeadState,
+  type CiJobForRepair,
   type FollowupReason,
   type FollowupScoreRow,
   type PriorFollowup,
@@ -295,6 +297,8 @@ export async function enqueueReviewFollowup(
     prior?: PriorFollowup[]
     /** Check the organization has follow-ups on first (the agent-pr-review hook); discovery filters before. */
     requireEnabled?: boolean
+    /** CI on the reviewed head; a "merge" review queues a CI repair only on a code failure. */
+    ci?: CiHeadState | null
   },
   now: Date = new Date(),
 ): Promise<{ queued: boolean; reason?: FollowupReason; error?: string }> {
@@ -308,7 +312,7 @@ export async function enqueueReviewFollowup(
       if (error) return { queued: false, error: error.message }
       prior = (data ?? []) as PriorFollowup[]
     }
-    const decision = followupTrigger({ review: input.review, attempt: input.attempt, prior })
+    const decision = followupTrigger({ review: input.review, attempt: input.attempt, prior, ci: input.ci ?? null })
     if (!decision.queue) return { queued: false, reason: decision.reason }
     const at = now.toISOString()
     const { data, error } = await db
@@ -323,6 +327,9 @@ export async function enqueueReviewFollowup(
           head_sha_before: input.review.head_sha,
           status: 'queued',
           queued_at: at,
+          // The column defaults to 'findings'; written only for a CI repair, so
+          // findings follow-ups keep working before migration 20261022100000.
+          ...(decision.kind === 'ci_repair' ? { kind: 'ci_repair' } : {}),
         },
         { onConflict: 'fix_attempt_id,head_sha_before', ignoreDuplicates: true },
       )
@@ -335,6 +342,36 @@ export async function enqueueReviewFollowup(
 }
 
 const IN_CHUNK = 100
+
+export const CI_REPAIR_JOB_COLUMNS =
+  'project_id, head_sha, job_id, job_name, workflow_name, run_id, run_attempt, repo, status, conclusion, ci_kind, infra, gh_created_at, steps'
+
+/**
+ * The `ci_jobs` rows (Plan 022) of these heads, grouped by head. Throws on a
+ * read error so callers wait instead of reading "no CI" as "not failing".
+ */
+export async function ciJobsForHeads(
+  db: SupabaseClient,
+  projectIds: string[],
+  heads: string[],
+): Promise<Map<string, CiJobForRepair[]>> {
+  const out = new Map<string, CiJobForRepair[]>()
+  const unique = [...new Set(heads.filter(Boolean))]
+  if (projectIds.length === 0 || unique.length === 0) return out
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const { data, error } = await db
+      .from('ci_jobs')
+      .select(CI_REPAIR_JOB_COLUMNS)
+      .in('project_id', projectIds)
+      .in('head_sha', unique.slice(i, i + IN_CHUNK))
+      .limit(2000)
+    if (error) throw new Error(`CI jobs read failed: ${error.message}`)
+    for (const row of (data ?? []) as Array<CiJobForRepair & { head_sha: string }>) {
+      out.set(row.head_sha, [...(out.get(row.head_sha) ?? []), row])
+    }
+  }
+  return out
+}
 
 /**
  * The follow-ups of these apps created in the last `days` days, for the
