@@ -6696,6 +6696,7 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
@@ -15213,9 +15214,74 @@ mushi runner status --json
 | --- | --- |
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
+| Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
+
+## What CI costs, and where it should run
+
+The **Cost and speed** section of the CI page, `mushi runner compare` and the
+MCP tool `get_ci_costs` compare GitHub-hosted runners with your own machines,
+per repo. Nothing here changes where your CI runs.
+
+```bash
+mushi runner compare           # this project, last 30 days
+mushi runner compare --all     # every project your account key can read
+mushi runner compare --json
+```
+
+For each repo and each place its jobs ran (GitHub-hosted, one of your
+machines, or never picked up) you see:
+
+| Figure | Measured or estimated |
+| --- | --- |
+| Wait p95, run time p50, pull-request pass rate, jobs | Measured from GitHub's job times |
+| Minutes billed | Estimated: each job rounded up to a whole minute, as GitHub bills |
+| Cost per month | Estimated: GitHub's list price after your included minutes, or your machine's electricity and wear |
+| Busy time of your machines | Measured: parallel jobs count once |
+| Speed, your machine vs GitHub | Measured only on jobs that passed on both, at least 5 times each; the sample size is shown |
+
+Money is always an estimate. GitHub's bill is the real figure.
+
+### Why it costs what it costs
+
+- **Public repositories run GitHub-hosted minutes free.** Private ones pay
+  after the plan's included minutes (Free 2,000, Pro and Team 3,000 a month),
+  which every private repo of the same GitHub account shares.
+- **Every job bills at least one whole minute.** Twenty 7-second checks bill
+  20 minutes; run them as steps of one job instead.
+- **macOS costs about 10× Linux** a minute (Linux $0.006, Windows $0.010,
+  macOS $0.062; Mushi shows the date it read GitHub's price list).
+- **Re-runs bill again on GitHub**, and cost only electricity on your machine.
+- **Jobs pinned to GitHub stay there.** A job that names
+  `runs-on: ubuntu-latest # pixel baselines are captured on hosted` does not
+  move with a runner variable; Mushi shows the comment as the reason.
+- **Main-branch and Dependabot runs often always use GitHub**, when the
+  workflow checks `github.ref` or `github.actor` before reading the variable.
+- **GitHub gives private repos smaller machines** (2 CPUs, 8 GB) than public
+  ones (4 CPUs, 16 GB), which is often why your own machine is faster.
+- **A job no runner picks up expires after 24 hours.** It costs nothing, and
+  the fix it was testing was never tested.
+
+### Your figures
+
+**Settings → General → CI cost** holds the figures behind the estimates, per
+organization: your GitHub plan, the idle and under-load watts of your
+machines, your price per kWh and currency, an optional wear cost per busy
+hour, and which runners share one physical machine (`Alienware: aw-,
+alienware-`). Until you save them, Mushi uses example figures and says so.
+On WSL2, `mushi runner heartbeat` sends a hash of the VM's boot id, so
+distros on one PC count as one machine without any setting.
+
+### Advice
+
+Cost advice comes with the numbers behind it: a private repo paying for
+GitHub minutes while your runner sits idle, a public repo queueing on your
+machine when GitHub would run it free, a workflow reading `vars.LINUX_RUNNER`
+in a repo with no such variable (every job falls back to GitHub), jobs pinned
+to GitHub and what they cost, many tiny jobs, and a public repo running on your
+own machine (a pull request from a fork can run code there).
 
 ## Machine health: heartbeat and job hooks
 
