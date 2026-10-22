@@ -94,6 +94,13 @@ export interface ConfigDoc {
     /** Edge functions / consumers that READ the value. */
     readBy?: string[];
   };
+  /** What we recommend, why, and the sources read (with the date). Only for
+   *  knobs where a source supports a value; leave it out rather than guess. */
+  recommended?: {
+    value: string;
+    why: string;
+    sources: Array<{ label: string; href: string; checked: string }>;
+  };
   /** Heuristic — when to nudge it up vs down. */
   whenToChange: string;
   /** Optional deep-link to a longer explanation. Same-origin anchors
@@ -201,6 +208,14 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     howItWorks:
       'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku 5.5 costs about a twentieth of Sonnet 5.5 but is rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
     default: { value: 'claude-sonnet-5-5' },
+    recommended: {
+      value: "claude-opus-5-5",
+      why: "The diagnosis reads code and logs to find a root cause: the agentic coding and knowledge work Opus 5.5 is built for, and Anthropic suggests starting most workloads there. It costs about twice Sonnet 5.5 ($4 / $20 against $2 / $10 per million tokens), once per report that reaches diagnosis.",
+      sources: [
+        { label: "Anthropic: Models overview", href: 'https://platform.claude.com/docs/en/models/overview', checked: '2026-10-22' },
+        { label: "Anthropic: Choosing a model", href: 'https://platform.claude.com/docs/en/about-claude/models/choosing-a-model', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'stage2_model',
@@ -220,7 +235,15 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     summary: 'Which Claude model runs the fast first pass on every report.',
     howItWorks:
       'Stage 1 reads each new report, filters spam and test noise, and sorts the easy bugs. Only reports it is unsure about go on to the triage model. Haiku 4.5 is the default; Haiku 5.5 costs a tenth as much per token. Only Claude models are accepted, because Stage 1 calls Claude first and OpenAI only as a fallback.',
-    default: { value: 'claude-haiku-4-5-20251001' },
+    default: { value: 'claude-haiku-4-5 (stored as claude-haiku-4-5-20251001, the same model)' },
+    recommended: {
+      value: "claude-haiku-5-5",
+      why: "The quick check sorts every report: high-volume classification, which Anthropic positions Haiku for. Haiku 5.5 costs a tenth of Haiku 4.5 ($0.10 / $0.50 against $1 / $5 per million tokens).",
+      sources: [
+        { label: "Anthropic: Models overview", href: 'https://platform.claude.com/docs/en/models/overview', checked: '2026-10-22' },
+        { label: "Anthropic: Choosing a model", href: 'https://platform.claude.com/docs/en/about-claude/models/choosing-a-model', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'stage1_model',
@@ -240,6 +263,14 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     howItWorks:
       'The judge re-reads classified reports and scores the triage for accuracy, severity, component and reproduction steps. Sonnet 5.5 is the default. Haiku 5.5 is much cheaper, but a judge on the same model as the triage tends to agree with it, so scores read more generously.',
     default: { value: 'claude-sonnet-5-5' },
+    recommended: {
+      value: "claude-sonnet-5-5",
+      why: "Never the model it grades: judges score text they find more probable higher (self-preference). With diagnosis on Opus 5.5, Sonnet 5.5 grades it from outside at half the price.",
+      sources: [
+        { label: "Adaline: LLM-as-a-judge reliability and bias (2026-04-08)", href: 'https://www.adaline.ai/blog/llm-as-a-judge-reliability-bias', checked: '2026-10-22' },
+        { label: "Future AGI: Evaluating LLM judge bias mitigation (2026)", href: 'https://futureagi.com/blog/evaluating-llm-judge-bias-mitigation-2026/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'judge_model',
@@ -259,6 +290,13 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     howItWorks:
       'When Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.',
     default: { value: 'claude-sonnet-5-5' },
+    recommended: {
+      value: "claude-opus-5-5",
+      why: "Writing a fix is agentic coding, which Anthropic recommends Opus 5.5 for. A fix that fails review costs another run, so the stronger model is usually cheaper per merged fix.",
+      sources: [
+        { label: "Anthropic: Choosing a model", href: 'https://platform.claude.com/docs/en/about-claude/models/choosing-a-model', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'claude_default_model',
@@ -279,6 +317,14 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     howItWorks:
       'When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold; a project member can merge anyway from the console with a reason. New commits are reviewed again, and the last verdict applies until that review finishes. Without an Anthropic key the review is skipped and the fix shows "Review skipped". A review usually costs $0.05 to $0.20 on your key, at most about $0.90 with retries.',
     default: { value: 'true (on; needs an Anthropic key)' },
+    recommended: {
+      value: "on",
+      why: "On 2026-10-21 the review said hold on 41% of agent PRs and fix first on 32%; without it those would reach merge on a green CI alone.",
+      sources: [
+        { label: "ADR 0035: verified fixes (live data, 2026-10-21)", href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md', checked: '2026-10-22' },
+        { label: "ADR 0030: agent PR review gate", href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0030-agent-pr-review-gate.md', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'agent_pr_review_enabled',
@@ -494,6 +540,13 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     howItWorks:
       'Every search through `firecrawlSearch` asks Firecrawl for at most this many results, whatever the calling code requests. The console, the server and the database all allow 1–50. Caps stack: this is the per-call ceiling, on top of any per-day quota set by Firecrawl.',
     default: { value: '5', range: '1 – 50' },
+    recommended: {
+      value: "5",
+      why: "Each scraped page costs one Firecrawl credit ($0.001 to $0.005 by plan), and the first few results carry most of the signal. Raise it only when answers cite pages the search missed.",
+      sources: [
+        { label: "Firecrawl: Pricing (1 credit per scraped page)", href: 'https://www.firecrawl.dev/pricing', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'firecrawl_max_pages_per_call',
@@ -511,6 +564,13 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     howItWorks:
       "After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as \"Others who hit this\". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.",
     default: { value: 'false (nothing is sent)' },
+    recommended: {
+      value: "off for apps whose error messages can hold personal data; on otherwise",
+      why: "It sends the scrubbed error message to a third party. Data minimisation says send only what the purpose needs.",
+      sources: [
+        { label: "GDPR Article 5: data minimisation and storage limitation", href: 'https://gdpr-info.eu/art-5-gdpr/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'known_issues_search_enabled',
@@ -583,6 +643,13 @@ const PROJECTS: ConfigDoc[] = [
     howItWorks:
       "Each preset maps to scopes stored on the key — edge functions check scope before serving the call, so a leaked SDK key can't mutate state. SDK send-only = report submission. MCP read = browse reports in Cursor. MCP read + write = dispatch fixes from the editor.",
     default: { value: 'SDK send-only (report:write only)' },
+    recommended: {
+      value: "report:write only for SDK keys",
+      why: "A key in an app bundle can be read by anyone. Least privilege: give it only what it must do, which for the SDK is sending reports.",
+      sources: [
+        { label: "NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)", href: 'https://csrc.nist.gov/glossary/term/least_privilege', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_api_keys',
       column: 'scopes (text[])',
@@ -633,6 +700,13 @@ const PROJECTS: ConfigDoc[] = [
     howItWorks:
       'Mutating MCP tools (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.',
     default: { value: 'disabled by default' },
+    recommended: {
+      value: "off unless the agent must change things",
+      why: "Least privilege: an editor agent that only reads bugs needs mcp:read; add mcp:write when it should triage, dispatch or merge.",
+      sources: [
+        { label: "NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)", href: 'https://csrc.nist.gov/glossary/term/least_privilege', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_api_keys',
       column: 'scopes (text[])',
@@ -1219,6 +1293,13 @@ const STORAGE: ConfigDoc[] = [
     howItWorks:
       'Every download in the admin (e.g. preview a screenshot, replay a session recording) is gated by a fresh presigned URL. Lower = tighter security (links expire fast); higher = friendlier UX (a copied link still works in a Slack thread an hour later).',
     default: { value: '3600 (1 hour)', range: '60 – 604800 (7 days)' },
+    recommended: {
+      value: "3600 (1 hour) or less",
+      why: "A signed link works for anyone who holds it until it expires, so keep it as short as your viewers need. AWS caps console-made links at 12 hours and SDK-made ones at 7 days.",
+      sources: [
+        { label: "AWS: Presigned URLs (expiration, bearer tokens)", href: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_storage_settings',
       column: 'signed_url_ttl_secs',
@@ -1311,6 +1392,13 @@ const COMPLIANCE: ConfigDoc[] = [
     howItWorks:
       'Two nightly sweeps (the retention-sweep function at 03:00 UTC and the `mushi_apply_retention()` cron at 03:30 UTC) delete any report whose `created_at + reports_retention_days` is in the past, UNLESS `legal_hold` is true (in which case nothing is deleted regardless of age). Deletes are permanent; there is no soft-delete step.',
     default: { value: '365 (1 year)' },
+    recommended: {
+      value: "365",
+      why: "A year covers regression checks on the same bug; storage limitation says keep personal data no longer than the purpose needs.",
+      sources: [
+        { label: "GDPR Article 5: data minimisation and storage limitation", href: 'https://gdpr-info.eu/art-5-gdpr/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_retention_policies',
       column: 'reports_retention_days',
@@ -1331,6 +1419,13 @@ const COMPLIANCE: ConfigDoc[] = [
     howItWorks:
       'Independent of the reports retention. The nightly `mushi_apply_retention()` cron deletes `audit_logs` rows older than this window unless the project is on legal hold. Most regulators want 1–7 years of audit even on 90-day data.',
     default: { value: '730 (2 years)' },
+    recommended: {
+      value: "730 (never below 365)",
+      why: "Audit trails are what an incident review and an assessor read. PCI DSS 10.5.1 asks for at least 12 months of history with the last 3 months immediately available.",
+      sources: [
+        { label: "AWS PCI DSS maturity model: requirement 10.5.1", href: 'https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_retention_policies',
       column: 'audit_retention_days',
@@ -1347,6 +1442,13 @@ const COMPLIANCE: ConfigDoc[] = [
     howItWorks:
       'The nightly `mushi_apply_retention()` cron deletes `byok_audit_log` rows older than this window unless the project is on legal hold. The keys themselves live in Vault and are not affected.',
     default: { value: '365 (1 year)' },
+    recommended: {
+      value: "365 (never below)",
+      why: "This is a security audit log of AI-key changes, the trail an incident review reads. PCI DSS 10.5.1 asks for at least 12 months of audit history with the last 3 months immediately available.",
+      sources: [
+        { label: "AWS PCI DSS maturity model: requirement 10.5.1", href: 'https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_retention_policies',
       column: 'byok_audit_retention_days',
@@ -1363,6 +1465,13 @@ const COMPLIANCE: ConfigDoc[] = [
     howItWorks:
       'The nightly retention-sweep deletes this project’s LLM call records (llm_invocations) older than this many days, once a retention policy is saved for the project. Projects with no saved policy keep their records. At least 35 days are always kept, because the AI budget, the auto-fix spend limit and billing read the last 30 days of these records. A legal hold stops the deletes.',
     default: { value: '90' },
+    recommended: {
+      value: "90",
+      why: "LLM call records hold prompts built from bug reports, which can include personal data. Storage limitation favours the shortest window your cost and quality reviews need.",
+      sources: [
+        { label: "GDPR Article 5: data minimisation and storage limitation", href: 'https://gdpr-info.eu/art-5-gdpr/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_retention_policies',
       column: 'llm_traces_retention_days',
@@ -1508,6 +1617,13 @@ const PROMPT_LAB: ConfigDoc[] = [
     howItWorks:
       "A weighted random pick (`prompt-ab.ts`) routes each request to a prompt version based on its `traffic_percentage`. The percentages should sum to 100 across active versions of a stage; the helper normalises if they don't. Live changes apply within seconds — no deploy required.",
     default: { value: '0% on new versions' },
+    recommended: {
+      value: "5% first, then raise",
+      why: "Canary a new prompt on a small share of traffic and compare before raising it. The Google SRE Workbook works through a 5% canary population as its example.",
+      sources: [
+        { label: "Google SRE Workbook: Canarying releases", href: 'https://sre.google/workbook/canarying-releases/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'prompt_versions',
       column: 'traffic_percentage',
@@ -1957,6 +2073,13 @@ const SDK_INSTALL: ConfigDoc[] = [
     howItWorks:
       'Hooks `fetch` and `XMLHttpRequest` to record method, URL, status, timing, and (optionally) bodies. Bodies are scrubbed of common secret patterns before upload, but the SDK errs on the side of NOT capturing bodies by default.',
     default: { value: 'on (headers/timing only)' },
+    recommended: {
+      value: "on, headers and timing only",
+      why: "Request and response bodies are where passwords, tokens and personal data travel. Sentry keeps bodies opt-in for the same reason.",
+      sources: [
+        { label: "Sentry: Session Replay privacy", href: 'https://docs.sentry.io/platforms/javascript/session-replay/privacy/', checked: '2026-10-22' },
+      ],
+    },
     whenToChange:
       'Disable on apps with PII-laden API traffic (medical, financial). Enable bodies temporarily when investigating a hard-to-repro API bug.',
   },
@@ -1990,6 +2113,13 @@ const SDK_INSTALL: ConfigDoc[] = [
     howItWorks:
       '`on-report` is the default and respects user privacy. `auto` captures every few seconds (more diagnostic context, but storage-heavy). `off` disables screenshots entirely (compliance-friendly).',
     default: { value: 'on-report' },
+    recommended: {
+      value: "on-report",
+      why: "Capture a screenshot only when someone files a report, not continuously. Data minimisation: collect what the purpose needs.",
+      sources: [
+        { label: "GDPR Article 5: data minimisation and storage limitation", href: 'https://gdpr-info.eu/art-5-gdpr/', checked: '2026-10-22' },
+      ],
+    },
     whenToChange:
       'Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.',
   },
@@ -2001,6 +2131,13 @@ const SDK_INSTALL: ConfigDoc[] = [
     howItWorks:
       'When on, the widget shows the preview the reporter is about to send plus a privacy caption so they can redact or drop it first. Leave the custom box empty to use the SDK\'s localized default copy, type your own to override it, or turn the caption off entirely. Surfaces as `widget.screenshotSensitiveHint` in GET /v1/sdk/config and is honored by both the web and React Native widgets.',
     default: { value: 'on (default caption)' },
+    recommended: {
+      value: "on",
+      why: "The caption reminds the reporter to remove anything private before sending, which keeps capture on for apps with sensitive screens.",
+      sources: [
+        { label: "GDPR Article 5: data minimisation and storage limitation", href: 'https://gdpr-info.eu/art-5-gdpr/', checked: '2026-10-22' },
+      ],
+    },
     backend: {
       table: 'project_settings',
       column: 'sdk_screenshot_sensitive_hint',
