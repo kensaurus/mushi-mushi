@@ -24,7 +24,7 @@
  *        it costs what it costs, what-ifs and cost advice (CiCompare in
  *        _shared/ci-compare-types.ts; Plan 022 Phase 7, ADR 0037). Same
  *        scoping as the overview. Read-only: nothing is written to GitHub.
- *   GET  /v1/admin/ci/cost-settings      adminOrApiKey(mcp:read)
+ *   GET  /v1/admin/ci/cost-settings      jwtAuth (console; MCP and the CLI read the figures in /compare)
  *        ?organization_id= | ?project_id= — the organization's cost figures
  *        (example figures until saved) and whether the caller may edit them.
  *   PUT  /v1/admin/ci/cost-settings      jwtAuth (console only), non-viewers
@@ -129,7 +129,7 @@ export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRo
   app.post('/v1/admin/projects/:id/runner-key', deps.adminOrApiKeyWrite, (c) => mintRunnerKey(c, deps))
   app.get('/v1/admin/ci/overview', deps.adminOrApiKeyRead, (c) => ciOverview(c, deps))
   app.get('/v1/admin/ci/compare', deps.adminOrApiKeyRead, (c) => ciCompare(c, deps))
-  app.get('/v1/admin/ci/cost-settings', deps.adminOrApiKeyRead, (c) => getCostSettings(c, deps))
+  app.get('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => getCostSettings(c, deps))
   app.put('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => putCostSettings(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
 }

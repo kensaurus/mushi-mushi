@@ -8,9 +8,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 185 |
+| `adminOrApiKey` | 184 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 362 |
+| `jwtAuth` | 363 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -89,7 +89,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/byok/spend-down/projects/:projectId/resume` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
-| GET | `/v1/admin/ci/cost-settings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/clusters` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
