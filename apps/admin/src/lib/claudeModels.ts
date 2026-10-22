@@ -161,8 +161,9 @@ export function modelOptions(live: readonly LiveModel[], saved: string | null | 
   }
   const liveIds = new Set(live.map((l) => l.id))
   for (const m of CLAUDE_MODELS) {
-    // With a live list, an older model the key cannot use is left out.
-    if (!m.current && live.length > 0 && !liveIds.has(m.id)) continue
+    // With a live list, an older model the key does not list is left out;
+    // the saved one stays, under its proper name.
+    if (!m.current && live.length > 0 && !liveIds.has(m.id) && m.id !== saved) continue
     out.push({ id: m.id, label: `${m.label} — ${m.blurb} ($${m.price.input} / $${m.price.output})`, group: m.current ? 'current' : 'older' })
     seen.add(m.id)
   }
