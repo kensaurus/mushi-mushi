@@ -6,7 +6,7 @@ describe('PDCA model options', () => {
     expect(PDCA_DEFAULT_MODEL).toBe('claude-sonnet-5-5')
     const values = MODEL_OPTIONS.map((m) => m.value)
     expect(values[0]).toBe(PDCA_DEFAULT_MODEL)
-    expect(values).toEqual(['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5'])
+    expect(values).toEqual(['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'])
     for (const v of values) expect(v.startsWith('claude-')).toBe(true)
   })
 })
