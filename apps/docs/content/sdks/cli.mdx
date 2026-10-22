@@ -117,6 +117,7 @@ mushi reports reopen <id>
 mushi reports dismiss <id>
 mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
+mushi reports file --title "…" --description "…" [--severity high] [--component checkout]
 
 mushi lessons list
 mushi lessons show <id>
@@ -138,6 +139,22 @@ mushi sentry import --query "level:error" --cursor <next>   # next page, printed
 
 It needs the Sentry org slug, project slug and an auth token with `event:read`
 and `project:read` (console: **Integrations → Sentry**).
+
+### File a report yourself
+
+For a bug you found yourself, or a backlog item you want an agent to fix,
+`mushi reports file` adds a report to the app's queue. It goes through the same
+triage as a user report, so it gets a diagnosis and can be sent to `mushi fix`.
+
+```bash
+mushi reports file --title "Checkout adds tax twice" \
+  --description "Cart with 2 items shows the tax line twice on /checkout. Done when the total matches the cart."
+mushi reports file --title "Bump sharp to 0.34" --description "..." --severity low --component build --project <uuid>
+```
+
+`--severity` (critical, high, medium, low) and `--component` are hints that
+triage may refine. It needs a key with the `mcp:write` scope; each app takes at
+most 30 filed reports an hour. The MCP tool is `file_report`.
 
 ### Reporter updates held for review
 

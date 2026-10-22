@@ -633,6 +633,106 @@
       },
       "returnsUntrusted": true
     },
+    "file_report": {
+      "title": "File a report",
+      "description": "File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical | high | medium | low) and component are optional hints that triage may refine. The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. Returns { reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "File a report",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "description": "One-line title (3-200 characters)"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "What happens, steps to reproduce, what you expected, and how to check it is fixed"
+          },
+          "severity": {
+            "description": "Your severity hint; triage may refine it",
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "component": {
+            "description": "Area of the app, e.g. \"checkout\"",
+            "type": "string",
+            "maxLength": 200
+          },
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "The new report id; pass it to triage_issue or dispatch_fix"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Always new: triage starts right away"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "reportId",
+          "projectId",
+          "title",
+          "status",
+          "severity",
+          "component"
+        ],
+        "additionalProperties": false
+      }
+    },
     "generate_tdd_from_story": {
       "title": "Generate TDD test from user story",
       "description": "Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead.",

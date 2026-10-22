@@ -83,6 +83,8 @@ const designSchema = z
       .object({
         globs: z.array(z.string().max(300)).max(40).optional(),
         ignore: z.array(z.string().max(300)).max(80).optional(),
+        /** Files that define token values; never judged (design-scan.ts DEFAULT_TOKEN_DEFINITION_GLOBS when absent). */
+        tokenDefinitions: z.array(z.string().max(300)).max(80).optional(),
       })
       .passthrough()
       .optional(),

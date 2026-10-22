@@ -57,7 +57,9 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/anti-gaming.ts reporter_tokens', 'stored'], // caller passes the key, or 'tester:<id>'
   ['_shared/product-events.ts anon_id', 'stored'], // payload.anonId; no caller passes a raw id
   ['_shared/sentry-ingest.ts reporter_token_hash', 'sentinel'], // 'sentry-webhook'
-  ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER)
+  ['_shared/design-actions.ts reporter_token_hash', 'sentinel'], // 'cron:design-drift' (DESIGN_DRIFT_REPORTER), 'design-drift:file' (DESIGN_FILE_REPORTER)
+  ['_shared/modernization-dispatch-db.ts reporter_token_hash', 'sentinel'], // 'console:modernization-dispatch'
+  ['_shared/report-file.ts reporter_token_hash', 'sentinel'], // 'admin-filed' (no SDK reporter behind a filed report)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it

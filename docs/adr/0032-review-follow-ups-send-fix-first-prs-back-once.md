@@ -212,3 +212,82 @@ with `prUrl`), `workOnCurrentBranch: true` pushes to the PR's head branch,
   app's auto-fix daily limit gives both room.
 - The scoreboard answers the owner's question directly: of the fix_first
   PRs sent back, how many became merge.
+
+## Amendment (2026-10-22): CI repair for "merge" PRs whose CI fails on the code
+
+Status: Proposed
+
+Related: migration `20261022100000_review_followup_ci_repair.sql`
+(`fix_review_followups.kind`), `_shared/review-followup.ts` (`ciHeadState`,
+`extractCiLogExcerpt`, `buildCiRepairPrompt`), `_shared/ci-jobs.ts`
+(`fetchJobLogTail`), `review-followup/` (discovery and dispatch), ADR
+[0033](0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md).
+
+### Context
+
+On 2026-10-22, 16 open agent PRs had an Opus `merge` verdict on their head
+while CI on that head had failed with a real code failure (lint, typecheck,
+build or a test; not a lost or missing runner). Follow-ups only ran on
+`fix_first`, and nothing else sent a PR back (`fix_attempts.repair_attempts`
+is never written), so the reviewer's best PRs sat red until a person fixed
+CI by hand.
+
+### Decision
+
+- **Trigger.** A completed `merge` review of the PR's current head earns one
+  follow-up of kind `ci_repair` when CI on that head fails on the code. CI
+  is read from `ci_jobs` (Plan 022): per job (workflow + job name) the latest
+  attempt decides, so a re-run that passed clears it. Only `failure` and
+  `timed_out` on a live runner count (`ci_kind = 'code_failure'`, not
+  infra). A lost runner, a job no runner picked up (ADR 0033), an approval
+  (`action_required`) and a broken workflow file (`startup_failure`) never
+  do. A code failure wins over a running sibling job. While CI still runs or
+  has not been read, nothing is queued (discovery) or the row waits
+  (`ci_pending`, dispatch); green or infra-only CI skips the row
+  (`ci_not_failing`).
+- **Same rules as every follow-up.** Same table, the same unique (fix
+  attempt, head) key (one follow-up per head, whatever its kind), at most 2
+  per PR counting both kinds, cloud-agent PRs on the agent's own branch
+  only, the organization's switch, key, model and daily limit, the app's
+  auto-fix caps (`checkAutofixBudget`), the claim token, the 6-hour cancel
+  and the re-review with force after a push. `hold` still never gets one.
+- **Prompt.** "Make CI green without weakening tests": the failing check
+  names (at most 5), their failed steps, and a log excerpt of the first 3
+  (`GET /actions/jobs/{id}/logs`, streamed, the last 256 KB kept, at most 8
+  MB read). The excerpt keeps the lines around errors (else the last
+  lines), at most 60 lines and 3,000 characters. The log is output of
+  agent-written code, so it is screened like a finding: a line that reads
+  as an instruction to a model or names a secret or the environment is
+  dropped (counted in `findings_dropped`), every URL becomes `[url]`, and
+  the text is scrubbed (`sanitizeForLLM`), capped and fenced
+  (`<ci_failure>`, `<ci_check>`, `<ci_log>`). The instructions forbid
+  deleting, skipping or loosening tests, lowering thresholds, suppression
+  comments (`@ts-ignore`, `eslint-disable`, …), lockfile or CI-config edits,
+  and say to change nothing and explain when the check fails for a reason
+  outside the PR (it also fails on the base branch, or needs a secret, a
+  runner or a person). The ADR 0032 safety rules apply unchanged.
+- **Trace.** The row's `kind` is `ci_repair`; the fix event reads "CI repair
+  dispatched" with the check names in its payload; the log line
+  `review-followup.dispatched` carries `kind`. The push is reviewed again
+  by Opus as before, so a repair that weakened a test meets the review.
+
+### Rejected
+
+- **A separate table or worker.** CI repair is a follow-up with another
+  prompt; sharing the table keeps one per head, one cap per PR, one claim
+  path and one scoreboard.
+- **Acting on `fix_attempts.ci_infra` alone.** It holds the latest verdict
+  without its head commit; `ci_jobs` is per head and per attempt.
+- **Repairing on any red check.** An infra stop has nothing for an agent to
+  fix (ADR 0033), and an approval or a workflow-file error is not code.
+
+### Consequences
+
+- A merge-verdict PR with red CI costs at most two more agent runs and two
+  more reviews, inside the same caps as the rest.
+- A check that fails on the base branch too (seen on 2026-10-22: "Compare
+  @mushi-mushi/* to npm latest", "Paired migration") still costs one run
+  whose agent should report it and change nothing; a base-branch comparison
+  is left for later.
+- Before the migration is applied, CI repairs are not queued (the insert
+  names the new column); findings follow-ups are unaffected.

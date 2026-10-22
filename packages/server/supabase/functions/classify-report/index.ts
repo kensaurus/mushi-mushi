@@ -34,7 +34,7 @@ import { estimateCallCostUsd } from '../_shared/pricing.ts';
 import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { keepAlive } from '../_shared/background.ts';
-import { isNonRealReport, type OldestReportRow } from '../_shared/first-report.ts';
+import { isNonRealReport, isNotFirstReportSource, type OldestReportRow } from '../_shared/first-report.ts';
 import {
   findInventoryCandidates,
   formatCandidatesForPrompt,
@@ -839,7 +839,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       // diagnoses finishing together would otherwise each see the other and
       // both skip, losing the event for good. A tie emits twice and the
       // dedup key keeps one. keepAlive covers the lookups, not just the insert.
-      if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
+      if (!isNotFirstReportSource(report.custom_metadata as Record<string, unknown> | null)) {
         void keepAlive((async () => {
           const { data: prior, error: priorErr } = await db
             .from('reports')
@@ -857,7 +857,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             return;
           }
           const hadEarlierDiagnosis = ((prior ?? []) as OldestReportRow[]).some(
-            (row) => !isNonRealReport(row.custom_metadata),
+            (row) => !isNotFirstReportSource(row.custom_metadata),
           );
           if (hadEarlierDiagnosis) return;
 
