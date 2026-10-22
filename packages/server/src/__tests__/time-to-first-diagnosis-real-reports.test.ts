@@ -23,11 +23,11 @@ describe('time-to-first-diagnosis skips test and seed reports', () => {
   const start = src.indexOf("'/v1/admin/onboarding/time-to-first-diagnosis'")
   const route = src.slice(start, src.indexOf('app.get(', start + 1))
 
-  it('filters the classified reports with the shared non-real predicate', () => {
+  it('filters the classified reports with the shared first-report predicate (fixtures and hand-filed reports)', () => {
     expect(start).toBeGreaterThan(-1)
-    expect(src).toContain("import { isNonRealReport } from '../../_shared/first-report.ts'")
+    expect(src).toContain("import { isNotFirstReportSource } from '../../_shared/first-report.ts'")
     expect(route).toContain("select('created_at, custom_metadata')")
-    expect(route).toMatch(/\.find\(\(row\) => !isNonRealReport\(row\.custom_metadata\)\)/)
+    expect(route).toMatch(/\.find\(\(row\) => !isNotFirstReportSource\(row\.custom_metadata\)\)/)
     expect(route).not.toMatch(/\.limit\(1\)\s*\.maybeSingle\(\),\s*\]\);/)
   })
 
@@ -35,5 +35,13 @@ describe('time-to-first-diagnosis skips test and seed reports', () => {
     const shared = readFileSync(resolve(functionsDir, '_shared/first-report.ts'), 'utf-8')
     expect(shared).toContain("'admin_test_report'")
     expect(shared).toContain("'mushi-marketing-seed'")
+  })
+
+  it('lifecycle emails count activation with the same set, so hand-filed reports never mark an account activated', async () => {
+    const lifecycle = readFileSync(resolve(functionsDir, 'lifecycle-emails/index.ts'), 'utf-8')
+    expect(lifecycle).toContain("import { NOT_FIRST_REPORT_SOURCES } from '../_shared/first-report.ts'")
+    expect(lifecycle).toMatch(/const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = NOT_FIRST_REPORT_SOURCES/)
+    const { NOT_FIRST_REPORT_SOURCES } = await import('../../supabase/functions/_shared/first-report.ts')
+    expect([...NOT_FIRST_REPORT_SOURCES].sort()).toEqual(['admin_file', 'admin_test_report', 'mushi-marketing-seed'])
   })
 })

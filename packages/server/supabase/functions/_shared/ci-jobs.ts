@@ -518,3 +518,51 @@ export async function fetchJob(gh: CiGithub, repo: string, jobId: number): Promi
   const res = await ghRequest<GhJob>(gh, `${API}/repos/${repo}/actions/jobs/${jobId}`)
   return res.status === 200 && res.body && typeof res.body.id === 'number' ? res.body : null
 }
+
+/** The tail of a job log a CI repair reads; the rest is discarded while streaming. */
+export const JOB_LOG_TAIL_BYTES = 256 * 1024
+/** Never stream more than this much of one log. */
+const JOB_LOG_MAX_STREAM_BYTES = 8 * 1024 * 1024
+
+/**
+ * The last `maxBytes` of a job's log (`GET /actions/jobs/{id}/logs`, which
+ * redirects to a short-lived download URL; Actions: read). Streams and keeps
+ * only the tail, stopping after 8 MB. Null when the log cannot be read (no
+ * Actions: read, expired logs, budget spent).
+ */
+export async function fetchJobLogTail(gh: CiGithub, repo: string, jobId: number, maxBytes = JOB_LOG_TAIL_BYTES): Promise<string | null> {
+  if (!REPO_RE.test(repo) || !Number.isSafeInteger(jobId) || jobId <= 0) return null
+  if (gh.budget.remaining <= 0) return null
+  gh.budget.remaining--
+  gh.budget.used++
+  const doFetch = gh.fetchImpl ?? ((u: string, init: RequestInit) => fetchWithTimeout(u, init))
+  const res = await doFetch(`${API}/repos/${repo}/actions/jobs/${jobId}/logs`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${gh.token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'mushi-mushi-ci',
+    },
+  })
+  if (res.status !== 200 || !res.body) return null
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let tail = ''
+  let read = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done || !value) break
+      read += value.byteLength
+      tail = (tail + decoder.decode(value, { stream: true })).slice(-maxBytes)
+      if (read >= JOB_LOG_MAX_STREAM_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        break
+      }
+    }
+  } catch {
+    return tail || null
+  }
+  return tail
+}

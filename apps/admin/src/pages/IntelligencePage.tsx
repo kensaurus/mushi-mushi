@@ -250,15 +250,19 @@ export function IntelligencePage() {
     }
   }, [reloadAll, toast])
 
-  const dispatchFinding = useCallback(async (id: string) => {
+  const dispatchFinding = useCallback(async (id: string, group?: 'minor') => {
     setDispatchingId(id)
     try {
-      const res = await apiFetch<{ dispatchId: string }>(
+      const res = await apiFetch<{ dispatchId: string; findingIds?: string[] }>(
         `/v1/admin/modernization/${id}/dispatch`,
-        { method: 'POST' },
+        { method: 'POST', body: JSON.stringify(group ? { group } : {}) },
       )
       if (res.ok) {
-        toast.push({ tone: 'success', message: 'Modernization fix dispatched — track on Fixes' })
+        const n = res.data?.findingIds?.length ?? 1
+        toast.push({
+          tone: 'success',
+          message: group ? `${n} minor upgrade${n === 1 ? '' : 's'} dispatched as one fix. Track on Fixes` : 'Modernization fix dispatched. Track on Fixes',
+        })
         reloadFindings()
         reloadStats()
       } else {

@@ -835,6 +835,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Pull my open Sentry issues into Mushi so I can triage and fix them.',
   },
   {
+    name: 'file_report',
+    title: 'File a report',
+    description:
+      'File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. ' +
+      'Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical | high | medium | low) and component are optional hints that triage may refine. ' +
+      'The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. ' +
+      'Returns { reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. ' +
+      'Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Log this bug I found (or this backlog item) in Mushi so it gets triaged and fixed.',
+  },
+  {
     name: 'triage_next_steps',
     title: 'What should I work on now?',
     description:

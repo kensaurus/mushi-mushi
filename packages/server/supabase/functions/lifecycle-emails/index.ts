@@ -35,6 +35,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveSenderAddress, sendTransactionalEmail } from '../_shared/email.ts'
 import { signUnsubscribeToken, unsubscribeSecret } from '../_shared/lifecycle-unsubscribe.ts'
+import { NOT_FIRST_REPORT_SOURCES } from '../_shared/first-report.ts'
 import {
   buildLifecycleEmail,
   decideLifecycleEmail,
@@ -57,8 +58,8 @@ const LOOKBACK_DAYS = 14
 const LIST_PAGE_SIZE = 200
 const LIST_MAX_PAGES = 25
 const REPLY_TO = 'kensaurus@gmail.com'
-/** Report sources that never count as a real report (see api/helpers.ts). */
-const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = new Set(['admin_test_report', 'mushi-marketing-seed'])
+/** Report sources that never count toward activation: fixtures and hand-filed reports (_shared/first-report.ts). */
+const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = NOT_FIRST_REPORT_SOURCES
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

@@ -213,7 +213,7 @@ export async function recordCiDeviance(db: Db, projectId: string, input: CiDevia
   let action: ActOutcome
   if (!onDefault) action = { action: 'not_default_branch' }
   else if (exposure) action = settings.ok && !settings.settings.autofix ? { action: 'off' } : { action: 'key_not_trusted', reason: exposure }
-  else action = await deps.act(db, { projectId, runId, score: scored.score, findings, branch: input.branch }, settings)
+  else action = await deps.act(db, { projectId, runId, score: scored.score, findings, branch: input.branch, manifest: snapshot.manifest }, settings)
 
   const completedAt = deps.now().toISOString()
   const summary = { ...base, storedFindings: stored, droppedFindings: dropped, ...(action.action === 'off' ? {} : { action }) }

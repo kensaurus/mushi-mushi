@@ -45,3 +45,31 @@ describe('mushi design set', () => {
     expect(run.stderr).toContain('signed-in owner or admin')
   })
 })
+
+describe('mushi design dispatch-findings', () => {
+  it('POSTs maxFiles and lists each file sent, refused and left', async () => {
+    const reply = {
+      action: 'dispatched',
+      sent: [
+        { file: 'src/a.tsx', reportId: 'r1', findings: 3, dispatchId: 'd1', refused: null },
+        { file: 'src/b.tsx', reportId: 'r2', findings: 1, dispatchId: null, refused: { code: 'AUTOFIX_CAP', message: 'Daily cap reached' } },
+      ],
+      remainingFiles: 4,
+      skipped: { tokenDefinition: 12, noFile: 0, info: 0, alreadyOpen: 0 },
+    }
+    const run = await runCli(registerDesignCommands, ['design', 'dispatch-findings', '--max-files', '2'], () => okReply(reply))
+    expect(run.calls[0]).toMatchObject({ method: 'POST', path: `/v1/admin/projects/${PID}/design/dispatch-findings`, body: { maxFiles: 2 } })
+    expect(run.stdout).toContain('✓ src/a.tsx: 3 finding(s) → report r1')
+    expect(run.stdout).toContain('not dispatched: Daily cap reached')
+    expect(run.stdout).toContain('4 more file(s) left')
+    expect(run.stdout).toContain('12 finding(s) in token-definition files')
+  })
+
+  it('refuses a bad --max-files before calling the API', async () => {
+    for (const v of ['0', '21', 'x']) {
+      const run = await runCli(registerDesignCommands, ['design', 'dispatch-findings', '--max-files', v])
+      expect(run.calls, v).toHaveLength(0)
+      expect(run.error?.code, v).toBe('E_INVALID_INPUT')
+    }
+  })
+})

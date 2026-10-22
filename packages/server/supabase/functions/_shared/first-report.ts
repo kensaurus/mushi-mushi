@@ -26,6 +26,21 @@ export const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = new Set([
   'mushi-marketing-seed',
 ]);
 
+/**
+ * Report sources that are never a project's activation "first report": the
+ * fixtures above, plus `admin_file` (a report an operator filed by hand from
+ * the console, `mushi reports file` or MCP `file_report`). A filed report is
+ * real work, so it keeps judge sampling and the known-issues lookup
+ * (isNonRealReport); it just is not the app's users reporting.
+ */
+export const NOT_FIRST_REPORT_SOURCES: ReadonlySet<string> = new Set([...NON_REAL_REPORT_SOURCES, 'admin_file']);
+
+/** True when the report never counts as the project's first report (activation, lifecycle). */
+export function isNotFirstReportSource(customMetadata: Record<string, unknown> | null | undefined): boolean {
+  const source = customMetadata?.source;
+  return typeof source === 'string' && NOT_FIRST_REPORT_SOURCES.has(source);
+}
+
 export interface OldestReportRow {
   id: string;
   custom_metadata: Record<string, unknown> | null;
@@ -47,7 +62,7 @@ export function isFirstRealReport(oldestAscending: readonly OldestReportRow[], r
 
 /** The id of the first real report in (created_at ASC, id ASC) order, or null. */
 export function firstRealReportId(oldestAscending: readonly OldestReportRow[]): string | null {
-  return oldestAscending.find((row) => !isNonRealReport(row.custom_metadata))?.id ?? null;
+  return oldestAscending.find((row) => !isNotFirstReportSource(row.custom_metadata))?.id ?? null;
 }
 
 /**
@@ -71,8 +86,8 @@ export function isEarlyRealReport(
 ): boolean {
   let realBefore = 0;
   for (const row of oldestAscending) {
-    if (row.id === reportId) return !isNonRealReport(row.custom_metadata) && realBefore < limit;
-    if (!isNonRealReport(row.custom_metadata)) realBefore++;
+    if (row.id === reportId) return !isNotFirstReportSource(row.custom_metadata) && realBefore < limit;
+    if (!isNotFirstReportSource(row.custom_metadata)) realBefore++;
   }
   return false;
 }
