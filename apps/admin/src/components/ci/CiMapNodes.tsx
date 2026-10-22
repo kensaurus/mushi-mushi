@@ -14,7 +14,9 @@ import { TONE_HEX } from '../flow-primitives/flowTokens'
 import { readVizToken } from '../../lib/vizTokens'
 import { formatPercent, formatSeconds } from '../../lib/ciView'
 import { usePrefersReducedMotion } from '../../lib/useMotionTransition'
+import { IconAlertTriangle, IconCloud, IconInfo, IconServer } from '../icons'
 import { useCiMapSelection } from './ciMapContext'
+import { CI_OUTCOME_STYLE } from './ciOutcome'
 import { runnerStatus } from './ciRunnerStatus'
 import type { CiHostNodeData, CiJobNodeData, CiMapEdgeData, CiRepoNodeData, CiRunnerNodeData } from './ciMapLayout'
 import { RelativeTime, formatRelative } from '../ui'
@@ -83,9 +85,13 @@ function HostNodeInner({ id, data }: NodeProps) {
   return (
     <NodeShell id={id} label={`Machine ${d.title}. ${sub}. Open details.`}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <span aria-hidden="true" className="text-sm leading-none">
-          {d.variant === 'github' ? '☁' : d.variant === 'unknown' ? '?' : '▣'}
-        </span>
+        {d.variant === 'github' ? (
+          <IconCloud size={14} className="shrink-0 text-fg-muted" />
+        ) : d.variant === 'unknown' ? (
+          <IconInfo size={14} className="shrink-0 text-fg-faint" />
+        ) : (
+          <IconServer size={14} className="shrink-0 text-fg-muted" />
+        )}
         <span className="truncate text-xs font-semibold text-fg">{d.title}</span>
         {d.stale && (
           <span className="ml-auto shrink-0 rounded-sm border border-warn/30 bg-warn-muted/50 px-1 text-3xs font-medium text-warn-foreground">
@@ -115,22 +121,26 @@ function RunnerNodeInner({ id, data }: NodeProps) {
   const hasMemory = d.memCurrentMb != null || d.memMaxMb != null
   const labels = d.labels.filter((l) => l !== 'self-hosted').join(', ')
   return (
-    <NodeShell id={id} label={`Runner ${d.name}, ${status.word}. Open details.`}>
+    <NodeShell id={id} label={`Runner ${d.title}, ${status.word}. Open details.`}>
       <div className="flex items-center gap-1.5 min-w-0">
         <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
-        <span className="truncate text-xs font-semibold text-fg">{d.name}</span>
+        <span className="truncate text-xs font-semibold text-fg" title={d.title}>
+          {d.name}
+          {d.oneJob && <span className="font-normal text-fg-muted"> · one-job runners</span>}
+        </span>
         <span className="ml-auto shrink-0 text-3xs font-medium text-fg-secondary" title={status.word}>
           {status.short ?? status.word}
         </span>
       </div>
       <p className="truncate text-3xs text-fg-muted">
         {d.jobs24h} job{d.jobs24h === 1 ? '' : 's'} today
+        {d.oneJob ? ` · ${d.members} runner${d.members === 1 ? '' : 's'}` : ''}
         {d.lastJobAt ? ` · last ${formatRelative(d.lastJobAt)}` : ' · no jobs seen'}
       </p>
       {warnings.length > 0 && (
-        <p className={`truncate text-3xs font-medium ${d.oomKills ? 'text-danger' : 'text-warn-foreground'}`}>
-          <span aria-hidden="true">⚠ </span>
-          {warnings.join(' · ')}
+        <p className={`flex min-w-0 items-center gap-1 text-3xs font-medium ${d.oomKills ? 'text-danger' : 'text-warn-foreground'}`}>
+          <IconAlertTriangle size={10} className="shrink-0" />
+          <span className="truncate">{warnings.join(' · ')}</span>
         </p>
       )}
       <div className="mt-auto">
@@ -165,11 +175,12 @@ function RepoNodeInner({ id, data }: NodeProps) {
 
 function JobNodeInner({ id, data }: NodeProps) {
   const d = data as CiJobNodeData
-  const word = d.running ? 'Running' : 'Waiting'
+  const outcome = CI_OUTCOME_STYLE[d.running ? 'running' : 'waiting']
+  const word = outcome.label
   return (
     <NodeShell id={id} label={`Job ${d.title} in ${d.repo}, ${word}. Open details.`}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <span aria-hidden="true" className="text-xs">{d.running ? '▶' : '◷'}</span>
+        <outcome.Icon size={12} className={`shrink-0 ${outcome.text}`} />
         <span className="truncate text-xs font-medium text-fg">{d.title}</span>
         {d.prNumber ? <span className="ml-auto shrink-0 text-3xs text-fg-muted">PR #{d.prNumber}</span> : null}
       </div>

@@ -295,12 +295,22 @@ export function describeCiInfra(ci: Pick<FixCiInfra, 'kind' | 'runner'>): string
 }
 
 /**
- * One-job (JIT) runners register as `<label>-<unix seconds>` (`mushi runner
- * add`), so every job is a new runner name. The base name is what a host
- * heartbeat lists and what the map shows as one runner.
+ * A one-job (JIT) runner's name: `<label>-<stamp>` or `<label>-<stamp>-<suffix>`,
+ * where the stamp is 8 to 13 digits (unix seconds or ms from `mushi runner
+ * add`, or a date stamp like MMDDhhmmss) and the suffix 1 to 6 letters or
+ * digits (`aw-tsumagoi-1022003316-163`). Short trailing numbers stay part of
+ * the name (`alienware-glot-1`, `build-2024`). The console mirrors this in
+ * `apps/admin/src/lib/ciView.ts` (`runnerFamily`); change both together.
+ */
+const ONE_JOB_RUNNER_RE = /^(.+?)-\d{8,13}(?:-[a-z0-9]{1,6})?$/i
+
+/**
+ * Every job of a one-job runner setup is a new runner name. The base name is
+ * what a host heartbeat lists and what the map shows as one runner; any
+ * other name is its own base.
  */
 export function runnerBaseName(name: string): string {
-  return name.replace(/-\d{9,}$/, '')
+  return ONE_JOB_RUNNER_RE.exec(name)?.[1] ?? name
 }
 
 /** True when a GitHub runner name is the heartbeat's runner, or a one-job runner of it. */

@@ -256,7 +256,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
 
   const dayAgo = nowMs - 24 * 60 * 60_000
   const weekAgo = nowMs - 7 * 24 * 60 * 60_000
-  // One-job runners (`<label>-<unix seconds>`) fold into one runner per label.
+  // One-job runners (`<label>-<stamp>[-<suffix>]`, runnerBaseName) fold into one runner per label.
   const grouped = new Map<string, typeof rows.runners>()
   for (const r of rows.runners) {
     const key = `${r.project_id}|${r.repo}|${runnerBaseName(r.runner_name)}`
@@ -335,8 +335,9 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
   }))
 
   const finished = rows.finished
-  const byRunner = [...new Set(all.map((j) => j.runner_name).filter((x): x is string => !!x))].map((runner) => {
-    const mine = all.filter((j) => j.runner_name === runner)
+  // One row per runner, one-job runners folded into their base name.
+  const byRunner = [...new Set(all.map((j) => j.runner_name).filter((x): x is string => !!x).map(runnerBaseName))].map((runner) => {
+    const mine = all.filter((j) => j.runner_name != null && runnerBaseName(j.runner_name) === runner)
     return {
       runner,
       jobs: mine.length,
