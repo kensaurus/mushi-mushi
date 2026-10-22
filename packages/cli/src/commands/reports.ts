@@ -5,9 +5,9 @@ import { resolveProjectId } from '../command-helpers.js';
 import { MushiCliError } from '../errors.js';
 
 /** The severities `reports file` accepts (the server checks the same set). */
-export const FILE_REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+const FILE_REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-export interface FileReportFlags {
+interface FileReportFlags {
   title?: string;
   description?: string;
   severity?: string;
@@ -15,7 +15,7 @@ export interface FileReportFlags {
 }
 
 /** The POST /v1/admin/projects/:id/reports body, validated with the server's bounds before any call. */
-export function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
+function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
   const title = (flags.title ?? '').trim();
   const description = (flags.description ?? '').trim();
   if (title.length < 3 || title.length > 200) {

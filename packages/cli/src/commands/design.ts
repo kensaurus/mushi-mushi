@@ -37,7 +37,7 @@ interface FindingsDispatch {
 }
 
 /** Plain lines for what a findings dispatch did. */
-export function renderFindingsDispatch(r: FindingsDispatch): string[] {
+function renderFindingsDispatch(r: FindingsDispatch): string[] {
   if (r.action === 'no_scan') return ['No finished design scan yet. Run one first (mushi recipe check --push, or the console).']
   const sent = r.sent ?? []
   const lines = sent.length === 0

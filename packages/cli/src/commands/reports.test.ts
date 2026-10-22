@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ConfigModule from '../config.js'
 import { errorReply, okReply, runCli } from '../test-harness.js'
-import { buildFileReportBody, registerReportsCommands } from './reports.js'
+import { registerReportsCommands } from './reports.js'
 
 vi.mock('../config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof ConfigModule>()
@@ -19,26 +19,28 @@ const filed = (over: Record<string, unknown> = {}) => ({
   reportId: RID, projectId: PID, title: 'Checkout adds tax twice', status: 'new', severity: null, component: null, ...over,
 })
 
-describe('buildFileReportBody', () => {
-  it('trims and keeps only the fields given', () => {
-    expect(buildFileReportBody({ title: '  Checkout adds tax twice ', description: ' Cart of 2 ' })).toEqual({
-      title: 'Checkout adds tax twice',
-      description: 'Cart of 2',
-    })
-    expect(buildFileReportBody({ title: 'Bump sharp', description: 'x', severity: 'LOW', component: ' build ' })).toEqual({
-      title: 'Bump sharp', description: 'x', severity: 'low', component: 'build',
-    })
+describe('mushi reports file: input checks', () => {
+  const file = (args: string[]) => runCli(registerReportsCommands, ['reports', 'file', ...args], () => okReply(filed()))
+
+  it('trims and sends only the fields given', async () => {
+    const plain = await file(['--title', '  Checkout adds tax twice ', '--description', ' Cart of 2 '])
+    expect(plain.calls[0]!.body).toEqual({ title: 'Checkout adds tax twice', description: 'Cart of 2' })
+    const full = await file(['--title', 'Bump sharp', '--description', 'x', '--severity', 'LOW', '--component', ' build '])
+    expect(full.calls[0]!.body).toEqual({ title: 'Bump sharp', description: 'x', severity: 'low', component: 'build' })
   })
 
   it.each([
-    [{ title: 'ab', description: 'x' }, /--title/],
-    [{ title: 'x'.repeat(201), description: 'x' }, /--title/],
-    [{ title: 'fine title', description: '  ' }, /--description/],
-    [{ title: 'fine title', description: 'x'.repeat(10_001) }, /--description/],
-    [{ title: 'fine title', description: 'x', severity: 'urgent' }, /--severity/],
-    [{ title: 'fine title', description: 'x', component: 'c'.repeat(201) }, /--component/],
-  ])('refuses %j', (flags, message) => {
-    expect(() => buildFileReportBody(flags)).toThrow(message)
+    [['--title', 'ab', '--description', 'x'], /--title/],
+    [['--title', 'x'.repeat(201), '--description', 'x'], /--title/],
+    [['--title', 'fine title', '--description', '  '], /--description/],
+    [['--title', 'fine title', '--description', 'x'.repeat(10_001)], /--description/],
+    [['--title', 'fine title', '--description', 'x', '--severity', 'urgent'], /--severity/],
+    [['--title', 'fine title', '--description', 'x', '--component', 'c'.repeat(201)], /--component/],
+  ])('refuses %j before calling the API', async (args, message) => {
+    const run = await file(args)
+    expect(run.calls).toHaveLength(0)
+    expect(run.error?.code).toBe('E_INVALID_INPUT')
+    expect(run.error?.message).toMatch(message)
   })
 })
 
