@@ -6,12 +6,15 @@ import {
   isEarlyRealReport,
   isFirstRealReport,
   isNonRealReport,
+  isNotFirstReportSource,
   NON_REAL_REPORT_SOURCES,
+  NOT_FIRST_REPORT_SOURCES,
 } from '../../_shared/first-report.ts'
 
 const real = (id: string) => ({ id, custom_metadata: { source: 'widget' } })
 const test = (id: string) => ({ id, custom_metadata: { source: 'admin_test_report' } })
 const seed = (id: string) => ({ id, custom_metadata: { source: 'mushi-marketing-seed' } })
+const filed = (id: string) => ({ id, custom_metadata: { source: 'admin_file', filed_via: 'api_key' } })
 
 Deno.test('the only real report on a project is its first', () => {
   assertEquals(isFirstRealReport([real('a')], 'a'), true)
@@ -83,3 +86,18 @@ Deno.test('firstRealReportId skips test and seed rows', () => {
   assertEquals(firstRealReportId([test('t1')]), null)
   assertEquals(firstRealReportId([]), null)
 })
+
+Deno.test('a hand-filed report (admin_file) is real work but never the activation first report', () => {
+  // It keeps judge sampling and the known-issues lookup...
+  assertEquals(isNonRealReport(filed('f1').custom_metadata), false)
+  assertEquals(NON_REAL_REPORT_SOURCES.has('admin_file'), false)
+  // ...but the app's first user report is still the first one.
+  assertEquals(NOT_FIRST_REPORT_SOURCES.has('admin_file'), true)
+  assertEquals(isNotFirstReportSource(filed('f1').custom_metadata), true)
+  assertEquals(isFirstRealReport([filed('f1'), real('r1')], 'r1'), true)
+  assertEquals(isFirstRealReport([filed('f1'), real('r1')], 'f1'), false)
+  assertEquals(firstRealReportId([filed('f1'), test('t1'), real('r1')]), 'r1')
+  assertEquals(isEarlyRealReport([filed('f1'), real('r1')], 'r1'), true)
+  assertEquals(isEarlyRealReport([filed('f1'), real('r1')], 'f1'), false)
+})
+

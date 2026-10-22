@@ -51,7 +51,7 @@ export interface ModernizationFinding {
   severity: 'major' | 'minor' | 'security' | 'deprecated'
   changelog_url: string | null
   related_report_id: string | null
-  status: 'pending' | 'dispatched' | 'dismissed'
+  status: 'pending' | 'dispatched' | 'dismissed' | 'resolved'
   detected_at: string
 }
 

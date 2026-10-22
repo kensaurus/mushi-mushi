@@ -102,25 +102,33 @@ export const githubConnector: RecipeConnector = {
     })) : []
 
     // Estimated minutes for up to 10 completed runs (GitHub closed the usage APIs).
+    // Self-hosted jobs cost GitHub nothing, and neither does a public repository
+    // on standard GitHub-hosted runners: both bill 0.
+    const isPublic = info.body?.private === false
     for (const run of runs.filter((x) => x.status === 'completed').slice(0, 10)) {
       const jobs = await gh(ctx, `/repos/${r.owner}/${r.repo}/actions/runs/${run.run_id}/jobs?per_page=100`)
       if (jobs.status !== 200) continue
-      const est = estimateRunMinutes(((jobs.body?.jobs ?? []) as Array<Record<string, any>>).map((j) => ({ started_at: j.started_at ?? null, completed_at: j.completed_at ?? null, labels: j.labels ?? [], runner_name: j.runner_name ?? null })))
-      Object.assign(run, { est_billable_minutes: est.minutes, runner_breakdown: est.breakdown })
+      const est = estimateRunMinutes(((jobs.body?.jobs ?? []) as Array<Record<string, any>>).map((j) => ({ started_at: j.started_at ?? null, completed_at: j.completed_at ?? null, labels: j.labels ?? [], runner_name: j.runner_name ?? null, runner_group_name: j.runner_group_name ?? null })))
+      Object.assign(run, { est_billable_minutes: isPublic ? 0 : est.minutes, runner_breakdown: est.breakdown, self_hosted_minutes: est.selfHostedMinutes })
     }
 
     // A list GitHub refused (no secrets scope, 403) is "not checked", never "empty":
     // actionsNamesComplete says whether both lists were read.
-    const listNames = async (base: string): Promise<string[] | null> => {
+    // variableNames keeps the repo's Actions variable names apart (the CI cost
+    // advice reads `vars.LINUX_RUNNER`); null when that list was refused.
+    let variableNames: string[] | null = null
+    const listNames = async (base: string, keepVariables = false): Promise<string[] | null> => {
       const out: string[] = []
       for (const kind of ['secrets', 'variables'] as const) {
         const res = await gh(ctx, `${base}/${kind}?per_page=100`)
         if (res.status !== 200) return null
-        for (const s of (res.body?.[kind] ?? []) as Array<{ name?: unknown }>) if (typeof s.name === 'string') out.push(s.name)
+        const names = ((res.body?.[kind] ?? []) as Array<{ name?: unknown }>).map((s) => s.name).filter((n): n is string => typeof n === 'string')
+        if (keepVariables && kind === 'variables') variableNames = names
+        out.push(...names)
       }
       return out
     }
-    const repoNames = await listNames(`/repos/${r.owner}/${r.repo}/actions`)
+    const repoNames = await listNames(`/repos/${r.owner}/${r.repo}/actions`, true)
     const names = repoNames ?? []
     const actionsNamesComplete = repoNames !== null
 
@@ -181,7 +189,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, actionsNamesComplete, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
+      facts: { branch, headSha, headCommittedAt, repoPrivate: typeof info.body?.private === 'boolean' ? info.body.private : null, workflowFiles, runs, actionsNames: names, actionsNamesComplete, variableNames, environmentNames, migrationsDir: migDir, migrationFiles, supabaseAuth, billingCatalog },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },

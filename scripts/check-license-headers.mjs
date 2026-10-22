@@ -5,13 +5,17 @@
  * Enforces that every package's `package.json#license` field matches the
  * canonical license the workspace has chosen for its folder:
  *
- *   - `packages/server`, `packages/agents`, `packages/verify` →
- *     AGPLv3 (GNU Affero General Public License v3.0). These server-side
- *     packages are true OSI-approved open source; the Section 13 "network
- *     use" copyleft applies to modified hosted deployments.
+ *   - `packages/server`, `packages/agents`, `packages/verify`, and the
+ *     console and tester portal (`apps/admin`, `apps/testers`) →
+ *     AGPL-3.0-only (GNU Affero General Public License v3.0). These are true
+ *     OSI-approved open source; the Section 13 "network use" copyleft
+ *     applies to modified hosted deployments. The console moved from MIT to
+ *     AGPL in ADR 0036 (docs/adr/0036-licensing-posture.md).
  *
- *   - Everything else under `packages/*` → MIT. SDKs, adapters, plugins,
- *     and CLI tooling are MIT so integrators can vendor/fork freely.
+ *   - Everything else under `packages/*` and `apps/*` → MIT. SDKs, adapters,
+ *     plugins, and CLI tooling are MIT so integrators can vendor/fork freely.
+ *     (`packages/brand` is MIT for code and tokens; its logo files are all
+ *     rights reserved, so it declares "SEE LICENSE IN LICENSE".)
  *
  * The script is deliberately blunt: it reads each `package.json`, looks
  * up the folder in a static map, and fails if the declared license doesn't
@@ -36,6 +40,8 @@ const AGPL_FOLDERS = new Set([
   'packages/server',
   'packages/agents',
   'packages/verify',
+  'apps/admin',
+  'apps/testers',
 ])
 
 /** Expected LICENSE file header marker per license kind. */
@@ -52,7 +58,7 @@ function pkgFolder(pkgPath) {
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === 'dist' || entry === '.turbo') continue
+    if (entry === 'node_modules' || entry === 'dist' || entry === '.turbo' || entry === '.next' || entry === 'out') continue
     const full = join(dir, entry)
     const s = statSync(full)
     if (s.isDirectory()) yield* walk(full)
@@ -60,7 +66,8 @@ function* walk(dir) {
   }
 }
 
-for (const pkgPath of walk(join(ROOT, 'packages'))) {
+const roots = ['packages', 'apps'].map((d) => join(ROOT, d)).filter((d) => existsSync(d))
+for (const pkgPath of roots.flatMap((d) => [...walk(d)])) {
   let pkg
   try { pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) } catch (err) {
     violations.push({ pkg: pkgFolder(pkgPath), rule: 'parse', detail: err.message })
@@ -94,7 +101,9 @@ for (const pkgPath of walk(join(ROOT, 'packages'))) {
   // LICENSE file presence + header cross-check.
   const licensePath = join(dirname(pkgPath), 'LICENSE')
   if (!existsSync(licensePath)) {
-    if (pkg.private !== true) {
+    // AGPL folders need their LICENSE even when private: the root LICENSE
+    // defaults to MIT, so a missing file would read as MIT.
+    if (pkg.private !== true || expectedLicense === 'AGPL') {
       violations.push({ pkg: folder, rule: 'license-file', detail: 'LICENSE file missing' })
     }
     continue

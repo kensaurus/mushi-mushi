@@ -93,6 +93,20 @@
     },
     "hints": { "destructive": false, "idempotent": true }
   },
+  "file_report": {
+    "scope": "mcp:write",
+    "description": "File a free-form report on a project; it is triaged like any other report.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/reports",
+    "required": ["title", "description"],
+    "body": {
+      "title": "{title}",
+      "description": "{description}",
+      "severity": "{severity}",
+      "component": "{component}"
+    },
+    "hints": { "destructive": false, "idempotent": false }
+  },
   "reopen_report": {
     "scope": "mcp:write",
     "description": "Reopen a report for regression triage.",
@@ -458,6 +472,13 @@
     "description": "Where tests run and why fixes wait: machines, runners, jobs with infra vs code verdicts, queue and run times, and advice.",
     "method": "GET",
     "path": "/v1/admin/ci/overview?project_id={projectId}&days={days|7}&refresh={refresh}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ci_costs": {
+    "scope": "mcp:read",
+    "description": "What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, included minutes, speed factors, what-ifs and advice (estimated).",
+    "method": "GET",
+    "path": "/v1/admin/ci/compare?project_id={projectId}&days={days|30}",
     "hints": { "destructive": false, "idempotent": true }
   },
   "get_fix_verification": {
