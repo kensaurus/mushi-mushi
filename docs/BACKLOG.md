@@ -14,6 +14,7 @@ parked work is visible in one place.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
 - **Added 2026-10-21 (verified fixes):** BL-101, a parked part of ADR 0035.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
+- **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
 - **Open items:** 55 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
@@ -122,6 +123,9 @@ parked work is visible in one place.
 | BL-103 | decision-needed | Counsel review of `CLA.md` (draft, adapted from the Apache ICLA v2.2, with an outbound-license promise in section 4) before the first outside pull request is merged; afterwards make the CLA check required in branch protection and keep the `cla-signatures` branch unprotected | relevant | high | ADR 0036 (Decision 6); `CLA.md`; `.github/workflows/cla.yml` | — |
 | BL-104 | decision-needed | Trademark filing, owner and lawyer: Japan Patent Office first (word marks Mushi Mushi / Mushi / 虫, the bug logo), then Madrid Protocol extension; when an application exists, add its number to `TRADEMARK.md` (the license check fails on "®" or "registered trademark" until a registration issues) | relevant | med | ADR 0036 (Decision 9); `TRADEMARK.md` | — |
 | BL-105 | decision-needed | ADR 0036 (licensing posture: AGPL server and console, MIT SDKs, brand all rights reserved, hosted tuning, CLA) is `Proposed`: accept or reject it, and confirm the copyright holder string "Kenji Sakuramoto / Kensaurus 合同会社" (the legal pages say "kensaurus LLC (kensaurus合同会社)") | relevant | med | `docs/adr/INDEX.md`; `docs/adr/0036-licensing-posture.md` | — |
+| BL-106 | unfinished-feature | `billing_blocked` CI verdict: a hosted job that never starts because the GitHub spending limit or billing blocks it is infra, not a code failure. Needs the exact annotation or job text GitHub writes in that case; no sample was available on 2026-10-22, so `ci-infra.ts` does not guess it | relevant | low | ADR 0037, `_shared/ci-infra.ts` `RUNNER_LOST_RE`, plan research §4 | — |
+| BL-107 | unfinished-feature | Read the GitHub billing usage API (`GET /users/{u}/settings/billing/usage/summary?product=actions`, classic `user` scope, the owner's own token) so "included minutes used this month" is the real figure instead of Mushi's estimate from job times | relevant | low | ADR 0037, Plan 022 Phase 7 (Phase 4 of the research plan) | — |
+| BL-108 | unfinished-feature | Scale self-hosted electricity by the heartbeat's `load1 / cpu_count` between idle and load watts instead of assuming full load while any job runs (today an upper bound) | relevant | low | ADR 0037, `_shared/ci-cost.ts` `machineCost` | — |
 
 ---
 
