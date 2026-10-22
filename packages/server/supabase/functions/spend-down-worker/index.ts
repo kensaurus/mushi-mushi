@@ -46,6 +46,8 @@ import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings
 import { dispatchFixForReport, type DispatchResult } from '../_shared/dispatch.ts'
 import {
   SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS,
+  SPEND_DOWN_STOP_AUTOFIX_OFF,
+  SPEND_DOWN_STOP_NO_REPORT,
   projectCapacity,
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
@@ -322,7 +324,7 @@ export async function runSpendDownForKey(
     }
     const candidates = await candidatesFor(db, projectId, now)
     if (candidates.length === 0) {
-      if (!probe) outcome.stopped = 'No open report to fix'
+      if (!probe) outcome.stopped = SPEND_DOWN_STOP_NO_REPORT
       continue
     }
     for (const report of candidates) {
@@ -340,7 +342,7 @@ export async function runSpendDownForKey(
         remaining--
         if (probe) outcome.probe = true
       } else if (res.code === 'AUTOFIX_DISABLED') {
-        if (!probe) outcome.stopped = 'Auto-fix is off'
+        if (!probe) outcome.stopped = SPEND_DOWN_STOP_AUTOFIX_OFF
         break
       }
     }
