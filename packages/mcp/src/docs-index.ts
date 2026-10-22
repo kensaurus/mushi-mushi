@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 215 pages, generated from llms.txt. */
+/** 216 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -176,6 +176,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "dashboard"],
     headings: ["What to look for first", "Flow canvas", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
     excerpt: "The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.",
+  },
+  {
+    title: "Design system",
+    url: docUrl("/admin/design"),
+    route: "/admin/design",
+    markdown: "admin/design.md",
+    keywords: ["admin", "design", "system"],
+    headings: ["Tokens", "The deviance score", "How an edit becomes a draft PR", "Related"],
+    excerpt: "The Design system page shows your tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft pull request.",
   },
   {
     title: "Docs bridge",
