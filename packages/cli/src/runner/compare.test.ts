@@ -4,7 +4,7 @@
  * thin speed data says so, and an empty or partial payload still renders.
  */
 import { describe, expect, it } from 'vitest'
-import { formatDuration, formatMoney, renderCompare, runsOnLabel } from './compare.js'
+import { renderCompare } from './compare.js'
 
 describe('renderCompare', () => {
   it('renders accounts, rows, machines, speed, what-ifs and advice', () => {
@@ -49,14 +49,18 @@ describe('renderCompare', () => {
     expect(text).toContain('No CI jobs in this window.')
   })
 
-  it('formats money, durations and labels', () => {
-    expect(formatMoney(3)).toBe('$3.00')
-    expect(formatMoney(-1.5, 'JPY')).toBe('−1.50 JPY')
-    expect(formatMoney(null)).toBe('—')
-    expect(formatDuration(45)).toBe('45 s')
-    expect(formatDuration(600)).toBe('10 min')
-    expect(formatDuration(7200)).toBe('2 h')
-    expect(runsOnLabel({ runnerClass: 'self_hosted', labels: ['self-hosted', 'x'], runner: null })).toBe('Self-hosted x')
-    expect(runsOnLabel({ runnerClass: 'github_hosted', labels: [], os: 'macos' })).toBe('GitHub-hosted (macos)')
+  it('formats money in another currency, minutes and hours, and labels without a runner or labels', () => {
+    const text = renderCompare({
+      rows: [
+        { repo: 'a/b', runnerClass: 'self_hosted', labels: ['self-hosted', 'x'], runner: null, jobs: 1, queueP95s: 600, runP50s: 7200, monthCost: 1.5, costBasis: 'self_hosted', currency: 'JPY' },
+        { repo: 'a/c', runnerClass: 'github_hosted', labels: [], os: 'macos', jobs: 1, queueP95s: 45, monthCost: null as unknown as number, costBasis: 'github_list' },
+      ],
+    }).join('\n')
+    expect(text).toMatch(/Self-hosted x\s/)
+    expect(text).toContain('GitHub-hosted (macos)')
+    expect(text).toContain('1.50 JPY')
+    expect(text).toMatch(/10 min\s+2 h/)
+    expect(text).toContain('45 s')
+    expect(text).toMatch(/—\s*$/m)
   })
 })

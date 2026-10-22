@@ -14,7 +14,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ciCompareFixture, costSettingsFixture } from './__fixtures__/ciCompare'
+import { ciCompareFixture, costSettingsFixture } from './__fixtures__/ciOverview'
 
 const state = vi.hoisted(() => ({ data: null as unknown, error: null as string | null, loading: false, paths: [] as Array<{ path: string | null; scope?: string }>, reload: vi.fn() }))
 

@@ -23,7 +23,7 @@ import { CiAdviceList } from './CiSections'
 import { CiCompareTable } from './CiCompareTable'
 import { CiCostExplainer } from './CiCostExplainer'
 
-export const CI_COST_SETTINGS_HREF = '/settings?tab=ci-cost'
+const CI_COST_SETTINGS_HREF = '/settings?tab=ci-cost'
 
 function Accounts({ data }: { data: CiCompare }) {
   if (data.accounts.length === 0) return null

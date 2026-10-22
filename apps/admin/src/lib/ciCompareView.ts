@@ -248,7 +248,7 @@ export const PLAN_INCLUDED_MINUTES: Record<Exclude<CiCompareSettings['plan'], 'c
 export type CostErrors = Partial<Record<keyof CostDraft, string>>
 
 /** Parse "Name: a, b" lines; null with an error for a bad line. */
-export function parseMachines(text: string, maxMachines = 20, maxRunners = 20): { machines: CiCompareSettings['machines']; error: string | null } {
+function parseMachines(text: string, maxMachines = 20, maxRunners = 20): { machines: CiCompareSettings['machines']; error: string | null } {
   const machines: CiCompareSettings['machines'] = []
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
   if (lines.length > maxMachines) return { machines: [], error: `At most ${maxMachines} machines.` }

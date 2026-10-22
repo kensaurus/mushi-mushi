@@ -11,8 +11,8 @@
 
 import type { CiAdvice } from './ciTypes'
 
-export type CiRunnerClass = 'github_hosted' | 'self_hosted' | 'unknown'
-export type CiRunnerOs = 'linux' | 'windows' | 'macos'
+type CiRunnerClass = 'github_hosted' | 'self_hosted' | 'unknown'
+type CiRunnerOs = 'linux' | 'windows' | 'macos'
 export type RepoVisibility = 'public' | 'private' | 'unknown'
 export type Provenance = 'measured' | 'estimated'
 
@@ -56,7 +56,7 @@ export interface CiCompareRow {
   currency: string
 }
 
-export interface CiCompareAccount {
+interface CiCompareAccount {
   /** The GitHub account the repos belong to: included minutes are per account. */
   owner: string
   plan: string
@@ -74,7 +74,7 @@ export interface CiCompareAccount {
   currency: string
 }
 
-export interface CiCompareMachine {
+interface CiCompareMachine {
   name: string
   /** settings = you grouped it; heartbeat = hosts reporting the same machine id; runner = one runner, its own machine. */
   source: 'settings' | 'heartbeat' | 'runner'
@@ -95,7 +95,7 @@ export interface CiCompareMachine {
   currency: string
 }
 
-export interface CiCompareSpeed {
+interface CiCompareSpeed {
   repo: string
   workflow: string
   job: string
@@ -107,7 +107,7 @@ export interface CiCompareSpeed {
   factor: number | null
 }
 
-export interface CiCompareWhatIf {
+interface CiCompareWhatIf {
   id: string
   projectId: string
   repo: string
@@ -129,7 +129,7 @@ export interface CiCompareWhatIf {
   currency: string
 }
 
-export interface CiCompareExplain {
+interface CiCompareExplain {
   /** Re-runs bill again on GitHub; $0 on self-hosted. */
   reruns: { hostedJobs: number; hostedBilledMinutes: number; selfHostedJobs: number }
   /** Jobs under 20 s on paid runners: each still bills a whole minute. */

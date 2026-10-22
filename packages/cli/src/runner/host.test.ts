@@ -12,7 +12,6 @@ import {
   parseUnitName,
   readCgroupMemory,
   runnerDirFromShow,
-  wslMachineId,
   type HostIO,
 } from './host.js'
 
@@ -158,7 +157,7 @@ describe('collectHeartbeat', () => {
       '/proc/sys/kernel/random/boot_id': 'b007-1d\n',
     })
     const wsl = collectHeartbeat(fakeHost(files('Linux version 6.6.36.6-microsoft-standard-WSL2'), {}), '1')
-    expect(wsl.host.metrics.machine_id).toBe(wslMachineId({ readFile: () => 'b007-1d' }, 'wsl2'))
+    expect(wsl.host.metrics.machine_id).toBe(hashHostId('wsl-vm:b007-1d'))
     expect(wsl.host.metrics.machine_id).toMatch(/^[0-9a-f]{64}$/)
     expect(JSON.stringify(wsl)).not.toContain('b007-1d')
     // A second distro has its own machine id but the same VM boot id.

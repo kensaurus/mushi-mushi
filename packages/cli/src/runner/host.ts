@@ -130,7 +130,7 @@ export function readMachineId(io: HostIO): string | null {
 }
 
 /** WSL2: the shared VM's boot id, hashed (never sent raw). Null elsewhere or when unreadable. */
-export function wslMachineId(io: Pick<HostIO, 'readFile'>, platform: RunnerPlatform): string | null {
+function wslMachineId(io: Pick<HostIO, 'readFile'>, platform: RunnerPlatform): string | null {
   if (platform !== 'wsl2') return null
   const boot = io.readFile('/proc/sys/kernel/random/boot_id')?.trim()
   return boot ? hashHostId(`wsl-vm:${boot}`) : null

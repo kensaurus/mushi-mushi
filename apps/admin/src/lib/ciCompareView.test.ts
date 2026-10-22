@@ -4,7 +4,7 @@
  * (bounds, the machines text with optional watts, the PUT body).
  */
 import { describe, expect, it } from 'vitest'
-import { ciCompareFixture, costSettingsFixture, ORG_ID } from '../components/ci/__fixtures__/ciCompare'
+import { ciCompareFixture, costSettingsFixture, ORG_ID } from '../components/ci/__fixtures__/ciOverview'
 import {
   costFacts,
   costSettingsBody,
@@ -13,7 +13,6 @@ import {
   formatDelta,
   formatMoney,
   groupRowsByRepo,
-  parseMachines,
   runsOnText,
   validateCostDraft,
 } from './ciCompareView'
@@ -108,12 +107,15 @@ describe('Settings → CI cost draft', () => {
   })
 
   it('refuses bad machine lines', () => {
-    expect(parseMachines('Alienware aw-').error).toMatch(/Line 1/)
-    expect(parseMachines('A:').error).toMatch(/at least one runner/)
-    expect(parseMachines('A: x\na: y').error).toMatch(/listed twice/)
-    expect(parseMachines('A (200-100 W): x').error).toMatch(/at least the idle/)
-    expect(parseMachines(': x').error).toMatch(/Line 1/)
-    expect(parseMachines('\n\n').machines).toEqual([])
+    const d = draftFromCostSettings(costSettingsFixture())
+    const machines = (text: string) => validateCostDraft({ ...d, machines: text }, BOUNDS).machines
+    expect(machines('Alienware aw-')).toMatch(/Line 1/)
+    expect(machines('A:')).toMatch(/at least one runner/)
+    expect(machines('A: x\na: y')).toMatch(/listed twice/)
+    expect(machines('A (200-100 W): x')).toMatch(/at least the idle/)
+    expect(machines(': x')).toMatch(/Line 1/)
+    expect(machines('\n\n')).toBeUndefined()
+    expect(costSettingsBody(ORG_ID, { ...d, machines: '\n\n' }).machines).toEqual([])
   })
 
   it('validates with the server bounds', () => {

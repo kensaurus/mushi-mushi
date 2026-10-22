@@ -13,7 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CiCostSettingsResponse } from '../../lib/ciCompareTypes'
-import { costSettingsFixture, ORG_ID } from '../ci/__fixtures__/ciCompare'
+import { costSettingsFixture, ORG_ID } from '../ci/__fixtures__/ciOverview'
 
 const state = vi.hoisted(() => ({ data: null as unknown, paths: [] as Array<string | null>, reload: vi.fn(), apiFetch: vi.fn() }))
 

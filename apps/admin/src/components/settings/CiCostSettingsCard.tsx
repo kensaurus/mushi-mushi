@@ -31,7 +31,7 @@ import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsList, SettingsRow } from './SettingsRow'
 import { SETTINGS_SECTION_IDS } from '../../lib/settingsTabs'
 
-export const CI_COST_SECTION_ID = SETTINGS_SECTION_IDS.ciCost
+const CI_COST_SECTION_ID = SETTINGS_SECTION_IDS.ciCost
 
 const PLAN_LABEL: Record<CiCompareSettings['plan'], string> = {
   free: 'Free (2,000 minutes)',

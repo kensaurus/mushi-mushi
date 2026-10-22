@@ -55,14 +55,14 @@ export interface CiCompare {
   advice?: Array<{ severity: string; title: string; evidence?: string; fix?: string }>
 }
 
-export function formatMoney(n: number | null | undefined, currency = 'USD'): string {
+function formatMoney(n: number | null | undefined, currency = 'USD'): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—'
   const abs = Math.abs(n).toFixed(2)
   const sign = n < 0 ? '−' : ''
   return currency === 'USD' ? `${sign}$${abs}` : `${sign}${abs} ${currency}`
 }
 
-export function formatDuration(s: number | null | undefined): string {
+function formatDuration(s: number | null | undefined): string {
   if (typeof s !== 'number' || !Number.isFinite(s)) return '—'
   if (s < 90) return `${Math.round(s)} s`
   if (s < 90 * 60) return `${Math.round(s / 60)} min`
@@ -74,7 +74,7 @@ function pct(n: number | null | undefined): string {
 }
 
 /** "GitHub-hosted (ubuntu-latest)", "Self-hosted aw-tsumagoi on Alienware", "Never picked up (kensaurus-local)". */
-export function runsOnLabel(r: { runnerClass: string; labels?: string[]; runner?: string | null; machine?: string | null; os?: string }): string {
+function runsOnLabel(r: { runnerClass: string; labels?: string[]; runner?: string | null; machine?: string | null; os?: string }): string {
   const labels = (r.labels ?? []).filter((l) => l.toLowerCase() !== 'self-hosted').join(', ')
   if (r.runnerClass === 'github_hosted') return `GitHub-hosted${labels ? ` (${labels})` : r.os ? ` (${r.os})` : ''}`
   if (r.runnerClass === 'self_hosted') {
