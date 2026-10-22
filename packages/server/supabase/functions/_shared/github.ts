@@ -210,13 +210,30 @@ export interface PullRequestSnapshot {
   mergedAt?: string | null
   /** Current head commit; CI runs against this, not the first fix commit. */
   headSha?: string | null
+  /**
+   * The base repository as GitHub names it now (`base.repo`). A renamed repo
+   * still answers under its old URL, so the id and current full name are the
+   * PR's identity, not the URL it was read through.
+   */
+  baseRepoId?: number | null
+  baseRepoFullName?: string | null
 }
 
 export interface PullRequestDetails extends PullRequestSnapshot {
+  /** PR title and description (agent-written for cloud-agent PRs: untrusted). */
+  title?: string | null
+  body?: string | null
   htmlUrl: string | null
   headRef: string | null
   headSha: string | null
   baseRef: string | null
+  /**
+   * The head repository (`head.repo`). A PR from a fork has a head repo
+   * different from its base repo; review follow-ups (ADR 0032) refuse those.
+   * Null when GitHub sends none (a deleted fork).
+   */
+  headRepoId?: number | null
+  headRepoFullName?: string | null
   mergeable: boolean | null
   mergeableState: string | null
 }
@@ -234,6 +251,18 @@ function githubAuthHeaders(token: string): Record<string, string> {
 export function prNumberFromUrl(url: string): number | null {
   const n = Number(url.match(/\/pull\/(\d+)/)?.[1])
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+type BaseRepoBody = { ref?: string; repo?: { id?: number; full_name?: string } | null }
+
+/** `base.repo` of a pull request payload, as `baseRepoId` / `baseRepoFullName`. */
+export function baseRepoOf(base: BaseRepoBody | undefined): { baseRepoId: number | null; baseRepoFullName: string | null } {
+  const id = base?.repo?.id
+  const name = base?.repo?.full_name
+  return {
+    baseRepoId: typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null,
+    baseRepoFullName: typeof name === 'string' && /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(name) ? name : null,
+  }
 }
 
 export async function fetchPullRequest(
@@ -256,6 +285,7 @@ export async function fetchPullRequest(
     closed_at?: string | null
     merged_at?: string | null
     head?: { sha?: string }
+    base?: BaseRepoBody
   }
   return {
     number: body.number ?? pullNumber,
@@ -266,6 +296,7 @@ export async function fetchPullRequest(
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
     headSha: body.head?.sha ?? null,
+    ...baseRepoOf(body.base),
   }
 }
 
@@ -287,8 +318,10 @@ export async function fetchPullRequestDetails(
     merged?: boolean
     node_id?: string
     html_url?: string
-    head?: { ref?: string; sha?: string }
-    base?: { ref?: string }
+    title?: string | null
+    body?: string | null
+    head?: { ref?: string; sha?: string; repo?: { id?: number; full_name?: string } | null }
+    base?: BaseRepoBody
     mergeable?: boolean | null
     mergeable_state?: string | null
   }
@@ -298,10 +331,17 @@ export async function fetchPullRequestDetails(
     state: body.state ?? 'open',
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
+    title: typeof body.title === 'string' ? body.title : null,
+    body: typeof body.body === 'string' ? body.body : null,
     htmlUrl: body.html_url ?? null,
     headRef: body.head?.ref ?? null,
     headSha: body.head?.sha ?? null,
     baseRef: body.base?.ref ?? null,
+    ...baseRepoOf(body.base),
+    ...(() => {
+      const head = baseRepoOf({ repo: body.head?.repo ?? null })
+      return { headRepoId: head.baseRepoId, headRepoFullName: head.baseRepoFullName }
+    })(),
     mergeable: body.mergeable ?? null,
     mergeableState: body.mergeable_state ?? null,
   }
@@ -309,6 +349,8 @@ export async function fetchPullRequestDetails(
 
 export interface PullRequestFile {
   filename: string
+  /** The path before a rename (`previous_filename`), when GitHub sends one. */
+  previousFilename?: string | null
   status: string
   additions: number
   deletions: number
@@ -341,12 +383,14 @@ export async function fetchPullRequestFiles(
       additions?: number
       deletions?: number
       patch?: string
+      previous_filename?: string
     }>
     if (!Array.isArray(body)) throw new Error('pull files fetch returned a non-array body')
     for (const f of body) {
       if (typeof f.filename !== 'string') continue
       files.push({
         filename: f.filename,
+        previousFilename: typeof f.previous_filename === 'string' ? f.previous_filename : null,
         status: f.status ?? 'modified',
         additions: f.additions ?? 0,
         deletions: f.deletions ?? 0,
@@ -450,6 +494,39 @@ export async function fetchLatestCheckRun(
   if (!res.ok) throw new Error(`check-runs fetch ${res.status}`)
   const body = await res.json() as { check_runs?: CheckRunLike[] }
   return collapseCheckRuns(body.check_runs ?? [])
+}
+
+/**
+ * Names of the check runs that failed (failure / timed_out) on the latest
+ * commit of `gitRef` (a branch name or a SHA), with `filter=latest`. Advisory
+ * runs (Copilot review) are left out. Null when the list cannot be read.
+ * The CI-repair follow-up (ADR 0032 amendment) uses it to leave alone a
+ * check that is red on the base branch too.
+ */
+export async function fetchFailingCheckNames(
+  token: string,
+  ref: GithubRepoRef,
+  gitRef: string,
+): Promise<Set<string> | null> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
+  if (!body || !Array.isArray(body.check_runs)) return null
+  return new Set(
+    body.check_runs
+      .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
+      .map((r) => String(r.name ?? ''))
+      .filter(Boolean),
+  )
 }
 
 export interface CheckRunLike {

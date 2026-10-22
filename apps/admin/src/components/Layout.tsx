@@ -23,28 +23,29 @@ import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
+import { ProjectScopeNotice } from './ProjectScopeNotice'
 import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
-import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { QUICK_PRE_SETUP_PATHS, SIMPLE_NAV_GROUPS } from '../lib/navRegistry'
+import { buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
+import { CORE_NAV_PATHS } from '../lib/navRegistry'
+import { LAB_FEATURES, labForPath, useLabs } from '../lib/labs'
 import { useAdminMode } from '../lib/mode'
-import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip, Btn } from './ui'
 import { RouteProgress } from './RouteProgress'
-import { NextStep } from './NextStep'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
 import { FirstRunTour } from './FirstRunTour'
-import { SetupGuide } from './setup-guide/SetupGuide'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
-import { SidebarBrandToggles } from './SidebarBrandToggles'
 import { SidebarFooterControls } from './SidebarFooterControls'
+import { SidebarBrandToggles } from './SidebarBrandToggles'
 import { SidebarUserCard, SignOutAllDialog } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
+import { DemoProjectHint } from './DemoProjectHint'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
 import { AskMushiLauncherButton } from './AskMushiLauncherButton'
@@ -64,49 +65,15 @@ import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
 
-interface NavItem extends BuiltNavItem {
-  /** Quick/Beginner cluster this item renders under (SIMPLE_NAV_GROUPS id). */
-  simpleGroupId?: string
-}
+type NavItem = BuiltNavItem
 
 /**
- * Quick and Beginner sidebars: one always-open list clustered under the
- * steps of the cycle (Connect / Bugs / Fix / Verify / Ship & watch / Account)
- * from SIMPLE_NAV_GROUPS. Each item carries its group id; items without one
- * render in a trailing cluster so a page never silently disappears.
+ * One sidebar for every account (console audit 2026-10-20): the nine core
+ * pages in a flat list, then a "Labs" group with whatever the user switched
+ * on in Settings › Labs. No modes, no accordion, no numbering.
  */
-function renderSimpleGroups(
-  items: NavItem[],
-  renderItem: (item: NavItem) => ReactNode,
-): ReactNode {
-  const clusters = SIMPLE_NAV_GROUPS.map((group) => ({
-    ...group,
-    subItems: items.filter((i) => i.simpleGroupId === group.id),
-  })).filter((g) => g.subItems.length > 0)
-  const leftovers = items.filter((i) => !i.simpleGroupId)
-
-  return (
-    <>
-      {clusters.map((group) => (
-        <div key={group.id} role="group" aria-labelledby={`${group.id}-label`} className="space-y-0.5">
-          <p
-            id={`${group.id}-label`}
-            className="px-2 pt-2 pb-0.5 text-3xs font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            {group.title}
-          </p>
-          {group.subItems.map(renderItem)}
-        </div>
-      ))}
-      {leftovers.length > 0 && (
-        <div className="space-y-0.5 pt-1.5">{leftovers.map(renderItem)}</div>
-      )}
-    </>
-  )
-}
-
 interface NavSection extends Omit<BuiltNavSection, 'id'> {
-  id: BuiltNavSection['id'] | 'quick'
+  id: BuiltNavSection['id'] | 'core' | 'labs'
 }
 
 // Sidebar follows the vibe-coding cycle (ADR 0027) — metadata from navRegistry.ts.
@@ -131,15 +98,12 @@ function isActive(currentPath: string, itemPath: string) {
   return currentPath === itemPath || currentPath.startsWith(itemPath + '/')
 }
 
-function sectionContainingPath(sections: NavSection[], path: string): NavSection | undefined {
-  return sections.find((s) => s.items.some((i) => isActive(path, i.path)))
-}
 
 /** Step number (1–5) / letter glyph for the icon-rail section picker. */
 function railSectionGlyph(section: NavSection): string {
   if (section.step) return String(section.step)
   if (section.stage) return section.stage
-  if (section.id === 'quick') return 'Q'
+  if (section.id === 'labs') return 'L'
   // Account (workspace) → "A"; Act is "5" now, so the letters no longer clash.
   return section.title.charAt(0).toUpperCase()
 }
@@ -185,9 +149,9 @@ export function Layout({ children }: { children: ReactNode }) {
   // both, each ran its hooks and data reads twice on every page.
   const isDesktopHeader = useMediaQuery('(min-width: 48rem)', true)
   const [railSignOutOpen, setRailSignOutOpen] = useState(false)
-  /** Which sidebar category is expanded — single accordion in rail + full sidebar. */
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
-  const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
+  const labs = useLabs()
+  // One mode for everyone (lib/mode.ts); the brand row keeps only the Admin / Tester portal switch.
+  const { mode, setMode } = useAdminMode()
   const palette = useCommandPalette()
   const askPanel = useAskMushiPanel()
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
@@ -197,6 +161,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const projectSnapshots = useProjectSnapshots()
   const activeProjectId = useActiveProjectId()
   const setupStatus = useSetupStatus(activeProjectId)
+  const setupOpen =
+    setupStatus.resolved && setupStatus.activeProject != null && !setupStatus.selectors.done
+      ? setupStatus.selectors
+      : null
   const activeProjectSnapshot = activeProjectId
     ? projectSnapshots.byId.get(activeProjectId)
     : undefined
@@ -355,18 +323,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const activeStage = stageForPath(pathname)
 
-  // Filter NAV items based on the active mode.
-  //  • Quick: about 10 core pages under task names (SIMPLE_NAV_GROUPS).
-  //  • Beginner: the same groups with a few next steps added.
-  //  • Advanced: every page, under plain section names.
-  // Sections collapse to an empty shell if all their items are filtered
-  // out; we drop them entirely so the sidebar stays tight.
-  // Always strip operator-only routes for non-super-admins, regardless
-  // of mode. The gateway also enforces this — UI hiding is purely so
-  // we don't tease a feature non-operators can't access.
-  // `operatorOnly` (company dashboards such as /growth) is a separate axis
-  // from super-admin: the entitlements endpoint reports `operator` and the
-  // route 403s for everyone else, so hide it rather than tease it.
+  // One sidebar for every account; role and plan gating still apply.
   const visibleByRole = (i: NavItem) =>
     (!i.superAdmin || isSuperAdmin) && (!i.operatorOnly || isOperator)
   // Nudge-not-hide: feature-gated items used to be filtered out for
@@ -378,83 +335,47 @@ export function Layout({ children }: { children: ReactNode }) {
   // flows already trim the surface aggressively, and a Pro pill in
   // quickstart would be more confusing than helpful.
   const visibleByFeature = (i: NavItem) =>
-    (!i.requiresFeature || has(i.requiresFeature) || isSuperAdmin) &&
-    (!i.requiresAdvancedMode || isAdvanced || isSuperAdmin)
+    !i.requiresFeature || has(i.requiresFeature) || isSuperAdmin
 
   const visibleNav = useMemo((): NavSection[] => {
-    if (isQuickstart || isBeginner) {
-      // The same cycle as the Advanced sections (ADR 0027), fewer pages:
-      // connect, bugs, fix, verify, ship and watch, account.
-      // Before the first bug arrives Quick shows only the pages that help
-      // get there.
-      const activationDone = setupStatus.selectors.done
-      const byPath = new Map(NAV.flatMap((s) => s.items).map((i) => [i.path, i]))
-      const items: NavItem[] = SIMPLE_NAV_GROUPS.flatMap((group) =>
-        (isQuickstart ? group.quick : group.beginner)
-          .filter((path) => !isQuickstart || activationDone || QUICK_PRE_SETUP_PATHS.has(path))
-          .map((path) => byPath.get(path))
-          .filter((i): i is NavItem => i != null)
-          .filter(visibleByRole)
-          .filter(visibleByFeature)
-          .map((i) => ({ ...i, simpleGroupId: group.id })),
-      )
-      return [
-        {
-          id: 'quick',
-          title: isQuickstart ? 'Quick' : 'Beginner',
-          hint: 'Connect, then bugs, fix, verify, ship and watch. Advanced mode lists every page.',
-          items,
-        },
-      ]
+    const byPath = new Map(NAV.flatMap((s) => s.items).map((i) => [i.path, i]))
+    const pick = (paths: readonly string[]): NavItem[] =>
+      paths
+        .map((path) => byPath.get(path))
+        .filter((i): i is NavItem => i != null)
+        .filter(visibleByRole)
+        .filter(visibleByFeature)
+    const core = pick(CORE_NAV_PATHS)
+    const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
+    const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The nine pages every account has.', items: core }]
+    if (labItems.length > 0) {
+      sections.push({
+        id: 'labs',
+        title: 'Labs',
+        hint: 'Pages you switched on in Settings › Labs.',
+        items: labItems,
+      })
     }
-    // Advanced mode: render every item including gated ones, so the
-    // sidebar's upsell pill replaces the "hidden until you pay" UX.
-    return NAV.map(s => ({
-      ...s,
-      items: s.items.filter(visibleByRole),
-    }))
-  }, [
-    isQuickstart,
-    isBeginner,
-    isAdvanced,
-    isSuperAdmin,
-    isOperator,
-    has,
-    setupStatus.selectors.done,
-  ])
+    return sections
+  }, [isSuperAdmin, isOperator, has, labs.enabled])
 
-  // One nav-meta request for the sidebar. Advanced shows every section
-  // badge, so it asks for every slice; Quick and Beginner ask only for what
-  // their ~10 items and the current page's hero read (slices = null → all).
+  // One nav-meta request for the sidebar: only the slices the listed pages
+  // and the current page's hero read.
   const navSlices = useMemo(
-    () =>
-      isAdvanced
-        ? null
-        : navSlicesForPaths([...visibleNav.flatMap((s) => s.items.map((i) => i.path)), pathname]),
-    [isAdvanced, visibleNav, pathname],
+    () => navSlicesForPaths([...visibleNav.flatMap((s) => s.items.map((i) => i.path)), pathname]),
+    [visibleNav, pathname],
   )
   const navCounts = useNavCounts({ live: true, slices: navSlices })
 
-  // Keep the open category aligned with the current route when navigating.
-  useEffect(() => {
-    const containing = sectionContainingPath(visibleNav, pathname)
-    if (containing) setExpandedSectionId(containing.id)
-  }, [pathname, visibleNav])
 
-  // Mode safety net: if the user lands on a route hidden by the active
-  // mode (deep link, bookmark, autocomplete), we never block navigation,
-  // but we do surface a hint that the page is hidden from their sidebar —
-  // and how to switch modes. The hint sits in the sidebar so it doesn't
-  // disrupt the page they actually wanted to read.
-  const onHiddenRoute = !isAdvanced && pathname !== '/' && !visibleNav.some(s =>
-    s.items.some(i => isActive(pathname, i.path))
-  )
-  const hiddenRouteCopy = isQuickstart
-    ? 'Not in Quick mode.'
-    : 'This page is in Advanced mode only.'
+  // A page reached by link or ⌘K that is not in the sidebar (a Lab that is
+  // off, or a page only the palette lists) gets a one-line pointer to Labs.
+  const onHiddenRoute =
+    pathname !== '/' &&
+    !visibleNav.some((s) => s.items.some((i) => isActive(pathname, i.path))) &&
+    labForPath(pathname) != null
 
   function selectSection(id: string, options?: { expandSidebar?: boolean }) {
-    setExpandedSectionId(id)
     if (options?.expandSidebar) {
       setSidebarCollapsed(false)
       requestAnimationFrame(() => {
@@ -467,8 +388,6 @@ export function Layout({ children }: { children: ReactNode }) {
     selectSection(id, { expandSidebar: true })
   }
 
-  // App checks before AI quality: verify the app, then the AI that triaged it.
-  const CHECK_SUB_GROUP_ORDER = ['system-health', 'quality-gates'] as const
 
   function renderFullNavLink(item: NavItem) {
     const { label, path, icon: Icon, requiresFeature } = item
@@ -533,27 +452,17 @@ export function Layout({ children }: { children: ReactNode }) {
             </h1>
           )}
         </div>
-        {compact ? (
-          <div className="px-2.5 pb-2.5">
-            <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
-          </div>
-        ) : (
-          <div className="px-4 pb-2 space-y-1.5">
-            <SidebarBrandToggles mode={mode} onSelectMode={setMode} />
-            {onHiddenRoute && (
-              <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
-                <p className="leading-snug">{hiddenRouteCopy}</p>
-                <Btn
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setMode(isQuickstart ? 'beginner' : 'advanced')}
-                  className="text-left underline hover:no-underline px-0 h-auto font-normal"
-                >
-                  Show in {isQuickstart ? 'Beginner' : 'Advanced'} →
-                </Btn>
-              </div>
-            )}
+        <div className={compact ? 'px-2.5 pb-2.5' : 'px-4 pb-2'}>
+          <SidebarBrandToggles compact={compact} showMode={false} mode={mode} onSelectMode={setMode} />
+        </div>
+        {!compact && onHiddenRoute && (
+          <div className="px-4 pb-2">
+            <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
+              <p className="leading-snug">This page is not in your sidebar.</p>
+              <Link to="/settings?tab=labs" className="block underline hover:no-underline">
+                Add it in Settings › Labs →
+              </Link>
+            </div>
           </div>
         )}
       </div>
@@ -564,7 +473,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {visibleNav.map((section, sectionIdx) => {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
-          const isExpanded = section.id === 'quick' || expandedSectionId === section.id
+          const isExpanded = true
           // Per-stage staleness — surfaced on the collapsed section header
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
@@ -575,7 +484,7 @@ export function Layout({ children }: { children: ReactNode }) {
               id={`nav-section-${section.id}`}
               className={compact ? 'nav-rail-group' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
             >
-              {section.id === 'quick' && !compact ? null : compact ? (
+              {section.id === 'core' ? null : compact ? (
                 <SectionRailHeader
                   section={section}
                   expanded={isExpanded}
@@ -597,37 +506,16 @@ export function Layout({ children }: { children: ReactNode }) {
                   animate={!compact}
                   className={compact ? 'flex flex-col gap-1' : 'space-y-0.5'}
                 >
-                  {section.id === 'quick' && !compact
-                    ? renderSimpleGroups(section.items, (item) => renderNavLink(item, compact))
-                    : section.id === 'check' && isAdvanced && !compact
-                    ? CHECK_SUB_GROUP_ORDER.map((subId) => {
-                        const subItems = section.items.filter((i) => i.checkSubGroup === subId)
-                        if (subItems.length === 0) return null
-                        const sub = CHECK_SUB_GROUPS[subId]
-                        return (
-                          <div key={subId} className="space-y-0.5">
-                            <p
-                              className="px-2 pt-1.5 pb-0.5 text-3xs font-medium uppercase tracking-wide text-fg-faint"
-                              title={sub.hint}
-                            >
-                              {sub.title}
-                            </p>
-                            {subItems.map((item) => renderNavLink(item, compact))}
-                          </div>
-                        )
-                      })
-                    : section.items.map((item) => renderNavLink(item, compact))}
-                  {section.id === 'quick' && !compact ? (
-                    <Btn
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setMode('advanced')}
+                  {section.items.map((item) => renderNavLink(item, compact))}
+                  {section.id === 'core' && !compact ? (
+                    <Link
+                      to="/settings?tab=labs"
                       className="nav-link w-full justify-start text-fg-muted hover:text-fg-secondary"
+                      title="Switch on more pages (Labs)"
                     >
                       <IconChevronRight className="nav-link-icon opacity-70" />
-                      <span>All pages (Advanced mode)</span>
-                    </Btn>
+                      <span>More pages…</span>
+                    </Link>
                   ) : null}
                 </NavSectionStagger>
               </AnimatedDisclosure>
@@ -643,6 +531,24 @@ export function Layout({ children }: { children: ReactNode }) {
           "account + app chrome" reads as a different class of thing from the
           PDCA navigation above it. */}
       <div className={`${compact ? 'flex flex-col gap-1 px-2.5 py-2.5 border-t border-edge' : 'px-3 py-2.5 space-y-2 border-t border-edge/60'}`}>
+        {!compact && setupOpen && (
+          <Link
+            to="/onboarding"
+            className="nav-link w-full justify-start text-fg-secondary hover:text-fg"
+            title="Finish setting up this app"
+          >
+            <span>Set up · {setupOpen.required_complete}/{setupOpen.required_total}</span>
+          </Link>
+        )}
+        {!compact && (
+          <Link
+            to="/feedback"
+            className="nav-link w-full justify-start text-fg-muted hover:text-fg-secondary"
+            title="Report a console bug, ask a question or request a feature"
+          >
+            <span>Help &amp; support</span>
+          </Link>
+        )}
         <PrivacyPostureBadge compact={compact} />
         {!compact && (
           <SidebarFooterControls
@@ -941,10 +847,13 @@ export function Layout({ children }: { children: ReactNode }) {
               className={`${PAGE_SHELL_CLASS[pageShellWidth]} pb-20 motion-safe:transition-[transform,opacity] motion-safe:duration-base`}
               data-page-width={pageShellWidth}
             >
-              {!focusMode && <NextStep variant="banner" />}
               <ScrollToHashAnchor />
-              {!focusMode && <RoutePageHelp />}
+              {!focusMode && <ProjectScopeNotice />}
               {children}
+              {!focusMode && <DemoProjectHint />}
+              {/* Page help sits under the content: a newcomer reads the page
+                  first, the explanation second (audit 2026-10-20). */}
+              {!focusMode && <RoutePageHelp />}
               {/* Developer details (components/readout/ReadoutPanel) portal here, so they close every page. */}
               <div id={PAGE_FOOT_SLOT_ID} className="mt-4 empty:hidden" />
             </div>
@@ -952,10 +861,6 @@ export function Layout({ children }: { children: ReactNode }) {
         </PageHelpProvider>
       </div>
       <FirstRunTour />
-      {/* Docked setup checklist. Self-contained (reads its own hooks,
-          like FirstRunTour) and route-aware, so it needs no props and
-          survives refactors of this file. */}
-      <SetupGuide />
       <CommandPalette />
       <HotkeysModal open={hotkeysOpen} onClose={() => setHotkeysOpen(false)} />
       <ActivityDrawer

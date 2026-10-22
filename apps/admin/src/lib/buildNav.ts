@@ -6,7 +6,6 @@
 import type { ComponentType } from 'react'
 import type { FeatureFlag } from './useEntitlements'
 import {
-  CHECK_SUB_GROUPS,
   NAV_REGISTRY,
   NAV_SECTION_META,
   type CheckSubGroupId,
@@ -194,4 +193,3 @@ export function buildOperatorNav(): BuiltNavSection[] {
   })
 }
 
-export { CHECK_SUB_GROUPS }

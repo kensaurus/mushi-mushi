@@ -92,7 +92,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/inbox': {
-      title: 'Inbox',
+      title: 'To-do',
       description: 'Open items across Plan, Do, Check, and Act — start here each session.',
       sections: { snapshot: 'Summary' },
       statLabels: {
@@ -117,7 +117,7 @@ const COPY: CopyRegistry = {
         activity: 'Recent',
       },
       help: {
-        title: 'About the inbox',
+        title: 'About the to-do list',
         whatIsIt:
           'One place to see every action waiting for you — bugs to review, fixes to check, and setup steps to finish.',
         useCases: [
@@ -129,7 +129,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/reports': {
-      title: 'Bugs to fix',
+      title: 'Bugs',
       description: 'Your most-felt bugs first. Click one to see the proof — screenshot, console, and reproduction steps.',
       help: {
         title: 'About bugs',
@@ -144,7 +144,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/fixes': {
-      title: 'Fixes ready to merge',
+      title: 'Fixes',
       description: 'Pull requests Mushi drafted from your real bugs. Review the diff and click "Open PR" to merge.',
       help: {
         title: 'About drafted fixes',
@@ -159,7 +159,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/onboarding': {
-      title: 'Setup',
+      title: 'Set up',
       description: 'Three steps: create your app, send a test bug, paste the widget snippet.',
       sections: { snapshot: 'Summary' },
       statLabels: {
@@ -189,7 +189,7 @@ const COPY: CopyRegistry = {
   },
   beginner: {
     '/inbox': {
-      title: 'Your to-do list',
+      title: 'To-do',
       description: 'Start here every session — banner shows what needs you before you open the queue.',
       sections: { snapshot: 'Summary' },
       statLabels: {
@@ -212,7 +212,7 @@ const COPY: CopyRegistry = {
         activity: 'Activity',
       },
       help: {
-        title: 'About the inbox',
+        title: 'About the to-do list',
         whatIsIt:
           'A tabbed action queue across Plan, Do, Check, Act, and Ops — every card links to the page where you resolve it.',
         useCases: [
@@ -226,10 +226,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/feedback': {
-      title: 'Support',
+      title: 'Help & support',
       description: 'Your support tickets to the Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
       help: {
-        title: 'About Support',
+        title: 'About Help & support',
         whatIsIt:
           'Your personal ticket inbox for console bugs and product ideas — separate from end-user reports sent through the SDK.',
         useCases: [
@@ -242,10 +242,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/projects': {
-      title: 'Projects',
+      title: 'Manage apps',
       description: 'Banner shows what needs you — then Overview for the big picture, Your projects to create apps and copy keys.',
       help: {
-        title: 'About projects',
+        title: 'About managing apps',
         whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
@@ -257,10 +257,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/queue': {
-      title: 'Stuck reports',
+      title: 'Processing jobs',
       description: 'Bug reports that couldn\'t be processed automatically. Retry them, inspect why they failed, or clear the backlog.',
       help: {
-        title: 'About the processing queue',
+        title: 'About processing jobs',
         whatIsIt: 'A holding area for reports that got stuck during automatic processing — like a jammed printer tray you can fix without losing any pages.',
         useCases: [
           'Retry reports that failed due to a temporary API outage',
@@ -271,7 +271,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/inventory': {
-      title: 'Map your app screens',
+      title: 'User stories',
       description:
         'Banner + INVENTORY SNAPSHOT first — Summary for posture, User stories, Gates, Discovery, or Yaml tabs.',
       sections: { snapshot: 'Summary' },
@@ -301,7 +301,7 @@ const COPY: CopyRegistry = {
         yaml: 'Yaml',
       },
       help: {
-        title: 'About app inventory',
+        title: 'About user stories',
         whatIsIt:
           "Your app's user-story map — pages, actions, and verification status derived from gates, crawler, and synthetic probes.",
         useCases: [
@@ -314,10 +314,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/query': {
-      title: 'Ask your data',
+      title: 'SQL query',
       description: 'Ask questions in plain English or paste read-only SQL — every run is logged for your team.',
       help: {
-        title: 'About Ask Your Data',
+        title: 'About SQL query',
         whatIsIt: 'Ask questions in plain English and get read-only SQL results, or paste SELECT statements yourself. Every run is saved for rerun and audit.',
         useCases: [
           'Answer ad-hoc questions about bugs and fixes without leaving the console',
@@ -328,7 +328,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/research': {
-      title: 'Look up fixes online',
+      title: 'Research',
       description:
         'Status banner first — Summary for posture, Search to look things up, History for past sessions.',
       sections: { snapshot: 'Summary' },
@@ -367,7 +367,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/repo': {
-      title: 'Your GitHub branches',
+      title: 'Pull requests',
       description:
         'Banner + REPO SNAPSHOT first — Summary for connection health, Branches for PR status, Activity for the live event log.',
       sections: { snapshot: 'Summary' },
@@ -395,7 +395,7 @@ const COPY: CopyRegistry = {
         activity: 'Activity',
       },
       help: {
-        title: 'About repo connection',
+        title: 'About pull requests',
         whatIsIt: 'Link your GitHub repo here once, and every auto-fix Mushi drafts will appear as a pull request in the right branch.',
         useCases: [
           'Connect your repo so the auto-fix agent has somewhere to open PRs',
@@ -435,10 +435,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/prompt-lab': {
-      title: 'Prompt editor',
+      title: 'AI prompts',
       description: 'Edit the instructions that tell the AI how to classify bugs and draft fixes. Improve accuracy without any code changes.',
       help: {
-        title: 'About the prompt editor',
+        title: 'About AI prompts',
         whatIsIt: 'A live editor where you can tune the instructions the AI uses — like telling a new employee how you want bugs described.',
         useCases: [
           'Fix a prompt that\'s consistently mis-labelling severity or category',
@@ -517,7 +517,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/marketplace': {
-      title: 'Add webhook plugins',
+      title: 'Plugins',
       description:
         'Banner + MARKETPLACE SNAPSHOT first — Summary for posture, Browse to install, Deliveries to debug webhooks.',
       sections: { snapshot: 'Summary' },
@@ -544,7 +544,7 @@ const COPY: CopyRegistry = {
         deliveries: 'Deliveries',
       },
       help: {
-        title: 'About the marketplace',
+        title: 'About plugins',
         whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
         useCases: [
           'Page on-call via PagerDuty when a critical bug is reported',
@@ -555,7 +555,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/mcp': {
-      title: 'Connect your AI editor',
+      title: 'Editor agents',
       description:
         'Banner + MCP SNAPSHOT first — Summary for posture, Setup for snippet, Catalog for tools and resources.',
       sections: { snapshot: 'Summary' },
@@ -581,7 +581,7 @@ const COPY: CopyRegistry = {
         examples: 'Examples',
       },
       help: {
-        title: 'About MCP (AI agent connection)',
+        title: 'About editor agents',
         whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
         useCases: [
           'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
@@ -593,7 +593,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/qa-coverage': {
-      title: 'Catch bugs before users do',
+      title: 'Scheduled tests',
       description:
         'Banner + QA SNAPSHOT first — Summary for posture, Stories for all tests, Failing for sub-80% pass rate.',
       sections: { snapshot: 'Summary' },
@@ -620,7 +620,7 @@ const COPY: CopyRegistry = {
         failing: 'Failing',
       },
       help: {
-        title: 'About QA coverage',
+        title: 'About scheduled tests',
         whatIsIt: 'Automated tests written in plain English that run on your live app on a schedule — like hiring a robot QA tester that never sleeps.',
         useCases: [
           'Write a test like "A user can log in and see their dashboard" and run it every hour',
@@ -631,10 +631,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/anti-gaming': {
-      title: 'Spam controls',
+      title: 'Spam & abuse',
       description: 'Detect and block fake or spammy bug reports so your inbox stays clean and your credits aren\'t wasted.',
       help: {
-        title: 'About spam controls',
+        title: 'About spam & abuse',
         whatIsIt: 'Automatic filters that catch fake, duplicate, or deliberately spammy reports before they waste your credits or clog your inbox.',
         useCases: [
           'Review flagged devices that are sending suspicious reports',
@@ -645,10 +645,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/rewards': {
-      title: 'Rewards program',
+      title: 'Tester rewards',
       description: 'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks and disputes.',
       help: {
-        title: 'About rewards',
+        title: 'About tester rewards',
         whatIsIt: 'Org-scoped loyalty loop: SDK activity → points → tiers → perks (Pro access, payouts, host webhooks).',
         useCases: [
           'Reward beta testers with tier perks when they file quality bug reports',
@@ -659,7 +659,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/lessons': {
-      title: 'Learn from past bugs',
+      title: 'Lessons',
       description:
         'Banner + LESSONS SNAPSHOT first — Summary for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
       sections: { snapshot: 'Summary' },
@@ -697,7 +697,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/releases': {
-      title: 'Tell users what shipped',
+      title: 'Releases',
       description:
         'Banner + RELEASES SNAPSHOT first — Summary for posture, Drafts/Published to manage, Draft to generate with AI.',
       sections: { snapshot: 'Summary' },
@@ -736,7 +736,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/iterate': {
-      title: 'Auto-improve pages',
+      title: 'Improvement runs',
       description:
         'Status banner first — Summary for the big picture, Runs to watch progress, New Run to start a loop.',
       sections: { snapshot: 'Summary' },
@@ -762,7 +762,7 @@ const COPY: CopyRegistry = {
         new: 'New Run',
       },
       help: {
-        title: 'About auto-improvement runs',
+        title: 'About improvement runs',
         whatIsIt: 'Each run fetches a live page, generates improved markup, then scores it with an AI critic. The loop repeats until the target score or max iterations.',
         useCases: [
           'Improve a dashboard page\'s visual hierarchy automatically',
@@ -812,7 +812,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/experiments': {
-      title: 'Run A/B tests',
+      title: 'Experiments',
       description:
         'Banner + EXPERIMENTS SNAPSHOT first — Summary for posture, Experiments to launch/monitor, New to create variants.',
       sections: { snapshot: 'Summary' },
@@ -926,7 +926,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/notifications': {
-      title: 'Updates for bug reporters',
+      title: 'Reporter updates',
       description:
         'Status banner first — Summary for posture, Inbox to debug payloads, Setup for a wiring checklist.',
       sections: { snapshot: 'Summary' },
@@ -951,7 +951,7 @@ const COPY: CopyRegistry = {
         setup: 'Setup',
       },
       help: {
-        title: 'About reporter notifications',
+        title: 'About reporter updates',
         whatIsIt: 'Messages queued for end users who submitted bugs. The SDK polls this inbox so reporters see when their report was classified, fixed, or rewarded.',
         useCases: [
           'Verify the reporter widget is receiving classify/fix updates',
@@ -1012,7 +1012,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/explore': {
-      title: 'Map your codebase',
+      title: 'Code map',
       description:
         'Banner + EXPLORE SNAPSHOT first — Summary for posture, Understand (Ask/Tour/Domains/Knowledge), Map (Graph/Layers), Search, Index for debug.',
       sections: { snapshot: 'Summary' },
@@ -1044,7 +1044,7 @@ const COPY: CopyRegistry = {
         index: 'Index',
       },
       help: {
-        title: 'About the codebase explorer',
+        title: 'About Code map',
         whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search and chat with plain English.',
         useCases: [
           'Understand → Ask: "How does auth work?" with file:line citations',
@@ -1057,10 +1057,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/connect': {
-      title: 'Connect & Update',
+      title: 'Connect',
       description: 'One hub to connect GitHub, install the SDK + MCP, and open upgrade PRs.',
       help: {
-        title: 'About Connect & Update',
+        title: 'About Connect',
         whatIsIt: 'The install and upgrade hub — connect your repo, copy SDK and editor install commands, and open a PR that bumps @mushi-mushi packages.',
         useCases: [
           'First-time setup: connect GitHub → install SDK → add MCP to Cursor',
@@ -1081,20 +1081,20 @@ const COPY: CopyRegistry = {
       },
     },
     '/content': {
-      title: 'Content QA',
+      title: 'Content checks',
       description: 'Review AI-generated or imported content before it ships to learners.',
       help: {
-        title: 'About content QA',
+        title: 'About content checks',
         whatIsIt: 'A review queue for generated copy, thumbnails, and lesson content awaiting approval.',
         useCases: ['Approve safe content before publish', 'Reject off-brand or incorrect generated text'],
         howToUse: 'Filter by status, open a row, approve or reject with a note.',
       },
     },
     '/feature-board': {
-      title: 'Feature board',
+      title: 'Feature requests',
       description: 'Community feature requests ranked by votes and impact.',
       help: {
-        title: 'About the feature board',
+        title: 'About feature requests',
         whatIsIt: 'End-user feature ideas linked to your project, with vote counts and status.',
         useCases: ['See what users ask for most', 'Promote a request into your roadmap'],
         howToUse: 'Sort by votes or recency; link items to reports or inventory stories when you start work.',
@@ -1111,10 +1111,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/skills': {
-      title: 'Skill playbooks',
+      title: 'Agent skills',
       description: 'Browse editor playbooks, sync sources, and track runs attached to reports.',
       help: {
-        title: 'About skill playbooks',
+        title: 'About agent skills',
         whatIsIt: 'Catalog of fix playbooks your editor can read, plus live runs when you attach one to a report.',
         useCases: ['Find the right skill for a bug class', 'Watch a cloud run step complete'],
         howToUse: 'Catalog tab to browse; Runs tab for active jobs; Sources tab to sync GitHub repos.',
@@ -1131,10 +1131,10 @@ const COPY: CopyRegistry = {
       },
     },
     '/users': {
-      title: 'User directory',
+      title: 'All users',
       description: 'Operator-only view of all signups, plans, and activity. Useful for support and growth tracking.',
       help: {
-        title: 'About the user directory',
+        title: 'About all users',
         whatIsIt: 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.',
         useCases: [
           'Look up a specific user to check their plan or recent activity',
@@ -1145,7 +1145,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/dashboard': {
-      title: 'Your bug-fix loop',
+      title: 'Home',
       description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
       sections: { snapshot: 'Summary' },
       statLabels: {
@@ -1170,7 +1170,7 @@ const COPY: CopyRegistry = {
         health: 'Health',
       },
       help: {
-        title: 'How to read this dashboard',
+        title: 'About your home screen',
         whatIsIt:
           'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.',
         useCases: [
@@ -1184,7 +1184,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/reports': {
-      title: 'Bugs your users felt',
+      title: 'Bugs',
       description:
         'Status banner first — then Overview for the big picture, Queue to review bugs, Severity for 14-day trends.',
       sections: { snapshot: 'Summary' },
@@ -1209,7 +1209,7 @@ const COPY: CopyRegistry = {
         severity: 'Severity',
       },
       help: {
-        title: 'About reports',
+        title: 'About bugs',
         whatIsIt:
           'A list of bugs your end-users flagged, automatically grouped, scored, and ranked by how many people are affected.',
         useCases: [
@@ -1222,7 +1222,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/graph': {
-      title: 'How bugs connect',
+      title: 'Bug clusters',
       description: 'See where bugs cluster — red banner means a hotspot needs attention.',
       sections: { snapshot: 'Summary' },
       statLabels: {
@@ -1245,7 +1245,7 @@ const COPY: CopyRegistry = {
         backend: 'Sync debug',
       },
       help: {
-        title: 'About the bug map',
+        title: 'About bug clusters',
         whatIsIt:
           'Every bug points at a component, page, or release. This map joins those dots so you can see where breakage clusters.',
         useCases: [
@@ -1258,13 +1258,13 @@ const COPY: CopyRegistry = {
       },
     },
     '/fixes': {
-      title: 'Fix drafts & PRs',
+      title: 'Fixes',
       description:
         'Status banner first — Summary for posture, In flight for active dispatches, Attempts for draft PRs.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         totalAttempts: 'Fixes (30 days)',
-        completed: 'Completed',
+        completed: 'Fixed',
         failed: 'Failed',
         inProgress: 'In flight',
         prsOpen: 'PRs open',
@@ -1299,7 +1299,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/judge': {
-      title: 'Is the classifier getting smarter?',
+      title: 'Triage grading',
       description:
         'Banner + JUDGE SNAPSHOT first — then Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
       sections: { snapshot: 'Summary' },
@@ -1327,7 +1327,7 @@ const COPY: CopyRegistry = {
         prompts: 'Prompts',
       },
       help: {
-        title: 'About the AI judge',
+        title: 'About triage grading',
         whatIsIt:
           "A second LLM independently grades the classifier's output on every report — was the category right, was the severity right, was the affected component right, and were the repro steps usable. We chart those scores over time so you can tell if the model is improving.",
         useCases: [
@@ -1340,7 +1340,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/health': {
-      title: 'Is the AI brain healthy?',
+      title: 'App health',
       description:
         'Banner + HEALTH SNAPSHOT first — then Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
       sections: { snapshot: 'Summary' },
@@ -1367,7 +1367,7 @@ const COPY: CopyRegistry = {
         activity: 'Recent traces',
       },
       help: {
-        title: 'About system health',
+        title: 'About App health',
         whatIsIt:
           'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
@@ -1400,7 +1400,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/integrations/config': {
-      title: 'Where fixed bugs go',
+      title: 'Integrations',
       description:
         'Status banner first — Platform for Sentry/Langfuse/GitHub, Routing for ticketing, Repo & index for auto-fix grounding.',
       sections: { snapshot: 'At a glance', workspace: 'Integration workspace' },
@@ -1435,7 +1435,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/settings': {
-      title: 'Tune your project',
+      title: 'Settings',
       description:
         'The banner says what to do first. General sets alerts and bug sorting, AI keys holds your own keys, SDK & connection installs the widget and sends a test bug.',
       sections: { snapshot: 'Summary' },
@@ -1466,7 +1466,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/onboarding': {
-      title: 'Get Mushi running',
+      title: 'Set up',
       description: 'Three short steps: create a project, install the widget, send a test bug to see the loop run.',
       sections: { snapshot: 'Setup snapshot' },
       statLabels: {
@@ -1734,36 +1734,4 @@ export function renderDogfoodNarrative(params: {
     return `${headline} ${drafted} — ready for your review.`
   }
   return `${headline} No fixes drafted yet — open one and let Mushi try.`
-}
-
-/**
- * Plain-language definitions for jargon nouns that show up in tooltips,
- * page-help bodies, and inline `<Jargon term="…">` wrappers. One source of
- * truth — change the wording here and every surface updates.
- */
-export const JARGON: Record<string, string> = {
-  triage: 'Reviewing new bug reports and deciding what to do with each one.',
-  dispatch:
-    'Sending a bug report to the auto-fix agent. The agent drafts a pull request for you to review.',
-  BYOK:
-    'Bring Your Own Key — give Mushi your Anthropic/OpenAI key and we run the loop against your account. Your prompts never flow through our LLM account.',
-  Vault: 'Encrypted store for your provider keys. Mushi can decrypt them only at request time.',
-  pipeline:
-    'The chain of LLM calls that turns a raw bug report into a classified, prioritised, auto-fixed PR.',
-  'fast-filter':
-    'A cheap LLM pass (Haiku) that quickly throws out spam and obvious dupes before anything expensive runs.',
-  'classify-report':
-    'The LLM step that tags severity, component, blast radius, and likely root cause.',
-  'judge-batch':
-    'A scheduled run of the LLM judge that grades a batch of recent fixes for quality + screenshot match.',
-  fingerprint:
-    'A short hash that identifies "the same bug" across multiple reports — used to dedupe.',
-  dedup: 'Detecting that two reports are the same underlying bug and merging them into one record.',
-  'air-gap':
-    'Self-hosted mode where Mushi never calls our cloud — every LLM call goes through your keys, on your infra.',
-  'reporter token':
-    'A short-lived token the SDK uses to attach a report to the right project without exposing your API key.',
-  'PDCA': 'Plan → Do → Check → Act. The four-stage loop Mushi runs every bug through.',
-  'judge':
-    "A second, independent LLM that grades the classifier's output on every report — accuracy, severity, component, and repro quality.",
 }

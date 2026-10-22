@@ -9,7 +9,7 @@
  * module, and so the verdict is unit-testable. No I/O here.
  */
 
-export type SdkStack = 'nextjs' | 'expo' | 'vite'
+export type SdkStack = 'nextjs' | 'nuxt' | 'expo' | 'vite'
 
 export interface CiVar {
   name: string
@@ -36,7 +36,11 @@ export function buildCiVars(params: {
   mintedKey: string
 }): CiVar[] {
   const { stack, projectId, endpoint, mintedKey } = params
-  const prefix = stack === 'expo' ? 'EXPO_PUBLIC_' : stack === 'vite' ? 'VITE_' : 'NEXT_PUBLIC_'
+  const prefix =
+    stack === 'expo' ? 'EXPO_PUBLIC_'
+    : stack === 'nuxt' ? 'NUXT_PUBLIC_'
+    : stack === 'vite' ? 'VITE_'
+    : 'NEXT_PUBLIC_'
   return [
     { name: `${prefix}MUSHI_PROJECT_ID`, value: projectId, ghKind: 'variable' },
     { name: `${prefix}MUSHI_API_KEY`, value: mintedKey, ghKind: 'secret' },
@@ -93,11 +97,13 @@ function dependencyNames(pkgText: string): string[] {
 
 /**
  * Stack from the repo's package.json texts, so the env check expects the
- * names the bundler really inlines (EXPO_PUBLIC_, VITE_, NEXT_PUBLIC_).
+ * names the bundler really inlines (EXPO_PUBLIC_, VITE_, NEXT_PUBLIC_, NUXT_PUBLIC_).
  * Files that depend on a Mushi SDK package are read first: in a monorepo
  * they are the app the SDK ships in. Expo / React Native wins over Next.js,
- * and Next.js over Vite (a Next app often has Vite only for its tests).
- * null when no file names a known bundler; the caller falls back to the slug.
+ * Next.js over Nuxt, and Nuxt over Vite. A Next or Nuxt app often lists
+ * Vite as its bundler or test runner; matching Vite first would emit
+ * `VITE_` names the framework never inlines. null when no file names a
+ * known bundler; the caller falls back to the slug.
  */
 export function stackFromPackageJsons(texts: readonly string[]): SdkStack | null {
   const all = texts.map(dependencyNames).filter((names) => names.length > 0)
@@ -105,6 +111,7 @@ export function stackFromPackageJsons(texts: readonly string[]): SdkStack | null
   const names = new Set((withSdk.length > 0 ? withSdk : all).flat())
   if (names.has('expo') || names.has('react-native')) return 'expo'
   if (names.has('next')) return 'nextjs'
+  if (names.has('nuxt')) return 'nuxt'
   if (names.has('vite')) return 'vite'
   return null
 }

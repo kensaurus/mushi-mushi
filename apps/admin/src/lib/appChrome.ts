@@ -1,23 +1,29 @@
 /**
  * FILE: apps/admin/src/lib/appChrome.ts
  * PURPOSE: Shared layout offsets for fixed overlays (drawers, panels)
- *          so they clear the beta banner and desktop sub-header.
+ *          so they clear the desktop sub-header (and the beta strip offset,
+ *          which stays 0 since the strip was removed on 2026-10-20).
  */
 
-export const BETA_BANNER_ID = 'mushi-beta-banner'
 export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 
 /**
  * Desktop sub-header height (Search + toolbar row in Layout).
  * @internal Exported for tests only.
  */
-export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height, 2.5rem)'
+export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height,2.5rem)'
 
-/** Tailwind top offset shared by every fixed overlay below persistent chrome. */
-const topBelowAppChromeClass = [
-  'top-[var(--mushi-beta-banner-offset,0px)]',
-  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
-].join(' ')
+/**
+ * Tailwind top offset shared by every fixed overlay below persistent chrome.
+ *
+ * Written out in full, with no spaces inside the brackets: Tailwind reads
+ * class names from the source text, so a class built with `${…}` or holding
+ * a space is never generated. Until 2026-10-22 the md: offset was built that
+ * way, so every desktop drawer started at the top of the window and the
+ * header covered its title.
+ */
+const topBelowAppChromeClass =
+  'top-[var(--mushi-beta-banner-offset,0px)] md:top-[calc(var(--mushi-beta-banner-offset,0px)+var(--chrome-row-height,2.5rem))]'
 
 /**
  * Stacking order for the authenticated shell.
@@ -38,7 +44,8 @@ export const headerDropdownPanelClass =
 
 /**
  * Right-anchored drawer shell that starts below persistent top chrome.
- * Beta strip height is published by BetaBanner via ResizeObserver.
+ * The beta-strip offset variable is kept for the fixed overlays' math; nothing
+ * publishes a non-zero value any more.
  */
 export const drawerBelowAppChromeClass = [
   'fixed inset-x-0 bottom-0 z-50 flex justify-end',
@@ -57,8 +64,3 @@ export const mobileNavBelowAppChromeClass = [
   topBelowAppChromeClass,
 ].join(' ')
 
-/** Publish measured beta-banner height on :root for fixed overlays. */
-export function setBetaBannerOffset(px: number) {
-  if (typeof document === 'undefined') return
-  document.documentElement.style.setProperty(BETA_BANNER_OFFSET_VAR, `${px}px`)
-}

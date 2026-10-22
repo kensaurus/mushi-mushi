@@ -28,8 +28,10 @@ interface FakeDbOptions {
    * Make a read fail the way PostgREST reports an error: return a message to
    * fail `from(table).select(...)`, or null to let it run. Used by the
    * fail-open suites to prove a failed read never renders as "nothing found".
+   * A message fails with code XX000; `{ code, message }` sets the code (e.g.
+   * 42P01 for a table that does not exist yet).
    */
-  failRead?: (table: string) => string | null
+  failRead?: (table: string) => string | { code: string; message: string } | null
   /**
    * PostgREST `max_rows`: no select returns more rows than this, whatever
    * `limit` / `range` ask for (1,000 on Supabase). Unset = no cap.
@@ -65,6 +67,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   private _order: Array<{ key: string; ascending: boolean }> = []
   private returning = false
   private onConflict: string[] | null = null
+  private ignoreDuplicates = false
   /** select(cols, { count: 'exact', head }) — return the match count, and no rows when head. */
   private counting: { head: boolean } | null = null
 
@@ -91,10 +94,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.payload = payload
     return this
   }
-  upsert(payload: Row | Row[], opts?: { onConflict?: string }): this {
+  upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }): this {
     this.op = 'upsert'
     this.payload = payload
     this.onConflict = opts?.onConflict ? opts.onConflict.split(',').map((s) => s.trim()) : null
+    this.ignoreDuplicates = opts?.ignoreDuplicates === true
     return this
   }
   delete(): this {
@@ -146,14 +150,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
   /**
    * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
-   * `eq` and `neq`. `neq` never matches a NULL / absent column, as in Postgres
+   * `eq`, `neq`, `in` and the comparisons `lt` / `gt` / `lte` / `gte`. `neq` never matches a NULL / absent column, as in Postgres
    * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
    */
   or(filters: string): this {
     // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
     const parts = filters.split(/,(?![^(]*\))/)
     const alternatives = parts.map((part) => {
-      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in)\.(.*)$/.exec(part.trim())
+      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt|lte|gte)\.(.*)$/.exec(part.trim())
       if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
       const [, key, negated, op, raw] = m
       return (r: Row): boolean => {
@@ -169,6 +173,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         if (op === 'in') {
           const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
           hit = values.includes(String(v))
+        } else if (op === 'lt' || op === 'gt' || op === 'lte' || op === 'gte') {
+          const a = String(v)
+          hit = op === 'lt' ? a < raw : op === 'gt' ? a > raw : op === 'lte' ? a <= raw : a >= raw
         } else {
           hit = op === 'eq' ? String(v) === raw : String(v) !== raw
         }
@@ -256,7 +263,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     switch (this.op) {
       case 'select': {
         const failure = this.db.options.failRead?.(this.table) ?? null
-        if (failure) return { data: null, error: { code: 'XX000', message: failure }, count: null }
+        if (failure) {
+          const error = typeof failure === 'string' ? { code: 'XX000', message: failure } : failure
+          return { data: null, error, count: null }
+        }
         return this.finish(this.matches())
       }
       case 'insert': {
@@ -279,6 +289,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         const stored: Row[] = []
         for (const item of items) {
           const existing = keys ? rows.find((r) => keys.every((k) => r[k] === item[k])) : undefined
+          // ignoreDuplicates (ON CONFLICT DO NOTHING): the stored row is left alone and not returned.
+          if (existing && this.ignoreDuplicates) continue
           if (existing) {
             Object.assign(existing, item)
             stored.push(existing)

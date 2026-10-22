@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { defaultTabForPrimary, exploreActionLabelFor, exploreTabSearchParams, resolveExploreTab } from './exploreTabNavigation'
+import {
+  defaultTabForPrimary,
+  exploreActionLabelFor,
+  exploreTabSearchParams,
+  primaryTabOf,
+  resolveExploreTab,
+} from './exploreTabNavigation'
 
 describe('exploreTabSearchParams', () => {
   it('writes tab=graph explicitly so Beginner/Quickstart do not redirect away', () => {
@@ -27,5 +33,22 @@ describe('default map view', () => {
     expect(resolveExploreTab(null)).toBe('layers')
     expect(defaultTabForPrimary('map')).toBe('layers')
     expect(resolveExploreTab('graph')).toBe('graph')
+  })
+
+  // Unknown values share that fallback. Layers is the default map view:
+  // the force graph drew 850 files as a strip (2026-10-08 review).
+  it('falls back unknown tabs to layers', () => {
+    expect(resolveExploreTab('bogus')).toBe('layers')
+  })
+})
+
+describe('primary groups', () => {
+  it('resolves knowledge as understand primary', () => {
+    expect(resolveExploreTab('knowledge')).toBe('knowledge')
+    expect(primaryTabOf('knowledge')).toBe('understand')
+  })
+
+  it('defaults understand primary to ask', () => {
+    expect(defaultTabForPrimary('understand')).toBe('ask')
   })
 })

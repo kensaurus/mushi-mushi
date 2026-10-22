@@ -10,7 +10,6 @@
  * - NAV_SECTION_META: the Advanced sections, one per step of the vibe-coding
  *   cycle (ADR 0027): 1 Connect, 2 Bugs, 3 Fix, 4 Verify, 5 Ship & watch,
  *   then Account
- * - SIMPLE_NAV_GROUPS: the Quick and Beginner sidebars, the same cycle
  * - CHECK_SUB_GROUPS: progressive-disclosure buckets inside Check (Advanced)
  * - buildStageRoutes / buildStaticRoutes: derived exports for pdca + palette
  *
@@ -127,73 +126,6 @@ export const CHECK_SUB_GROUPS: Record<
   },
 }
 
-/**
- * Quick and Beginner sidebars. They follow the same cycle as the Advanced
- * sections (ADR 0027): connect, bugs come in, fix, verify, ship and watch,
- * then account. Quick lists the core pages; Beginner adds a few next steps.
- * Advanced keeps every page under NAV_SECTION_META. Paths not in the
- * registry, or hidden by role/plan, are skipped; a group with no visible page
- * is not rendered (Quick has no Verify page).
- */
-export interface SimpleNavGroup {
-  id: string
-  title: string
-  /** Pages in Quick mode, in order. */
-  quick: readonly string[]
-  /** Pages in Beginner mode, in order (a superset of `quick`). */
-  beginner: readonly string[]
-}
-
-export const SIMPLE_NAV_GROUPS: readonly SimpleNavGroup[] = [
-  {
-    id: 'simple-connect',
-    title: 'Connect',
-    quick: ['/onboarding', '/connect', '/integrations/config'],
-    beginner: ['/onboarding', '/connect', '/integrations/config', '/mcp'],
-  },
-  {
-    id: 'simple-bugs',
-    title: 'Bugs',
-    quick: ['/dashboard', '/inbox', '/reports'],
-    beginner: ['/dashboard', '/inbox', '/reports'],
-  },
-  {
-    id: 'simple-fix',
-    title: 'Fix',
-    quick: ['/fixes'],
-    beginner: ['/fixes', '/repo', '/ux-runs'],
-  },
-  {
-    id: 'simple-verify',
-    title: 'Verify',
-    quick: [],
-    beginner: ['/qa-coverage', '/judge'],
-  },
-  {
-    id: 'simple-ship',
-    title: 'Ship & watch',
-    quick: ['/portfolio'],
-    beginner: ['/portfolio', '/notifications'],
-  },
-  {
-    id: 'simple-account',
-    title: 'Account',
-    quick: ['/settings', '/projects'],
-    beginner: ['/settings', '/projects', '/team', '/feedback'],
-  },
-]
-
-/** Quick-mode pages shown before the first bug has arrived (setup not done). */
-export const QUICK_PRE_SETUP_PATHS: ReadonlySet<string> = new Set([
-  '/onboarding',
-  '/connect',
-  '/reports',
-  '/inbox',
-  '/fixes',
-  '/integrations/config',
-  '/settings',
-])
-
 export const NAV_SECTION_META: Record<
   NavSectionId,
   {
@@ -212,31 +144,31 @@ export const NAV_SECTION_META: Record<
   }
 > = {
   start: {
-    title: '1 · Connect',
+    title: 'Connect',
     step: 1,
     hint: 'Install Mushi in your app and connect your editor, your tools and your coding agents.',
     defaultCollapsed: true,
   },
   plan: {
-    title: '2 · Bugs',
+    title: 'Bugs',
     step: 2,
     stage: 'P',
     hint: 'Your home page, your to-do list and the bugs your users and monitoring send in, sorted and grouped.',
   },
   do: {
-    title: '3 · Fix',
+    title: 'Fix',
     step: 3,
     stage: 'D',
     hint: 'Turn a bug into a draft pull request with its checks, and see what changed in your code.',
   },
   check: {
-    title: '4 · Verify',
+    title: 'Verify',
     step: 4,
     stage: 'C',
     hint: 'Prove the app works before you ship: scheduled tests, audits, app health, and how good the AI’s triage is.',
   },
   act: {
-    title: '5 · Ship & watch',
+    title: 'Ship & watch',
     step: 5,
     stage: 'A',
     hint: 'Ship it and keep watching: all your apps, releases, what reporters hear back, experiments and research.',
@@ -451,6 +383,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    id: 'nav:checks',
+    path: '/checks',
+    label: 'Checks',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'shield-check',
+    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, app health, audits, user stories, design, content and AI triage quality.',
+    paletteKeywords: ['checks', 'verify', 'quality', 'health', 'audit', 'tests', 'qa'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:fullstack-audit',
     path: '/fullstack-audit',
     label: 'Full-stack audit',
@@ -472,6 +416,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'pipeline',
     paletteDescription: 'What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed.',
     paletteKeywords: ['recipe', 'app recipe', 'blueprint', 'stack', 'design system', 'tokens', 'gates', 'ci', 'deploy', 'env', 'integrations', 'manifest', 'mushi.recipe.json'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:ci',
+    path: '/ci',
+    label: 'CI runners',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'gauge',
+    paletteDescription: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.',
+    paletteKeywords: ['ci', 'ci runners', 'runners', 'self-hosted', 'github actions', 'actions', 'queue', 'build queue', 'test machine', 'runner', 'slow ci', 'jobs'],
     paletteGroup: 'Check',
   },
   {
@@ -550,7 +506,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:portfolio',
     path: '/portfolio',
-    label: 'All apps',
+    label: 'Apps',
     sectionId: 'act',
     pdcaStage: 'act',
     iconKey: 'overview',
@@ -1117,7 +1073,7 @@ export function routeFallbackTitle(pathname: string): string | null {
 /**
  * IA decisions:
  * - Check hub: extend `/health?hub=check` (not a new `/check` route) — Health already owns integration telemetry.
- * - Oct 2026: Quick and Beginner use SIMPLE_NAV_GROUPS (no PDCA sections);
+ * - Oct 2026: one sidebar for every account — CORE_NAV_PATHS plus Labs (lib/labs.ts);
  *   Advanced keeps every page under plain section names. Overlapping pages
  *   stay separate but are named for what they do: Home (/dashboard, summary)
  *   vs To-do (/inbox, decisions) vs Improvement runs (/iterate); Bugs
@@ -1133,3 +1089,19 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   The six section ids stay, so only titles, order and membership moved; a
  *   moved page takes its stage, palette group and badge with it.
  */
+
+/**
+ * The nine sidebar pages every account has, in order (console audit
+ * 2026-10-20). Everything else is a Lab (lib/labs.ts) or palette-only.
+ */
+export const CORE_NAV_PATHS: readonly string[] = [
+  '/dashboard',
+  '/reports',
+  '/fixes',
+  '/portfolio',
+  '/connect',
+  '/integrations/config',
+  '/checks',
+  '/team',
+  '/settings',
+]

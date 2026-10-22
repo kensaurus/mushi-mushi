@@ -12,6 +12,8 @@
 
 import { useState } from 'react'
 import { useSendTestReport } from '../../lib/useSendTestReport'
+import { useRealtimeReload } from '../../lib/realtime'
+import { invalidateSetupStatus } from '../../lib/useSetupStatus'
 import { Btn, ResultChip, type ResultChipTone } from '../ui'
 import { ActionPill, ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 
@@ -37,6 +39,13 @@ function statusToTone(status: SendStatus): ResultChipTone {
 }
 
 export function FirstReportHero({ projectId, projectName, onReportSent }: Props) {
+  // Live "waiting for first report" state (audit 2026-10-20, Phase 2): the
+  // moment a report lands, every setup surface refreshes without a reload.
+  const { channelState } = useRealtimeReload(
+    [{ table: 'reports', event: 'INSERT', filter: `project_id=eq.${projectId}` }],
+    invalidateSetupStatus,
+    { debounceMs: 1000 },
+  )
   const sendTestReport = useSendTestReport()
   const [status, setStatus] = useState<SendStatus>('idle')
   const [sentAt, setSentAt] = useState<string | null>(null)
@@ -74,6 +83,12 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
             <p className="text-2xs text-fg-secondary leading-snug max-w-prose">
               Your SDK is wired up, but no real users have flagged a bug yet. Fire a synthetic
               report so you can watch one full Plan → Do → Check loop without waiting on traffic.
+            </p>
+            <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-fg-muted" aria-live="polite">
+              <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
+              {channelState === 'live'
+                ? 'Waiting for your first report — this page updates by itself when one lands.'
+                : 'Waiting for your first report — refresh after sending one.'}
             </p>
           </ContainedBlock>
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">

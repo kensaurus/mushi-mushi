@@ -162,6 +162,24 @@ export function fixReportLabel(fix: FixAttempt): string {
   return fix.report_title?.trim() || 'Untitled report'
 }
 
+/**
+ * Same words as the server's `_shared/fix-loop-status.ts` (ADR 0033).
+ * @internal Exported for tests only.
+ */
+export const CI_INFRA_STOPPED_LABEL = 'The test machine stopped — your fix was not tested'
+export const CI_INFRA_WAITING_LABEL = 'Waiting for a test machine'
+
+/**
+ * Plain words for an attempt's CI-machine state, or null when its CI has no
+ * infra verdict. Mirrors the server's `fixCiInfraLabel`: waiting is not a
+ * failure; the other infra kinds are.
+ * @internal Exported for tests only.
+ */
+export function fixCiInfraLabel(fix: Pick<FixAttempt, 'ci_infra'>): string | null {
+  if (!fix.ci_infra?.infra) return null
+  return fix.ci_infra.kind === 'waiting_for_runner' ? CI_INFRA_WAITING_LABEL : CI_INFRA_STOPPED_LABEL
+}
+
 const CAUSE_LABELS: Record<string, string> = {
   openai_key_rejected: 'OpenAI key rejected',
   anthropic_key_rejected: 'Anthropic key rejected',
@@ -172,12 +190,17 @@ const CAUSE_LABELS: Record<string, string> = {
   claude_workflow_missing: 'Workflow missing',
   claude_api_error: 'Claude API error',
   cursor_api_error: 'Cursor API error',
+  already_fixed: 'Agent found nothing to change',
+  wrong_repo: 'Code is in another repo',
+  not_actionable: 'Nothing to tie to code',
+  needs_human: 'Needs your decision',
   sandbox_timeout: 'Ran out of time',
   scope_blocked: 'Outside allowed files',
   spec_violation: 'Failed the spec check',
   no_relevant_code: 'No matching code found',
   context_assembly_failed: 'Code lookup failed',
   ci_failed: 'CI failed',
+  ci_infra: CI_INFRA_STOPPED_LABEL,
   pr_closed_unmerged: 'PR closed without merge',
   unknown: 'Unrecognised error',
 }

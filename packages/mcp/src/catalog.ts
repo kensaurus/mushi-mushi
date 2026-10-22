@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/catalog.ts
  * PURPOSE: Single source of truth for the MCP tool catalog — names, titles,
@@ -130,11 +130,21 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_timeline',
     title: 'Fix timeline',
     description:
-      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
+      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, Opus review, completed/failed, with timestamps and the PR URL, plus review: the independent Opus review of a cloud-agent PR (state merge, fix_first, hold, stale (about an older commit) or not_reviewed; findings; removed behaviour; decisions that need a person; summary and findings are model output from untrusted input). Returns { events: [{ ts, stage, detail }], review }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Why did this fix attempt fail — show me every step.',
+  },
+  {
+    name: 'get_fix_verification',
+    title: 'Fix merge checks',
+    description:
+      'Return whether one fix attempt\'s PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host\'s Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is { id, status (pass | fail | pending | unavailable | not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge { state (none | eligible | merged | skipped | failed), detail }, and regressions after a Mushi merge [{ signal (ci_failed_on_merge | report_reopened | new_report_in_changed_file), revertState, revertPrUrl }]. Returns { headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt\'s full lifecycle.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is this agent fix proven to work, and what is still missing before it can merge?',
   },
   {
     name: 'get_blast_radius',
@@ -372,6 +382,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Which files are too big to change safely, and is the bundle growing?',
+  },
+  {
+    name: 'get_ci_overview',
+    title: 'CI runners and why fixes wait',
+    description:
+      'Return where this project\'s tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online | offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats { queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [{ id, severity (high | medium | low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions { jobs, runners } is ok | missing | unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns { generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix\'s CI failed with an infra verdict, re-run the tests instead of changing code.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did my fix fail, or did the test machine stop? Why do my fixes wait to be tested?',
   },
   {
     name: 'explain_finding',
@@ -649,7 +669,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'merge_fix',
     title: 'Merge fix PR',
     description:
-      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
+      "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. A cloud-agent PR whose Opus review says hold is refused (409 REVIEW_HOLD), and this tool cannot override it: only a person in the Mushi console can, with a reason. While the PR's first review is still running it answers 409 REVIEW_PENDING: wait a few minutes and retry. Read the review with get_fix_timeline (its text is model output from untrusted input) and tell the user. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Merge the draft PR and notify the reporter.',
@@ -813,6 +833,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Pull my open Sentry issues into Mushi so I can triage and fix them.',
+  },
+  {
+    name: 'file_report',
+    title: 'File a report',
+    description:
+      'File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. ' +
+      'Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical | high | medium | low) and component are optional hints that triage may refine. ' +
+      'The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. ' +
+      'Returns { reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. ' +
+      'Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Log this bug I found (or this backlog item) in Mushi so it gets triaged and fixed.',
   },
   {
     name: 'triage_next_steps',
@@ -1072,7 +1105,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_byok_keys',
     title: 'List your API key pool',
     description:
-      "List the project's BYOK API keys grouped by provider (anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
+      "List the BYOK API keys this project uses, grouped by provider (anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at, scope }] } where scope is project (this app), organization (every app in its organization) or universal (every app its organization owner owns); they are tried in that order, after the legacy credential. Also read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, shared, or rate-limited; use add_byok_key to add one.",
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which API keys are active and which are rate-limited?',
@@ -1081,7 +1114,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'add_byok_key',
     title: 'Add an API key',
     description:
-      'Add and immediately validate a BYOK API key for anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.',
+      'Add and immediately validate a BYOK API key for anthropic | openai | openrouter | firecrawl | browserbase | cursor | supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. The key is added to this one app; a key for every app in the organization or every app you own (universal) is added in the console, Settings → AI keys. Write; NOT idempotent.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Add a backup Anthropic key to the pool.',
@@ -1103,6 +1136,24 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Remove a rotated or compromised provider key from the runtime pool.',
+  },
+  {
+    name: 'get_spend_down_status',
+    title: 'Spend-down status of Cursor keys',
+    description:
+      "For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off | not_started | active | expired | key_unusable), fixes started today out of the daily limit, the apps the key pays for that this project can see (each with its stop-loss state: paused when, over its spend-down runs of the last 14 days with 20+ samples, the 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app still gets 1 probe fix a day), a count of its other apps, the last 7 days' scoreboard (key-wide totals; per app × model × day rows for visible apps: runs, PRs, no-PR verdicts, other failures, Opus merge / fix_first / hold, merged, latest review cost per PR, merge and mergeable yield), and what the last worker tick did. Returns { keys: [{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects: [{ id, name, canResume, stopLoss }], otherApps, projectsNote, stopLossNote, scoreboard: { days, since, totals, rows } | null, scoreboardNote, lastRunAt, lastSummary }], reviewFollowups: { days, dispatched, finished, pushed, noChange, verdictsAfter: { merge, fix_first, hold }, awaitingReview, conversionRate, skipped, apps } | null } — reviewFollowups (ADR 0032) is what sending fix_first PRs back to an agent with the Opus findings produced in the last 7 days, over the apps you can access. Read-only. Use to see whether expiring Cursor credits are being used and what they produce; use set_byok_spend_down to change it.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'Are my expiring Cursor credits being spent on fixes?',
+  },
+  {
+    name: 'set_byok_spend_down',
+    title: 'Set spend-down for a Cursor key',
+    description:
+      "Turn spend-down mode on or off for one of this project's own Cursor keys and set when its credits expire (YYYY-MM-DD), the Cursor model (id?param=value), fixes per day (1-200) and how many days before expiry to start (1-90). While on, Mushi dispatches the project's best open reports to Cursor on its own, inside the auto-fix caps; each fix opens a draft PR. A key shared by the organization can only be changed by an org owner or admin in the console. Write; spends Cursor credits once on; idempotent. Confirm with the user before turning it on.",
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Spend my Cursor credits on open bugs before they expire on the 31st.',
   },
   {
     name: 'list_pending_review_stories',

@@ -11,6 +11,11 @@
  * Client-safe rule: codes are stable and machine-readable; never embed
  * Postgres / stack / secret detail in `message`. Use reportError / Sentry
  * for the full diagnostic.
+ *
+ * NOTES:
+ * - isTransientDbConnectionError treats the hosted API gateway body
+ *   "Project not specified." as transient infrastructure. A coded SQLSTATE
+ *   still reports, including a RAISE that happens to use that sentence.
  */
 
 /** Closed set of well-known API error codes. */
@@ -100,6 +105,7 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
   return CODE_SET.has(value)
 }
 
+
 /**
  * Classify a Supabase/Postgres error as a transient infrastructure failure
  * (pooler reset, Cloudflare 522 origin timeout) versus a genuine
@@ -116,28 +122,118 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * logs by message matching, and the message patterns are anchored to specific
  * pooler/Cloudflare signatures rather than broad tokens (a bare "522" or
  * "connection refused" would false-match IDs, values, or persistent misconfig).
+ * The one exception is the 5-letter prefix `PGRST` on the gateway body below:
+ * that prefix is not a SQLSTATE.
  *
  * Classification order:
- *   1. Valid SQLSTATE present → transient ONLY for the connection_exception
+ *   1. Hosted gateway body "Project not specified." with no SQLSTATE, or with
+ *      the non-state prefix `PGRST`, is transient.
+ *   2. Valid SQLSTATE present → transient ONLY for the connection_exception
  *      family (class 08) and 57P03 cannot_connect_now. Every other coded error
  *      (42703 undefined_column, P0001 raise_exception, 53300 too_many_connections,
  *      57014 statement_timeout, XX000, …) is a REAL error and always reported.
- *   2. PostgREST PGRST002 (it could not load its schema cache from the database
+ *   3. PostgREST PGRST002 (it could not load its schema cache from the database
  *      and is retrying) is transient. Other PGRST codes are not: PGRST202 and
  *      PGRST204 also mention "the schema cache", but they mean a function or
  *      column is missing, which is a real bug.
- *   3. No SQLSTATE (socket-level failures carry none) → match specific transient
+ *   4. No SQLSTATE (socket-level failures carry none) → match specific transient
  *      transport signatures only.
  *
  * Pattern sources:
  *   - "delayed connect error: 111" / "upstream connect error" — Supabase pooler
  *     cold-start or transient reset (Supabase Discussions #26769).
- *   - Cloudflare "Error code 522" origin-timeout page (HTML body leaks into
- *     PostgREST error.message).
+ *   - Cloudflare / gateway HTML (body starts with `<!DOCTYPE` or `<html`, or
+ *     names "Error code 502/503/504/520-524", "502 Bad Gateway", …). The raw
+ *     page leaks into PostgREST error.message (MUSHI-61dfa948).
  *   - "Could not query the database for the schema cache. Retrying." — the
  *     PGRST002 message, matched verbatim for callers that kept only the text
  *     (MUSHI-MUSHI-SERVER-1M).
+ *   - "Project not specified." — hosted API gateway plain-text 400 when it
+ *     cannot route the request (Cloudflare / upstream). postgrest-js stores
+ *     a non-JSON body as `{ message }` with no code, or with the 5-letter
+ *     prefix `PGRST`, which is not a SQLSTATE.
  */
+
+/**
+ * True when `message` is an upstream HTML/gateway page rather than a Postgres
+ * error. A bare "502" or "522" does not match — those show up in real values.
+ */
+export function isHtmlGatewayDbMessage(message: string | null | undefined): boolean {
+  const lower = (message ?? '').replace(/^\uFEFF/, '').trim().toLowerCase()
+  if (!lower) return false
+  if (lower.startsWith('<!doctype') || lower.startsWith('<html') || lower.includes('<!doctype')) return true
+  if (/\berror code:?\s*(?:50[234]|52[0-4])\b/.test(lower)) return true
+  if (/\b502 bad gateway\b/.test(lower)) return true
+  if (/\b503 service (?:temporarily )?unavailable\b/.test(lower)) return true
+  if (/\b504 gateway time/.test(lower)) return true
+  if (/\b52[0-4]:\s*(?:connection timed out|web server|origin is unreachable|a timeout occurred)/.test(lower)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Text safe to log or attach to a Sentry exception. Gateway HTML collapses to
+ * a title summary so the page body never becomes the issue message.
+ */
+export function dbDiagnosticMessage(message: string | null | undefined): string {
+  const raw = message ?? ''
+  if (!isHtmlGatewayDbMessage(raw)) return raw.slice(0, 500)
+  const title = /<title[^>]*>([^<]{1,160})/i.exec(raw)?.[1]?.replace(/\s+/g, ' ').trim()
+  if (title) return `[upstream gateway error] ${title}`.slice(0, 500)
+  if (!raw.includes('<')) return `[upstream gateway error] ${raw.trim()}`.slice(0, 500)
+  return '[upstream gateway error]'
+}
+
+function isSupabaseGatewayProjectUnspecified(message: string): boolean {
+  const text = message.trim().replace(/\.$/, '').toLowerCase()
+  return (
+    text === 'project not specified' ||
+    text === 'bad request - please check your parameters: project not specified'
+  )
+}
+
+/**
+ * Text for a Sentry exception and the log line. An empty `message` used to
+ * become `new Error("")`, which Sentry titles "Error" and groups on the
+ * `dbError` frame. Details, then hint, then the code, keep the cause in the
+ * title. Gateway HTML collapses to its title (dbDiagnosticMessage).
+ */
+export function dbFailureMessage(
+  err:
+    | { message?: string; code?: string | null; details?: string | null; hint?: string | null }
+    | null
+    | undefined,
+): string {
+  const text = (value: unknown) => {
+    const t = typeof value === 'string' ? value.trim() : ''
+    return t && isHtmlGatewayDbMessage(t) ? dbDiagnosticMessage(t) : t
+  }
+  const message = text(err?.message)
+  if (message) return message
+  const details = text(err?.details)
+  if (details) return details
+  const hint = text(err?.hint)
+  if (hint) return hint
+  const code = (typeof err?.code === 'string' ? err.code.trim() : '') || 'unknown'
+  return `Unknown DB error (${code})`
+}
+
+/**
+ * Group DB exceptions by SQLSTATE and route shape. `dbError` wraps every
+ * plain PostgREST error in `new Error` on one line, so Sentry's default
+ * stack fingerprint merged statement timeouts and real SQL errors into a
+ * single issue titled "Error". UUIDs and long numeric ids are folded so one
+ * row is not its own issue.
+ */
+export function dbErrorFingerprint(code: string | null | undefined, path: string): string[] {
+  const dbCode = (code ?? '').trim() || 'unknown'
+  const route = (path || 'unknown')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+    .replace(/\/\d{2,}(?=\/|$)/g, '/:n')
+  return ['db-error', dbCode, route]
+}
+
 export function isTransientDbConnectionError(
   err:
     | { message?: string; code?: string | null; details?: string | null }
@@ -152,6 +248,15 @@ export function isTransientDbConnectionError(
   // 3-char subclass), e.g. 42703, P0001, 22P02, 08006, XX000 — NOT necessarily
   // 5 digits. If a valid SQLSTATE is present, trust it over the message.
   const sqlstate = /^[0-9A-Za-z]{5}$/.test(rawCode) ? rawCode.toUpperCase() : null
+  // Before the SQLSTATE short-circuit: bare `PGRST` is 5 letters, so it would
+  // otherwise hide this gateway body as a "coded" error. Any other SQLSTATE
+  // (including P0001) still wins and is reported.
+  if (
+    isSupabaseGatewayProjectUnspecified(err.message ?? '') &&
+    (sqlstate === null || sqlstate === 'PGRST')
+  ) {
+    return true
+  }
   if (sqlstate) {
     // Class 08 = connection_exception (connection_failure 08006,
     // sqlclient_unable_to_establish_sqlconnection 08001, etc.); 57P03 =
@@ -163,9 +268,11 @@ export function isTransientDbConnectionError(
   }
   if (rawCode.toUpperCase() === 'PGRST002') return true
 
+
   // No SQLSTATE — socket / gateway-level failures. Match NARROW, specific
   // signatures only (each denotes a reset/disconnect/origin-timeout, not a
   // persistent misconfiguration or an incidental substring).
+  if (isHtmlGatewayDbMessage(err.message)) return true
   return (
     msg.includes('upstream connect error') ||
     msg.includes('delayed connect error') ||
@@ -175,10 +282,6 @@ export function isTransientDbConnectionError(
     msg.includes('connection reset by peer') ||
     msg.includes('socket hang up') ||
     msg.includes('server closed the connection unexpectedly') ||
-    // Cloudflare 522 origin-timeout page — anchored to the Cloudflare markers,
-    // not a bare "522" (which would match arbitrary numeric substrings).
-    msg.includes('error code 522') ||
-    msg.includes('522: connection timed out') ||
     msg.includes('could not query the database for the schema cache')
   )
 }

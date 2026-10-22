@@ -23,6 +23,7 @@ import {
   releaseForTicket,
 } from '../lib/supportTickets'
 import { FeedbackModal } from '../components/FeedbackModal'
+import { getMushiSelf, isMushiSelfEnabled, reportMushiBug } from '../lib/mushi-self'
 import { SupportTicketDetailModal } from '../components/support/SupportTicketDetailModal'
 import { FeedbackStatusBanner } from '../components/feedback/FeedbackStatusBanner'
 import { FeedbackSnapshotStrip } from '../components/feedback/FeedbackSnapshotStrip'
@@ -190,7 +191,7 @@ export function FeedbackPage() {
 
   usePublishPageContext({
     route: '/feedback',
-    title: 'Support',
+    title: 'Help & support',
     summary: `${activeTabMeta.label} · ${stats.totalTickets} submission${stats.totalTickets === 1 ? '' : 's'} · ${stats.activeTickets} active`,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.awaitingReply,
@@ -220,6 +221,13 @@ export function FeedbackPage() {
   )
 
   function openFeedback(type: 'bug' | 'feature') {
+    // Console bugs go to the dogfood SDK widget (one real report with console
+    // and network evidence); ideas and support questions go to the ticket
+    // modal. This was the beta strip's job until it was removed (2026-10-20).
+    if (type === 'bug' && (getMushiSelf() || isMushiSelfEnabled())) {
+      reportMushiBug({ category: 'bug' })
+      return
+    }
     setFeedbackType(type)
     setFeedbackOpen(true)
   }
@@ -246,10 +254,10 @@ export function FeedbackPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feedback">
       <PageHeaderBar
-        title={copy?.title ?? 'Support'}
+        title={copy?.title ?? 'Help & support'}
         projectScope={stats.projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About Support'}
+        helpTitle={copy?.help?.title ?? 'About Help & support'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A personal inbox for bugs and feature requests you file to the Mushi team. When we ship your idea, the release version appears on the row.'

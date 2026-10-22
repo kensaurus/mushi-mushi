@@ -3,11 +3,13 @@
  * PURPOSE: Resolve effective API keys for all BYOK providers
  *          (Bring-Your-Own-Key, Phase 0 multi-key pool).
  *
- * RESOLUTION ORDER (per provider):
- *   1. byok_keys table — ordered by priority ASC, skips cooldown/disabled/auth_failed
- *      Returns all active candidates for withLlmFailover() to iterate.
- *   2. project_settings.byok_<provider>_key_ref (legacy columns — back-compat)
- *   3. process.env.<PROVIDER>_API_KEY (host fallback)
+ * RESOLUTION ORDER (per provider; ADR 0023, extended by ADR 0031):
+ *   1. the app's own byok_keys rows, by priority (skips cooldown/disabled/auth_failed)
+ *   2. project_settings.byok_<provider>_key_ref (legacy column — back-compat)
+ *   3. its organization's shared byok_keys rows, by priority
+ *   4. universal byok_keys rows of its organization's owners, by priority
+ *   5. process.env.<PROVIDER>_API_KEY (platform fallback)
+ *   Every candidate is returned in that order for withLlmFailover() to iterate.
  *
  * SECURITY:
  *   - Logs the source ('byok' | 'env') and last-used timestamp; NEVER logs the
@@ -18,8 +20,17 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
-import { isRunnableByokPoolState, validateOpenAiBaseUrl } from './byok-validation.ts';
-import { keyOwnerFilter, ownKeysFirst, projectKeyOwner } from './byok-scope.ts';
+import { isRunnableByokPoolState, validateOpenAiBaseUrl, type ByokPoolLifecycleState } from './byok-validation.ts';
+import {
+  isMissingOwnerUserColumn,
+  keyOwnerFilter,
+  keyScopeFor,
+  ownKeysFirst,
+  ownerUserColumnReady,
+  projectKeyOwner,
+  type KeyOwner,
+  type KeyScope,
+} from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 
 const log = rootLog.child('byok');
@@ -53,6 +64,14 @@ export interface ResolvedKey {
   provider?: LlmProvider;
   /** Human label if set on the key row */
   label?: string;
+  /**
+   * True for a key the app does not own: its organization's shared key (ADR
+   * 0023) or a universal key of the organization's owner (ADR 0031). Both
+   * come after the app's own credentials, legacy included.
+   */
+  shared?: boolean;
+  /** Which pool the key came from; absent for the legacy and platform keys. */
+  scope?: KeyScope;
 }
 
 const ENV_VAR: Record<LlmProvider, string> = {
@@ -169,33 +188,69 @@ export async function resolveLlmKeys(
   provider: LlmProvider,
   opts: { openAiOnly?: boolean } = {},
 ): Promise<ResolvedKey[]> {
-  // The app's own keys always come before its organization's shared ones
-  // (ADR 0023): its pool keys (OpenAI, then OpenRouter), else its legacy
-  // credential; then the shared pool keys; the platform key last.
-  const pool = await byokPoolCandidates(db, projectId, provider);
+  // The app's own keys always come first (ADR 0023): its pool keys (OpenAI,
+  // then OpenRouter), else its legacy credential; then its organization's
+  // shared keys; then the universal keys of its organization's owners (ADR
+  // 0031); the platform key last.
+  const owner = await projectKeyOwner(db, projectId);
+  const pool = await byokPoolCandidates(db, owner, provider);
   const own = [...pool.own];
   const shared = [...pool.shared];
+  const universal = [...pool.universal];
   if (provider === 'openai' && !opts.openAiOnly) {
-    const router = await byokPoolCandidates(db, projectId, 'openrouter');
+    const router = await byokPoolCandidates(db, owner, 'openrouter');
     own.push(...router.own.map((c) => ({ ...c, provider: 'openrouter' as const })));
     shared.push(...router.shared.map((c) => ({ ...c, provider: 'openrouter' as const })));
+    universal.push(...router.universal.map((c) => ({ ...c, provider: 'openrouter' as const })));
   }
-  if (own.length > 0) return [...own, ...shared];
-  const legacy = await legacyCandidates(db, projectId, provider);
-  if (legacy.length > 0 || shared.length > 0) return [...legacy, ...shared];
-  return envCandidates(projectId, provider);
+  return orderCandidates({
+    own,
+    legacy: own.length > 0 ? [] : await legacyCandidates(db, projectId, provider),
+    shared,
+    universal,
+    env: () => envCandidates(projectId, provider),
+  });
 }
 
 /**
- * Step 1: the byok_keys rows the project may use for one provider: its own
- * and its organization's shared keys (ADR 0023), each by priority.
+ * The five steps in order. The platform key is used only when the app has no
+ * key at all: not its own, legacy, shared or universal.
+ */
+export function orderCandidates(c: {
+  own: ResolvedKey[];
+  legacy: ResolvedKey[];
+  shared: ResolvedKey[];
+  universal: ResolvedKey[];
+  env: () => ResolvedKey[];
+}): ResolvedKey[] {
+  const out = [...(c.own.length > 0 ? c.own : c.legacy), ...c.shared, ...c.universal];
+  return out.length > 0 ? out : c.env();
+}
+
+/** One byok_keys row as the resolver reads it. */
+interface PoolRow extends ByokPoolLifecycleState {
+  id: string;
+  project_id: string | null;
+  organization_id?: string | null;
+  owner_user_id?: string | null;
+  vault_secret_id: string | null;
+  label: string | null;
+  priority: number | null;
+  base_url: string | null;
+}
+
+/**
+ * Steps 1, 3 and 4: the byok_keys rows the project may use for one provider:
+ * its own, its organization's shared keys (ADR 0023) and its organization
+ * owners' universal keys (ADR 0031), each group by priority.
  */
 async function byokPoolCandidates(
   db: SupabaseClient,
-  projectId: string,
+  owner: KeyOwner,
   provider: LlmProvider,
-): Promise<{ own: ResolvedKey[]; shared: ResolvedKey[] }> {
+): Promise<{ own: ResolvedKey[]; shared: ResolvedKey[]; universal: ResolvedKey[] }> {
   const nowMs = Date.now();
+  const projectId = owner.projectId;
 
   // Step 1: byok_keys table — ordered candidates, skip cooled-down entries.
   // Include 'quota_exhausted' so a key that hit a 429 can re-enter the pool
@@ -203,19 +258,28 @@ async function byokPoolCandidates(
   // keys that are still cooling). Without this, a single 429 would drop the
   // key permanently until a human re-enabled it. 'auth_failed' and 'disabled'
   // stay excluded — those require explicit operator action to recover.
-  const owner = await projectKeyOwner(db, projectId);
-  const { data: rawRows } = await db
-    .from('byok_keys')
-    .select('id, project_id, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url')
-    .or(keyOwnerFilter(owner))
-    .eq('provider_slug', provider)
-    .in('status', ['active', 'quota_exhausted'])
-    .in('test_status', ['ok', 'error_quota'])
-    .order('priority', { ascending: true });
-  const keyRows = rawRows ? ownKeysFirst(rawRows) : rawRows;
+  const readPool = (o: KeyOwner, withUniversal: boolean) =>
+    db
+      .from('byok_keys')
+      .select(
+        `id, project_id, organization_id${withUniversal ? ', owner_user_id' : ''}, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url`,
+      )
+      .or(keyOwnerFilter(o))
+      .eq('provider_slug', provider)
+      .in('status', ['active', 'quota_exhausted'])
+      .in('test_status', ['ok', 'error_quota'])
+      .order('priority', { ascending: true });
+  let { data: rawRows, error: poolError } = await readPool(owner, await ownerUserColumnReady(db));
+  if (poolError && isMissingOwnerUserColumn(poolError)) {
+    // Functions deployed before migration 20261021051628: no universal keys yet.
+    ({ data: rawRows, error: poolError } = await readPool({ ...owner, universalUserIds: [] }, false));
+  }
+  if (poolError) log.warn('byok_keys read failed', { projectId, provider, error: poolError.message });
+  const keyRows = rawRows ? ownKeysFirst(rawRows as unknown as PoolRow[]) : null;
 
   const own: ResolvedKey[] = [];
   const shared: ResolvedKey[] = [];
+  const universal: ResolvedKey[] = [];
 
   if (keyRows && keyRows.length > 0) {
     for (const row of keyRows) {
@@ -225,6 +289,11 @@ async function byokPoolCandidates(
       // A malformed cooldown is contained by treating the row as non-runnable.
       if (!isRunnableByokPoolState(row, nowMs)) continue;
       if (!row.vault_secret_id) continue;
+      // Cross-tenant guard: a row this project may not use is dropped even if
+      // the query returned it (a universal key whose owner does not own this
+      // project's organization never serves it).
+      const scope = keyScopeFor(row, owner);
+      if (!scope) continue;
 
       const ref = `vault://${row.vault_secret_id}`;
       const dereffed = await dereferenceKey(db, ref);
@@ -253,19 +322,21 @@ async function byokPoolCandidates(
         } else if (provider === 'openrouter') {
           baseUrl = OPENROUTER_BASE_URL;
         }
-        (row.project_id ? own : shared).push({
+        (scope === 'project' ? own : scope === 'organization' ? shared : universal).push({
           keyId: row.id,
           key: dereffed,
           source: 'byok',
           hint: hint(dereffed),
           baseUrl,
           label: row.label ?? undefined,
+          scope,
+          ...(scope === 'project' ? {} : { shared: true }),
         });
       }
     }
   }
 
-  return { own, shared };
+  return { own, shared, universal };
 }
 
 /** Steps 2 and 3: the legacy single-key column, then the platform key. */
@@ -401,7 +472,8 @@ export async function markKeyUsed(
       .from('byok_keys')
       .update({ last_used_at: usedAt })
       .eq('id', keyId)
-      // The key may be the organization's shared key (ADR 0023).
+      // The key may be the organization's shared key (ADR 0023) or a
+      // universal key of its owner (ADR 0031).
       .or(keyOwnerFilter(await projectKeyOwner(db, projectId)));
     if (error) {
       log.warn('Failed to update pooled BYOK last-used timestamp', {

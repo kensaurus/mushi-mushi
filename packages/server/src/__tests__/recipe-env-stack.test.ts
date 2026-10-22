@@ -35,6 +35,18 @@ describe('stackFromPackageJsons', () => {
 
   it('prefers Next.js over Vite in the same file (a Next app with Vite for tests)', () => {
     expect(stackFromPackageJsons([pkg({ next: '15', '@mushi-mushi/web': '^1' }, { vite: '^6' })])).toBe('nextjs')
+    expect(requiredCiVarNames('nextjs').map((v) => v.name)).toEqual([
+      'NEXT_PUBLIC_MUSHI_PROJECT_ID',
+      'NEXT_PUBLIC_MUSHI_API_KEY',
+    ])
+  })
+
+  it('prefers Nuxt over Vite so a Nuxt app is not told to set VITE_ names', () => {
+    expect(stackFromPackageJsons([pkg({ nuxt: '^3', '@mushi-mushi/vue': '^1' }, { vite: '^6' })])).toBe('nuxt')
+    expect(requiredCiVarNames('nuxt').map((v) => v.name)).toEqual([
+      'NUXT_PUBLIC_MUSHI_PROJECT_ID',
+      'NUXT_PUBLIC_MUSHI_API_KEY',
+    ])
   })
 
   it('reads a Vite app, including a Capacitor shell over Vite', () => {

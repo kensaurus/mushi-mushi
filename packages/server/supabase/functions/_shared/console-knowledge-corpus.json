@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-14T02:13:51.208Z",
+  "generatedAt": "2026-10-21T11:27:40.640Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -219,6 +219,15 @@
       "content_hash": "218c8a602c212f9129e07c6287e956f18ec2ca6fd92b9135b9cf913539345506"
     },
     {
+      "doc_path": "pages/checks.md",
+      "section": "main",
+      "title": "Checks",
+      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, app health, audits, user stories, design, content and AI triage quality.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
+      "route_path": "/checks",
+      "kind": "page",
+      "content_hash": "7645befc57a0e7cb0720677e82fff54cee2651bc138c5af8b565d9292a40e5bf"
+    },
+    {
       "doc_path": "pages/fullstack-audit.md",
       "section": "main",
       "title": "Full-stack audit",
@@ -235,6 +244,15 @@
       "route_path": "/recipe",
       "kind": "page",
       "content_hash": "5dee8b49078a7d61b216d6bae02417d4235a5bd221562e85caff0648963e71b7"
+    },
+    {
+      "doc_path": "pages/ci.md",
+      "section": "main",
+      "title": "CI runners",
+      "body": "# CI runners\n\nWhere your tests run, how long they wait for a machine, and what slows your fixes down.\n\nRoute: /ci\nSection: Check\n\nKeywords: ci, ci runners, runners, self-hosted, github actions, actions, queue, build queue, test machine, runner, slow ci, jobs\n\nUse this page when the user asks about: ci, ci runners, runners, self-hosted, github actions, actions",
+      "route_path": "/ci",
+      "kind": "page",
+      "content_hash": "065ce88af30e0b627cb54bb0c2eede80d67aa943f55991482936336b946740a3"
     },
     {
       "doc_path": "pages/health.md",
@@ -293,11 +311,11 @@
     {
       "doc_path": "pages/portfolio.md",
       "section": "main",
-      "title": "All apps",
-      "body": "# All apps\n\nEvery app in this team side by side: setup state, open bugs, SDK version and problems to fix once across apps.\n\nRoute: /portfolio\nSection: Act\n\nKeywords: portfolio, all apps, apps, fix once, sdk skew, sdk version, radar, holes, team, organization\n\nUse this page when the user asks about: portfolio, all apps, apps, fix once, sdk skew, sdk version",
+      "title": "Apps",
+      "body": "# Apps\n\nEvery app in this team side by side: setup state, open bugs, SDK version and problems to fix once across apps.\n\nRoute: /portfolio\nSection: Act\n\nKeywords: portfolio, all apps, apps, fix once, sdk skew, sdk version, radar, holes, team, organization\n\nUse this page when the user asks about: portfolio, all apps, apps, fix once, sdk skew, sdk version",
       "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "5ae2adf534bcd73aa1e075ea689f885d4dcde5e3ac7966b09abcaea3b20c82e5"
+      "content_hash": "48b723358d0fb8878146c4bd293406666aa9a12aa2ab7cadc50b50709c3fbc19"
     },
     {
       "doc_path": "pages/releases.md",

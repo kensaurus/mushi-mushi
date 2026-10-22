@@ -294,15 +294,55 @@ describe('applyCloudAgentOutcome', () => {
     expect(mocks.dispatchPluginEventDetached).toHaveBeenCalledWith(db, PROJECT, 'fix.failed', expect.anything())
   })
 
-  it('completed_no_pr: job goes to completed_no_pr and the github agent gets a github_* category', async () => {
+  it('completed_no_pr: job goes to completed_no_pr, filed as unknown rather than an API error', async () => {
     const { db, queries } = createFakeDb((q) => {
       if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
       return { data: null }
     })
     const res = await applyCloudAgentOutcome(db, { ...TARGET, agent: 'github_cloud_agent' }, { kind: 'completed_no_pr' })
     expect(res).toEqual({ applied: true })
-    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'github_other_error' })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'unknown' })
     expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'completed_no_pr' })
+  })
+
+  it('completed_no_pr with an "already fixed" summary: own category, skipped job, no retry bait', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
+      return { data: null }
+    })
+    const summary = 'This crash is already fixed on `main`. I did not open a pull request.'
+    const res = await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary })
+    expect(res).toEqual({ applied: true })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({
+      status: 'failed',
+      failure_category: 'already_fixed',
+      error: 'Agent found nothing to change: This crash is already fixed on main.',
+      summary,
+    })
+    expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'skipped' })
+    expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({ label: 'Agent found nothing to change' })
+    expect(mocks.notifyTeamFixEvent).toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_failed', expect.objectContaining({ failureCategory: 'already_fixed' }))
+  })
+
+  it('completed_no_pr with notes but no verdict is unknown, not cursor_api_error (2026-10-21)', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    await applyCloudAgentOutcome(db, TARGET, {
+      kind: 'completed_no_pr',
+      summary: "I couldn't find which query timed out, so I didn't open a pull request. A guessed index would not fix this report.",
+    })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({
+      failure_category: 'unknown',
+      error: "Cloud agent finished without opening a pull request. Its notes: I couldn't find which query timed out, so I didn't open a pull request.",
+    })
+  })
+
+  it('completed_no_pr with a "not in this repository" summary is wrong_repo', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    await applyCloudAgentOutcome(db, TARGET, {
+      kind: 'completed_no_pr',
+      summary: 'The payout fee check is not in this repository, so I did not open a pull request.',
+    })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'wrong_repo' })
   })
 
   it('pr_opened with a notes-only PR: attempt needs investigation, report NOT moved to fixing', async () => {
@@ -689,6 +729,19 @@ describe('resolveCursorApiKey', () => {
 
     const { db: db3 } = createFakeDb(() => ({ data: null }))
     expect(await resolveCursorApiKey(db3, PROJECT)).toBe('crsr_env')
+  })
+
+  it("ADR 0023: the app's legacy key beats an organization's shared key, which beats env", async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ key: 'crsr_shared', source: 'byok', hint: 'shrd', shared: true })
+    const { db } = createFakeDb((q) => {
+      if (q.table === 'project_settings') return { data: { cursor_api_key_ref: 'vault://sec-cursor' } }
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_project' }
+      return { data: null }
+    })
+    expect(await resolveCursorApiKey(db, PROJECT)).toBe('crsr_project')
+
+    const { db: noLegacy } = createFakeDb(() => ({ data: null }))
+    expect(await resolveCursorApiKey(noLegacy, PROJECT)).toBe('crsr_shared')
   })
 })
 
