@@ -41,7 +41,7 @@
  * aborts at 90 s. Merges of one app run one at a time, so the daily cap holds.
  *
  * Auth: `requireServiceRoleAuth`. Invoked by pg_cron `mushi-fix-verifier`
- * (migration 20261021230000, `4-54/10 * * * *`) and by
+ * (migration 20261022010615, `4-54/10 * * * *`) and by
  * POST /v1/admin/fixes/:id/verify.
  */
 
