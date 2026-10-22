@@ -384,6 +384,21 @@ export interface DesignActionSettingsView {
   canEdit: boolean
 }
 
+/**
+ * POST /v1/admin/projects/:id/design/dispatch-findings — the newest scan's
+ * existing findings sent to the agent, one report per file (token-definition
+ * files never), through the automatic (capped) dispatch.
+ */
+export interface DesignFindingsDispatchResult {
+  action: 'dispatched' | 'nothing_to_send' | 'no_scan' | 'budget_reached'
+  /** budget_reached: why the auto-fix caps leave no room today. */
+  reason?: string
+  runId?: string
+  sent?: Array<{ file: string; reportId: string; findings: number; dispatchId: string | null; refused: { code?: string; message?: string } | null }>
+  remainingFiles?: number
+  skipped?: { tokenDefinition: number; noFile: number; info: number; alreadyOpen: number }
+}
+
 export interface DesignEditability {
   enabled: boolean
   /** Why editing is off: no manifest, export-only tokens, no GitHub token. */

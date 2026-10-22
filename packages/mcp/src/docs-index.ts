@@ -1146,7 +1146,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/operating/ci-runners",
     markdown: "operating/ci-runners.md",
     keywords: ["operating", "ci-runners", "runners", "ci"],
-    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "Machine health: heartbeat and job hooks", "The runner key", "What is sent, and what never is", "Add your own machine as a runner", "Is it worth it?"],
+    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "What CI costs, and where it should run", "Why it costs what it costs", "Your figures", "Advice", "Machine health: heartbeat and job hooks"],
     excerpt: "See where your tests run and why a fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.",
   },
   {
@@ -1542,7 +1542,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/cli",
     markdown: "sdks/cli.md",
     keywords: ["sdks", "cli", "@mushi-mushi/cli"],
-    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "Reporter updates held for review", "Agentic fixes"],
+    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "File a report yourself", "Reporter updates held for review"],
     excerpt: "Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.",
   },
   {

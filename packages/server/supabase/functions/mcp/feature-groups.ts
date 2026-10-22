@@ -64,6 +64,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_report_evidence: 'triage',
   triage_issue: 'triage',
   import_sentry_issues: 'triage',
+  file_report: 'triage',
   query_lessons: 'triage',
   list_lessons: 'triage',
   suggest_fix: 'triage',
