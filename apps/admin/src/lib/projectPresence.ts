@@ -3,8 +3,9 @@
  * PURPOSE: Remember, per browser, whether this account owns a project, so a
  *          failed or pending `/v1/admin/setup` fetch never flips the shell
  *          into the "create your first project" state (console audit
- *          2026-10-20, B1). Kept apart from useSetupStatus so supabase.ts can
- *          clear it on sign-out without an import cycle.
+ *          2026-10-20, B1). Page stats banners share it through
+ *          statsWithProjectPresence (B1a). Kept apart from useSetupStatus so
+ *          supabase.ts can clear it on sign-out without an import cycle.
  */
 
 /**
@@ -58,4 +59,19 @@ export function deriveHasAnyProject(
 ): { hasAnyProject: boolean; resolved: boolean } {
   if (response) return { hasAnyProject: response.has_any_project, resolved: true }
   return { hasAnyProject: remembered ?? true, resolved: false }
+}
+
+/**
+ * Fill a page's empty stats while its request is pending or failed.
+ * A resolved payload is merged over `empty` and wins, including
+ * `hasAnyProject: false`. With no payload, the remembered answer stands in,
+ * and with nothing remembered we assume a project exists — the same rule as
+ * `deriveHasAnyProject` — so the banner does not say "create a project first".
+ */
+export function statsWithProjectPresence<T extends { hasAnyProject: boolean }>(
+  data: T | null | undefined,
+  empty: T,
+): T {
+  if (data) return { ...empty, ...data }
+  return { ...empty, hasAnyProject: readRememberedHasAnyProject() ?? true }
 }
