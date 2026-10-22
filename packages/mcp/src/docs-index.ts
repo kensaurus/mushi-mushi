@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 212 pages, generated from llms.txt. */
+/** 214 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -95,6 +95,24 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "billing"],
     headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity", "Related docs"],
     excerpt: "The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.",
+  },
+  {
+    title: "Checks",
+    url: docUrl("/admin/checks"),
+    route: "/admin/checks",
+    markdown: "admin/checks.md",
+    keywords: ["admin", "checks"],
+    headings: ["App checks", "AI quality"],
+    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+  },
+  {
+    title: "CI runners",
+    url: docUrl("/admin/ci"),
+    route: "/admin/ci",
+    markdown: "admin/ci.md",
+    keywords: ["admin", "ci", "runners"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "When nothing has reported in", "Related pages"],
+    excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {
     title: "CLI device auth",
@@ -867,8 +885,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/open-source",
     markdown: "concepts/open-source.md",
     keywords: ["concepts", "open-source", "open", "source", "licensing"],
-    headings: ["Open-core, one repo", "Why MIT for the SDK?", "Why AGPLv3 for the server?", "No lock-in", "What's paid and what's free", "Run it yourself", "Trademarks"],
-    excerpt: "What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.",
+    headings: ["Open-core, one repo", "Why MIT for the SDK?", "Why AGPLv3 for the server?", "Why AGPLv3 for the console?", "What the hosted service keeps", "Contributing", "No lock-in", "What's paid and what's free"],
+    excerpt: "What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps.",
   },
   {
     title: "Connecting your orchestrator (MCP / A2A / REST / AG-UI)",
@@ -1542,7 +1560,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/cli",
     markdown: "sdks/cli.md",
     keywords: ["sdks", "cli", "@mushi-mushi/cli"],
-    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "Reporter updates held for review", "Agentic fixes"],
+    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "File a report yourself", "Reporter updates held for review"],
     excerpt: "Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.",
   },
   {

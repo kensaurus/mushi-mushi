@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 212
+Pages: 214
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -4570,18 +4570,19 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/open-source
 
 ---
 title: Open source & licensing
-description: What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.
+description: What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps.
 ---
 
 # Open source & licensing
 
 Mushi is **open by default**. The cloud product at `kensaur.us/mushi-mushi/` runs the
-exact same code in this repository — there is no closed-source "enterprise"
-fork. What you self-host is what we run.
+same code as this repository — there is no closed-source "enterprise" fork. What you
+self-host is what we run; the hosted service adds only its own tuning data
+([what that means](#what-the-hosted-service-keeps)).
 
   **TL;DR** — Mushi is **open-core** (the Supabase / Grafana model). The SDKs you
-  embed in your app are **MIT** (use them anywhere, open or closed). The server you
-  self-host is **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
+  embed in your app are **MIT** (use them anywhere, open or closed). The server and
+  console you self-host are **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
   modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)).
   A small **enterprise-edition** boundary (`packages/server/ee/`) is source-available
   but commercial for production use. The wedge — capture, diagnosis, fix, self-host,
@@ -4591,8 +4592,10 @@ fork. What you self-host is what we run.
 
 | Surface | License | What you can do |
 | --- | --- | --- |
-| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `brand`, `marketing-ui` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
+| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `marketing-ui`, and the code and design tokens in `brand` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
 | **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
+| **Console** — `apps/admin` (and the tester portal, `apps/testers`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/apps/admin/LICENSE) | Same terms as the server. AGPLv3 since Oct 22, 2026; copies from before that date stay MIT. |
+| **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi. Not as your own app's identity. |
 | **Enterprise edition** — `packages/server/ee/` (SAML/OIDC SSO, audit export, retention CRUD, region pinning, SOC 2 evidence pack) | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
 | **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
 
@@ -4612,6 +4615,39 @@ funded by managed cloud hosting and a small commercial **enterprise edition**
 
 Need to run modified Mushi as multi-tenant SaaS without publishing server changes?
 See [COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+
+### Why AGPLv3 for the console?
+
+The console is the product you look at every day. Under MIT, anyone could put a new
+name on it and ship it closed next to the open server. Under AGPLv3 you can still
+self-host it, change it and fork it; if you offer a modified console to other people
+as a service, you publish your changes. Nothing in the MIT SDKs imports console code,
+so embedding the SDK is unaffected.
+
+## What the hosted service keeps
+
+Mushi Cloud runs the code in this repository. Going forward it also keeps **its own
+tuning data**, as configuration in its database rather than code in the repo:
+
+- prompt wording tuned on live traffic (the [Prompt Lab](/admin/prompt-lab) stores the same
+  kind of override for your project),
+- the evaluation sets that tuning is measured against,
+- judge scoring weights, and later adjustments to spend-down thresholds.
+
+The repository keeps **working default prompts**, the default scoring weights, the
+spend-down defaults and the test fixtures, so a self-hosted stack has every feature and
+runs end to end. Your stack can word a diagnosis a little differently from the hosted one,
+because its prompts are the defaults or your own. We used to say the cloud runs
+"provably the same code"; the exact version is: **the same code; the hosted service
+carries its own tuning data.**
+
+## Contributing
+
+Outside pull requests come in under a [Contributor License Agreement](https://github.com/kensaurus/mushi-mushi/blob/master/CLA.md),
+signed once by replying to the CLA bot on your pull request. You keep the copyright. The CLA
+lets the maintainer keep the licensing above coherent and offer the commercial license,
+and it promises your contribution stays available under MIT or an OSI-approved license.
+See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTRIBUTING.md).
 
 ## No lock-in
 
@@ -4646,8 +4682,12 @@ Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 class
 ## Trademarks
 
 The code is open source; the **name and logo are not**. "Mushi Mushi", the
-mushi-chan mascot, and the wordmark are trademarks. Fork the code freely, but
-ship your fork under your own brand — don't imply it's the official Mushi.
+mushi-chan mascot, the bug logo and the wordmark are trademarks. They are not
+registered yet. The logo files, app icons and mascot art are all rights reserved.
+You may use the unmodified logo to refer or link to Mushi (an article, a "works with
+Mushi" note, an integrations page). Fork the code freely, but ship your fork under
+your own name and logo — don't imply it's the official Mushi. Details:
+[TRADEMARK.md](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md).
 
 ---
 
@@ -13013,7 +13053,7 @@ description: Run the whole Mushi Mushi stack yourself with one command — Docke
 
 # Self-hosting
 
-Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the exact same code in this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is the same binary that powers Mushi Cloud.
+Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
   **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 
@@ -13206,7 +13246,9 @@ Postgres locally? Skip Compose and follow the
 [Admin SPA deploy](/self-hosting/admin-spa).
 
   Same code, either way. Mushi Cloud runs this exact stack — there is no
-  closed-source plus-tier. See [Open source & licensing](/concepts/open-source).
+  closed-source plus-tier. The hosted service adds only its own tuning data
+  (prompts and scoring weights kept as configuration); the repo's default
+  prompts give you every feature. See [Open source & licensing](/concepts/open-source).
 
 ---
 
@@ -14709,6 +14751,8 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
+**Update, Oct 22, 2026.** Two changes since this post, both in [Open source & licensing](/concepts/open-source). The console (`apps/admin`) is now AGPLv3 too, so a rebranded console can't ship closed. And we now say it more exactly: Mushi Cloud runs the same code, and carries its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo keeps working default prompts, so self-hosting stays free and complete.
+
 ## The honest "open source" claim
 
 We can now say "the server is open source" and mean it. The SDKs were always MIT. The distinction is: SDK = embed anywhere; server = copyleft when you SaaS a modified version.
@@ -15081,7 +15125,8 @@ This section is for **maintainers** running Mushi Cloud or shipping the open-sou
 SDK packages — not for app developers integrating the SDK. If you are integrating
 Mushi into your app, start at [Quickstart](/quickstart) instead.
 
-  Mushi is **OSS-first**: the hosted product runs the exact same code in this repo.
+  Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
+  tuning data (prompts and scoring weights kept as configuration).
   Self-hosters can reuse every deploy path described here. See [Self-hosting](/self-hosting).
 
 ## What lives here
@@ -16083,6 +16128,119 @@ mushi billing cap 0      # clear override → plan default
 
 - [Public pricing](/pricing) — plan table, estimator, example bills, FAQ
 - [Self-hosting](/self-hosting) — unlimited diagnoses with your own LLM key
+
+---
+
+## Checks
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/checks
+
+---
+title: Checks
+description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+---
+
+# Checks
+
+**Route:** `/checks`
+
+Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+
+## App checks
+
+Is the app itself sound: scheduled tests, user stories, audits, its blueprint, app health, design tokens and content.
+
+| Card | Route | What it covers |
+| --- | --- | --- |
+| [Scheduled tests](/admin/qa-coverage) | `/qa-coverage` | Browser tests of your user stories that run on a schedule and alert when one breaks. |
+| [App health](/admin/health) | `/health` | Whether your integrations and background jobs are working: uptime, errors and failed checks. |
+| [CI runners](/admin/ci) | `/ci` | Where your tests run, how long they wait for a machine, and what slows your fixes down. |
+| [Full-stack audit](/admin/fullstack-audit) | `/fullstack-audit` | An end-to-end audit across the frontend, the API and the database. |
+| [User stories](/admin/inventory) | `/inventory` | The things users can do in your app, found by crawling it, and which ones broke. |
+| App blueprint | `/recipe` | What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed. |
+| Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
+| [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
+
+## AI quality
+
+How good the AI's triage is: grading, lessons learned and the prompts behind it.
+
+| Card | Route | What it covers |
+| --- | --- | --- |
+| [Triage grading](/admin/judge) | `/judge` | A second AI grades how well each bug was triaged and flags where it disagrees with the first. |
+| [Lessons](/admin/lessons) | `/lessons` | Patterns learned from past bugs and fixes. |
+| [AI prompts](/admin/prompt-lab) | `/prompt-lab` | Edit and compare the prompts that turn bug reports into pull requests. |
+
+---
+
+## CI runners
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/ci
+
+---
+title: CI runners
+description: The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
+---
+
+# CI runners
+
+**Route:** `/ci`
+
+Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
+
+The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
+
+A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
+
+## Test machine or your code
+
+A lost runner, a job still waiting for a runner, and a queue that expired are the test machine. They are never a code failure. The page labels them **Test machine stopped**. **Tests failed** means a step failed while a machine was running your code.
+
+Re-run a job the test machine stopped. Open the fix for a job whose tests failed. The line at the top says what needs you: a job has been waiting a long time for a machine, most failures are the test machine, some jobs failed on the code, or every finished job passed.
+
+## Queue and wait
+
+**Queue** is every job, from waiting for a machine to finished.
+
+| Column | Meaning |
+| --- | --- |
+| **Waiting** | Waiting for a free test machine. A long column means too few machines. |
+| **Running** | On a test machine now. |
+| **Finished** | Finished in the last 2 hours. Filter to **Tests failed**, **Test machine stopped**, or **Passed**. |
+
+Above the queue: how many are waiting now, how many are running, the typical wait for a machine, and the typical run time. The wait also names the slow tail, the 1 job in 20 that waits longer. A bar splits the jobs from the last 7 days into passed, tests failed, test machine stopped, and cancelled, skipped or still going.
+
+**Timeline** is one row per test machine. Gaps are idle time. Striped bars are jobs waiting for a machine.
+
+## Runner map
+
+**Runner map** is your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click a card for its health and recent jobs.
+
+Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
+
+## What would make fixes land sooner
+
+**Speed it up** lists changes that would land your fixes sooner, each with the evidence and a copy-ready fix.
+
+**Slow jobs** is the jobs and steps that take the longest.
+
+**Stopped by the test machine** lists jobs that never finished testing. Re-run them.
+
+## When nothing has reported in
+
+The page stays empty until GitHub reports a job for this app's repositories, or a machine that runs your tests reports in. On that machine, run:
+
+```bash
+mushi runner key
+mushi runner hooks install --dir <runner dir>
+```
+
+Host health arrives through `mushi runner heartbeat` and the job hooks, as `POST /v1/ingest/runner` with a `runner:write` key only. The setup steps are in [CI runners](/operating/ci-runners).
+
+## Related pages
+
+- [Checks](/admin/checks) — CI runners as one of the automatic checks
+- [Fixes](/admin/fixes) — the pull request a job was testing
 
 ---
 

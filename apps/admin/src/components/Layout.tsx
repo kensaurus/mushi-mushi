@@ -23,6 +23,7 @@ import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
+import { ProjectScopeNotice } from './ProjectScopeNotice'
 import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
@@ -847,6 +848,7 @@ export function Layout({ children }: { children: ReactNode }) {
               data-page-width={pageShellWidth}
             >
               <ScrollToHashAnchor />
+              {!focusMode && <ProjectScopeNotice />}
               {children}
               {!focusMode && <DemoProjectHint />}
               {/* Page help sits under the content: a newcomer reads the page
