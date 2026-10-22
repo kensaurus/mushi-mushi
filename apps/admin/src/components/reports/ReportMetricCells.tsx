@@ -14,14 +14,14 @@ import {
   confidenceCellTint,
   confidenceEmptySegmentTone,
   confidencePercent,
-  confidenceSegmentCount,
+  CONFIDENCE_SEGMENT_COUNT,
   confidenceSegmentFilled,
   confidenceTextTone,
   recencyBarTone,
   recencyFreshness,
   recencyHours,
   severityActiveIndex,
-  severityLevelKeys,
+  SEVERITY_LEVEL_KEYS,
 } from './reportMetricViz'
 
 interface ConfidenceCellProps {
@@ -47,7 +47,7 @@ export function TableConfidenceCell({ confidence, layout = 'default' }: Confiden
       className={`flex gap-px h-1.5 ${isTable ? 'w-full max-w-[2.75rem]' : 'min-w-0 flex-1'}`}
       aria-hidden="true"
     >
-      {Array.from({ length: confidenceSegmentCount }, (_, i) => (
+      {Array.from({ length: CONFIDENCE_SEGMENT_COUNT }, (_, i) => (
         <span
           key={i}
           className={`flex-1 rounded-hairline motion-safe:transition-opacity ${
@@ -118,7 +118,7 @@ export function TableSeverityCell({ severity }: SeverityCellProps) {
           role="img"
           aria-label={`Severity ${traffic?.label ?? severity}`}
         >
-          {severityLevelKeys.map((level: SeverityTrafficKey, i: number) => {
+          {SEVERITY_LEVEL_KEYS.map((level: SeverityTrafficKey, i: number) => {
             const active = i === activeIdx
             const tone = SEVERITY_TRAFFIC[level]?.bg ?? 'bg-surface-overlay/80'
             return (
