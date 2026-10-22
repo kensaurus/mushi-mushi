@@ -13,6 +13,16 @@
  *            caller (or a replay) gets nothing. The payload passed to act()
  *            is the ROW's payload — never anything from the request — and its
  *            hash is recomputed and compared before the claim.
+ *
+ * Legacy-backed GitHub (ADR 0037): a CI placement action names
+ * `connector_kind = 'github'` instead of a connector instance, because GitHub
+ * runs on the project's own stored token. Execution resolves that token with
+ * `legacyGithubToken` (the project's stored token, else its organization's;
+ * never the App installation or the platform token); the connector's act()
+ * checks the allowlist, the binding, the policy and the compare-and-set
+ * itself. CI placement actions go only through requestLegacyConnectorAction
+ * (the /v1/admin/ci/placement routes build the payload from a preview); the
+ * generic request path refuses them.
  */
 
 import type { getServiceClient } from './db.ts'
@@ -21,6 +31,13 @@ import { sha256Hex } from './connectors/jwt.ts'
 import { getConnector } from './connectors/index.ts'
 import { resolveCredential } from './connectors/credentials.ts'
 import type { ConnectorActionResult } from './connectors/types.ts'
+import { resolveProjectGithubToken } from './github.ts'
+import { PLACEMENT_ACTIONS } from './ci-placement.ts'
+
+/** CI placement actions: only through the /v1/admin/ci/placement routes (ADR 0037). */
+function isPlacementAction(action: string): boolean {
+  return (PLACEMENT_ACTIONS as readonly string[]).includes(action)
+}
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -29,11 +46,17 @@ export const REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export type ActionOutcome<T> = { ok: true; value: T } | { ok: false; code: string; message: string; status: 400 | 403 | 404 | 409 | 410 | 502 }
 
+/** Postgres / PostgREST: the column or NOT NULL this needs is not applied yet (20261022052438_ci_placement). */
+function migrationPending(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && (error.code === '23502' || error.code === '42703' || error.code === 'PGRST204' || /connector_kind|null value in column "connector_instance_id"/i.test(error.message ?? ''))
+}
+
 interface ActionRow {
   id: string
   organization_id: string
   project_id: string | null
-  connector_instance_id: string
+  connector_instance_id: string | null
+  connector_kind?: string | null
   action: string
   payload: Record<string, unknown>
   payload_sha256: string
@@ -63,6 +86,9 @@ export async function requestConnectorAction(
   if (!connector.act || !(connector.actions ?? []).includes(input.action)) {
     return { ok: false, code: 'ACTION_NOT_SUPPORTED', message: `${connector.title} has no "${input.action}" action.`, status: 400 }
   }
+  if (isPlacementAction(input.action)) {
+    return { ok: false, code: 'USE_CI_PLACEMENT', message: 'Ask to change where CI runs through /v1/admin/ci/placement/requests (CI runners → Where CI runs): Mushi builds that change from a preview.', status: 400 }
+  }
   const payloadSha256 = await payloadHash(input.payload)
   const { data, error } = await db.from('connector_actions').insert({
     organization_id: input.organizationId, project_id: input.projectId ?? null, connector_instance_id: input.instanceId,
@@ -72,6 +98,32 @@ export async function requestConnectorAction(
   if (error || !data) return { ok: false, code: 'DB_ERROR', message: 'The request could not be saved.', status: 400 }
   const id = (data as { id: string }).id
   await audit(db, { organization_id: input.organizationId, project_id: input.projectId ?? null, id, action: input.action }, null, 'requested', { requestedBy: input.requestedBy })
+  return { ok: true, value: { id, payloadSha256 } }
+}
+
+/**
+ * Request an action on a legacy-backed connector (GitHub: the project's own
+ * token, no connector_instances row). Same row, hash and approval as
+ * requestConnectorAction; only kinds whose connector declares the action.
+ */
+export async function requestLegacyConnectorAction(
+  db: Db,
+  input: { organizationId: string; projectId: string; kind: 'github'; action: string; payload: Record<string, unknown>; requestedBy: string; reason?: string | null },
+): Promise<ActionOutcome<{ id: string; payloadSha256: string }>> {
+  const connector = getConnector(input.kind)
+  if (!connector.act || !(connector.actions ?? []).includes(input.action)) {
+    return { ok: false, code: 'ACTION_NOT_SUPPORTED', message: `${connector.title} has no "${input.action}" action.`, status: 400 }
+  }
+  const payloadSha256 = await payloadHash(input.payload)
+  const { data, error } = await db.from('connector_actions').insert({
+    organization_id: input.organizationId, project_id: input.projectId, connector_instance_id: null, connector_kind: input.kind,
+    action: input.action, payload: input.payload, payload_sha256: payloadSha256, reason: input.reason ?? null,
+    status: 'pending_approval', requested_by: input.requestedBy,
+  }).select('id').single()
+  if (migrationPending(error)) return { ok: false, code: 'MIGRATION_PENDING', message: 'Changing where CI runs needs the database update 20261022052438_ci_placement first.', status: 409 }
+  if (error || !data) return { ok: false, code: 'DB_ERROR', message: 'The request could not be saved.', status: 400 }
+  const id = (data as { id: string }).id
+  await audit(db, { organization_id: input.organizationId, project_id: input.projectId, id, action: input.action }, null, 'requested', { requestedBy: input.requestedBy })
   return { ok: true, value: { id, payloadSha256 } }
 }
 
@@ -120,7 +172,11 @@ export interface ExecuteDeps {
   fetch: (url: string, init?: RequestInit) => Promise<Response>
   now: () => Date
   resolveCredential?: typeof resolveCredential
+  /** The token a legacy-backed GitHub action runs with (default: the project's stored PAT, no platform fallback). */
+  legacyGithubToken?: (db: Db, projectId: string) => Promise<string | null>
 }
+
+const defaultLegacyGithubToken = (db: Db, projectId: string) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
 
 /** Run one approved action once. Never retries; a failure is recorded, not hidden. */
 export async function executeConnectorAction(db: Db, id: string, organizationId: string, userId: string, deps: ExecuteDeps): Promise<ActionOutcome<ConnectorActionResult>> {
@@ -142,8 +198,29 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
   if (!Array.isArray(claimed) || claimed.length !== 1) return { ok: false, code: 'ALREADY_RUN', message: 'This action already ran or is running.', status: 409 }
 
   const finish = async (result: ConnectorActionResult) => {
-    await db.from('connector_actions').update({ status: result.ok ? 'executed' : 'failed', result: result.result ?? { detail: result.detail }, error: result.ok ? null : result.detail }).eq('id', id)
+    await db.from('connector_actions').update({ status: result.ok ? 'executed' : 'failed', result: result.result ?? { detail: result.detail, ...(result.code ? { code: result.code } : {}) }, error: result.ok ? null : result.detail }).eq('id', id)
     await audit(db, row, userId, result.ok ? 'executed' : 'failed', { detail: result.detail })
+  }
+
+  if (!row.connector_instance_id) {
+    // Legacy-backed GitHub: the project's own stored token; act() checks the rest.
+    if (row.connector_kind !== 'github' || !row.project_id) {
+      const r = { ok: false, detail: 'This action names no connector.' }
+      await finish(r)
+      return { ok: false, code: 'ACT_DISABLED', message: r.detail, status: 403 }
+    }
+    let result: ConnectorActionResult
+    try {
+      const token = await (deps.legacyGithubToken ?? defaultLegacyGithubToken)(db, row.project_id)
+      result = await getConnector('github').act!({
+        db, organizationId, projectId: row.project_id, instanceId: null, config: {},
+        readCredential: token, writeCredential: token, fetch: deps.fetch, now: deps.now,
+      }, { id: row.id, action: row.action, payload: row.payload, payloadSha256: row.payload_sha256 })
+    } catch (err) {
+      result = { ok: false, detail: ((err as Error)?.message ?? String(err)).slice(0, 300) }
+    }
+    await finish(result)
+    return result.ok ? { ok: true, value: result } : { ok: false, code: result.code ?? 'ACTION_FAILED', message: result.detail, status: result.status ?? 502 }
   }
 
   const { data: inst } = await db.from('connector_instances').select('id, kind, organization_id, project_id, config, read_credential_ref, write_credential_ref, enabled_capabilities').eq('id', row.connector_instance_id).maybeSingle()
@@ -152,6 +229,12 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
     const r = { ok: false, detail: 'Act is not turned on for this connector.' }
     await finish(r)
     return { ok: false, code: 'ACT_DISABLED', message: r.detail, status: 403 }
+  }
+  if (isPlacementAction(row.action)) {
+    // A placement change never runs on a connector instance's credential.
+    const r = { ok: false, detail: 'CI placement changes run only through the CI placement routes.' }
+    await finish(r)
+    return { ok: false, code: 'USE_CI_PLACEMENT', message: r.detail, status: 403 }
   }
   const connector = getConnector(instance.kind)
   const resolve = deps.resolveCredential ?? resolveCredential
@@ -167,5 +250,5 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
     result = { ok: false, detail: ((err as Error)?.message ?? String(err)).slice(0, 300) }
   }
   await finish(result)
-  return result.ok ? { ok: true, value: result } : { ok: false, code: 'ACTION_FAILED', message: result.detail, status: 502 }
+  return result.ok ? { ok: true, value: result } : { ok: false, code: result.code ?? 'ACTION_FAILED', message: result.detail, status: result.status ?? 502 }
 }
