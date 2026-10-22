@@ -81,6 +81,12 @@ describe('rate table', () => {
     expect(ranSelfHosted({ labels: ['x'], runner_name: 'GitHub Actions 4', runner_group_name: 'Default' })).toBe(false)
     expect(ranSelfHosted({ labels: ['ubuntu-latest'] })).toBe(false)
   })
+
+  it('leaves a custom-label job with no runner group out of the price, as the collector calls it unknown', () => {
+    const est = estimateRunMinutes([{ ...job('2026-10-01T00:00:00Z', '2026-10-01T00:02:00Z', ['kensaurus-local']) }])
+    expect(est).toMatchObject({ unknownMinutes: 2, selfHostedMinutes: 0, listUsd: 0, minutes: 0 })
+    expect(ranSelfHosted({ labels: ['kensaurus-local'] })).toBe(false)
+  })
 })
 
 describe('isMinutesSpike', () => {

@@ -18,6 +18,8 @@
  * Pure: no I/O.
  */
 
+import { runnerKindOf } from './ci-infra.ts'
+
 export type RunnerOs = 'linux' | 'windows' | 'macos'
 
 /**
@@ -59,6 +61,8 @@ export interface RunMinutesEstimate {
   breakdown: Record<RunnerOs, number>
   /** Whole minutes on self-hosted runners: GitHub does not bill them. */
   selfHostedMinutes: number
+  /** Whole minutes Mushi cannot place (a custom label and no runner group): left out of the price. */
+  unknownMinutes: number
   /** List price of the GitHub-hosted minutes, USD, before included minutes. */
   listUsd: number
   estimated: true
@@ -72,12 +76,13 @@ export function runnerOsOf(job: Pick<CiJob, 'labels' | 'runner_name'>): RunnerOs
   return 'linux'
 }
 
-/** True when the job ran on a self-hosted runner (a `self-hosted` label, or a runner group other than "GitHub Actions"). */
+/**
+ * True when the job ran on a self-hosted runner: the same rule as the
+ * collector's runnerKindOf (a `self-hosted` label, or a runner group other
+ * than "GitHub Actions").
+ */
 export function ranSelfHosted(job: Pick<CiJob, 'labels' | 'runner_name' | 'runner_group_name'>): boolean {
-  if ((job.labels ?? []).some((l) => l.toLowerCase() === 'self-hosted')) return true
-  if (/^GitHub Actions \d+$/i.test(job.runner_name ?? '')) return false
-  const group = (job.runner_group_name ?? '').trim().toLowerCase()
-  return group !== '' && group !== 'github actions'
+  return runnerKindOf({ labels: job.labels ?? [], runner_name: job.runner_name ?? null, runner_group_name: job.runner_group_name ?? null }) === 'self_hosted'
 }
 
 /** GitHub bills each job in whole minutes, rounded up, at least 1; 0 for a job with no duration (it never ran). */
@@ -102,6 +107,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100
 export function estimateRunMinutes(jobs: readonly CiJob[]): RunMinutesEstimate {
   const breakdown: Record<RunnerOs, number> = { linux: 0, windows: 0, macos: 0 }
   let selfHostedMinutes = 0
+  let unknownMinutes = 0
   let listUsd = 0
   for (const job of jobs) {
     if (!job.started_at || !job.completed_at) continue
@@ -109,8 +115,13 @@ export function estimateRunMinutes(jobs: readonly CiJob[]): RunMinutesEstimate {
     const end = Date.parse(job.completed_at)
     if (!Number.isFinite(start) || !Number.isFinite(end)) continue
     const billed = billedMinutesOf(Math.max(0, end - start) / 1000)
-    if (ranSelfHosted(job)) {
+    const kind = runnerKindOf({ labels: job.labels ?? [], runner_name: job.runner_name ?? null, runner_group_name: job.runner_group_name ?? null })
+    if (kind === 'self_hosted') {
       selfHostedMinutes += billed
+      continue
+    }
+    if (kind === 'unknown') {
+      unknownMinutes += billed
       continue
     }
     breakdown[runnerOsOf(job)] += billed
@@ -120,6 +131,7 @@ export function estimateRunMinutes(jobs: readonly CiJob[]): RunMinutesEstimate {
     minutes: round2(listUsd / GITHUB_RUNNER_RATES.usdPerMinute.linux),
     breakdown,
     selfHostedMinutes,
+    unknownMinutes,
     listUsd: Math.round(listUsd * 10000) / 10000,
     estimated: true,
   }
