@@ -38,6 +38,7 @@ export default {
   'code-health': 'Code health',
   drift: 'Drift scanner',
   anomalies: 'Anomaly detection',
+  design: 'Design system',
   content: 'Content quality',
   judge: 'Judge dashboard',
   lessons: 'Lessons',
