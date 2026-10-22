@@ -40,6 +40,7 @@ import { DISPATCH_FILES_MAX, dispatchExistingDesignFindings, loadDesignActionSet
 import { requiredCiVarNames, resolveStack } from '../../_shared/sdk-diagnostics.ts'
 import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
+import { logAudit } from '../../_shared/audit.ts'
 import type { Variables } from '../types.ts'
 import {
   buildDesignExcerpt,
@@ -109,14 +110,14 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
 
 type Access = { ok: true; projectId: string; role: string | null } | { ok: false; response: Response }
 
-async function projectAccess(c: Context, db: Db, opts: { needAdmin?: boolean } = {}): Promise<Access> {
+async function projectAccess(c: Context, db: Db, opts: { needAdmin?: boolean; adminAction?: string } = {}): Promise<Access> {
   const projectId = c.req.param('id') ?? ''
   if (!UUID_RE.test(projectId)) return { ok: false, response: jsonError(c, 'NOT_FOUND', 'Project not found', 404) }
   const userId = c.get('userId') as string
   const access = await callerCanAccessProject(c, db, userId, projectId)
   if (!access.allowed) return { ok: false, response: jsonError(c, 'NOT_FOUND', 'Project not found', 404) }
   if (opts.needAdmin && access.role !== 'owner' && access.role !== 'admin') {
-    return { ok: false, response: jsonError(c, 'FORBIDDEN', 'Only project owners and admins can open design PRs.', 403) }
+    return { ok: false, response: jsonError(c, 'FORBIDDEN', `Only project owners and admins can ${opts.adminAction ?? 'open design PRs'}.`, 403) }
   }
   return { ok: true, projectId, role: access.role }
 }
@@ -390,7 +391,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   // admins only; auto-fix must be on.
   app.post('/v1/admin/projects/:id/design/dispatch-findings', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
-    const access = await projectAccess(c, db, { needAdmin: true })
+    const access = await projectAccess(c, db, { needAdmin: true, adminAction: 'send design findings to an agent' })
     if (!access.ok) return access.response
     const parsed = dispatchFindingsSchema.safeParse((await c.req.json().catch(() => null)) ?? {})
     if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 300), 400)
@@ -411,6 +412,18 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     if (out.action === 'settings_unavailable' || out.action === 'failed') {
       rlog.error('design findings dispatch failed', { projectId: access.projectId, err: out.error })
       return jsonError(c, 'DISPATCH_FAILED', 'Could not send the design findings.', 500)
+    }
+    if (out.action === 'dispatched') {
+      await logAudit(
+        db as never,
+        access.projectId,
+        (c.get('userId') as string | undefined) ?? 'unknown',
+        'fix.attempted',
+        'design_drift',
+        out.runId,
+        { source: 'design_drift_findings', files: out.sent.map((s) => ({ file: s.file, reportId: s.reportId, dispatchId: s.dispatchId, refused: s.refused?.code ?? null })), remainingFiles: out.remainingFiles },
+        { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' },
+      ).catch(() => {})
     }
     rlog.info('design findings dispatch', {
       projectId: access.projectId,

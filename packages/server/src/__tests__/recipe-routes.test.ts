@@ -871,9 +871,23 @@ describe('POST /design/dispatch-findings', () => {
     expect(res.body).toEqual({ ok: true, data: out })
     expect(dispatchFindings).toHaveBeenCalledWith(db, expect.objectContaining({ projectId: P_A, maxFiles: 3, requestedBy: 'user-a', manifest: expect.objectContaining({ version: 1 }) }))
 
+    // Audited: who sent which files.
+    expect(db.table('audit_logs')).toEqual([
+      expect.objectContaining({
+        project_id: P_A,
+        actor_id: 'user-a',
+        action: 'fix.attempted',
+        resource_type: 'design_drift',
+        resource_id: 'run-2',
+        metadata: expect.objectContaining({ source: 'design_drift_findings', files: [{ file: 'app/page.tsx', reportId: 'r1', dispatchId: 'job-1', refused: null }], remainingFiles: 3 }),
+      }),
+    ])
+
     const member = await app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: {}, vars: { userId: 'member-a' } })
     expect(member.status).toBe(403)
+    expect(member.body).toMatchObject({ error: { message: 'Only project owners and admins can send design findings to an agent.' } })
     expect(dispatchFindings).toHaveBeenCalledTimes(1)
+    expect(db.table('audit_logs')).toHaveLength(1)
   })
 
   it('validates the body, defaults maxFiles, and maps auto-fix off and failures', async () => {
