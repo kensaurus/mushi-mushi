@@ -27,6 +27,18 @@ import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import {
+  buildFindingReport,
+  buildGroupReport,
+  classifyBump,
+  FIXED_REPORT_STATUSES,
+  isGroupableBump,
+  repoLabel,
+  selectMinorGroup,
+  shadowedByGroup,
+  type ModernizationFindingRow,
+} from '../../_shared/modernization-dispatch.ts';
+import { FINDING_COLUMNS, fileModernizationReport, reconcileFixedFindings } from '../../_shared/modernization-dispatch-db.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import {
@@ -51,6 +63,13 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
+/** `owner/repo` of the finding's repo, for the report text. */
+async function findingRepoLabel(db: ReturnType<typeof getServiceClient>, repoId: string | null): Promise<string> {
+  if (!repoId) return 'this repository';
+  const { data } = await db.from('project_repos').select('repo_url').eq('id', repoId).maybeSingle();
+  return repoLabel((data as { repo_url?: string | null } | null)?.repo_url ?? null);
+}
+
 export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // LIBRARY MODERNIZATION
@@ -72,11 +91,17 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { findings: [] } });
 
+    // A finding whose report was fixed is done: mark it resolved before the
+    // list is read, so it stops showing as pending. Idempotent; a failure
+    // (e.g. before migration 20261022100100) only leaves the list as it was.
+    const reconciled = await reconcileFixedFindings(db, projectIds);
+    if (reconciled.error) {
+      log.warn('modernization reconcile failed (non-fatal)', { scope: 'modernization', err: reconciled.error });
+    }
+
     let q = db
       .from('modernization_findings')
-      .select(
-        'id, project_id, repo_id, dep_name, current_version, suggested_version, manifest_path, summary, severity, changelog_url, related_report_id, status, detected_at',
-      )
+      .select(FINDING_COLUMNS)
       .in('project_id', projectIds)
       .order('detected_at', { ascending: false })
       .limit(100);
@@ -87,34 +112,38 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     return c.json({ ok: true, data: { findings: data ?? [] } });
   });
 
+  /**
+   * Send a finding to the fix pipeline. A finding without a report gets one
+   * first (source library_modernizer; package, from → to, changelog, and
+   * "build + typecheck + tests pass" as the acceptance check). With
+   * `{ group: 'minor' }`, every pending minor / patch finding of the same
+   * repo goes as ONE report ("Bump N minor dependencies in <repo>"); major
+   * bumps never join a group. Then one fix_dispatch_jobs row, as before.
+   */
   app.post('/v1/admin/modernization/:id/dispatch', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const findingId = c.req.param('id')!;
     const db = getServiceClient();
+    const body = (await c.req.json().catch(() => ({}))) as { group?: unknown };
+    if (body?.group !== undefined && body.group !== 'minor') {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: "group must be 'minor' when given." } }, 400);
+    }
+    const groupMinor = body?.group === 'minor';
 
-    const { data: finding } = await db
+    const { data: findingData } = await db
       .from('modernization_findings')
-      .select('id, project_id, related_report_id, dep_name, status')
+      .select(FINDING_COLUMNS)
       .eq('id', findingId)
       .maybeSingle();
+    let finding = findingData as ModernizationFindingRow | null;
     if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'That finding no longer exists. Refresh the page.' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
 
-    if (!finding.related_report_id) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'NO_REPORT',
-            message:
-              'This finding has no synthetic report attached (low-severity findings are info-only).',
-          },
-        },
-        400,
-      );
+    if (finding.status === 'dismissed' || finding.status === 'resolved') {
+      return c.json({ ok: false, error: { code: 'FINDING_CLOSED', message: `This finding is ${finding.status}.` } }, 409);
     }
 
     const { data: settings } = await db
@@ -132,17 +161,101 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       );
     }
 
+    // A linked report that is already fixed: nothing to dispatch.
+    if (finding.related_report_id) {
+      const { data: linked } = await db.from('reports').select('id, status').eq('id', finding.related_report_id).maybeSingle();
+      const linkedStatus = (linked as { status?: string } | null)?.status ?? '';
+      if (FIXED_REPORT_STATUSES.includes(linkedStatus)) {
+        await reconcileFixedFindings(db, [finding.project_id]);
+        return c.json({ ok: false, error: { code: 'ALREADY_FIXED', message: 'The report for this finding is already fixed.' } }, 409);
+      }
+    }
+
+    let groupedFindingIds: string[] = [];
+    if (groupMinor) {
+      const kind = classifyBump(finding.current_version, finding.suggested_version);
+      if (!isGroupableBump(kind)) {
+        return c.json({
+          ok: false,
+          error: { code: 'NOT_MINOR', message: `Only minor and patch bumps are grouped; ${finding.dep_name} is ${kind === 'major' ? 'a major bump' : 'not a verified upgrade'}.` },
+        }, 400);
+      }
+      let candQ = db
+        .from('modernization_findings')
+        .select(FINDING_COLUMNS)
+        .eq('project_id', finding.project_id)
+        .eq('status', 'pending')
+        .is('related_report_id', null)
+        .limit(500);
+      candQ = finding.repo_id ? candQ.eq('repo_id', finding.repo_id) : candQ.is('repo_id', null);
+      const { data: cands, error: candErr } = await candQ;
+      if (candErr) return dbError(c, candErr);
+      const candidates = (cands ?? []) as ModernizationFindingRow[];
+      const group = selectMinorGroup(finding, candidates);
+      if (group.length === 0) {
+        if (!finding.related_report_id) {
+          return c.json({ ok: false, error: { code: 'NOTHING_TO_GROUP', message: 'No pending minor or patch bumps without a report in this repo.' } }, 400);
+        }
+      } else {
+        const repo = await findingRepoLabel(db, finding.repo_id);
+        const filed = await fileModernizationReport(db, {
+          projectId: finding.project_id,
+          draft: buildGroupReport(group, repo),
+          findingIds: [...group.map((f) => f.id), ...shadowedByGroup(group, candidates)],
+        });
+        if (filed.error && !filed.reportId) {
+          return c.json({ ok: false, error: { code: 'REPORT_FAILED', message: filed.error } }, 500);
+        }
+        if (!filed.reportId) {
+          return c.json({ ok: false, error: { code: 'CONFLICT', message: 'Another dispatch took these findings. Refresh the page.' } }, 409);
+        }
+        groupedFindingIds = filed.linked;
+        // The dispatch below goes to the group's report.
+        finding = { ...finding, related_report_id: filed.reportId };
+      }
+    } else if (!finding.related_report_id) {
+      const kind = classifyBump(finding.current_version, finding.suggested_version);
+      if (kind === 'unknown' || kind === 'not_upgrade') {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'VERSION_UNVERIFIED',
+            message: `${finding.dep_name}: "${finding.current_version ?? ''}" → "${finding.suggested_version ?? ''}" is not a verifiable upgrade. Dismiss it; the next scan re-checks it against npm.`,
+          },
+        }, 400);
+      }
+      const repo = await findingRepoLabel(db, finding.repo_id);
+      const filed = await fileModernizationReport(db, {
+        projectId: finding.project_id,
+        draft: buildFindingReport(finding, repo),
+        findingIds: [finding.id],
+      });
+      if (filed.reportId) {
+        finding = { ...finding, related_report_id: filed.reportId };
+      } else if (filed.error) {
+        return c.json({ ok: false, error: { code: 'REPORT_FAILED', message: filed.error } }, 500);
+      } else {
+        // Another dispatch linked a report first: use that one.
+        const { data: again } = await db.from('modernization_findings').select(FINDING_COLUMNS).eq('id', finding.id).maybeSingle();
+        finding = (again as ModernizationFindingRow | null) ?? finding;
+        if (!finding.related_report_id) {
+          return c.json({ ok: false, error: { code: 'CONFLICT', message: 'The finding changed while dispatching. Refresh the page.' } }, 409);
+        }
+      }
+    }
+    const reportId = finding.related_report_id as string;
+
     const { data: existing } = await db
       .from('fix_dispatch_jobs')
       .select('id, status')
       .eq('project_id', finding.project_id)
-      .eq('report_id', finding.related_report_id)
+      .eq('report_id', reportId)
       .in('status', ['queued', 'running'])
       .limit(1);
     if (existing?.length) {
       return c.json({
         ok: true,
-        data: { dispatchId: existing[0].id, status: existing[0].status, deduplicated: true },
+        data: { dispatchId: existing[0].id, status: existing[0].status, deduplicated: true, reportId },
       });
     }
 
@@ -150,11 +263,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .from('fix_dispatch_jobs')
       .insert({
         project_id: finding.project_id,
-        report_id: finding.related_report_id,
+        report_id: reportId,
         requested_by: userId,
         status: 'queued',
         // A person pressed "Dispatch fix" on the finding.
-        dispatch_metadata: { trigger: 'manual' },
+        dispatch_metadata: { trigger: 'manual', ...(groupMinor ? { group: 'minor', findings: groupedFindingIds.length } : {}) },
       })
       .select('id, status, created_at')
       .single();
@@ -168,7 +281,8 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       );
     }
 
-    await db.from('modernization_findings').update({ status: 'dispatched' }).eq('id', finding.id);
+    const dispatchedIds = groupMinor && groupedFindingIds.length > 0 ? groupedFindingIds : [finding.id];
+    await db.from('modernization_findings').update({ status: 'dispatched' }).in('id', dispatchedIds);
 
     invokeFixWorker(job.id).catch((err) => {
       log.warn('worker invocation failed', {
@@ -185,11 +299,17 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       'fix.attempted',
       'modernization_finding',
       finding.id,
-      { dep: finding.dep_name, dispatchId: job.id, source: 'modernization' },
+      {
+        dep: finding.dep_name,
+        dispatchId: job.id,
+        reportId,
+        source: 'modernization',
+        ...(groupMinor ? { group: 'minor', findingIds: dispatchedIds } : {}),
+      },
     ).catch(() => {});
     return c.json({
       ok: true,
-      data: { dispatchId: job.id, status: job.status, createdAt: job.created_at },
+      data: { dispatchId: job.id, status: job.status, createdAt: job.created_at, reportId, findingIds: dispatchedIds },
     });
   });
 
