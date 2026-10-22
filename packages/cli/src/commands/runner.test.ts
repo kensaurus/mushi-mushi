@@ -103,6 +103,35 @@ describe('mushi runner status', () => {
   })
 })
 
+describe('mushi runner compare', () => {
+  const COMPARE = {
+    window: { days: 30 }, dataDays: 2.1, lowConfidence: true, source: 'sql', sourceNote: null,
+    rates: { fetchedAt: '2026-10-22', usdPerMinute: { linux: 0.006, windows: 0.01, macos: 0.062 } },
+    repos: [{ repo: 'acme/api', visibility: 'private' }],
+    rows: [{ repo: 'acme/api', runnerClass: 'github_hosted', labels: ['ubuntu-latest'], jobs: 12, queueP95s: 3, runP50s: 220, prPassRate: 0.9, billedMinutes: 48, monthCost: 4.5, costBasis: 'github_list', currency: 'USD' }],
+    accounts: [], machines: [], speed: [], whatIfs: [], advice: [],
+  }
+
+  it('reads the configured project for 30 days and prints estimated costs with the price date', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'compare'], () => okReply(COMPARE))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/compare?project_id=${TEST_PROJECT_ID}&days=30`)
+    expect(run.calls[0]!.method ?? 'GET').toBe('GET')
+    expect(run.stdout).toContain('Low confidence')
+    expect(run.stdout).toContain('GitHub list prices from 2026-10-22')
+    expect(run.stdout).toMatch(/acme\/api \(private\)\s+GitHub-hosted \(ubuntu-latest\)/)
+    expect(run.stdout).toContain('$4.50')
+  })
+
+  it('--all --json prints the payload; a bad window is refused before any call', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'compare', '--all', '--days', '7', '--json'], () => okReply(COMPARE))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/compare?days=7')
+    expect(JSON.parse(run.stdout)).toEqual(COMPARE)
+    const bad = await runCli(registerRunnerCommands, ['runner', 'compare', '--days', '0'])
+    expect(bad.error?.message).toMatch(/1 to 30/)
+    expect(bad.calls).toEqual([])
+  })
+})
+
 describe('mushi runner heartbeat', () => {
   it('--dry-run prints the body and sends nothing; the raw machine id never appears', async () => {
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--dry-run'])

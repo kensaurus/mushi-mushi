@@ -34,10 +34,13 @@ function first(...values: (string | undefined)[]): string | undefined {
   return values.find((v) => v !== undefined && v !== '');
 }
 
+// `import.meta.env` is declared locally because the core package intentionally
+// omits vite/client types so it stays bundler-agnostic.
+type MetaWithEnv = ImportMeta & { env?: Record<string, unknown> };
+
 function tryImportMetaEnv(key: string): string | undefined {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = (import.meta as any).env;
+    const env = (import.meta as MetaWithEnv).env;
     return typeof env === 'object' && env !== null ? (env[key] as string | undefined) : undefined;
   } catch {
     return undefined;
@@ -156,8 +159,7 @@ export function diagnoseEnvConfig(): EnvConfigDiagnostics {
 
   const importMetaEnv = (() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const env = (import.meta as any).env;
+      const env = (import.meta as MetaWithEnv).env;
       return typeof env === 'object' && env !== null ? (env as Record<string, unknown>) : null;
     } catch {
       return null;

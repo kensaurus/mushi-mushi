@@ -1,0 +1,42 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, version 3 of the License only.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+The "network use" provision of AGPLv3 (Section 13) means that if you run a
+modified version of this software as a service (SaaS), you must make the
+complete source of the modified version available to the users of that service
+under this license.
+
+The full license text is in LICENSES/AGPL-3.0-only.txt at the root of this
+repository, and at https://www.gnu.org/licenses/agpl-3.0.html.
+
+SPDX-License-Identifier: AGPL-3.0-only
+
+---
+
+Applies to: apps/testers (the tester portal)
+
+Earlier versions of this directory, up to and including commit 862e53ff
+(2026-10-22), were published under the MIT License. Anyone who obtained those
+versions keeps the MIT rights for them. Changes made after that commit are
+licensed only under this license. Why: docs/adr/0036-licensing-posture.md.
+
+The Mushi Mushi name, logo, bug mark and app icons in this directory (for
+example public/favicon.svg and anything under public/icons/ that shows the
+Mushi mark) are not licensed under this license. All rights reserved; see
+TRADEMARK.md for how you may use them. Third-party logos keep their owners'
+terms.
+
+For a commercial license that removes copyleft obligations when offering a
+modified console as a hosted service to third parties, see COMMERCIAL-LICENSE.md
+at the repo root.

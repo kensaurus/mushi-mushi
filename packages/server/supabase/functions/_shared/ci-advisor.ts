@@ -20,6 +20,11 @@
  *   unknown_runner         a new self-hosted runner no heartbeat lists and no
  *                          `mushi-` label marks
  *
+ * adviseCiCost (bottom of the file) adds the cost rules of
+ * GET /v1/admin/ci/compare: paid_while_idle, public_on_busy_self_hosted,
+ * missing_runner_variable, pinned_hosted_cost, tiny_job_rounding,
+ * self_hosted_on_public_repo.
+ *
  * Runner names are folded to their base (runnerBaseName): a one-job runner
  * setup registers a new name per job, and is one runner here.
  *
@@ -34,6 +39,8 @@ import { parse as parseYaml } from 'npm:yaml@2'
 import { ciWorkflowDrift } from './recipe-drift.ts'
 import type { CiOverviewAdvice } from './ci-overview-types.ts'
 import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'
+import type { CiCompareExplain, CiCompareMachine, CiCompareRow, RepoVisibility } from './ci-compare-types.ts'
+import type { ParsedWorkflow } from './ci-runs-on.ts'
 
 export interface AdvisorJob {
   repo: string
@@ -420,4 +427,181 @@ export function slowSteps(jobs: readonly AdvisorJob[]): Array<{ repo: string; jo
     .map((t) => ({ repo: t.repo, job: t.job, step: t.step, p50s: percentile(t.values, 50) as number, runs: t.values.length }))
     .sort((a, b) => b.p50s - a.p50s)
     .slice(0, 5)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cost advice (Plan 022 Phase 7, ADR 0037): GET /v1/admin/ci/compare
+// ─────────────────────────────────────────────────────────────────────────────
+//
+//   paid_while_idle             a private repo pays for GitHub-hosted minutes
+//                               while a self-hosted machine that serves it sits
+//                               mostly idle
+//   public_on_busy_self_hosted  a public repo queues on a busy self-hosted
+//                               machine although GitHub would run it free
+//   missing_runner_variable     workflows read vars.X in runs-on, the repo has
+//                               no variable X, so every such job falls back to
+//                               the GitHub-hosted label
+//   pinned_hosted_cost          jobs pinned to GitHub on a private repo, with
+//                               the reason from the YAML and what they cost
+//   tiny_job_rounding           many jobs under 20 s on paid runners, each
+//                               billed a whole minute
+//   self_hosted_on_public_repo  a public repo runs on your machine: a pull
+//                               request from a fork can run code on it
+//
+// Like the rules above, each one fires only on data Mushi has.
+
+export interface CostAdvisorInput {
+  now: Date
+  spanDays: number
+  repos: Array<{ projectId: string; repo: string; visibility: RepoVisibility }>
+  rows: CiCompareRow[]
+  machines: CiCompareMachine[]
+  workflows: Array<{ repo: string; path: string; text: string }>
+  /** Repo Actions variable names; null when the list could not be read. */
+  variableNames: Record<string, string[] | null>
+  parsed: Map<string, ParsedWorkflow[]>
+  pinned: CiCompareExplain['pinned']
+  tinyJobs: Array<{ repo: string; jobs: number; rawSeconds: number; billedMinutes: number; allJobs: number }>
+}
+
+/** Idle below this busy share: a machine that could take more work. */
+export const IDLE_BUSY_SHARE = 0.3
+/** A pin is worth listing from this much a month (in the row's currency). */
+export const PINNED_COST_FLOOR = 1
+export const TINY_JOBS_MIN = 10
+export const TINY_WASTE_MIN_MINUTES = 10
+
+function fmtMoney(n: number, currency: string): string {
+  return currency === 'USD' ? `$${n.toFixed(2)}` : `${n.toFixed(2)} ${currency}`
+}
+
+export function adviseCiCost(input: CostAdvisorInput): CiOverviewAdvice[] {
+  const out: CiOverviewAdvice[] = []
+  const vis = new Map(input.repos.map((r) => [r.repo, r.visibility]))
+  const days = Math.round(input.spanDays * 10) / 10
+
+  for (const [repo, rows] of groupBy(input.rows, (r) => r.repo)) {
+    const visibility = vis.get(repo) ?? 'unknown'
+    const paid = rows.filter((r) => r.runnerClass === 'github_hosted' && r.costBasis === 'github_list')
+    const self = rows.filter((r) => r.runnerClass === 'self_hosted')
+
+    // paid_while_idle
+    if (visibility === 'private') {
+      const month = paid.reduce((n, r) => n + r.monthCost, 0)
+      const minutes = paid.reduce((n, r) => n + r.billedMinutes, 0)
+      const idle = input.machines.filter((m) => m.repos.includes(repo) && m.busyShare < IDLE_BUSY_SHARE && m.online !== false)
+      if (month > 0 && idle.length > 0) {
+        const m = idle.sort((a, b) => a.busyShare - b.busyShare)[0]
+        const currency = paid[0].currency
+        out.push({
+          id: `paid_while_idle:${repo}`,
+          severity: month >= 10 ? 'high' : 'medium',
+          title: `${repo} pays for GitHub minutes while your runner sits idle`,
+          detail: 'This private repo ran jobs on GitHub-hosted runners, which bill after your plan\'s included minutes, while a machine that already runs its jobs was mostly free.',
+          evidence: `${minutes} GitHub-hosted minutes in ${days} days (about ${fmtMoney(month, currency)} a month after included minutes, estimated); ${m.name} was busy ${Math.round(m.busyShare * 100)}% of the time.`,
+          fix: 'Send the jobs that read a runner variable to your machine (set the repo variable, e.g. LINUX_RUNNER, to its label). Jobs pinned to GitHub move only through a workflow change.',
+          repo,
+          runner: m.runners[0] ?? null,
+        })
+      }
+    }
+
+    // public_on_busy_self_hosted and self_hosted_on_public_repo
+    if (visibility === 'public' && self.length > 0) {
+      const slow = self.filter((r) => r.jobs >= 5 && (r.queueP95s ?? 0) > 10 * MIN)
+      if (slow.length > 0) {
+        const worst = slow.sort((a, b) => (b.queueP95s ?? 0) - (a.queueP95s ?? 0))[0]
+        out.push({
+          id: `public_on_busy_self_hosted:${repo}`,
+          severity: 'medium',
+          title: `${repo} waits for your machine although GitHub would run it free`,
+          detail: 'Public repositories run standard GitHub-hosted runners at no cost, and those start in seconds. Here jobs queue behind other work on your own machine.',
+          evidence: `Queue p95 ${mins(worst.queueP95s as number)} over ${worst.jobs} jobs on ${worst.machine ?? worst.runner ?? 'a self-hosted runner'}.`,
+          fix: 'Run this repo on GitHub-hosted runners (remove its runner variable, or use ubuntu-latest), and keep your machine for private repos.',
+          repo,
+          runner: worst.runner,
+        })
+      }
+      const jobs = self.reduce((n, r) => n + r.jobs, 0)
+      out.push({
+        id: `self_hosted_on_public_repo:${repo}`,
+        severity: 'medium',
+        title: `${repo} is public and runs on your own machine`,
+        detail: 'A pull request from a fork can change the workflow and run any code on a self-hosted runner, with the access that machine has. GitHub recommends self-hosted runners only for private repositories.',
+        evidence: `${jobs} job${jobs === 1 ? '' : 's'} of this public repo ran on ${[...new Set(self.map((r) => r.machine ?? r.runner).filter(Boolean))].join(', ') || 'a self-hosted runner'} in ${days} days.`,
+        fix: 'Move it to GitHub-hosted runners (free for public repos), or require approval for every workflow run from outside collaborators (Settings → Actions → General) and never run pull_request_target on that machine.',
+        repo,
+        runner: self[0].runner,
+      })
+    }
+  }
+
+  // missing_runner_variable
+  for (const [repo, parsed] of input.parsed) {
+    const names = input.variableNames[repo]
+    if (!names) continue
+    const have = new Set(names.map((n) => n.toUpperCase()))
+    const wanted = new Map<string, { jobs: number; workflows: Set<string>; fallback: string | null }>()
+    for (const wf of parsed) {
+      for (const j of wf.jobs) {
+        if (j.kind !== 'follows_variable') continue
+        for (const v of j.variables) {
+          if (have.has(v.toUpperCase())) continue
+          const e = wanted.get(v) ?? { jobs: 0, workflows: new Set<string>(), fallback: null }
+          e.jobs++
+          e.workflows.add(wf.path)
+          e.fallback = e.fallback ?? j.fallbackLabel
+          wanted.set(v, e)
+        }
+      }
+    }
+    const visibility = vis.get(repo) ?? 'unknown'
+    const hasSelf = input.machines.some((m) => m.repos.includes(repo))
+    for (const [v, e] of wanted) {
+      out.push({
+        id: `missing_runner_variable:${repo}:${v}`,
+        severity: visibility === 'private' ? 'high' : 'low',
+        title: `${repo} has no ${v} variable, so its jobs run on ${e.fallback ?? 'the fallback runner'}`,
+        detail: `${e.jobs} job${e.jobs === 1 ? '' : 's'} pick their runner from vars.${v}. The repository has no variable with that name${visibility === 'private' ? ', so they run on paid GitHub-hosted runners' : ''}${hasSelf ? ' even though a self-hosted runner has served this repo' : ''}.`,
+        evidence: `vars.${v} is read in ${[...e.workflows].join(', ')}; the repo's Actions variables do not include ${v}.`,
+        fix: `Create the repo variable ${v} (Settings → Secrets and variables → Actions → Variables) with your runner's label, or delete the reference if GitHub-hosted is intended.`,
+        repo,
+      })
+    }
+  }
+
+  // pinned_hosted_cost
+  for (const [repo, pins] of groupBy(input.pinned.filter((p) => p.monthCost >= PINNED_COST_FLOOR), (p) => p.repo)) {
+    const total = pins.reduce((n, p) => n + p.monthCost, 0)
+    const currency = input.rows.find((r) => r.repo === repo)?.currency ?? 'USD'
+    out.push({
+      id: `pinned_hosted_cost:${repo}`,
+      severity: 'low',
+      title: `Jobs pinned to GitHub cost ${repo} about ${fmtMoney(total, currency)} a month`,
+      detail: 'These jobs name a GitHub-hosted runner directly, so no runner variable moves them. The reason is the comment in the workflow.',
+      evidence: pins.slice(0, 5).map((p) => `${p.workflow} · ${p.job}: ${fmtMoney(p.monthCost, currency)}${p.reason ? ` (“${p.reason}”)` : ' (no reason given)'}`).join('; '),
+      fix: 'Keep them where the reason still holds. To move one, fix the reason first, then change its runs-on in a workflow pull request.',
+      repo,
+    })
+  }
+
+  // tiny_job_rounding
+  for (const [repo, list] of groupBy(input.tinyJobs, (t) => t.repo)) {
+    const jobs = list.reduce((n, t) => n + t.jobs, 0)
+    const raw = list.reduce((n, t) => n + t.rawSeconds, 0) / 60
+    const waste = jobs - raw
+    if (jobs < TINY_JOBS_MIN || waste < TINY_WASTE_MIN_MINUTES) continue
+    out.push({
+      id: `tiny_job_rounding:${repo}`,
+      severity: 'low',
+      title: `${repo} has many very short jobs, each billed a full minute`,
+      detail: 'GitHub rounds every job up to a whole minute, so a 7-second check costs as much as a 60-second one.',
+      evidence: `${jobs} jobs under 20 s in ${days} days ran ${raw.toFixed(1)} minutes and billed ${jobs}.`,
+      fix: 'Run the short checks as steps of one job instead of separate jobs.',
+      repo,
+    })
+  }
+
+  const rank = { high: 0, medium: 1, low: 2 } as const
+  return out.sort((a, b) => rank[a.severity] - rank[b.severity])
 }
