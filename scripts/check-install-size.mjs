@@ -51,9 +51,14 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // verify workflow` give the verified-merge gates and the mushi-verify workflow
 // their terminal path (surface parity). No new dependencies; the growth is the
 // gate renderer and the workflow writer, measured at cli 205.7/782.1 kB.
+//
+// Raised 2026-10-22 (Plan 022 Phase 7b, ADR 0037): `mushi runner placement`
+// gives "choose where CI runs" its terminal path (surface parity): the
+// placement preview, request and status renderers. No new dependencies; the
+// growth is that code, measured at cli 211.6/805.2 kB packed/unpacked.
 export const BUDGETS = [
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 210_000, unpacked: 800_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 220_000, unpacked: 840_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

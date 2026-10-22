@@ -404,6 +404,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
   },
   {
+    name: 'request_ci_placement_change',
+    title: 'Ask to change where CI runs (needs approval)',
+    description:
+      'Ask to change where one repository\'s CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_<WORKFLOW> may be changed; value is one runner label, or null to remove the variable so jobs use the workflow\'s fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable\'s current value, which the change must still match when it runs. Your organization\'s CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
+  },
+  {
     name: 'explain_finding',
     title: 'Explain one finding',
     description:

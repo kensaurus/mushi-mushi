@@ -25,6 +25,8 @@
  *        verification or null); 429 RATE_LIMITED over the limit;
  *        `mushi fixes verify --rerun`.
  *   GET  /v1/admin/projects/:id/verify-workflow      adminOrApiKey(mcp:read)
+ *        The workflow fitted to the repo: its lockfile's package manager, a
+ *        local .github/actions/setup, and its runner variable (toolchain).
  *        { path, yaml }: the mushi-verify workflow filled in with this
  *        project's runner labels and test command (`mushi verify workflow`).
  *   POST /v1/admin/projects/:id/verify-workflow/pr   jwtAuth, non-viewers, 5/h per project
@@ -58,7 +60,8 @@ import {
   type PrimaryRepo,
 } from '../../_shared/fix-verify-db.ts'
 import { fetchDefaultBranch, openVerifyWorkflowPr, verifyWorkflowInstalled } from '../../_shared/fix-verify-github.ts'
-import { fillVerifyWorkflow, VERIFY_WORKFLOW_PATH } from '../../_shared/verify-workflow.ts'
+import { DEFAULT_TOOLCHAIN, fillVerifyWorkflow, VERIFY_WORKFLOW_PATH, type RepoToolchain } from '../../_shared/verify-workflow.ts'
+import { readRepoToolchain } from '../../_shared/verify-workflow-repo.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
@@ -83,6 +86,8 @@ export interface VerifyRouteDeps {
   workflowInstalled: typeof verifyWorkflowInstalled
   defaultBranch: typeof fetchDefaultBranch
   openWorkflowPr: typeof openVerifyWorkflowPr
+  /** Lockfile, local setup action and runner variable of the repo (best effort; the default toolchain on any failure). */
+  repoToolchain: (db: Db, input: { projectId: string; token: string; ref: GithubRepoRef; branch: string | null }) => Promise<RepoToolchain>
   resolveSecondJudgeKey: typeof resolveSecondJudgeKey
   /** Fire-and-forget call to the fix-verifier function for one fix. */
   invokeVerifier: (fixAttemptId: string) => void
@@ -116,6 +121,7 @@ export const defaultVerifyRouteDeps: VerifyRouteDeps = {
   workflowInstalled: verifyWorkflowInstalled,
   defaultBranch: fetchDefaultBranch,
   openWorkflowPr: openVerifyWorkflowPr,
+  repoToolchain: (db, input) => readRepoToolchain(db as never, input),
   resolveSecondJudgeKey,
   invokeVerifier: defaultInvokeVerifier,
   now: () => new Date(),
@@ -272,7 +278,21 @@ async function getWorkflow(c: Context, deps: VerifyRouteDeps): Promise<Response>
   if (access instanceof Response) return access
   const read = await loadVerifySettings(db as never, access.projectId)
   if (read.error) return jsonError(c, 'DB_ERROR', 'Could not read the verified-merge settings.', 500)
-  return c.json({ ok: true, data: { path: VERIFY_WORKFLOW_PATH, yaml: fillVerifyWorkflow(read.settings) } })
+  const toolchain = await toolchainFor(deps, db, access.projectId)
+  return c.json({ ok: true, data: { path: VERIFY_WORKFLOW_PATH, yaml: fillVerifyWorkflow(read.settings, toolchain), toolchain } })
+}
+
+/** The repo's toolchain for the workflow; the template's defaults when the repo or its token cannot be read. */
+async function toolchainFor(deps: VerifyRouteDeps, db: Db, projectId: string): Promise<RepoToolchain> {
+  try {
+    const repo = await primaryRepoFor(db as never, projectId)
+    if (!repo) return DEFAULT_TOOLCHAIN
+    const token = await deps.resolveRepoToken(db, projectId, repo)
+    if (!token) return DEFAULT_TOOLCHAIN
+    return await deps.repoToolchain(db, { projectId, token, ref: { owner: repo.owner, repo: repo.repo }, branch: repo.defaultBranch ?? null })
+  } catch {
+    return DEFAULT_TOOLCHAIN
+  }
 }
 
 async function openWorkflowPr(c: Context, deps: VerifyRouteDeps): Promise<Response> {
@@ -300,7 +320,8 @@ async function openWorkflowPr(c: Context, deps: VerifyRouteDeps): Promise<Respon
   if (read.error) return jsonError(c, 'DB_ERROR', 'Could not read the verified-merge settings.', 500)
   let pr: { url: string; number: number; branch: string }
   try {
-    pr = await deps.openWorkflowPr({ token, ref, defaultBranch: branch, yaml: fillVerifyWorkflow(read.settings), now: deps.now() })
+    const toolchain = await deps.repoToolchain(db, { projectId: access.projectId, token, ref, branch }).catch(() => DEFAULT_TOOLCHAIN)
+    pr = await deps.openWorkflowPr({ token, ref, defaultBranch: branch, yaml: fillVerifyWorkflow(read.settings, toolchain), now: deps.now() })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     // GitHub refuses writes under .github/workflows without the workflows permission.

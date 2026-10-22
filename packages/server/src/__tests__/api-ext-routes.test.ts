@@ -18,13 +18,16 @@ const ext = fn('api-ext/index.ts')
 const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'codebase-understand', register: 'registerCodebaseUnderstandRoutes', count: 15 },
   { file: 'modernization-health-super', register: 'registerModernizationHealthSuperRoutes', count: 9 },
+  { file: 'qa-coverage', register: 'registerQaCoverageRoutes', count: 9 },
+  { file: 'fullstack-audit', register: 'registerFullstackAuditRoutes', count: 2 },
+  { file: 'ux-runs', register: 'registerUxRunsRoutes', count: 6 },
 ]
 
 describe('route groups that run in api-ext', () => {
   for (const g of MOVED) {
     it(`api forwards every ${g.file} path, and api-ext registers the group`, () => {
       const src = fn(`api/routes/${g.file}.ts`)
-      const paths = [...new Set([...src.matchAll(/app\.(?:get|post|put|patch|delete)\(\s*'([^']+)'/g)].map((m) => m[1]))]
+      const paths = [...new Set([...src.matchAll(/(?:app|parent)\.(?:get|post|put|patch|delete)\(\s*'([^']+)'/g)].map((m) => m[1]))]
       expect(paths).toHaveLength(g.count)
       for (const p of paths) expect(api, p).toContain(`'${p}'`)
       expect(api).not.toContain(`${g.register}(app)`)
