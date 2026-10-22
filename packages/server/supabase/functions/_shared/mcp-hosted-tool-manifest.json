@@ -460,6 +460,14 @@
     "path": "/v1/admin/ci/overview?project_id={projectId}&days={days|7}&refresh={refresh}",
     "hints": { "destructive": false, "idempotent": true }
   },
+  "get_fix_verification": {
+    "scope": "mcp:read",
+    "description": "Merge checks for a fix's current PR head: Opus review, CI, fail-to-pass proof, weakened tests, size, second review; automatic merge state and regressions.",
+    "method": "GET",
+    "path": "/v1/admin/fixes/{fixId}/verification",
+    "required": ["fixId"],
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "explain_finding": {
     "scope": "mcp:read",
     "description": "Explain one gate finding by id: the check, why it fired, file and line, the fix, and whether it is still open.",

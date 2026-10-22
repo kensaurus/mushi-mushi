@@ -11,6 +11,7 @@ import { PdcaReceipt } from './PdcaReceipt'
 import { FixAttemptFlow } from './FixAttemptFlow'
 import { CursorArtifactsGallery } from './CursorArtifactsGallery'
 import { FixErrorPanel } from './FixErrorPanel'
+import { FixGateChecklist } from './FixGateChecklist'
 import { isSuperseded, supersededLabel } from '../../lib/fixReportTruth'
 import { pluralizeWithCount } from '../../lib/format'
 import { formatTokens } from '../charts'
@@ -30,6 +31,9 @@ interface InventoryActionSummary {
   expectedOutcome?: Record<string, unknown> | null
   status?: string | null
 }
+
+/** Agents whose PRs Mushi checks for automatic merge (ADR 0035). */
+const CLOUD_AGENTS = new Set(['cursor_cloud', 'github_cloud_agent'])
 
 interface Props {
   fix: FixAttempt
@@ -172,6 +176,8 @@ export function FixDetailPanel({
           </Link>
         )}
       </div>
+
+      {fix.pr_url && CLOUD_AGENTS.has(fix.agent) && <FixGateChecklist fixId={fix.id} />}
 
       {timeline ? (
         <div>
