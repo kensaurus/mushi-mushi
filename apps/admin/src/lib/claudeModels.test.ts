@@ -32,6 +32,13 @@ describe('modelOptions', () => {
     expect(opts.find((o) => o.id === 'claude-opus-6')?.label).toContain('new')
   })
 
+  it('keeps a saved older model under its catalog name when the live list spells it differently', () => {
+    const opts = modelOptions([live('claude-haiku-4-5-20251001', '2025-10-01T00:00:00Z'), live('claude-opus-5-5', '2026-09-22T00:00:00Z')], 'claude-haiku-4-5')
+    const saved = opts.find((o) => o.id === 'claude-haiku-4-5')
+    expect(saved).toMatchObject({ group: 'older' })
+    expect(saved?.label).toContain('Claude Haiku 4.5')
+  })
+
   it('with a live list, drops older catalog models the key cannot use', () => {
     const opts = modelOptions([live('claude-opus-5-5', '2026-09-22T00:00:00Z')], 'claude-opus-5-5')
     expect(opts.some((o) => o.id === 'claude-opus-4-6')).toBe(false)
