@@ -38,7 +38,7 @@ import { Badge, Btn, Callout, ErrorAlert, Input, Loading, RelativeTime, ResultCh
 import { IconAlertTriangle, IconLock, IconShield } from '../icons'
 import { RepoVisibilityBadge } from './RepoVisibilityBadge'
 
-export const CI_POLICY_SETTINGS_HREF = '/settings?tab=ci-policy'
+const CI_POLICY_SETTINGS_HREF = '/settings?tab=ci-policy'
 
 type Choice = { kind: 'hosted' } | { kind: 'label'; label: string }
 

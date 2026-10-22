@@ -7,7 +7,7 @@
  *          _shared/ci-placement.ts and api/routes/ci-placement.ts.
  */
 
-export interface PlacementTargetView {
+interface PlacementTargetView {
   kind: 'github_hosted' | 'self_hosted'
   label: string | null
 }
@@ -46,7 +46,7 @@ export interface PlacementView {
   watches?: Array<{ repo: string; variable: string; status: string; jobs_seen?: number; unexpected?: number; slow?: number }>
 }
 
-export function targetText(t: PlacementTargetView | undefined | null): string {
+function targetText(t: PlacementTargetView | undefined | null): string {
   if (!t) return '?'
   if (t.kind === 'github_hosted') return `GitHub-hosted${t.label ? ` (${t.label})` : ''}`
   return `self-hosted “${t.label}”`

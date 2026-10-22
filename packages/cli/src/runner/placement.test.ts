@@ -4,7 +4,7 @@
  * a blocked change with its reason, and pending requests.
  */
 import { describe, expect, it } from 'vitest'
-import { renderPlacement, renderPreview, targetText } from './placement.js'
+import { renderPlacement, renderPreview } from './placement.js'
 
 describe('renderPlacement', () => {
   it('shows the agreement, each repo\'s variables and labels, controllers and pending requests', () => {
@@ -63,6 +63,6 @@ describe('renderPreview', () => {
     const text = renderPreview({ repo: 'a/b', variable: 'LINUX_RUNNER', current: null, next: { value: null, target: { kind: 'github_hosted', label: null } }, blocked: { code: 'POLICY_NO_PAID_HOSTED', message: 'Your CI agreement says no.' } }).join('\n')
     expect(text).toContain('vars.LINUX_RUNNER unreadable → removed')
     expect(text).toContain('Cannot request: Your CI agreement says no. (POLICY_NO_PAID_HOSTED)')
-    expect(targetText(null)).toBe('?')
+    expect(renderPreview({ repo: 'a/b', variable: 'X' }).join('\n')).toContain('run on: ? → ?')
   })
 })

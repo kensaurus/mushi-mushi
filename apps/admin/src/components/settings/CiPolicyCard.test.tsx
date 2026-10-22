@@ -12,7 +12,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CiPolicyResponse } from '../../lib/ciPlacementTypes'
-import { ORG, policyFixture } from '../ci/__fixtures__/ciPlacement'
+import { PLACEMENT_ORG as ORG, policyFixture } from '../ci/__fixtures__/ciOverview'
 
 const state = vi.hoisted(() => ({ data: null as unknown, paths: [] as Array<string | null>, reload: vi.fn(), apiFetch: vi.fn() }))
 

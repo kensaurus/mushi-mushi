@@ -4,7 +4,7 @@
  * labels, and the agreement form's text ↔ policy conversion with its checks.
  */
 import { describe, expect, it } from 'vitest'
-import { placementFixture, policyFixture } from '../components/ci/__fixtures__/ciPlacement'
+import { placementFixture, policyFixture } from '../components/ci/__fixtures__/ciOverview'
 import { currentPlacement, draftFromPolicy, hostedDisabledReason, labelChoices, minutesLeft, parsePolicyDraft, requestSummary, targetLabel } from './ciPlacementView'
 import type { PlacementRequestRow } from './ciPlacementTypes'
 

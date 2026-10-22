@@ -5,10 +5,10 @@
  *          `api/routes/ci-placement.ts`. Change the server first, then copy.
  */
 
-export type PlacementAction = 'set_actions_variable' | 'delete_actions_variable'
+type PlacementAction = 'set_actions_variable' | 'delete_actions_variable'
 export type PlacementTarget = { kind: 'github_hosted'; label: string | null } | { kind: 'self_hosted'; label: string }
 
-export interface ExternalController {
+interface ExternalController {
   name: string
   owner: string
   repos: string[]
@@ -25,13 +25,13 @@ export interface CiRunnerPolicy {
   updatedAt: string | null
 }
 
-export interface VariableState {
+interface VariableState {
   exists: boolean
   value: string | null
   updatedAt: string | null
 }
 
-export interface PlacementPayload {
+interface PlacementPayload {
   repo: string
   name: string
   value: string | null

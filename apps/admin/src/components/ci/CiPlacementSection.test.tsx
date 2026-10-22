@@ -13,7 +13,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { placementFixture, previewFixture, PROJECT } from './__fixtures__/ciPlacement'
+import { placementFixture, previewFixture, PLACEMENT_PROJECT as PROJECT } from './__fixtures__/ciOverview'
 import type { PlacementRequestRow } from '../../lib/ciPlacementTypes'
 
 const state = vi.hoisted(() => ({ data: null as unknown, paths: [] as Array<string | null>, reload: vi.fn(), apiFetch: vi.fn() }))

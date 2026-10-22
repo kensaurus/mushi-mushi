@@ -10,7 +10,7 @@ import type { CiRunnerPolicy, PlacementRepo, PlacementRequestRow, PlacementTarge
 
 const HOSTED_LABEL_RE = /^(?:ubuntu|windows|macos)-[\w.-]+$/i
 
-export function isHostedLabel(label: string): boolean {
+function isHostedLabel(label: string): boolean {
   return HOSTED_LABEL_RE.test(label.trim())
 }
 
