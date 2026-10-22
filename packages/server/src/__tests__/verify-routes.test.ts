@@ -57,6 +57,7 @@ const calls = {
   rate: vi.fn(),
   openPr: vi.fn(),
   installed: vi.fn(),
+  toolchain: vi.fn(),
 }
 let role: string | null = 'member'
 
@@ -105,6 +106,7 @@ function app(over: Partial<Parameters<Routes['registerVerifyRoutes']>[1]> = {}) 
     workflowInstalled: calls.installed as never,
     defaultBranch: async () => 'main',
     openWorkflowPr: calls.openPr as never,
+    repoToolchain: calls.toolchain as never,
     resolveSecondJudgeKey: (async () => ({ key: { key: 'sk-secret-value', source: 'byok', hint: 'alue', label: 'Team OpenAI' }, provider: 'openai', model: 'gpt-5.4' })) as never,
     invokeVerifier: calls.invoke,
     now: () => new Date('2026-10-21T12:00:00Z'),
@@ -123,6 +125,7 @@ beforeEach(() => {
   role = 'member'
   calls.audit.mockReset().mockResolvedValue(undefined)
   calls.invoke.mockReset()
+  calls.toolchain.mockReset().mockResolvedValue({ packageManager: null, yarnBerry: false, localSetupAction: false, runnerVariable: null })
   calls.rate.mockReset().mockResolvedValue({ allowed: true })
   calls.openPr.mockReset().mockResolvedValue({ url: 'https://github.com/acme/app/pull/12', number: 12, branch: 'mushi/verify-workflow-x' })
   calls.installed.mockReset().mockResolvedValue(false)
@@ -262,6 +265,32 @@ describe('the verify workflow', () => {
     expect(calls.openPr.mock.calls[0][0]).toMatchObject({ token: 'gh-token', ref: { owner: 'acme', repo: 'app' }, defaultBranch: 'main' })
     expect(calls.openPr.mock.calls[0][0].yaml).toContain('runs-on: [self-hosted, alienware]')
     expect(calls.audit).toHaveBeenCalled()
+  })
+
+  it('fits the workflow to the repo: npm from its lockfile, its runner variable when the project kept the default label', async () => {
+    calls.toolchain.mockResolvedValue({ packageManager: 'npm', yarnBerry: false, localSetupAction: false, runnerVariable: { name: 'LINUX_RUNNER', fallback: 'ubuntu-24.04' } })
+    const res = await call(app(), 'GET', `/v1/admin/projects/${P}/verify-workflow`)
+    // The project picked its own labels, so they win over the variable.
+    expect(res.json.data.yaml).toContain('runs-on: [self-hosted, alienware]')
+    expect(res.json.data.yaml).toContain('- run: npm ci')
+    expect(res.json.data.yaml).not.toContain('pnpm install')
+    expect(res.json.data.toolchain).toMatchObject({ packageManager: 'npm' })
+    expect(calls.toolchain.mock.calls[0][1]).toMatchObject({ projectId: P, token: 'gh-token', ref: { owner: 'acme', repo: 'app' }, branch: 'main' })
+
+    seed({ project_settings: [{ project_id: P, verified_auto_merge: false, verify_runs_on: ['ubuntu-latest'], verify_test_command: null }] })
+    const fitted = await call(app(), 'GET', `/v1/admin/projects/${P}/verify-workflow`)
+    expect(fitted.json.data.yaml).toContain("runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}")
+    expect(fitted.json.data.yaml).toContain('test-command: "npx vitest run {files}"')
+    await call(app(), 'POST', `/v1/admin/projects/${P}/verify-workflow/pr`)
+    expect(calls.openPr.mock.calls.at(-1)[0].yaml).toContain("runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}")
+  })
+
+  it('falls back to the template when the repo cannot be read', async () => {
+    calls.toolchain.mockRejectedValue(new Error('boom'))
+    const res = await call(app(), 'GET', `/v1/admin/projects/${P}/verify-workflow`)
+    expect(res.status).toBe(200)
+    expect(res.json.data.yaml).toContain('pnpm install --frozen-lockfile')
+    expect(res.json.data.toolchain).toMatchObject({ packageManager: null })
   })
 
   it('POST /pr refuses viewers, an installed workflow, and explains a missing workflows permission', async () => {

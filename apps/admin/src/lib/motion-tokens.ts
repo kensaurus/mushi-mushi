@@ -21,16 +21,13 @@ export const microLayoutTransitionReduced: Transition = {
 /** Segment press feedback (paired with CSS :active fallback). */
 export const microTapScale = 0.96
 
-/** Banner / KPI tile entrance — quick settle. */
+/** Banner / KPI tile / chrome-row entrance — quick settle. */
 export const bannerEnterSpring: Transition = {
   type: 'spring',
   stiffness: 500,
   damping: 38,
   mass: 0.75,
 }
-
-/** Alias — PagePosture rows, status banners, chrome enter. */
-export const chromeEnterSpring = bannerEnterSpring
 
 /** Sidebar category accordion — grid 0fr→1fr disclosure. */
 export const sectionExpandSpring: Transition = {

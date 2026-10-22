@@ -57,13 +57,13 @@ const METRICS = [
     id: 'eslint-disable',
     label: 'eslint-disable',
     pattern: /eslint-disable/g,
-    max: 21,
+    max: 18,
   },
   {
     id: 'any',
     label: ': any | as any',
     pattern: /:\s*any\b|\bas any\b/g,
-    max: 9,
+    max: 6,
   },
 ]
 

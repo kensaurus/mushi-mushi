@@ -21,6 +21,15 @@ const state = vi.hoisted(() => ({
   paths: [] as Array<{ path: string | null; scope?: string }>,
   error: null as unknown,
   summary: '' as string,
+  syncs: [] as Array<{ path: string; scope?: string }>,
+}))
+
+vi.mock('../lib/supabase', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  apiFetch: async (path: string, opts: { scope?: string } = {}) => {
+    state.syncs.push({ path, scope: opts.scope })
+    return { ok: true, data: null }
+  },
 }))
 
 vi.mock('../lib/usePageData', () => ({
@@ -75,6 +84,7 @@ beforeEach(() => {
   state.overview = ciOverviewFixture()
   state.projectId = 'p1'
   state.paths = []
+  state.syncs = []
   state.error = null
   state.summary = ''
   window.localStorage.clear()
@@ -114,9 +124,12 @@ describe('CiPage', () => {
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('polls the project overview with refresh=1 and shows when it was updated', async () => {
+  it('paints from stored jobs, live-syncs with refresh=1 in the background, and shows when it was updated', async () => {
     await render()
-    expect(state.paths.some((p) => p.path === '/v1/admin/ci/overview?project_id=p1&days=7&refresh=1')).toBe(true)
+    expect(state.paths.some((p) => p.path === '/v1/admin/ci/overview?project_id=p1&days=7')).toBe(true)
+    expect(state.paths.some((p) => p.path?.includes('refresh=1'))).toBe(false)
+    expect(state.syncs).toContainEqual({ path: '/v1/admin/ci/overview?project_id=p1&days=7&refresh=1', scope: 'project' })
+    expect(state.syncs).toHaveLength(1)
     expect(q('ci-updated-ago')!.textContent).toBe('Updated 20 s ago')
   })
 
@@ -261,12 +274,12 @@ describe('CiPage', () => {
   it('reads every app without a project_id when no project is active', async () => {
     state.projectId = null
     await render()
-    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
   })
 
   it('reads every app when the header says All apps, without the fix links', async () => {
     await render('/ci?apps=all')
-    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
     expect(state.paths.some((p) => p.path?.includes('project_id='))).toBe(false)
     expect(state.paths.filter((p) => p.path?.startsWith('/v1/admin/fixes'))).toEqual([])
   })
@@ -274,7 +287,7 @@ describe('CiPage', () => {
   it('reads every app when All apps is the stored choice', async () => {
     setStoredProjectScopeMode('all')
     await render('/ci')
-    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
   })
 
   it('its toggle switches the header scope back to this app', async () => {
@@ -283,8 +296,8 @@ describe('CiPage', () => {
     state.paths = []
     await act(async () => thisApp.click())
     expect(getStoredProjectScopeMode()).toBe('project')
-    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?project_id=p1&days=7&refresh=1', scope: 'project' })
-    expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?project_id=p1&days=7', scope: 'project' })
+    expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
   })
 
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {
