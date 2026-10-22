@@ -912,3 +912,11 @@ export function IconSkip(p: IconProps) {
     <line x1="3.5" y1="8" x2="12.5" y2="8" />
   </>)
 }
+
+/** A closed padlock: a private repository (CI cost, ADR 0037). */
+export function IconLock(p: IconProps) {
+  return wrap(p, <>
+    <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+  </>)
+}

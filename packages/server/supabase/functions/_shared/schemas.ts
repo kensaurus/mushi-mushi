@@ -396,6 +396,8 @@ export const runnerHeartbeatSchema = z
             swap_used_mb: megabytes.optional(),
             swap_total_mb: megabytes.optional(),
             disk_free_gb: z.number().min(0).max(1_000_000).optional(),
+            // WSL2 distros on one PC send the same hashed VM boot id (CI cost: one machine).
+            machine_id: runnerHostIdSchema.optional(),
           })
           .strict()
           .optional(),

@@ -5,7 +5,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { callerProjectIds, enumerateAccessibleProjectIds, resolveOwnedProject } from '../shared.ts';
 import { resolveNextStepTo } from '../../_shared/activation-status.ts';
 import { isOperatorUser } from '../../_shared/operator-gate.ts';
-import { isNonRealReport } from '../../_shared/first-report.ts';
+import { isNotFirstReportSource } from '../../_shared/first-report.ts';
 import { loadProjectSetupSignals } from '../../_shared/setup-signals.ts';
 
 export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -205,7 +205,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     const firstReal = ((firstDiagnosisRes.data ?? []) as Array<{
       created_at: string;
       custom_metadata: Record<string, unknown> | null;
-    }>).find((row) => !isNonRealReport(row.custom_metadata));
+    }>).find((row) => !isNotFirstReportSource(row.custom_metadata));
     const firstDiagnosisAt = firstReal?.created_at ?? null;
 
     let ms: number | null = null;
