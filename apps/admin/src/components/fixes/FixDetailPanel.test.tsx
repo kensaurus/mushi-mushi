@@ -20,6 +20,8 @@ import type { FixAttempt } from './types'
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('@sentry/react', () => ({ captureMessage: vi.fn() }))
+// Covered by FixGateChecklist.test.tsx; its own reads would share this apiFetch mock.
+vi.mock('./FixGateChecklist', () => ({ FixGateChecklist: () => null }))
 
 import { FixDetailPanel } from './FixDetailPanel'
 import { ToastProvider } from '../../lib/toast'

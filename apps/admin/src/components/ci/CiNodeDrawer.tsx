@@ -4,18 +4,21 @@
  *          runner, repository or job — in the shared StageDrawer (focus trap,
  *          Esc to close). Machines and runners show live gauges, a 7-day
  *          outcome chart and chips that open the linked machine, runner or
- *          repository, so the drawer can be walked like the map.
+ *          repository, so the drawer can be walked like the map. A one-job
+ *          runner family opens as one runner and lists its members' runs.
  */
 
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { StageDrawer } from '../flow-primitives/StageDrawer'
+import { IconExternalLink } from '../icons'
 import { RelativeTime } from '../ui'
 import type { CiJob, CiOverview } from '../../lib/ciTypes'
-import { ciActivity, formatPercent, formatSeconds } from '../../lib/ciView'
+import { ciActivity, formatPercent, formatSeconds, runnerFamily, runnerKey } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNER_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
 import { ActivityBars, ChipRow, DrawerSection, Facts, Gauge, RecentJobs, StatTiles, StatusLine } from './CiDrawerParts'
 import { runnerStatus } from './ciRunnerStatus'
+import { MUSHI_VERIFY_JOB_NOTE, isMushiVerifyJob } from '../../lib/verifyView'
 
 interface Props {
   overview: CiOverview
@@ -38,14 +41,41 @@ function now(o: CiOverview): number {
   return Number.isFinite(t) ? t : Date.now()
 }
 
-/** Map node id of the runner a job ran on. */
+/** Map node id of the runner a job ran on (a one-job runner's family card). */
 function runnerNodeId(j: Pick<CiJob, 'runnerName' | 'runnerKind'>): string | null {
   if (j.runnerKind === 'github_hosted') return GITHUB_RUNNER_ID
-  return j.runnerName ? `runner:${j.runnerName}` : null
+  return j.runnerName ? `runner:${runnerKey(j.runnerName)}` : null
 }
 
+/** How a runner chip reads: a one-job runner as its family. */
+function runnerChipLabel(name: string): string {
+  const family = runnerFamily(name)
+  return family ? `${family} · one-job runners` : name
+}
+
+/** A self-hosted job on the runner (or one-job family) shown as `key`. */
+function onRunner(j: Pick<CiJob, 'runnerName' | 'runnerKind'>, key: string): boolean {
+  return j.runnerKind !== 'github_hosted' && j.runnerName != null && runnerKey(j.runnerName) === key
+}
+
+type RecentOptions = Pick<ComponentProps<typeof RecentJobs>, 'title' | 'hint' | 'showRunner' | 'limit'>
+
 /** The activity chart, stat tiles and recent jobs every runner-like node shares. */
-function JobsPanel({ o, jobs, empty, onSelect, jobsToday }: { o: CiOverview; jobs: CiJob[]; empty: string; onSelect: Select; jobsToday?: number }) {
+function JobsPanel({
+  o,
+  jobs,
+  empty,
+  onSelect,
+  jobsToday,
+  recent,
+}: {
+  o: CiOverview
+  jobs: CiJob[]
+  empty: string
+  onSelect: Select
+  jobsToday?: number
+  recent?: RecentOptions
+}) {
   const oldest = o.jobs.reduce<number | null>((m, j) => {
     const t = Date.parse(j.createdAt)
     return Number.isFinite(t) && (m == null || t < m) ? t : m
@@ -68,7 +98,7 @@ function JobsPanel({ o, jobs, empty, onSelect, jobsToday }: { o: CiOverview; job
       <DrawerSection title="Last 7 days" hint={a.days.some((d) => !d.covered) ? 'shaded days are older than the jobs Mushi holds' : undefined}>
         <ActivityBars activity={a} />
       </DrawerSection>
-      <RecentJobs jobs={jobs} empty={empty} onSelect={onSelect} />
+      <RecentJobs jobs={jobs} empty={empty} onSelect={onSelect} {...recent} />
     </>
   )
 }
@@ -98,24 +128,33 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
     }
   }
 
-  const rows = o.runners.filter((r) => r.name === key)
-  const host = o.hosts.find((h) => rows.some((r) => r.hostId === h.hostId)) ?? o.hosts.find((h) => h.runners.some((r) => r.name === key)) ?? null
-  const hr = host?.runners.find((r) => r.name === key) ?? null
-  const jobs = o.jobs.filter((j) => j.runnerName === key)
+  const rows = o.runners.filter((r) => r.kind !== 'github_hosted' && runnerKey(r.name) === key)
+  const host =
+    o.hosts.find((h) => rows.some((r) => r.hostId === h.hostId)) ?? o.hosts.find((h) => h.runners.some((r) => runnerKey(r.name) === key)) ?? null
+  const hr = host?.runners.find((r) => runnerKey(r.name) === key) ?? null
+  const jobs = o.jobs.filter((j) => onRunner(j, key))
+  // One-job runners of this family, from GitHub's list and from jobs.
+  const members = [...new Set([...rows.map((r) => r.name), ...jobs.map((j) => j.runnerName!)].filter((n) => runnerFamily(n) != null))]
+  const oneJob = members.length > 0
   // Rows also come from jobs; only a known status means GitHub listed it.
   const listed = rows.some((r) => r.status !== 'unknown')
-  const status = rows.some((r) => r.status === 'online') ? 'online' : rows.some((r) => r.status === 'offline') ? 'offline' : hr ? (hr.active ? 'online' : 'offline') : 'unknown'
+  const anyOnline = rows.some((r) => r.status === 'online')
+  // A finished one-job runner is gone, so its "offline" says nothing about the family.
+  const status = oneJob
+    ? anyOnline ? 'online' : hr ? (hr.active ? 'online' : 'offline') : 'unknown'
+    : anyOnline ? 'online' : rows.some((r) => r.status === 'offline') ? 'offline' : hr ? (hr.active ? 'online' : 'offline') : 'unknown'
   const busy = rows.some((r) => r.busy) || jobs.some((j) => j.status === 'in_progress')
-  const st = runnerStatus({ busy, status, runnerKind: 'self_hosted' })
+  const st = runnerStatus({ busy, status, runnerKind: 'self_hosted', oneJob })
   const repos = [...new Set([...rows.map((r) => r.repo), ...(hr?.repo ? [hr.repo] : []), ...jobs.map((j) => j.repo)])].sort()
   const labels = [...new Set([...rows.flatMap((r) => r.labels), ...jobs.flatMap((j) => j.labels)])].sort()
   const infra7d = rows.reduce((s, r) => s + r.infraFailures7d, 0)
   const peak = jobs.reduce<number | null>((m, j) => (j.memPeakMb == null ? m : Math.max(m ?? 0, j.memPeakMb)), null)
   const lastJob = [...rows.map((r) => r.lastJobAt), ...jobs.map((j) => j.startedAt ?? j.createdAt)].filter((x): x is string => !!x).sort().pop() ?? null
 
+  const where = host ? `On ${host.hostname}` : 'On a machine with no Mushi heartbeat'
   return {
-    title: key,
-    subtitle: host ? `On ${host.hostname}` : 'On a machine with no Mushi heartbeat',
+    title: oneJob ? `${key} · one-job runners` : key,
+    subtitle: oneJob ? `${where} · ${members.length} one-job runner${members.length === 1 ? '' : 's'} seen` : where,
     body: (
       <>
         <StatusLine {...st} />
@@ -147,11 +186,18 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
               ['Service restarts', hr?.restarts != null ? String(hr.restarts) : '—'],
               ['Out-of-memory kills', hr?.oomKills != null ? String(hr.oomKills) : '—'],
               ['Service', hr?.service ?? '—'],
-              ['Listed by GitHub', listed ? 'Yes' : 'No (seen on jobs only)'],
+              oneJob ? ['One-job runners seen', String(members.length)] : ['Listed by GitHub', listed ? 'Yes' : 'No (seen on jobs only)'],
             ]}
           />
         </DrawerSection>
-        <JobsPanel o={o} jobs={jobs} empty="No recent jobs on this runner." onSelect={onSelect} jobsToday={listed ? rows.reduce((s, r) => s + r.jobs24h, 0) : undefined} />
+        <JobsPanel
+          o={o}
+          jobs={jobs}
+          empty={oneJob ? 'No recent jobs on these runners.' : 'No recent jobs on this runner.'}
+          onSelect={onSelect}
+          jobsToday={listed ? rows.reduce((s, r) => s + r.jobs24h, 0) : undefined}
+          recent={oneJob ? { title: 'Runs by its one-job runners', hint: 'each job had a runner of its own', showRunner: true, limit: 20 } : undefined}
+        />
       </>
     ),
   }
@@ -160,7 +206,7 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
 function hostContent(o: CiOverview, key: string, onSelect: Select) {
   const h = o.hosts.find((x) => x.hostId === key)
   if (!h) return null
-  const names = new Set(h.runners.map((r) => r.name))
+  const names = new Set(h.runners.map((r) => runnerKey(r.name)))
   const cpu = h.cpuCount ?? null
   const load = h.metrics.load1
   return {
@@ -192,7 +238,7 @@ function hostContent(o: CiOverview, key: string, onSelect: Select) {
                 <li key={r.name}>
                   <button
                     type="button"
-                    onClick={() => onSelect?.(`runner:${r.name}`)}
+                    onClick={() => onSelect?.(`runner:${runnerKey(r.name)}`)}
                     className="flex w-full items-center gap-2 rounded-md border border-edge-subtle bg-surface-raised px-2.5 py-1.5 text-left text-xs hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                   >
                     <span className={`h-2 w-2 shrink-0 rounded-full ${r.active ? 'bg-ok' : 'bg-danger'}`} aria-hidden="true" />
@@ -215,7 +261,7 @@ function hostContent(o: CiOverview, key: string, onSelect: Select) {
             })}
           </ul>
         </DrawerSection>
-        <JobsPanel o={o} jobs={o.jobs.filter((j) => j.runnerName && names.has(j.runnerName))} empty="No recent jobs on this machine." onSelect={onSelect} />
+        <JobsPanel o={o} jobs={o.jobs.filter((j) => j.runnerKind !== 'github_hosted' && j.runnerName && names.has(runnerKey(j.runnerName)))} empty="No recent jobs on this machine." onSelect={onSelect} />
       </>
     ),
   }
@@ -239,13 +285,17 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
     }
   }
   if (nodeId === UNKNOWN_HOST_ID) {
-    const known = new Set(o.hosts.flatMap((h) => h.runners.map((r) => r.name)))
+    const known = new Set(o.hosts.flatMap((h) => h.runners.map((r) => runnerKey(r.name))))
     const names = new Set(
       [
         ...o.runners.filter((r) => r.kind !== 'github_hosted' && !o.hosts.some((h) => h.hostId === r.hostId)).map((r) => r.name),
         ...o.jobs.filter((j) => j.runnerKind !== 'github_hosted' && j.runnerName).map((j) => j.runnerName!),
-      ].filter((n) => !known.has(n)),
+      ]
+        .map(runnerKey)
+        .filter((n) => !known.has(n)),
     )
+    // A family name reads as one; any of its members' names tells us it is one.
+    const families = new Set([...o.runners.map((r) => r.name), ...o.jobs.map((j) => j.runnerName ?? '')].map(runnerFamily).filter((f): f is string => f != null))
     return {
       title: 'Unknown machine',
       subtitle: 'These runners have not sent a heartbeat, so Mushi cannot see their memory or service state.',
@@ -256,9 +306,13 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
             <code className="font-mono">mushi runner hooks install --dir &lt;runner dir&gt;</code>, to fill this in.
           </p>
           <DrawerSection title="Runners">
-            <ChipRow items={[...names].sort().map((n) => ({ key: n, label: n, nodeId: `runner:${n}` }))} onSelect={onSelect} empty="None." />
+            <ChipRow
+              items={[...names].sort().map((n) => ({ key: n, label: families.has(n) ? `${n} · one-job runners` : n, nodeId: `runner:${n}` }))}
+              onSelect={onSelect}
+              empty="None."
+            />
           </DrawerSection>
-          <JobsPanel o={o} jobs={o.jobs.filter((j) => j.runnerName && names.has(j.runnerName))} empty="No recent jobs on these runners." onSelect={onSelect} />
+          <JobsPanel o={o} jobs={o.jobs.filter((j) => j.runnerKind !== 'github_hosted' && j.runnerName && names.has(runnerKey(j.runnerName)))} empty="No recent jobs on these runners." onSelect={onSelect} />
         </>
       ),
     }
@@ -271,9 +325,12 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
     const runnerIds = new Map<string, string>()
     for (const j of jobs) {
       const id = runnerNodeId(j)
-      if (id) runnerIds.set(id, j.runnerKind === 'github_hosted' ? GITHUB_RUNNERS_NAME : j.runnerName!)
+      if (id) runnerIds.set(id, j.runnerKind === 'github_hosted' ? GITHUB_RUNNERS_NAME : runnerChipLabel(j.runnerName!))
     }
-    for (const x of o.runners.filter((x) => x.repo === key)) runnerIds.set(x.kind === 'github_hosted' ? GITHUB_RUNNER_ID : `runner:${x.name}`, x.kind === 'github_hosted' ? GITHUB_RUNNERS_NAME : x.name)
+    for (const x of o.runners.filter((x) => x.repo === key)) {
+      if (x.kind === 'github_hosted') runnerIds.set(GITHUB_RUNNER_ID, GITHUB_RUNNERS_NAME)
+      else if (!runnerIds.has(`runner:${runnerKey(x.name)}`)) runnerIds.set(`runner:${runnerKey(x.name)}`, runnerChipLabel(x.name))
+    }
     return {
       title: key,
       subtitle: r?.projectName ? `App: ${r.projectName}` : 'Repository',
@@ -326,9 +383,11 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
             />
           </DrawerSection>
           {j.infraDetail && <p className="mt-3 text-xs text-fg-secondary">{j.infraDetail}</p>}
+          {isMushiVerifyJob(j) && <p className="mt-3 text-xs text-fg-secondary">{MUSHI_VERIFY_JOB_NOTE}</p>}
           {j.htmlUrl && (
-            <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-xs font-medium text-accent hover:underline">
-              Open on GitHub ↗
+            <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
+              Open on GitHub
+              <IconExternalLink size={12} />
             </a>
           )}
         </>

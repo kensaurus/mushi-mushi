@@ -137,6 +137,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Why did this fix attempt fail — show me every step.',
   },
   {
+    name: 'get_fix_verification',
+    title: 'Fix merge checks',
+    description:
+      'Return whether one fix attempt\'s PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host\'s Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is { id, status (pass | fail | pending | unavailable | not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge { state (none | eligible | merged | skipped | failed), detail }, and regressions after a Mushi merge [{ signal (ci_failed_on_merge | report_reopened | new_report_in_changed_file), revertState, revertPrUrl }]. Returns { headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt\'s full lifecycle.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is this agent fix proven to work, and what is still missing before it can merge?',
+  },
+  {
     name: 'get_blast_radius',
     title: 'Blast radius',
     description:

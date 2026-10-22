@@ -7,6 +7,9 @@
  * Rules:
  * - A runner attaches to the machine whose heartbeat lists it (or its
  *   `hostId`); runners with no heartbeat attach to one "Unknown machine".
+ * - One-job runners (`aw-tsumagoi-1022003316-163`, `runnerFamily`) fold into
+ *   one card per family ("aw-tsumagoi · one-job runners"): busy when any
+ *   member is, jobs today summed, last job the newest.
  * - GitHub-hosted runners collapse into one "GitHub-hosted" machine with one
  *   "GitHub-hosted runners" runner, so its edges never cross behind a
  *   self-hosted runner card on the way to a repo.
@@ -23,7 +26,7 @@
 import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
-import { buildCiQueue, jobOutcome, runnerDisplayName } from '../../lib/ciView'
+import { buildCiQueue, jobOutcome, runnerDisplayName, runnerFamily, runnerKey } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 
 type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
@@ -53,7 +56,12 @@ export interface CiHostNodeData extends Base {
 
 export interface CiRunnerNodeData extends Base {
   kind: 'runner'
+  /** The runner's name, or a one-job family's base name. */
   name: string
+  /** A family of one-job runners: a new runner registers for every job. */
+  oneJob: boolean
+  /** One-job runner names seen in the family (0 for an ordinary runner). */
+  members: number
   status: 'online' | 'offline' | 'unknown'
   busy: boolean
   runnerKind: CiRunnerKind
@@ -122,7 +130,7 @@ function hostOfRunner(hosts: CiHost[], name: string, hostId: string | null): CiH
     const byId = hosts.find((h) => h.hostId === hostId)
     if (byId) return byId
   }
-  return hosts.find((h) => h.runners.some((r) => r.name === name)) ?? null
+  return hosts.find((h) => h.runners.some((r) => runnerKey(r.name) === name)) ?? null
 }
 
 function nodeId(kind: CiMapNodeKind, key: string): string {
@@ -212,18 +220,33 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
   // Which runner is running a job in which repo right now.
   const runningOn = new Set<string>()
   for (const j of overview.jobs) {
-    if (j.runnerName && jobOutcome(j) === 'running') runningOn.add(`${j.runnerName}\u0000${j.repo}`)
+    if (j.runnerName && jobOutcome(j) === 'running') runningOn.add(`${runnerKey(j.runnerName)}\u0000${j.repo}`)
   }
 
-  // Runners, merged by name across the repos they serve.
-  type Acc = { name: string; repos: Set<string>; labels: Set<string>; status: CiRunnerNodeData['status']; busy: boolean; kind: CiRunnerKind; hostId: string | null; jobs24h: number; infra7d: number; lastJobAt: string | null }
+  // Runners, merged by name across the repos they serve; one-job runners by family.
+  type Acc = {
+    name: string
+    members: Set<string>
+    repos: Set<string>
+    labels: Set<string>
+    status: CiRunnerNodeData['status']
+    anyOnline: boolean
+    busy: boolean
+    kind: CiRunnerKind
+    hostId: string | null
+    jobs24h: number
+    infra7d: number
+    lastJobAt: string | null
+  }
   const runners = new Map<string, Acc>()
-  const touch = (name: string, kind: CiRunnerKind, hostId: string | null): Acc => {
+  const touch = (rawName: string, kind: CiRunnerKind, hostId: string | null): Acc => {
+    const name = kind === 'github_hosted' ? rawName : runnerKey(rawName)
     let acc = runners.get(name)
     if (!acc) {
-      acc = { name, repos: new Set(), labels: new Set(), status: 'unknown', busy: false, kind, hostId, jobs24h: 0, infra7d: 0, lastJobAt: null }
+      acc = { name, members: new Set(), repos: new Set(), labels: new Set(), status: 'unknown', anyOnline: false, busy: false, kind, hostId, jobs24h: 0, infra7d: 0, lastJobAt: null }
       runners.set(name, acc)
     }
+    if (kind !== 'github_hosted' && runnerFamily(rawName)) acc.members.add(rawName)
     if (acc.kind === 'unknown' && kind !== 'unknown') acc.kind = kind
     if (!acc.hostId && hostId) acc.hostId = hostId
     return acc
@@ -232,6 +255,7 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
     const acc = touch(r.name, r.kind, r.hostId)
     acc.repos.add(r.repo)
     for (const l of r.labels) acc.labels.add(l)
+    acc.anyOnline = acc.anyOnline || r.status === 'online'
     if (r.status === 'online' || (r.status === 'offline' && acc.status === 'unknown')) acc.status = r.status
     acc.busy = acc.busy || r.busy === true
     acc.jobs24h += r.jobs24h
@@ -266,6 +290,8 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
         kind: 'runner',
         title: GITHUB_RUNNERS_NAME,
         name: GITHUB_RUNNERS_NAME,
+        oneJob: false,
+        members: 0,
         status: 'online',
         busy: false,
         runnerKind: 'github_hosted',
@@ -297,15 +323,24 @@ export function buildCiMap(overview: CiOverview, opts: { maxJobs?: number; now?:
     const hostNodeId = host ? nodeId('host', host.hostId) : specialHost('unknown')
     const hostData = nodes.get(hostNodeId) as CiHostNodeData
     hostData.runnerCount += 1
-    const hr = host?.runners.find((r) => r.name === acc.name) ?? null
+    const hr = host?.runners.find((r) => runnerKey(r.name) === acc.name) ?? null
     const id = nodeId('runner', acc.name)
     const busy = acc.busy || [...acc.repos].some((repo) => runningOn.has(`${acc.name}\u0000${repo}`))
+    const oneJob = acc.members.size > 0
+    // A one-job runner is gone once its job ends, so GitHub's "offline" for
+    // past members says nothing about the family: only a live member or the
+    // heartbeat does.
+    const status: CiRunnerNodeData['status'] = oneJob
+      ? acc.anyOnline ? 'online' : hr ? (hr.active ? 'online' : 'offline') : 'unknown'
+      : // A heartbeat that reports the service down outranks "unknown".
+        acc.status === 'unknown' && hr ? (hr.active ? 'online' : 'offline') : acc.status
     nodes.set(id, {
       kind: 'runner',
-      title: acc.name,
+      title: oneJob ? `${acc.name} · one-job runners` : acc.name,
       name: acc.name,
-      // A heartbeat that reports the service down outranks "unknown".
-      status: acc.status === 'unknown' && hr ? (hr.active ? 'online' : 'offline') : acc.status,
+      oneJob,
+      members: acc.members.size,
+      status,
       busy,
       runnerKind: acc.kind,
       repos: [...acc.repos].sort(),
