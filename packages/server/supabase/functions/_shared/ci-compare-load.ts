@@ -5,7 +5,7 @@
  *          GitHub snapshot's workflow files and variable names, runners,
  *          host heartbeats, cost settings, and the job aggregate.
  *
- * Degrades until 20261022120000_ci_cost_compare is applied:
+ * Degrades until 20261022050303_ci_cost_compare is applied:
  *   - no ci_runner_comparison → the newest MAX_FALLBACK_JOBS jobs are read
  *     and aggregated in TypeScript (source 'rows', with a note);
  *   - no ci_cost_settings     → the example figures, settingsWritable false.

@@ -8,7 +8,7 @@ Related: [Plan 022](../execplans/ci-runners.md) Phase 7, ADR
 [0016](0016-mushi-as-the-app-recipe-control-plane.md) (CI is a recipe
 element; CI minutes never lead), `_shared/ci-compare.ts`, `_shared/ci-cost.ts`,
 `_shared/ci-runs-on.ts`, `_shared/ci-advisor.ts` (`adviseCiCost`),
-`api/routes/ci.ts`, migration `20261022120000_ci_cost_compare`, the owner's CI
+`api/routes/ci.ts`, migration `20261022050303_ci_cost_compare`, the owner's CI
 agreement (`~/actions-runners/CI-AGREEMENT.md`, 2026-10-22).
 
 ## Context

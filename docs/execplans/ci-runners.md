@@ -164,7 +164,7 @@ read; writes are service role only.
   - 7a (read-only): hosted vs self-hosted from `runner_group_name`; dated
     rate table in `ci-minutes.ts`; repo visibility in `ci_collector_state`;
     WSL2 heartbeats carry a hashed VM id; `ci_cost_settings` and
-    `ci_runner_comparison` (migration `20261022120000_ci_cost_compare`);
+    `ci_runner_comparison` (migration `20261022050303_ci_cost_compare`);
     `_shared/ci-runs-on.ts`, `ci-cost.ts`, `ci-compare.ts`; cost rules in
     `ci-advisor.ts`; `GET /v1/admin/ci/compare`, `GET/PUT
     /v1/admin/ci/cost-settings`; console "Cost and speed" on `/ci` and

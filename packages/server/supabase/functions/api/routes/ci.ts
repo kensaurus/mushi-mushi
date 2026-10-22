@@ -446,14 +446,14 @@ async function putCostSettings(c: Context, deps: CiRouteDeps): Promise<Response>
   const row = costSettingsRow(org.orgId, figures, userId, now)
   const { data: prior, error: readErr } = await db.from('ci_cost_settings').select('*').eq('organization_id', org.orgId).maybeSingle()
   if (readErr) {
-    if (isMissingObject(readErr)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022120000_ci_cost_compare is applied.', 409)
+    if (isMissingObject(readErr)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022050303_ci_cost_compare is applied.', 409)
     return jsonError(c, 'DB_ERROR', 'Could not read the CI cost settings.', 500)
   }
   // Snapshot before the write: the audit says which figures changed.
   const before = prior ? normalizeCostSettings(org.orgId, prior as CostSettingsRow) : null
   const { error } = await db.from('ci_cost_settings').upsert(row, { onConflict: 'organization_id' })
   if (error) {
-    if (isMissingObject(error)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022120000_ci_cost_compare is applied.', 409)
+    if (isMissingObject(error)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022050303_ci_cost_compare is applied.', 409)
     clog.error('ci cost settings save failed', { orgId: org.orgId, err: error.message })
     return jsonError(c, 'DB_ERROR', 'The CI cost settings could not be saved.', 500)
   }
