@@ -31,6 +31,7 @@ describe('resolveSettingsTab', () => {
     ['health', 'sdk', null],
     ['dev', 'sdk', 'debug-logging'],
     ['keys', 'byok', null],
+    ['fixes', 'general', 'verified-merge'],
   ])('maps the old id %s to %s (section %s)', (alias, tab, anchor) => {
     expect(resolveSettingsTab(alias)).toEqual({ tab, anchor })
   })

@@ -1198,6 +1198,36 @@
     ]
   },
   {
+    "majorMinor": "0.32",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.32.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.32.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.31",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.31.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.31.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.30",
     "headline": null,
     "pending": false,
@@ -1247,6 +1277,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.28.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.28.0"
       }
     ]
   },
@@ -1288,6 +1322,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.27.1"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.27.0"
       }
     ]
   },
@@ -2275,6 +2313,8 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.7",
+      "0.8.6",
       "0.8.5",
       "0.8.4",
       "0.8.3",
@@ -2351,7 +2391,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.5"
+        "version": "0.8.7"
       }
     ]
   },
@@ -2575,7 +2615,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.5"
+        "version": "0.6.7"
       },
       {
         "name": "mushi-mushi",

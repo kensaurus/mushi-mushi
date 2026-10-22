@@ -16,10 +16,11 @@ import {
   type TruthAttempt,
   type TruthReport,
 } from './fix-report-truth.ts'
+import { universalKeysByOrg } from './byok-scope.ts'
 
 /** Columns every truth derivation needs from fix_attempts. */
 export const TRUTH_ATTEMPT_COLUMNS =
-  'id, report_id, project_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, failure_category, error, created_at, started_at'
+  'id, report_id, project_id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, ci_infra, failure_category, error, created_at, started_at'
 
 const ID_CHUNK = 100
 
@@ -115,11 +116,17 @@ export async function loadReportFixTruths(
     const { data: projRows } = await db.from('projects').select('id, organization_id').in('id', projectIds)
     const orgOf = new Map(((projRows ?? []) as Array<{ id: string; organization_id: string | null }>).map((p) => [p.id, p.organization_id]))
     const orgIds = [...new Set([...orgOf.values()].filter((v): v is string => Boolean(v)))]
-    const [{ data: keyRows }, { data: orgKeyRows }] = await Promise.all([
+    const [{ data: keyRows }, { data: orgKeyRows }, universalByOrg] = await Promise.all([
       db.from('byok_keys').select('project_id, provider_slug, status, test_status').in('project_id', projectIds),
       orgIds.length
         ? db.from('byok_keys').select('organization_id, provider_slug, status, test_status').in('organization_id', orgIds)
         : Promise.resolve({ data: [] }),
+      // Universal keys of each organization's owners (ADR 0031).
+      universalKeysByOrg<{ owner_user_id: string; provider_slug: string; status: string | null; test_status: string | null }>(
+        db as never,
+        orgIds,
+        'provider_slug, status, test_status',
+      ),
     ])
     type KeyRow = { project_id?: string | null; organization_id?: string | null; provider_slug: string; status?: string | null; test_status?: string | null }
     const note = (pid: string, k: KeyRow) => {
@@ -135,6 +142,10 @@ export async function loadReportFixTruths(
     for (const k of (keyRows ?? []) as KeyRow[]) if (k.project_id) note(k.project_id, k)
     for (const k of (orgKeyRows ?? []) as KeyRow[]) {
       for (const pid of projectIds) if (k.organization_id && orgOf.get(pid) === k.organization_id) note(pid, k)
+    }
+    for (const pid of projectIds) {
+      const org = orgOf.get(pid)
+      for (const k of org ? (universalByOrg.get(org) ?? []) : []) note(pid, k)
     }
   }
 

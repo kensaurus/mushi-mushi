@@ -294,14 +294,14 @@ describe('applyCloudAgentOutcome', () => {
     expect(mocks.dispatchPluginEventDetached).toHaveBeenCalledWith(db, PROJECT, 'fix.failed', expect.anything())
   })
 
-  it('completed_no_pr: job goes to completed_no_pr and the github agent gets a github_* category', async () => {
+  it('completed_no_pr: job goes to completed_no_pr, filed as unknown rather than an API error', async () => {
     const { db, queries } = createFakeDb((q) => {
       if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
       return { data: null }
     })
     const res = await applyCloudAgentOutcome(db, { ...TARGET, agent: 'github_cloud_agent' }, { kind: 'completed_no_pr' })
     expect(res).toEqual({ applied: true })
-    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'github_other_error' })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({ failure_category: 'unknown' })
     expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'completed_no_pr' })
   })
 
@@ -322,6 +322,18 @@ describe('applyCloudAgentOutcome', () => {
     expect(findQueries(queries, 'fix_dispatch_jobs', 'update')[0].payload).toMatchObject({ status: 'skipped' })
     expect(findQueries(queries, 'fix_events', 'insert')[0].payload).toMatchObject({ label: 'Agent found nothing to change' })
     expect(mocks.notifyTeamFixEvent).toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_failed', expect.objectContaining({ failureCategory: 'already_fixed' }))
+  })
+
+  it('completed_no_pr with notes but no verdict is unknown, not cursor_api_error (2026-10-21)', async () => {
+    const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
+    await applyCloudAgentOutcome(db, TARGET, {
+      kind: 'completed_no_pr',
+      summary: "I couldn't find which query timed out, so I didn't open a pull request. A guessed index would not fix this report.",
+    })
+    expect(findQueries(queries, 'fix_attempts', 'update')[0].payload).toMatchObject({
+      failure_category: 'unknown',
+      error: "Cloud agent finished without opening a pull request. Its notes: I couldn't find which query timed out, so I didn't open a pull request.",
+    })
   })
 
   it('completed_no_pr with a "not in this repository" summary is wrong_repo', async () => {

@@ -24,12 +24,15 @@ export default {
 
   '-- Fix': { type: 'separator', title: '3 · Fix' },
   fixes: 'Fix orchestrator',
+  'verified-merge': 'Verified merge',
+  ci: 'CI runners',
   repo: 'Repo graph',
   explore: 'Codebase Atlas',
   'ux-runs': 'UX runs',
   iterate: 'Iterate (PDCA)',
 
   '-- Verify': { type: 'separator', title: '4 · Verify' },
+  checks: 'Checks',
   'qa-coverage': 'QA Coverage',
   inventory: 'Inventory & user stories',
   'fullstack-audit': 'Full-stack audit',

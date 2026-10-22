@@ -16,7 +16,8 @@
  *   process.env.NAME        process.env['NAME']      process.env["NAME"]
  *   import.meta.env.NAME    Deno.env.get('NAME')
  * Comments are stripped first so a name that only appears in prose is not a
- * read. Runtime/platform builtins are allowlisted below.
+ * read. Runtime/platform builtins, and sample copy that is not a real read,
+ * are allowlisted below.
  */
 
 import { execSync } from 'node:child_process'
@@ -46,6 +47,25 @@ const BUILTIN_ALLOWLIST = new Set([
   'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_DB_URL',
+  // CI injects these. The CLI prefers them over `git rev-parse`.
+  'GITHUB_SHA',
+  'GITHUB_REF_NAME',
+  'CI_COMMIT_SHA',
+  'CI_COMMIT_BRANCH',
+  // OS locale, and the Windows per-user directory (same class as HOME / APPDATA).
+  'LANG',
+  'LOCALAPPDATA',
+  // Supabase edge runtime: region where this isolate is actually running.
+  'SB_REGION',
+  // systemd (LoadCredential) and WSL set these; `mushi runner` reads them.
+  'CREDENTIALS_DIRECTORY',
+  'WSL_DISTRO_NAME',
+])
+
+/** Names that match a read regex but are sample copy, not configuration this repo reads. */
+const NON_READ_ALLOWLIST = new Set([
+  // Kill-switch example in a detector message (`env:AI_TUTOR_ENABLED`).
+  'AI_TUTOR_ENABLED',
 ])
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/
@@ -134,7 +154,7 @@ for (const rel of tracked) {
 }
 
 const undocumented = [...reads.entries()]
-  .filter(([name]) => !BUILTIN_ALLOWLIST.has(name) && !documented.has(name))
+  .filter(([name]) => !BUILTIN_ALLOWLIST.has(name) && !NON_READ_ALLOWLIST.has(name) && !documented.has(name))
   .sort(([a], [b]) => a.localeCompare(b))
 
 if (JSON_OUT) {

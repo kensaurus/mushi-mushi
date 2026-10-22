@@ -15,7 +15,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**117 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**124 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -43,7 +43,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.25.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.28.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",

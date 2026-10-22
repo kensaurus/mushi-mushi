@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/server.ts
  * PURPOSE: Testable MCP server factory. Exports `createMushiServer()` which
@@ -1119,6 +1119,26 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_fix_verification',
+    {
+      title: titleOf('get_fix_verification'),
+      description: descOf('get_fix_verification'),
+      annotations: annotationsFor('get_fix_verification'),
+      inputSchema: z.object({
+        fixId: z.string().describe('fix_attempt UUID'),
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — required for org-scoped keys with multiple projects.'),
+      }),
+    },
+    async (args) => {
+      const { headers } = await projectScopeHeaders(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/fixes/${encodeURIComponent(args.fixId)}/verification`, { headers }));
+    },
+  );
+
+  server.registerTool(
     'get_blast_radius',
     {
       title: titleOf('get_blast_radius'),
@@ -1682,6 +1702,117 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const pid = await resolveProjectId(args.projectId);
       const qs = new URLSearchParams({ project_id: pid, days: String(args.days ?? 30) });
       return jsonText(await apiCall(`/v1/admin/code-health?${qs}`));
+    },
+  );
+
+  // CI runners (Plan 022, ADR 0033). Loose objects: the rows mirror database
+  // columns and grow; only the top-level shape is the contract.
+  const CI_ADVICE_OUTPUT = z.looseObject({
+    id: z.string(),
+    severity: z.string(),
+    title: z.string(),
+    detail: z.string().nullable().optional(),
+    evidence: z.unknown().optional(),
+    fix: z.string().nullable().optional(),
+  });
+  server.registerTool(
+    'get_ci_overview',
+    {
+      title: titleOf('get_ci_overview'),
+      description: descOf('get_ci_overview'),
+      annotations: annotationsFor('get_ci_overview'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 7)'),
+        refresh: z.boolean().optional().describe('Read GitHub first instead of the last 10-minute sync (at most once a minute per project)'),
+      }),
+      outputSchema: z.looseObject({
+        generatedAt: z.string().optional(),
+        refreshedAt: z.string().nullable().optional(),
+        window: z.unknown().optional(),
+        permissions: z.unknown().optional(),
+        hosts: z.array(z.looseObject({})).optional().describe('Machines that send a runner heartbeat'),
+        runners: z.array(z.looseObject({})).optional().describe('GitHub runners seen, with status'),
+        repos: z.array(z.looseObject({})).optional(),
+        jobs: z.array(z.looseObject({})).optional().describe('Latest jobs with their infra or code verdict'),
+        stats: z.looseObject({}).nullable().optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional().describe('Rule-based advice with evidence, most severe first'),
+      }),
+    },
+    async (args) => {
+      // An explicit id is checked against a project-bound key; with none, the
+      // configured project, and with an account key no project (portfolio map).
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 7) });
+      if (pid) qs.set('project_id', pid);
+      if (args.refresh) qs.set('refresh', '1');
+      return jsonResult(
+        await apiCall(`/v1/admin/ci/overview?${qs}`, undefined, args.refresh ? { minTimeoutMs: 60_000 } : undefined),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_ci_costs',
+    {
+      title: titleOf('get_ci_costs'),
+      description: descOf('get_ci_costs'),
+      annotations: annotationsFor('get_ci_costs'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        dataDays: z.number().optional(),
+        lowConfidence: z.boolean().optional().describe('Under 7 days of data'),
+        source: z.string().optional(),
+        sourceNote: z.string().nullable().optional(),
+        rates: z.unknown().optional().describe('GitHub list prices and the date they were read'),
+        fields: z.record(z.string(), z.string()).optional().describe('measured | estimated per field'),
+        settings: z.array(z.looseObject({})).optional(),
+        repos: z.array(z.looseObject({})).optional(),
+        rows: z.array(z.looseObject({})).optional().describe('Per repo × runner class: wait, run time, pass rate, minutes, cost'),
+        accounts: z.array(z.looseObject({})).optional().describe('Included minutes per GitHub owner'),
+        machines: z.array(z.looseObject({})).optional(),
+        speed: z.array(z.looseObject({})).optional(),
+        whatIfs: z.array(z.looseObject({})).optional(),
+        explain: z.looseObject({}).optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional(),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/compare?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'request_ci_placement_change',
+    {
+      title: titleOf('request_ci_placement_change'),
+      description: descOf('request_ci_placement_change'),
+      annotations: annotationsFor('request_ci_placement_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$/).describe('LINUX_RUNNER or RUNNER_<WORKFLOW>'),
+        value: z.string().min(1).max(100).nullable().describe('One runner label, or null to remove the variable'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
+      return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
     },
   );
 
@@ -3203,6 +3334,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         sha: z.string().nullable().optional().describe('Merge commit SHA, when GitHub reported one'),
         reportId: z.string().describe('Report UUID linked to this fix attempt'),
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
+        review: z
+          .object({
+            state: z.string().describe('merge | fix_first | stale | queued | skipped | failed | not_reviewed (a hold never merges here)'),
+            label: z.string().describe('One line, e.g. "Opus review: fix first" or "Not reviewed"'),
+            overridden: z.boolean().describe('Always false from MCP: only a person in the console can override a hold'),
+          })
+          .optional()
+          .describe('The Opus review of the PR at merge time (ADR 0030)'),
       }),
     },
     async (args) => {
@@ -3349,6 +3488,50 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           sinceDays: args.sinceDays,
           cursor: args.cursor,
           sentryProject: args.sentryProject,
+        }),
+      });
+      return jsonResult(data);
+    },
+  );
+
+  server.registerTool(
+    'file_report',
+    {
+      title: titleOf('file_report'),
+      description: descOf('file_report'),
+      annotations: annotationsFor('file_report'),
+      inputSchema: z.object({
+        title: z.string().min(3).max(200).describe('One-line title (3-200 characters)'),
+        description: z
+          .string()
+          .min(1)
+          .max(10_000)
+          .describe('What happens, steps to reproduce, what you expected, and how to check it is fixed'),
+        severity: z
+          .enum(['critical', 'high', 'medium', 'low'])
+          .optional()
+          .describe('Your severity hint; triage may refine it'),
+        component: z.string().max(200).optional().describe('Area of the app, e.g. "checkout"'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      }),
+      outputSchema: z.object({
+        reportId: z.string().describe('The new report id; pass it to triage_issue or dispatch_fix'),
+        projectId: z.string(),
+        title: z.string(),
+        status: z.string().describe('Always new: triage starts right away'),
+        severity: z.string().nullable(),
+        component: z.string().nullable(),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/reports`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: args.title,
+          description: args.description,
+          severity: args.severity,
+          component: args.component,
         }),
       });
       return jsonResult(data);

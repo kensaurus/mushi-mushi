@@ -1,5 +1,17 @@
 # @mushi-mushi/cli
 
+## 0.32.0
+
+### Minor Changes
+
+- 238acef: Every pull request a cloud coding agent opens as a fix now gets an independent review by Claude Opus 5.5 on your own Anthropic key: merge, fix first or hold, with findings, removed behaviour and decisions that need you. A "hold" stops every Mushi merge path (the console, `merge_fix`, `mushi fixes merge`) until a project member overrides it in the console with a reason; the CLI and MCP cannot override. Mushi merges only the commit it reviewed. `get_fix_timeline` returns the review, `merge_fix` reports it, and the CLI adds `mushi fixes review <fixId> [--show]`.
+
+## 0.31.0
+
+### Minor Changes
+
+- f80c828: Spend down expiring Cursor credits on open bugs. A Cursor key can be given the date its credits expire, a model and a number of fixes per day; from a chosen number of days before that date, Mushi sends the best open reports of the apps that key already pays for to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. New MCP tools `get_spend_down_status` and `set_byok_spend_down`, and the CLI command `mushi keys spend-down`.
+
 ## 0.30.6
 
 ### Patch Changes

@@ -6,6 +6,8 @@
  */
 
 import { CHIP_TONE } from '../../lib/chipTone'
+import { readFixCi } from '../../lib/ciInfra'
+import type { CiInfraVerdict } from '../../lib/ciTypes'
 
 /**
  * Soft warning emitted by `validateAgainstSpec()` when the diff parses
@@ -47,6 +49,8 @@ export interface FixAttempt {
   check_run_status?: string | null;
   check_run_conclusion?: string | null;
   check_run_updated_at?: string | null;
+  /** Latest infra verdict for the PR head (ADR 0033): the test machine, not the code. */
+  ci_infra?: CiInfraVerdict | null;
   pr_state?: 'open' | 'closed' | 'merged' | 'draft' | null;
   merged_at?: string | null;
   spec_validation_warnings?: SpecValidationWarning[] | null;
@@ -183,6 +187,10 @@ const CHECK_RUN_TONE: Record<string, string> = {
  * GitHub webhook hasn't fired yet — better empty than a faked "passed".
  */
 export function ciBadge(fix: FixAttempt): { label: string; className: string } | null {
+  if (fix.ci_infra?.infra) {
+    // ADR 0033: the machine stopped or never came; the code was not tested.
+    return { label: readFixCi(fix).label, className: CHIP_TONE.warnSubtle };
+  }
   const conclusion = fix.check_run_conclusion?.toLowerCase();
   const status = fix.check_run_status?.toLowerCase();
   if (conclusion) {
