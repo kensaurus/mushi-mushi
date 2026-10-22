@@ -20,6 +20,7 @@ import {
   LIVE_SYNC_CALLS_PER_REQUEST,
   liveSyncProjects,
   runCiCollector,
+  settleStaleLiveJobs,
   type CollectorDeps,
 } from '../../supabase/functions/_shared/ci-collector.ts'
 
@@ -208,3 +209,95 @@ describe('liveSyncProjects', () => {
     expect(out.calls).toBe(LIVE_SYNC_CALLS_PER_REQUEST)
   })
 })
+
+describe('settleStaleLiveJobs', () => {
+  const REPO = 'kensaurus/tsumagoi'
+  const stored = (jobId: number, status: string, updatedMinAgo: number, extra: Record<string, unknown> = {}) => ({
+    project_id: P1,
+    repo: REPO,
+    run_id: 900,
+    run_attempt: 1,
+    job_id: jobId,
+    job_name: `job ${jobId}`,
+    status,
+    conclusion: null,
+    ci_kind: status === 'in_progress' ? 'running' : 'queued',
+    event: 'pull_request',
+    pr_number: 844,
+    gh_created_at: new Date(NOW.getTime() - 9 * 60 * 60_000).toISOString(),
+    updated_at: new Date(NOW.getTime() - updatedMinAgo * 60_000).toISOString(),
+    ...extra,
+  })
+
+  function jobsApi(answers: Record<number, { status: number; body?: unknown }>) {
+    const calls: string[] = []
+    const fetchImpl = async (url: string) => {
+      calls.push(url)
+      const m = /\/actions\/jobs\/(\d+)$/.exec(url)
+      const a = m ? answers[Number(m[1])] : undefined
+      if (!a) return new Response('{}', { status: 500 })
+      return new Response(JSON.stringify(a.body ?? { message: 'Not Found' }), { status: a.status })
+    }
+    return { calls, fetchImpl }
+  }
+
+  const finished = (id: number) => ({
+    ...job(id, 900, 'completed'),
+    run_attempt: 1,
+    head_branch: 'cursor/fix',
+    completed_at: new Date(NOW.getTime() - 8 * 60 * 60_000).toISOString(),
+  })
+
+  it('re-reads a job stored as running for hours, and keeps its PR and event', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(11, 'in_progress', 9 * 60)],
+    })
+    const gh = jobsApi({ 11: { status: 200, body: finished(11) } })
+    const n = await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 5, now: NOW })
+    expect(n).toBe(1)
+    expect(gh.calls).toEqual([`https://api.github.com/repos/${REPO}/actions/jobs/11`])
+    expect(db.table('ci_jobs')[0]).toMatchObject({ job_id: 11, status: 'completed', conclusion: 'success', ci_kind: 'passed', pr_number: 844, event: 'pull_request' })
+  })
+
+  it('closes a job GitHub no longer has instead of asking for it forever', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(12, 'queued', 60)],
+    })
+    const gh = jobsApi({ 12: { status: 404 } })
+    await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 5, now: NOW })
+    expect(db.table('ci_jobs')[0]).toMatchObject({ status: 'completed', ci_kind: 'cancelled', infra_detail: expect.stringContaining('no longer has this job') })
+  })
+
+  it('leaves recently refreshed and finished jobs alone, and stays inside its budget', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [
+        stored(21, 'in_progress', 3),
+        stored(22, 'completed', 600, { conclusion: 'success', ci_kind: 'passed' }),
+        stored(23, 'in_progress', 120),
+        stored(24, 'in_progress', 90),
+        stored(25, 'queued', 60),
+      ],
+    })
+    const gh = jobsApi({ 23: { status: 200, body: finished(23) }, 24: { status: 200, body: finished(24) }, 25: { status: 200, body: finished(25) } })
+    await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 2, now: NOW })
+    // Oldest stale first, two calls: 23 then 24; 21 is fresh, 22 finished, 25 waits for the next tick.
+    expect(gh.calls.map((u) => u.split('/').pop())).toEqual(['23', '24'])
+    expect(db.table('ci_jobs').find((j) => j.job_id === 25)).toMatchObject({ status: 'queued' })
+  })
+
+  it('runs after every collector tick', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(31, 'in_progress', 600)],
+    })
+    const base = github({ runs: [] })
+    const fetchImpl = async (url: string) => (/\/actions\/jobs\/31$/.test(url) ? new Response(JSON.stringify(finished(31)), { status: 200 }) : base.fetchImpl(url))
+    const summary = await runCiCollector(db as never, deps(fetchImpl))
+    expect(summary.settled).toBe(1)
+    expect(db.table('ci_jobs')[0]).toMatchObject({ status: 'completed' })
+  })
+})
+
