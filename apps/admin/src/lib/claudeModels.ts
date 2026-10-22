@@ -14,9 +14,9 @@
  *          https://platform.claude.com/docs/en/about-claude/models/choosing-a-model.
  */
 
-export type ClaudeLine = 'fable' | 'opus' | 'sonnet' | 'haiku'
+type ClaudeLine = 'fable' | 'opus' | 'sonnet' | 'haiku'
 
-export interface ClaudeModelInfo {
+interface ClaudeModelInfo {
   id: string
   label: string
   line: ClaudeLine
@@ -28,6 +28,7 @@ export interface ClaudeModelInfo {
   current: boolean
 }
 
+/** @internal Exported for tests only. */
 export const CLAUDE_MODELS: readonly ClaudeModelInfo[] = [
   { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', line: 'fable', price: { input: 10, output: 50 }, blurb: 'most capable; demanding reasoning, long agent runs', current: true },
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', line: 'opus', price: { input: 4, output: 20 }, blurb: 'agentic coding and knowledge work', current: true },
@@ -46,7 +47,7 @@ export const CLAUDE_MODELS: readonly ClaudeModelInfo[] = [
 /** The LLM jobs a project can pick a Claude model for. */
 export type ModelRole = 'quick_check' | 'diagnosis' | 'judge' | 'fix' | 'pr_review'
 
-export interface ModelSource {
+interface ModelSource {
   label: string
   href: string
   /** Date the source was read. */
@@ -113,7 +114,7 @@ export const ROLE_RECOMMENDED: Record<ModelRole, ModelRecommendation> = {
   },
 }
 
-export function modelInfo(id: string): ClaudeModelInfo | undefined {
+function modelInfo(id: string): ClaudeModelInfo | undefined {
   return CLAUDE_MODELS.find((m) => m.id === id)
 }
 
