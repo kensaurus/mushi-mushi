@@ -4,17 +4,41 @@
  *          default: fail `mushi recipe check --push` in the host's CI above a
  *          threshold, and dispatch a fix for new design drift above it (the
  *          normal automatic dispatch, so Autofix and its caps still apply).
- *          Owners and admins change it; everyone else reads it.
+ *          Owners and admins change it; everyone else reads it. Owners and
+ *          admins can also send the newest scan's existing findings to an
+ *          agent (one report per file, a few files at a time, never a
+ *          token-definition file), since the auto-fix only acts on new ones.
  *
  * Data: GET|PUT /v1/admin/projects/:id/design/settings → DesignActionSettingsView
+ *       POST /v1/admin/projects/:id/design/dispatch-findings → DesignFindingsDispatchResult
  */
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Callout, ErrorAlert, Loading, Section, Toggle } from '../ui'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
-import type { DesignActionSettingsView } from '../../lib/recipeTypes'
+import type { DesignActionSettingsView, DesignFindingsDispatchResult } from '../../lib/recipeTypes'
+
+/** Files sent per click; the server allows 1–20. */
+const FILES_PER_SEND = 5
+
+/** One plain sentence for what a send did. */
+function describeFindingsDispatch(r: DesignFindingsDispatchResult): string {
+  if (r.action === 'no_scan') return 'There is no finished scan yet. Run a scan first.'
+  const sent = r.sent ?? []
+  const left = r.remainingFiles ?? 0
+  const tokenFiles = r.skipped?.tokenDefinition ?? 0
+  const skippedNote = tokenFiles > 0 ? ` ${tokenFiles} finding${tokenFiles === 1 ? '' : 's'} in token files were left out.` : ''
+  if (sent.length === 0) return `Nothing to send: every file with findings already has an open report.${skippedNote}`
+  const refused = sent.filter((s) => s.refused)
+  const queued = sent.length - refused.length
+  const parts = [`Sent ${queued} file${queued === 1 ? '' : 's'} to the agent.`]
+  if (refused.length > 0) parts.push(`${refused.length} not dispatched: ${refused[0].refused?.message ?? 'refused'}.`)
+  if (left > 0) parts.push(`${left} more file${left === 1 ? '' : 's'} left.`)
+  return parts.join(' ') + skippedNote
+}
 
 const FIELD_CLS =
   'w-20 rounded-sm border border-edge-subtle bg-surface px-2 py-1 text-xs text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40'
@@ -51,6 +75,23 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
     } finally {
       setBusy(false)
       reload()
+    }
+  }
+
+  const [confirmSend, setConfirmSend] = useState(false)
+  const sendFindings = async () => {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await apiFetchMutate<DesignFindingsDispatchResult>(`/v1/admin/projects/${projectId}/design/dispatch-findings`, {
+        method: 'POST',
+        body: JSON.stringify({ maxFiles: FILES_PER_SEND }),
+      })
+      if (!res.ok || !res.data) setNotice({ tone: 'danger', text: res.error?.message ?? 'The findings could not be sent.' })
+      else setNotice({ tone: 'ok', text: describeFindingsDispatch(res.data) })
+    } finally {
+      setBusy(false)
+      setConfirmSend(false)
     }
   }
 
@@ -118,6 +159,23 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
                 the CI check, because that key ships inside your app.
               </p>
             </div>
+            {data.canEdit && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setConfirmSend(true)}
+                  disabled={busy || !data.autofixEnabled}
+                  title={data.autofixEnabled ? 'Send the latest scan\'s findings to an agent' : 'Turn on Autofix first'}
+                >
+                  Send findings to agent
+                </Btn>
+                <span className="text-2xs text-fg-muted">
+                  The latest scan&apos;s findings, one report per file, {FILES_PER_SEND} files at a time. Token files are never sent.
+                </span>
+              </div>
+            )}
             {data.autofix && !data.autofixEnabled && (
               <Callout tone="warn" label="Autofix is off for this project">
                 <p className="text-xs text-fg-secondary">
@@ -130,6 +188,16 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
               </Callout>
             )}
           </>
+        )}
+        {confirmSend && (
+          <ConfirmDialog
+            title="Send design findings to an agent?"
+            body={`Mushi opens one report for each of up to ${FILES_PER_SEND} files from the latest scan and dispatches a fix for each. Autofix's spend and per-day caps apply.`}
+            confirmLabel="Send findings"
+            loading={busy}
+            onConfirm={sendFindings}
+            onCancel={() => setConfirmSend(false)}
+          />
         )}
         {notice && (
           <Callout tone={notice.tone}>

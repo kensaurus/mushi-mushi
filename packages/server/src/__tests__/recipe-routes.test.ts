@@ -200,6 +200,7 @@ const WRITE_ROUTES = (pid: string) => [
   `/v1/admin/projects/${pid}/recipe/refresh`,
   `/v1/admin/projects/${pid}/design/deviance/run`,
   `/v1/admin/projects/${pid}/design/changes`,
+  `/v1/admin/projects/${pid}/design/dispatch-findings`,
 ]
 
 // ── access ───────────────────────────────────────────────────────────────────
@@ -855,5 +856,42 @@ describe('deploy observations per target (a chatty target never hides another)',
     const { app } = harness(broken as FakeDb)
     expect((await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/env`)).status).toBe(500)
     expect((await app.call('GET', `/v1/admin/projects/${P_A}/recipe/elements/deploy`)).status).toBe(500)
+  })
+})
+
+describe('POST /design/dispatch-findings', () => {
+  const out = { action: 'dispatched' as const, runId: 'run-2', sent: [{ file: 'app/page.tsx', reportId: 'r1', findings: 2, dispatchId: 'job-1', refused: null }], remainingFiles: 3, skipped: { tokenDefinition: 4, noFile: 0, info: 1, alreadyOpen: 0 } }
+
+  it('owners and admins send the findings with the recipe and their user id; members are refused', async () => {
+    const db = seed({ app_recipe_snapshots: [glotSnapshot(P_A)] })
+    const dispatchFindings = vi.fn(async () => out)
+    const { app } = harness(db, { dispatchFindings: dispatchFindings as never })
+    const res = await app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: { maxFiles: 3 } })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, data: out })
+    expect(dispatchFindings).toHaveBeenCalledWith(db, expect.objectContaining({ projectId: P_A, maxFiles: 3, requestedBy: 'user-a', manifest: expect.objectContaining({ version: 1 }) }))
+
+    const member = await app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: {}, vars: { userId: 'member-a' } })
+    expect(member.status).toBe(403)
+    expect(dispatchFindings).toHaveBeenCalledTimes(1)
+  })
+
+  it('validates the body, defaults maxFiles, and maps auto-fix off and failures', async () => {
+    const dispatchFindings = vi.fn(async () => out)
+    const { app } = harness(seed(), { dispatchFindings: dispatchFindings as never })
+    for (const body of [{ maxFiles: 0 }, { maxFiles: 21 }, { maxFiles: 2.5 }, { extra: true }]) {
+      expect((await app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body })).status, JSON.stringify(body)).toBe(400)
+    }
+    expect(dispatchFindings).not.toHaveBeenCalled()
+    expect((await app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: undefined })).status).toBe(200)
+    expect(dispatchFindings).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ maxFiles: null, manifest: null }))
+
+    const off = harness(seed(), { dispatchFindings: vi.fn(async () => ({ action: 'autofix_disabled' as const })) as never })
+    const offRes = await off.app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: {} })
+    expect(offRes.status).toBe(409)
+    expect(offRes.body).toMatchObject({ ok: false, error: { code: 'AUTOFIX_DISABLED' } })
+
+    const broken = harness(seed(), { dispatchFindings: vi.fn(async () => ({ action: 'failed' as const, error: 'boom' })) as never })
+    expect((await broken.app.call('POST', `/v1/admin/projects/${P_A}/design/dispatch-findings`, { body: {} })).status).toBe(500)
   })
 })

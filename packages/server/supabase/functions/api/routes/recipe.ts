@@ -36,7 +36,7 @@ import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE
 import { contentProblem } from '../../_shared/recipe-change.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignActionSettingsView, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
-import { loadDesignActionSettings } from '../../_shared/design-actions.ts'
+import { DISPATCH_FILES_MAX, dispatchExistingDesignFindings, loadDesignActionSettings } from '../../_shared/design-actions.ts'
 import { requiredCiVarNames, resolveStack } from '../../_shared/sdk-diagnostics.ts'
 import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
@@ -73,6 +73,8 @@ export interface RecipeRouteDeps extends ComposeDeps {
   assetSecret: () => string | null
   /** The fixer context for GET /design/excerpt (never throws). */
   loadFixContext: typeof loadFixRecipeContext
+  /** POST /design/dispatch-findings (never throws). */
+  dispatchFindings: typeof dispatchExistingDesignFindings
 }
 
 export const defaultRecipeDeps: RecipeRouteDeps = {
@@ -94,6 +96,7 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
     }
   },
   loadFixContext: loadFixRecipeContext,
+  dispatchFindings: dispatchExistingDesignFindings,
   resolveRepo: resolveRecipeRepo,
   getDefaultHead,
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => fetchLatestWorkflowRunForSha(repo.token, repo.ref, branch, sha),
@@ -155,6 +158,10 @@ const changeSchema = z.discriminatedUnion('kind', [
     title: z.string().max(120).optional(),
   }),
 ])
+
+const dispatchFindingsSchema = z.object({
+  maxFiles: z.number().int().min(1).max(DISPATCH_FILES_MAX).optional(),
+}).strict()
 
 const designSettingsSchema = z.object({
   threshold: z.number().int().min(0).max(100).optional(),
@@ -373,6 +380,45 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     if (!read.ok) return dbError(c, { message: read.error })
     const data: DesignActionSettingsView = { ...read.settings, canEdit: true }
     return c.json({ ok: true, data })
+  })
+
+  // ── POST /v1/admin/projects/:id/design/dispatch-findings ───────────────────
+  // Send the newest scan's existing findings to the agent: one report per
+  // file, at most `maxFiles` (default 5, max 20) files per call, never a
+  // token-definition file or a file that already has an open report. Each is
+  // an automatic dispatch, so the project's auto-fix caps apply. Owners and
+  // admins only; auto-fix must be on.
+  app.post('/v1/admin/projects/:id/design/dispatch-findings', deps.adminOrApiKeyWrite, async (c) => {
+    const db = deps.getServiceClient()
+    const access = await projectAccess(c, db, { needAdmin: true })
+    if (!access.ok) return access.response
+    const parsed = dispatchFindingsSchema.safeParse((await c.req.json().catch(() => null)) ?? {})
+    if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 300), 400)
+    let manifest: SnapshotRow['manifest'] | null = null
+    try {
+      manifest = (await deps.loadSnapshot(db, access.projectId))?.manifest ?? null
+    } catch (err) {
+      // Without the recipe the default token-definition list still applies.
+      rlog.warn('design snapshot read failed; default token-definition list used', { projectId: access.projectId, err: String(err) })
+    }
+    const out = await deps.dispatchFindings(db, {
+      projectId: access.projectId,
+      maxFiles: parsed.data.maxFiles ?? null,
+      requestedBy: (c.get('userId') as string | undefined) ?? null,
+      manifest,
+    })
+    if (out.action === 'autofix_disabled') return jsonError(c, 'AUTOFIX_DISABLED', 'Turn on auto-fix for this app first (Settings → Auto-fix).', 409)
+    if (out.action === 'settings_unavailable' || out.action === 'failed') {
+      rlog.error('design findings dispatch failed', { projectId: access.projectId, err: out.error })
+      return jsonError(c, 'DISPATCH_FAILED', 'Could not send the design findings.', 500)
+    }
+    rlog.info('design findings dispatch', {
+      projectId: access.projectId,
+      action: out.action,
+      sent: 'sent' in out ? out.sent.length : 0,
+      remainingFiles: 'remainingFiles' in out ? out.remainingFiles : 0,
+    })
+    return c.json({ ok: true, data: out })
   })
 
   // ── GET /v1/admin/projects/:id/design/excerpt[?files=&reportId=] ───────────
