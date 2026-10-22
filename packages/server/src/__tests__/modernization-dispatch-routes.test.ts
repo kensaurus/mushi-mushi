@@ -7,7 +7,8 @@
  *            - `{ group: 'minor' }` sends every pending minor/patch finding of
  *              the repo as ONE report and one job; majors stay out;
  *            - made-up versions and major anchors for a group are refused;
- *            - a finding whose report is fixed is resolved, never re-sent.
+ *            - a finding whose report is fixed is resolved, never re-sent;
+ *            - a viewer cannot dispatch (it starts a paid agent).
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -18,6 +19,7 @@ const USER = '2000000a-0000-4000-8000-0000000000a1'
 const REPO = '3000000a-0000-4000-8000-0000000000a1'
 
 let db: FakeDb
+let accessRole: string | null = 'member'
 const invokeFixWorker = vi.fn(async () => {})
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -47,7 +49,7 @@ vi.mock('../../supabase/functions/api/shared.ts', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
     ...actual,
-    callerCanAccessProject: async () => ({ allowed: true }),
+    callerCanAccessProject: async () => ({ allowed: true, role: accessRole }),
     scopedOwnedProjectIds: async () => [P],
   }
 })
@@ -102,7 +104,24 @@ function seed(findings: Row[], extra: Record<string, Row[]> = {}) {
   )
 }
 
-beforeEach(() => invokeFixWorker.mockClear())
+beforeEach(() => {
+  invokeFixWorker.mockClear()
+  accessRole = 'member'
+})
+
+describe('who may dispatch', () => {
+  it('a viewer is refused before any report or job is written', async () => {
+    seed([finding('f1'), finding('f2')])
+    accessRole = 'viewer'
+    const res = await call('POST', '/v1/admin/modernization/f1/dispatch', { group: 'minor' })
+    expect(res.status).toBe(403)
+    expect(res.json.error.message).toMatch(/read-only/)
+    expect(db.tables.reports).toHaveLength(0)
+    expect(db.tables.fix_dispatch_jobs).toHaveLength(0)
+    expect(db.tables.modernization_findings.every((f) => f.status === 'pending' && !f.related_report_id)).toBe(true)
+    expect(invokeFixWorker).not.toHaveBeenCalled()
+  })
+})
 
 describe('dispatching a finding with no report', () => {
   it('files a report, links it, and dispatches through the normal path', async () => {

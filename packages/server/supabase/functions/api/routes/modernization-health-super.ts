@@ -27,6 +27,7 @@ import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { denyViewerWrite } from '../viewer-gate.ts';
 import {
   buildFindingReport,
   buildGroupReport,
@@ -141,6 +142,9 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     // Teams v1: owner / org-member / project-member can act on findings.
     const access = await callerCanAccessProject(c, db, userId, finding.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'This finding belongs to a project you cannot access.' } }, 403);
+    // A dispatch starts a paid agent (and may file a report): viewers read only.
+    const viewerDenied = denyViewerWrite(c, access.role, 'dispatch fixes');
+    if (viewerDenied) return viewerDenied;
 
     if (finding.status === 'dismissed' || finding.status === 'resolved') {
       return c.json({ ok: false, error: { code: 'FINDING_CLOSED', message: `This finding is ${finding.status}.` } }, 409);
