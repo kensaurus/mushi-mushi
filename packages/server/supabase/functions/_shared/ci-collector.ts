@@ -30,6 +30,7 @@
 import {
   ciGithub,
   collectRunJobs,
+  fetchRepoVisibility,
   listRepoRunners,
   listRunsByStatus,
   listRunsUpdatedSince,
@@ -51,13 +52,25 @@ export const LIVE_SYNC_FINISHED_WINDOW_MS = 15 * 60_000
 export const CI_RETENTION_DAYS = 30
 /** A runner list GitHub refused is asked again after this long. */
 export const RUNNER_PERMISSION_RECHECK_MS = 24 * 60 * 60_000
+/** A repo's visibility is read again after this long (one call per repo a day). */
+export const VISIBILITY_RECHECK_MS = 24 * 60 * 60_000
 
 export type PermissionState = 'ok' | 'missing' | 'unknown'
+export type RepoVisibility = 'public' | 'private' | 'unknown'
 export interface RepoPermissions {
   jobs: PermissionState
   runners: PermissionState
   checkedAt?: string
   runnersCheckedAt?: string
+  /**
+   * Repo visibility from GET /repos/{o}/{r} (Metadata: read), read once a day.
+   * Public repos run standard GitHub-hosted minutes free; private repos pay
+   * after the plan's included minutes (Plan 022 Phase 7).
+   */
+  visibility?: RepoVisibility
+  visibilityCheckedAt?: string
+  /** The repo owner's login: GitHub's included minutes are per owner account. */
+  owner?: string
 }
 
 export interface CollectorDeps {
@@ -144,7 +157,7 @@ async function collectRepo(
   prior: RepoPermissions | undefined,
   now: Date,
   opts: { mode: 'collect' | 'live' },
-): Promise<{ jobs?: PermissionState; runners?: PermissionState; stored: number; error: string | null }> {
+): Promise<{ jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null }; stored: number; error: string | null }> {
   let runs: GhRun[] = []
   let jobsState: PermissionState | undefined
   if (opts.mode === 'collect') {
@@ -185,6 +198,14 @@ async function collectRepo(
     }
   }
 
+  // Visibility once a day, after the runner list, and only with budget to spare.
+  let visibility: { value: RepoVisibility; owner: string | null } | undefined
+  const visibilityDue = !prior?.visibilityCheckedAt || now.getTime() - Date.parse(prior.visibilityCheckedAt) >= VISIBILITY_RECHECK_MS
+  if (opts.mode === 'collect' && visibilityDue && gh.budget.remaining > 1) {
+    const v = await fetchRepoVisibility(gh, binding.repo)
+    if (v.status !== 0) visibility = { value: v.visibility, owner: v.owner }
+  }
+
   const due = await runsToRead(db, binding.projectId, binding.repo, runs)
   const out = await collectRunJobs(db, gh, {
     projectId: binding.projectId,
@@ -194,17 +215,29 @@ async function collectRepo(
     now,
     maxAnnotationCalls: opts.mode === 'live' ? 1 : 3,
   })
-  return { jobs: jobsState, runners: runnersState, stored: out.rows.length, error: out.error }
+  return { jobs: jobsState, runners: runnersState, visibility, stored: out.rows.length, error: out.error }
 }
 
-function mergePermissions(prior: RepoPermissions | undefined, got: { jobs?: PermissionState; runners?: PermissionState }, now: Date): RepoPermissions {
+function mergePermissions(
+  prior: RepoPermissions | undefined,
+  got: { jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null } },
+  now: Date,
+): RepoPermissions {
   const nowIso = now.toISOString()
-  return {
+  const out: RepoPermissions = {
     jobs: got.jobs ?? prior?.jobs ?? 'unknown',
     runners: got.runners ?? prior?.runners ?? 'unknown',
     checkedAt: got.jobs ? nowIso : prior?.checkedAt,
     runnersCheckedAt: got.runners ? nowIso : prior?.runnersCheckedAt,
   }
+  // A failed read (403/5xx → unknown) keeps the last known visibility.
+  const visibility = got.visibility && got.visibility.value !== 'unknown' ? got.visibility.value : prior?.visibility
+  if (visibility) out.visibility = visibility
+  const checked = got.visibility ? nowIso : prior?.visibilityCheckedAt
+  if (checked) out.visibilityCheckedAt = checked
+  const owner = got.visibility?.owner ?? prior?.owner
+  if (owner) out.owner = owner
+  return out
 }
 
 export interface CollectorSummary {

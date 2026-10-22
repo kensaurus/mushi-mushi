@@ -14,7 +14,7 @@
  */
 
 import { adviseCi, percentile, slowSteps, STALE_HEARTBEAT_MS, type AdvisorJob } from './ci-advisor.ts'
-import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'
+import { runnerBaseName, runnerKindOf, runnerNameMatches } from './ci-infra.ts'
 import type { CiJobKind, CiOverview } from './ci-overview-types.ts'
 import type { RepoPermissions } from './ci-collector.ts'
 
@@ -42,6 +42,8 @@ export interface JobRow {
   infra_detail: string | null
   runner_name: string | null
   runner_kind: 'self_hosted' | 'github_hosted' | 'unknown'
+  /** "GitHub Actions" for hosted runners; read to heal rows stored as unknown before 2026-10-22. */
+  runner_group_name?: string | null
   runner_labels: string[] | null
   queue_seconds: number | null
   duration_seconds: number | null
@@ -106,7 +108,7 @@ export interface OverviewRows {
 }
 
 const JOB_COLUMNS =
-  'id, project_id, repo, run_id, run_attempt, job_id, workflow_name, job_name, head_branch, pr_number, status, conclusion, ci_kind, infra, infra_detail, runner_name, runner_kind, runner_labels, queue_seconds, duration_seconds, gh_created_at, started_at, completed_at, html_url, steps'
+  'id, project_id, repo, run_id, run_attempt, job_id, workflow_name, job_name, head_branch, pr_number, status, conclusion, ci_kind, infra, infra_detail, runner_name, runner_kind, runner_group_name, runner_labels, queue_seconds, duration_seconds, gh_created_at, started_at, completed_at, html_url, steps'
 
 function repoOf(url: unknown): string | null {
   if (typeof url !== 'string') return null
@@ -156,19 +158,43 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     }
   }
 
+  const unfinished = check<JobRow>(unfinishedRes, 'ci_jobs')
+  const finished = check<JobRow>(finishedRes, 'ci_jobs')
+  const runners = check<RunnerRow>(runnersRes, 'ci_runners')
+  healRunnerKinds([...unfinished, ...finished], runners)
+
   return {
     projects,
     repoBindings: check<{ project_id: string; repo_url: string }>(reposRes, 'project_repos')
       .map((r) => ({ project_id: r.project_id, repo: repoOf(r.repo_url) }))
       .filter((r): r is { project_id: string; repo: string } => !!r.repo),
-    unfinished: check<JobRow>(unfinishedRes, 'ci_jobs'),
-    finished: check<JobRow>(finishedRes, 'ci_jobs'),
-    runners: check<RunnerRow>(runnersRes, 'ci_runners'),
+    unfinished,
+    finished,
+    runners,
     hosts: check<HostRow>(hostsRes, 'ci_runner_hosts'),
     samples: check<SampleRow>(samplesRes, 'ci_runner_job_samples'),
     permissions,
     lastLiveSyncAt,
     workflows,
+  }
+}
+
+/**
+ * Rows stored before the runner-group rule (ci-infra.ts runnerKindOf, 2026-10-22)
+ * say `unknown` for self-hosted jobs whose label is not `self-hosted`. Heal them
+ * on read from the stored runner group, and give a runner the kind its jobs
+ * have, so the CI view is right without rewriting stored rows.
+ */
+export function healRunnerKinds(jobs: JobRow[], runners: RunnerRow[]): void {
+  const byRunner = new Map<string, JobRow['runner_kind']>()
+  for (const j of jobs) {
+    if (j.runner_kind === 'unknown') {
+      j.runner_kind = runnerKindOf({ labels: j.runner_labels ?? [], runner_name: j.runner_name, runner_group_name: j.runner_group_name ?? null })
+    }
+    if (j.runner_name && j.runner_kind !== 'unknown') byRunner.set(`${j.repo}|${j.runner_name}`, j.runner_kind)
+  }
+  for (const r of runners) {
+    if (r.kind === 'unknown') r.kind = byRunner.get(`${r.repo}|${r.runner_name}`) ?? 'unknown'
   }
 }
 
