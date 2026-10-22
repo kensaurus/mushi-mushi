@@ -125,6 +125,7 @@ import {
   cursorModelsCached,
   enqueueReviewFollowup,
   loadFollowupSettings,
+  notMigrated,
   orgFollowupsToday,
   PRIOR_COLUMNS,
   type FollowupKey,
@@ -718,23 +719,29 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     }
   }
 
-  const saved = await written(
-    ownWrite(db, row.id, runId, now, {
-      status: 'dispatched',
-      cursor_agent_id: created.agentId,
-      cursor_run_id: created.runId,
-      cursor_agent_url: created.url,
-      key_id: key.keyId,
-      key_kind: key.source,
-      model,
-      findings_count: sentCount,
-      findings_dropped: droppedCount,
-      prompt_chars: promptText.length,
-      dispatched_at: nowIso,
-      skip_reason: null,
-      error: null,
-    }),
-  )
+  const dispatchedPatch = {
+    status: 'dispatched',
+    cursor_agent_id: created.agentId,
+    cursor_run_id: created.runId,
+    cursor_agent_url: created.url,
+    key_id: key.keyId,
+    key_kind: key.source,
+    model,
+    findings_count: sentCount,
+    findings_dropped: droppedCount,
+    prompt_chars: promptText.length,
+    dispatched_at: nowIso,
+    skip_reason: null,
+    error: null,
+  }
+  // The kind of what was actually sent (a re-review can turn a queued
+  // findings row into a CI repair). Before migration 20261022100000 the
+  // column does not exist: write the rest without it.
+  let saveRes = await ownWrite(db, row.id, runId, now, { ...dispatchedPatch, kind: isCiRepair ? 'ci_repair' : 'findings' })
+  if (saveRes.error && notMigrated(saveRes.error as { code?: string })) {
+    saveRes = await ownWrite(db, row.id, runId, now, dispatchedPatch)
+  }
+  const saved = !saveRes.error && Array.isArray(saveRes.data) && saveRes.data.length > 0
   // The deterministic agent id makes a retry adopt this agent, so a lost write is recoverable.
   if (!saved) return { outcome: 'superseded' }
   await followupEvent(db, row, {
@@ -1001,17 +1008,21 @@ export async function discover(db: SupabaseClient, now: Date): Promise<number> {
     if (pErr) throw new Error(`organization apps read failed: ${pErr.message}`)
     const ids = ((projects ?? []) as Array<{ id: string }>).map((p) => p.id)
     for (let i = 0; i < ids.length; i += 100) {
-      const { data, error } = await db
-        .from('fix_reviews')
-        .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha')
-        .in('project_id', ids.slice(i, i + 100))
-        .eq('status', 'completed')
-        .in('verdict', ['fix_first', 'merge'])
-        .gte('reviewed_at', since)
-        .order('reviewed_at', { ascending: false })
-        .limit(DISCOVERY_SCAN)
-      if (error) throw new Error(`fix_first / merge reviews read failed: ${error.message}`)
-      reviews.push(...((data ?? []) as DiscoveredReview[]))
+      // One read per verdict: merge reviews (most with green CI) must not
+      // crowd fix_first ones out of the scan window.
+      for (const verdict of ['fix_first', 'merge'] as const) {
+        const { data, error } = await db
+          .from('fix_reviews')
+          .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha')
+          .in('project_id', ids.slice(i, i + 100))
+          .eq('status', 'completed')
+          .eq('verdict', verdict)
+          .gte('reviewed_at', since)
+          .order('reviewed_at', { ascending: false })
+          .limit(DISCOVERY_SCAN)
+        if (error) throw new Error(`${verdict} reviews read failed: ${error.message}`)
+        reviews.push(...((data ?? []) as DiscoveredReview[]))
+      }
     }
   }
   if (reviews.length === 0) return 0
@@ -1054,6 +1065,8 @@ export async function discover(db: SupabaseClient, now: Date): Promise<number> {
   }
   const mergeIds = new Set(mergeReviews.map((r) => r.id))
   let queued = 0
+  let enqueueErrors = 0
+  let firstEnqueueError: string | null = null
   for (const review of reviews) {
     if (review.verdict === 'merge' && !mergeIds.has(review.id)) continue
     const ci = review.verdict === 'merge'
@@ -1066,7 +1079,13 @@ export async function discover(db: SupabaseClient, now: Date): Promise<number> {
       now,
     )
     if (res.queued) queued++
+    else if (res.error) {
+      enqueueErrors++
+      firstEnqueueError ??= res.error
+    }
   }
+  // Once per tick: e.g. the kind column missing before migration 20261022100000.
+  if (enqueueErrors > 0) log.warn('review follow-up enqueue failed', { count: enqueueErrors, err: firstEnqueueError })
   return queued
 }
 

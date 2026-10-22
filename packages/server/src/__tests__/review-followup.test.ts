@@ -1385,3 +1385,87 @@ describe('CI repair: worker', () => {
     expect(rowOf(db)).toMatchObject({ status: 'dispatched', kind: 'ci_repair' })
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review fixes (PR #571)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A query builder that answers every call with `error`, like PostgREST refusing the write. */
+function failingQuery(error: { code?: string; message: string }): unknown {
+  const result = { data: null, error }
+  const proxy: unknown = new Proxy(() => {}, {
+    get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve(result).then(ok, bad) : () => proxy),
+    apply: () => proxy,
+  })
+  return proxy
+}
+
+/** Before migration 20261022100000: any write naming `kind` is refused (PGRST204). */
+function withoutKindColumn(db: FakeDb): FakeDb {
+  const from = db.from.bind(db)
+  ;(db as unknown as { from: unknown }).from = (name: string) => {
+    const q = from(name) as unknown as Record<string, (...a: unknown[]) => unknown>
+    if (name !== 'fix_review_followups') return q
+    for (const m of ['update', 'upsert', 'insert']) {
+      const orig = q[m].bind(q)
+      q[m] = (payload: unknown, ...rest: unknown[]) =>
+        payload && typeof payload === 'object' && 'kind' in (payload as object)
+          ? failingQuery({ code: 'PGRST204', message: "Could not find the 'kind' column" })
+          : orig(payload, ...rest)
+    }
+    return q
+  }
+  return db
+}
+
+describe('review fixes (PR #571)', () => {
+  beforeEach(() => clearCursorModelCache())
+
+  it('the dispatch writes the kind it sent: findings, or a CI repair when the review turned to merge', async () => {
+    const db = seed()
+    await runReviewFollowups(db as never, deps())
+    expect(rowOf(db)).toMatchObject({ status: 'dispatched', kind: 'findings' })
+
+    // Queued as a findings row; re-reviewed on the same head to merge with red CI.
+    const flipped = seed({ followups: [{ id: 'f9', fix_review_id: REVIEW, fix_attempt_id: ATTEMPT, project_id: P1, report_id: REPORT, pr_url: PR_URL, head_sha_before: HEAD, status: 'queued', attempts: 0, queued_at: NOW.toISOString(), created_at: NOW.toISOString() }] })
+    Object.assign(flipped.table('fix_reviews')[0], { verdict: 'merge', findings: [] })
+    flipped.table('ci_jobs').push({ project_id: P1, head_sha: HEAD, repo: 'acme/app', job_id: 7001, job_name: 'Lint & Build', workflow_name: 'CI', run_id: 1, run_attempt: 1, status: 'completed', conclusion: 'failure', ci_kind: 'code_failure', infra: false, gh_created_at: NOW.toISOString(), steps: [] })
+    await dispatchOne(flipped as never, rowOf(flipped, 'f9'), deps({ fetchJobLog: async () => null, baseFailingChecks: async () => null }))
+    expect(rowOf(flipped, 'f9')).toMatchObject({ status: 'dispatched', kind: 'ci_repair' })
+  })
+
+  it('before the kind migration a findings dispatch is still saved (without kind), never superseded', async () => {
+    const db = withoutKindColumn(seed())
+    const summary = await runReviewFollowups(db as never, deps())
+    expect(summary.dispatched).toBe(1)
+    const row = rowOf(db)
+    expect(row).toMatchObject({ status: 'dispatched', run_id: null })
+    expect(row.kind).toBeUndefined()
+  })
+
+  it('fix_first reviews are read apart from merge reviews, so 200+ merge verdicts cannot crowd them out', async () => {
+    const db = seed({ review: { reviewed_at: new Date(NOW.getTime() - 60 * 60_000).toISOString() } })
+    for (let i = 0; i < 205; i++) {
+      db.table('fix_reviews').push({ id: `m${i}`, fix_attempt_id: `a${i}`, project_id: P1, report_id: null, status: 'completed', verdict: 'merge', head_sha: `h${i}`, reviewed_at: new Date(NOW.getTime() - i * 1000).toISOString() })
+    }
+    const summary = await runReviewFollowups(db as never, deps())
+    expect(summary.discovered).toBe(1)
+    expect(rowOf(db)).toMatchObject({ fix_review_id: REVIEW })
+  })
+
+  it('a failed enqueue is logged once per tick with the count', async () => {
+    const warn = fakeLog.warn as ReturnType<typeof vi.fn>
+    warn.mockClear()
+    const db = seed()
+    const from = db.from.bind(db)
+    ;(db as unknown as { from: unknown }).from = (name: string) => {
+      const q = from(name) as unknown as Record<string, unknown>
+      if (name === 'fix_review_followups') q.upsert = () => failingQuery({ code: 'XX000', message: 'disk full' })
+      return q
+    }
+    const summary = await runReviewFollowups(db as never, deps())
+    expect(summary.discovered).toBe(0)
+    const calls = warn.mock.calls.filter((c) => c[0] === 'review follow-up enqueue failed')
+    expect(calls).toEqual([['review follow-up enqueue failed', { count: 1, err: 'disk full' }]])
+  })
+})
