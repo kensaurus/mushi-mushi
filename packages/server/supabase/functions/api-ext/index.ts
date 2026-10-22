@@ -24,6 +24,9 @@ import { registerCiRoutes } from '../api/routes/ci.ts'
 import { registerInventoryRoutes } from '../api/routes/inventory.ts'
 import { registerAskMushiRoutes } from '../api/routes/ask-mushi.ts'
 import { registerVerifyRoutes } from '../api/routes/verify.ts'
+import { registerCodebaseUnderstandRoutes } from '../api/routes/codebase-understand.ts'
+import { registerModernizationHealthSuperRoutes } from '../api/routes/modernization-health-super.ts'
+import { registerSkillsRoutes } from '../api/routes/skills.ts'
 
 ensureSentry('api-ext')
 
@@ -37,6 +40,9 @@ registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
 registerVerifyRoutes(app)
+registerCodebaseUnderstandRoutes(app)
+registerModernizationHealthSuperRoutes(app)
+registerSkillsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

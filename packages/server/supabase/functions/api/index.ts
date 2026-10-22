@@ -17,7 +17,6 @@ import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts
 import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
-import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
 import { registerRepoDiagramRoutes } from './routes/repo-diagram.ts';
 import {
@@ -27,7 +26,6 @@ import {
 import { registerEnterpriseIntegrationsRoutes } from './routes/enterprise-integrations.ts';
 import { registerFixDispatchRoutes } from './routes/fix-dispatch.ts';
 import { registerMigrationProgressRoutes } from './routes/migration-progress.ts';
-import { registerModernizationHealthSuperRoutes } from './routes/modernization-health-super.ts';
 import { registerOrganizationRoutes } from './routes/organizations.ts';
 import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
@@ -63,7 +61,6 @@ import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
-import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
@@ -599,7 +596,24 @@ registerFixDispatchRoutes(app);
 
 registerCodebaseRoutes(app);
 
-registerCodebaseUnderstandRoutes(app);
+forwardToApiExt([
+  // Codebase Atlas (codebase-understand.ts); deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:id/codebase/analyze',
+  '/v1/admin/projects/:id/codebase/analyze/:jobId',
+  '/v1/admin/projects/:id/codebase/chat',
+  '/v1/admin/projects/:id/codebase/chat/stream',
+  '/v1/admin/projects/:id/codebase/chat/threads',
+  '/v1/admin/projects/:id/codebase/chat/threads/:threadId',
+  '/v1/admin/projects/:id/codebase/chat/threads/:threadId/messages',
+  '/v1/admin/projects/:id/codebase/domains',
+  '/v1/admin/projects/:id/codebase/impact',
+  '/v1/admin/projects/:id/codebase/knowledge/graph',
+  '/v1/admin/projects/:id/codebase/settings',
+  '/v1/admin/projects/:id/codebase/summary',
+  '/v1/admin/projects/:id/codebase/tour',
+  '/v1/admin/projects/:id/codebase/wiki/sources',
+  '/v1/admin/projects/:id/codebase/wiki/sources/:sourceId/retry',
+]);
 
 registerRepoDigestRoutes(app);
 
@@ -609,7 +623,19 @@ registerReportsDashboardRoutes(app);
 
 registerSettingsResearchRoutes(app);
 
-registerModernizationHealthSuperRoutes(app);
+forwardToApiExt([
+  // Modernization, health history, entitlements, super-admin metrics
+  // (modernization-health-super.ts); deploy size limit, 2026-10-22.
+  '/v1/admin/entitlements',
+  '/v1/admin/health/history',
+  '/v1/admin/health/integration/:kind',
+  '/v1/admin/modernization',
+  '/v1/admin/modernization/:id/dismiss',
+  '/v1/admin/modernization/:id/dispatch',
+  '/v1/super-admin/metrics',
+  '/v1/super-admin/users',
+  '/v1/super-admin/users/:id',
+]);
 
 registerBillingProjectsQueueGraphRoutes(app);
 
@@ -696,7 +722,8 @@ registerPortfolioFunnelRoutes(app);
 registerSpendLedgerRoutes(app);
 registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
-registerSkillsRoutes(app);
+// Agent skills (skills.ts); deploy size limit, 2026-10-22.
+forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
 registerSdkUpgradeRoutes(app);
 registerUxCloudRoutes(app);
 registerUxRunsRoutes(app);
