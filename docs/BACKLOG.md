@@ -10,24 +10,24 @@ parked work is visible in one place.
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
-- **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
+- **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, parked parts of ADR 0031. BL-098 closed 2026-10-22.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 55 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 54 · **Recently closed:** 22 (BL-098 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 10 |
 | test-gap | 6 |
 | tech-debt | 18 |
-| known-bug | 1 |
+| known-bug | 0 |
 | decision-needed | 6 |
 | unfinished-feature | 10 |
 | needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 52 |
+| relevant | 51 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -112,7 +112,6 @@ parked work is visible in one place.
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
-| BL-098 | known-bug | The legacy single-key routes (`DELETE /v1/admin/byok/:provider`, the Firecrawl and Browserbase panels, and retiring a legacy key after its pooled copy validates) delete the Vault secret by name with `vault_delete_secret`, without asking `private.vault_secret_in_use`. On live data a pool row can share that secret (yen-yen's Anthropic key, 2026-10-21), so removing the legacy credential would break the pool row. Look the secret's id up and call `vault_delete_secret_if_unused` instead | relevant | med | ADR 0031, `api/routes/settings-research.ts` (`clearLegacyByokCredential`, firecrawl/browserbase deletes), migration `20261021051628` | — |
 | BL-099 | unfinished-feature | Send a "hold" agent PR back with its findings once a person approves it in the console (a "Send back with these findings" action that queues a review follow-up). Follow-ups run on fix_first only; a hold needs a person | relevant | low | ADR 0032 (Rejected), `_shared/review-followup.ts` `followupTrigger` | — |
 | BL-100 | unfinished-feature | Per-app review follow-up settings (on/off, key, model) overriding the organization's, plus CLI/MCP to read and change them; today they are per organization and console-only | relevant | low | ADR 0032 (Rejected), `api/routes/byok-review-followups.ts` | — |
 
@@ -122,6 +121,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-098 | Removing a legacy AI key deleted the Vault secret by name, including one a pooled key still used | 2026-10-22 | `vault_delete_secret_by_name_if_unused` deletes by name or uuid only when `private.vault_secret_in_use` is false. `clearLegacyByokCredential` and the Firecrawl and Browserbase deletes call it after the `*_ref` columns are cleared, and log a warning with no `vault_delete_secret` fallback if the RPC is missing. |
 | BL-065 | `firebase-analytics.test.ts` named a `firebase-analytics.signature.test.ts` that was never created | 2026-10-20 | `packages/adapters/src/__tests__/firebase-analytics.signature.test.ts` serves a local JWKS and checks the default RS256 path: a fixture-signed token with `iss` `https://accounts.google.com` or `accounts.google.com` returns 200 and calls the sink; a different key, a tampered payload, a wrong `aud`, and a project-id substring spoof return 401 `INVALID_TOKEN`; a valid signature from another issuer returns 401 `INVALID_ISS`. The unsigned cases stay in `firebase-analytics.test.ts`, which now points at this file. |
 | BL-010 | knip unresolved import: the server explore-tab test reached into `apps/admin` | 2026-10-20 | Deleted `packages/server/src/__tests__/explore-tab-navigation.test.ts`. Its three cases (knowledge maps to understand, understand defaults to ask, unknown tabs fall back to layers) now live in `apps/admin/src/lib/exploreTabNavigation.test.ts`, which imports the module locally (7 tests pass). `pnpm exec knip` reports 35 error-level issues on `152b4428` and zero unresolved imports; the default CI ceiling is `--max-issues 35`. |
 | BL-007 | The `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) | 2026-10-20 | `.github/workflows/e2e-realworld.yml` runs `pnpm e2e:realworld` with `MUSHI_REALWORLD=1` after installing Playwright chromium and building `@mushi-mushi/react` and `@mushi-mushi/node` (and their workspace deps). Triggers: path-filtered pull requests (`examples/realworld`, `packages/core`, `packages/web`, `packages/react`, `packages/node`), daily cron `15 5 * * *`, and `workflow_dispatch`. `scripts/e2e-realworld-workflow.test.mjs` pins that invocation. |

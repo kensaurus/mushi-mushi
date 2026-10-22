@@ -134,8 +134,10 @@ across the Mushi console, with "universal" as the default.
   column of `project_settings` or `organization_integration_settings`
   (listed from `information_schema` at call time) holding it, as the bare id
   or `vault://<id>`. A missing Vault privilege in the trigger raises a warning
-  instead of blocking the delete. The legacy single-key routes still delete
-  their secret by name (BL-098).
+  instead of blocking the delete. Legacy single-key removal
+  (`clearLegacyByokCredential`, and the Firecrawl and Browserbase deletes)
+  calls `vault_delete_secret_by_name_if_unused` after those `*_ref` columns
+  are cleared, and leaves the secret in place when that RPC is missing.
 - Like organization keys, universal keys write no per-project health rows
   (`byok-health` skips keys without a `project_id`).
 

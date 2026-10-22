@@ -6,8 +6,9 @@
  *   to the wrong app; it now answers 400 NO_PROJECT_SELECTED.
  * - Both OAuth start routes return a URL holding a one-time state/nonce, so
  *   they send Cache-Control: no-store.
- * - DELETE /v1/admin/byok/browserbase wrapped vault_delete_secret in
- *   try/catch, but rpc() reports failure in `error`; the error is now logged.
+ * - DELETE /v1/admin/byok/browserbase logs a vault_delete_secret_by_name_if_unused
+ *   error (rpc() reports failure in `error`) and does not fall back to
+ *   vault_delete_secret.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -97,10 +98,18 @@ describe('GET /v1/admin/linear-oauth/authorize', () => {
 })
 
 describe('DELETE /v1/admin/byok/browserbase', () => {
-  it('logs a vault_delete_secret error instead of dropping it', async () => {
-    ;(db as unknown as { rpc: unknown }).rpc = async () => ({ data: null, error: { code: '42501', message: 'denied' } })
+  it('logs a vault_delete_secret_by_name_if_unused error instead of dropping it', async () => {
+    const calls: string[] = []
+    ;(db as unknown as { rpc: unknown }).rpc = async (fn: string) => {
+      calls.push(fn)
+      return { data: null, error: { code: '42501', message: 'denied' } }
+    }
     const res = await app.request('/v1/admin/byok/browserbase', { method: 'DELETE' })
     expect(res.status).toBe(200)
-    expect(warn).toHaveBeenCalledWith('vault_delete_secret failed for browserbase (non-fatal)', { code: '42501' })
+    expect(calls).toEqual(['vault_delete_secret_by_name_if_unused'])
+    expect(warn).toHaveBeenCalledWith(
+      'vault_delete_secret_by_name_if_unused failed for browserbase (non-fatal)',
+      { code: '42501' },
+    )
   })
 })
