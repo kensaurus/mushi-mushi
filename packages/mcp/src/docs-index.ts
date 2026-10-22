@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 212 pages, generated from llms.txt. */
+/** 213 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -437,6 +437,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "realtime", "real-time", "collaboration"],
     headings: ["Presence", "Comments", "Writing a comment", "Editing and deleting", "Timestamps", "Notifications", "Audit log", "See also"],
     excerpt: "How Mushi report pages support real-time collaboration — see who else is viewing a report and watch new comments arrive without a refresh.",
+  },
+  {
+    title: "App blueprint",
+    url: docUrl("/admin/recipe"),
+    route: "/admin/recipe",
+    markdown: "admin/recipe.md",
+    keywords: ["admin", "recipe", "app", "blueprint"],
+    headings: ["Refresh and status", "Diagram and list", "What \"not connected\" means", "Side panel", "Risk checks", "Related"],
+    excerpt: "The App blueprint page shows what this app is built from, the state of each part, and the draft pull request a change opens.",
   },
   {
     title: "Releases",
