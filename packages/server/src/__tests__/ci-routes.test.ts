@@ -195,6 +195,14 @@ describe('POST /v1/ingest/runner', () => {
     expect(s.db.table('ci_runner_hosts')).toHaveLength(0)
   })
 
+  it('accepts a hashed WSL machine id in metrics and refuses a raw one', async () => {
+    const s = setup()
+    const withId = (machine_id: string) => heartbeat({ host: { ...heartbeat().host, metrics: { ...heartbeat().host.metrics, machine_id } } })
+    expect((await ingest(s, withId('f'.repeat(64)))).status).toBe(200)
+    expect(s.db.table('ci_runner_hosts')[0].metrics).toMatchObject({ machine_id: 'f'.repeat(64) })
+    expect((await ingest(s, withId('b007-1d'))).status).toBe(400)
+  })
+
   it('needs a project key and answers 429 over the limit', async () => {
     const s = setup()
     expect((await ingest(s, heartbeat(), null)).body.error?.code).toBe('PROJECT_KEY_REQUIRED')

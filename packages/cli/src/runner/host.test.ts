@@ -12,6 +12,7 @@ import {
   parseUnitName,
   readCgroupMemory,
   runnerDirFromShow,
+  wslMachineId,
   type HostIO,
 } from './host.js'
 
@@ -147,6 +148,25 @@ describe('collectHeartbeat', () => {
     expect(text).not.toContain('deadbeef')
     expect(text).not.toContain('SECRET_ARG')
     expect(text).not.toContain('runsvc.sh')
+  })
+
+  it('on WSL2, sends the VM boot id hashed as machine_id, so distros on one PC group as one machine', () => {
+    const files = (version: string) => ({
+      '/proc/version': version,
+      '/etc/machine-id': 'distro-a\n',
+      '/proc/meminfo': MEMINFO,
+      '/proc/sys/kernel/random/boot_id': 'b007-1d\n',
+    })
+    const wsl = collectHeartbeat(fakeHost(files('Linux version 6.6.36.6-microsoft-standard-WSL2'), {}), '1')
+    expect(wsl.host.metrics.machine_id).toBe(wslMachineId({ readFile: () => 'b007-1d' }, 'wsl2'))
+    expect(wsl.host.metrics.machine_id).toMatch(/^[0-9a-f]{64}$/)
+    expect(JSON.stringify(wsl)).not.toContain('b007-1d')
+    // A second distro has its own machine id but the same VM boot id.
+    const other = collectHeartbeat(fakeHost({ ...files('Linux version 6.6.36.6-microsoft-standard-WSL2'), '/etc/machine-id': 'distro-b\n' }, {}), '1')
+    expect(other.host.host_id).not.toBe(wsl.host.host_id)
+    expect(other.host.metrics.machine_id).toBe(wsl.host.metrics.machine_id)
+    // Plain Linux sends none: its host id already is the machine.
+    expect(collectHeartbeat(fakeHost(files('Linux version 6.8.0-generic'), {}), '1').host.metrics).not.toHaveProperty('machine_id')
   })
 
   it('refuses native Windows and points at WSL2', () => {

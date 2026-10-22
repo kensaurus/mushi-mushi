@@ -95,6 +95,12 @@ export interface HeartbeatBody {
       swap_used_mb: number
       swap_total_mb: number
       disk_free_gb: number
+      /**
+       * WSL2 only: sha256 of the VM's boot id. Every WSL2 distro on one PC
+       * shares one VM kernel, so distros on the same physical machine send the
+       * same value; /ci counts that machine's electricity once.
+       */
+      machine_id?: string
     }
   }
   runners: RunnerSample[]
@@ -121,6 +127,13 @@ export function readMachineId(io: HostIO): string | null {
     if (id) return id
   }
   return null
+}
+
+/** WSL2: the shared VM's boot id, hashed (never sent raw). Null elsewhere or when unreadable. */
+export function wslMachineId(io: Pick<HostIO, 'readFile'>, platform: RunnerPlatform): string | null {
+  if (platform !== 'wsl2') return null
+  const boot = io.readFile('/proc/sys/kernel/random/boot_id')?.trim()
+  return boot ? hashHostId(`wsl-vm:${boot}`) : null
 }
 
 /** sha256(machine id + salt), 64 hex characters. */
@@ -383,6 +396,7 @@ export function collectHeartbeat(io: HostIO, mushiVersion: string): HeartbeatBod
     load1 = parseLoadavg(io.readFile('/proc/loadavg') ?? '') ?? load1
   }
   const diskFree = io.diskFreeBytes('/')
+  const machineId = wslMachineId(io, platform)
 
   return {
     kind: 'heartbeat',
@@ -399,6 +413,7 @@ export function collectHeartbeat(io: HostIO, mushiVersion: string): HeartbeatBod
         swap_used_mb: Math.max(0, swapUsedMb),
         swap_total_mb: swapTotalMb,
         disk_free_gb: diskFree == null ? 0 : round1(diskFree / 1024 ** 3),
+        ...(machineId ? { machine_id: machineId } : {}),
       },
     },
     runners: platform === 'macos' ? macRunners(io) : linuxRunners(io),
