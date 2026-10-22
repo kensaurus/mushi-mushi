@@ -665,3 +665,13 @@ and a compose profile with no route out but an allowlisting proxy. Full
 plan: [`local-only.md`](local-only.md); decision:
 [ADR 0034](../adr/0034-verifiably-local-mode.md).
 
+---
+
+## Plan 024 — Verified fixes (2026-10-21) `IN PROGRESS`
+
+Agent PRs merge on their own only with proof: a fail-to-pass test run by
+the host's `mushi-verify` workflow on its own (or self-hosted) runners, no
+weakened tests, a diff budget, CI green, and two model families that may
+veto but never approve; then a 72-hour regression watch that opens a revert
+PR. Full plan: [`verified-fixes.md`](verified-fixes.md); decision:
+[ADR 0035](../adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md).
