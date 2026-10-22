@@ -7,6 +7,8 @@
  *              no unknown fields) answers 422 and writes nothing;
  *            - a caller without access gets 403, a viewer 403;
  *            - the per-app hourly limit answers 429, a limiter error 503;
+ *            - the plan's monthly report quota answers 402 QUOTA_EXCEEDED, as
+ *              SDK ingest does, and a filed report is metered (usage_events);
  *            - a filed report is stored with source 'api', queued for
  *              stage-1 triage, classified, and audited with how it was filed.
  */
@@ -21,6 +23,8 @@ const state = vi.hoisted(() => ({
   classified: [] as Array<{ reportId: string; projectId: string }>,
   audits: [] as Array<{ action: string; resourceId?: string; metadata?: Record<string, unknown>; actorType?: string }>,
   rpcError: null as null | { message: string },
+  quotaAllowed: true,
+  background: [] as Promise<unknown>[],
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -52,6 +56,17 @@ vi.mock('../../supabase/functions/_shared/audit.ts', () => ({
 vi.mock('../../supabase/functions/api/helpers.ts', () => ({
   triggerClassification: (reportId: string, projectId: string) => {
     state.classified.push({ reportId, projectId })
+  },
+}))
+vi.mock('../../supabase/functions/_shared/quota.ts', () => ({
+  checkIngestQuota: async () =>
+    state.quotaAllowed
+      ? { allowed: true }
+      : { allowed: false, used: 1000, limit: 1000, plan: { display_name: 'Hobby' }, reason: 'over_quota', periodResetsAt: '2026-11-01T00:00:00Z', retryAfterSeconds: 3600 },
+}))
+vi.mock('../../supabase/functions/_shared/background.ts', () => ({
+  runInBackground: (task: Promise<unknown>) => {
+    state.background.push(task)
   },
 }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
@@ -96,6 +111,7 @@ class FakeApp {
         vars[k] = v
       },
       json: (b: unknown, status = 200) => ({ body: b, status }),
+      header: () => {},
     }
     return (await route.handlers[route.handlers.length - 1](c)) as Res
   }
@@ -120,6 +136,8 @@ beforeEach(() => {
   state.classified = []
   state.audits = []
   state.rpcError = null
+  state.quotaAllowed = true
+  state.background = []
 })
 
 const rows = (db: FakeDb, table: string) => (db as unknown as { tables: Record<string, Array<Record<string, unknown>>> }).tables[table] ?? []
@@ -178,6 +196,23 @@ describe('POST /v1/admin/projects/:id/reports', () => {
     expect(db.rpcCalls).toEqual([
       { fn: 'scoped_rate_limit_claim', args: { p_user_id: P1, p_scope: 'admin_report_file', p_max_per_window: 30, p_window: '1 hour' } },
     ])
+    // Metered like an SDK report.
+    await Promise.all(state.background)
+    expect(rows(db, 'usage_events')).toEqual([
+      expect.objectContaining({ project_id: P1, event_name: 'reports_ingested', quantity: 1, metadata: { report_id: id, source: 'admin_file' } }),
+    ])
+  })
+
+  it("answers 402 QUOTA_EXCEEDED over the plan's monthly quota, filing, classifying and metering nothing", async () => {
+    const { db, app } = setup()
+    state.quotaAllowed = false
+    const res = await app.call(P1, { title: 'fine title', description: 'x' })
+    expect(res.status).toBe(402)
+    expect(res.body.error?.code).toBe('QUOTA_EXCEEDED')
+    expect(rows(db, 'reports')).toHaveLength(0)
+    expect(rows(db, 'usage_events')).toHaveLength(0)
+    expect(state.classified).toHaveLength(0)
+    expect(state.background).toHaveLength(0)
   })
 
   it('leaves severity and component to triage when not given', async () => {

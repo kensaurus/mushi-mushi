@@ -4,7 +4,9 @@
  *          one app from the console, the CLI (`mushi reports file`) or MCP
  *          (`file_report`). A console session or an `mcp:write` API key;
  *          viewers are read-only. At most FILED_REPORTS_PER_HOUR per app an
- *          hour. The report is stored with source 'api', queued for stage-1
+ *          hour, and inside the app's monthly report quota (checkIngestQuota,
+ *          402 QUOTA_EXCEEDED like SDK ingest); each filed report is metered
+ *          as `reports_ingested` the way SDK ingest meters one. The report is stored with source 'api', queued for stage-1
  *          triage and classified like any other report; the audit log records
  *          who filed it and how.
  */
@@ -18,6 +20,8 @@ import { logAudit } from '../../_shared/audit.ts'
 import { callerCanAccessProject, dbError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import { triggerClassification } from '../helpers.ts'
+import { checkIngestQuota } from '../../_shared/quota.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import {
   FILE_REPORT_RATE_SCOPE,
   FILED_REPORTS_PER_HOUR,
@@ -80,6 +84,28 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
       )
     }
 
+    // A filed report is a stored report that buys a classification: it
+    // counts against the plan's monthly quota like an SDK report.
+    const quota = await checkIngestQuota(db, projectId)
+    if (!quota.allowed) {
+      c.header('Retry-After', String(quota.retryAfterSeconds ?? 3600))
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `${quota.plan.display_name} plan quota of ${quota.limit?.toLocaleString() ?? 'n/a'} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+            used: quota.used,
+            limit: quota.limit,
+            plan: quota.plan,
+            reason: quota.reason,
+            periodResetsAt: quota.periodResetsAt,
+          },
+        },
+        402,
+      )
+    }
+
     const via: FiledVia = c.get('authMethod') === 'apiKey' ? 'api_key' : 'console'
     const reportId = crypto.randomUUID()
     const row = filedReportRow(parsed.value, { reportId, projectId, actorId: userId, via, now: new Date() })
@@ -98,6 +124,22 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
       log.error('filed report not queued for classification', { reportId, errMsg: queueError.message })
     }
     triggerClassification(reportId, projectId)
+
+    // Metered like SDK ingest (helpers.ts ingestReport): kept alive past the
+    // response; the usage-aggregator cron rolls these up for billing.
+    runInBackground(
+      Promise.resolve(
+        db.from('usage_events').insert({
+          project_id: projectId,
+          event_name: 'reports_ingested',
+          quantity: 1,
+          metadata: { report_id: reportId, source: 'admin_file' },
+        }),
+      ).then(({ error }) => {
+        if (error) log.warn('usage event insert failed', { reportId, err: error.message })
+      }),
+      'usage_events insert',
+    )
 
     await logAudit(
       db,
