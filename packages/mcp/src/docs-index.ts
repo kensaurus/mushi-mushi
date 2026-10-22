@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 216 pages, generated from llms.txt. */
+/** 217 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -887,6 +887,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "knowledge-graph", "knowledge", "graph"],
     headings: ["Storage", "Why both pgvector and AGE?", "Indexing", "Bug Ontology"],
     excerpt: "How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.",
+  },
+  {
+    title: "Known holes in dependencies",
+    url: docUrl("/concepts/known-holes"),
+    route: "/concepts/known-holes",
+    markdown: "concepts/known-holes.md",
+    keywords: ["concepts", "known-holes", "known", "holes", "dependencies"],
+    headings: ["What Mushi checks", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi", "Where to see it", "Data sources"],
+    excerpt: "Mushi matches the exact versions in your lockfiles and pinned runtimes against published security advisories, and files each one with a fix as a bug with the upgrade to make.",
   },
   {
     title: "Multi-repo coordinated fixes",

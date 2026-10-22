@@ -382,6 +382,12 @@ verify_jwt = false
 [functions.fix-verifier]
 verify_jwt = false
 
+# vuln-watch is invoked by pg_cron (mushi-vuln-watch, 05:25 UTC) and by
+# POST /v1/admin/projects/:id/vulnerabilities/scan through the internal
+# caller token; requireServiceRoleAuth inside (ADR 0038).
+[functions.vuln-watch]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on

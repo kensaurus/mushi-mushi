@@ -774,6 +774,8 @@ forwardToApiExt([
   '/v1/admin/projects/:id/verify-workflow',
   '/v1/admin/projects/:id/verify-workflow/pr',
 ]);
+// Known holes in dependencies and the runtime (ADR 0038).
+forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 
 registerA2ATaskRoutes(app);
 

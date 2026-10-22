@@ -15,7 +15,7 @@ parked work is visible in one place.
 - **Added 2026-10-21 (verified fixes):** BL-101, a parked part of ADR 0035.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
 - **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
-- **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-112, an owner decision and parked parts of ADR 0038.
+- **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-115, an owner decision and parked parts of ADR 0038.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
 - **Open items:** 53 · **Recently closed:** 23 (BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
@@ -129,6 +129,9 @@ parked work is visible in one place.
 | BL-110 | unfinished-feature | Optional Dependabot-alerts on-ramp (`/repos/{o}/{r}/dependabot/alerts`, includes EPSS) beside OSV: needs the GitHub App permission "Dependabot alerts: read" and a re-consent for every installation, or a PAT | relevant | low | ADR 0038 (Rejected) | — |
 | BL-111 | unfinished-feature | Runtime detection, second half: the radar public probe reads `X-Powered-By` / `Server` headers, OSV distro ecosystems (Debian, Alpine) when the Dockerfile base image is known, and config-fix PRs for php.ini mitigations. v1 reads repo files only and lists the mitigations in the finding | relevant | low | ADR 0038; research plan Phase 2 | — |
 | BL-112 | unfinished-feature | Function-level reachability: OSV `ecosystem_specific.imports[].symbols` (Go, some PyPI) against the code index, and import extraction of bare package specifiers at index time (`project_codebase_files.imports` holds relative imports only, so v1 reads previews) | relevant | low | ADR 0038 (Consequences); `_shared/vuln-watch.ts` | — |
+| BL-113 | unfinished-feature | `mushi radar scan` parses lockfiles locally (the `_shared/lockfiles/` parsers, copied into the CLI) and pushes package coordinates only, for repos Mushi cannot read through GitHub (no token, a monorepo over the 20-lockfile cap, a private mirror) | relevant | low | ADR 0038; `_shared/lockfiles/` | — |
+| BL-114 | unfinished-feature | Close a `security_advisory` report on its own when every `dependency_vulns` row it carries closes as `fixed` (the upgrade landed outside Mushi), with a timeline note; today the rows close and the report stays open until someone closes it | relevant | low | ADR 0038 (Consequences); `_shared/vuln-watch-db.ts` | — |
+| BL-115 | unfinished-feature | vuln-watch reads every connected repo of a project, not only the primary one (`resolveRecipeRepo` returns the primary repo) | relevant | low | ADR 0038 (Consequences) | — |
 
 ---
 

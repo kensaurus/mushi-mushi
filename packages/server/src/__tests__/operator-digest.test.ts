@@ -299,8 +299,8 @@ describe('collectDigest past the server row cap', () => {
       } : Reflect.get(t, prop, r)),
     })
     const data = await digest.collectDigest(counted as never, ORG, NOW)
-    // One newest-run read per hole-check gate (the host-CI one finds nothing); none of the 1,100 old rows.
-    expect(gateRunReads).toBe(2)
+    // One newest-run read per hole-check gate (the host-CI and vuln-watch ones find nothing); none of the 1,100 old rows.
+    expect(gateRunReads).toBe(3)
     expect(data.truncated).toEqual([])
     expect(data.projects[0].radar).toMatchObject({ checked: true, failed: false })
   })
@@ -340,7 +340,8 @@ describe('collectDigest past the server row cap', () => {
       } : Reflect.get(t, prop, r)),
     })
     const data = await digest.collectDigest(spied as never, ORG, NOW)
-    expect(calls).toHaveLength(4)
+    // 2 apps × 3 hole-check gates (portfolio_radar, portfolio_radar_ci, portfolio_radar_vulns).
+    expect(calls).toHaveLength(6)
     for (const used of calls) {
       expect(used).toContain('limit(1)')
       expect(used).not.toContain('range')
