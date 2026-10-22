@@ -468,6 +468,8 @@ export interface CompareInput {
   workflows: Array<{ projectId: string; repo: string; path: string; text: string }>
   /** Repo variable names from the GitHub snapshot; null = not readable. */
   variableNames: Record<string, string[] | null>
+  /** How many what-ifs to return (default MAX_WHAT_IFS); the placement preview asks for all. */
+  whatIfLimit?: number
 }
 
 interface MachineInfo {
@@ -961,7 +963,7 @@ export function buildCiCompare(input: CompareInput): CiCompare {
     accounts: accountOut.sort((a, b) => b.monthCost - a.monthCost),
     machines: machineOut.sort((a, b) => b.busyHours - a.busyHours),
     speed,
-    whatIfs: whatIfs.slice(0, MAX_WHAT_IFS),
+    whatIfs: whatIfs.slice(0, input.whatIfLimit ?? MAX_WHAT_IFS),
     explain,
     advice,
   }

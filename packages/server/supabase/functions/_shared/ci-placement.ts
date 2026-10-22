@@ -34,7 +34,7 @@ export type PlacementAction = (typeof PLACEMENT_ACTIONS)[number]
 export const RECENT_CHANGE_MS = 24 * 60 * 60_000
 const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
 
-export function isAllowedPlacementVariable(name: unknown): name is string {
+export function isAllowedPlacementVariable(name: unknown): boolean {
   return typeof name === 'string' && PLACEMENT_VARIABLE_RE.test(name)
 }
 
