@@ -76,6 +76,10 @@ how much is left.
   its daily number; the console, `get_spend_down_status` and
   `mushi keys spend-down` show today's count, the apps it pays for and why the
   last tick skipped an app.
+- The hole check `spend_down_idle` (operator detectors, same facts as that
+  status line) warns when a key is inside its window and dispatched nothing:
+  no app has it as first pick, auto-fix is off, or every open report is
+  settled. A cap or a full run queue is not that finding.
 - Same day, the Cursor key resolver was brought back in line with ADR 0023:
   an app's legacy Integrations key now comes before a shared key
   (`resolveCursorApiKey`); before, a shared key moved such apps onto another
