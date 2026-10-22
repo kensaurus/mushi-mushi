@@ -1,5 +1,28 @@
 # @mushi-mushi/mcp
 
+## 0.29.0
+
+### Minor Changes
+
+- 9a492e4: File a report by hand. `mushi reports file --title --description [--severity] [--component] [--project]` and the new MCP write tool `file_report` add a free-form report to an app's queue, for a bug you found yourself or a backlog item you want an agent to fix. The report goes through the same triage as a user report, so it gets a diagnosis and can then be sent to `mushi fix` or `dispatch_fix`. Severity and component are hints that triage may refine. It needs a key with the `mcp:write` scope; each app takes at most 30 filed reports an hour, and viewers cannot file.
+
+  `mushi design dispatch-findings [--max-files N]` sends the latest design scan's findings to an agent, one report per file and a few files per call, skipping token-definition files (the console's "Send findings to agent").
+
+- 897e79d: New read tool `get_ci_costs` (ADR 0037): what a project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines. It returns rows per repo and runner class (wait and run times, pull-request pass rate, minutes billed, an estimated monthly cost), included minutes per GitHub account, your machines' busy time and electricity, speed factors measured only from jobs that passed on both, what-ifs for moving a workflow, the reasons behind each cost, and advice. Wait and run times are measured; money is always an estimate, with the date of GitHub's price list. Read-only, and wrapped as untrusted data because repo, workflow and job names come from the repos.
+- 6c0155f: New read tool `get_ci_overview` (ADR 0033): where a project's tests run and why a fix waits to land. It returns the machines that send a runner heartbeat, the GitHub runners seen, the latest jobs with a verdict that tells a code failure from a stopped test machine (waiting for a runner, runner lost, queue expired), wait and run times, and advice with the evidence for each rule. Its result is wrapped as untrusted data, since repo, job and runner names come from the repos.
+- 51407d0: New read tool `get_fix_verification` (ADR 0035): whether an agent's fix is proven to work on its PR's current commit. It returns each merge check in order (Opus review, CI, a test that fails without the fix and passes with it, no weakened tests, size, a second model family's review) with what to do when one is not passing, whether Mushi merged it on its own, and any regression after the merge with its revert PR. Its result is wrapped as untrusted data, since the second review's text is model output from the report and the agent's diff.
+- b9c7667: New write tool `request_ci_placement_change` (ADR 0037): ask to change where one repository's CI runs by setting or removing one runner variable (`LINUX_RUNNER` or `RUNNER_<WORKFLOW>`) its workflows read. Mushi builds the change from a fresh preview: the jobs that move and the ones that stay, the target runners, the cost change, and the variable's current value, which must still match when the change runs. Your organization's CI policy is checked now and again at execution. The tool only creates a request: a team owner or admin approves and runs it in the console within an hour, and Mushi never changes runner labels or registrations.
+
+### Patch Changes
+
+- 17580d9: The bundled docs index includes the App blueprint console page, so `search_mushi_docs` and `get_mushi_doc` can find it.
+- 794c6fc: The bundled docs index includes the Design system console page, so `search_mushi_docs` and `get_mushi_doc` can find it.
+- 68221c1: `get_spend_down_status` now also returns `reviewFollowups` (ADR 0032): the last 7 days of review follow-ups, where a pull request the Opus review marked "fix first" is sent back to a new Cursor agent once with the review's findings. It counts follow-ups sent, finished, pushed and with no change, the Opus verdict on each pushed commit, and the fix-first → merge conversion rate, over the apps you can access.
+- bd45f0d: `get_spend_down_status` now describes the spend-down stop-loss and scoreboard (ADR 0028 amendment): each app the key pays for that the project can see carries its stop-loss state (paused when, over 14 days with 20+ samples, the 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; one probe fix a day while paused), and each key returns its last 7 days of runs, PRs, no-PR verdicts, Opus verdicts, merges and latest review cost per PR.
+- 32daae2: AI keys can now be used by all your apps: a key added in the console defaults to "All my apps" and serves every app in every organization you own, after each app's own key and its organization's key. `list_byok_keys` and `mushi keys list` show each key's scope (project, organization or universal). `add_byok_key` and `mushi keys add` still add a key to one app; organization and all-apps keys are added in the console.
+- Updated dependencies [a546d41]
+  - @mushi-mushi/core@1.33.2
+
 ## 0.28.0
 
 ### Minor Changes
