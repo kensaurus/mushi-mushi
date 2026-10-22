@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 211 pages, generated from llms.txt. */
+/** 212 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -581,6 +581,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "ux-runs", "runs", "ux"],
     headings: ["Run in the cloud", "What you see", "File as bug", "Where the changes are"],
     excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
+  },
+  {
+    title: "Verified merge",
+    url: docUrl("/admin/verified-merge"),
+    route: "/admin/verified-merge",
+    markdown: "admin/verified-merge.md",
+    keywords: ["admin", "verified-merge", "verified", "merge"],
+    headings: ["The gates", "Add the workflow", "What the check does", "The test command", "Run it on your own machine", "Turn on automatic merge", "After the merge", "Check one fix"],
+    excerpt: "Mushi merges an agent's fix on its own only with proof — a test that fails without the fix and passes with it, run in your own CI.",
   },
   {
     title: "Voice intake",

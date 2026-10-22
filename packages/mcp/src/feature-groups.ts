@@ -119,6 +119,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   merge_fix: 'fixes',
   refresh_ci: 'fixes',
   get_ci_overview: 'fixes',
+  get_fix_verification: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
   request_reporter_info: 'fixes',

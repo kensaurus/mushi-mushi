@@ -239,6 +239,7 @@ mushi fixes merge <fixId> --method squash
 
 ## See also
 
+- [Verified merge](/admin/verified-merge) — the gates an agent's PR passes before Mushi merges it on its own.
 - [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) — how auto-fix works internally.
 - [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes) — coordinated multi-repo runs.
 - [Connecting your orchestrator](/concepts/orchestrator-interop) — dispatch via MCP, A2A, or REST.

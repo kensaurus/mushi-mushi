@@ -1,0 +1,226 @@
+# Verified merge
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/verified-merge
+
+---
+title: Verified merge
+description: Mushi merges an agent's fix on its own only with proof — a test that fails without the fix and passes with it, run in your own CI.
+---
+
+# Verified merge
+
+Your agents open more fix PRs than you can read. A green CI run does not
+prove a fix: an agent can make CI green by editing or skipping a test.
+Verified merge asks for proof instead. A fix PR merges on its own only when
+**a test fails without the fix and passes with it**, no test was weakened,
+the change is small, and two reviews from different model families raise no
+problem.
+
+A model's review can stop a merge. It can never approve one on its own
+([ADR 0035](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md)).
+
+## The gates
+
+Mushi checks every gate against the PR's latest commit. A new commit starts
+from zero. The fix card in the console shows the list, and so does
+`mushi fixes verify `.
+
+| Gate | Passes when | What to do when it does not |
+| --- | --- | --- |
+| **Opus review** | The [Opus review](/concepts/agent-pr-review) of this commit says `merge` | Read the findings. `fix_first` and `hold` block. |
+| **CI** | Every check on the commit is green | A stopped test machine counts as waiting, never as a pass ([CI runners](/operating/ci-runners)). |
+| **Test proves the fix** | The **Mushi verify** check says `fail_to_pass` | Add the workflow below, or ask the agent for a test that reproduces the bug. |
+| **No tests weakened** | No test file deleted, no assertions removed, no `.skip`, `.only`, `@ts-ignore` or `eslint-disable` added, no CI config or lockfile changed, no big snapshot update | Undo the change to the test, or merge it yourself. |
+| **Small change** | At most 3 source files and 150 changed lines (you can raise both) | A big change needs a person. |
+| **Second review** | A model from another family (OpenAI or OpenRouter, on your own key) says `merge` | It runs only after the other five pass. Without a key it reads **unavailable** and blocks automatic merge. |
+
+Each gate reads one of **pass**, **fail**, **pending**, **unavailable** or
+**not set up**.
+
+## Add the workflow
+
+The **Test proves the fix** gate needs one workflow in your repo. Get it with
+your runner labels and test command already filled in, in any of three ways:
+
+- Console: **Settings → Fixes → Verified merge → Open a PR that adds it**, or
+  **Copy workflow**.
+- Terminal: `mushi verify workflow --out .github/workflows/mushi-verify.yml`,
+  then commit it to your default branch.
+- By hand: save the file below as `.github/workflows/mushi-verify.yml` and
+  change the `runs-on` and `test-command` lines.
+
+```yaml
+# Mushi verify. Save as .github/workflows/mushi-verify.yml on your default branch.
+# It proves an agent's fix before Mushi merges it on its own: the tests the PR
+# adds or changes must pass with the fix, and fail when the PR's other files
+# are put back the way they were. The result is a "Mushi verify" check on the
+# PR. Mushi reads it with the GitHub access it already has; no secret needed.
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge
+name: Mushi verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: mushi-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # Agent branches only (cursor/**, mushi/**, copilot/**), and never a fork:
+    # `on.pull_request.branches` filters the base branch, so the head is checked here.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (startsWith(github.head_ref, 'cursor/') ||
+       startsWith(github.head_ref, 'mushi/') ||
+       startsWith(github.head_ref, 'copilot/'))
+    # Not "Mushi verify": that name belongs to the check run the action posts.
+    name: Mushi verify run
+    runs-on: [ubuntu-latest]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          # The commit the agent pushed, not GitHub's merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history, so the PR's merge base is here.
+          fetch-depth: 0
+          persist-credentials: false
+      # Not Node? Swap these two steps for your toolchain's setup action
+      # (actions/setup-python, actions/setup-go, …). The verify action itself
+      # needs Node 20 or newer on the runner; setup-node gives you that.
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v4.1.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          # No version file? Replace with  node-version: 22
+          node-version-file: .nvmrc  # or .node-version / package.json
+          cache: pnpm  # npm or yarn for those; remove the pnpm step above
+      # Install your dependencies the way your CI does, e.g.
+      #   npm ci   |   yarn install --immutable   |   pip install -r requirements.txt
+      - run: pnpm install --frozen-lockfile
+      - uses: kensaurus/mushi-mushi/.github/actions/fix-verify@master
+        with:
+          # {files} becomes the test files the PR added or changed, quoted.
+          # e.g. "npx jest {files}" or "pytest {files}"
+          test-command: "pnpm vitest run {files}"
+```
+
+It runs only on PRs from `cursor/…`, `mushi/…` and `copilot/…` branches in
+your own repo, needs only `contents: read` and `checks: write`, and stops after
+20 minutes. It never uses `pull_request_target`, so a fork's code never runs
+with your secrets. Mushi needs no secret in your repo: it reads the check with
+the GitHub access it already has.
+
+  Mushi does not write the file into your repo on its own. Writing under
+  `.github/workflows` needs a GitHub permission Mushi does not ask for. The
+  **Open a PR that adds it** button opens a pull request for you to merge.
+
+## What the check does
+
+1. It finds the test files the PR **added or changed**. A source file edit
+   alone does not count.
+2. It runs them with your test command on the PR's commit. They must **pass**.
+3. It puts every other file the PR changed back the way it was on your base
+   branch, keeps the PR's tests, and runs them again. They must **fail**.
+4. It puts the PR's files back and posts the **Mushi verify** check.
+
+| Verdict | Meaning | Check |
+| --- | --- | --- |
+| `fail_to_pass` | The test fails without the fix and passes with it. This is the proof. | green |
+| `no_test` | The PR adds or changes no test. | red |
+| `passes_without_fix` | The tests pass even on the old code, so they do not reproduce the bug. | red |
+| `fails_with_fix` | The fix does not make its own tests pass. | red |
+| `error` | A run timed out, crashed or the command was not found. It says nothing about the fix. | red |
+
+The check's details show the tests it ran, both results, the runner and the
+end of the log. Token-shaped strings in the log are masked, and the job's
+GitHub token is not passed to your tests.
+
+### The test command
+
+`{files}` becomes the test file paths, each quoted, so a strange file name can
+never run as a command. Use your runner's "run these files" form:
+
+| Stack | `test-command` |
+| --- | --- |
+| Vitest | `pnpm vitest run {files}` |
+| Jest | `npx jest {files}` |
+| pytest | `pytest {files}` |
+| Node test runner | `node --test {files}` |
+
+Set it in the console (**Settings → Fixes → Verified merge → Test command**)
+so `mushi verify workflow` and the PR button fill it in.
+
+A test file is one under `__tests__/`, `test/`, `tests/` or `e2e/`, or named
+`*.test.*`, `*.spec.*`, `*_test.go`, `test_*.py`, `*_test.py`, `*Test.java` or
+`*Tests.swift`. If yours look different, add `test-globs` to the action step,
+for example `test-globs: "**/*.check.ts"`. A glob without a `/` matches the
+file name in any folder.
+
+## Run it on your own machine
+
+The check runs wherever `runs-on` says. To use your own machine (no GitHub
+minutes, your own toolchain), set it up as a runner first:
+
+```bash
+mushi runner add --repo you/your-app   # prints the label, e.g. mushi-nuc
+```
+
+Then add that label under **Settings → Fixes → Verified merge → Runner
+labels** (the console suggests the runners it has seen), and get the workflow
+again. The `runs-on` line becomes, for example:
+
+```yaml
+    runs-on: [self-hosted, mushi-nuc]
+```
+
+See [Add your own machine as a runner](/operating/ci-runners#add-your-own-machine-as-a-runner)
+for the safe defaults.
+
+  The check runs the agent's code and tests on that machine, like any CI job.
+  Keep self-hosted runners on private repos you trust.
+
+## Turn on automatic merge
+
+Automatic merge is **off** until you turn it on in **Settings → Fixes →
+Verified merge**. When it is on and every gate passes, Mushi squash-merges the
+PR's exact commit, up to a daily limit per app (5 by default). It never turns
+on GitHub's own auto-merge, which merges on green CI alone.
+
+You can still merge any PR yourself, from the console, GitHub or
+`mushi fixes merge`, as before.
+
+## After the merge
+
+For 72 hours after Mushi merges a fix, it watches for three signs that the fix
+broke something:
+
+| Sign | What Mushi does |
+| --- | --- |
+| CI fails on the merge commit (not a stopped test machine) | Marks the fix **regressed** and opens a revert PR |
+| The report is reopened | Marks the fix **regressed** and opens a revert PR |
+| A new report's stack trace names a file the fix changed | Flags the fix for you to look at |
+
+Mushi never merges a revert PR by itself: a person does. If later commits
+changed the same files, Mushi opens no revert PR and tells you to revert by
+hand. Turn revert PRs off with **Auto-revert → Off**. A regressed fix also
+counts against that app in the spend-down stop-loss, which pauses automatic
+fixes for an app whose fixes keep failing.
+
+## Check one fix
+
+```bash
+mushi fixes verify <fixId>           # every gate for the PR's latest commit
+mushi fixes verify <fixId> --rerun   # check again now
+```
+
+## See also
+
+- [Agent PR review](/concepts/agent-pr-review): the Opus review, the first gate.
+- [Fix orchestrator](/admin/fixes): the fix card, CI feedback and merging from the console.
+- [CI runners](/operating/ci-runners): where your tests run, and a stopped test machine versus a failed fix.

@@ -386,6 +386,11 @@ export interface SpendDownYieldRun {
   reviewedAt: string | null
   /** Dispatched as the paused app's daily probe. */
   probe: boolean
+  /**
+   * Its fix regressed after Mushi merged it (`fix_attempts.regressed_at`,
+   * ADR 0035): counted as a hold whatever the review said.
+   */
+  regressedAt?: string | null
 }
 
 export interface SpendDownYieldSamples {
@@ -453,8 +458,8 @@ const NO_PR_WORDS = 'already fixed, not actionable, needs a person or wrong repo
 
 /**
  * Should spend-down stop dispatching to this app? Reads its newest 40 Opus
- * reviews and newest 40 finished runs from the last 14 days (and after its
- * last Resume). Not paused, it pauses when, with at least 20 samples, the
+ * reviews (a fix that regressed after a Mushi merge counts as a hold) and
+ * newest 40 finished runs from the last 14 days (and after its last Resume). Not paused, it pauses when, with at least 20 samples, the
  * one-sided 95% Wilson bound says the merge rate is under 20%, the hold rate
  * over 35%, or the no-PR-verdict share over 50%. Paused, it resumes when:
  *   - the point estimates clear the hysteresis lines (merge above 25%, hold
@@ -467,7 +472,10 @@ export function spendDownStopLoss(
   previous: SpendDownPauseState = { paused: false, pausedAt: null },
   now: Date = new Date(),
 ): SpendDownStopLoss {
+  // A merged fix that regressed (ADR 0035) counts as a hold: the merge
+  // verdict it had was wrong, and the app's yield must say so.
   const reviews = samples.runs
+    .map((r) => (r.regressedAt ? { ...r, verdict: 'hold', reviewedAt: r.reviewedAt ?? r.regressedAt } : r))
     .filter((r) => r.verdict === 'merge' || r.verdict === 'fix_first' || r.verdict === 'hold')
     .sort((a, b) => String(b.reviewedAt ?? b.at).localeCompare(String(a.reviewedAt ?? a.at)))
     .slice(0, SPEND_DOWN_YIELD_WINDOW)

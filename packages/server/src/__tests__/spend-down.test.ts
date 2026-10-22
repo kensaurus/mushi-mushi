@@ -986,3 +986,28 @@ describe('cachedYieldSamples', () => {
     expect(from.mock.calls.filter(([t]) => t === 'fix_dispatch_jobs')).toHaveLength(1)
   })
 })
+
+describe('spendDownStopLoss: a fix that regressed after a Mushi merge counts as a hold (ADR 0035)', () => {
+  it('turns one regressed "merge" into the hold that pauses the app', () => {
+    const runs = sample({ merge: 6, hold: 10, fixFirst: 4 })
+    expect(spendDownStopLoss({ runs }, undefined, AT).paused).toBe(false)
+    const regressed = runs.map((r, i) => (i === 0 ? { ...r, regressedAt: '2026-10-19T06:00:00.000Z' } : r))
+    const d = spendDownStopLoss({ runs: regressed }, undefined, AT)
+    expect(d).toMatchObject({ paused: true, holdVerdicts: 11, mergeVerdicts: 5 })
+    expect(d.reason).toMatch(/hold on 11 of the last 20/)
+  })
+
+  it('counts a regressed run with no review as a reviewed hold', () => {
+    const runs = sample({ merge: 6, hold: 10, fixFirst: 3, other: 1 })
+    const last = runs.length - 1
+    const regressed = runs.map((r, i) => (i === last ? { ...r, regressedAt: '2026-10-19T06:00:00.000Z' } : r))
+    expect(spendDownStopLoss({ runs: regressed }, undefined, AT)).toMatchObject({ reviewed: 20, holdVerdicts: 11, paused: true })
+  })
+
+  it('a regressed probe does not count toward probe recovery', () => {
+    const probes = sample({ merge: 2, probe: true }).map((r) => ({ ...r, at: '2026-10-20T08:00:00.000Z', reviewedAt: '2026-10-20T08:00:00.000Z' }))
+    expect(spendDownStopLoss({ runs: [...probes, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ resumedBy: 'probes' })
+    const regressedProbe = probes.map((r, i) => (i === 0 ? { ...r, regressedAt: '2026-10-20T08:30:00.000Z' } : r))
+    expect(spendDownStopLoss({ runs: [...regressedProbe, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ paused: true, resumedBy: null })
+  })
+})

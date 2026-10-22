@@ -56,6 +56,8 @@ interface AttemptRow {
   failure_category: string | null
   merged_at?: string | null
   llm_model?: string | null
+  /** ADR 0035: set when the fix regressed after a Mushi merge. */
+  regressed_at?: string | null
 }
 
 interface ReviewRow {
@@ -86,6 +88,20 @@ async function readByIds<T>(
 }
 
 /**
+ * The yield read of attempts, with `regressed_at` (ADR 0035). Before that
+ * migration is applied the column does not exist (42703): read without it,
+ * so the stop-loss keeps working on the reviews alone.
+ */
+async function yieldAttempts(db: SupabaseClient, ids: string[]): Promise<AttemptRow[]> {
+  try {
+    return await readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category, regressed_at', 'id', ids, 'yield attempts')
+  } catch (err) {
+    if (!/regressed_at/.test(err instanceof Error ? err.message : String(err))) throw err
+    return readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', ids, 'yield attempts')
+  }
+}
+
+/**
  * The stop-loss samples of one app: its spend-down runs (any key, never a
  * manual or auto-fix dispatch) dispatched in the last 14 days and after its
  * last Resume (`resetAt`), newest first, each with where it ended and the
@@ -113,7 +129,7 @@ export async function projectYieldSamples(
   const jobs = (data ?? []) as JobRow[]
   const attemptIds = jobs.map((j) => j.fix_attempt_id).filter((id): id is string => !!id)
   const [attempts, reviews] = await Promise.all([
-    readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', attemptIds, 'yield attempts'),
+    yieldAttempts(db, attemptIds),
     readByIds<ReviewRow>(db, 'fix_reviews', 'fix_attempt_id, verdict, reviewed_at', 'fix_attempt_id', attemptIds, 'yield reviews'),
   ])
   const attemptById = new Map(attempts.map((a) => [a.id, a]))
@@ -127,6 +143,7 @@ export async function projectYieldSamples(
         verdict: review?.verdict ?? null,
         reviewedAt: review?.reviewed_at ?? null,
         probe: j.dispatch_metadata?.spend_down_probe === true,
+        regressedAt: (j.fix_attempt_id ? attemptById.get(j.fix_attempt_id)?.regressed_at : null) ?? null,
       }
     }),
   }

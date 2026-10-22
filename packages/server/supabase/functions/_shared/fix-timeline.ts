@@ -28,6 +28,11 @@ export type FixTimelineKind =
   | 'reviewed'
   /** A review follow-up: a new Cursor agent sent to the PR with the Opus findings (ADR 0032). */
   | 'followup'
+  /** Verified fixes (ADR 0035): every gate passed, merged on proof, a regression after a merge, a revert PR opened. */
+  | 'verified'
+  | 'auto_merged'
+  | 'regressed'
+  | 'revert_opened'
   | 'completed'
   | 'failed'
 

@@ -376,6 +376,12 @@ verify_jwt = false
 [functions.ci-jobs-collector]
 verify_jwt = false
 
+# fix-verifier is invoked by pg_cron (mushi-fix-verifier, 4-54/10) and by
+# POST /v1/admin/fixes/:id/verify through the internal caller token;
+# requireServiceRoleAuth inside (ADR 0035).
+[functions.fix-verifier]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on

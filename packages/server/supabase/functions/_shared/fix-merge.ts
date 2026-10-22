@@ -170,7 +170,7 @@ export async function finalizeFixMerge(
      * Which path saw the merge, recorded on the usage event. Defaults to
      * console_merge when an admin acted (actorUserId), otherwise system.
      */
-    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile';
+    source?: 'console_merge' | 'github_webhook' | 'ci_sync' | 'fixing_reconcile' | 'verified_auto_merge';
   },
 ): Promise<{ justMerged: boolean; reportStatus: string | null }> {
   const nowDate = new Date();

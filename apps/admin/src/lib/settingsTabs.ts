@@ -20,6 +20,7 @@ export const SETTINGS_SECTION_IDS = {
   browserbase: 'browserbase',
   connection: 'connection',
   debugLogging: 'debug-logging',
+  verifiedMerge: 'verified-merge',
 } as const
 
 /** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
@@ -38,6 +39,9 @@ const SETTINGS_TAB_ALIASES: Readonly<Record<string, SettingsTabTarget>> = {
   health: { tab: 'sdk', anchor: null },
   dev: { tab: 'sdk', anchor: SETTINGS_SECTION_IDS.debugLogging },
   keys: { tab: 'byok', anchor: null },
+  // Plan 024 / ADR 0035 call it "Settings → Fixes → Verified merge"; it sits
+  // in General beside the agent PR review.
+  fixes: { tab: 'general', anchor: SETTINGS_SECTION_IDS.verifiedMerge },
 }
 
 function isSettingsTabId(value: unknown): value is SettingsTabId {

@@ -200,6 +200,11 @@ mushi fixes merge <fixId>
 mushi fixes merge <fixId> --method squash   # default
 mushi fixes merge <fixId> --method merge
 mushi fixes merge <fixId> --json
+
+# The verified-merge gates for the PR's current head (ADR 0035)
+mushi fixes verify <fixId>
+mushi fixes verify <fixId> --rerun   # re-check now, then show
+mushi fixes verify <fixId> --json
 ```
 
 **Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
@@ -208,6 +213,18 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+
+### `mushi verify`
+
+The `mushi-verify` workflow that proves an agent's fix with a test that fails
+without it, filled in with your project's runner labels and test command. Full
+guide: [Verified merge](/admin/verified-merge).
+
+```bash
+mushi verify workflow                                           # print it
+mushi verify workflow --out .github/workflows/mushi-verify.yml  # write it
+mushi verify workflow --project <projectId> --json
+```
 
 ### `mushi runner`
 
