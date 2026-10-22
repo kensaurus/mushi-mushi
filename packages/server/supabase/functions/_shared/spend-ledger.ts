@@ -28,7 +28,7 @@ import { BILL_VENDORS, type BillVendor } from './spend-bill-csv.ts'
 type Db = ReturnType<typeof getServiceClient>
 
 export const LEDGER_DAYS = 30
-/** GitHub-hosted Linux runner list price per minute; est_billable_minutes already carries the OS multiplier. */
+/** GitHub-hosted Linux runner list price per minute; est_billable_minutes is Linux-equivalent (ci-minutes.ts price ratio), 0 for public repos and self-hosted jobs. */
 export const CI_USD_PER_LINUX_MINUTE = 0.006
 const READ_LIMIT = 50_000
 

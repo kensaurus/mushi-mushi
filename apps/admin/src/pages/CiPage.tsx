@@ -7,12 +7,15 @@
  * Top to bottom: the queue (Waiting → Running → Finished), a per-runner
  * timeline, stat tiles, the runner map (machines → runners → repos → live
  * jobs), "Speed it up" advice, slowest jobs and steps, and recent test
- * machine failures. Scope follows the header switcher (lib/projectScope.ts):
- * one app, or "All apps" for every project the caller can see. The toggle
- * here mirrors that choice. Polls every 30 s while the tab is visible with
+ * machine failures, then "Cost and speed" (Plan 022 Phase 7, ADR 0037:
+ * GitHub-hosted vs your own machines, read-only, never the top of the page).
+ * Scope follows the header switcher (lib/projectScope.ts): one app, or
+ * "All apps" for every project the caller can see. The toggle here mirrors
+ * that choice. Polls every 30 s while the tab is visible with
  * `refresh=1` (the server live-syncs GitHub at most once a minute).
  *
  * Data: GET /v1/admin/ci/overview?project_id=&days=7&refresh=1 → CiOverview
+ *       GET /v1/admin/ci/compare?project_id=&days=30 → CiCompare (Cost and speed)
  *       GET /v1/admin/fixes?limit=100 (project scope) → "Mushi fix" links
  */
 
@@ -23,7 +26,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconBolt, IconClock, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
+import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
@@ -31,6 +34,7 @@ import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
+import { CiCostSection } from '../components/ci/CiCostSection'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -121,7 +125,7 @@ export function CiPage() {
       : page.error
         ? "CI runners couldn't load"
         : 'Loading CI runners',
-    questions: ['Why are my fixes slow to land?', 'Which runner keeps failing?', 'How do I make CI faster?'],
+    questions: ['Why are my fixes slow to land?', 'Which runner keeps failing?', 'How do I make CI faster?', 'What does my CI cost, and would my own machine be cheaper?'],
   })
 
   const notice = data ? permissionsNotice(data.permissions) : null
@@ -208,6 +212,12 @@ export function CiPage() {
           <Section title="Speed it up" id="ci-advice" icon={<IconBolt />}>
             <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
+          </Section>
+
+          <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
+            <PanelErrorBoundary label="Cost and speed">
+              <CiCostSection projectId={projectId} scope={scope} />
+            </PanelErrorBoundary>
           </Section>
 
           <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>

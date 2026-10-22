@@ -19,6 +19,17 @@
  *        always reads its own project. refresh=1 first runs a live sync
  *        (queued / running / just-finished runs, once a minute per project,
  *        ≤ 12 GitHub calls).
+ *   GET  /v1/admin/ci/compare            adminOrApiKey(mcp:read)
+ *        ?project_id=&days=30 — cost and speed per repo × runner class, why
+ *        it costs what it costs, what-ifs and cost advice (CiCompare in
+ *        _shared/ci-compare-types.ts; Plan 022 Phase 7, ADR 0037). Same
+ *        scoping as the overview. Read-only: nothing is written to GitHub.
+ *   GET  /v1/admin/ci/cost-settings      jwtAuth (console; MCP and the CLI read the figures in /compare)
+ *        ?organization_id= | ?project_id= — the organization's cost figures
+ *        (example figures until saved) and whether the caller may edit them.
+ *   PUT  /v1/admin/ci/cost-settings      jwtAuth (console only), non-viewers
+ *        Saves the figures (zod bounds), audited as settings.updated. 409
+ *        MIGRATION_PENDING until ci_cost_settings exists.
  *   POST /v1/admin/fixes/:id/ci/rerun    adminOrApiKey(mcp:write), non-viewers
  *        Re-runs the failed / cancelled jobs on the fix PR's head
  *        (POST /actions/runs/{id}/rerun-failed-jobs). 409 CI_RUNNING while
@@ -27,13 +38,17 @@
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
-import { adminOrApiKey, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { z } from 'npm:zod@3'
+import { adminOrApiKey, apiKeyAuth, jwtAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { runnerIngestSchema } from '../../_shared/schemas.ts'
 import { mintProjectApiKey } from '../../_shared/api-key-mint.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
+import { claimTenantRateLimit, logOrgAudit } from '../../_shared/tenant-observability.ts'
+import { buildCiCompare } from '../../_shared/ci-compare.ts'
+import { isMissingObject, loadCiCompareInput } from '../../_shared/ci-compare-load.ts'
+import { COST_BOUNDS, COST_PLANS, costSettingsRow, normalizeCostSettings, type CostSettingsRow } from '../../_shared/ci-cost.ts'
 import {
   fetchPullRequest,
   installationIdForAttempt,
@@ -70,6 +85,8 @@ export interface CiRouteDeps {
   requireRunnerScope: MiddlewareHandler
   adminOrApiKeyRead: MiddlewareHandler
   adminOrApiKeyWrite: MiddlewareHandler
+  /** Console session only (cost settings writes). */
+  jwtAuth: MiddlewareHandler
   claimRateLimit: typeof claimTenantRateLimit
   callerProjectIds: typeof callerProjectIds
   callerCanAccessProject: typeof callerCanAccessProject
@@ -79,6 +96,7 @@ export interface CiRouteDeps {
   fetchPullRequest: typeof fetchPullRequest
   mintKey: typeof mintProjectApiKey
   logAudit: typeof logAudit
+  logOrgAudit: typeof logOrgAudit
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
 }
@@ -89,6 +107,7 @@ export const defaultCiRouteDeps: CiRouteDeps = {
   requireRunnerScope: requireApiKeyScope('runner:write') as MiddlewareHandler,
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
+  jwtAuth: jwtAuth as MiddlewareHandler,
   claimRateLimit: claimTenantRateLimit,
   callerProjectIds,
   callerCanAccessProject,
@@ -101,6 +120,7 @@ export const defaultCiRouteDeps: CiRouteDeps = {
   fetchPullRequest,
   mintKey: mintProjectApiKey,
   logAudit,
+  logOrgAudit,
   now: () => new Date(),
 }
 
@@ -108,6 +128,9 @@ export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRo
   app.post('/v1/ingest/runner', deps.apiKeyAuth, deps.requireRunnerScope, (c) => ingestRunner(c, deps))
   app.post('/v1/admin/projects/:id/runner-key', deps.adminOrApiKeyWrite, (c) => mintRunnerKey(c, deps))
   app.get('/v1/admin/ci/overview', deps.adminOrApiKeyRead, (c) => ciOverview(c, deps))
+  app.get('/v1/admin/ci/compare', deps.adminOrApiKeyRead, (c) => ciCompare(c, deps))
+  app.get('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => getCostSettings(c, deps))
+  app.put('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => putCostSettings(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
 }
 
@@ -282,6 +305,171 @@ async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
     clog.error('ci overview read failed', { err: err instanceof Error ? err.message : String(err) })
     return jsonError(c, 'CI_OVERVIEW_FAILED', 'The CI overview could not be read. Try again in a minute.', 500)
   }
+}
+
+async function ciCompare(c: Context, deps: CiRouteDeps): Promise<Response> {
+  const userId = c.get('userId') as string
+  const db = deps.getServiceClient()
+  const requested = c.req.query('project_id') ?? c.req.query('projectId') ?? null
+  if (requested && !UUID_RE.test(requested)) return jsonError(c, 'VALIDATION_ERROR', 'project_id must be a uuid', 400)
+  const daysRaw = Number(c.req.query('days') ?? 30)
+  const days = Number.isFinite(daysRaw) ? Math.min(30, Math.max(1, Math.round(daysRaw))) : 30
+  const projectIds = await deps.callerProjectIds(c, db, userId)
+  if (requested && !projectIds.includes(requested)) return jsonError(c, 'FORBIDDEN', 'You cannot read this project.', 403)
+  const scope = requested ? [requested] : projectIds
+  const now = deps.now()
+  const from = new Date(now.getTime() - days * 24 * 60 * 60_000)
+  try {
+    const loaded = await loadCiCompareInput(db as never, scope, from, now)
+    return c.json({ ok: true, data: buildCiCompare({ ...loaded, now, days, from, to: now }) })
+  } catch (err) {
+    clog.error('ci compare failed', { err: err instanceof Error ? err.message : String(err) })
+    return jsonError(c, 'CI_COMPARE_FAILED', 'The CI cost comparison could not be read. Try again in a minute.', 500)
+  }
+}
+
+const costMachineSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    runners: z.array(z.string().trim().min(1).max(100)).min(1).max(COST_BOUNDS.machineRunners),
+    wattsIdle: z.number().min(COST_BOUNDS.watts.min).max(COST_BOUNDS.watts.max).nullable().optional(),
+    wattsLoad: z.number().min(COST_BOUNDS.watts.min).max(COST_BOUNDS.watts.max).nullable().optional(),
+  })
+  .strict()
+
+export const costSettingsSchema = z
+  .object({
+    organizationId: z.string().uuid(),
+    currency: z.string().regex(/^[A-Z]{3}$/, 'a 3-letter currency code, e.g. USD'),
+    fxPerUsd: z.number().min(COST_BOUNDS.fxPerUsd.min).max(COST_BOUNDS.fxPerUsd.max),
+    wattsIdle: z.number().min(COST_BOUNDS.watts.min).max(COST_BOUNDS.watts.max),
+    wattsLoad: z.number().min(COST_BOUNDS.watts.min).max(COST_BOUNDS.watts.max),
+    pricePerKwh: z.number().min(COST_BOUNDS.pricePerKwh.min).max(COST_BOUNDS.pricePerKwh.max),
+    wearPerHour: z.number().min(COST_BOUNDS.wearPerHour.min).max(COST_BOUNDS.wearPerHour.max),
+    plan: z.enum(COST_PLANS),
+    includedMinutes: z.number().int().min(COST_BOUNDS.includedMinutes.min).max(COST_BOUNDS.includedMinutes.max),
+    selfHostedFeePerMinuteUsd: z.number().min(COST_BOUNDS.selfHostedFeePerMinuteUsd.min).max(COST_BOUNDS.selfHostedFeePerMinuteUsd.max),
+    machines: z.array(costMachineSchema).max(COST_BOUNDS.machines),
+  })
+  .strict()
+  .refine((v) => v.wattsLoad >= v.wattsIdle, { message: 'must be at least the idle draw', path: ['wattsLoad'] })
+
+/** The organizations of the projects the caller can read, with names. */
+async function callerOrgs(c: Context, deps: CiRouteDeps, db: Db, userId: string): Promise<Array<{ id: string; name: string | null }>> {
+  const projectIds = await deps.callerProjectIds(c, db, userId)
+  if (projectIds.length === 0) return []
+  const { data, error } = await db.from('projects').select('organization_id, organizations(name)').in('id', projectIds)
+  if (error) throw new Error(`projects read failed: ${error.message}`)
+  const out = new Map<string, string | null>()
+  for (const p of (data ?? []) as Array<{ organization_id: string | null; organizations?: { name?: string | null } | null }>) {
+    if (p.organization_id && !out.has(p.organization_id)) out.set(p.organization_id, p.organizations?.name ?? null)
+  }
+  return [...out.entries()].map(([id, name]) => ({ id, name }))
+}
+
+/** Pick the organization: ?organization_id=, else ?project_id='s, else the caller's only one. */
+async function resolveCostOrg(c: Context, deps: CiRouteDeps, db: Db, userId: string, requestedOrg: string | null): Promise<{ orgId: string } | { response: Response }> {
+  let orgs: Array<{ id: string; name: string | null }>
+  try {
+    orgs = await callerOrgs(c, deps, db, userId)
+  } catch {
+    return { response: jsonError(c, 'DB_ERROR', 'Could not read your organizations.', 500) }
+  }
+  const projectId = c.req.query('project_id') ?? c.req.query('projectId') ?? null
+  if (requestedOrg) {
+    if (!UUID_RE.test(requestedOrg)) return { response: jsonError(c, 'VALIDATION_ERROR', 'organization_id must be a uuid', 400) }
+    if (!orgs.some((o) => o.id === requestedOrg)) return { response: jsonError(c, 'FORBIDDEN', 'You cannot read this organization.', 403) }
+    return { orgId: requestedOrg }
+  }
+  if (projectId) {
+    if (!UUID_RE.test(projectId)) return { response: jsonError(c, 'VALIDATION_ERROR', 'project_id must be a uuid', 400) }
+    const ids = await deps.callerProjectIds(c, db, userId)
+    if (!ids.includes(projectId)) return { response: jsonError(c, 'FORBIDDEN', 'You cannot read this project.', 403) }
+    const { data } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+    const org = (data as { organization_id: string | null } | null)?.organization_id
+    if (!org) return { response: jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization.', 409) }
+    return { orgId: org }
+  }
+  if (orgs.length !== 1) {
+    return {
+      response: jsonError(c, 'ORG_REQUIRED', orgs.length === 0 ? 'You can read no organization.' : 'You belong to several organizations; pass organization_id.', 400, { organizations: orgs }),
+    }
+  }
+  return { orgId: orgs[0].id }
+}
+
+async function orgRole(db: Db, orgId: string, userId: string): Promise<string | null> {
+  const { data } = await db.from('organization_members').select('role').eq('organization_id', orgId).eq('user_id', userId).maybeSingle()
+  return (data as { role?: string } | null)?.role ?? null
+}
+
+async function getCostSettings(c: Context, deps: CiRouteDeps): Promise<Response> {
+  const userId = c.get('userId') as string
+  const db = deps.getServiceClient()
+  const org = await resolveCostOrg(c, deps, db, userId, c.req.query('organization_id') ?? c.req.query('organizationId') ?? null)
+  if ('response' in org) return org.response
+  const { data, error } = await db.from('ci_cost_settings').select('*').eq('organization_id', org.orgId).maybeSingle()
+  if (error && !isMissingObject(error)) return jsonError(c, 'DB_ERROR', 'Could not read the CI cost settings.', 500)
+  const role = c.get('authMethod') === 'apiKey' ? null : await orgRole(db, org.orgId, userId)
+  return c.json({
+    ok: true,
+    data: {
+      settings: normalizeCostSettings(org.orgId, error ? null : ((data as CostSettingsRow | null) ?? null)),
+      writable: !error,
+      // Console members who are not viewers may edit; API keys never.
+      canEdit: !error && role != null && role !== 'viewer',
+      bounds: COST_BOUNDS,
+      plans: COST_PLANS,
+    },
+  })
+}
+
+async function putCostSettings(c: Context, deps: CiRouteDeps): Promise<Response> {
+  // jwtAuth already refused API keys; say so plainly if one slips through a test double.
+  if (c.get('authMethod') === 'apiKey') return jsonError(c, 'CONSOLE_ONLY', 'CI cost settings are changed in the console, not with an API key.', 403)
+  const userId = c.get('userId') as string
+  const db = deps.getServiceClient()
+  const parsed = costSettingsSchema.safeParse(await c.req.json().catch(() => null))
+  if (!parsed.success) {
+    return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
+  }
+  const body = parsed.data
+  const org = await resolveCostOrg(c, deps, db, userId, body.organizationId)
+  if ('response' in org) return org.response
+  const role = await orgRole(db, org.orgId, userId)
+  if (!role) return jsonError(c, 'FORBIDDEN', 'You are not a member of this organization.', 403)
+  const viewer = denyViewerWrite(c, role, 'change CI cost settings')
+  if (viewer) return viewer
+
+  const now = deps.now()
+  const { organizationId: _org, ...figures } = body
+  const row = costSettingsRow(org.orgId, figures, userId, now)
+  const { data: prior, error: readErr } = await db.from('ci_cost_settings').select('*').eq('organization_id', org.orgId).maybeSingle()
+  if (readErr) {
+    if (isMissingObject(readErr)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022050303_ci_cost_compare is applied.', 409)
+    return jsonError(c, 'DB_ERROR', 'Could not read the CI cost settings.', 500)
+  }
+  // Snapshot before the write: the audit says which figures changed.
+  const before = prior ? normalizeCostSettings(org.orgId, prior as CostSettingsRow) : null
+  const { error } = await db.from('ci_cost_settings').upsert(row, { onConflict: 'organization_id' })
+  if (error) {
+    if (isMissingObject(error)) return jsonError(c, 'MIGRATION_PENDING', 'CI cost settings can be saved once the database update 20261022050303_ci_cost_compare is applied.', 409)
+    clog.error('ci cost settings save failed', { orgId: org.orgId, err: error.message })
+    return jsonError(c, 'DB_ERROR', 'The CI cost settings could not be saved.', 500)
+  }
+  const after = normalizeCostSettings(org.orgId, { ...row, updated_at: now.toISOString() })
+  const changed = before
+    ? (Object.keys(figures) as Array<keyof typeof figures>).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+    : Object.keys(figures)
+  void deps.logOrgAudit(db as never, {
+    organizationId: org.orgId,
+    actorId: userId,
+    action: 'settings.updated',
+    resourceType: 'ci_cost_settings',
+    resourceId: org.orgId,
+    metadata: { changed, first_save: !before },
+  }).catch(() => {})
+  return c.json({ ok: true, data: { settings: after, writable: true, canEdit: true, bounds: COST_BOUNDS, plans: COST_PLANS } })
 }
 
 async function rerunFixCi(c: Context, deps: CiRouteDeps): Promise<Response> {
