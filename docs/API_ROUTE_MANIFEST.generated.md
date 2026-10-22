@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-22 · **714** routes.
+> Generated: 2026-10-22 · **726** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 185 |
+| `adminOrApiKey` | 190 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 361 |
+| `jwtAuth` | 368 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -88,7 +88,19 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/byok/spend-down` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | POST | `/v1/admin/byok/spend-down/projects/:projectId/resume` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-spend-down.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
+| GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/placement` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/preview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/execute` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/reject` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/revert` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| GET | `/v1/admin/ci/policy` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| PUT | `/v1/admin/ci/policy` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | GET | `/v1/admin/clusters` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | GET | `/v1/admin/clusters/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | POST | `/v1/admin/clusters/:id/promote` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |

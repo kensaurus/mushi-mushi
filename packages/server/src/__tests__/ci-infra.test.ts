@@ -184,6 +184,25 @@ describe('runner kind and thresholds', () => {
     expect(runnerKindOf({ labels: ['big-runner-16core'] })).toBe('unknown')
     expect(waitThresholdSeconds({ labels: [] })).toBe(30 * 60)
   })
+
+  // REGRESSION 2026-10-22: `runs-on: kensaurus-local` has no self-hosted label;
+  // 518 Alienware jobs were stored as unknown.
+  it('reads the runner group: "GitHub Actions" is hosted, any other group is self-hosted', () => {
+    expect(runnerKindOf({ labels: ['kensaurus-local'], runner_name: 'aw-tsumagoi-1022003316-163', runner_group_name: 'Default' })).toBe('self_hosted')
+    expect(runnerKindOf({ labels: ['kensaurus-local'], runner_group_name: 'Alienware pool' })).toBe('self_hosted')
+    expect(runnerKindOf({ labels: ['ubuntu-latest'], runner_name: 'GitHub-hosted 2', runner_group_name: 'GitHub Actions' })).toBe('github_hosted')
+    expect(runnerKindOf({ labels: ['big-runner-16core'], runner_group_name: 'github actions' })).toBe('github_hosted')
+  })
+
+  it('keeps a self-hosted label and a "GitHub Actions N" name ahead of the group', () => {
+    expect(runnerKindOf({ labels: ['self-hosted'], runner_group_name: 'GitHub Actions' })).toBe('self_hosted')
+    expect(runnerKindOf({ labels: ['x'], runner_name: 'GitHub Actions 7', runner_group_name: 'Default' })).toBe('github_hosted')
+  })
+
+  it('leaves a queued custom-label job (no group yet) unknown, and a blank group falls back to labels', () => {
+    expect(runnerKindOf({ labels: ['kensaurus-local'], runner_group_name: null })).toBe('unknown')
+    expect(runnerKindOf({ labels: ['ubuntu-24.04'], runner_group_name: '  ' })).toBe('github_hosted')
+  })
 })
 
 describe('summarizeCiJobs', () => {
