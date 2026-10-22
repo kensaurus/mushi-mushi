@@ -13,9 +13,9 @@
  *              when the table overflows horizontally, giving a visual cue
  *              that content exists off-screen.
  *
- *            • Sticky first column — opt-in `stickyFirstColumn` prop that
- *              pins the first <td> of every row while the rest scrolls.
- *              Uses `position: sticky`; falls back gracefully.
+ *            • Sticky lead columns — opt-in `stickyLeadColumns` that pins
+ *              the first N columns while the rest scrolls. Uses
+ *              `position: sticky`; offsets come from `stickyOffsets`.
  *
  *          Existing table markup (`<table>` + `<thead>` + `<tbody>`) is
  *          passed through as children unmodified — adoption is
@@ -30,8 +30,6 @@ import { MICRO_SEG, MICRO_SEG_LABEL, microSegActive } from './sidebar/SidebarMic
 
 interface ResponsiveTableProps {
   children: ReactNode
-  /** @deprecated Prefer `stickyLeadColumns` — pins only the 1px stripe. */
-  stickyFirstColumn?: boolean
   /** Pin the first N columns while the rest scrolls (e.g. 3 = stripe + checkbox + summary). */
   stickyLeadColumns?: 0 | 2 | 3
   /** CSS custom properties for sticky column `left` offsets (cols 2 and 3). */
@@ -43,13 +41,12 @@ interface ResponsiveTableProps {
 
 export function ResponsiveTable({
   children,
-  stickyFirstColumn = false,
   stickyLeadColumns = 0,
   stickyOffsets,
   ariaLabel,
   className = '',
 }: ResponsiveTableProps) {
-  const leadCount = stickyLeadColumns || (stickyFirstColumn ? 1 : 0)
+  const leadCount = stickyLeadColumns
   const [density] = useTableDensity()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [overflow, setOverflow] = useState<{ left: boolean; right: boolean }>({
@@ -86,7 +83,6 @@ export function ResponsiveTable({
     <div
       className={`responsive-table ${className}`.trim()}
       data-density={density}
-      data-sticky-first={stickyFirstColumn && !stickyLeadColumns ? 'true' : undefined}
       data-sticky-lead={leadCount > 1 ? String(leadCount) : undefined}
       data-overflow-left={overflow.left ? 'true' : undefined}
       data-overflow-right={overflow.right ? 'true' : undefined}
