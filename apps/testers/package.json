@@ -2,6 +2,7 @@
   "name": "@mushi-mushi/testers",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next --turbopack --port 3001",
     "build": "next build",

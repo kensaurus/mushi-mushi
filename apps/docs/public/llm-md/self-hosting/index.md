@@ -9,7 +9,7 @@ description: Run the whole Mushi Mushi stack yourself with one command — Docke
 
 # Self-hosting
 
-Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the exact same code in this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is the same binary that powers Mushi Cloud.
+Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
   **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 
