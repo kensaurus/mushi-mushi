@@ -34,6 +34,7 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
   apiKeyAuth: async (_c: unknown, next: () => Promise<void>) => next(),
   requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => {} }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
@@ -62,6 +63,7 @@ class FakeApp {
   routes: Array<{ method: string; path: string; handler: Handler }> = []
   get(path: string, ...h: Handler[]) { this.routes.push({ method: 'GET', path, handler: h[h.length - 1] }) }
   post(path: string, ...h: Handler[]) { this.routes.push({ method: 'POST', path, handler: h[h.length - 1] }) }
+  put(path: string, ...h: Handler[]) { this.routes.push({ method: 'PUT', path, handler: h[h.length - 1] }) }
   async call(method: string, path: string, opts: { body?: unknown; query?: Record<string, string>; params?: Record<string, string>; vars?: Record<string, unknown> } = {}): Promise<Res> {
     const route = this.routes.find((r) => r.method === method && r.path === path)
     if (!route) throw new Error(`no route ${method} ${path}`)
@@ -94,9 +96,12 @@ interface Setup {
   role: { value: string | null }
   github: Record<string, { status: number; body: unknown }>
   audits: unknown[][]
+  orgAudits: unknown[]
 }
 
-function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup {
+type DbOpts = Pick<NonNullable<Parameters<typeof makeFakeDb>[1]>, 'failRead' | 'rpcError'> & { rpc?: (fn: string, args: Record<string, unknown>) => unknown }
+
+function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, dbOpts: DbOpts = {}): Setup {
   let db: FakeDb
   let clock = NOW
   db = makeFakeDb(
@@ -106,7 +111,10 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
       ...seed,
     },
     {
+      failRead: dbOpts.failRead,
+      rpcError: dbOpts.rpcError,
       rpc: (fn, args) => {
+        if (dbOpts.rpc && fn !== 'ci_claim_live_sync') return dbOpts.rpc(fn, args)
         if (fn !== 'ci_claim_live_sync') return null
         const rows = db.table('ci_collector_state')
         const row = rows.find((r) => r.project_id === args.p_project_id)
@@ -122,6 +130,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
   const role = { value: 'member' as string | null }
   const github: Setup['github'] = {}
   const audits: unknown[][] = []
+  const orgAudits: unknown[] = []
   const fetchImpl = async (url: string, init: RequestInit) => {
     calls.push(`${init.method ?? 'GET'} ${url}`)
     const hit = Object.entries(github).find(([k]) => url.includes(k))
@@ -135,6 +144,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
     requireRunnerScope: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyRead: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     adminOrApiKeyWrite: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
+    jwtAuth: (async (_c: unknown, next: () => Promise<void>) => next()) as never,
     claimRateLimit: async () => ({ allowed: rate.allowed, retryAfterSec: 60 }),
     callerProjectIds: async (c: any) => (c.get('authMethod') === 'apiKey' ? [P1] : [P1, P2]),
     callerCanAccessProject: async () => ({ allowed: role.value != null, role: role.value }) as never,
@@ -143,10 +153,11 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}): Setup
     fetchPullRequest: (async () => ({ number: 152, draft: false, state: 'open', merged: false, headSha: 'head1' })) as never,
     mintKey: mintProjectApiKey,
     logAudit: (async (...args: unknown[]) => { audits.push(args) }) as never,
+    logOrgAudit: (async (_db: unknown, input: unknown) => { orgAudits.push(input) }) as never,
     fetchImpl,
     now: () => clock,
   })
-  return Object.assign({ db, app, calls, rate, role, github, audits }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
+  return Object.assign({ db, app, calls, rate, role, github, audits, orgAudits }, { tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } })
 }
 
 const heartbeat = (over: Record<string, unknown> = {}) => ({
@@ -301,5 +312,190 @@ describe('POST /v1/admin/projects/:id/runner-key', () => {
     s.rate.allowed = false
     expect((await mint(s)).status).toBe(429)
     expect(s.db.table('project_api_keys')).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan 022 Phase 7: cost and speed (ADR 0037)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ORG2 = '0000000b-0000-4000-8000-000000000000'
+const ciJob = (over: Record<string, unknown> = {}) => ({
+  id: crypto.randomUUID(),
+  project_id: P1,
+  repo: 'kensaurus/glot.it',
+  workflow_name: 'CI',
+  job_name: 'Lint & Build',
+  event: 'pull_request',
+  head_branch: 'feat/x',
+  pr_number: 3,
+  run_attempt: 1,
+  status: 'completed',
+  ci_kind: 'passed',
+  runner_name: 'GitHub Actions 1000',
+  runner_group_name: 'GitHub Actions',
+  runner_kind: 'github_hosted',
+  runner_labels: ['ubuntu-latest'],
+  queue_seconds: 2,
+  duration_seconds: 85,
+  started_at: new Date(NOW.getTime() - 3600_000).toISOString(),
+  completed_at: new Date(NOW.getTime() - 3600_000 + 85_000).toISOString(),
+  gh_created_at: new Date(NOW.getTime() - 3602_000).toISOString(),
+  ...over,
+})
+const MISSING_FN = { code: 'PGRST202', message: 'Could not find the function public.ci_runner_comparison' }
+const MISSING_TABLE = { code: '42P01', message: 'relation "public.ci_cost_settings" does not exist' }
+
+describe('GET /v1/admin/ci/compare', () => {
+  it('validates project_id and refuses a project the caller cannot read', async () => {
+    const s = setup()
+    expect((await s.app.call('GET', '/v1/admin/ci/compare', { query: { project_id: 'nope' } })).status).toBe(400)
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', { query: { project_id: '1000000c-0000-4000-8000-000000000000' } })
+    expect(res.status).toBe(403)
+  })
+
+  it('reads the SQL aggregate over a window clamped to 30 days, scoped to the project', async () => {
+    const s = setup({}, {
+      rpc: () => ({ groups: [{ project_id: P1, repo: 'kensaurus/glot.it', runner_class: 'github_hosted', os: 'linux', labels: ['ubuntu-latest'], jobs: '3', billed_minutes: '6', raw_seconds: '255' }], pairs: [], workflows: [], intervals: [], oldest: NOW.toISOString(), jobs: 3 }),
+    })
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', { query: { project_id: P1, days: '99' } })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ source: 'sql', sourceNote: null, window: { days: 30 } })
+    expect(res.body.data.rows[0]).toMatchObject({ repo: 'kensaurus/glot.it', billedMinutes: 6, jobs: 3 })
+    const call = s.db.rpcCalls.find((r) => r.fn === 'ci_runner_comparison')!
+    expect(call.args.project_ids).toEqual([P1])
+    expect(Date.parse(String(call.args.p_to)) - Date.parse(String(call.args.p_from))).toBe(30 * 24 * 60 * 60_000)
+  })
+
+  it('falls back to the newest jobs when the function is not applied, and to example figures without the settings table', async () => {
+    const s = setup(
+      { ci_jobs: [ciJob(), ciJob({ duration_seconds: 7, completed_at: new Date(NOW.getTime() - 3600_000 + 7_000).toISOString() })] },
+      { rpcError: (fn) => (fn === 'ci_runner_comparison' ? MISSING_FN : null), failRead: (t) => (t === 'ci_cost_settings' ? MISSING_TABLE : null) },
+    )
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', {})
+    expect(res.status).toBe(200)
+    expect(res.body.data.source).toBe('rows')
+    expect(res.body.data.sourceNote).toMatch(/not applied yet/)
+    expect(res.body.data.settingsWritable).toBe(false)
+    expect(res.body.data.settings[0]).toMatchObject({ source: 'default', organizationId: ORG })
+    expect(res.body.data.rows[0]).toMatchObject({ jobs: 2, billedMinutes: 3, tinyJobs: 1 })
+  })
+
+  it('answers 500, never an empty comparison, when the aggregate fails for another reason', async () => {
+    const s = setup({}, { rpcError: () => ({ code: '57014', message: 'canceling statement due to statement timeout' }) })
+    const res = await s.app.call('GET', '/v1/admin/ci/compare', {})
+    expect(res.status).toBe(500)
+    expect(res.body.error?.code).toBe('CI_COMPARE_FAILED')
+  })
+
+  it('a project-bound key reads only its own project', async () => {
+    const s = setup({}, { rpc: () => ({ groups: [], pairs: [], workflows: [], intervals: [], oldest: null, jobs: 0 }) })
+    await s.app.call('GET', '/v1/admin/ci/compare', { vars: { authMethod: 'apiKey', projectId: P1 } })
+    expect(s.db.rpcCalls.find((r) => r.fn === 'ci_runner_comparison')!.args.project_ids).toEqual([P1])
+  })
+})
+
+describe('GET/PUT /v1/admin/ci/cost-settings', () => {
+  const member = (role: string, org = ORG) => ({ organization_id: org, user_id: 'u1', role })
+  const valid = (over: Record<string, unknown> = {}) => ({
+    organizationId: ORG,
+    currency: 'JPY',
+    fxPerUsd: 150,
+    wattsIdle: 40,
+    wattsLoad: 220,
+    pricePerKwh: 31,
+    wearPerHour: 5,
+    plan: 'pro',
+    includedMinutes: 3000,
+    selfHostedFeePerMinuteUsd: 0,
+    machines: [{ name: 'Alienware', runners: ['aw-', 'alienware-'] }],
+    ...over,
+  })
+  const put = (s: Setup, body: unknown, vars: Record<string, unknown> = {}) => s.app.call('PUT', '/v1/admin/ci/cost-settings', { body, vars })
+
+  it('GET shows the example figures until saved; members may edit, viewers and API keys may not', async () => {
+    const s = setup({ organization_members: [member('member')] })
+    const res = await s.app.call('GET', '/v1/admin/ci/cost-settings', {})
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ writable: true, canEdit: true, settings: { organizationId: ORG, source: 'default', includedMinutes: 2000 } })
+    s.db.table('organization_members')[0].role = 'viewer'
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', {})).body.data.canEdit).toBe(false)
+    s.db.table('organization_members')[0].role = 'owner'
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', { vars: { authMethod: 'apiKey', projectId: P1 } })).body.data.canEdit).toBe(false)
+  })
+
+  it('GET says not writable before the table exists, and refuses an organization the caller cannot read', async () => {
+    const s = setup({ organization_members: [member('owner')] }, { failRead: (t) => (t === 'ci_cost_settings' ? MISSING_TABLE : null) })
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', {})).body.data).toMatchObject({ writable: false, canEdit: false })
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', { query: { organization_id: ORG2 } })).status).toBe(403)
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', { query: { organization_id: 'x' } })).status).toBe(400)
+  })
+
+  it('GET asks which organization when the caller has several', async () => {
+    const s = setup({ projects: [{ id: P1, name: 'glot.it', organization_id: ORG }, { id: P2, name: 'yen-yen', organization_id: ORG2 }] })
+    const res = await s.app.call('GET', '/v1/admin/ci/cost-settings', {})
+    expect(res.status).toBe(400)
+    expect(res.body.error?.code).toBe('ORG_REQUIRED')
+    expect((await s.app.call('GET', '/v1/admin/ci/cost-settings', { query: { project_id: P2 } })).body.data.settings.organizationId).toBe(ORG2)
+  })
+
+  it('PUT saves the figures, audits what changed, and GET reads them back', async () => {
+    const s = setup({ organization_members: [member('member')] })
+    const res = await put(s, valid())
+    expect(res.status).toBe(200)
+    expect(res.body.data.settings).toMatchObject({ source: 'yours', currency: 'JPY', fxPerUsd: 150, pricePerKwh: 31, plan: 'pro', machines: [{ name: 'Alienware', runners: ['aw-', 'alienware-'] }] })
+    expect(s.db.table('ci_cost_settings')[0]).toMatchObject({ organization_id: ORG, updated_by: 'u1', watts_load: 220 })
+    expect(s.orgAudits[0]).toMatchObject({ organizationId: ORG, action: 'settings.updated', resourceType: 'ci_cost_settings', metadata: { first_save: true } })
+
+    await put(s, valid({ pricePerKwh: 28 }))
+    expect(s.orgAudits[1]).toMatchObject({ metadata: { changed: ['pricePerKwh'], first_save: false } })
+    const back = await s.app.call('GET', '/v1/admin/ci/cost-settings', {})
+    expect(back.body.data.settings.pricePerKwh).toBe(28)
+  })
+
+  it('PUT refuses viewers, non-members and API keys', async () => {
+    const viewer = setup({ organization_members: [member('viewer')] })
+    expect((await put(viewer, valid())).status).toBe(403)
+    const stranger = setup()
+    expect((await put(stranger, valid())).status).toBe(403)
+    const key = setup({ organization_members: [member('owner')] })
+    const res = await put(key, valid(), { authMethod: 'apiKey', projectId: P1 })
+    expect(res.status).toBe(403)
+    expect(res.body.error?.code).toBe('CONSOLE_ONLY')
+    expect(key.db.table('ci_cost_settings')).toHaveLength(0)
+  })
+
+  it('PUT enforces the bounds', async () => {
+    const s = setup({ organization_members: [member('owner')] })
+    const bad: Array<Record<string, unknown>> = [
+      { wattsLoad: 99999 },
+      { wattsIdle: -1 },
+      { wattsIdle: 300, wattsLoad: 200 },
+      { pricePerKwh: 1001 },
+      { wearPerHour: 10001 },
+      { fxPerUsd: 0 },
+      { currency: 'yen' },
+      { plan: 'gold' },
+      { includedMinutes: 1.5 },
+      { selfHostedFeePerMinuteUsd: 2 },
+      { machines: Array.from({ length: 21 }, (_, i) => ({ name: `m${i}`, runners: ['r'] })) },
+      { machines: [{ name: 'x', runners: [] }] },
+      { extra: true },
+    ]
+    for (const over of bad) {
+      const res = await put(s, valid(over))
+      expect([res.status, over]).toEqual([400, over])
+      expect(res.body.error?.code).toBe('VALIDATION_ERROR')
+    }
+    expect((await put(s, 'not json')).status).toBe(400)
+    expect(s.db.table('ci_cost_settings')).toHaveLength(0)
+  })
+
+  it('PUT refuses an organization the caller cannot read, and says 409 before the table exists', async () => {
+    const s = setup({ organization_members: [member('owner')] }, { failRead: (t) => (t === 'ci_cost_settings' ? MISSING_TABLE : null) })
+    expect((await put(s, valid({ organizationId: ORG2 }))).status).toBe(403)
+    const res = await put(s, valid())
+    expect(res.status).toBe(409)
+    expect(res.body.error?.code).toBe('MIGRATION_PENDING')
   })
 })

@@ -115,11 +115,11 @@ describe('settings', () => {
 
   it('reads a saved row (numeric strings too), with included minutes from the plan', () => {
     const s = normalizeCostSettings(ORG, { organization_id: ORG, currency: 'JPY', fx_per_usd: '150', watts_idle: '40', watts_load: 220, price_per_kwh: 31, plan: 'pro', included_minutes: null, updated_at: '2026-10-22T00:00:00Z' })
-    expect(s).toMatchObject({ source: 'yours', currency: 'JPY', fxPerUsd: 150, wattsIdle: 40, wattsLoad: 220, pricePerKwh: 0.2, plan: 'pro', includedMinutes: 3000 })
+    expect(s).toMatchObject({ source: 'yours', currency: 'JPY', fxPerUsd: 150, wattsIdle: 40, wattsLoad: 220, pricePerKwh: 31, plan: 'pro', includedMinutes: 3000 })
   })
 
   it('falls back field by field on values out of bounds or of the wrong type', () => {
-    const s = normalizeCostSettings(ORG, { organization_id: ORG, currency: 'dollars', watts_idle: -1, watts_load: 99999, price_per_kwh: 'x', plan: 'gold', included_minutes: 50 })
+    const s = normalizeCostSettings(ORG, { organization_id: ORG, currency: 'dollars', watts_idle: -1, watts_load: 99999, price_per_kwh: 1001, plan: 'gold', included_minutes: 50 })
     expect(s).toMatchObject({ currency: 'USD', fxPerUsd: 1, wattsIdle: 30, wattsLoad: 180, pricePerKwh: 0.2, plan: 'free', includedMinutes: 50 })
   })
 

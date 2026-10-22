@@ -38,8 +38,9 @@ export type CostPlan = (typeof COST_PLANS)[number]
 /** Bounds for every user figure (the PUT route's zod schema and the console form use these). */
 export const COST_BOUNDS = {
   watts: { min: 0, max: 5000 },
-  pricePerKwh: { min: 0, max: 10 },
-  wearPerHour: { min: 0, max: 100 },
+  // In the settings currency: 31 JPY/kWh and 500 KRW/h of wear are ordinary.
+  pricePerKwh: { min: 0, max: 1000 },
+  wearPerHour: { min: 0, max: 10000 },
   fxPerUsd: { min: 0.0001, max: 100000 },
   includedMinutes: { min: 0, max: 1_000_000 },
   selfHostedFeePerMinuteUsd: { min: 0, max: 1 },

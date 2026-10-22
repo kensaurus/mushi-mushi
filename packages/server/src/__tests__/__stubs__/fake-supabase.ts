@@ -17,6 +17,8 @@ interface FakeDbOptions {
   /** table → columns that form a unique key (insert conflicts return 23505). */
   uniques?: Record<string, string[]>
   rpc?: (fn: string, args: Record<string, unknown>) => unknown
+  /** Make an rpc fail as PostgREST does (e.g. PGRST202 for a function that is not applied yet); null lets it run. */
+  rpcError?: (fn: string) => { code: string; message: string } | null
   /** Mint a uuid `id` on insert when the row has none (mimics `default gen_random_uuid()`). */
   autoId?: boolean
   /**
@@ -343,8 +345,10 @@ export class FakeDb {
     return new FakeQuery(this, name, 'select')
   }
 
-  async rpc(fn: string, args: Record<string, unknown> = {}): Promise<{ data: unknown; error: null }> {
+  async rpc(fn: string, args: Record<string, unknown> = {}): Promise<{ data: unknown; error: { code: string; message: string } | null }> {
     this.rpcCalls.push({ fn, args })
+    const error = this.options.rpcError?.(fn) ?? null
+    if (error) return { data: null, error }
     return { data: this.options.rpc ? this.options.rpc(fn, args) : null, error: null }
   }
 }
