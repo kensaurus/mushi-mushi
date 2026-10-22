@@ -36,7 +36,7 @@ export function pdcaModelError(field: string, raw: unknown): string | null {
   if (typeof raw !== 'string' || !CLAUDE_MODEL_ID_RE.test(raw.trim())) return message
   const resolved = resolvePdcaModel(raw)
   if (!resolved.startsWith('claude-') || !Object.hasOwn(LLM_PRICING_PER_M_TOKENS, resolved)) {
-    return `${field} "${raw.trim().slice(0, 64)}" is not a Claude model Mushi knows. Use ${PDCA_DEFAULT_MODEL}, claude-opus-5-5 or claude-haiku-4-5.`
+    return `${field} "${raw.trim().slice(0, 64)}" is not a Claude model Mushi knows. Use ${PDCA_DEFAULT_MODEL}, claude-opus-5-5, claude-fable-5-1 or claude-haiku-5-5.`
   }
   return null
 }

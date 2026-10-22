@@ -736,6 +736,8 @@ registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 // Agent skills (skills.ts); deploy size limit, 2026-10-22.
 forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
+// Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
+forwardToApiExt(['/v1/admin/byok/anthropic/models']);
 registerSdkUpgradeRoutes(app);
 registerUxCloudRoutes(app);
 forwardToApiExt([

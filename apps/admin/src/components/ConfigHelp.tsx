@@ -354,6 +354,25 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
             <Section heading="Default">
               <DefaultChip value={doc.default.value} range={doc.default.range} />
             </Section>
+            {doc.recommended && (
+              <Section heading="Recommended" tone="action">
+                <p>
+                  <span className="font-mono font-semibold text-fg">{doc.recommended.value}</span>. {doc.recommended.why}
+                </p>
+                <p className="mt-1 text-fg-muted">
+                  Sources:{' '}
+                  {doc.recommended.sources.map((src, i) => (
+                    <span key={src.href}>
+                      {i > 0 && ' · '}
+                      <a href={src.href} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-fg">
+                        {src.label}
+                      </a>
+                    </span>
+                  ))}{' '}
+                  (read {doc.recommended.sources[0]?.checked})
+                </p>
+              </Section>
+            )}
             {doc.backend && (
               <Section heading="Where it lives">
                 <BackendLineage backend={doc.backend} />
