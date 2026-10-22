@@ -2184,7 +2184,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       table: 'byok_keys',
       column: 'spend_down_enabled, credits_expire_at, spend_down_model, spend_down_daily_limit, spend_down_window_days',
       endpoint: 'PATCH /v1/admin/byok/keys/:keyId/spend-down',
-      readBy: ['spend-down-worker edge function (cron every 10 minutes, :08 to :58)', 'GET /v1/admin/byok/spend-down', 'MCP get_spend_down_status', 'mushi keys spend-down'],
+      readBy: ['spend-down-worker edge function (cron every 10 minutes, :08 to :58)', 'GET /v1/admin/byok/spend-down', 'MCP get_spend_down_status', 'mushi keys spend-down', 'radar rule spend_down_idle'],
     },
     whenToChange:
       "Turn it on when a Cursor plan's included usage or a credit grant is about to expire unused. Raise the app's auto-fix daily limit under Settings, Spend limits, if you want more than three fixes a day on one app. Leave it off on a key you pay for per use.",
