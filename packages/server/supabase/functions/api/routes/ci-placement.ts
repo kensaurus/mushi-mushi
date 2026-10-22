@@ -347,7 +347,7 @@ async function putPolicy(c: Context, deps: CiPlacementRouteDeps): Promise<Respon
   let prior: ReturnType<typeof normalizePolicy>
   try {
     const loaded = await loadPolicy(db, body.organizationId)
-    if (!loaded.writable) return jsonError(c, 'MIGRATION_PENDING', 'The CI policy can be saved once the database update 20261022130000_ci_placement is applied.', 409)
+    if (!loaded.writable) return jsonError(c, 'MIGRATION_PENDING', 'The CI policy can be saved once the database update 20261022052438_ci_placement is applied.', 409)
     prior = loaded.policy
   } catch {
     return jsonError(c, 'DB_ERROR', 'Could not read the CI policy.', 500)
@@ -369,7 +369,7 @@ async function putPolicy(c: Context, deps: CiPlacementRouteDeps): Promise<Respon
   }
   const { error } = await db.from('ci_runner_policies').upsert(row, { onConflict: 'organization_id' })
   if (error) {
-    if (isMissingObject(error)) return jsonError(c, 'MIGRATION_PENDING', 'The CI policy can be saved once the database update 20261022130000_ci_placement is applied.', 409)
+    if (isMissingObject(error)) return jsonError(c, 'MIGRATION_PENDING', 'The CI policy can be saved once the database update 20261022052438_ci_placement is applied.', 409)
     return jsonError(c, 'DB_ERROR', 'The CI policy could not be saved.', 500)
   }
   const lifted = !!prior?.noPaidHostedOnPrivate && !body.noPaidHostedOnPrivate

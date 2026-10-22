@@ -46,7 +46,7 @@ export const REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export type ActionOutcome<T> = { ok: true; value: T } | { ok: false; code: string; message: string; status: 400 | 403 | 404 | 409 | 410 | 502 }
 
-/** Postgres / PostgREST: the column or NOT NULL this needs is not applied yet (20261022130000_ci_placement). */
+/** Postgres / PostgREST: the column or NOT NULL this needs is not applied yet (20261022052438_ci_placement). */
 function migrationPending(error: { code?: string; message?: string } | null | undefined): boolean {
   return !!error && (error.code === '23502' || error.code === '42703' || error.code === 'PGRST204' || /connector_kind|null value in column "connector_instance_id"/i.test(error.message ?? ''))
 }
@@ -120,7 +120,7 @@ export async function requestLegacyConnectorAction(
     action: input.action, payload: input.payload, payload_sha256: payloadSha256, reason: input.reason ?? null,
     status: 'pending_approval', requested_by: input.requestedBy,
   }).select('id').single()
-  if (migrationPending(error)) return { ok: false, code: 'MIGRATION_PENDING', message: 'Changing where CI runs needs the database update 20261022130000_ci_placement first.', status: 409 }
+  if (migrationPending(error)) return { ok: false, code: 'MIGRATION_PENDING', message: 'Changing where CI runs needs the database update 20261022052438_ci_placement first.', status: 409 }
   if (error || !data) return { ok: false, code: 'DB_ERROR', message: 'The request could not be saved.', status: 400 }
   const id = (data as { id: string }).id
   await audit(db, { organization_id: input.organizationId, project_id: input.projectId, id, action: input.action }, null, 'requested', { requestedBy: input.requestedBy })

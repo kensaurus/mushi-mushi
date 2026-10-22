@@ -28,6 +28,9 @@ import { registerVerifyRoutes } from '../api/routes/verify.ts'
 import { registerCodebaseUnderstandRoutes } from '../api/routes/codebase-understand.ts'
 import { registerModernizationHealthSuperRoutes } from '../api/routes/modernization-health-super.ts'
 import { registerSkillsRoutes } from '../api/routes/skills.ts'
+import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
+import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
+import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
 
 ensureSentry('api-ext')
 
@@ -45,6 +48,9 @@ registerVerifyRoutes(app)
 registerCodebaseUnderstandRoutes(app)
 registerModernizationHealthSuperRoutes(app)
 registerSkillsRoutes(app)
+registerQaCoverageRoutes(app)
+registerFullstackAuditRoutes(app)
+registerUxRunsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261022130000_ci_placement
+-- 20261022052438_ci_placement
 --
 -- Choose where CI runs (Plan 022 Phase 7b, ADR 0037). Mushi may change one
 -- thing: a repo Actions variable from an allowlist (LINUX_RUNNER,
@@ -24,7 +24,7 @@
 --                          how long they waited; the revert request, if any
 --
 -- ADDITIVE: two tables, one nullable column, one relaxed NOT NULL guarded by
--- a CHECK. Apply after 20261022120000_ci_cost_compare and before deploying
+-- a CHECK. Apply after 20261022050303_ci_cost_compare and before deploying
 -- api-ext and ci-jobs-collector.
 -- ============================================================================
 

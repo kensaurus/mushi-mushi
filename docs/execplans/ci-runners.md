@@ -174,7 +174,7 @@ read; writes are service role only.
     `delete_actions_variable` connector actions for allowlisted names only,
     request → approve → execute with compare-and-set; post-change watch and
     revert; MCP `request_ci_placement_change`; CLI `mushi runner placement`
-    (migration `20261022130000_ci_placement`). The verify workflow generator
+    (migration `20261022052438_ci_placement`). The verify workflow generator
     reads the repo's lockfile, local setup action and runner variable.
 
 ## Verification
