@@ -20,6 +20,7 @@
  * Data: GET /v1/admin/ci/overview?project_id=&days=7 (stored) → CiOverview
  *       GET …&refresh=1 (background live sync, then re-read)
  *       GET /v1/admin/ci/compare?project_id=&days=30 → CiCompare (Cost and speed)
+ *       GET /v1/admin/ci/placement?project_id= → CiPlacement (Where CI runs, ADR 0037)
  *       GET /v1/admin/fixes?limit=100 (project scope) → "Mushi fix" links
  */
 
@@ -30,7 +31,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
+import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
@@ -39,6 +40,7 @@ import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
 import { CiCostSection } from '../components/ci/CiCostSection'
+import { CiPlacementSection } from '../components/ci/CiPlacementSection'
 import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -258,6 +260,13 @@ export function CiPage() {
           <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
             <PanelErrorBoundary label="Cost and speed">
               <CiCostSection projectId={projectId} scope={scope} />
+            </PanelErrorBoundary>
+          </Section>
+
+          <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
+            <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
+            <PanelErrorBoundary label="Where CI runs">
+              <CiPlacementSection projectId={projectId} scope={scope} />
             </PanelErrorBoundary>
           </Section>
 

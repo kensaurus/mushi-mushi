@@ -4684,6 +4684,61 @@
         ]
       }
     },
+    "request_ci_placement_change": {
+      "title": "Ask to change where CI runs (needs approval)",
+      "description": "Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_<WORKFLOW> may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Ask to change where CI runs (needs approval)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+$",
+            "description": "owner/repo, connected to the project"
+          },
+          "variable": {
+            "type": "string",
+            "pattern": "^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$",
+            "description": "LINUX_RUNNER or RUNNER_<WORKFLOW>"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One runner label, or null to remove the variable"
+          },
+          "reason": {
+            "description": "Why, shown to the approver",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "repo",
+          "variable",
+          "value"
+        ]
+      },
+      "returnsUntrusted": true
+    },
     "request_connector_action": {
       "title": "Request a store action (needs approval)",
       "description": "Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256 }. Write.",

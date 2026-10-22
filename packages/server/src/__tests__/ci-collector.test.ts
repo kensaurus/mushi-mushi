@@ -301,3 +301,31 @@ describe('settleStaleLiveJobs', () => {
   })
 })
 
+
+describe('runPlacementWatches (ADR 0037)', () => {
+  it('marks a watch ok after 10 moved jobs ran where expected, alert on a wrong label, and leaves others alone', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const started = new Date(NOW.getTime() - 60 * 60_000).toISOString()
+    const jobs = (n: number, labels: string[], repo = 'kensaurus/yen-yen') =>
+      Array.from({ length: n }, (_, i) => ({ project_id: P1, repo, workflow_name: 'CI', job_name: 'Lint', runner_labels: labels, queue_seconds: 20, head_branch: 'feat/x', html_url: null, gh_created_at: new Date(Date.parse(started) + (i + 1) * 60_000).toISOString() }))
+    const db = makeFakeDb({
+      ci_placement_watches: [
+        { id: 'w1', project_id: P1, repo: 'kensaurus/yen-yen', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w2', project_id: P1, repo: 'kensaurus/glot.it', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w3', project_id: P1, repo: 'kensaurus/x', jobs: [], expected_labels: [], started_at: started, status: 'ok' },
+      ],
+      ci_jobs: [...jobs(11, ['kensaurus-local']), ...jobs(1, ['ubuntu-24.04'], 'kensaurus/glot.it')],
+    })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(2)
+    const w = Object.fromEntries(db.table('ci_placement_watches').map((r) => [r.id, r]))
+    expect(w.w1).toMatchObject({ status: 'ok', jobs_seen: 10, unexpected: 0 })
+    expect(w.w2).toMatchObject({ status: 'alert', jobs_seen: 1, unexpected: 1 })
+    expect(w.w3.status).toBe('ok')
+  })
+
+  it('does nothing before the table exists', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const db = makeFakeDb({}, { failRead: (t) => (t === 'ci_placement_watches' ? { code: '42P01', message: 'missing' } : null) })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(0)
+  })
+})
