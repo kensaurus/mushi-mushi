@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * review-followup — Supabase Edge Function (verify_jwt = false, internal)
  *
  * The review follow-up loop (ADR 0032). When the Opus review of a cloud
  * agent's PR (ADR 0030) says "fix_first" on the PR's current head, Mushi
  * starts one NEW Cursor agent on that PR with the review's findings; the
- * push is then reviewed again. Each tick:
+ * push is then reviewed again. When the review says "merge" but CI on that
+ * head fails on the code (ci_jobs, not an infra stop: ADR 0033), the same
+ * loop sends one CI-repair agent with the failing check names and a
+ * screened log excerpt (ADR 0032 amendment, 2026-10-22). Each tick:
  *
  *   1. settles: a follow-up that pushed gets the verdict of the review of
  *      its new head once that review completes (`verdict_after`);
- *   2. discovers: completed fix_first reviews of the last 3 days that have
+ *   2. discovers: completed fix_first reviews (and merge reviews whose head
+ *      fails CI on the code) of the last 3 days that have
  *      no follow-up for their head are queued (agent-pr-review also queues
  *      one the moment the verdict lands; the unique (attempt, head) keeps
  *      it to one). At most one per (fix attempt, reviewed head) and two per
@@ -57,6 +61,7 @@ import { startCronRun } from '../_shared/telemetry.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import {
+  fetchFailingCheckNames,
   fetchPullRequestDetails,
   fetchPullRequestFiles,
   installationIdForAttempt,
@@ -67,6 +72,7 @@ import {
 } from '../_shared/github.ts'
 import { parsePullRequestUrl } from '../_shared/pr-substance.ts'
 import { readFixCiInfra } from '../_shared/ci-infra.ts'
+import { ciGithub, fetchJobLogTail } from '../_shared/ci-jobs.ts'
 import { enqueueFixReview } from '../_shared/fix-review-db.ts'
 import {
   cancelCursorRun,
@@ -83,7 +89,12 @@ import {
   type CursorRun,
 } from '../_shared/cursor-cloud.ts'
 import {
+  buildCiRepairPrompt,
   buildFollowupPrompt,
+  CI_REPAIR_MAX_CHECKS,
+  CI_REPAIR_MAX_EXCERPTS,
+  ciHeadState,
+  extractCiLogExcerpt,
   cursorBackoffMs,
   expireIfStale,
   FOLLOWUP_CANCEL_GIVE_UP_MS,
@@ -94,9 +105,13 @@ import {
   FOLLOWUP_VERDICT_WINDOW_MS,
   followupAgentInput,
   followupDispatchGate,
+  followupTrigger,
   repoUrlFromPrUrl,
   screenFindings,
   validateCursorModel,
+  type CiHeadState,
+  type CiJobForRepair,
+  type CiRepairCheck,
   type DispatchGate,
   type LivePr,
   type PrFilesForScreen,
@@ -105,10 +120,12 @@ import {
   type PriorFollowup,
 } from '../_shared/review-followup.ts'
 import {
+  ciJobsForHeads,
   cursorKeyById,
   cursorModelsCached,
   enqueueReviewFollowup,
   loadFollowupSettings,
+  notMigrated,
   orgFollowupsToday,
   PRIOR_COLUMNS,
   type FollowupKey,
@@ -189,6 +206,12 @@ export interface FollowupDeps {
   keyForCancel?: (db: SupabaseClient, row: FollowupRow, organizationId: string) => Promise<FollowupKey>
   checkBudget?: (db: SupabaseClient, projectId: string, settings: AutofixBudgetSettings) => Promise<AutofixBudgetCheck>
   enqueueReview?: typeof enqueueFixReview
+  /** CI repair: the ci_jobs rows of one head (throws on a read error). */
+  readCiJobs?: (db: SupabaseClient, projectId: string, headSha: string) => Promise<CiJobForRepair[]>
+  /** CI repair: the tail of one job's log, or null when unreadable. */
+  fetchJobLog?: (token: string, repo: string, jobId: number) => Promise<string | null>
+  /** CI repair: names of the checks failing on the base branch's latest commit; null when unreadable. */
+  baseFailingChecks?: (token: string, ref: GithubRepoRef, baseRef: string) => Promise<Set<string> | null>
 }
 
 export type FollowupOutcome =
@@ -288,6 +311,11 @@ function defaults(deps: FollowupDeps): Required<FollowupDeps> {
     checkBudget:
       deps.checkBudget ?? ((d, pid, s) => checkAutofixBudget(d, pid, s, { trigger: 'automatic' })),
     enqueueReview: deps.enqueueReview ?? enqueueFixReview,
+    readCiJobs:
+      deps.readCiJobs ?? (async (d, pid, sha) => (await ciJobsForHeads(d, [pid], [sha])).get(sha) ?? []),
+    fetchJobLog:
+      deps.fetchJobLog ?? ((token, repo, jobId) => fetchJobLogTail(ciGithub(token, 1), repo, jobId)),
+    baseFailingChecks: deps.baseFailingChecks ?? fetchFailingCheckNames,
   }
 }
 
@@ -370,6 +398,7 @@ async function livePr(db: SupabaseClient, d: Required<FollowupDeps>, attempt: At
       headRef: details.headRef ?? null,
       headRepoId: details.headRepoId ?? null,
       baseRepoId: details.baseRepoId ?? null,
+      baseRef: details.baseRef ?? null,
     }
   } catch (err) {
     log.warn('PR read failed', { attemptId: attempt.id, err: err instanceof Error ? err.message : String(err) })
@@ -514,6 +543,33 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     log.warn('auto-fix budget read failed', { followupId: row.id, err: err instanceof Error ? err.message : String(err) })
   }
 
+  // A "merge" review earns a CI repair only while CI on its head fails on
+  // the code: read that head's jobs (a failed read waits, never "not failing").
+  let ci: CiHeadState | null = null
+  if (review?.verdict === 'merge' && review.status !== 'queued' && review.status !== 'running') {
+    let rows: CiJobForRepair[]
+    try {
+      rows = await d.readCiJobs(db, row.project_id, row.head_sha_before)
+    } catch (err) {
+      return wait('ci_pending', err instanceof Error ? err.message.slice(0, 300) : String(err))
+    }
+    ci = ciHeadState(rows)
+    // A check that is red on the base branch too is not this PR's: read the
+    // base branch's latest checks live, before anything is spent. Unreadable
+    // (no token, GitHub down): the agent is still told to leave such checks.
+    if (ci.state === 'code_failure' && pr?.baseRef && attempt?.pr_url) {
+      const ref = parsePullRequestUrl(attempt.pr_url)
+      try {
+        const token = ref ? await d.resolveGithubToken(db, attempt) : null
+        const onBase = token && ref ? await d.baseFailingChecks(token, { owner: ref.owner, repo: ref.repo }, pr.baseRef) : null
+        if (onBase) ci = ciHeadState(rows, onBase)
+        else log.warn('base branch checks not read (CI repair proceeds)', { followupId: row.id })
+      } catch (err) {
+        log.warn('base branch checks read failed (CI repair proceeds)', { followupId: row.id, err: err instanceof Error ? err.message : String(err) })
+      }
+    }
+  }
+
   const gate = followupDispatchGate({
     row,
     review,
@@ -525,9 +581,11 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     dailyUsed,
     dailyLimit: settings.dailyLimit,
     budget,
+    ci,
     now,
   })
   if (gate.action !== 'dispatch') return finish(gate)
+  const isCiRepair = gate.kind === 'ci_repair'
 
   // The key that pays, then the model it may run (fail closed).
   const key = await d.resolveKey(db, { projectId: row.project_id, organizationId: ctx.organizationId, keyId: settings.keyId })
@@ -554,37 +612,80 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     const { data } = await db.from('reports').select('id, summary, component, stage2_analysis').eq('id', row.report_id).maybeSingle()
     report = (data as Record<string, unknown> | null) ?? null
   }
-  // Only findings about files this PR changed, with no URL or command in
-  // them, reach the agent: the review is model output about agent-written
-  // code, the one place an injected instruction could reach the next agent.
-  const files = await changedFiles(db, d, attempt!)
-  if (!files) return wait('pr_unreadable', 'The changed-file list could not be read.')
-  const allFindings = asFindings(review!.findings)
-  if (allFindings.length === 0) return finish({ action: 'skip', reason: 'no_findings' })
-  const screened = screenFindings(allFindings, files, { ciInfra: readFixCiInfra(attempt!.ci_infra)?.infra === true })
-  const droppedCount =
-    screened.dropped.url + screened.dropped.command + screened.dropped.injection + screened.dropped.ciConfig + screened.dropped.notInPr + screened.dropped.ciInfra
-  if (droppedCount > 0) log.info('review-followup.findings_dropped', { followupId: row.id, ...screened.dropped })
-  if (screened.kept.length === 0) {
-    return finish(
-      {
-        action: 'skip',
-        reason: 'no_usable_findings',
-        detail: `${droppedCount} dropped: ${screened.dropped.injection} reading as instructions, ${screened.dropped.ciConfig} about CI or deploy config, ${screened.dropped.command} with a command or a leak, ${screened.dropped.url} with a foreign URL, ${screened.dropped.notInPr} outside the PR, ${screened.dropped.ciInfra} only saying CI stopped on the test machine.`,
-      },
-      { findings_dropped: droppedCount },
-    )
+  let promptText: string
+  let sentCount: number
+  let droppedCount = 0
+  let ciChecks: string[] = []
+  if (isCiRepair) {
+    // Make CI green without weakening tests: the failing check names and a
+    // screened, bounded excerpt of the first few logs (output of
+    // agent-written code: untrusted, fenced like the findings).
+    const failing = ci?.state === 'code_failure' ? ci.failing.slice(0, CI_REPAIR_MAX_CHECKS) : []
+    const token = await d.resolveGithubToken(db, attempt!).catch(() => null)
+    const checks: CiRepairCheck[] = []
+    for (const [i, job] of failing.entries()) {
+      let excerpt: string | null = null
+      if (token && i < CI_REPAIR_MAX_EXCERPTS) {
+        try {
+          const raw = await d.fetchJobLog(token, job.repo, job.jobId)
+          if (raw) {
+            const ex = extractCiLogExcerpt(raw)
+            droppedCount += ex.linesDropped
+            excerpt = ex.text || null
+          }
+        } catch (err) {
+          log.warn('CI job log read failed (sent without it)', { followupId: row.id, jobId: job.jobId, err: err instanceof Error ? err.message : String(err) })
+        }
+      }
+      checks.push({ name: job.name, workflow: job.workflow, failedSteps: job.failedSteps, excerpt })
+    }
+    ciChecks = checks.map((c) => (c.workflow ? `${c.workflow} / ${c.name}` : c.name))
+    const prompt = buildCiRepairPrompt({
+      report: reportContext(report, row.report_id),
+      prUrl,
+      branch: pr?.headRef ?? null,
+      headSha: row.head_sha_before,
+      checks,
+      alsoFailingOnBase: ci?.state === 'code_failure' ? ci.onBase : undefined,
+      scrub: (t) => sanitizeForLLM(t).text,
+    })
+    promptText = prompt.text
+    sentCount = prompt.checksSent
+  } else {
+    // Only findings about files this PR changed, with no URL or command in
+    // them, reach the agent: the review is model output about agent-written
+    // code, the one place an injected instruction could reach the next agent.
+    const files = await changedFiles(db, d, attempt!)
+    if (!files) return wait('pr_unreadable', 'The changed-file list could not be read.')
+    const allFindings = asFindings(review!.findings)
+    if (allFindings.length === 0) return finish({ action: 'skip', reason: 'no_findings' })
+    const screened = screenFindings(allFindings, files, { ciInfra: readFixCiInfra(attempt!.ci_infra)?.infra === true })
+    droppedCount =
+      screened.dropped.url + screened.dropped.command + screened.dropped.injection + screened.dropped.ciConfig + screened.dropped.notInPr + screened.dropped.ciInfra
+    if (droppedCount > 0) log.info('review-followup.findings_dropped', { followupId: row.id, ...screened.dropped })
+    if (screened.kept.length === 0) {
+      return finish(
+        {
+          action: 'skip',
+          reason: 'no_usable_findings',
+          detail: `${droppedCount} dropped: ${screened.dropped.injection} reading as instructions, ${screened.dropped.ciConfig} about CI or deploy config, ${screened.dropped.command} with a command or a leak, ${screened.dropped.url} with a foreign URL, ${screened.dropped.notInPr} outside the PR, ${screened.dropped.ciInfra} only saying CI stopped on the test machine.`,
+        },
+        { findings_dropped: droppedCount },
+      )
+    }
+    const prompt = buildFollowupPrompt({
+      report: reportContext(report, row.report_id),
+      prUrl,
+      branch: pr?.headRef ?? null,
+      headSha: row.head_sha_before,
+      findings: screened.kept,
+      scrub: (t) => sanitizeForLLM(t).text,
+    })
+    promptText = prompt.text
+    sentCount = prompt.findingsSent
   }
-  const prompt = buildFollowupPrompt({
-    report: reportContext(report, row.report_id),
-    prUrl,
-    branch: pr?.headRef ?? null,
-    headSha: row.head_sha_before,
-    findings: screened.kept,
-    scrub: (t) => sanitizeForLLM(t).text,
-  })
   const agentId = await deterministicCursorAgentId(`review-followup:${row.id}`)
-  const input = followupAgentInput({ prompt: prompt.text, repoUrl, prUrl, agentId, model, reportId: row.report_id })
+  const input = followupAgentInput({ prompt: promptText, repoUrl, prUrl, agentId, model, reportId: row.report_id, kind: isCiRepair ? 'ci_repair' : 'findings' })
 
   let created: { agentId: string; runId: string | null; url: string | null }
   try {
@@ -618,31 +719,39 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     }
   }
 
-  const saved = await written(
-    ownWrite(db, row.id, runId, now, {
-      status: 'dispatched',
-      cursor_agent_id: created.agentId,
-      cursor_run_id: created.runId,
-      cursor_agent_url: created.url,
-      key_id: key.keyId,
-      key_kind: key.source,
-      model,
-      findings_count: prompt.findingsSent,
-      findings_dropped: droppedCount,
-      prompt_chars: prompt.text.length,
-      dispatched_at: nowIso,
-      skip_reason: null,
-      error: null,
-    }),
-  )
+  const dispatchedPatch = {
+    status: 'dispatched',
+    cursor_agent_id: created.agentId,
+    cursor_run_id: created.runId,
+    cursor_agent_url: created.url,
+    key_id: key.keyId,
+    key_kind: key.source,
+    model,
+    findings_count: sentCount,
+    findings_dropped: droppedCount,
+    prompt_chars: promptText.length,
+    dispatched_at: nowIso,
+    skip_reason: null,
+    error: null,
+  }
+  // The kind of what was actually sent (a re-review can turn a queued
+  // findings row into a CI repair). Before migration 20261022100000 the
+  // column does not exist: write the rest without it.
+  let saveRes = await ownWrite(db, row.id, runId, now, { ...dispatchedPatch, kind: isCiRepair ? 'ci_repair' : 'findings' })
+  if (saveRes.error && notMigrated(saveRes.error as { code?: string })) {
+    saveRes = await ownWrite(db, row.id, runId, now, dispatchedPatch)
+  }
+  const saved = !saveRes.error && Array.isArray(saveRes.data) && saveRes.data.length > 0
   // The deterministic agent id makes a retry adopt this agent, so a lost write is recoverable.
   if (!saved) return { outcome: 'superseded' }
   await followupEvent(db, row, {
     status: 'pending',
-    label: 'Follow-up dispatched',
-    detail: `${prompt.findingsSent} Opus finding(s) sent to Cursor${model ? ` (${model})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
+    label: isCiRepair ? 'CI repair dispatched' : 'Follow-up dispatched',
+    detail: isCiRepair
+      ? `${sentCount} failing check(s) sent to Cursor to make CI green without weakening tests${model ? ` (${model})` : ''}: ${ciChecks.join(', ').slice(0, 300)}.`
+      : `${sentCount} Opus finding(s) sent to Cursor${model ? ` (${model})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
     dedupe: `followup-dispatched:${row.id}`,
-    payload: { agentId: created.agentId, runId: created.runId, model, keyId: key.keyId, headSha: row.head_sha_before },
+    payload: { agentId: created.agentId, runId: created.runId, model, keyId: key.keyId, headSha: row.head_sha_before, kind: isCiRepair ? 'ci_repair' : 'findings', ...(isCiRepair ? { checks: ciChecks } : {}) },
     at: nowIso,
   })
   log.info('review-followup.dispatched', {
@@ -652,9 +761,10 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     agentId: created.agentId,
     keyId: key.keyId,
     model,
-    findings: prompt.findingsSent,
+    kind: isCiRepair ? 'ci_repair' : 'findings',
+    findings: sentCount,
     findingsDropped: droppedCount,
-    promptChars: prompt.text.length,
+    promptChars: promptText.length,
   })
   return { outcome: 'dispatched', agentId: created.agentId }
 }
@@ -879,7 +989,8 @@ type DiscoveredReview = {
 
 /**
  * Queue a follow-up for each fix_first review that has none for its head,
- * in organizations with follow-ups on only. Each organization's window
+ * and a CI repair for each merge review whose head fails CI on the code
+ * (ci_jobs), in organizations with follow-ups on only. Each organization's window
  * starts 3 days before it turned them on (`review_followup_enabled_at`), so
  * turning them on deliberately picks up the last 3 days of fix_first PRs.
  */
@@ -897,17 +1008,21 @@ export async function discover(db: SupabaseClient, now: Date): Promise<number> {
     if (pErr) throw new Error(`organization apps read failed: ${pErr.message}`)
     const ids = ((projects ?? []) as Array<{ id: string }>).map((p) => p.id)
     for (let i = 0; i < ids.length; i += 100) {
-      const { data, error } = await db
-        .from('fix_reviews')
-        .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha')
-        .in('project_id', ids.slice(i, i + 100))
-        .eq('status', 'completed')
-        .eq('verdict', 'fix_first')
-        .gte('reviewed_at', since)
-        .order('reviewed_at', { ascending: false })
-        .limit(DISCOVERY_SCAN)
-      if (error) throw new Error(`fix_first reviews read failed: ${error.message}`)
-      reviews.push(...((data ?? []) as DiscoveredReview[]))
+      // One read per verdict: merge reviews (most with green CI) must not
+      // crowd fix_first ones out of the scan window.
+      for (const verdict of ['fix_first', 'merge'] as const) {
+        const { data, error } = await db
+          .from('fix_reviews')
+          .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha')
+          .in('project_id', ids.slice(i, i + 100))
+          .eq('status', 'completed')
+          .eq('verdict', verdict)
+          .gte('reviewed_at', since)
+          .order('reviewed_at', { ascending: false })
+          .limit(DISCOVERY_SCAN)
+        if (error) throw new Error(`${verdict} reviews read failed: ${error.message}`)
+        reviews.push(...((data ?? []) as DiscoveredReview[]))
+      }
     }
   }
   if (reviews.length === 0) return 0
@@ -927,15 +1042,50 @@ export async function discover(db: SupabaseClient, now: Date): Promise<number> {
       prior.set(f.fix_attempt_id, [...(prior.get(f.fix_attempt_id) ?? []), f])
     }
   }
+  // CI on the heads of merge reviews that could still earn a CI repair (open
+  // cloud-agent PRs, under the per-PR limit, no follow-up for that head yet).
+  const mergeReviews = reviews.filter((r) => {
+    if (r.verdict !== 'merge' || !r.head_sha) return false
+    const decision = followupTrigger({
+      review: r,
+      attempt: attempts.get(r.fix_attempt_id) ?? null,
+      prior: prior.get(r.fix_attempt_id) ?? [],
+      ci: { state: 'code_failure', failing: [] },
+    })
+    return decision.queue
+  })
+  let ciByHead = new Map<string, CiJobForRepair[]>()
+  if (mergeReviews.length > 0) {
+    try {
+      ciByHead = await ciJobsForHeads(db, [...new Set(mergeReviews.map((r) => r.project_id))], mergeReviews.map((r) => r.head_sha as string))
+    } catch (err) {
+      // Next tick reads again; fix_first follow-ups are not held up by it.
+      log.warn('CI jobs read for CI repairs failed (next tick)', { err: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  const mergeIds = new Set(mergeReviews.map((r) => r.id))
   let queued = 0
+  let enqueueErrors = 0
+  let firstEnqueueError: string | null = null
   for (const review of reviews) {
+    if (review.verdict === 'merge' && !mergeIds.has(review.id)) continue
+    const ci = review.verdict === 'merge'
+      ? ciHeadState((ciByHead.get(review.head_sha ?? '') ?? []).filter((j) => !j.project_id || j.project_id === review.project_id))
+      : null
+    if (review.verdict === 'merge' && ci?.state !== 'code_failure') continue
     const res = await enqueueReviewFollowup(
       db,
-      { review, attempt: attempts.get(review.fix_attempt_id) ?? null, prior: prior.get(review.fix_attempt_id) ?? [] },
+      { review, attempt: attempts.get(review.fix_attempt_id) ?? null, prior: prior.get(review.fix_attempt_id) ?? [], ci },
       now,
     )
     if (res.queued) queued++
+    else if (res.error) {
+      enqueueErrors++
+      firstEnqueueError ??= res.error
+    }
   }
+  // Once per tick: e.g. the kind column missing before migration 20261022100000.
+  if (enqueueErrors > 0) log.warn('review follow-up enqueue failed', { count: enqueueErrors, err: firstEnqueueError })
   return queued
 }
 

@@ -18,7 +18,9 @@
  *                       label, ≥ 30 min on GitHub-hosted labels      infra
  *   runner_lost         ran on a runner, then the runner died (annotation
  *                       says lost communication / shutdown signal, or
- *                       steps ran but GitHub kept no runner name)    infra
+ *                       steps ran but GitHub kept no runner name), or
+ *                       a step died of a crash signal on a machine
+ *                       that is not GitHub-hosted                    infra
  *   queue_expired       cancelled before any runner picked it up, after
  *                       waiting as long as waiting_for_runner needs  infra
  *   cancelled           cancelled for another reason (superseded by a
@@ -30,6 +32,13 @@
  * here means a runner took the job: a runner name or id, or a step that
  * started. A queued job cancelled within minutes was superseded, not
  * stranded, so it stays plain `cancelled`.
+ *
+ * REGRESSION (2026-10-22, glot.it): the Alienware runner's WSL VM went
+ * unstable after a host reboot. Node and the runner's own .NET worker died
+ * of SIGSEGV / SIGILL / SIGTRAP at random; lint and build steps ended "exit
+ * code 139" and every agent fix PR read as broken code. A crash signal on a
+ * self-hosted machine says the machine is sick; the same code passed on the
+ * NUC. GitHub-hosted machines are clean images, so there it stays the code.
  *
  * Pure: no imports, no env, no I/O.
  */
@@ -95,6 +104,21 @@ export const QUEUE_EXPIRY_S = 23 * 60 * 60
 /** The annotation GitHub writes when the runner process died or was stopped mid-job. */
 export const RUNNER_LOST_RE =
   /lost communication with the server|received a shutdown signal|runner has received a shutdown/i
+
+/**
+ * A step killed by a signal: 128 + SIGILL (4), SIGTRAP (5), SIGBUS (7),
+ * SIGKILL (9, the out-of-memory killer) or SIGSEGV (11). GitHub writes it as
+ * the job's failure annotation.
+ */
+export const CRASH_EXIT_RE = /Process completed with exit code (132|133|135|137|139)\b/
+
+const CRASH_SIGNAL: Record<string, string> = {
+  '132': 'an illegal instruction (SIGILL)',
+  '133': 'a trap (SIGTRAP)',
+  '135': 'a bus error (SIGBUS)',
+  '137': 'a kill signal, usually the out-of-memory killer (SIGKILL)',
+  '139': 'a segmentation fault (SIGSEGV)',
+}
 
 const GITHUB_HOSTED_LABEL_RE = /^(?:ubuntu|windows|macos)-[\w.-]+$/i
 
@@ -186,6 +210,16 @@ export function classifyCiJob(
   if ((conclusion === 'cancelled' || conclusion === 'failure') && took) {
     if (lostNote) return verdict('runner_lost', lostNote.trim().slice(0, 300))
     if (!runner) return verdict('runner_lost', 'The job started, then GitHub lost track of its runner.')
+  }
+
+  if (conclusion === 'failure' && took && runnerKindOf(job) !== 'github_hosted') {
+    const crash = (opts.annotations ?? []).map((a) => CRASH_EXIT_RE.exec(a)).find(Boolean)
+    if (crash) {
+      return verdict(
+        'runner_lost',
+        `A step on ${runner} died of ${CRASH_SIGNAL[crash[1]]}. Re-run it; if it keeps crashing only on this machine, the machine is unhealthy.`,
+      )
+    }
   }
 
   if (conclusion === 'cancelled' || conclusion === 'stale') {

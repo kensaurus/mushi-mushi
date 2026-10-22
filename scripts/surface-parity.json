@@ -478,6 +478,7 @@
     "POST /v1/admin/projects/:id/codebase/wiki/sources/:sourceId/retry": {"allow": "parity-debt"},
     "POST /v1/admin/projects/:id/design/changes": {"allow": "parity-debt"},
     "POST /v1/admin/projects/:id/design/deviance/run": {"mcp": ["run_design_deviance"]},
+    "POST /v1/admin/projects/:id/design/dispatch-findings": {"cli": ["design dispatch-findings"]},
     "POST /v1/admin/projects/:id/fixes/dry-run": {"allow": "parity-debt"},
     "POST /v1/admin/projects/:id/identity-secret": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/keys": {"allow": "jwt-only"},
