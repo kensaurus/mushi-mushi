@@ -184,6 +184,18 @@ export async function listRepoRunners(gh: CiGithub, repo: string): Promise<{ sta
   return { status: 'unknown', runners: [] }
 }
 
+/**
+ * The repo's visibility (`GET /repos/{o}/{r}`, Metadata: read). Public repos
+ * run standard GitHub-hosted minutes free; private repos pay after the plan's
+ * included minutes. 'unknown' when GitHub did not answer 200.
+ */
+export async function fetchRepoVisibility(gh: CiGithub, repo: string): Promise<{ status: number; visibility: 'public' | 'private' | 'unknown'; owner: string | null; ownerType: string | null }> {
+  const res = await ghRequest<{ private?: boolean; visibility?: string; owner?: { login?: string; type?: string } }>(gh, `${API}/repos/${repo}`)
+  if (res.status !== 200 || !res.body) return { status: res.status, visibility: 'unknown', owner: null, ownerType: null }
+  const v = typeof res.body.private === 'boolean' ? (res.body.private ? 'private' : 'public') : res.body.visibility === 'public' ? 'public' : res.body.visibility ? 'private' : 'unknown'
+  return { status: res.status, visibility: v, owner: res.body.owner?.login ?? null, ownerType: res.body.owner?.type ?? null }
+}
+
 /** POST rerun-failed-jobs for a run. 201 = queued; 403 = the token cannot write Actions. */
 export async function rerunFailedJobs(gh: CiGithub, repo: string, runId: number): Promise<number> {
   const res = await ghRequest<unknown>(gh, `${API}/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`, 'POST')
@@ -383,6 +395,16 @@ export async function noteRunnersFromJobs(db: Db, rows: CiJobRow[], now: Date): 
       .eq('repo', x.repo)
       .eq('runner_name', x.runner_name)
       .or(`last_job_at.is.null,last_job_at.lt.${x.at}`)
+    // A runner first stored as unknown (before the runner-group rule) learns its kind.
+    if (x.kind !== 'unknown') {
+      await db
+        .from('ci_runners')
+        .update({ kind: x.kind, updated_at: nowIso })
+        .eq('project_id', x.project_id)
+        .eq('repo', x.repo)
+        .eq('runner_name', x.runner_name)
+        .eq('kind', 'unknown')
+    }
   }
 }
 

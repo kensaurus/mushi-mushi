@@ -1756,6 +1756,46 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_ci_costs',
+    {
+      title: titleOf('get_ci_costs'),
+      description: descOf('get_ci_costs'),
+      annotations: annotationsFor('get_ci_costs'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        dataDays: z.number().optional(),
+        lowConfidence: z.boolean().optional().describe('Under 7 days of data'),
+        source: z.string().optional(),
+        sourceNote: z.string().nullable().optional(),
+        rates: z.unknown().optional().describe('GitHub list prices and the date they were read'),
+        fields: z.record(z.string(), z.string()).optional().describe('measured | estimated per field'),
+        settings: z.array(z.looseObject({})).optional(),
+        repos: z.array(z.looseObject({})).optional(),
+        rows: z.array(z.looseObject({})).optional().describe('Per repo × runner class: wait, run time, pass rate, minutes, cost'),
+        accounts: z.array(z.looseObject({})).optional().describe('Included minutes per GitHub owner'),
+        machines: z.array(z.looseObject({})).optional(),
+        speed: z.array(z.looseObject({})).optional(),
+        whatIfs: z.array(z.looseObject({})).optional(),
+        explain: z.looseObject({}).optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional(),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/compare?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
     'explain_finding',
     {
       title: titleOf('explain_finding'),

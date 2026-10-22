@@ -1,9 +1,12 @@
 /**
  * FILE: packages/cli/src/commands/runner.ts
- * PURPOSE: `mushi runner status|heartbeat|hooks install|add|audit` (Plan 022,
- *          ADR 0033): where your tests run and why a fix waits to land.
+ * PURPOSE: `mushi runner status|compare|heartbeat|hooks install|add|audit`
+ *          (Plan 022, ADR 0033 / 0037): where your tests run, why a fix waits
+ *          to land, and what each place costs.
  *
  *          - status     the CI view in the terminal (GET /v1/admin/ci/overview)
+ *          - compare    cost and speed per repo × runner class, what-ifs
+ *                       (GET /v1/admin/ci/compare; read-only)
  *          - heartbeat  this machine's memory, swap, load and runner services
  *                       (POST /v1/ingest/runner, kind heartbeat)
  *          - hooks      job hooks that report each job's memory peak and OOM
@@ -46,6 +49,7 @@ import {
 import { HOOKS_DIR_NAME, hookScript, mergeRunnerEnv } from '../runner/hooks.js'
 import { collectHeartbeat, detectPlatform, hashHostId, nodeHostIO, readMachineId, UnsupportedHostError, type HostIO } from '../runner/host.js'
 import { renderOverview, type CiOverview } from '../runner/overview.js'
+import { renderCompare, type CiCompare } from '../runner/compare.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
@@ -243,6 +247,38 @@ export function registerRunnerCommands(program: Command): void {
         return
       }
       for (const line of renderOverview(result.data)) console.log(line)
+    })
+
+  runner
+    .command('compare')
+    .description('What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, with what-ifs (estimated)')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--project <id>', 'Same as --project-id')
+    .option('--all', 'Every project your key can read (account-level key)')
+    .option('--days <n>', 'Window in days (1-30)', '30')
+    .option('--json', 'Machine-readable JSON output')
+    .addHelpText('after', `
+Read-only: nothing is changed on GitHub. Wait and run times are measured from
+GitHub's job times; billed minutes and money are estimated from GitHub's list
+prices (dated), your plan's included minutes, and your electricity figures
+(console: Settings → CI cost).`)
+    .action(async (opts: { projectId?: string; project?: string; all?: boolean; days: string; json?: boolean }) => {
+      const config = requireConfig()
+      const days = Number(opts.days)
+      if (!Number.isInteger(days) || days < 1 || days > 30) {
+        throw new MushiCliError('E_INVALID_INPUT', '--days must be a whole number from 1 to 30.')
+      }
+      const qs = new URLSearchParams()
+      const raw = opts.all ? undefined : (opts.projectId ?? opts.project ?? config.projectId)
+      if (raw) qs.set('project_id', requireUuid(raw, 'project id'))
+      qs.set('days', String(days))
+      const result = await apiCall<CiCompare>(`/v1/admin/ci/compare?${qs}`, config, {}, { timeoutMs: 60_000 })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderCompare(result.data)) console.log(line)
     })
 
   runner

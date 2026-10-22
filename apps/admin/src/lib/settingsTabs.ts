@@ -21,6 +21,7 @@ export const SETTINGS_SECTION_IDS = {
   connection: 'connection',
   debugLogging: 'debug-logging',
   verifiedMerge: 'verified-merge',
+  ciCost: 'ci-cost',
 } as const
 
 /** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
@@ -42,6 +43,8 @@ const SETTINGS_TAB_ALIASES: Readonly<Record<string, SettingsTabTarget>> = {
   // Plan 024 / ADR 0035 call it "Settings → Fixes → Verified merge"; it sits
   // in General beside the agent PR review.
   fixes: { tab: 'general', anchor: SETTINGS_SECTION_IDS.verifiedMerge },
+  // ADR 0037: /ci "Cost and speed" links here for electricity and plan figures.
+  'ci-cost': { tab: 'general', anchor: SETTINGS_SECTION_IDS.ciCost },
 }
 
 function isSettingsTabId(value: unknown): value is SettingsTabId {
