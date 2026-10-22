@@ -20,6 +20,7 @@ import {
   LIVE_SYNC_CALLS_PER_REQUEST,
   liveSyncProjects,
   runCiCollector,
+  settleStaleLiveJobs,
   type CollectorDeps,
 } from '../../supabase/functions/_shared/ci-collector.ts'
 
@@ -52,7 +53,7 @@ const job = (id: number, runId: number, status: string) => ({
   labels: ['self-hosted', 'glot'],
 })
 
-function github(opts: { runs?: unknown[]; runners?: { status: number; body: unknown } } = {}) {
+function github(opts: { runs?: unknown[]; runners?: { status: number; body: unknown }; repo?: { status: number; body: unknown } } = {}) {
   const calls: string[] = []
   const fetchImpl = async (url: string) => {
     calls.push(url)
@@ -64,6 +65,10 @@ function github(opts: { runs?: unknown[]; runners?: { status: number; body: unkn
     }
     if (url.includes('/actions/runners')) {
       const r = opts.runners ?? { status: 403, body: { message: 'Resource not accessible by personal access token' } }
+      return new Response(JSON.stringify(r.body), { status: r.status })
+    }
+    if (/\/repos\/[^/]+\/[^/?]+$/.test(url)) {
+      const r = opts.repo ?? { status: 200, body: { private: false, owner: { login: 'kensaurus', type: 'User' } } }
       return new Response(JSON.stringify(r.body), { status: r.status })
     }
     if (url.includes('/actions/runs?')) {
@@ -99,18 +104,33 @@ describe('runCiCollector', () => {
     const db = makeFakeDb({ project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/glot.it', github_app_installation_id: null }] })
     const gh = github({ runs: [run(1, 'completed', 30), run(2, 'in_progress', 5), run(3, 'completed', 300)] })
     const first = await runCiCollector(db as never, deps(gh.fetchImpl))
-    // runs list + runner list + jobs of run 1 and run 2 (run 3 is outside the window).
-    expect(gh.calls).toHaveLength(4)
+    // runs list + runner list + repo visibility + jobs of run 1 and run 2 (run 3 is outside the window).
+    expect(gh.calls).toHaveLength(5)
     expect(first.stored).toBe(2)
     expect(db.table('ci_jobs').map((j) => j.run_id).sort()).toEqual([1, 2])
     const state = db.table('ci_collector_state')[0]
-    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing' } })
+    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing', visibility: 'public', owner: 'kensaurus' } })
 
     gh.calls.length = 0
     await runCiCollector(db as never, deps(gh.fetchImpl, new Date(NOW.getTime() + 10 * 60_000)))
     // The refused runner list is not asked again; finished run 1 is not re-read; running run 2 is.
     expect(gh.calls.some((u) => u.includes('/actions/runners'))).toBe(false)
     expect(gh.calls.filter((u) => u.includes('/jobs'))).toEqual([expect.stringContaining('/actions/runs/2/jobs')])
+    // Visibility is read once a day, not every tick.
+    expect(gh.calls.some((u) => u.endsWith('/repos/kensaurus/glot.it'))).toBe(false)
+  })
+
+  it('records a private repo, reads visibility again after a day, and keeps the last known value when GitHub refuses', async () => {
+    const db = makeFakeDb({ project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/yen-yen', github_app_installation_id: null }] })
+    const priv = github({ runs: [], repo: { status: 200, body: { private: true, owner: { login: 'kensaurus' } } } })
+    await runCiCollector(db as never, deps(priv.fetchImpl))
+    expect(db.table('ci_collector_state')[0].permissions['kensaurus/yen-yen']).toMatchObject({ visibility: 'private', visibilityCheckedAt: NOW.toISOString() })
+
+    const refused = github({ runs: [], repo: { status: 403, body: {} } })
+    const nextDay = new Date(NOW.getTime() + 25 * 60 * 60_000)
+    await runCiCollector(db as never, deps(refused.fetchImpl, nextDay))
+    expect(refused.calls.some((u) => u.endsWith('/repos/kensaurus/yen-yen'))).toBe(true)
+    expect(db.table('ci_collector_state')[0].permissions['kensaurus/yen-yen']).toMatchObject({ visibility: 'private', visibilityCheckedAt: nextDay.toISOString() })
   })
 
   it('shares the tick budget, least recently collected project first', async () => {
@@ -187,5 +207,125 @@ describe('liveSyncProjects', () => {
     const out = await liveSyncProjects(db as never, deps(gh.fetchImpl), [P1, P2])
     expect(gh.calls).toHaveLength(LIVE_SYNC_CALLS_PER_REQUEST)
     expect(out.calls).toBe(LIVE_SYNC_CALLS_PER_REQUEST)
+  })
+})
+
+describe('settleStaleLiveJobs', () => {
+  const REPO = 'kensaurus/tsumagoi'
+  const stored = (jobId: number, status: string, updatedMinAgo: number, extra: Record<string, unknown> = {}) => ({
+    project_id: P1,
+    repo: REPO,
+    run_id: 900,
+    run_attempt: 1,
+    job_id: jobId,
+    job_name: `job ${jobId}`,
+    status,
+    conclusion: null,
+    ci_kind: status === 'in_progress' ? 'running' : 'queued',
+    event: 'pull_request',
+    pr_number: 844,
+    gh_created_at: new Date(NOW.getTime() - 9 * 60 * 60_000).toISOString(),
+    updated_at: new Date(NOW.getTime() - updatedMinAgo * 60_000).toISOString(),
+    ...extra,
+  })
+
+  function jobsApi(answers: Record<number, { status: number; body?: unknown }>) {
+    const calls: string[] = []
+    const fetchImpl = async (url: string) => {
+      calls.push(url)
+      const m = /\/actions\/jobs\/(\d+)$/.exec(url)
+      const a = m ? answers[Number(m[1])] : undefined
+      if (!a) return new Response('{}', { status: 500 })
+      return new Response(JSON.stringify(a.body ?? { message: 'Not Found' }), { status: a.status })
+    }
+    return { calls, fetchImpl }
+  }
+
+  const finished = (id: number) => ({
+    ...job(id, 900, 'completed'),
+    run_attempt: 1,
+    head_branch: 'cursor/fix',
+    completed_at: new Date(NOW.getTime() - 8 * 60 * 60_000).toISOString(),
+  })
+
+  it('re-reads a job stored as running for hours, and keeps its PR and event', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(11, 'in_progress', 9 * 60)],
+    })
+    const gh = jobsApi({ 11: { status: 200, body: finished(11) } })
+    const n = await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 5, now: NOW })
+    expect(n).toBe(1)
+    expect(gh.calls).toEqual([`https://api.github.com/repos/${REPO}/actions/jobs/11`])
+    expect(db.table('ci_jobs')[0]).toMatchObject({ job_id: 11, status: 'completed', conclusion: 'success', ci_kind: 'passed', pr_number: 844, event: 'pull_request' })
+  })
+
+  it('closes a job GitHub no longer has instead of asking for it forever', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(12, 'queued', 60)],
+    })
+    const gh = jobsApi({ 12: { status: 404 } })
+    await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 5, now: NOW })
+    expect(db.table('ci_jobs')[0]).toMatchObject({ status: 'completed', ci_kind: 'cancelled', infra_detail: expect.stringContaining('no longer has this job') })
+  })
+
+  it('leaves recently refreshed and finished jobs alone, and stays inside its budget', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [
+        stored(21, 'in_progress', 3),
+        stored(22, 'completed', 600, { conclusion: 'success', ci_kind: 'passed' }),
+        stored(23, 'in_progress', 120),
+        stored(24, 'in_progress', 90),
+        stored(25, 'queued', 60),
+      ],
+    })
+    const gh = jobsApi({ 23: { status: 200, body: finished(23) }, 24: { status: 200, body: finished(24) }, 25: { status: 200, body: finished(25) } })
+    await settleStaleLiveJobs(db as never, deps(gh.fetchImpl), { calls: 2, now: NOW })
+    // Oldest stale first, two calls: 23 then 24; 21 is fresh, 22 finished, 25 waits for the next tick.
+    expect(gh.calls.map((u) => u.split('/').pop())).toEqual(['23', '24'])
+    expect(db.table('ci_jobs').find((j) => j.job_id === 25)).toMatchObject({ status: 'queued' })
+  })
+
+  it('runs after every collector tick', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: P1, repo_url: `https://github.com/${REPO}`, github_app_installation_id: null }],
+      ci_jobs: [stored(31, 'in_progress', 600)],
+    })
+    const base = github({ runs: [] })
+    const fetchImpl = async (url: string) => (/\/actions\/jobs\/31$/.test(url) ? new Response(JSON.stringify(finished(31)), { status: 200 }) : base.fetchImpl(url))
+    const summary = await runCiCollector(db as never, deps(fetchImpl))
+    expect(summary.settled).toBe(1)
+    expect(db.table('ci_jobs')[0]).toMatchObject({ status: 'completed' })
+  })
+})
+
+
+describe('runPlacementWatches (ADR 0037)', () => {
+  it('marks a watch ok after 10 moved jobs ran where expected, alert on a wrong label, and leaves others alone', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const started = new Date(NOW.getTime() - 60 * 60_000).toISOString()
+    const jobs = (n: number, labels: string[], repo = 'kensaurus/yen-yen') =>
+      Array.from({ length: n }, (_, i) => ({ project_id: P1, repo, workflow_name: 'CI', job_name: 'Lint', runner_labels: labels, queue_seconds: 20, head_branch: 'feat/x', html_url: null, gh_created_at: new Date(Date.parse(started) + (i + 1) * 60_000).toISOString() }))
+    const db = makeFakeDb({
+      ci_placement_watches: [
+        { id: 'w1', project_id: P1, repo: 'kensaurus/yen-yen', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w2', project_id: P1, repo: 'kensaurus/glot.it', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w3', project_id: P1, repo: 'kensaurus/x', jobs: [], expected_labels: [], started_at: started, status: 'ok' },
+      ],
+      ci_jobs: [...jobs(11, ['kensaurus-local']), ...jobs(1, ['ubuntu-24.04'], 'kensaurus/glot.it')],
+    })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(2)
+    const w = Object.fromEntries(db.table('ci_placement_watches').map((r) => [r.id, r]))
+    expect(w.w1).toMatchObject({ status: 'ok', jobs_seen: 10, unexpected: 0 })
+    expect(w.w2).toMatchObject({ status: 'alert', jobs_seen: 1, unexpected: 1 })
+    expect(w.w3.status).toBe('ok')
+  })
+
+  it('does nothing before the table exists', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const db = makeFakeDb({}, { failRead: (t) => (t === 'ci_placement_watches' ? { code: '42P01', message: 'missing' } : null) })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(0)
   })
 })

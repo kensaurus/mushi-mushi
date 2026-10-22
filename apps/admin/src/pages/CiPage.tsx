@@ -7,29 +7,42 @@
  * Top to bottom: the queue (Waiting → Running → Finished), a per-runner
  * timeline, stat tiles, the runner map (machines → runners → repos → live
  * jobs), "Speed it up" advice, slowest jobs and steps, and recent test
- * machine failures. Scope follows the active project; "All apps" reads every
- * project the caller can see. Polls every 30 s while the tab is visible with
- * `refresh=1` (the server live-syncs GitHub at most once a minute).
+ * machine failures, then "Cost and speed" (Plan 022 Phase 7, ADR 0037:
+ * GitHub-hosted vs your own machines, read-only, never the top of the page).
+ * Scope follows the header switcher (lib/projectScope.ts): one app, or
+ * "All apps" for every project the caller can see. The toggle here mirrors
+ * that choice. The page paints from the stored jobs first, then asks the
+ * server to live-sync GitHub (`refresh=1`, at most once a minute
+ * server-side) in the background and re-reads when that returns: on load,
+ * every 30 s while the tab is visible, and on Refresh. A live sync took
+ * 12.5 s for All apps on 2026-10-22, so it never blocks the first paint.
  *
- * Data: GET /v1/admin/ci/overview?project_id=&days=7&refresh=1 → CiOverview
+ * Data: GET /v1/admin/ci/overview?project_id=&days=7 (stored) → CiOverview
+ *       GET …&refresh=1 (background live sync, then re-read)
+ *       GET /v1/admin/ci/compare?project_id=&days=30 → CiCompare (Cost and speed)
+ *       GET /v1/admin/ci/placement?project_id= → CiPlacement (Where CI runs, ADR 0037)
  *       GET /v1/admin/fixes?limit=100 (project scope) → "Mushi fix" links
  */
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconBolt, IconClock, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
+import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
 import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
+import { CiCostSection } from '../components/ci/CiCostSection'
+import { CiPlacementSection } from '../components/ci/CiPlacementSection'
 import { usePageData } from '../lib/usePageData'
+import { apiFetch } from '../lib/supabase'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { docsUrl } from '../lib/docsUrl'
@@ -59,6 +72,36 @@ function UpdatedAgo({ at, validating }: { at: string | null; validating: boolean
       Updated {formatSeconds(secs)} ago
     </span>
   )
+}
+
+/**
+ * Live-sync GitHub in the background, then re-read the stored overview. One
+ * sync at a time; a failed sync still re-reads (the stored jobs are fine).
+ */
+function useBackgroundLiveSync(livePath: string, scope: 'project' | 'enumeration', reload: () => void) {
+  const [syncing, setSyncing] = useState(false)
+  const busy = useRef(false)
+  // Held in a ref so a new reload identity never re-runs the sync effect.
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const sync = useCallback(async () => {
+    if (busy.current) return
+    busy.current = true
+    setSyncing(true)
+    try {
+      await apiFetch<CiOverview>(livePath, { scope, cache: 'no-store' })
+    } catch {
+      // The stored jobs still render; the next poll tries again.
+    } finally {
+      busy.current = false
+      setSyncing(false)
+      reloadRef.current()
+    }
+  }, [livePath, scope])
+  useEffect(() => {
+    void sync()
+  }, [sync])
+  return { syncing, sync }
 }
 
 /** Reload every `ms` while the tab is visible, and once on coming back. */
@@ -91,16 +134,23 @@ export function CiPage() {
   const projectId = useActiveProjectId()
   const [searchParams] = useSearchParams()
   const focusJobId = searchParams.get('job')
-  const [scopeChoice, setScopeChoice] = useState<Scope>('project')
+  const scopeChoice: Scope = useProjectScope().mode
+  const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
 
   const path =
     scope === 'project' && projectId
+      ? `/v1/admin/ci/overview?project_id=${encodeURIComponent(projectId)}&days=7`
+      : '/v1/admin/ci/overview?days=7'
+  const livePath =
+    scope === 'project' && projectId
       ? `/v1/admin/ci/overview?project_id=${encodeURIComponent(projectId)}&days=7&refresh=1`
       : '/v1/admin/ci/overview?days=7&refresh=1'
-  const page = usePageData<CiOverview>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
+  const fetchScope = scope === 'all' ? 'enumeration' : 'project'
+  const page = usePageData<CiOverview>(path, { scope: fetchScope })
   const { data, reload } = page
-  useVisiblePolling(reload, POLL_MS)
+  const live = useBackgroundLiveSync(livePath, fetchScope, reload)
+  useVisiblePolling(live.sync, POLL_MS)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
   const fixes = usePageData<{ fixes: FixAttempt[] }>(scope === 'project' && projectId ? '/v1/admin/fixes?limit=100' : null)
@@ -118,7 +168,7 @@ export function CiPage() {
       : page.error
         ? "CI runners couldn't load"
         : 'Loading CI runners',
-    questions: ['Why are my fixes slow to land?', 'Which runner keeps failing?', 'How do I make CI faster?'],
+    questions: ['Why are my fixes slow to land?', 'Which runner keeps failing?', 'How do I make CI faster?', 'What does my CI cost, and would my own machine be cheaper?'],
   })
 
   const notice = data ? permissionsNotice(data.permissions) : null
@@ -134,8 +184,8 @@ export function CiPage() {
         helpWhatIsIt="Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why your fixes take as long as they do to land."
         helpHowToUse="Start with the queue: a long Waiting column means too few machines. A job marked “Test machine stopped” was not a code failure; re-run it. Speed it up lists changes with the evidence behind each one."
       >
-        <UpdatedAgo at={data?.refreshedAt ?? data?.generatedAt ?? null} validating={page.isValidating && !page.loading} />
-        <Btn size="sm" variant="ghost" onClick={reload} disabled={page.isValidating} title="Read the latest jobs from GitHub now">
+        <UpdatedAgo at={data?.refreshedAt ?? data?.generatedAt ?? null} validating={(live.syncing || page.isValidating) && !page.loading} />
+        <Btn size="sm" variant="ghost" onClick={() => void live.sync()} disabled={live.syncing} title="Read the latest jobs from GitHub now">
           Refresh
         </Btn>
         {projectId && (
@@ -205,6 +255,19 @@ export function CiPage() {
           <Section title="Speed it up" id="ci-advice" icon={<IconBolt />}>
             <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
+          </Section>
+
+          <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
+            <PanelErrorBoundary label="Cost and speed">
+              <CiCostSection projectId={projectId} scope={scope} />
+            </PanelErrorBoundary>
+          </Section>
+
+          <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
+            <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
+            <PanelErrorBoundary label="Where CI runs">
+              <CiPlacementSection projectId={projectId} scope={scope} />
+            </PanelErrorBoundary>
           </Section>
 
           <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>

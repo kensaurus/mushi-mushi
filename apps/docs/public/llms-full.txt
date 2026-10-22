@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 213
+Pages: 215
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -4570,18 +4570,19 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/open-source
 
 ---
 title: Open source & licensing
-description: What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.
+description: "What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps."
 ---
 
 # Open source & licensing
 
 Mushi is **open by default**. The cloud product at `kensaur.us/mushi-mushi/` runs the
-exact same code in this repository — there is no closed-source "enterprise"
-fork. What you self-host is what we run.
+same code as this repository — there is no closed-source "enterprise" fork. What you
+self-host is what we run; the hosted service adds only its own tuning data
+([what that means](#what-the-hosted-service-keeps)).
 
   **TL;DR** — Mushi is **open-core** (the Supabase / Grafana model). The SDKs you
-  embed in your app are **MIT** (use them anywhere, open or closed). The server you
-  self-host is **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
+  embed in your app are **MIT** (use them anywhere, open or closed). The server and
+  console you self-host are **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
   modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)).
   A small **enterprise-edition** boundary (`packages/server/ee/`) is source-available
   but commercial for production use. The wedge — capture, diagnosis, fix, self-host,
@@ -4591,8 +4592,10 @@ fork. What you self-host is what we run.
 
 | Surface | License | What you can do |
 | --- | --- | --- |
-| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `brand`, `marketing-ui` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
+| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `marketing-ui`, and the code and design tokens in `brand` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
 | **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
+| **Console** — `apps/admin` (and the tester portal, `apps/testers`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/apps/admin/LICENSE) | Same terms as the server. AGPLv3 since Oct 22, 2026; copies from before that date stay MIT. |
+| **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi. Not as your own app's identity. |
 | **Enterprise edition** — `packages/server/ee/` (SAML/OIDC SSO, audit export, retention CRUD, region pinning, SOC 2 evidence pack) | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
 | **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
 
@@ -4612,6 +4615,39 @@ funded by managed cloud hosting and a small commercial **enterprise edition**
 
 Need to run modified Mushi as multi-tenant SaaS without publishing server changes?
 See [COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+
+### Why AGPLv3 for the console?
+
+The console is the product you look at every day. Under MIT, anyone could put a new
+name on it and ship it closed next to the open server. Under AGPLv3 you can still
+self-host it, change it and fork it; if you offer a modified console to other people
+as a service, you publish your changes. Nothing in the MIT SDKs imports console code,
+so embedding the SDK is unaffected.
+
+## What the hosted service keeps
+
+Mushi Cloud runs the code in this repository. Going forward it also keeps **its own
+tuning data**, as configuration in its database rather than code in the repo:
+
+- prompt wording tuned on live traffic (the [Prompt Lab](/admin/prompt-lab) stores the same
+  kind of override for your project),
+- the evaluation sets that tuning is measured against,
+- judge scoring weights, and later adjustments to spend-down thresholds.
+
+The repository keeps **working default prompts**, the default scoring weights, the
+spend-down defaults and the test fixtures, so a self-hosted stack has every feature and
+runs end to end. Your stack can word a diagnosis a little differently from the hosted one,
+because its prompts are the defaults or your own. We used to say the cloud runs
+"provably the same code"; the exact version is: **the same code; the hosted service
+carries its own tuning data.**
+
+## Contributing
+
+Outside pull requests come in under a [Contributor License Agreement](https://github.com/kensaurus/mushi-mushi/blob/master/CLA.md),
+signed once by replying to the CLA bot on your pull request. You keep the copyright. The CLA
+lets the maintainer keep the licensing above coherent and offer the commercial license,
+and it promises your contribution stays available under MIT or an OSI-approved license.
+See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTRIBUTING.md).
 
 ## No lock-in
 
@@ -4646,8 +4682,12 @@ Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 class
 ## Trademarks
 
 The code is open source; the **name and logo are not**. "Mushi Mushi", the
-mushi-chan mascot, and the wordmark are trademarks. Fork the code freely, but
-ship your fork under your own brand — don't imply it's the official Mushi.
+mushi-chan mascot, the bug logo and the wordmark are trademarks. They are not
+registered yet. The logo files, app icons and mascot art are all rights reserved.
+You may use the unmodified logo to refer or link to Mushi (an article, a "works with
+Mushi" note, an integrations page). Fork the code freely, but ship your fork under
+your own name and logo — don't imply it's the official Mushi. Details:
+[TRADEMARK.md](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md).
 
 ---
 
@@ -4687,7 +4727,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>121 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>124 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4735,7 +4775,7 @@ your client:
 }
 ```
 
-The full tool catalog (121 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (124 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4911,7 +4951,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 121 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 124 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6541,6 +6581,7 @@ mushi reports reopen <id>
 mushi reports dismiss <id>
 mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
+mushi reports file --title "…" --description "…" [--severity high] [--component checkout]
 
 mushi lessons list
 mushi lessons show <id>
@@ -6562,6 +6603,22 @@ mushi sentry import --query "level:error" --cursor <next>   # next page, printed
 
 It needs the Sentry org slug, project slug and an auth token with `event:read`
 and `project:read` (console: **Integrations → Sentry**).
+
+### File a report yourself
+
+For a bug you found yourself, or a backlog item you want an agent to fix,
+`mushi reports file` adds a report to the app's queue. It goes through the same
+triage as a user report, so it gets a diagnosis and can be sent to `mushi fix`.
+
+```bash
+mushi reports file --title "Checkout adds tax twice" \
+  --description "Cart with 2 items shows the tax line twice on /checkout. Done when the total matches the cart."
+mushi reports file --title "Bump sharp to 0.34" --description "..." --severity low --component build --project <uuid>
+```
+
+`--severity` (critical, high, medium, low) and `--component` are hints that
+triage may refine. It needs a key with the `mcp:write` scope; each app takes at
+most 30 filed reports an hour. The MCP tool is `file_report`.
 
 ### Reporter updates held for review
 
@@ -6656,6 +6713,8 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
@@ -7825,7 +7884,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **121-tool** catalog and
+on npm for the full **124-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -7925,7 +7984,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**121 tools** · **8 resources** · **4 prompts**
+**124 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -7957,6 +8016,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_release_calendar` | Release calendar | Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ rows, batchSuggestion, note }. Read-only. |
 | `get_code_health` | Code health | Return the code health your CI pushed for one project: files over the size budget (god files) from the latest code_health run, each with severity, file, line, message and suggested fix, the bundle-size and largest-file trends, and a summary \{ error_count, warn_count, max_loc, latest_bundle_kb }. latestRunAt null means CI has never pushed (add MUSHI_INGEST_KEY to CI). Optional projectId and days (trend window, 1–365, default 30); a project-bound key reads its own project, an account-level key must pass projectId (400 PROJECT_REQUIRED otherwise). Returns \{ trends, godFiles, latestRunAt, latestRunStatus, summary }. Read-only. Use explain_finding with a god-file id for its fix; split the file before adding to it. |
 | `get_ci_overview` | CI runners and why fixes wait | Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online \| offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats \{ queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [\{ id, severity (high \| medium \| low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions \{ jobs, runners } is ok \| missing \| unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns \{ generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code. |
+| `get_ci_costs` | CI cost and speed | Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [\{ repo, runnerClass (github_hosted \| self_hosted \| unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list \| github_public_free \| github_larger_unpriced \| self_hosted \| unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns \{ window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate. |
 | `explain_finding` | Explain one finding | Explain one gate finding by its id (from list_gate_findings, get_radar, get_recipe_drift, get_code_health, get_store_status or the console): which check raised it and what that check is for, the rule, why it fired (reason), the file, line and column or the target it is about, the fix in one sentence (fix.text, with fix.kind, fix.command, fix.consolePath and the stored fix object in fix.detail), and whether it is still open: state open (in the latest run of that check, the latest run found the same problem in the same file or target, or no finished run has looked again yet), not_in_latest_run (the latest run checked that rule clean and no longer has it: fixed or moved), unknown (the latest run could not confirm a fix: it errored or skipped, stored only part of its findings, did not run or could not decide the rule, or read only part of the project; stateReason says which) or allowlisted. The latest run is the newest one that looked at the same thing: a design server scan is compared only with server scans and a CI push only with CI pushes, and a run scoped to another story is skipped. Treat unknown as still open. A finding in a project the key cannot reach is a 404. Returns \{ id, projectId, gate, gateLabel, gateMeaning, ruleId, rule, severity, reason, fix, location, state, stateReason, run, latestRun }. Read-only. |
 | `get_auto_release_status` | Auto-release blocker | Return the automatic release draft that is blocking auto-release for one project, if any. Only one automatic draft can exist at a time, so a draft whose publish failed stops every later automatic release until a person publishes or deletes it (mushi releases publish / delete, or the console Releases page). Optional projectId (defaults to the configured project). Returns \{ blockingDraft: \{ id, version, createdAt, autoSource, stale } \| null }. Read-only. |
 | `get_design_settings` | Design score actions | Return what the design deviance score may do on its own for one project: threshold (0–100; the actions fire above it), failCi (mushi recipe check --push fails CI above it), autofix (new warn/error findings above it dispatch a fix) and autofixEnabled (the project auto-fix switch, without which the design auto-fix does nothing), plus canEdit. Optional projectId. Read-only. |
@@ -8020,6 +8080,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
+| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_\ may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
 | `pull_store_reviews` | Pull store reviews now | Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns \{ status, filed, stores }. Write. |
 | `set_store_review_intake` | Set store review intake | Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -8040,6 +8101,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `award_bonus_points` | Award bonus points | Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign. |
 | `set_tier` | Override contributor tier | Override a contributor's tier by tier slug (e.g. "champion"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope. |
 | `import_sentry_issues` | Import Sentry issues | Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project's Sentry projects. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns \{ items: [\{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report. |
+| `file_report` | File a report | File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical \| high \| medium \| low) and component are optional hints that triage may refine. The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. Returns \{ reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId. |
 | `map_user_stories` | Map user stories from live app | Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns \{ runId, status: "pending" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story. |
 | `generate_tdd_from_story` | Generate TDD test from user story | Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns \{ qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead. |
 | `improve_qa_story` | Auto-improve a failing QA story | Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns \{ improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first. |
@@ -13013,7 +13075,7 @@ description: Run the whole Mushi Mushi stack yourself with one command — Docke
 
 # Self-hosting
 
-Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the exact same code in this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is the same binary that powers Mushi Cloud.
+Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
   **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 
@@ -13206,7 +13268,9 @@ Postgres locally? Skip Compose and follow the
 [Admin SPA deploy](/self-hosting/admin-spa).
 
   Same code, either way. Mushi Cloud runs this exact stack — there is no
-  closed-source plus-tier. See [Open source & licensing](/concepts/open-source).
+  closed-source plus-tier. The hosted service adds only its own tuning data
+  (prompts and scoring weights kept as configuration); the repo's default
+  prompts give you every feature. See [Open source & licensing](/concepts/open-source).
 
 ---
 
@@ -14709,6 +14773,8 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
+**Update, Oct 22, 2026.** Two changes since this post, both in [Open source & licensing](/concepts/open-source). The console (`apps/admin`) is now AGPLv3 too, so a rebranded console can't ship closed. And we now say it more exactly: Mushi Cloud runs the same code, and carries its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo keeps working default prompts, so self-hosting stays free and complete.
+
 ## The honest "open source" claim
 
 We can now say "the server is open source" and mean it. The SDKs were always MIT. The distinction is: SDK = embed anywhere; server = copyleft when you SaaS a modified version.
@@ -15081,7 +15147,8 @@ This section is for **maintainers** running Mushi Cloud or shipping the open-sou
 SDK packages — not for app developers integrating the SDK. If you are integrating
 Mushi into your app, start at [Quickstart](/quickstart) instead.
 
-  Mushi is **OSS-first**: the hosted product runs the exact same code in this repo.
+  Mushi is **OSS-first**: the hosted product runs the same code as this repo, plus its own
+  tuning data (prompts and scoring weights kept as configuration).
   Self-hosters can reuse every deploy path described here. See [Self-hosting](/self-hosting).
 
 ## What lives here
@@ -15167,9 +15234,135 @@ mushi runner status --json
 | --- | --- |
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
+| Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`, with the GitHub token stored in the project's settings (or, without one, the organization's). Never the Mushi GitHub App, which does not have this permission, and never Mushi's own token |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
+
+## What CI costs, and where it should run
+
+The **Cost and speed** section of the CI page, `mushi runner compare` and the
+MCP tool `get_ci_costs` compare GitHub-hosted runners with your own machines,
+per repo. Nothing here changes where your CI runs.
+
+```bash
+mushi runner compare           # this project, last 30 days
+mushi runner compare --all     # every project your account key can read
+mushi runner compare --json
+```
+
+For each repo and each place its jobs ran (GitHub-hosted, one of your
+machines, or never picked up) you see:
+
+| Figure | Measured or estimated |
+| --- | --- |
+| Wait p95, run time p50, pull-request pass rate, jobs | Measured from GitHub's job times |
+| Minutes billed | Estimated: each job rounded up to a whole minute, as GitHub bills |
+| Cost per month | Estimated: GitHub's list price after your included minutes, or your machine's electricity and wear |
+| Busy time of your machines | Measured: parallel jobs count once |
+| Speed, your machine vs GitHub | Measured only on jobs that passed on both, at least 5 times each; the sample size is shown |
+
+Money is always an estimate. GitHub's bill is the real figure.
+
+### Why it costs what it costs
+
+- **Public repositories run GitHub-hosted minutes free.** Private ones pay
+  after the plan's included minutes (Free 2,000, Pro and Team 3,000 a month),
+  which every private repo of the same GitHub account shares.
+- **Every job bills at least one whole minute.** Twenty 7-second checks bill
+  20 minutes; run them as steps of one job instead.
+- **macOS costs about 10× Linux** a minute (Linux $0.006, Windows $0.010,
+  macOS $0.062; Mushi shows the date it read GitHub's price list).
+- **Re-runs bill again on GitHub**, and cost only electricity on your machine.
+- **Jobs pinned to GitHub stay there.** A job that names
+  `runs-on: ubuntu-latest # pixel baselines are captured on hosted` does not
+  move with a runner variable; Mushi shows the comment as the reason.
+- **Main-branch and Dependabot runs often always use GitHub**, when the
+  workflow checks `github.ref` or `github.actor` before reading the variable.
+- **GitHub gives private repos smaller machines** (2 CPUs, 8 GB) than public
+  ones (4 CPUs, 16 GB), which is often why your own machine is faster.
+- **A job no runner picks up expires after 24 hours.** It costs nothing, and
+  the fix it was testing was never tested.
+
+### Your figures
+
+**Settings → General → CI cost** holds the figures behind the estimates, per
+organization: your GitHub plan, the idle and under-load watts of your
+machines, your price per kWh and currency, an optional wear cost per busy
+hour, and which runners share one physical machine (`Alienware: aw-,
+alienware-`). Until you save them, Mushi uses example figures and says so.
+On WSL2, `mushi runner heartbeat` sends a hash of the VM's boot id, so
+distros on one PC count as one machine without any setting.
+
+### Advice
+
+Cost advice comes with the numbers behind it: a private repo paying for
+GitHub minutes while your runner sits idle, a public repo queueing on your
+machine when GitHub would run it free, a workflow reading `vars.LINUX_RUNNER`
+in a repo with no such variable (every job falls back to GitHub), jobs pinned
+to GitHub and what they cost, many tiny jobs, and a public repo running on your
+own machine (a pull request from a fork can run code there).
+
+## Change where CI runs
+
+Most workflows that can run on your own machine pick their runner from a repo
+variable:
+
+```yaml
+runs-on: ${{ (github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+```
+
+The **Where CI runs** section of the CI page shows, for each repo, which jobs
+read `LINUX_RUNNER` (or a `RUNNER_` variable) and where they run
+now. You can move them between GitHub-hosted runners and one of your runner
+labels. Mushi changes only that variable: never runner labels, registrations,
+runner groups, or another tool's dispatcher.
+
+Every change goes through four steps:
+
+1. **Preview.** Nothing changes. You see the jobs that move and the ones that
+   stay, with the reason: pinned to GitHub in the workflow (the comment next to
+   `runs-on`), main-branch and Dependabot runs, or a different variable. You
+   also see how many runners with the target label are online, how long jobs
+   wait there, the estimated cost change, and warnings, such as no online
+   runner for the label (jobs would wait, then expire after 24 hours) or a
+   public repo where a pull request from a fork could run code on your
+   machine.
+2. **Request.** Anyone who is not a viewer can ask, in the console, with
+   `mushi runner placement request`, or with the MCP tool
+   `request_ci_placement_change`. Mushi builds the change itself from the
+   preview, including the variable's current value.
+3. **Approve.** A team owner or admin approves exactly that change in the
+   console. An API key can never approve. The approval lasts an hour.
+4. **Run.** The owner or admin runs it from the console. If the variable
+   changed since the preview, Mushi refuses with `VARIABLE_MOVED` and you
+   preview again.
+
+After a change, Mushi watches the next 10 jobs that read the variable. It
+raises an alert if one lands on another runner or waits more than 30
+minutes. **Ask to revert** requests the reverse change, which goes through the
+same approval.
+
+```bash
+mushi runner placement show
+mushi runner placement preview --repo you/your-app --value my-runner-label
+mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
+mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+```
+
+### Your CI agreement
+
+**Settings → General → CI policy** records the rules Mushi checks at the
+request and again when the change runs. Mushi fills in nothing for you:
+
+- **No paid GitHub-hosted minutes on private repos**, with a list of repos
+  allowed anyway. Only an owner can turn this rule off.
+- **External controllers**: another tool that decides where some repos run
+  (for example a dispatcher that flips runner labels). Mushi shows those
+  repos read-only and never competes with it.
+- **Standby runners**: runner names or labels that are only a fallback
+  (`kensaurus-local-*`). They are never a target.
 
 ## Machine health: heartbeat and job hooks
 
@@ -16083,6 +16276,119 @@ mushi billing cap 0      # clear override → plan default
 
 - [Public pricing](/pricing) — plan table, estimator, example bills, FAQ
 - [Self-hosting](/self-hosting) — unlimited diagnoses with your own LLM key
+
+---
+
+## Checks
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/checks
+
+---
+title: Checks
+description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+---
+
+# Checks
+
+**Route:** `/checks`
+
+Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+
+## App checks
+
+Is the app itself sound: scheduled tests, user stories, audits, its blueprint, app health, design tokens and content.
+
+| Card | Route | What it covers |
+| --- | --- | --- |
+| [Scheduled tests](/admin/qa-coverage) | `/qa-coverage` | Browser tests of your user stories that run on a schedule and alert when one breaks. |
+| [App health](/admin/health) | `/health` | Whether your integrations and background jobs are working: uptime, errors and failed checks. |
+| [CI runners](/admin/ci) | `/ci` | Where your tests run, how long they wait for a machine, and what slows your fixes down. |
+| [Full-stack audit](/admin/fullstack-audit) | `/fullstack-audit` | An end-to-end audit across the frontend, the API and the database. |
+| [User stories](/admin/inventory) | `/inventory` | The things users can do in your app, found by crawling it, and which ones broke. |
+| App blueprint | `/recipe` | What this app is built from — database, design system, routes, CI, deploy, env and integrations — and what changed. |
+| Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
+| [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
+
+## AI quality
+
+How good the AI's triage is: grading, lessons learned and the prompts behind it.
+
+| Card | Route | What it covers |
+| --- | --- | --- |
+| [Triage grading](/admin/judge) | `/judge` | A second AI grades how well each bug was triaged and flags where it disagrees with the first. |
+| [Lessons](/admin/lessons) | `/lessons` | Patterns learned from past bugs and fixes. |
+| [AI prompts](/admin/prompt-lab) | `/prompt-lab` | Edit and compare the prompts that turn bug reports into pull requests. |
+
+---
+
+## CI runners
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/ci
+
+---
+title: CI runners
+description: The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
+---
+
+# CI runners
+
+**Route:** `/ci`
+
+Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
+
+The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
+
+A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
+
+## Test machine or your code
+
+A lost runner, a job still waiting for a runner, and a queue that expired are the test machine. They are never a code failure. The page labels them **Test machine stopped**. **Tests failed** means a step failed while a machine was running your code.
+
+Re-run a job the test machine stopped. Open the fix for a job whose tests failed. The line at the top says what needs you: a job has been waiting a long time for a machine, most failures are the test machine, some jobs failed on the code, or every finished job passed.
+
+## Queue and wait
+
+**Queue** is every job, from waiting for a machine to finished.
+
+| Column | Meaning |
+| --- | --- |
+| **Waiting** | Waiting for a free test machine. A long column means too few machines. |
+| **Running** | On a test machine now. |
+| **Finished** | Finished in the last 2 hours. Filter to **Tests failed**, **Test machine stopped**, or **Passed**. |
+
+Above the queue: how many are waiting now, how many are running, the typical wait for a machine, and the typical run time. The wait also names the slow tail, the 1 job in 20 that waits longer. A bar splits the jobs from the last 7 days into passed, tests failed, test machine stopped, and cancelled, skipped or still going.
+
+**Timeline** is one row per test machine. Gaps are idle time. Striped bars are jobs waiting for a machine.
+
+## Runner map
+
+**Runner map** is your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click a card for its health and recent jobs.
+
+Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
+
+## What would make fixes land sooner
+
+**Speed it up** lists changes that would land your fixes sooner, each with the evidence and a copy-ready fix.
+
+**Slow jobs** is the jobs and steps that take the longest.
+
+**Stopped by the test machine** lists jobs that never finished testing. Re-run them.
+
+## When nothing has reported in
+
+The page stays empty until GitHub reports a job for this app's repositories, or a machine that runs your tests reports in. On that machine, run:
+
+```bash
+mushi runner key
+mushi runner hooks install --dir <runner dir>
+```
+
+Host health arrives through `mushi runner heartbeat` and the job hooks, as `POST /v1/ingest/runner` with a `runner:write` key only. The setup steps are in [CI runners](/operating/ci-runners).
+
+## Related pages
+
+- [Checks](/admin/checks) — CI runners as one of the automatic checks
+- [Fixes](/admin/fixes) — the pull request a job was testing
 
 ---
 
@@ -19247,7 +19553,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**121 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**124 tools**, 8 resources, 4 prompts).
 
 ---
 

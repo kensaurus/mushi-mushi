@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/server.ts
  * PURPOSE: Testable MCP server factory. Exports `createMushiServer()` which
@@ -1756,6 +1756,67 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_ci_costs',
+    {
+      title: titleOf('get_ci_costs'),
+      description: descOf('get_ci_costs'),
+      annotations: annotationsFor('get_ci_costs'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        dataDays: z.number().optional(),
+        lowConfidence: z.boolean().optional().describe('Under 7 days of data'),
+        source: z.string().optional(),
+        sourceNote: z.string().nullable().optional(),
+        rates: z.unknown().optional().describe('GitHub list prices and the date they were read'),
+        fields: z.record(z.string(), z.string()).optional().describe('measured | estimated per field'),
+        settings: z.array(z.looseObject({})).optional(),
+        repos: z.array(z.looseObject({})).optional(),
+        rows: z.array(z.looseObject({})).optional().describe('Per repo × runner class: wait, run time, pass rate, minutes, cost'),
+        accounts: z.array(z.looseObject({})).optional().describe('Included minutes per GitHub owner'),
+        machines: z.array(z.looseObject({})).optional(),
+        speed: z.array(z.looseObject({})).optional(),
+        whatIfs: z.array(z.looseObject({})).optional(),
+        explain: z.looseObject({}).optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional(),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/compare?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'request_ci_placement_change',
+    {
+      title: titleOf('request_ci_placement_change'),
+      description: descOf('request_ci_placement_change'),
+      annotations: annotationsFor('request_ci_placement_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$/).describe('LINUX_RUNNER or RUNNER_<WORKFLOW>'),
+        value: z.string().min(1).max(100).nullable().describe('One runner label, or null to remove the variable'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
+      return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
     'explain_finding',
     {
       title: titleOf('explain_finding'),
@@ -3427,6 +3488,50 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           sinceDays: args.sinceDays,
           cursor: args.cursor,
           sentryProject: args.sentryProject,
+        }),
+      });
+      return jsonResult(data);
+    },
+  );
+
+  server.registerTool(
+    'file_report',
+    {
+      title: titleOf('file_report'),
+      description: descOf('file_report'),
+      annotations: annotationsFor('file_report'),
+      inputSchema: z.object({
+        title: z.string().min(3).max(200).describe('One-line title (3-200 characters)'),
+        description: z
+          .string()
+          .min(1)
+          .max(10_000)
+          .describe('What happens, steps to reproduce, what you expected, and how to check it is fixed'),
+        severity: z
+          .enum(['critical', 'high', 'medium', 'low'])
+          .optional()
+          .describe('Your severity hint; triage may refine it'),
+        component: z.string().max(200).optional().describe('Area of the app, e.g. "checkout"'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      }),
+      outputSchema: z.object({
+        reportId: z.string().describe('The new report id; pass it to triage_issue or dispatch_fix'),
+        projectId: z.string(),
+        title: z.string(),
+        status: z.string().describe('Always new: triage starts right away'),
+        severity: z.string().nullable(),
+        component: z.string().nullable(),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/reports`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: args.title,
+          description: args.description,
+          severity: args.severity,
+          component: args.component,
         }),
       });
       return jsonResult(data);

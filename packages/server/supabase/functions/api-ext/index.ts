@@ -11,7 +11,7 @@
  *          headers. The route files stay under `api/routes/` so the route
  *          manifest and the surface-parity check keep reading them.
  *
- *          Routes here: CI runners (Plan 022), inventory, Ask Mushi,
+ *          Routes here: CI runners and placement (Plan 022), inventory, Ask Mushi,
  *          verified fixes (Plan 024).
  */
 
@@ -21,9 +21,16 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts'
 import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts'
 import { registerCiRoutes } from '../api/routes/ci.ts'
+import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerInventoryRoutes } from '../api/routes/inventory.ts'
 import { registerAskMushiRoutes } from '../api/routes/ask-mushi.ts'
 import { registerVerifyRoutes } from '../api/routes/verify.ts'
+import { registerCodebaseUnderstandRoutes } from '../api/routes/codebase-understand.ts'
+import { registerModernizationHealthSuperRoutes } from '../api/routes/modernization-health-super.ts'
+import { registerSkillsRoutes } from '../api/routes/skills.ts'
+import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
+import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
+import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
 
 ensureSentry('api-ext')
 
@@ -36,7 +43,14 @@ app.use('/v1/*', stdioMcpUsage())
 registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
+registerCiPlacementRoutes(app)
 registerVerifyRoutes(app)
+registerCodebaseUnderstandRoutes(app)
+registerModernizationHealthSuperRoutes(app)
+registerSkillsRoutes(app)
+registerQaCoverageRoutes(app)
+registerFullstackAuditRoutes(app)
+registerUxRunsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

@@ -8,7 +8,7 @@
 
 import { Card } from '../ui'
 import { ChartActionsMenu } from '../ChartActionsMenu'
-import type { QueueSummary } from './types'
+import { queueStageLabel, type QueueSummary } from './types'
 
 interface Props {
   summary: QueueSummary
@@ -65,7 +65,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
                 selectedStage === s ? 'bg-brand/10 ring-1 ring-brand/40' : 'hover:bg-surface-overlay'
               }`}
             >
-              <span className="text-xs font-mono text-fg-secondary">{s}</span>
+              <span className="text-xs font-mono text-fg-secondary">{queueStageLabel(s)}</span>
               <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle">
                 {BACKLOG_STATUSES.map((st) => {
                   const v = breakdown[st] ?? 0
