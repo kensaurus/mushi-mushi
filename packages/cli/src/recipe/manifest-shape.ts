@@ -131,10 +131,19 @@ export function readScanManifest(manifest: Json): { manifest: DesignScanManifest
 
   if (d.literalScan !== undefined) {
     const ls = d.literalScan
-    if (!isObject(ls) || (ls.globs !== undefined && !isStringList(ls.globs)) || (ls.ignore !== undefined && !isStringList(ls.ignore))) {
-      issues.push({ severity: 'error', message: 'design.literalScan.globs and .ignore must be lists of file globs.' })
+    if (
+      !isObject(ls) ||
+      (ls.globs !== undefined && !isStringList(ls.globs)) ||
+      (ls.ignore !== undefined && !isStringList(ls.ignore)) ||
+      (ls.tokenDefinitions !== undefined && !isStringList(ls.tokenDefinitions))
+    ) {
+      issues.push({ severity: 'error', message: 'design.literalScan.globs, .ignore and .tokenDefinitions must be lists of file globs.' })
     } else {
-      design.literalScan = { ...(ls.globs ? { globs: ls.globs as string[] } : {}), ...(ls.ignore ? { ignore: ls.ignore as string[] } : {}) }
+      design.literalScan = {
+        ...(ls.globs ? { globs: ls.globs as string[] } : {}),
+        ...(ls.ignore ? { ignore: ls.ignore as string[] } : {}),
+        ...(ls.tokenDefinitions ? { tokenDefinitions: ls.tokenDefinitions as string[] } : {}),
+      }
     }
   }
 

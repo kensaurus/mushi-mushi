@@ -28,6 +28,7 @@
  */
 
 import { Hono } from 'npm:hono@4'
+import { reconcileFixedFindings } from '../_shared/modernization-dispatch-db.ts'
 import { z } from 'npm:zod@3'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
@@ -455,7 +456,12 @@ app.post('/library-modernizer', async (c) => {
     }
   }
 
-  return c.json({ ok: true, processed: summary.length, results: summary })
+  // Findings whose report was fixed are done (idempotent; also runs on the
+  // console's read). A failure is logged, never fatal.
+  const reconciled = await reconcileFixedFindings(db, [...new Set((rows ?? []).map((r) => r.project_id as string))])
+  if (reconciled.error) log.warn('modernization reconcile failed (non-fatal)', { error: reconciled.error })
+
+  return c.json({ ok: true, processed: summary.length, results: summary, resolved: reconciled.resolved })
 })
 
 Deno.serve(app.fetch)

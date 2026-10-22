@@ -4,7 +4,8 @@
  * /ci (Plan 022): renders the overview (queue first, then timeline, stats,
  * map, advice, slow jobs, test machine failures), the one-sentence empty
  * state, the GitHub permissions banner, the queue columns with their counts,
- * hints and fix links, the `?job=` focus, and the All apps scope.
+ * hints and fix links, the `?job=` focus, and the All apps scope (the header
+ * switcher's choice, lib/projectScope.ts, mirrored by the page toggle).
  */
 
 import { act, createElement } from 'react'
@@ -58,6 +59,7 @@ vi.mock('../components/ci/CiRunnerMap', async () => {
 })
 
 import { CiPage } from './CiPage'
+import { getStoredProjectScopeMode, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -75,6 +77,7 @@ beforeEach(() => {
   state.paths = []
   state.error = null
   state.summary = ''
+  window.localStorage.clear()
 })
 
 afterEach(() => {
@@ -259,6 +262,29 @@ describe('CiPage', () => {
     state.projectId = null
     await render()
     expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+  })
+
+  it('reads every app when the header says All apps, without the fix links', async () => {
+    await render('/ci?apps=all')
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+    expect(state.paths.some((p) => p.path?.includes('project_id='))).toBe(false)
+    expect(state.paths.filter((p) => p.path?.startsWith('/v1/admin/fixes'))).toEqual([])
+  })
+
+  it('reads every app when All apps is the stored choice', async () => {
+    setStoredProjectScopeMode('all')
+    await render('/ci')
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
+  })
+
+  it('its toggle switches the header scope back to this app', async () => {
+    await render('/ci?apps=all')
+    const thisApp = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'This app') as HTMLButtonElement
+    state.paths = []
+    await act(async () => thisApp.click())
+    expect(getStoredProjectScopeMode()).toBe('project')
+    expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?project_id=p1&days=7&refresh=1', scope: 'project' })
+    expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7&refresh=1', scope: 'enumeration' })
   })
 
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {
