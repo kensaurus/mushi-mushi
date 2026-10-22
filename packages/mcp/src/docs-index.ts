@@ -868,7 +868,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "concepts/open-source.md",
     keywords: ["concepts", "open-source", "open", "source", "licensing"],
     headings: ["Open-core, one repo", "Why MIT for the SDK?", "Why AGPLv3 for the server?", "Why AGPLv3 for the console?", "What the hosted service keeps", "Contributing", "No lock-in", "What's paid and what's free"],
-    excerpt: "What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server and console you can self-host, the small commercial enterprise edition, and what the hosted…",
+    excerpt: "What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps.",
   },
   {
     title: "Connecting your orchestrator (MCP / A2A / REST / AG-UI)",

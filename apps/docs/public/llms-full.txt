@@ -4570,7 +4570,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/open-source
 
 ---
 title: Open source & licensing
-description: What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server and console you can self-host, the small commercial enterprise edition, and what the hosted service keeps to itself.
+description: What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps.
 ---
 
 # Open source & licensing
