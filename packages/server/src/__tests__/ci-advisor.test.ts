@@ -116,6 +116,27 @@ describe('adviseCi', () => {
     expect(slowSteps(jobs.slice(0, 2))).toEqual([])
   })
 
+  it('treats the one-job runners of one label as one runner', () => {
+    const oneJob = (i: number, over: Partial<AdvisorJob> = {}) => job({ runnerName: `aw-tsumagoi-10220${String(i).padStart(5, '0')}-${100 + i}`, ...over })
+    // Six one-job runners of aw-tsumagoi: one busy runner, not six.
+    const queued = Array.from({ length: 6 }, (_, i) => oneJob(i, { queueSeconds: 20 * 60 }))
+    expect(adviseCi(base({ jobs: queued })).find((a) => a.id === `single_runner_busy:${REPO}`)).toMatchObject({ runner: 'aw-tsumagoi' })
+    // The infra share names the label, not one throwaway runner.
+    const infra = [...Array.from({ length: 8 }, (_, i) => oneJob(i)), oneJob(8, { ciKind: 'runner_lost', infra: true }), oneJob(9, { ciKind: 'runner_lost', infra: true })]
+    const share = adviseCi(base({ jobs: infra })).find((x) => x.id === 'infra_share')!
+    expect(share.runner).toBe('aw-tsumagoi')
+    expect(share.evidence).toContain('most on aw-tsumagoi (2)')
+    // One unknown_runner per label, from the first time any of its runners appeared.
+    const runners = [0, 1, 2].map((i) => ({ repo: REPO, name: `aw-tsumagoi-10220${i}3316-16${i}`, kind: 'self_hosted' as const, labels: ['self-hosted'], firstSeenAt: ago(DAY - i * 60) }))
+    const unknown = adviseCi(base({ runners, repoWatchedSince: { [REPO]: ago(20 * DAY) } })).filter((a) => a.id.startsWith('unknown_runner'))
+    expect(unknown).toHaveLength(1)
+    expect(unknown[0]).toMatchObject({ id: `unknown_runner:${REPO}:aw-tsumagoi`, runner: 'aw-tsumagoi', evidence: expect.stringContaining(`First seen ${ago(DAY)}`) })
+    // Memory samples from one-job runners fold too.
+    const samples = [0, 1].map((i) => ({ hostId: 'h1', runnerName: `aw-tsumagoi-10220${i}3316-16${i}`, repo: REPO, at: ago(60), memPeakMb: 4000, memMaxMb: 4096, oomKills: 1 }))
+    const ooms = adviseCi(base({ samples })).filter((a) => a.id.startsWith('oom_kill'))
+    expect(ooms).toEqual([expect.objectContaining({ id: 'oom_kill:h1:aw-tsumagoi', evidence: expect.stringContaining('2 OOM kills on aw-tsumagoi') })])
+  })
+
   describe('security', () => {
     it('flags a runner named like the Shai-Hulud backdoor, from the runner list or a job', () => {
       const fromList = adviseCi(base({ runners: [{ repo: REPO, name: 'SHA1HULUD', kind: 'self_hosted', labels: ['self-hosted'], firstSeenAt: ago(60) }] }))
@@ -302,5 +323,16 @@ describe('buildCiOverview', () => {
     }), opts)
     expect(o.runners).toHaveLength(1)
     expect(o.runners[0]).toMatchObject({ name: 'mushi-nuc', status: 'online', busy: true, hostId: 'c'.repeat(64), jobs24h: 2 })
+    expect(o.stats.byRunner).toEqual([expect.objectContaining({ runner: 'mushi-nuc', jobs: 2 })])
+  })
+
+  it('folds date-stamped one-job runners (<label>-<MMDDhhmmss>-<suffix>) in runners and byRunner', () => {
+    const names = ['aw-tsumagoi-1022003316-163', 'aw-tsumagoi-1022011144-356', 'aw-tsumagoi-1022020000-7']
+    const o = buildCiOverview(rows({
+      finished: [...names.map((name) => row({ runner_name: name })), row({ runner_name: 'alienware-glot-1' })],
+      runners: names.map((name, i) => ({ project_id: P1, repo: REPO, runner_name: name, status: 'offline' as const, busy: i === 2, labels: ['self-hosted'], kind: 'self_hosted' as const, first_seen_at: ago(60), last_job_at: ago(5 + i) })),
+    }), opts)
+    expect(o.runners).toEqual([expect.objectContaining({ name: 'aw-tsumagoi', busy: true, jobs24h: 3, lastJobAt: ago(5) })])
+    expect(o.stats.byRunner.map((r) => [r.runner, r.jobs])).toEqual([['aw-tsumagoi', 3], ['alienware-glot-1', 1]])
   })
 })

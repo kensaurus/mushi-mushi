@@ -1,7 +1,8 @@
 /**
  * FILE: apps/admin/src/components/ci/CiTimeline.tsx
  * PURPOSE: Per-runner timeline on /ci: one lane per runner (busiest first)
- *          and "No runner yet" last, over the last 2 h / 6 h / 24 h. Each job
+ *          and "No runner yet" last, over the last 2 h / 6 h / 24 h; GitHub's
+ *          machines and one-job runner families share packed lanes. Each job
  *          is a bar: a hatched segment for the wait for a machine, a solid
  *          segment for the run, coloured by outcome with a glyph so it never
  *          reads by colour alone. Bars are buttons: hover or focus shows the
@@ -153,10 +154,13 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
             <ul className="flex flex-col gap-1" aria-label="Jobs per runner">
               {timeline.lanes.map((lane) => (
                 <li key={lane.id} className="flex items-center gap-2" data-testid={`ci-timeline-lane-${lane.label}`}>
-                  <span className={`flex w-34 shrink-0 items-center gap-1.5 text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`} title={lane.label}>
+                  <span
+                    className={`flex w-34 shrink-0 items-center gap-1.5 text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
+                    title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
+                  >
                     {lane.unassigned ? (
                       <IconClock size={12} className="shrink-0" />
-                    ) : lane.id.startsWith('github:') ? (
+                    ) : lane.kind === 'github' ? (
                       <IconCloud size={12} className="shrink-0" />
                     ) : (
                       <IconServer size={12} className="shrink-0" />
