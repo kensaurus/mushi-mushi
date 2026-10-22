@@ -80,7 +80,8 @@ export const PDCA_DEFAULT_MODEL = 'claude-sonnet-5-5'
 export const MODEL_OPTIONS = [
   { value: PDCA_DEFAULT_MODEL, label: 'Claude Sonnet 5.5 (default)' },
   { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (fastest)' },
+  { value: 'claude-fable-5-1', label: 'Claude Fable 5.1 (most capable)' },
+  { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)' },
 ] as const
 
 function scoreTone(pct: number): 'ok' | 'warn' | 'danger' {

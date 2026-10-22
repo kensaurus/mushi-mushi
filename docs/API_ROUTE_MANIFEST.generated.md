@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-22 · **726** routes.
+> Generated: 2026-10-22 · **727** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 190 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 368 |
+| `jwtAuth` | 369 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -63,6 +63,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/:provider/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/anthropic/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/anthropic-models.ts` |
 | DELETE | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

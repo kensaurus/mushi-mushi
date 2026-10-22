@@ -67,6 +67,7 @@
     "GET /v1/admin/billing/stats": {"mcp": ["get_usage"], "cli": ["billing cap", "budgets show", "usage"]},
     "GET /v1/admin/byok/browserbase": {"allow": "jwt-only"},
     "GET /v1/admin/byok/credits": {"allow": "parity-debt"},
+    "GET /v1/admin/byok/anthropic/models": {"allow": "jwt-only", "note": "The settings model pickers (ADR 0039): Anthropic GET /v1/models for the key the app's LLM calls use, cached an hour; the console falls back to its built-in list. A key never leaves the server."},
     "GET /v1/admin/byok/cursor/models": {"allow": "jwt-only", "note": "The review follow-up model picker (ADR 0032): Cursor GET /v1/models for one key, or for the key the app would use. Another app's key needs an organization owner or admin. The Run in the cloud card reads the app key's list through GET /v1/admin/integrations/cursor/models."},
     "GET /v1/admin/byok/firecrawl": {"allow": "jwt-only"},
     "GET /v1/admin/byok/keys": {"mcp": ["list_byok_keys"], "cli": ["keys list"]},

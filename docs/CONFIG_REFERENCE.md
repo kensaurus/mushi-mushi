@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-10-21._
+_120 configuration knobs across 19 sections · last regenerated 2026-10-22._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -125,6 +125,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-opus-5-5`. The diagnosis reads code and logs to find a root cause: the agentic coding and knowledge work Opus 5.5 is built for, and Anthropic suggests starting most workloads there. It costs about twice Sonnet 5.5 ($4 / $20 against $2 / $10 per million tokens), once per report that reaches diagnosis. Sources: [Anthropic: Models overview](https://platform.claude.com/docs/en/models/overview), [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.stage2_model` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
 
 **When to change** — Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
@@ -141,7 +143,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **How it works** — Stage 1 reads each new report, filters spam and test noise, and sorts the easy bugs. Only reports it is unsure about go on to the triage model. Haiku 4.5 is the default; Haiku 5.5 costs a tenth as much per token. Only Claude models are accepted, because Stage 1 calls Claude first and OpenAI only as a fallback.
 
-**Default** — `claude-haiku-4-5-20251001`
+**Default** — `claude-haiku-4-5 (stored as claude-haiku-4-5-20251001, the same model)`
+
+**Recommended** — `claude-haiku-5-5`. The quick check sorts every report: high-volume classification, which Anthropic positions Haiku for. Haiku 5.5 costs a tenth of Haiku 4.5 ($0.10 / $0.50 against $1 / $5 per million tokens). Sources: [Anthropic: Models overview](https://platform.claude.com/docs/en/models/overview), [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.stage1_model` · endpoint `PATCH /v1/admin/settings` · read by `fast-filter edge function`
 
@@ -161,6 +165,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-sonnet-5-5`. Never the model it grades: judges score text they find more probable higher (self-preference). With diagnosis on Opus 5.5, Sonnet 5.5 grades it from outside at half the price. Sources: [Adaline: LLM-as-a-judge reliability and bias (2026-04-08)](https://www.adaline.ai/blog/llm-as-a-judge-reliability-bias), [Future AGI: Evaluating LLM judge bias mitigation (2026)](https://futureagi.com/blog/evaluating-llm-judge-bias-mitigation-2026/) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.judge_model` · endpoint `PATCH /v1/admin/settings` · read by `judge-batch edge function`
 
 **When to change** — Pick Haiku 5.5 when cost matters more than an independent second opinion.
@@ -179,6 +185,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `claude-sonnet-5-5`
 
+**Recommended** — `claude-opus-5-5`. Writing a fix is agentic coding, which Anthropic recommends Opus 5.5 for. A fix that fails review costs another run, so the stronger model is usually cheaper per merged fix. Sources: [Anthropic: Choosing a model](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.claude_default_model` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
 
 **When to change** — Pick Haiku 5.5 when fixes are the bulk of your AI spend; review its draft pull requests a little more closely.
@@ -196,6 +204,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold; a project member can merge anyway from the console with a reason. New commits are reviewed again, and the last verdict applies until that review finishes. Without an Anthropic key the review is skipped and the fix shows "Review skipped". A review usually costs $0.05 to $0.20 on your key, at most about $0.90 with retries.
 
 **Default** — `true (on; needs an Anthropic key)`
+
+**Recommended** — `on`. On 2026-10-21 the review said hold on 41% of agent PRs and fix first on 32%; without it those would reach merge on a green CI alone. Sources: [ADR 0035: verified fixes (live data, 2026-10-21)](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md), [ADR 0030: agent PR review gate](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0030-agent-pr-review-gate.md) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.agent_pr_review_enabled` · endpoint `PATCH /v1/admin/settings` · read by `agent-pr-review edge function`, `POST /v1/admin/fixes/:id/merge (the hold gate reads fix_reviews)`
 
@@ -387,6 +397,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `5` · range `1 – 50`
 
+**Recommended** — `5`. Each scraped page costs one Firecrawl credit ($0.001 to $0.005 by plan), and the first few results carry most of the signal. Raise it only when answers cite pages the search missed. Sources: [Firecrawl: Pricing (1 credit per scraped page)](https://www.firecrawl.dev/pricing) (read 2026-10-22).
+
 **Where it lives** — table `project_settings.firecrawl_max_pages_per_call` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl.ts firecrawlSearch (api Research search, fix-worker)`, `fix-worker edge function`
 
 **When to change** — Raise to 10–15 when fix-augmentation is consistently hitting the cap and the judge isn't getting enough context. Lower to 2–3 once your Firecrawl bill becomes the noisy line item.
@@ -402,6 +414,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as "Others who hit this". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.
 
 **Default** — `false (nothing is sent)`
+
+**Recommended** — `off for apps whose error messages can hold personal data; on otherwise`. It sends the scrubbed error message to a third party. Data minimisation says send only what the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.known_issues_search_enabled` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function (_shared/known-issues.ts)`, `POST /v1/admin/reports/:id/known-issues (Search again)`, `fix-worker edge function (web search for fix context)`
 
@@ -485,6 +499,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `SDK send-only (report:write only)`
 
+**Recommended** — `report:write only for SDK keys`. A key in an app bundle can be read by anyone. Least privilege: give it only what it must do, which for the SDK is sending reports. Sources: [NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)](https://csrc.nist.gov/glossary/term/least_privilege) (read 2026-10-22).
+
 **Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`, `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.
@@ -532,6 +548,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — Mutating MCP tools (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.
 
 **Default** — `disabled by default`
+
+**Recommended** — `off unless the agent must change things`. Least privilege: an editor agent that only reads bugs needs mcp:read; add mcp:write when it should triage, dispatch or merge. Sources: [NIST CSRC glossary: least privilege (SP 800-53 Rev. 5)](https://csrc.nist.gov/glossary/term/least_privilege) (read 2026-10-22).
 
 **Where it lives** — table `project_api_keys.scopes (text[])` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
 
@@ -1067,6 +1085,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `3600 (1 hour)` · range `60 – 604800 (7 days)`
 
+**Recommended** — `3600 (1 hour) or less`. A signed link works for anyone who holds it until it expires, so keep it as short as your viewers need. AWS caps console-made links at 12 hours and SDK-made ones at 7 days. Sources: [AWS: Presigned URLs (expiration, bearer tokens)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html) (read 2026-10-22).
+
 **Where it lives** — table `project_storage_settings.signed_url_ttl_secs` · endpoint `PUT /v1/admin/storage/:projectId` · read by `_shared/storage.ts adapter (every signed URL it mints)`
 
 **When to change** — Drop to 5–15 minutes for high-sensitivity data. Bump up to a day if your team works asynchronously and copies links into long-running threads.
@@ -1153,6 +1173,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `365 (1 year)`
 
+**Recommended** — `365`. A year covers regression checks on the same bug; storage limitation says keep personal data no longer than the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
+
 **Where it lives** — table `project_retention_policies.reports_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`, `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
 **When to change** — Lower to 90 for GDPR-tight projects. Raise to 730+ for regulated industries that need multi-year audit history.
@@ -1168,6 +1190,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — Independent of the reports retention. The nightly `mushi_apply_retention()` cron deletes `audit_logs` rows older than this window unless the project is on legal hold. Most regulators want 1–7 years of audit even on 90-day data.
 
 **Default** — `730 (2 years)`
+
+**Recommended** — `730 (never below 365)`. Audit trails are what an incident review and an assessor read. PCI DSS 10.5.1 asks for at least 12 months of history with the last 3 months immediately available. Sources: [AWS PCI DSS maturity model: requirement 10.5.1](https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/) (read 2026-10-22).
 
 **Where it lives** — table `project_retention_policies.audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`, `soc2-evidence edge function`
 
@@ -1185,6 +1209,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `365 (1 year)`
 
+**Recommended** — `365 (never below)`. This is a security audit log of AI-key changes, the trail an incident review reads. PCI DSS 10.5.1 asks for at least 12 months of audit history with the last 3 months immediately available. Sources: [AWS PCI DSS maturity model: requirement 10.5.1](https://pci-maturitymodel.security.aws.dev/en/recommendation/r10.2/) (read 2026-10-22).
+
 **Where it lives** — table `project_retention_policies.byok_audit_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `mushi-soc2-retention-sweep cron (mushi_apply_retention)`
 
 **When to change** — Keep it at least as long as your audit log retention, so you can still show who changed an AI key during an audit window.
@@ -1200,6 +1226,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — The nightly retention-sweep deletes this project’s LLM call records (llm_invocations) older than this many days, once a retention policy is saved for the project. Projects with no saved policy keep their records. At least 35 days are always kept, because the AI budget, the auto-fix spend limit and billing read the last 30 days of these records. A legal hold stops the deletes.
 
 **Default** — `90`
+
+**Recommended** — `90`. LLM call records hold prompts built from bug reports, which can include personal data. Storage limitation favours the shortest window your cost and quality reviews need. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
 **Where it lives** — table `project_retention_policies.llm_traces_retention_days` · endpoint `PUT /v1/admin/compliance/retention/{projectId}` · read by `retention-sweep edge function`
 
@@ -1336,6 +1364,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — A weighted random pick (`prompt-ab.ts`) routes each request to a prompt version based on its `traffic_percentage`. The percentages should sum to 100 across active versions of a stage; the helper normalises if they don't. Live changes apply within seconds — no deploy required.
 
 **Default** — `0% on new versions`
+
+**Recommended** — `5% first, then raise`. Canary a new prompt on a small share of traffic and compare before raising it. The Google SRE Workbook works through a 5% canary population as its example. Sources: [Google SRE Workbook: Canarying releases](https://sre.google/workbook/canarying-releases/) (read 2026-10-22).
 
 **Where it lives** — table `prompt_versions.traffic_percentage` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `_shared/prompt-ab.ts (fast-filter, classify-report, fix-worker, judge-batch and other LLM stages)`
 
@@ -1801,6 +1831,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on (headers/timing only)`
 
+**Recommended** — `on, headers and timing only`. Request and response bodies are where passwords, tokens and personal data travel. Sentry keeps bodies opt-in for the same reason. Sources: [Sentry: Session Replay privacy](https://docs.sentry.io/platforms/javascript/session-replay/privacy/) (read 2026-10-22).
+
 **When to change** — Disable on apps with PII-laden API traffic (medical, financial). Enable bodies temporarily when investigating a hard-to-repro API bug.
 
 ### Capture performance
@@ -1843,6 +1875,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `on-report`
 
+**Recommended** — `on-report`. Capture a screenshot only when someone files a report, not continuously. Data minimisation: collect what the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
+
 **When to change** — Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.
 
 ### Screenshot privacy caption
@@ -1856,6 +1890,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **How it works** — When on, the widget shows the preview the reporter is about to send plus a privacy caption so they can redact or drop it first. Leave the custom box empty to use the SDK's localized default copy, type your own to override it, or turn the caption off entirely. Surfaces as `widget.screenshotSensitiveHint` in GET /v1/sdk/config and is honored by both the web and React Native widgets.
 
 **Default** — `on (default caption)`
+
+**Recommended** — `on`. The caption reminds the reporter to remove anything private before sending, which keeps capture on for apps with sensitive screens. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
 **Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `api edge function (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
 
