@@ -59,7 +59,10 @@ overrides:
   'next@>=16.0.0 <16.2.11': '>=16.2.11'
   'find-my-way@<=9.6.0': '>=9.7.0'
   'devalue@<5.8.1': '>=5.8.1'
-  'hono@<4.12.25': '>=4.12.25'
+  # GHSA-5r4p-p66f-jhc7 (serveStatic double-decode) is fixed in 4.13.11.
+  # The applied floor is package.json#pnpm.overrides; this dormant selector
+  # stays at the same floor so activating this block cannot reinstall 4.13.7.
+  'hono@<4.13.11': '>=4.13.11 <5'
   'ip-address@<=10.3.0': '>=10.3.1'
   'fast-uri@<3.1.6': '>=3.1.6 <4'
   'ajv>fast-uri': '4.1.3'
