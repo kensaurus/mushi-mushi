@@ -1,5 +1,11 @@
 # @mushi-mushi/core
 
+## 1.33.2
+
+### Patch Changes
+
+- a546d41: Read `import.meta.env` through a local `ImportMeta` type. Vite, Next, Nuxt, and Expo variable resolution is unchanged.
+
 ## 1.33.1
 
 ### Patch Changes
