@@ -575,7 +575,7 @@ Async UX & reliability:
 | Sliding pill / layoutId indicator | `MicroSegmentedTrack` or `MotionSegmentedControl` | `MotionProvider` + hook |
 | Accordion / disclosure height | `AnimatedDisclosure` (grid `0fr→1fr`, not `height:auto` spring) | `useDisclosureVariants()` |
 | Modal / palette / drawer exit | `AnimatePresence` + `useOverlayVariants()` / `useDrawerVariants()` | `useMotionTransition(overlayTween)` |
-| Banner / posture row enter | `SpringChromeEnter` | `useMotionTransition(chromeEnterSpring)` |
+| Banner / posture row enter | `SpringChromeEnter` | `useMotionTransition(bannerEnterSpring)` |
 
 **Rules:** never import raw `motion.*` without `useMotionTransition` / variant helpers; never spring `height: auto`; prefer explicit property lists over `transition-all` (baseline grep: 0 hits in `apps/admin/src` as of 2026-06).
 - `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)
