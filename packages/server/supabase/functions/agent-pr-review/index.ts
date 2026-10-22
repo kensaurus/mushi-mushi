@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * agent-pr-review — Supabase Edge Function (verify_jwt = false, internal)
  *
