@@ -72,7 +72,21 @@ apps/docs/content/**  linguist-documentation=true
 
 # --- Archive hygiene (`git archive` / `npm pack`) ----------------------------
 # Keep these out of release tarballs published to npm / GitHub.
-.github/              export-ignore
+# Archives leave out .github/ except actions/: a runner downloads
+# `uses: kensaurus/mushi-mushi/.github/actions/<name>@ref` as GitHub's archive
+# tarball, which honours export-ignore, so excluding the whole folder meant
+# fix-verify and sdk-lockfile-refresh never reached a runner ("Can't find
+# 'action.yml'", glot.it, 2026-10-22). A directory marked export-ignore drops
+# its contents whatever later lines say, so the other entries are listed.
+.github/workflows/    export-ignore
+.github/ISSUE_TEMPLATE/ export-ignore
+.github/scripts/      export-ignore
+.github/CODEOWNERS    export-ignore
+.github/FUNDING.yml   export-ignore
+.github/PULL_REQUEST_TEMPLATE.md export-ignore
+.github/ROADMAP.md    export-ignore
+.github/dependabot.yml export-ignore
+.github/labels.yml    export-ignore
 .changeset/           export-ignore
 .playwright-mcp/      export-ignore
 .cursor/              export-ignore

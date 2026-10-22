@@ -496,6 +496,39 @@ export async function fetchLatestCheckRun(
   return collapseCheckRuns(body.check_runs ?? [])
 }
 
+/**
+ * Names of the check runs that failed (failure / timed_out) on the latest
+ * commit of `gitRef` (a branch name or a SHA), with `filter=latest`. Advisory
+ * runs (Copilot review) are left out. Null when the list cannot be read.
+ * The CI-repair follow-up (ADR 0032 amendment) uses it to leave alone a
+ * check that is red on the base branch too.
+ */
+export async function fetchFailingCheckNames(
+  token: string,
+  ref: GithubRepoRef,
+  gitRef: string,
+): Promise<Set<string> | null> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${encodeURIComponent(gitRef)}/check-runs?per_page=100&filter=latest`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as { check_runs?: CheckRunLike[] } | null
+  if (!body || !Array.isArray(body.check_runs)) return null
+  return new Set(
+    body.check_runs
+      .filter((r) => !isAdvisoryCheckRun(r) && (r.conclusion === 'failure' || r.conclusion === 'timed_out'))
+      .map((r) => String(r.name ?? ''))
+      .filter(Boolean),
+  )
+}
+
 export interface CheckRunLike {
   name?: string | null
   status: string | null
