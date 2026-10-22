@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-22 · **727** routes.
+> Generated: 2026-10-22 · **731** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 190 |
+| `adminOrApiKey` | 192 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 369 |
+| `jwtAuth` | 371 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -408,6 +408,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/verify-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/verify.ts` |
 | GET | `/v1/admin/projects/:id/verify-workflow` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/verify.ts` |
 | POST | `/v1/admin/projects/:id/verify-workflow/pr` | `jwtAuth` | `packages/server/supabase/functions/api/routes/verify.ts` |
+| GET | `/v1/admin/projects/:id/vulnerabilities` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
+| PATCH | `/v1/admin/projects/:id/vulnerabilities/groups` | `jwtAuth` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
+| POST | `/v1/admin/projects/:id/vulnerabilities/scan` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
+| PUT | `/v1/admin/projects/:id/vulnerabilities/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/vulnerabilities.ts` |
 | POST | `/v1/admin/projects/:pid/content-quality/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/admin/projects/:pid/gate-findings/:id/dismiss` | `jwtAuth` | `packages/server/supabase/functions/api/routes/gate-finding-dismiss.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `public` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

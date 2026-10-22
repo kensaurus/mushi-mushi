@@ -12,7 +12,7 @@
  *          manifest and the surface-parity check keep reading them.
  *
  *          Routes here: CI runners and placement (Plan 022), inventory, Ask Mushi,
- *          verified fixes (Plan 024).
+ *          verified fixes (Plan 024), known holes in dependencies (ADR 0038).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -32,6 +32,7 @@ import { registerAnthropicModelRoutes } from '../api/routes/anthropic-models.ts'
 import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
 import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
 import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
+import { registerVulnerabilityRoutes } from '../api/routes/vulnerabilities.ts'
 
 ensureSentry('api-ext')
 
@@ -53,6 +54,7 @@ registerAnthropicModelRoutes(app)
 registerQaCoverageRoutes(app)
 registerFullstackAuditRoutes(app)
 registerUxRunsRoutes(app)
+registerVulnerabilityRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

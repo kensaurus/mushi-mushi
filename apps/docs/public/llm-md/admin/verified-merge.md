@@ -30,7 +30,7 @@ from zero. The fix card in the console shows the list, and so does
 | **Opus review** | The [Opus review](/concepts/agent-pr-review) of this commit says `merge` | Read the findings. `fix_first` and `hold` block. |
 | **CI** | Every check on the commit is green | A stopped test machine counts as waiting, never as a pass ([CI runners](/operating/ci-runners)). |
 | **Test proves the fix** | The **Mushi verify** check says `fail_to_pass` | Add the workflow below, or ask the agent for a test that reproduces the bug. |
-| **No tests weakened** | No test file deleted, no assertions removed, no `.skip`, `.only`, `@ts-ignore` or `eslint-disable` added, no CI config or lockfile changed, no big snapshot update | Undo the change to the test, or merge it yourself. |
+| **No tests weakened** | No test file deleted, no assertions removed, no `.skip`, `.only`, `@ts-ignore` or `eslint-disable` added, no CI config changed, no big snapshot update. A lockfile may change only for a dependency report, beside the manifest it comes from (`package.json` for `package-lock.json`…); for a [known-hole](../concepts/known-holes) report that manifest change must name the package | Undo the change to the test, or merge it yourself. |
 | **Small change** | At most 3 source files and 150 changed lines (you can raise both) | A big change needs a person. |
 | **Second review** | A model from another family (OpenAI or OpenRouter, on your own key) says `merge` | It runs only after the other five pass. Without a key it reads **unavailable** and blocks automatic merge. |
 

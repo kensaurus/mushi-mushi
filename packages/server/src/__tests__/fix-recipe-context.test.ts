@@ -20,7 +20,7 @@ import {
   RECENT_OBSERVATIONS,
   tablesNamedIn,
 } from '../../supabase/functions/_shared/fix-recipe-context.ts'
-import { RADAR_CI_GATE, RADAR_GATE } from '../../supabase/functions/_shared/radar/run.ts'
+import { RADAR_CI_GATE, RADAR_GATE, RADAR_VULN_GATE } from '../../supabase/functions/_shared/radar/run.ts'
 import type { FixRecipeContext } from '../../supabase/functions/_shared/recipe-types.ts'
 
 const bytes = (v: unknown) => new TextEncoder().encode(typeof v === 'string' ? v : JSON.stringify(v)).length
@@ -234,8 +234,8 @@ describe('buildRadarContext', () => {
     expect(r.note).toContain('not counted as passing')
   })
 
-  it('reads the same two gates as radar/run.ts', () => {
-    expect([...RADAR_GATES]).toEqual([RADAR_GATE, RADAR_CI_GATE])
+  it('reads the same three gates as radar/run.ts', () => {
+    expect([...RADAR_GATES]).toEqual([RADAR_GATE, RADAR_CI_GATE, RADAR_VULN_GATE])
   })
 })
 

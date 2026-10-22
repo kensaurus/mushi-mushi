@@ -86,7 +86,8 @@ import {
   autoMergeDecision,
   ciFailedOnMerge,
   evaluateVerification,
-  isDependencyReport,
+  lockfileAllowance,
+  type DependencyReportLike,
   isVerificationFinal,
   pickVerifyBatch,
   readSecondJudge,
@@ -142,7 +143,7 @@ const NEW_REPORTS_SCAN = 50
 
 const ATTEMPT_COLUMNS = 'id, project_id, report_id, agent, status, pr_url, pr_number, pr_state, merged_at, commit_sha, branch, repo_id, ci_infra, summary'
 const REVIEW_COLUMNS = 'fix_attempt_id, status, verdict, head_sha, reviewed_at, skip_reason, error'
-const REPORT_COLUMNS = 'id, status, summary, description, category, severity, component, reproduction_steps, stage2_analysis'
+const REPORT_COLUMNS = 'id, status, source, summary, description, category, severity, component, reproduction_steps, stage2_analysis, environment'
 
 interface AttemptRow {
   id: string
@@ -547,6 +548,7 @@ export async function verifyOne(ctx: RunContext, candidate: Candidate): Promise<
       report = (data as Record<string, unknown> | null) ?? null
     }
     const files: PrFile[] = (listed?.files ?? []).map((f) => ({ ...f, previous_filename: f.previousFilename ?? null }))
+    const lockfiles = lockfileAllowance(files, report as DependencyReportLike | null)
     const reviewInput = {
       status: review.status,
       verdict: review.verdict,
@@ -563,7 +565,8 @@ export async function verifyOne(ctx: RunContext, candidate: Candidate): Promise<
       files,
       filesComplete: listed ? listed.complete : false,
       settings,
-      allowLockfiles: isDependencyReport(report as { summary?: string; description?: string; component?: string } | null),
+      allowLockfiles: lockfiles.allowed,
+      lockfileReason: lockfiles.reason,
       now,
     }
     let evaluation = evaluateVerification({ ...base, secondJudge: stored ? { kind: 'result', record: stored } : null })
