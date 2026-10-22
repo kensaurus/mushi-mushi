@@ -172,6 +172,27 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
+  it('does not report a gateway upstream request timeout (MUSHI-cd3477a9)', async () => {
+    const err = new ProjectAccessReadError('project_members', {
+      message: 'upstream request timeout',
+      code: '',
+    })
+    expect(err.transient).toBe(true)
+    expect(err.message).toBe('project access read failed (project_members): upstream request timeout')
+    const res = sentryHonoErrorHandler(
+      err,
+      fakeContext('/api/v1/admin/onboarding/stats', 'GET', { requestId: '95b19469-968' }) as never,
+    )
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: { code: string; message: string; requestId?: string } }
+    expect(body.error.code).toBe('DB_ERROR')
+    expect(body.error.requestId).toBe('95b19469-968')
+    const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
+    expect(payload.event).toBe('db_transient_error')
+    expect(payload.path).toBe('/api/v1/admin/onboarding/stats')
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
   it('still returns 500 internal for a project-access failure that is a real query error', async () => {
     const err = new ProjectAccessReadError('organization_members', {
       message: 'column "user_id" does not exist',

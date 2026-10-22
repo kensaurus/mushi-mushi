@@ -30,6 +30,28 @@ describe('isTransientDbConnectionError', () => {
     assertEquals(isTransientDbConnectionError(err), true)
   })
 
+  it('gateway "upstream request timeout" (no SQLSTATE) is transient (MUSHI-cd3477a9)', () => {
+    // Kong/Envoy plain-text or JSON body when PostgREST does not answer in
+    // time. The project_members read on GET /v1/admin/onboarding/stats threw
+    // this and Sentry filed it because only "upstream connect error" matched.
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '' }), true)
+    // A real SQLSTATE still wins, including a statement timeout.
+    assertEquals(
+      isTransientDbConnectionError({ message: 'upstream request timeout', code: '57014' }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({ message: 'upstream request timeout', code: 'P0001' }),
+      false,
+    )
+    // A nearby sentence is not the gateway body.
+    assertEquals(
+      isTransientDbConnectionError({ message: 'request timeout while calling the provider', code: null }),
+      false,
+    )
+  })
+
   it('SERVER-1M: Cloudflare 522 origin-timeout HTML page is transient', () => {
     const err = {
       message:
