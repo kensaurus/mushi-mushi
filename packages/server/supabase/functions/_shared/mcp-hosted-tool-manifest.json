@@ -460,6 +460,13 @@
     "path": "/v1/admin/ci/overview?project_id={projectId}&days={days|7}&refresh={refresh}",
     "hints": { "destructive": false, "idempotent": true }
   },
+  "get_ci_costs": {
+    "scope": "mcp:read",
+    "description": "What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, included minutes, speed factors, what-ifs and advice (estimated).",
+    "method": "GET",
+    "path": "/v1/admin/ci/compare?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "get_fix_verification": {
     "scope": "mcp:read",
     "description": "Merge checks for a fix's current PR head: Opus review, CI, fail-to-pass proof, weakened tests, size, second review; automatic merge state and regressions.",
