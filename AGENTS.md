@@ -38,6 +38,8 @@ Portfolio and radar features never lead a public surface; the claim is
 
 The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
 
+**Engineering yardstick** ([ADR 0039](./docs/adr/0039-better-models-make-mushi-better.md)). Before you build or change a feature, ask: *"When the models get better, does this get better on its own?"* The model is a setting, never a constant (project or organization column → edge secret → code default). Facts and safety (advisory matching, merge gates, test proof, budgets, permissions) are deterministic code; judgement (diagnosis, fix plans, review) goes to the model. Feed the model evidence, not prompt workarounds, and store outcomes per model so "better" shows.
+
 **Decision memory.** Before proposing a change to architecture, dependencies, conventions, positioning, or testing posture, read [`docs/adr/INDEX.md`](./docs/adr/INDEX.md). Do not contradict an Accepted ADR silently — surface it, cite the ADR, and ask. A reversal produces a superseding ADR, by the human, on purpose. New decisions that meet the bar in the index land as an ADR in the same PR.
 
 **Parked work.** Read [`docs/BACKLOG.md`](./docs/BACKLOG.md) before planning. New parked work adds a `BL-` row in the same PR.

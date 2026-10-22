@@ -56,7 +56,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
-import { isClaudeRefusal } from '../_shared/claude-request.ts'
+import { isClaudeRefusal, resolveClaudeModel } from '../_shared/claude-request.ts'
 import { estimateCallCostUsd } from '../_shared/pricing.ts'
 import { recordLlmUsage, extractLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
@@ -180,6 +180,8 @@ export interface ReviewDeps {
   fetchPr?: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   fetchFiles?: (token: string, ref: GithubRepoRef, n: number) => Promise<{ files: PullRequestFile[]; complete: boolean } | null>
   callModel?: (input: ModelCallInput) => Promise<ModelCallResult>
+  /** The platform reviewer model (env `AGENT_PR_REVIEW_MODEL`); tests pin it. */
+  platformModel?: string | null
   upsertComment?: (
     token: string,
     ref: GithubRepoRef,
@@ -230,6 +232,41 @@ export interface ReviewRunOptions {
 async function defaultResolveGithubToken(db: SupabaseClient, attempt: AttemptRow): Promise<string | null> {
   const installationId = await installationIdForAttempt(db, attempt)
   return resolveProjectGithubToken(db, attempt.project_id, installationId)
+}
+
+/**
+ * The reviewer model: the project's `agent_pr_review_model`, else the
+ * platform's `AGENT_PR_REVIEW_MODEL` env, else the code default. A better
+ * Claude model is a setting away, never a deploy. Retired ids map back to the
+ * default (`resolveClaudeModel`), and a non-Claude id does too: the review
+ * always runs on the project's Anthropic key.
+ *
+ * @internal Exported for tests only.
+ */
+export function pickReviewModel(projectModel: string | null | undefined, platformModel: string | null | undefined): string {
+  const chosen = (projectModel ?? '').trim() || (platformModel ?? '').trim()
+  const resolved = resolveClaudeModel(chosen, AGENT_PR_REVIEW_MODEL)
+  return /^claude-/.test(resolved) ? resolved : AGENT_PR_REVIEW_MODEL
+}
+
+/**
+ * Whether reviews are on and which model the project chose. A failed read
+ * reviews on the default (the switch defaults to true). Before migration
+ * 20261022021555 adds `agent_pr_review_model`, naming it fails the read, so it
+ * is read again without it: a project that turned reviews off stays off.
+ *
+ * @internal Exported for tests only.
+ */
+export async function readReviewSettings(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ enabled: boolean; model: string | null }> {
+  const read = (columns: string) =>
+    db.from('project_settings').select(columns).eq('project_id', projectId).maybeSingle()
+  let { data, error } = await read('agent_pr_review_enabled, agent_pr_review_model')
+  if (error) ({ data, error } = await read('agent_pr_review_enabled'))
+  const row = (data as { agent_pr_review_enabled?: boolean | null; agent_pr_review_model?: string | null } | null) ?? null
+  return { enabled: row?.agent_pr_review_enabled !== false, model: row?.agent_pr_review_model ?? null }
 }
 
 async function defaultCallModel(input: ModelCallInput): Promise<ModelCallResult> {
@@ -476,14 +513,12 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   }
 
   // Default on: a missing row or a failed read reviews (the column defaults to true).
-  const { data: settings } = await db
-    .from('project_settings')
-    .select('agent_pr_review_enabled')
-    .eq('project_id', attempt.project_id)
-    .maybeSingle()
-  if ((settings as { agent_pr_review_enabled?: boolean | null } | null)?.agent_pr_review_enabled === false) {
-    return finishSkipped(attempt, 'review_off')
-  }
+  const settings = await readReviewSettings(db, attempt.project_id)
+  if (!settings.enabled) return finishSkipped(attempt, 'review_off')
+  const reviewModel = pickReviewModel(
+    settings.model,
+    deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
+  )
 
   let key: ResolvedKey | null
   try {
@@ -538,7 +573,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     stage: 'pr_review',
     projectId: attempt.project_id,
     reportId: attempt.report_id,
-    model: AGENT_PR_REVIEW_MODEL,
+    model: reviewModel,
     keySource: key.source,
     startedAt: Date.now(),
   } as const
@@ -546,7 +581,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   try {
     result = await (deps.callModel ?? defaultCallModel)({
       apiKey: key.key,
-      model: AGENT_PR_REVIEW_MODEL,
+      model: reviewModel,
       system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
       prompt,
       abortSignal: AbortSignal.timeout(REVIEW_CALL_TIMEOUT_MS + 5_000),
@@ -586,7 +621,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     sourceOmitted: diff.sourceOmitted.length > 0,
     fileListIncomplete: diff.fileListIncomplete,
   })
-  const model = servedModel(result, AGENT_PR_REVIEW_MODEL)
+  const model = servedModel(result, reviewModel)
   const tokens = extractLlmUsage(result)
   const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
 
