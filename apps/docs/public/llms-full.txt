@@ -3036,6 +3036,7 @@ checks** on the Recipe page:
 | No keys left unused for 90 days | A Mushi SDK key or a stored provider key nobody used in 90 days. Console and MCP keys are not judged, because Mushi does not record every use of them. |
 | Paid features can be switched off | A feature that costs money per use with no kill switch, or AI spend with no paid feature declared. Reads `spend.paidFeatures`. |
 | AI providers have a spending limit | OpenAI or Anthropic used by this app with no monthly limit declared, or spend at 80% of the declared limit. Mushi cannot cap your own provider keys; only the provider can. Reads `spend.providerLimits`. |
+| Spend-down is not idle | A Cursor key with spend-down on, inside its window, that dispatched nothing: no app uses it, auto-fix is off, or every open report is already settled. |
 
 A check with nothing to look at says **Not checked**. It is never shown as passing.
 

@@ -8,7 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
-- **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028.
+- **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
@@ -16,7 +16,7 @@ parked work is visible in one place.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
 - **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 54 · **Recently closed:** 22 (BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 53 · **Recently closed:** 23 (BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -25,7 +25,7 @@ parked work is visible in one place.
 | tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 6 |
-| unfinished-feature | 10 |
+| unfinished-feature | 9 |
 | needs-triage | 1 |
 
 | Status | Open |
@@ -109,7 +109,6 @@ parked work is visible in one place.
 | BL-083 | tech-debt | `PATH_SLICES` in `apps/admin/src/lib/navBadges.tsx` lists the nav-meta slices each route's badge and page hero read. `layoutHeroFromStats`, the route hero enrichment that also read them, had no caller and was deleted on 2026-10-17, so some entries may now fetch slices only that hero used. Audit `PATH_SLICES` against `resolveNavBadge` and drop the extra slices. This changes request behaviour, so the dead-code pass left it | relevant | low | `apps/admin/src/lib/navBadges.tsx:70`-`:76` (on `chore/housekeep-dead-code-2026-10-17`) | — |
 | BL-087 | deferred-plan-phase | Spend-down UX lane: spend an expiring Cursor key on cloud UX runs as well as fixes. Parked because the cloud UX run route is session-only (ADR 0017 approval posture); needs an owner decision on who `requested_by` is for an unattended run | relevant | low | ADR 0028 (Rejected), `api/routes/ux-cloud.ts`, plan cursor-credit-spend-down §4 step 5 | — |
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
-| BL-089 | unfinished-feature | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing (no app it is first pick for, auto-fix off, every report settled). Today only the console status line and `get_spend_down_status` say so | relevant | low | ADR 0028, `_shared/radar.ts`, plan §4 Console | — |
 | BL-090 | unfinished-feature | Cursor model picker for spend-down and Integrations, fed by Cursor's `GET /v1/models` through a new `/v1/admin/byok/cursor/models`. The console takes a free-text model spec validated by `parseCursorModelSpec` | relevant | low | `apps/admin/src/components/settings/SpendDownSection.tsx`, plan §4 Console | — |
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
@@ -132,6 +131,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |
 | BL-008 | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | 2026-10-22 | `packages/web/src/lifecycle-hooks.test.ts` covers `beforeSendFeedback` drop, modify, throw, and the 2s timeout, plus `onCrashedLastRun` (first run `null`, unclean exit `true`, `pagehide` sets `clean`, a thrown hook does not break init). `packages/cli/src/project-create.test.ts` covers `persistProjectCreate` (the `mushi project create` write step): `.env.local` merge, `.cursor/mcp.json` merge that keeps other servers and does not inline the API key, and `saveConfig` keeping `clientId` / `telemetryNoticeShown`. Plan 012 boxes in `docs/execplans/PLANS.md` are ticked. |
 | BL-065 | `firebase-analytics.test.ts` named a `firebase-analytics.signature.test.ts` that was never created | 2026-10-20 | `packages/adapters/src/__tests__/firebase-analytics.signature.test.ts` serves a local JWKS and checks the default RS256 path: a fixture-signed token with `iss` `https://accounts.google.com` or `accounts.google.com` returns 200 and calls the sink; a different key, a tampered payload, a wrong `aud`, and a project-id substring spoof return 401 `INVALID_TOKEN`; a valid signature from another issuer returns 401 `INVALID_ISS`. The unsigned cases stay in `firebase-analytics.test.ts`, which now points at this file. |
 | BL-010 | knip unresolved import: the server explore-tab test reached into `apps/admin` | 2026-10-20 | Deleted `packages/server/src/__tests__/explore-tab-navigation.test.ts`. Its three cases (knowledge maps to understand, understand defaults to ask, unknown tabs fall back to layers) now live in `apps/admin/src/lib/exploreTabNavigation.test.ts`, which imports the module locally (7 tests pass). `pnpm exec knip` reports 35 error-level issues on `152b4428` and zero unresolved imports; the default CI ceiling is `--max-issues 35`. |
