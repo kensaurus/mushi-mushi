@@ -20,12 +20,12 @@ interface RadarDetectorView {
   ruleId: string
   title: string
   prevents: string
-  /** `mushi` = read from rows Mushi already keeps (SDK heartbeats, stored keys). */
-  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi'
+  /** `mushi` = read from rows Mushi already keeps (SDK heartbeats, stored keys); `advisory_feed` = OSV.dev and the feeds (ADR 0038). */
+  source: 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi' | 'advisory_feed'
   state: DetectorState
   reason: string
   checkedAt: string | null
-  from: 'portfolio_radar' | 'portfolio_radar_ci' | null
+  from: 'portfolio_radar' | 'portfolio_radar_ci' | 'portfolio_radar_vulns' | null
   findings: RadarFindingView[]
 }
 
@@ -33,6 +33,7 @@ export interface RadarView {
   projectId: string
   checkedAt: string | null
   ciCheckedAt: string | null
+  vulnsCheckedAt: string | null
   status: 'never_run' | 'pass' | 'warn' | 'fail' | 'skipped' | 'error'
   detectors: RadarDetectorView[]
 }

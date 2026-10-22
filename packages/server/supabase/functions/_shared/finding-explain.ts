@@ -290,6 +290,7 @@ export const GATE_MEANINGS: Readonly<Record<string, { label: string; meaning: st
   env_drift: { label: 'Env drift', meaning: 'An environment variable the app declares is missing where it runs (CI or deploy).' },
   portfolio_radar: { label: 'Hole check', meaning: 'A problem no user has hit yet: an expiring domain or certificate, store listings out of sync, missing security headers, a broken privacy link.' },
   portfolio_radar_ci: { label: 'Hole check (CI)', meaning: 'A hole found by the scan your CI ran on the repo, for example an outdated store SDK target.' },
+  portfolio_radar_vulns: { label: 'Known hole in a dependency', meaning: 'A package or runtime version your app ships has a published security advisory (OSV.dev), or the runtime line no longer gets security fixes.' },
   store_review: { label: 'Store review', meaning: 'The store listing checked against the code and the live stores: claims the code contradicts, privacy labels, screenshots, length limits.' },
   radar: { label: 'Mushi setup check', meaning: 'Part of the Mushi setup itself is not working: a rejected AI key, a webhook that never arrives, no spend cap on autofix.' },
 }

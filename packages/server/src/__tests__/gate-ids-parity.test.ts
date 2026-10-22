@@ -6,6 +6,7 @@
  *   20261002130100_recipe_gate_types       restates the full list (+ 4 drift gates)
  *   20261002140100_failopen_radar_and_index_schema  appends 'radar'
  *   20261002180000_radar_gates_and_digest  appends v_add (portfolio_radar …)
+ *   20261022112045_known_vulnerabilities   appends v_add (portfolio_radar_vulns, ADR 0038)
  * and compared with the stdio `GATE_IDS`, the hosted
  * `LIST_GATE_FINDINGS_GATES`, the hosted tools/list schema generated into
  * `mcp-discovery-tools.json`, and the console `GATE_IDS` / `GATE_LABELS`.
@@ -27,7 +28,11 @@ function liveGates(): string[] {
   const digest = read('packages/server/supabase/migrations/20261002180000_radar_gates_and_digest.sql')
   const add = /v_add\s+text\[\]\s*:=\s*ARRAY\[([^\]]*)\]/.exec(digest)
   if (!add) throw new Error('digest migration no longer declares v_add')
-  return [...new Set([...quoted(check[1]), 'radar', ...quoted(add[1])])].sort()
+  const vulns = read('packages/server/supabase/migrations/20261022112045_known_vulnerabilities.sql')
+  const gateBlock = vulns.slice(vulns.indexOf('gate_runs.gate: append'))
+  const vulnAdd = /v_add\s+text\[\]\s*:=\s*ARRAY\[([^\]]*)\]/.exec(gateBlock)
+  if (!vulnAdd) throw new Error('known_vulnerabilities migration no longer declares the gate v_add')
+  return [...new Set([...quoted(check[1]), 'radar', ...quoted(add[1]), ...quoted(vulnAdd[1])])].sort()
 }
 
 function constList(rel: string, name: string): string[] {
@@ -40,8 +45,8 @@ describe('gate ids', () => {
   const live = liveGates()
 
   it('the live constraint includes radar and the hole-check gates', () => {
-    expect(live).toEqual(expect.arrayContaining(['radar', 'portfolio_radar', 'portfolio_radar_ci', 'store_review', 'code_health', 'design_drift']))
-    expect(live).toHaveLength(18)
+    expect(live).toEqual(expect.arrayContaining(['radar', 'portfolio_radar', 'portfolio_radar_ci', 'portfolio_radar_vulns', 'store_review', 'code_health', 'design_drift']))
+    expect(live).toHaveLength(19)
   })
 
   it('stdio list_gate_findings accepts exactly the live gates', () => {
