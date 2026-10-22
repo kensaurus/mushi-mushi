@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 212 pages, generated from llms.txt. */
+/** 214 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -95,6 +95,24 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "billing"],
     headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity", "Related docs"],
     excerpt: "The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.",
+  },
+  {
+    title: "Checks",
+    url: docUrl("/admin/checks"),
+    route: "/admin/checks",
+    markdown: "admin/checks.md",
+    keywords: ["admin", "checks"],
+    headings: ["App checks", "AI quality"],
+    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+  },
+  {
+    title: "CI runners",
+    url: docUrl("/admin/ci"),
+    route: "/admin/ci",
+    markdown: "admin/ci.md",
+    keywords: ["admin", "ci", "runners"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "When nothing has reported in", "Related pages"],
+    excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {
     title: "CLI device auth",
