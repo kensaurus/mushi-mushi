@@ -9,8 +9,9 @@
  * jobs), "Speed it up" advice, slowest jobs and steps, and recent test
  * machine failures, then "Cost and speed" (Plan 022 Phase 7, ADR 0037:
  * GitHub-hosted vs your own machines, read-only, never the top of the page).
- * Scope follows the active project; "All apps" reads every
- * project the caller can see. Polls every 30 s while the tab is visible with
+ * Scope follows the header switcher (lib/projectScope.ts): one app, or
+ * "All apps" for every project the caller can see. The toggle here mirrors
+ * that choice. Polls every 30 s while the tab is visible with
  * `refresh=1` (the server live-syncs GitHub at most once a minute).
  *
  * Data: GET /v1/admin/ci/overview?project_id=&days=7&refresh=1 → CiOverview
@@ -27,6 +28,7 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { CiQueueBoard } from '../components/ci/CiQueueBoard'
 import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
@@ -95,7 +97,8 @@ export function CiPage() {
   const projectId = useActiveProjectId()
   const [searchParams] = useSearchParams()
   const focusJobId = searchParams.get('job')
-  const [scopeChoice, setScopeChoice] = useState<Scope>('project')
+  const scopeChoice: Scope = useProjectScope().mode
+  const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
 
   const path =
