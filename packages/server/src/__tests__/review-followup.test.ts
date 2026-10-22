@@ -47,6 +47,7 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
   fetchPullRequestDetails: async () => {
     throw new Error('inject fetchPr')
   },
+  fetchFailingCheckNames: async () => null,
   installationIdForAttempt: async () => null,
   resolveProjectGithubToken: async () => null,
 }))
@@ -1181,6 +1182,19 @@ describe('CI repair: rules', () => {
     expect(followupTrigger({ ...merge, ci: { state: 'pending', failing: [] } })).toEqual({ queue: false, reason: 'ci_pending' })
   })
 
+  it('a check that also fails on the base branch is not counted; all of them on the base means no repair', () => {
+    const two = [ciJob(), ciJob({ job_id: 7002, job_name: 'Compare @mushi-mushi/* to npm latest' })] as never
+    const partly = ciHeadState(two, new Set(['Compare @mushi-mushi/* to npm latest', 'unrelated']))
+    expect(partly).toMatchObject({ state: 'code_failure', onBase: ['Compare @mushi-mushi/* to npm latest'] })
+    expect(partly.failing.map((f) => f.name)).toEqual(['Lint & Build'])
+    const all = ciHeadState(two, new Set(['Lint & Build', 'Compare @mushi-mushi/* to npm latest']))
+    expect(all).toEqual({ state: 'base_failing', failing: [], onBase: ['Lint & Build', 'Compare @mushi-mushi/* to npm latest'] })
+    expect(followupTrigger({ review, attempt, prior: [], ci: all })).toEqual({ queue: false, reason: 'ci_fails_on_base' })
+    // No base information, or an empty set, changes nothing.
+    expect(ciHeadState(two, null).failing).toHaveLength(2)
+    expect(ciHeadState(two, new Set()).failing).toHaveLength(2)
+  })
+
   it('the dispatch gate waits while CI runs and skips once CI is green', () => {
     const base: DispatchGateInput = {
       row: { id: 'f1', head_sha_before: HEAD, queued_at: NOW.toISOString(), created_at: NOW.toISOString() },
@@ -1263,6 +1277,7 @@ describe('CI repair: worker', () => {
         logs.push(jobId)
         return FAILING_LOG
       },
+      baseFailingChecks: async () => new Set<string>(),
       ...over,
     })
     return Object.assign(d, { logs })
@@ -1333,5 +1348,40 @@ describe('CI repair: worker', () => {
     expect(rowOf(capped)).toMatchObject({ status: 'queued', skip_reason: 'autofix_cap' })
     const off = mergeSeed([ciJob()], { org: { review_followup_enabled: false } })
     expect((await runReviewFollowups(off as never, ciDeps())).discovered).toBe(0)
+  })
+
+  it('a red base branch buys no run: every failing check also failing on the base skips the row', async () => {
+    const db = mergeSeed([ciJob(), ciJob({ job_id: 7002, job_name: 'gate' })])
+    const seen: Array<{ owner: string; repo: string; base: string }> = []
+    const d = ciDeps({
+      baseFailingChecks: async (_t, ref, base) => {
+        seen.push({ owner: ref.owner, repo: ref.repo, base })
+        return new Set(['Lint & Build', 'gate'])
+      },
+    })
+    await runReviewFollowups(db as never, d)
+    expect(seen).toEqual([{ owner: 'acme', repo: 'app', base: 'main' }])
+    expect(rowOf(db)).toMatchObject({ status: 'skipped', skip_reason: 'ci_fails_on_base' })
+    expect(d.calls.create).toHaveLength(0)
+    expect(d.logs).toHaveLength(0)
+  })
+
+  it('only the checks the PR broke are sent; the ones red on the base are named to leave alone', async () => {
+    const db = mergeSeed([ciJob(), ciJob({ job_id: 7002, job_name: 'Paired migration' })])
+    const d = ciDeps({ baseFailingChecks: async () => new Set(['Paired migration']) })
+    await runReviewFollowups(db as never, d)
+    expect(rowOf(db)).toMatchObject({ status: 'dispatched', kind: 'ci_repair', findings_count: 1 })
+    const prompt = String((d.calls.create[0].input as { prompt: string }).prompt)
+    expect(prompt).toContain('Check: CI / Lint & Build')
+    expect(prompt).not.toContain('Check: CI / Paired migration')
+    expect(prompt).toContain('fail on the base branch too')
+    expect(d.logs).toEqual([7001])
+  })
+
+  it('an unreadable base branch does not block the repair', async () => {
+    const db = mergeSeed([ciJob()])
+    const d = ciDeps({ baseFailingChecks: async () => null })
+    await runReviewFollowups(db as never, d)
+    expect(rowOf(db)).toMatchObject({ status: 'dispatched', kind: 'ci_repair' })
   })
 })

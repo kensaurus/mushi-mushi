@@ -79,6 +79,7 @@ export const FOLLOWUP_REASONS = {
   // Terminal: the row is skipped.
   not_fix_first: 'The latest review is not "fix first".',
   ci_not_failing: 'The review says "merge" and CI on the reviewed commit is not failing on the code (green, or stopped on the test machine).',
+  ci_fails_on_base: 'Every failing check also fails on the base branch, so the pull request did not break it.',
   not_cloud_agent: 'Only pull requests a Mushi cloud agent opened get follow-ups.',
   fork_head: 'The pull request comes from another repository (a fork).',
   branch_mismatch: "The pull request's branch is not the one the agent created.",
@@ -118,6 +119,7 @@ export type FollowupReason = keyof typeof FOLLOWUP_REASONS
 const TERMINAL: ReadonlySet<FollowupReason> = new Set([
   'not_fix_first',
   'ci_not_failing',
+  'ci_fails_on_base',
   'review_changed',
   'head_moved',
   'pr_not_open',
@@ -215,6 +217,7 @@ export function followupTrigger(input: {
   if (others.filter((p) => p.cursor_agent_id).length >= FOLLOWUP_MAX_PER_PR) return { queue: false, reason: 'max_followups' }
   if (review.verdict === 'merge') {
     if (input.ci?.state === 'code_failure') return { queue: true, kind: 'ci_repair' }
+    if (input.ci?.state === 'base_failing') return { queue: false, reason: 'ci_fails_on_base' }
     return { queue: false, reason: !input.ci || input.ci.state === 'pending' ? 'ci_pending' : 'ci_not_failing' }
   }
   return { queue: true }
@@ -250,7 +253,10 @@ export interface CiFailingJob {
 }
 
 export type CiHeadState =
-  | { state: 'code_failure'; failing: CiFailingJob[] }
+  /** `onBase`: failing checks left out because they also fail on the base branch. */
+  | { state: 'code_failure'; failing: CiFailingJob[]; onBase?: string[] }
+  /** Every failing check also fails on the base branch: the PR did not break CI. */
+  | { state: 'base_failing'; failing: []; onBase: string[] }
   | { state: 'pending' | 'infra' | 'green' | 'none'; failing: [] }
 
 /** Conclusions that are the code's fault. `action_required` (an approval) and `startup_failure` (the workflow file) are not an agent's to fix. */
@@ -264,8 +270,14 @@ const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired
  * A code failure wins over a running sibling and over an infra stop (the
  * code is broken whatever the machine did, as in ci-infra.ts); then
  * pending, then infra, then green. No rows is `none` (not read yet).
+ *
+ * `baseFailing` (check names that fail on the latest commit of the PR's base
+ * branch, read live at dispatch) takes those checks out: a red base branch
+ * is not this PR's to fix, and must not buy a paid "change nothing" run on
+ * every merge-verdict PR. When every failing check is also red on the base,
+ * the state is `base_failing`.
  */
-export function ciHeadState(rows: readonly CiJobForRepair[]): CiHeadState {
+export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: ReadonlySet<string> | null = null): CiHeadState {
   const latest = new Map<string, CiJobForRepair>()
   for (const r of rows) {
     const key = `${r.workflow_name ?? ''}\u0000${r.job_name}`
@@ -290,7 +302,13 @@ export function ciHeadState(rows: readonly CiJobForRepair[]): CiHeadState {
         .map((s) => String(s?.name ?? '').slice(0, 200))
         .filter(Boolean),
     }))
-  if (failing.length > 0) return { state: 'code_failure', failing }
+  if (failing.length > 0) {
+    if (!baseFailing || baseFailing.size === 0) return { state: 'code_failure', failing }
+    const own = failing.filter((f) => !baseFailing.has(f.name))
+    const onBase = failing.filter((f) => baseFailing.has(f.name)).map((f) => f.name)
+    if (own.length === 0) return { state: 'base_failing', failing: [], onBase }
+    return onBase.length > 0 ? { state: 'code_failure', failing: own, onBase } : { state: 'code_failure', failing: own }
+  }
   if (jobs.some((j) => PENDING_KINDS.has(j.ci_kind))) return { state: 'pending', failing: [] }
   if (jobs.some((j) => INFRA_KINDS.has(j.ci_kind) || j.infra)) return { state: 'infra', failing: [] }
   return { state: 'green', failing: [] }
@@ -306,6 +324,8 @@ export interface LivePr {
   headRef?: string | null
   headRepoId?: number | null
   baseRepoId?: number | null
+  /** The base branch name (CI repair compares its checks). */
+  baseRef?: string | null
 }
 
 export interface DispatchGateInput {
@@ -825,6 +845,8 @@ export interface CiRepairPromptInput {
   branch: string | null
   headSha: string
   checks: CiRepairCheck[]
+  /** Checks that fail on the base branch too: named so the agent leaves them alone. */
+  alsoFailingOnBase?: string[]
   /** Scrubs untrusted text (sanitizeForLLM in the worker). */
   scrub: (text: string) => string
 }
@@ -890,7 +912,13 @@ export function buildCiRepairPrompt(input: CiRepairPromptInput): { text: string;
     blocks.push(block)
     used += block.length + 1
   }
-  const failureBlock = [`<ci_failure trust="untrusted" checks="${blocks.length}">`, ...blocks, '</ci_failure>']
+  const onBase = (input.alsoFailingOnBase ?? []).slice(0, 10)
+  const failureBlock = [
+    `<ci_failure trust="untrusted" checks="${blocks.length}">`,
+    ...blocks,
+    ...(onBase.length > 0 ? [`These checks fail on the base branch too, so they are not this pull request's to fix; leave them: ${clean(onBase.join('; '), 600)}`] : []),
+    '</ci_failure>',
+  ]
   const text = [...head, ...failureBlock, ...tail].join('\n')
   return { text: text.slice(0, FOLLOWUP_PROMPT_MAX_CHARS), checksSent: blocks.length }
 }

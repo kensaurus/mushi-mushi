@@ -61,6 +61,7 @@ import { startCronRun } from '../_shared/telemetry.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import {
+  fetchFailingCheckNames,
   fetchPullRequestDetails,
   fetchPullRequestFiles,
   installationIdForAttempt,
@@ -208,6 +209,8 @@ export interface FollowupDeps {
   readCiJobs?: (db: SupabaseClient, projectId: string, headSha: string) => Promise<CiJobForRepair[]>
   /** CI repair: the tail of one job's log, or null when unreadable. */
   fetchJobLog?: (token: string, repo: string, jobId: number) => Promise<string | null>
+  /** CI repair: names of the checks failing on the base branch's latest commit; null when unreadable. */
+  baseFailingChecks?: (token: string, ref: GithubRepoRef, baseRef: string) => Promise<Set<string> | null>
 }
 
 export type FollowupOutcome =
@@ -311,6 +314,7 @@ function defaults(deps: FollowupDeps): Required<FollowupDeps> {
       deps.readCiJobs ?? (async (d, pid, sha) => (await ciJobsForHeads(d, [pid], [sha])).get(sha) ?? []),
     fetchJobLog:
       deps.fetchJobLog ?? ((token, repo, jobId) => fetchJobLogTail(ciGithub(token, 1), repo, jobId)),
+    baseFailingChecks: deps.baseFailingChecks ?? fetchFailingCheckNames,
   }
 }
 
@@ -393,6 +397,7 @@ async function livePr(db: SupabaseClient, d: Required<FollowupDeps>, attempt: At
       headRef: details.headRef ?? null,
       headRepoId: details.headRepoId ?? null,
       baseRepoId: details.baseRepoId ?? null,
+      baseRef: details.baseRef ?? null,
     }
   } catch (err) {
     log.warn('PR read failed', { attemptId: attempt.id, err: err instanceof Error ? err.message : String(err) })
@@ -541,10 +546,26 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
   // the code: read that head's jobs (a failed read waits, never "not failing").
   let ci: CiHeadState | null = null
   if (review?.verdict === 'merge' && review.status !== 'queued' && review.status !== 'running') {
+    let rows: CiJobForRepair[]
     try {
-      ci = ciHeadState(await d.readCiJobs(db, row.project_id, row.head_sha_before))
+      rows = await d.readCiJobs(db, row.project_id, row.head_sha_before)
     } catch (err) {
       return wait('ci_pending', err instanceof Error ? err.message.slice(0, 300) : String(err))
+    }
+    ci = ciHeadState(rows)
+    // A check that is red on the base branch too is not this PR's: read the
+    // base branch's latest checks live, before anything is spent. Unreadable
+    // (no token, GitHub down): the agent is still told to leave such checks.
+    if (ci.state === 'code_failure' && pr?.baseRef && attempt?.pr_url) {
+      const ref = parsePullRequestUrl(attempt.pr_url)
+      try {
+        const token = ref ? await d.resolveGithubToken(db, attempt) : null
+        const onBase = token && ref ? await d.baseFailingChecks(token, { owner: ref.owner, repo: ref.repo }, pr.baseRef) : null
+        if (onBase) ci = ciHeadState(rows, onBase)
+        else log.warn('base branch checks not read (CI repair proceeds)', { followupId: row.id })
+      } catch (err) {
+        log.warn('base branch checks read failed (CI repair proceeds)', { followupId: row.id, err: err instanceof Error ? err.message : String(err) })
+      }
     }
   }
 
@@ -624,6 +645,7 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
       branch: pr?.headRef ?? null,
       headSha: row.head_sha_before,
       checks,
+      alsoFailingOnBase: ci?.state === 'code_failure' ? ci.onBase : undefined,
       scrub: (t) => sanitizeForLLM(t).text,
     })
     promptText = prompt.text
