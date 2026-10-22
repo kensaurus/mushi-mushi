@@ -108,6 +108,7 @@ const GATE_TITLES: Record<string, string> = {
   radar: 'Mushi setup checks',
   portfolio_radar: 'App hole checks',
   portfolio_radar_ci: 'App hole checks (host CI)',
+  portfolio_radar_vulns: 'Known holes in dependencies',
   store_review: 'Store review checklist',
 }
 

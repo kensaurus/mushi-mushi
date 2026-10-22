@@ -349,6 +349,7 @@ const LIST_GATE_FINDINGS_GATES = [
   'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
+  'portfolio_radar_vulns',
   'store_review',
 ] as const
 

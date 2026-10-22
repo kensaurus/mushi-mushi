@@ -232,6 +232,8 @@ const LOCK_FILE_NAMES = new Set([
   'Cargo.lock',
   'Gemfile.lock',
   'poetry.lock',
+  'uv.lock',
+  'Pipfile.lock',
   'composer.lock',
   'go.sum',
   'Podfile.lock',
@@ -393,7 +395,7 @@ Check, in this order:
 4. Decisions taken silently: product, copy, pricing, default or design choices, or visual changes across the app (images, layout, theme) with no screenshots, that an owner would want to make. Put the decision in needs_human_decision.
 5. Scope: changes the report did not ask for.
 6. Tests: do new or changed tests fail without the fix and pass with it? Tests that only render, snapshot or mock the thing under test, and deleted or weakened assertions, are findings.
-7. Security: secrets, injection, removed auth or permission checks, unsafe HTML, new network calls or dependencies.
+7. Security: secrets, injection, removed auth or permission checks, unsafe HTML, new network calls or dependencies. Exploit or proof-of-concept code for a vulnerability (a payload, an attack script, a test that performs the attack) is a blocker; a fix for a known advisory needs only the upgrade and, at most, a test that the fixed version is installed.
 8. Conventions visible in the diff: private or internal framework APIs (for example React's private hooks or __SECRET_INTERNALS), unstable or deprecated APIs, dead code and unused exports, disabled lint or type checks (eslint-disable, @ts-ignore, any), hard-coded colours or spacing where the code uses tokens, lock file edits without a matching manifest change.
 
 Severity: blocker = users would be hurt, data lost, or the app broken if merged as-is; major = a real defect or gap to fix in this PR; minor = worth fixing, safe to merge without.

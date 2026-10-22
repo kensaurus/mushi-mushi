@@ -183,6 +183,25 @@ export async function readBlobsGraphql(repo: RecipeRepo, sha: string, paths: rea
 }
 
 /**
+ * One blob's text by its sha (from listTree), through the Git blobs API, for
+ * files the GraphQL read returns truncated (large lockfiles). Null for a blob
+ * over `maxBytes` or one that is not UTF-8 text.
+ */
+export async function readBlobText(repo: RecipeRepo, blobSha: string, size: number, maxBytes: number): Promise<string | null> {
+  if (size > maxBytes || !/^[0-9a-f]{40,64}$/.test(blobSha)) return null
+  const blob = await ghGet(repo.token, api(repo.ref, `/git/blobs/${encodeURIComponent(blobSha)}`))
+  const content = blob.body as { content?: string; encoding?: string } | null
+  if (blob.status !== 200 || content?.encoding !== 'base64' || typeof content.content !== 'string') {
+    throw new RecipeGithubError(`could not read blob ${blobSha.slice(0, 7)} (${blob.status})`, blob.status)
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(content.content.replace(/\s/g, '')), (c) => c.charCodeAt(0)))
+  } catch {
+    return null
+  }
+}
+
+/**
  * Names (never values) of the repo's Actions secrets and variables. A 403 is
  * an error ("cannot list"), not an empty list, so a token without the
  * secrets scope never reads as "every variable is missing".

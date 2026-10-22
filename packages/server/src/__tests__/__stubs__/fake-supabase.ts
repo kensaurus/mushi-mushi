@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory stand-in for the supabase-js query builder, covering the
  * subset the voice-inbox modules use: from().select/insert/update/upsert/delete
- * with eq / not-in / order / limit / range / maybeSingle / single, `count`
+ * with eq / not-in / ilike / order / limit / range / maybeSingle / single, `count`
  * (with or without `head`), plus rpc(). `failRead` makes a table's reads fail.
  *
  * Filters on JSON paths use the PostgREST `col->>key` spelling. Unique keys
@@ -197,6 +197,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
       const v = readPath(r, key)
       return v !== null && v !== undefined && String(v) < String(value)
     })
+    return this
+  }
+  /** `ilike(col, '%x%')`: case-insensitive LIKE (`%` any run, `_` one character, `\` escapes). */
+  ilike(key: string, pattern: string): this {
+    const source = pattern.replace(/\\(.)|([%_])|([^%_\\]+)/g, (_m, esc: string, wild: string, lit: string) =>
+      esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : wild === '%' ? '.*' : wild === '_' ? '.' : lit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const re = new RegExp(`^${source}$`, 'is')
+    this.filters.push((r) => re.test(String(readPath(r, key) ?? '')))
     return this
   }
   gte(key: string, value: unknown): this {
