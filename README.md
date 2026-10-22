@@ -144,7 +144,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~539K TS lines · 2,429 source files · 45 workspace / 37 npm packages · 71 edge functions · 487 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~542K TS lines · 2,435 source files · 45 workspace / 37 npm packages · 71 edge functions · 491 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 
@@ -164,11 +164,11 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 | Part | License | In short |
 | --- | --- | --- |
 | SDKs, CLI, MCP, plugins, adapters | [MIT](./LICENSE) | Use anywhere, including closed-source products |
-| Server (`server`, `agents`, `verify`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server as a service: publish your changes or get a [commercial license](./COMMERCIAL-LICENSE.md) |
+| Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./COMMERCIAL-LICENSE.md) |
 | Enterprise features (`packages/server/ee/`) | [EE license](./packages/server/ee/LICENSE) | SSO, audit ingest, retention, region pinning. Paid for production use |
-| Name and logo | [Trademark policy](./TRADEMARK.md) | Forks must rename |
+| Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi with the unmodified logo; forks must rename |
 
-Third-party notices: [NOTICE](./NOTICE).
+Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
 
 ## More apps from the same maker
 

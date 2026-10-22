@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261021230000_verified_fixes
+-- 20261022010615_verified_fixes
 --
 -- Verified fixes (ADR 0035, Plan 024). Mushi merges a cloud agent's PR on its
 -- own only when deterministic proof says the fix works: the Opus review says

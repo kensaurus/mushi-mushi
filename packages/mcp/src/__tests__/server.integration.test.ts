@@ -155,6 +155,7 @@ describe('MCP protocol handshake', () => {
       'reopen_report',
       // Sentry pull-import creates reports and spends classification budget
       'import_sentry_issues',
+      'file_report',
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.
       'ask_codebase',
