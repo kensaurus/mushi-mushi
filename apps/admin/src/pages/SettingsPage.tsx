@@ -26,6 +26,7 @@ import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
 import { AgentPrReviewCard } from '../components/settings/AgentPrReviewCard';
 import { VerifiedMergeCard } from '../components/settings/VerifiedMergeCard';
 import { CiCostSettingsCard } from '../components/settings/CiCostSettingsCard';
+import { CiPolicyCard } from '../components/settings/CiPolicyCard';
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from '../lib/settingsTabExplainer';
 import { ByokPanel } from '../components/settings/ByokPanel';
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel';
@@ -318,6 +319,7 @@ function SettingsPageBody({
             <AgentPrReviewCard projectId={activeProjectId} />
             <VerifiedMergeCard projectId={activeProjectId} />
             <CiCostSettingsCard projectId={activeProjectId} />
+            <CiPolicyCard projectId={activeProjectId} />
           </>
         )}
         {active === 'byok' && <ByokPanel />}

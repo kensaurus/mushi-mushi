@@ -50,6 +50,7 @@ import {
   type CiGithub,
   type GhRun,
 } from './ci-jobs.ts'
+import { evaluateWatch, type WatchJob } from './ci-placement.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -267,6 +268,8 @@ export interface CollectorSummary {
   /** Stale queued / running jobs re-read by id this tick. */
   settled: number
   deleted: { jobs: number | null; samples: number | null }
+  /** CI placement watches updated this tick (ADR 0037). */
+  watches: number
 }
 
 export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projectIds?: string[]; calls?: number } = {}): Promise<CollectorSummary> {
@@ -284,7 +287,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
 
   let remaining = opts.calls ?? COLLECTOR_CALLS_PER_TICK
   const share = Math.max(COLLECTOR_MIN_CALLS_PER_PROJECT, Math.ceil(remaining / Math.max(1, order.length)))
-  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null } }
+  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null }, watches: 0 }
   const tokens = new Map<string, string | null>()
 
   for (const projectId of order) {
@@ -327,6 +330,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
   }
 
   summary.settled = await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_TICK, now, bindings, tokens })
+  summary.watches = await runPlacementWatches(db, now).catch(() => 0)
   summary.deleted = await deleteExpiredCiRows(db, now)
   return summary
 }
@@ -414,6 +418,51 @@ export async function settleStaleLiveJobs(
   if (fresh.length === 0) return gone.length
   const stored = await upsertCiJobs(db, fresh)
   return (stored.error ? 0 : fresh.length) + gone.length
+}
+
+/**
+ * After a CI placement change ran (ADR 0037): look at the next jobs that read
+ * the variable, in ci_jobs (no GitHub call), and mark each open watch ok,
+ * alert (a job asked for another label or waited over 30 min) or expired.
+ * Before the ci_placement_watches table exists this does nothing.
+ */
+export async function runPlacementWatches(db: Db, now: Date): Promise<number> {
+  const { data, error } = await db
+    .from('ci_placement_watches')
+    .select('id, project_id, repo, jobs, expected_labels, started_at, status')
+    .eq('status', 'watching')
+    .order('started_at', { ascending: true })
+    .limit(50)
+  if (error || !Array.isArray(data)) return 0
+  let updated = 0
+  for (const w of data as Array<{ id: string; project_id: string | null; repo: string; jobs: Array<{ workflow: string; job: string }> | null; expected_labels: string[] | null; started_at: string }>) {
+    let q = db
+      .from('ci_jobs')
+      .select('workflow_name, job_name, runner_labels, queue_seconds, gh_created_at, head_branch, html_url')
+      .eq('repo', w.repo)
+      .gte('gh_created_at', w.started_at)
+      .order('gh_created_at', { ascending: true })
+      .limit(300)
+    if (w.project_id) q = q.eq('project_id', w.project_id)
+    const { data: jobs, error: jobsErr } = await q
+    if (jobsErr) continue
+    const r = evaluateWatch({ jobs: w.jobs ?? [], expectedLabels: w.expected_labels ?? [], startedAt: w.started_at }, (jobs ?? []) as WatchJob[], now)
+    await db
+      .from('ci_placement_watches')
+      .update({
+        status: r.status,
+        jobs_seen: r.jobsSeen,
+        unexpected: r.unexpected.length,
+        slow: r.slow.length,
+        detail: { unexpected: r.unexpected.slice(0, 10), slow: r.slow.slice(0, 10) },
+        last_checked_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', w.id)
+      .eq('status', 'watching')
+    updated++
+  }
+  return updated
 }
 
 /** Retention: ci_jobs and ci_runner_job_samples are kept 30 days. */

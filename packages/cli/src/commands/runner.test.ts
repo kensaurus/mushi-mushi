@@ -132,6 +132,51 @@ describe('mushi runner compare', () => {
   })
 })
 
+describe('mushi runner placement', () => {
+  const REQ = '33333333-4444-4555-8666-777777777777'
+
+  it('show reads the configured project', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'show'], () => okReply({ policy: null, repos: [] }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/placement?project_id=${TEST_PROJECT_ID}`)
+    expect(run.stdout).toContain('Where CI runs')
+  })
+
+  it('preview POSTs the change and changes nothing; --remove sends null', async () => {
+    const preview = { repo: 'acme/api', variable: 'LINUX_RUNNER', current: { exists: false, value: null, updatedAt: null }, next: { value: 'kensaurus-local', target: { kind: 'self_hosted', label: 'kensaurus-local' } }, jobs: { moves: [], stays: [] }, warnings: [], blocked: null }
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'preview', '--repo', 'acme/api', '--value', 'kensaurus-local'], () => okReply(preview))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/placement/preview')
+    expect(run.calls[0]!.method).toBe('POST')
+    expect(run.calls[0]!.body).toEqual({ projectId: TEST_PROJECT_ID, repo: 'acme/api', variable: 'LINUX_RUNNER', value: 'kensaurus-local' })
+    expect(run.stdout).toContain('acme/api: vars.LINUX_RUNNER not set → “kensaurus-local”')
+    const del = await runCli(registerRunnerCommands, ['runner', 'placement', 'preview', '--repo', 'acme/api', '--remove', '--variable', 'RUNNER_E2E'], () => okReply(preview))
+    expect(del.calls[0]!.body).toMatchObject({ variable: 'RUNNER_E2E', value: null })
+  })
+
+  it('request asks with a reason and says who approves; bad flags are refused before any call', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'request', '--repo', 'acme/api', '--value', 'kensaurus-local', '--reason', 'save minutes'], () =>
+      okReply({ id: REQ, status: 'pending_approval', preview: { repo: 'acme/api', variable: 'LINUX_RUNNER', next: { value: 'kensaurus-local', target: { kind: 'self_hosted', label: 'kensaurus-local' } } } }))
+    expect(run.calls[0]!.path).toBe('/v1/admin/ci/placement/requests')
+    expect(run.calls[0]!.body).toMatchObject({ reason: 'save minutes' })
+    expect(run.stdout).toContain(`Requested ${REQ} (pending_approval)`)
+    for (const argv of [
+      ['runner', 'placement', 'request', '--repo', 'acme/api'],
+      ['runner', 'placement', 'request', '--repo', 'acme/api', '--value', 'x', '--remove'],
+      ['runner', 'placement', 'preview', '--repo', 'not-a-repo', '--value', 'x'],
+    ]) {
+      const bad = await runCli(registerRunnerCommands, argv)
+      expect(bad.calls).toEqual([])
+      expect(bad.error).toBeTruthy()
+    }
+  })
+
+  it('revert asks for the reverse of a change that ran', async () => {
+    const run = await runCli(registerRunnerCommands, ['runner', 'placement', 'revert', REQ], () => okReply({ id: 'new-id', status: 'pending_approval', revertOf: REQ }))
+    expect(run.calls[0]!.path).toBe(`/v1/admin/ci/placement/requests/${REQ}/revert`)
+    expect(run.calls[0]!.method).toBe('POST')
+    expect(run.stdout).toContain(`Requested revert new-id of ${REQ}`)
+  })
+})
+
 describe('mushi runner heartbeat', () => {
   it('--dry-run prints the body and sends nothing; the raw machine id never appears', async () => {
     const run = await runCli(registerRunnerCommands, ['runner', 'heartbeat', '--dry-run'])
