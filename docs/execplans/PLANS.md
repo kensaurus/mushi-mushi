@@ -227,10 +227,10 @@ Add Helm chart region awareness and operator documentation for multi-region depl
 Ship unit tests, CLI extract, CLI README updates, and framework adapter hooks from the CHANGELOG `pending` section.
 
 ### Deliverables
-- [ ] `packages/web/src/lifecycle-hooks.test.ts` — **Not shipped as a dedicated file.** Hooks `beforeSendFeedback` / `onCrashedLastRun` exist in `packages/web/src/mushi.ts` and are listed in presets (`packages/core/src/presets.test.ts`); drop/modify/throw/timeout contract tests were never added.
+- [x] `packages/web/src/lifecycle-hooks.test.ts` — `beforeSendFeedback` drop / modify / throw / 2s timeout, and `onCrashedLastRun` (first run, unclean exit, `pagehide` clean, thrown hook).
 - [x] `packages/web/src/rewards.test.ts` — `initRewards`, `updateRewardsUser`, `enqueue`, `flush`, `teardown` unit-tested.
 - [x] `packages/cli/src/project-bootstrap.ts` — `mushi project create` logic (shipped as `project-bootstrap.ts`, not `project-create.ts`; wired from `packages/cli/src/commands/project.ts`).
-- [ ] `packages/cli/src/project-create.test.ts` — **Not shipped.** No dedicated unit tests for `.env.local` / MCP merge / `saveConfig` at this path.
+- [x] `packages/cli/src/project-create.test.ts` — `persistProjectCreate` covers `.env.local` merge, `.cursor/mcp.json` merge, and `saveConfig`.
 - [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented (synced Jul 2026 docs pass).
 - [x] `packages/react/src/hooks.ts` — `usePulseTrigger`, `useBeforeSendFeedback`, `useOnCrashedLastRun` added.
 - [x] `packages/vue/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` composables added.

@@ -1,6 +1,7 @@
 /**
  * FILE: packages/cli/src/commands/project.ts
- * PURPOSE: `mushi project create` — device-auth sign-in, project bootstrap, SDK key mint, and env/MCP writes.
+ * PURPOSE: `mushi project create` — browser sign-in, then `persistProjectCreate`
+ *          (CLI config, `.env.local`, and `.cursor/mcp.json`).
  */
 
 import type { Command } from 'commander';
@@ -16,7 +17,33 @@ import {
   type DeviceProject,
 } from '../device-auth.js';
 import { printAuthBanner, printAuthApproved, printAuthFailed } from '../auth-ui.js';
-import { writeProjectBootstrapFiles } from '../project-bootstrap.js';
+import { writeProjectBootstrapFiles, type ProjectBootstrapFilesResult } from '../project-bootstrap.js';
+
+/**
+ * Write the CLI config, `.env.local`, and Cursor MCP entry after a project is chosen.
+ * @internal Called by `mushi project create` and its unit tests. Not a package export.
+ */
+export async function persistProjectCreate(opts: {
+  cwd?: string
+  configPath?: string
+  endpoint: string
+  projectId: string
+  apiKey: string
+  consoleUrl: string
+}): Promise<ProjectBootstrapFilesResult> {
+  const config = loadConfig(opts.configPath)
+  config.apiKey = opts.apiKey
+  config.endpoint = opts.endpoint
+  config.projectId = opts.projectId
+  config.consoleUrl = opts.consoleUrl
+  saveConfig(config, opts.configPath)
+  return writeProjectBootstrapFiles({
+    cwd: opts.cwd,
+    endpoint: opts.endpoint,
+    projectId: opts.projectId,
+    apiKey: opts.apiKey,
+  })
+}
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -143,17 +170,11 @@ Typical first-time flow:
     }
 
     // ── Step 4: persist config + write project files ─────────────────────────
-    const config = loadConfig()
-    config.apiKey = apiKey
-    config.endpoint = endpoint
-    config.projectId = projectId
-    config.consoleUrl = consoleBase
-    saveConfig(config)
-
-    const { envUpdated, mcpUpdated } = await writeProjectBootstrapFiles({
+    const { envUpdated, mcpUpdated } = await persistProjectCreate({
       endpoint,
       projectId,
       apiKey,
+      consoleUrl: consoleBase,
     })
     console.log(`\n  OK  ${envUpdated ? 'Updated' : 'Created'} .env.local`)
     console.log(`  OK  ${mcpUpdated ? 'Updated' : 'Created'} .cursor/mcp.json`)
