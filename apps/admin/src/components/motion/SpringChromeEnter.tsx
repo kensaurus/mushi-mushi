@@ -5,7 +5,7 @@
 
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
-import { chromeEnterSpring } from '../../lib/motion-tokens'
+import { bannerEnterSpring } from '../../lib/motion-tokens'
 import { useMotionTransition } from '../../lib/useMotionTransition'
 
 export interface SpringChromeEnterProps {
@@ -20,7 +20,7 @@ export function SpringChromeEnter({
   delay = 0,
   className = '',
 }: SpringChromeEnterProps) {
-  const transition = useMotionTransition(chromeEnterSpring)
+  const transition = useMotionTransition(bannerEnterSpring)
 
   return (
     <motion.div
