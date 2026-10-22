@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 214
+Pages: 215
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -20992,6 +20992,92 @@ accessible in **Settings → Audit** and is exportable as CSV.
 
 - [Admin → Reports](/admin/reports) — the full report detail surface where collaboration happens.
 - [Admin → Teams and Members](/admin/teams) — manage who has access to your project.
+
+---
+
+## App blueprint
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/recipe
+
+---
+title: App blueprint
+description: The App blueprint page shows what this app is built from, the state of each part, and the draft pull request a change opens.
+---
+
+# App blueprint
+
+**Route:** `/recipe`
+
+> **Scenario:** A fix should follow this app's own tokens and tables, and you are not sure what is connected. Open App blueprint and start with the card marked **Needs attention** or **Check failed**.
+
+App blueprint is the console screen for one project's recipe: what the app is made of, and whether each part works. With no project selected it says **No project selected**. How the recipe is stored is on the [App recipe](/concepts/app-recipe) concept page.
+
+---
+
+## Refresh and status
+
+**Refresh** reads the repo again — the recipe file, design tokens, CI builds and environment variable names — and reloads this page. A failure shows the reason. Until the recipe loads, the page says **Composing the recipe…**. A load error names the app recipe and offers a retry.
+
+The status card has two sides:
+
+- **Overall** is the worst state on the page. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
+- **Recipe file** says the page is built from what Mushi already sees when `mushi.recipe.json` is missing, and tells you to add that file at the repo root to declare design tokens, deploy targets and budgets. When the file is present, the card shows its path, the short commit and when it was read. Problems in the file are listed: fix them in the repo, then press Refresh.
+
+---
+
+## Diagram and list
+
+**Auto**, **Diagram** and **List** choose the layout. Auto shows the diagram, and the list below 768 px or when the browser asks for reduced motion. The line beside the control says to click a card for what is wrong and how to fix it.
+
+Both layouts show the same eight parts, in four lanes. A part the server left out still appears, as **Not checked yet**, and says to press Refresh.
+
+| Lane | Cards |
+|------|--------|
+| **Sources** | Database schema, Design system, Pages and user flows |
+| **Build** | Automated checks, CI builds |
+| **Deploy** | What is live |
+| **Runtime** | Environment variables, Connected tools |
+
+Cards do not move on the diagram. If the column is narrower than the lanes, the page says to drag the diagram sideways or switch to List. Each card shows its state, a one-line reason, when it was last checked, and whether problems are open. List cards also show how that part is checked and up to three facts. A card with a link opens the page that owns that part.
+
+---
+
+## What "not connected" means
+
+The stored state `not_connected` is labelled **Not set up**. Nothing is configured for that part. It is optional, and the card says how to set it up. The check line reads **Nothing to check until it is set up**. It is not a pass and it is not a failure. On **Problems**, Mushi says it cannot say yet whether anything needs fixing.
+
+| Label | What the card means |
+|-------|---------------------|
+| **OK** | Checked recently, and nothing needs fixing. **OK** with no check time is shown as **Not checked yet**. |
+| **Needs attention** | Something does not match what the app expects. The reason says what and how to fix it. |
+| **Not checked yet** | Not checked, so this is not a pass. |
+| **Not confirmed** | Checked, but the result is out of date or could not decide. Not a pass. |
+| **Check failed** | The last check did not finish. |
+
+---
+
+## Side panel
+
+With nothing selected, the panel says to pick a card. A selected card shows the name, state, check time, reason and how it is checked. **Close** clears it.
+
+**What it is** loads the detail. Database schema lists tables (RLS on or off, column count) and what changed since the previous scan. CI builds lists recent workflow runs with their result and estimated minutes. What is live compares each deploy target with the default-branch head; no observation says **Not observed**, and no targets says **Not set up** and points at `deploy.targets` in `mushi.recipe.json`. Environment variables is a matrix of names: **Set**, **Missing**, **Set, not declared**, or **Not checked**. Values are never shown. An empty matrix says **Not set up** and points at the Change tab. Other parts show their fields. Design system also links to the design system page.
+
+**Problems** shows the open count after a check. For **Not checked yet**, **Not set up** and **Check failed** it says Mushi cannot say yet whether anything needs fixing, and links to where those problems are listed.
+
+**Change** is only on Automated checks, Environment variables, and Pages and user flows. You edit the files read from the branch, press **Preview diff**, then **Open draft PR**. The preview writes nothing. Changes ship only as a reviewed draft pull request: one draft with exactly that diff, left in draft so CI does not run until you mark it ready, and nothing on the default branch changes until you merge. An open Mushi draft for the same change has to be finished or closed first. Owners and admins of the project's team can open the PR; anyone else can still preview it.
+
+---
+
+## Risk checks
+
+**Risk checks** sits under the cards: store rules, an expiring domain, a broken privacy link, storage that keeps billing. Problems are listed first. Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
+
+---
+
+## Related
+
+- [App recipe](/concepts/app-recipe) — the concept behind this screen, including `mushi.recipe.json`
+- [Full-stack audit](/admin/fullstack-audit) — Mushi's own setup checks
 
 ---
 
