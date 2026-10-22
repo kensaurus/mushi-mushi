@@ -76,7 +76,7 @@ function UpdatedAgo({ at, validating }: { at: string | null; validating: boolean
  * Live-sync GitHub in the background, then re-read the stored overview. One
  * sync at a time; a failed sync still re-reads (the stored jobs are fine).
  */
-function useBackgroundLiveSync(path: string, scope: 'project' | 'enumeration', reload: () => void) {
+function useBackgroundLiveSync(livePath: string, scope: 'project' | 'enumeration', reload: () => void) {
   const [syncing, setSyncing] = useState(false)
   const busy = useRef(false)
   // Held in a ref so a new reload identity never re-runs the sync effect.
@@ -87,7 +87,7 @@ function useBackgroundLiveSync(path: string, scope: 'project' | 'enumeration', r
     busy.current = true
     setSyncing(true)
     try {
-      await apiFetch<CiOverview>(`${path}&refresh=1`, { scope, cache: 'no-store' })
+      await apiFetch<CiOverview>(livePath, { scope, cache: 'no-store' })
     } catch {
       // The stored jobs still render; the next poll tries again.
     } finally {
@@ -95,7 +95,7 @@ function useBackgroundLiveSync(path: string, scope: 'project' | 'enumeration', r
       setSyncing(false)
       reloadRef.current()
     }
-  }, [path, scope])
+  }, [livePath, scope])
   useEffect(() => {
     void sync()
   }, [sync])
@@ -140,10 +140,14 @@ export function CiPage() {
     scope === 'project' && projectId
       ? `/v1/admin/ci/overview?project_id=${encodeURIComponent(projectId)}&days=7`
       : '/v1/admin/ci/overview?days=7'
+  const livePath =
+    scope === 'project' && projectId
+      ? `/v1/admin/ci/overview?project_id=${encodeURIComponent(projectId)}&days=7&refresh=1`
+      : '/v1/admin/ci/overview?days=7&refresh=1'
   const fetchScope = scope === 'all' ? 'enumeration' : 'project'
   const page = usePageData<CiOverview>(path, { scope: fetchScope })
   const { data, reload } = page
-  const live = useBackgroundLiveSync(path, fetchScope, reload)
+  const live = useBackgroundLiveSync(livePath, fetchScope, reload)
   useVisiblePolling(live.sync, POLL_MS)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
