@@ -22,6 +22,7 @@ export const SETTINGS_SECTION_IDS = {
   debugLogging: 'debug-logging',
   verifiedMerge: 'verified-merge',
   ciCost: 'ci-cost',
+  ciPolicy: 'ci-policy',
 } as const
 
 /** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
@@ -45,6 +46,8 @@ const SETTINGS_TAB_ALIASES: Readonly<Record<string, SettingsTabTarget>> = {
   fixes: { tab: 'general', anchor: SETTINGS_SECTION_IDS.verifiedMerge },
   // ADR 0037: /ci "Cost and speed" links here for electricity and plan figures.
   'ci-cost': { tab: 'general', anchor: SETTINGS_SECTION_IDS.ciCost },
+  // ADR 0037: "Import from your CI agreement" on /ci "Where CI runs".
+  'ci-policy': { tab: 'general', anchor: SETTINGS_SECTION_IDS.ciPolicy },
 }
 
 function isSettingsTabId(value: unknown): value is SettingsTabId {

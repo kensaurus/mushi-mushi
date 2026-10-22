@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-22 · **723** routes.
+> Generated: 2026-10-22 · **726** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 190 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 365 |
+| `jwtAuth` | 368 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -95,6 +95,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ci/placement` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | POST | `/v1/admin/ci/placement/preview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | POST | `/v1/admin/ci/placement/requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/execute` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
+| POST | `/v1/admin/ci/placement/requests/:id/reject` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | POST | `/v1/admin/ci/placement/requests/:id/revert` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | GET | `/v1/admin/ci/policy` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | PUT | `/v1/admin/ci/policy` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |

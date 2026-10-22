@@ -125,9 +125,9 @@ export function registerCiPlacementRoutes(app: Hono<{ Variables: Variables }>, d
   app.get('/v1/admin/ci/placement', deps.adminOrApiKeyRead, (c) => getPlacement(c, deps))
   app.post('/v1/admin/ci/placement/preview', deps.adminOrApiKeyRead, (c) => previewRoute(c, deps))
   app.post('/v1/admin/ci/placement/requests', deps.adminOrApiKeyWrite, (c) => requestRoute(c, deps))
-  for (const verb of ['approve', 'reject', 'execute'] as const) {
-    app.post(`/v1/admin/ci/placement/requests/:id/${verb}`, deps.jwtAuth, (c) => decideRoute(c, deps, verb))
-  }
+  app.post('/v1/admin/ci/placement/requests/:id/approve', deps.jwtAuth, (c) => decideRoute(c, deps, 'approve'))
+  app.post('/v1/admin/ci/placement/requests/:id/reject', deps.jwtAuth, (c) => decideRoute(c, deps, 'reject'))
+  app.post('/v1/admin/ci/placement/requests/:id/execute', deps.jwtAuth, (c) => decideRoute(c, deps, 'execute'))
   app.post('/v1/admin/ci/placement/requests/:id/revert', deps.adminOrApiKeyWrite, (c) => revertRoute(c, deps))
 }
 

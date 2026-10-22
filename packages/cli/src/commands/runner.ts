@@ -318,41 +318,49 @@ prices (dated), your plan's included minutes, and your electricity figures
       for (const line of renderPlacement(result.data)) console.log(line)
     })
 
-  for (const verb of ['preview', 'request'] as const) {
-    placement
-      .command(verb)
-      .description(
-        verb === 'preview'
-          ? 'Dry run: what would move, what stays and why, the target runners, cost, the CI agreement\'s verdict. Changes nothing'
-          : 'Ask for the change. Nothing changes until an owner or admin approves and runs it in the console',
-      )
+  const placementAction = (verb: 'preview' | 'request') =>
+    async (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; reason?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const body = { ...placementBody(opts, config), ...(verb === 'request' && opts.reason ? { reason: opts.reason.slice(0, 500) } : {}) }
+      const path = verb === 'preview' ? '/v1/admin/ci/placement/preview' : '/v1/admin/ci/placement/requests'
+      const result = await apiCall<PlacementPreviewView | { id: string; status: string; preview: PlacementPreviewView; next?: string }>(path, config, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs: 60_000 })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      if (verb === 'preview') {
+        for (const line of renderPreview(result.data as PlacementPreviewView)) console.log(line)
+        return
+      }
+      const r = result.data as { id: string; status: string; preview: PlacementPreviewView; next?: string }
+      for (const line of renderPreview(r.preview)) console.log(line)
+      console.log(`\nRequested ${r.id} (${r.status}). ${r.next ?? 'An owner or admin approves and runs it in the console.'}`)
+    }
+
+  const changeOptions = (cmd: Command): Command =>
+    cmd
       .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
       .option('--variable <name>', 'LINUX_RUNNER or RUNNER_<WORKFLOW>', 'LINUX_RUNNER')
       .option('--value <label>', 'The runner label jobs should ask for')
       .option('--remove', 'Remove the variable (jobs use the workflow\'s fallback, usually GitHub-hosted)')
       .option('--project-id <id>', 'Project ID (defaults to the configured project)')
       .option('--project <id>', 'Same as --project-id')
-      .option('--reason <text>', 'Why, shown to the approver (request only)')
       .option('--json', 'Machine-readable JSON output')
-      .action(async (opts: { projectId?: string; project?: string; repo: string; variable: string; value?: string; remove?: boolean; reason?: string; json?: boolean }) => {
-        const config = requireConfig()
-        const body = { ...placementBody(opts, config), ...(verb === 'request' && opts.reason ? { reason: opts.reason.slice(0, 500) } : {}) }
-        const path = verb === 'preview' ? '/v1/admin/ci/placement/preview' : '/v1/admin/ci/placement/requests'
-        const result = await apiCall<PlacementPreviewView | { id: string; status: string; preview: PlacementPreviewView; next?: string }>(path, config, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs: 60_000 })
-        if (!result.ok) die(result)
-        if (outputIsJson(opts.json)) {
-          console.log(JSON.stringify(result.data, null, 2))
-          return
-        }
-        if (verb === 'preview') {
-          for (const line of renderPreview(result.data as PlacementPreviewView)) console.log(line)
-          return
-        }
-        const r = result.data as { id: string; status: string; preview: PlacementPreviewView; next?: string }
-        for (const line of renderPreview(r.preview)) console.log(line)
-        console.log(`\nRequested ${r.id} (${r.status}). ${r.next ?? 'An owner or admin approves and runs it in the console.'}`)
-      })
-  }
+
+  changeOptions(
+    placement
+      .command('preview')
+      .description('Dry run: what would move, what stays and why, the target runners, cost, the CI agreement\'s verdict. Changes nothing'),
+  ).action(placementAction('preview'))
+
+  changeOptions(
+    placement
+      .command('request')
+      .description('Ask for the change. Nothing changes until an owner or admin approves and runs it in the console'),
+  )
+    .option('--reason <text>', 'Why, shown to the approver')
+    .action(placementAction('request'))
 
   placement
     .command('revert <requestId>')
