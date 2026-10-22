@@ -1789,10 +1789,41 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   }
 
   /**
-   * Retire a provider's legacy credential: delete its Vault secret (by the
-   * name in the stored `vault://` ref) and clear every legacy column. Used by
-   * DELETE /v1/admin/byok/:provider and when a pooled key supersedes an
-   * identical legacy key.
+   * Delete a legacy Vault secret by name only when nothing else still holds
+   * it. A pool row can share the secret (BL-098). Call this after the
+   * `*_ref` columns are cleared, so this slot no longer counts as a use.
+   * A missing RPC is a warning and the secret stays. Never falls back to
+   * the unchecked `vault_delete_secret`.
+   */
+  async function deleteVaultSecretByNameIfUnused(
+    db: ReturnType<typeof getServiceClient>,
+    secretName: string,
+    label: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
+    try {
+      const { error: vaultError } = await db.rpc('vault_delete_secret_by_name_if_unused', {
+        secret_name: secretName,
+      });
+      if (vaultError) {
+        log.warn(`vault_delete_secret_by_name_if_unused failed for ${label} (non-fatal)`, {
+          ...extra,
+          code: vaultError.code,
+        });
+      }
+    } catch (err) {
+      log.warn(`vault_delete_secret_by_name_if_unused failed for ${label} (non-fatal)`, {
+        ...extra,
+        error: String(err),
+      });
+    }
+  }
+
+  /**
+   * Retire a provider's legacy credential: clear every legacy column, then
+   * delete its Vault secret by name only if nothing else still references it.
+   * Used by DELETE /v1/admin/byok/:provider and when a pooled key supersedes
+   * an identical legacy key.
    */
   async function clearLegacyByokCredential(
     db: ReturnType<typeof getServiceClient>,
@@ -1809,20 +1840,6 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       typeof ref === 'string' && ref.startsWith('vault://')
         ? ref.slice('vault://'.length)
         : byokSecretName(projectId, provider);
-    try {
-      const { error: vaultError } = await db.rpc('vault_delete_secret', { secret_name: secretName });
-      if (vaultError) {
-        log.warn('vault_delete_secret failed for legacy BYOK key (non-fatal)', {
-          provider,
-          code: vaultError.code,
-        });
-      }
-    } catch (err) {
-      log.warn('vault_delete_secret failed for legacy BYOK key (non-fatal)', {
-        provider,
-        error: String(err),
-      });
-    }
 
     const cleared: Record<string, null> = {};
     for (const column of legacyByokColumns(provider)) cleared[column] = null;
@@ -1830,7 +1847,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const { error } = await db
       .from('project_settings')
       .upsert({ project_id: projectId, ...cleared }, { onConflict: 'project_id' });
-    return { error };
+    if (error) return { error };
+
+    await deleteVaultSecretByNameIfUnused(db, secretName, 'legacy BYOK key', { provider });
+    return { error: null };
   }
 
   /**
@@ -2131,16 +2151,6 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const project = resolvedProject.project;
 
     const secretName = firecrawlSecretName(project.id);
-    // rpc() reports failure in `error`, not by throwing.
-    try {
-      const { error: vaultError } = await db.rpc('vault_delete_secret', { secret_name: secretName });
-      if (vaultError) {
-        log.warn('vault_delete_secret failed for firecrawl (non-fatal)', { code: vaultError.code });
-      }
-    } catch (err) {
-      log.warn('vault_delete_secret failed for firecrawl (non-fatal)', { error: String(err) });
-    }
-
     const { error } = await db.from('project_settings').upsert(
       {
         project_id: project.id,
@@ -2155,6 +2165,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     );
 
     if (error) return dbError(c, error);
+
+    // After the ref is cleared, so this slot no longer counts as a use.
+    await deleteVaultSecretByNameIfUnused(db, secretName, 'firecrawl');
 
     try {
       await db.from('byok_audit_log').insert({
@@ -2386,19 +2399,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    // rpc() reports failure in `error`, not by throwing.
-    try {
-      const { error: vaultError } = await db.rpc('vault_delete_secret', {
-        secret_name: browserbaseSecretName(project.id),
-      });
-      if (vaultError) {
-        log.warn('vault_delete_secret failed for browserbase (non-fatal)', { code: vaultError.code });
-      }
-    } catch (error) {
-      log.warn('vault_delete_secret failed for browserbase (non-fatal)', {
-        error: String(error),
-      });
-    }
+    const secretName = browserbaseSecretName(project.id);
     const { error } = await db.from('project_settings').upsert(
       {
         project_id: project.id,
@@ -2412,6 +2413,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       { onConflict: 'project_id' },
     );
     if (error) return dbError(c, error);
+
+    // After the ref is cleared, so this slot no longer counts as a use.
+    await deleteVaultSecretByNameIfUnused(db, secretName, 'browserbase');
 
     try {
       const { error: auditError } = await db.from('byok_audit_log').insert({
