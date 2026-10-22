@@ -1,5 +1,5 @@
 Mushi Mushi
-Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
 https://github.com/kensaurus/mushi-mushi
 
 This product is composed of multiple packages distributed under different
@@ -14,14 +14,18 @@ LICENSE SUMMARY
 
   License                        Scope
   ---------                      -----
-  MIT                            Client-side SDKs, plugin SDK, CLI, adapters,
-                                 framework wrappers (React, Vue, Svelte,
-                                 Angular, React Native, iOS, Android,
-                                 Flutter), brand tokens, marketing UI.
+  MIT                            Client-side SDKs, plugin SDK, CLI, MCP
+                                 server, adapters, framework wrappers (React,
+                                 Vue, Svelte, Angular, React Native, iOS,
+                                 Android, Flutter), brand tokens and CSS,
+                                 marketing UI.
 
-  GNU Affero GPL v3 (AGPLv3)     Server packages: @mushi-mushi/server,
-                                 @mushi-mushi/agents, @mushi-mushi/verify
-                                 (everything NOT under an `ee/` directory).
+  GNU Affero GPL v3 only         Server packages: @mushi-mushi/server,
+  (AGPL-3.0-only)                @mushi-mushi/agents, @mushi-mushi/verify
+                                 (everything NOT under an `ee/` directory),
+                                 the console (apps/admin) and the tester
+                                 portal (apps/testers). Full text:
+                                 LICENSES/AGPL-3.0-only.txt.
                                  True OSI open source. Self-host and modify
                                  freely; network SaaS use of modified versions
                                  requires publishing changes (§13) or a
@@ -35,13 +39,19 @@ LICENSE SUMMARY
                                  MUSHI_EE_LICENSE_KEY. See
                                  packages/server/ee/LICENSE.
 
+  All rights reserved            Brand assets: the logo and bug mark files
+                                 (packages/brand/src/logo*), favicons and app
+                                 icons, mascot art (docs/mascot/). Use them
+                                 only as TRADEMARK.md allows.
+
 ================================================================================
 TRADEMARKS
 ================================================================================
 
-"Mushi Mushi", "Mushi", the bug logo, and the 虫 mark are unregistered
-trademarks of Kenji Sakuramoto. The licenses listed above grant rights to
-the SOFTWARE only and DO NOT grant any rights to the trademarks. See
+"Mushi Mushi", "Mushi", the bug logo, and the 虫 mark are trademarks of
+Kenji Sakuramoto / Kensaurus 合同会社. They are not registered yet. The
+licenses listed above grant rights to the SOFTWARE only and DO NOT grant any
+rights to the trademarks. See
 TRADEMARK.md for the full policy. Forks, derivative works, and competing
 products MUST be renamed to a non-confusing identifier; redistributing
 under the Mushi Mushi brand is not permitted.

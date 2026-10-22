@@ -46,6 +46,10 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
+<Callout type="info">
+**Update, Oct 22, 2026.** Two changes since this post, both in [Open source & licensing](/concepts/open-source). The console (`apps/admin`) is now AGPLv3 too, so a rebranded console can't ship closed. And we now say it more exactly: Mushi Cloud runs the same code, and carries its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo keeps working default prompts, so self-hosting stays free and complete.
+</Callout>
+
 ## The honest "open source" claim
 
 We can now say "the server is open source" and mean it. The SDKs were always MIT. The distinction is: SDK = embed anywhere; server = copyleft when you SaaS a modified version.

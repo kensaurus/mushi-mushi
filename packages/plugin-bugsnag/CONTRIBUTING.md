@@ -74,9 +74,9 @@ packages/
   agents/        Agentic fix pipeline (AGPLv3)
   verify/        Fix verification (AGPLv3)
 apps/
-  admin/         Admin dashboard (React + Tailwind)
+  admin/         Admin console (React + Tailwind) (AGPLv3)
   docs/          Documentation site (Nextra — apps/docs)
-  testers/       Tester marketplace portal (Next.js)
+  testers/       Tester marketplace portal (Next.js) (AGPLv3)
 tooling/
   eslint-config/ Shared ESLint flat config
   tsconfig/      Shared TypeScript configs
@@ -216,10 +216,16 @@ chore: bump dependencies
 - **Location:** Co-located with source (`src/foo.test.ts`)
 - **Coverage:** Required for `core`, `web`, `react` — encouraged for all packages
 
-## License
+## License and the CLA
 
-- SDK packages are MIT — your contributions will be MIT-licensed
-- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3. A [commercial license](../../COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications. The `packages/server/ee/` directory is source-available but commercial (production use needs a license); contributions there are accepted under the same EE terms.
+**Before your first pull request is merged, you sign the [Contributor License Agreement](../../CLA.md)** — once, by replying to the CLA bot's comment on your pull request with the sentence it asks for. You keep the copyright in your work. The CLA gives the maintainer the rights needed to keep the licensing below coherent and to offer the [commercial license](../../COMMERCIAL-LICENSE.md); in return it promises your contribution stays available under MIT or an OSI-approved license. The CLA is a draft until counsel has reviewed it, and no outside pull request is merged before then. Pull requests from branches of this repository and from bots skip the check.
+
+Each directory's own `LICENSE` file governs it; the [root `LICENSE`](../../LICENSE) states the split:
+
+- **SDKs, CLI, MCP server, plugins, adapters, marketing UI** — MIT. Your contribution there is distributed under MIT.
+- **Server, agents, verify, the console (`apps/admin`) and the tester portal (`apps/testers`)** — AGPL-3.0-only (the console moved from MIT to AGPL in October 2026, [ADR 0036](../../docs/adr/0036-licensing-posture.md)). A [commercial license](../../COMMERCIAL-LICENSE.md) is available for hosted-SaaS use cases that cannot publish modifications.
+- **`packages/server/ee/`** — source-available Enterprise Edition (production use needs a license); contributions there are accepted under the same EE terms.
+- **Logo, bug mark, app icons and mascot art** — all rights reserved, see [TRADEMARK.md](../../TRADEMARK.md). Please don't send changes to the logo files; open an issue instead.
 
 ## Questions?
 
