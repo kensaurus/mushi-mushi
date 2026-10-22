@@ -515,8 +515,15 @@ export async function refreshFixCiInfra(
 
 /** One job by id (`GET /actions/jobs/{id}`); an Actions check run's id is its job id. */
 export async function fetchJob(gh: CiGithub, repo: string, jobId: number): Promise<GhJob | null> {
+  const res = await fetchJobResult(gh, repo, jobId)
+  return res.status === 200 ? res.body : null
+}
+
+/** The same with GitHub's status, so a caller can tell "gone" (404) from "not now". */
+export async function fetchJobResult(gh: CiGithub, repo: string, jobId: number): Promise<GhResult<GhJob>> {
   const res = await ghRequest<GhJob>(gh, `${API}/repos/${repo}/actions/jobs/${jobId}`)
-  return res.status === 200 && res.body && typeof res.body.id === 'number' ? res.body : null
+  if (res.status === 200 && !(res.body && typeof res.body.id === 'number')) return { status: 502, body: null }
+  return res
 }
 
 /** The tail of a job log a CI repair reads; the rest is discarded while streaming. */
