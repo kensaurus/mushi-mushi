@@ -1,0 +1,11 @@
+-- project_settings' CHECK on verify_protected_globs (20261022010615) calls
+-- private.text_items_within. PostgreSQL checks EXECUTE on that function for
+-- the role writing the row, on EVERY insert/update of project_settings (all
+-- CHECKs run, not only those on changed columns). The verified_fixes
+-- migration revoked it from everyone, so every settings save through the API
+-- (service_role) and the console (authenticated) failed with
+-- "permission denied for function text_items_within" from 01:06 to 01:24 UTC
+-- on 2026-10-22. The function is pure and IMMUTABLE; the roles still have no
+-- USAGE on schema private, so they cannot call it by name, only through the
+-- constraint.
+GRANT EXECUTE ON FUNCTION private.text_items_within(text[], integer) TO service_role, authenticated;
