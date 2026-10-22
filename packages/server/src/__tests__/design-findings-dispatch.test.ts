@@ -9,7 +9,11 @@
  *     findings to the agent, one report per file, a few files per call,
  *     skipping token-definition files, info findings, findings without a file
  *     and files that already have an open report, through the automatic
- *     (capped) dispatch.
+ *     (capped) dispatch;
+ *   - the auto-fix caps are read first: no room today files nothing, and a
+ *     batch never exceeds the room left (its own queued jobs would otherwise
+ *     get the whole batch skipped); a file whose report was never dispatched
+ *     or whose latest job was skipped is sent again on that same report.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -151,13 +155,19 @@ describe('dispatchExistingDesignFindings', () => {
         row('new', 'src/info.tsx', { severity: 'info' }),
       ],
       reports: [{ id: 'r-open', project_id: P, status: 'classified', reporter_token_hash: actions.DESIGN_FILE_REPORTER, environment: { file: 'src/open.tsx' } }],
+      // r-open's fix is running: its file stays out.
+      fix_dispatch_jobs: [{ id: 'job-open', project_id: P, report_id: 'r-open', status: 'running', created_at: new Date().toISOString(), dispatch_metadata: { trigger: 'automatic' } }],
       ...extra,
     } as never, { autoId: true })
   }
 
   it('sends the newest scan only, one report per file, at most maxFiles, through the automatic path', async () => {
     const d = seed()
-    const dispatch = vi.fn(async () => ({ ok: true, dispatchId: 'job-x' }))
+    // Like dispatchFixForReport: a queued job for the report.
+    const dispatch = vi.fn(async (input: { reportId: string }) => {
+      d.table('fix_dispatch_jobs').push({ id: `job-${input.reportId}`, project_id: P, report_id: input.reportId, status: 'queued', created_at: new Date().toISOString(), dispatch_metadata: { trigger: 'automatic' } })
+      return { ok: true, dispatchId: `job-${input.reportId}` }
+    })
     const out = await actions.dispatchExistingDesignFindings(d, { projectId: P, maxFiles: 2, requestedBy: 'user-a' }, { dispatch: dispatch as never, now: () => NOW })
     expect(out).toMatchObject({ action: 'dispatched', runId: 'new', remainingFiles: 1, skipped: { tokenDefinition: 2, info: 1, alreadyOpen: 1, noFile: 0 } })
     if (out.action !== 'dispatched') throw new Error('expected dispatched')
@@ -209,5 +219,55 @@ describe('dispatchExistingDesignFindings', () => {
     const empty = seed({ gate_runs: [run('pr', '2026-10-22T00:00:00Z', 'ci_branch_scan'), run('err', '2026-10-22T01:00:00Z', 'scan', 'error')] })
     expect(await actions.dispatchExistingDesignFindings(empty, { projectId: P }, { dispatch: dispatch as never, now: () => NOW })).toEqual({ action: 'no_scan' })
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  const today = () => new Date().toISOString()
+  const autoJob = (id: string, status = 'completed') => ({ id, project_id: P, report_id: `r-${id}`, status, created_at: today(), dispatch_metadata: { trigger: 'automatic' } })
+
+  it('caps the batch at the dispatches left today, so its own queued jobs cannot get it skipped', async () => {
+    const d = seed({
+      project_settings: [{ project_id: P, autofix_enabled: true, autofix_max_dispatches_per_day: 4 }],
+      fix_dispatch_jobs: [
+        { id: 'job-open', project_id: P, report_id: 'r-open', status: 'running', created_at: today(), dispatch_metadata: { trigger: 'automatic' } },
+        autoJob('j1'),
+        // A skipped job never ran and a manual one is not capped: neither counts.
+        autoJob('j2', 'skipped'),
+        { ...autoJob('j3'), dispatch_metadata: { trigger: 'manual' } },
+      ],
+    })
+    const dispatch = vi.fn(async () => ({ ok: true, dispatchId: 'job-x' }))
+    const out = await actions.dispatchExistingDesignFindings(d, { projectId: P, maxFiles: 5 }, { dispatch: dispatch as never, now: () => NOW })
+    if (out.action !== 'dispatched') throw new Error(`expected dispatched, got ${out.action}`)
+    // 2 automatic today (job-open, j1) of 4: room for 2 of the 3 files.
+    expect(out.sent.map((s) => s.file)).toEqual(['src/b.tsx', 'src/a.tsx'])
+    expect(out.remainingFiles).toBe(1)
+    expect(dispatch).toHaveBeenCalledTimes(2)
+  })
+
+  it('no room today: files no report and dispatches nothing', async () => {
+    const d = seed({
+      project_settings: [{ project_id: P, autofix_enabled: true, autofix_max_dispatches_per_day: 2 }],
+      fix_dispatch_jobs: [autoJob('j1'), autoJob('j2')],
+    })
+    const dispatch = vi.fn()
+    const out = await actions.dispatchExistingDesignFindings(d, { projectId: P, maxFiles: 5 }, { dispatch: dispatch as never, now: () => NOW })
+    expect(out).toEqual({ action: 'budget_reached', reason: 'Daily auto-fix dispatch quota reached (2/2).' })
+    expect(d.table('reports').map((r) => r.id)).toEqual(['r-open'])
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('a file whose report was refused by the caps (latest job skipped) or never dispatched is sent again on that report', async () => {
+    for (const jobs of [[{ id: 'job-skip', project_id: P, report_id: 'r-open', status: 'skipped', created_at: today(), dispatch_metadata: { trigger: 'automatic' } }], []]) {
+      const d = seed({ fix_dispatch_jobs: jobs })
+      const dispatch = vi.fn(async () => ({ ok: true, dispatchId: 'job-y' }))
+      const out = await actions.dispatchExistingDesignFindings(d, { projectId: P, maxFiles: 20 }, { dispatch: dispatch as never, now: () => NOW })
+      if (out.action !== 'dispatched') throw new Error('expected dispatched')
+      const again = out.sent.find((s) => s.file === 'src/open.tsx')
+      expect(again?.reportId).toBe('r-open')
+      expect(out.skipped.alreadyOpen).toBe(0)
+      // No second report for the file; the existing one carries the newest scan.
+      expect(d.table('reports').filter((r) => (r.environment as { file?: string } | null)?.file === 'src/open.tsx')).toHaveLength(1)
+      expect(d.table('reports').find((r) => r.id === 'r-open')).toMatchObject({ environment: { file: 'src/open.tsx', gateRunId: 'new' } })
+    }
   })
 })

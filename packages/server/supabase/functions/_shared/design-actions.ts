@@ -27,6 +27,7 @@
 
 import type { getServiceClient } from './db.ts'
 import { dispatchFixForReport, type DispatchResult } from './dispatch.ts'
+import { checkAutofixBudget } from './autofix-budget.ts'
 import { log } from './logger.ts'
 import type { DesignRuleId, DevianceFinding, FindingSeverity } from './design-engine-types.ts'
 import { isTokenDefinitionFile, SCAN_LIMITS, type DesignScanManifest } from './design-scan.ts'
@@ -200,12 +201,39 @@ export type ActOutcome =
   | { action: 'dispatched'; reportId: string; dispatchId: string | null; newFindings: number }
   | { action: 'dispatch_refused'; reportId: string; code: DispatchResult['code']; message: string | undefined }
 
+/** Room for automatic dispatches today: `room` null means no daily cap. */
+export type DesignBudget = { allowed: true; room: number | null } | { allowed: false; reason: string }
+
 export interface ActDeps {
   dispatch: typeof dispatchFixForReport
   now: () => Date
+  /** dispatchExistingDesignFindings only: the app's auto-fix budget (throws when it cannot be read). */
+  budget?: (db: Db, projectId: string) => Promise<DesignBudget>
 }
 
-const defaultActDeps: ActDeps = { dispatch: dispatchFixForReport, now: () => new Date() }
+/**
+ * The app's auto-fix caps for an automatic dispatch (checkAutofixBudget):
+ * refused when the spend ceiling or the daily cap is reached, else the
+ * dispatches left today.
+ */
+export async function designAutofixBudget(db: Db, projectId: string): Promise<DesignBudget> {
+  const { data, error } = await db
+    .from('project_settings')
+    .select('autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error) throw new Error(`auto-fix caps read failed: ${error.message}`)
+  const s = (data ?? {}) as Record<string, number | null | undefined>
+  const check = await checkAutofixBudget(db as never, projectId, {
+    autofix_max_spend_usd: s.autofix_max_spend_usd ?? null,
+    autofix_max_dispatches_per_day: s.autofix_max_dispatches_per_day ?? null,
+    autofix_approval_cost_threshold_usd: s.autofix_approval_cost_threshold_usd ?? null,
+  }, { trigger: 'automatic' })
+  if (!check.allowed) return { allowed: false, reason: check.reason ?? 'The auto-fix limits are reached.' }
+  return { allowed: true, room: check.maxDispatchesPerDay == null ? null : Math.max(0, check.maxDispatchesPerDay - check.dispatchesToday) }
+}
+
+const defaultActDeps: ActDeps = { dispatch: dispatchFixForReport, now: () => new Date(), budget: designAutofixBudget }
 
 /** The findings a scan keeps (and acts on): the first SCAN_LIMITS.maxStoredFindings in sortFindings order. */
 export function storedFindingsOf<T>(findings: readonly T[]): T[] {
@@ -431,6 +459,8 @@ export interface SentDesignFile {
 export type DispatchFindingsOutcome =
   | { action: 'settings_unavailable' | 'failed'; error: string }
   | { action: 'autofix_disabled' }
+  /** The app's auto-fix caps leave no room today: nothing was filed or dispatched. */
+  | { action: 'budget_reached'; reason: string }
   | { action: 'no_scan' }
   | {
       action: 'dispatched' | 'nothing_to_send'
@@ -498,11 +528,32 @@ export async function dispatchExistingDesignFindings(
     ])
     if (fErr) throw new Error(`gate_findings read failed: ${fErr.message}`)
     if (oErr) throw new Error(`reports read failed: ${oErr.message}`)
-    const openFiles = new Set(
-      ((open ?? []) as Array<{ environment: { file?: unknown } | null }>)
-        .map((r) => r.environment?.file)
-        .filter((f): f is string => typeof f === 'string'),
-    )
+    const openReports = ((open ?? []) as Array<{ id: string; environment: { file?: unknown } | null }>)
+      .filter((r): r is { id: string; environment: { file: string } } => typeof r.environment?.file === 'string')
+    // A file's open report whose latest dispatch was skipped (refused by the
+    // caps) or that was never dispatched is sent again, reusing that report;
+    // only a report with a live or finished job keeps its file out.
+    const latestJob = new Map<string, { status: string; at: string }>()
+    const openIds = openReports.map((r) => r.id)
+    for (let i = 0; i < openIds.length; i += 100) {
+      const { data: jobs, error: jErr } = await db
+        .from('fix_dispatch_jobs')
+        .select('report_id, status, created_at')
+        .eq('project_id', input.projectId)
+        .in('report_id', openIds.slice(i, i + 100))
+      if (jErr) throw new Error(`fix_dispatch_jobs read failed: ${jErr.message}`)
+      for (const j of (jobs ?? []) as Array<{ report_id: string; status: string; created_at: string }>) {
+        const prev = latestJob.get(j.report_id)
+        if (!prev || j.created_at > prev.at) latestJob.set(j.report_id, { status: j.status, at: j.created_at })
+      }
+    }
+    const openFiles = new Set<string>()
+    const reusable = new Map<string, string>()
+    for (const r of openReports) {
+      const job = latestJob.get(r.id)
+      if (!job || job.status === 'skipped') reusable.set(r.environment.file, r.id)
+      else openFiles.add(r.environment.file)
+    }
     const findings: DevianceFinding[] = ((rows ?? []) as StoredFindingRow[]).map((r) => ({
       rule_id: r.rule_id as DesignRuleId,
       severity: r.severity,
@@ -514,11 +565,29 @@ export async function dispatchExistingDesignFindings(
       suggestion: r.suggested_fix?.suggestion ?? null,
     }))
     const { groups, skipped } = groupFindingsByFile(findings, { manifest: input.manifest ?? null, openFiles })
-    const picked = groups.slice(0, clampDispatchFiles(input.maxFiles))
+    if (groups.length === 0) return { action: 'nothing_to_send', runId: run.id, sent: [], remainingFiles: 0, skipped }
+    // The caps before any report is filed. Every job of this batch is queued
+    // at once and counts against the daily cap of the next one the worker
+    // checks, so the batch never exceeds the room left today: a larger batch
+    // would be skipped wholesale by its own queued rows.
+    const budget = await (deps.budget ?? designAutofixBudget)(db, input.projectId)
+    if (!budget.allowed) return { action: 'budget_reached', reason: budget.reason }
+    const take = Math.min(clampDispatchFiles(input.maxFiles), budget.room ?? Number.POSITIVE_INFINITY)
+    if (take <= 0) return { action: 'budget_reached', reason: 'No automatic dispatches are left today under the auto-fix daily cap.' }
+    const picked = groups.slice(0, take)
     const sent: SentDesignFile[] = []
     for (const group of picked) {
       const text = fileDriftReportText(group)
-      const { data: report, error: insErr } = await db
+      const reuseId = reusable.get(group.file)
+      if (reuseId) {
+        // Send the file again on its existing report, with the newest findings.
+        const { error: upErr } = await db
+          .from('reports')
+          .update({ description: text.description, summary: text.summary, environment: { source: 'design-drift', gateRunId: run.id, file: group.file } })
+          .eq('id', reuseId)
+        if (upErr) throw new Error(`report update failed: ${upErr.message}`)
+      }
+      const { data: report, error: insErr } = reuseId ? { data: { id: reuseId }, error: null } : await db
         .from('reports')
         .insert({
           project_id: input.projectId,

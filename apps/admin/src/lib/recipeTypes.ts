@@ -390,7 +390,9 @@ export interface DesignActionSettingsView {
  * files never), through the automatic (capped) dispatch.
  */
 export interface DesignFindingsDispatchResult {
-  action: 'dispatched' | 'nothing_to_send' | 'no_scan'
+  action: 'dispatched' | 'nothing_to_send' | 'no_scan' | 'budget_reached'
+  /** budget_reached: why the auto-fix caps leave no room today. */
+  reason?: string
   runId?: string
   sent?: Array<{ file: string; reportId: string; findings: number; dispatchId: string | null; refused: { code?: string; message?: string } | null }>
   remainingFiles?: number

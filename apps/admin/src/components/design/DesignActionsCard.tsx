@@ -27,6 +27,7 @@ const FILES_PER_SEND = 5
 /** One plain sentence for what a send did. */
 function describeFindingsDispatch(r: DesignFindingsDispatchResult): string {
   if (r.action === 'no_scan') return 'There is no finished scan yet. Run a scan first.'
+  if (r.action === 'budget_reached') return `Nothing sent: ${r.reason ?? "the app's auto-fix limits are reached for today"}`
   const sent = r.sent ?? []
   const left = r.remainingFiles ?? 0
   const tokenFiles = r.skipped?.tokenDefinition ?? 0

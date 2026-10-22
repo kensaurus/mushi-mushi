@@ -30,7 +30,8 @@ function parseOnOff(raw: string, flag: string): boolean {
 }
 
 interface FindingsDispatch {
-  action: 'dispatched' | 'nothing_to_send' | 'no_scan'
+  action: 'dispatched' | 'nothing_to_send' | 'no_scan' | 'budget_reached'
+  reason?: string
   sent?: Array<{ file: string; reportId: string; findings: number; dispatchId: string | null; refused: { code?: string; message?: string } | null }>
   remainingFiles?: number
   skipped?: { tokenDefinition: number; noFile: number; info: number; alreadyOpen: number }
@@ -39,6 +40,7 @@ interface FindingsDispatch {
 /** Plain lines for what a findings dispatch did. */
 function renderFindingsDispatch(r: FindingsDispatch): string[] {
   if (r.action === 'no_scan') return ['No finished design scan yet. Run one first (mushi recipe check --push, or the console).']
+  if (r.action === 'budget_reached') return [`Nothing sent: ${r.reason ?? "the app's auto-fix limits are reached for today"}`]
   const sent = r.sent ?? []
   const lines = sent.length === 0
     ? ['Nothing to send: every file with findings already has an open report.']
