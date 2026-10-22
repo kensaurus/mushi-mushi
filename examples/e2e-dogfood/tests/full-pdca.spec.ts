@@ -13,8 +13,9 @@
  *   3. Do        — dispatch an autofix attempt and confirm the worker
  *                   picked it up.
  *   4. Check     — judge-batch run records an evaluation row.
- *   5. Act       — fix attempt surfaces in /queue with a PR URL (mocked
- *                   by msw unless E2E_LIVE_GITHUB=1).
+ *   5. Act       — with E2E_LIVE_GITHUB unset, nothing is intercepted
+ *                   and the attempt must leave `pending`. Set to 1 to
+ *                   assert a real GitHub PR URL.
  *   6. Health    — /v1/admin/health/integration/anthropic probe returns
  *                  a structured status (ok or unknown — never 5xx).
  *
@@ -203,7 +204,7 @@ test.describe('Full PDCA dogfood', () => {
     ).toBeGreaterThan(0)
   })
 
-  test('Act — fix_attempts surfaces a PR URL (mocked unless E2E_LIVE_GITHUB=1)', async () => {
+  test('Act — attempt leaves pending (PR URL only when E2E_LIVE_GITHUB=1)', async () => {
     test.skip(!createdReportId, 'Plan must succeed first')
 
     // Act only means something if Do actually dispatched an attempt. If the
@@ -221,10 +222,8 @@ test.describe('Full PDCA dogfood', () => {
     )
 
     if (!LIVE_GITHUB) {
-      // In mock mode the fix-worker should still populate a fake PR URL
-      // (or at least transition the attempt past `pending`). Asserting
-      // the transition is the important contract — the URL shape is
-      // asserted in packages/agents tests.
+      // Nothing intercepts GitHub when E2E_LIVE_GITHUB is unset. Assert
+      // only that the attempt's status leaves `pending`.
       await expect.poll(
         async () => {
           const { data } = await db

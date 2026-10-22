@@ -70,7 +70,7 @@ message when the variable is unset.
 | `MUSHI_ADMIN_JWT`           | —                                            | JWT for `/v1/admin/*` calls (Do / Check / Health need this)        |
 | `MUSHI_ADMIN_EMAIL`         | falls back to `TEST_USER_EMAIL`              | Login identity for the admin-polish suite (`byok-no-flash`, `dynamic-title`, `favicon-badge`) |
 | `MUSHI_ADMIN_PASSWORD`      | falls back to `TEST_USER_PASSWORD`           | Paired password; both vars are consumed by `admin-polish.helpers.ts` |
-| `E2E_LIVE_GITHUB`           | unset (mock mode)                            | Set `1` to hit real GitHub in the Act stage                        |
+| `E2E_LIVE_GITHUB`           | unset (GitHub not intercepted)               | Set `1` to hit real GitHub in the Act stage                        |
 
 ## Run it
 
