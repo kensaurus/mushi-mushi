@@ -16,12 +16,12 @@ parked work is visible in one place.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
 - **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 55 · **Recently closed:** 21 (BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 54 · **Recently closed:** 22 (BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 10 |
-| test-gap | 6 |
+| test-gap | 5 |
 | tech-debt | 18 |
 | known-bug | 1 |
 | decision-needed | 6 |
@@ -30,7 +30,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 52 |
+| relevant | 51 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -81,7 +81,6 @@ parked work is visible in one place.
 | BL-004 | deferred-plan-phase | Plan 020 Portfolio operator. 2026-10-17: all seven §4.2 detectors the plan lists as unbuilt are in `_shared/radar/` (`dead_app_live_spend`, `provider_key_invalid`, `store_credential_scope_missing`, `key_unused_90d`, `key_in_client_bundle`, `paid_feature_no_kill_switch`, `provider_limit_unset`), so the Phase 2 box is stale. `check:admin-docs-coverage` now warns on 3 pages, down from 5: `/design`, `/email/reporter`, `/recipe`. Left: those three MDX pages, the MCP-docs regeneration box, and ticking the plan | relevant | low | `docs/execplans/PLANS.md:632`, `:634`; `docs/execplans/portfolio-operator.md:474`-`:475`; `node scripts/check-admin-docs-coverage.mjs` | — |
 | BL-005 | deferred-plan-phase | Plan 021 `mushi ux`: owner-owed probes (Cursor `--list-models`, billing go/no-go, persistent-profile login, non-GET census); the single `NextStep` component waits on an owner decision; cloud-mode live dispatch not yet run | relevant | med | `docs/execplans/ux-loop.md:63`; `docs/execplans/PLANS.md:642`-`:646` | — |
 | BL-006 | deferred-plan-phase | Billing launch gate never ticked. The runbook says public Stripe checkout and paid tiers wait until all 12 items are green: hard-stop tests (Free at 50 → `NO_SUBSCRIPTION_OVER_FREE`, Indie overage, spend cap → `SPEND_CAP_REACHED`), billing UI states, 50/80/100% alerts, `stripe-bootstrap.mjs` lookup keys, metered overage only after Stage 2. PLANS.md adds quota validation over two cycles, one enterprise customer, the Sentry upsell, and annual prices. 2026-10-17: `pricing_plans` has `free_cloud`, `indie` and `pro`, the tiers migration is recorded, and there are 0 `billing_subscriptions`, so nothing is charged yet. Raised to med because it blocks paid launch | relevant | med | `docs/runbooks/billing-launch-gate.md:20`-`:57`; `docs/execplans/PLANS.md:515`-`:518` | — |
-| BL-008 | test-gap | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | relevant | low | `docs/execplans/PLANS.md:230`, `:233` | — |
 | BL-009 | test-gap | Code-health ingest's ship checklist is unticked. 2026-10-17: the migration is live and 50 `code_health` gate runs plus 156 `bundle.*` / `code_health.*` metric rows from yen-yen are in production (last run 2026-07-16), so the "migration applied" and "one real yen-yen push" boxes are done. Not re-run: `POST /v1/ingest/metrics` 201 / 429, the owner vs non-member RLS spot-check, advisors. Tick those or reopen. Ingest has since stopped (BL-082) | verify-done | med | `docs/execplans/PLANS.md:421`-`:431` | — |
 | BL-011 | tech-debt | `_shared/storage.ts`: replace the bucket assumption with a pre-flight bucket existence probe | relevant | low | `packages/server/supabase/functions/_shared/storage.ts:87` | — |
 | BL-012 | tech-debt | knip remainder after the 2026-10-17 pass (35 default / 49 production re-measured 2026-10-20; default duplicates 5→3 on 2026-10-22 when BL-042b removed the `PAGE_STACK` alias and the report-metric aliases went, ceilings unchanged; the one unresolved import closed as BL-010). 14 files: 4 manual tools, 6 design primitives, and 4 decisions (BL-040, BL-041). 7 exports and 1 type, each kept with a stated reason. 3 duplicates (BL-042) | relevant | low | `docs/plan-dead-code-2026-10-16.md`; `docs/execplans/knip-baseline/README.md` | — |
@@ -133,6 +132,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-008 | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | 2026-10-22 | `packages/web/src/lifecycle-hooks.test.ts` covers `beforeSendFeedback` drop, modify, throw, and the 2s timeout, plus `onCrashedLastRun` (first run `null`, unclean exit `true`, `pagehide` sets `clean`, a thrown hook does not break init). `packages/cli/src/project-create.test.ts` covers `persistProjectCreate` (the `mushi project create` write step): `.env.local` merge, `.cursor/mcp.json` merge that keeps other servers and does not inline the API key, and `saveConfig` keeping `clientId` / `telemetryNoticeShown`. Plan 012 boxes in `docs/execplans/PLANS.md` are ticked. |
 | BL-065 | `firebase-analytics.test.ts` named a `firebase-analytics.signature.test.ts` that was never created | 2026-10-20 | `packages/adapters/src/__tests__/firebase-analytics.signature.test.ts` serves a local JWKS and checks the default RS256 path: a fixture-signed token with `iss` `https://accounts.google.com` or `accounts.google.com` returns 200 and calls the sink; a different key, a tampered payload, a wrong `aud`, and a project-id substring spoof return 401 `INVALID_TOKEN`; a valid signature from another issuer returns 401 `INVALID_ISS`. The unsigned cases stay in `firebase-analytics.test.ts`, which now points at this file. |
 | BL-010 | knip unresolved import: the server explore-tab test reached into `apps/admin` | 2026-10-20 | Deleted `packages/server/src/__tests__/explore-tab-navigation.test.ts`. Its three cases (knowledge maps to understand, understand defaults to ask, unknown tabs fall back to layers) now live in `apps/admin/src/lib/exploreTabNavigation.test.ts`, which imports the module locally (7 tests pass). `pnpm exec knip` reports 35 error-level issues on `152b4428` and zero unresolved imports; the default CI ceiling is `--max-issues 35`. |
 | BL-007 | The `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) | 2026-10-20 | `.github/workflows/e2e-realworld.yml` runs `pnpm e2e:realworld` with `MUSHI_REALWORLD=1` after installing Playwright chromium and building `@mushi-mushi/react` and `@mushi-mushi/node` (and their workspace deps). Triggers: path-filtered pull requests (`examples/realworld`, `packages/core`, `packages/web`, `packages/react`, `packages/node`), daily cron `15 5 * * *`, and `workflow_dispatch`. `scripts/e2e-realworld-workflow.test.mjs` pins that invocation. |

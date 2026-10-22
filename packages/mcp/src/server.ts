@@ -1796,6 +1796,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'request_ci_placement_change',
+    {
+      title: titleOf('request_ci_placement_change'),
+      description: descOf('request_ci_placement_change'),
+      annotations: annotationsFor('request_ci_placement_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$/).describe('LINUX_RUNNER or RUNNER_<WORKFLOW>'),
+        value: z.string().min(1).max(100).nullable().describe('One runner label, or null to remove the variable'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
+      return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
     'explain_finding',
     {
       title: titleOf('explain_finding'),

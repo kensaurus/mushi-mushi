@@ -4727,7 +4727,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>123 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>124 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4775,7 +4775,7 @@ your client:
 }
 ```
 
-The full tool catalog (123 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (124 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4951,7 +4951,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 123 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 124 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6714,6 +6714,7 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
 mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
@@ -7883,7 +7884,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **123-tool** catalog and
+on npm for the full **124-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -7983,7 +7984,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**123 tools** · **8 resources** · **4 prompts**
+**124 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -8079,6 +8080,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
+| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_\ may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
 | `pull_store_reviews` | Pull store reviews now | Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns \{ status, filed, stores }. Write. |
 | `set_store_review_intake` | Set store review intake | Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -15233,6 +15235,7 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`, with the GitHub token stored in the project's settings (or, without one, the organization's). Never the Mushi GitHub App, which does not have this permission, and never Mushi's own token |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
@@ -15300,6 +15303,66 @@ machine when GitHub would run it free, a workflow reading `vars.LINUX_RUNNER`
 in a repo with no such variable (every job falls back to GitHub), jobs pinned
 to GitHub and what they cost, many tiny jobs, and a public repo running on your
 own machine (a pull request from a fork can run code there).
+
+## Change where CI runs
+
+Most workflows that can run on your own machine pick their runner from a repo
+variable:
+
+```yaml
+runs-on: ${{ (github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+```
+
+The **Where CI runs** section of the CI page shows, for each repo, which jobs
+read `LINUX_RUNNER` (or a `RUNNER_` variable) and where they run
+now. You can move them between GitHub-hosted runners and one of your runner
+labels. Mushi changes only that variable: never runner labels, registrations,
+runner groups, or another tool's dispatcher.
+
+Every change goes through four steps:
+
+1. **Preview.** Nothing changes. You see the jobs that move and the ones that
+   stay, with the reason: pinned to GitHub in the workflow (the comment next to
+   `runs-on`), main-branch and Dependabot runs, or a different variable. You
+   also see how many runners with the target label are online, how long jobs
+   wait there, the estimated cost change, and warnings, such as no online
+   runner for the label (jobs would wait, then expire after 24 hours) or a
+   public repo where a pull request from a fork could run code on your
+   machine.
+2. **Request.** Anyone who is not a viewer can ask, in the console, with
+   `mushi runner placement request`, or with the MCP tool
+   `request_ci_placement_change`. Mushi builds the change itself from the
+   preview, including the variable's current value.
+3. **Approve.** A team owner or admin approves exactly that change in the
+   console. An API key can never approve. The approval lasts an hour.
+4. **Run.** The owner or admin runs it from the console. If the variable
+   changed since the preview, Mushi refuses with `VARIABLE_MOVED` and you
+   preview again.
+
+After a change, Mushi watches the next 10 jobs that read the variable. It
+raises an alert if one lands on another runner or waits more than 30
+minutes. **Ask to revert** requests the reverse change, which goes through the
+same approval.
+
+```bash
+mushi runner placement show
+mushi runner placement preview --repo you/your-app --value my-runner-label
+mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
+mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+```
+
+### Your CI agreement
+
+**Settings → General → CI policy** records the rules Mushi checks at the
+request and again when the change runs. Mushi fills in nothing for you:
+
+- **No paid GitHub-hosted minutes on private repos**, with a list of repos
+  allowed anyway. Only an owner can turn this rule off.
+- **External controllers**: another tool that decides where some repos run
+  (for example a dispatcher that flips runner labels). Mushi shows those
+  repos read-only and never competes with it.
+- **Standby runners**: runner names or labels that are only a fallback
+  (`kensaurus-local-*`). They are never a target.
 
 ## Machine health: heartbeat and job hooks
 
@@ -19490,7 +19553,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**123 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**124 tools**, 8 resources, 4 prompts).
 
 ---
 
