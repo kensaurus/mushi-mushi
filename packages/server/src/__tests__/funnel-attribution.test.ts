@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isNonRealReport } from '../../supabase/functions/_shared/first-report.ts'
+import { isNonRealReport, isNotFirstReportSource } from '../../supabase/functions/_shared/first-report.ts'
 import { MUSHI_EVENTS } from '../../supabase/functions/_shared/analytics-taxonomy.generated.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
@@ -63,12 +63,17 @@ describe('first_diagnosis_ready fires for the R2 / R3 shapes', () => {
     expect(isNonRealReport({})).toBe(false)
     // R2's only earlier diagnosed report: the console test report.
     expect(isNonRealReport({ source: 'admin_test_report' })).toBe(true)
+    // A hand-filed report (mushi reports file / file_report) is real work but
+    // never the first diagnosis an app's users produced.
+    expect(isNotFirstReportSource({ source: 'admin_test_report' })).toBe(true)
+    expect(isNotFirstReportSource({ source: 'admin_file' })).toBe(true)
+    expect(isNotFirstReportSource({})).toBe(false)
   })
 
-  it('the earlier-diagnosis lookup ignores precomputed test diagnoses and test reports', () => {
+  it('the earlier-diagnosis lookup ignores precomputed test diagnoses, test reports and hand-filed reports', () => {
     const src = read('classify-report/index.ts')
     expect(src).toContain("stage2_model.is.null,stage2_model.neq.precomputed")
-    expect(src).toMatch(/hadEarlierDiagnosis = \(\(prior \?\? \[\]\) as OldestReportRow\[\]\)\.some\(\s*\(row\) => !isNonRealReport\(row\.custom_metadata\)/)
+    expect(src).toMatch(/hadEarlierDiagnosis = \(\(prior \?\? \[\]\) as OldestReportRow\[\]\)\.some\(\s*\(row\) => !isNotFirstReportSource\(row\.custom_metadata\)/)
   })
 
   it('diagnosis_viewed is a console event a browser may send (not server-owned)', () => {

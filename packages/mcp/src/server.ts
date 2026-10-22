@@ -3434,6 +3434,50 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'file_report',
+    {
+      title: titleOf('file_report'),
+      description: descOf('file_report'),
+      annotations: annotationsFor('file_report'),
+      inputSchema: z.object({
+        title: z.string().min(3).max(200).describe('One-line title (3-200 characters)'),
+        description: z
+          .string()
+          .min(1)
+          .max(10_000)
+          .describe('What happens, steps to reproduce, what you expected, and how to check it is fixed'),
+        severity: z
+          .enum(['critical', 'high', 'medium', 'low'])
+          .optional()
+          .describe('Your severity hint; triage may refine it'),
+        component: z.string().max(200).optional().describe('Area of the app, e.g. "checkout"'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      }),
+      outputSchema: z.object({
+        reportId: z.string().describe('The new report id; pass it to triage_issue or dispatch_fix'),
+        projectId: z.string(),
+        title: z.string(),
+        status: z.string().describe('Always new: triage starts right away'),
+        severity: z.string().nullable(),
+        component: z.string().nullable(),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/reports`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: args.title,
+          description: args.description,
+          severity: args.severity,
+          component: args.component,
+        }),
+      });
+      return jsonResult(data);
+    },
+  );
+
+  server.registerTool(
     'transition_status',
     {
       title: titleOf('transition_status'),
