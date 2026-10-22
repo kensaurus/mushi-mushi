@@ -13,7 +13,8 @@ interface Props {
   dispatchingId: string | null
   projectName: string | null
   loading?: boolean
-  onDispatch: (id: string) => void
+  /** `group: 'minor'` sends every pending minor/patch bump of the finding's repo as one report. */
+  onDispatch: (id: string, group?: 'minor') => void
   onDismiss: (id: string) => void
 }
 
@@ -37,8 +38,8 @@ export function ModernizationFindings({
             : 'The weekly library-modernizer cron scans dependency manifests and surfaces upgrade recommendations here.'
         }
         hints={[
-          'Security and deprecated deps auto-create synthetic reports for dispatch',
-          'Minor findings can be dismissed without a fix',
+          'Dispatch files a report for the upgrade, then sends it to a fix agent',
+          'Minor bumps of one repo can go together as one report',
           'Dispatched findings appear on the Fixes page',
         ]}
       />
@@ -89,12 +90,6 @@ export function ModernizationFindings({
                     <span className="font-mono">{f.manifest_path}</span>
                   </>
                 )}
-                {!f.related_report_id && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span className="text-warn">No auto-dispatch (minor)</span>
-                  </>
-                )}
               </div>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -102,12 +97,23 @@ export function ModernizationFindings({
                 size="sm"
                 variant="primary"
                 onClick={() => onDispatch(f.id)}
-                disabled={!f.related_report_id || dispatchingId === f.id}
+                disabled={dispatchingId === f.id}
                 loading={dispatchingId === f.id}
-                title={f.related_report_id ? 'Dispatch to fix-worker' : 'Minor finding — dismiss instead'}
+                title={f.related_report_id ? 'Dispatch to fix-worker' : 'Files a report for this upgrade, then dispatches it'}
               >
                 Dispatch fix
               </Btn>
+              {f.severity === 'minor' && !f.related_report_id && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onDispatch(f.id, 'minor')}
+                  disabled={dispatchingId === f.id}
+                  title="One report and one fix for every pending minor or patch bump in this repo"
+                >
+                  Bump all minor
+                </Btn>
+              )}
               <Btn size="sm" variant="cancel" onClick={() => onDismiss(f.id)}>
                 Dismiss
               </Btn>
