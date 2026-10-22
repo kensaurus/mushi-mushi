@@ -57,6 +57,37 @@ describe('classifyCiJob', () => {
     expect(v.kind).toBe('runner_lost')
   })
 
+  it('reads a segfaulted step on a self-hosted runner as runner_lost (glot.it on the Alienware, 2026-10-22)', () => {
+    const v = classifyCiJob(
+      { ...GLOT_OOM_JOB, conclusion: 'failure', runner_name: 'alienware-glot-1' },
+      { annotations: ['Node.js 20 is deprecated.', 'Process completed with exit code 139.'], now: NOW },
+    )
+    expect(v).toMatchObject({ kind: 'runner_lost', infra: true, runner: 'alienware-glot-1' })
+    expect(v.detail).toMatch(/segmentation fault/)
+  })
+
+  it('reads every crash signal on a custom-labelled machine as runner_lost', () => {
+    for (const code of [132, 133, 135, 137, 139]) {
+      const v = classifyCiJob(
+        { ...GLOT_OOM_JOB, conclusion: 'failure', labels: ['kensaurus-local'] },
+        { annotations: [`Process completed with exit code ${code}.`], now: NOW },
+      )
+      expect(v.kind, String(code)).toBe('runner_lost')
+    }
+  })
+
+  it('keeps a crash on a GitHub-hosted runner, and an ordinary exit code, as code_failure', () => {
+    const hosted = classifyCiJob(
+      { ...GLOT_OOM_JOB, conclusion: 'failure', runner_name: 'GitHub Actions 1000079285', labels: ['ubuntu-latest'] },
+      { annotations: ['Process completed with exit code 139.'], now: NOW },
+    )
+    expect(hosted.kind).toBe('code_failure')
+    for (const code of [1, 2, 13, 134, 1390]) {
+      const v = classifyCiJob({ ...GLOT_OOM_JOB, conclusion: 'failure' }, { annotations: [`Process completed with exit code ${code}.`], now: NOW })
+      expect(v.kind, String(code)).toBe('code_failure')
+    }
+  })
+
   it('reads steps that ran with no runner name left as runner_lost', () => {
     const v = classifyCiJob({ ...GLOT_OOM_JOB, runner_name: null, runner_id: null }, { annotations: [], now: NOW })
     expect(v).toMatchObject({ kind: 'runner_lost', infra: true, runner: null })
