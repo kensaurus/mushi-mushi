@@ -6714,6 +6714,7 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
 mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
@@ -15234,6 +15235,7 @@ mushi runner status --json
 | Actions: read | Jobs, their times, runner names and why a job was cancelled |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
+| Variables: read and write (optional) | Changing where CI runs: Mushi reads and writes only `LINUX_RUNNER` and `RUNNER_`. A fine-grained token stored in the project settings; the Mushi GitHub App does not have this permission |
 
 Without Administration: read, Mushi shows the runners it saw in jobs and says
 so.
@@ -15301,6 +15303,66 @@ machine when GitHub would run it free, a workflow reading `vars.LINUX_RUNNER`
 in a repo with no such variable (every job falls back to GitHub), jobs pinned
 to GitHub and what they cost, many tiny jobs, and a public repo running on your
 own machine (a pull request from a fork can run code there).
+
+## Change where CI runs
+
+Most workflows that can run on your own machine pick their runner from a repo
+variable:
+
+```yaml
+runs-on: ${{ (github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+```
+
+The **Where CI runs** section of the CI page shows, for each repo, which jobs
+read `LINUX_RUNNER` (or a `RUNNER_` variable) and where they run
+now. You can move them between GitHub-hosted runners and one of your runner
+labels. Mushi changes only that variable: never runner labels, registrations,
+runner groups, or another tool's dispatcher.
+
+Every change goes through four steps:
+
+1. **Preview.** Nothing changes. You see the jobs that move and the ones that
+   stay, with the reason: pinned to GitHub in the workflow (the comment next to
+   `runs-on`), main-branch and Dependabot runs, or a different variable. You
+   also see how many runners with the target label are online, how long jobs
+   wait there, the estimated cost change, and warnings, such as no online
+   runner for the label (jobs would wait, then expire after 24 hours) or a
+   public repo where a pull request from a fork could run code on your
+   machine.
+2. **Request.** Anyone who is not a viewer can ask, in the console, with
+   `mushi runner placement request`, or with the MCP tool
+   `request_ci_placement_change`. Mushi builds the change itself from the
+   preview, including the variable's current value.
+3. **Approve.** A team owner or admin approves exactly that change in the
+   console. An API key can never approve. The approval lasts an hour.
+4. **Run.** The owner or admin runs it from the console. If the variable
+   changed since the preview, Mushi refuses with `VARIABLE_MOVED` and you
+   preview again.
+
+After a change, Mushi watches the next 10 jobs that read the variable. It
+raises an alert if one lands on another runner or waits more than 30
+minutes. **Ask to revert** requests the reverse change, which goes through the
+same approval.
+
+```bash
+mushi runner placement show
+mushi runner placement preview --repo you/your-app --value my-runner-label
+mushi runner placement request --repo you/your-app --value my-runner-label --reason "save paid minutes"
+mushi runner placement preview --repo you/your-app --remove     # back to GitHub-hosted
+```
+
+### Your CI agreement
+
+**Settings → General → CI policy** records the rules Mushi checks at the
+request and again when the change runs. Mushi fills in nothing for you:
+
+- **No paid GitHub-hosted minutes on private repos**, with a list of repos
+  allowed anyway. Only an owner can turn this rule off.
+- **External controllers**: another tool that decides where some repos run
+  (for example a dispatcher that flips runner labels). Mushi shows those
+  repos read-only and never competes with it.
+- **Standby runners**: runner names or labels that are only a fallback
+  (`kensaurus-local-*`). They are never a target.
 
 ## Machine health: heartbeat and job hooks
 
