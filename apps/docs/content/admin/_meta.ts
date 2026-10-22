@@ -24,6 +24,7 @@ export default {
 
   '-- Fix': { type: 'separator', title: '3 · Fix' },
   fixes: 'Fix orchestrator',
+  'verified-merge': 'Verified merge',
   repo: 'Repo graph',
   explore: 'Codebase Atlas',
   'ux-runs': 'UX runs',

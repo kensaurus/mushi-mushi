@@ -11,7 +11,8 @@
  *          headers. The route files stay under `api/routes/` so the route
  *          manifest and the surface-parity check keep reading them.
  *
- *          Routes here: CI runners (Plan 022), inventory, Ask Mushi.
+ *          Routes here: CI runners (Plan 022), inventory, Ask Mushi,
+ *          verified fixes (Plan 024).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -22,6 +23,7 @@ import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts'
 import { registerCiRoutes } from '../api/routes/ci.ts'
 import { registerInventoryRoutes } from '../api/routes/inventory.ts'
 import { registerAskMushiRoutes } from '../api/routes/ask-mushi.ts'
+import { registerVerifyRoutes } from '../api/routes/verify.ts'
 
 ensureSentry('api-ext')
 
@@ -34,6 +36,7 @@ app.use('/v1/*', stdioMcpUsage())
 registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
+registerVerifyRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

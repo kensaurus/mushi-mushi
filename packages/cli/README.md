@@ -29,7 +29,7 @@ For your editor, `mushi setup` writes the hosted MCP entry by default: the edito
 | --- | --- |
 | Set up | `init`, `login`, `setup`, `connect`, `doctor`, `upgrade`, `nudge`, `completion` |
 | Bugs | `reports list/show/search/triage`, `lessons list/show` |
-| Fixes | `fix <reportId>`, `fixes tail/merge/refresh-ci` |
+| Fixes | `fix <reportId>`, `fixes tail/merge/refresh-ci/review/verify`, `verify workflow` |
 | Ship | `sourcemaps upload`, `deploy check`, `migrate`, `audit` |
 | Test and UX | `qa stories/runs/run`, `tdd gen/pending/approve/improve`, `stories map`, `ux` |
 | Account | `whoami`, `status`, `usage`, `billing`, `keys`, `integrations`, `slack` |

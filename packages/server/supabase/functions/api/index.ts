@@ -715,6 +715,14 @@ registerPushRoutes(app);
 registerSentryImportRoutes(app);
 // CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
 forwardToApiExt(['/v1/admin/ci/*', '/v1/ingest/runner', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
+forwardToApiExt([
+  '/v1/admin/projects/:id/verify-settings',
+  '/v1/admin/fixes/:id/verification',
+  '/v1/admin/fixes/:id/verify',
+  '/v1/admin/projects/:id/verify-workflow',
+  '/v1/admin/projects/:id/verify-workflow/pr',
+]);
 
 registerA2ATaskRoutes(app);
 

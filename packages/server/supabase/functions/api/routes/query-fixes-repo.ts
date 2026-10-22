@@ -50,6 +50,7 @@ import { runInBackground } from '../../_shared/background.ts';
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
 import { enqueueFixReview, loadFixReview, loadFixReviewRow } from '../../_shared/fix-review-db.ts';
 import { gatedMergePullRequest } from '../../_shared/gated-merge.ts';
+import { loadFixVerification } from '../../_shared/fix-verify-db.ts';
 import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts';
 import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { loadRecentFixTruths, loadReportFixTruths, reportTitle } from '../../_shared/fix-report-truth-load.ts';
@@ -1286,7 +1287,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
       if (!fix) {
         const events = pendingDispatchEvents(job);
-        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), source: 'synthesized' } });
+        return c.json({ ok: true, data: { fix: null, dispatch: job, events, review: toPublicReview(null), verification: null, source: 'synthesized' } });
       }
     }
 
@@ -1319,7 +1320,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
     // fix_attempts.commit_sha follows the PR head on push (webhooks-github-indexer),
     // so a verdict about an older commit shows as stale here.
-    const review = await loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null);
+    // ADR 0035: the merge gates for the current head, the automatic-merge
+    // outcome and any regression after a Mushi merge.
+    const [review, verification] = await Promise.all([
+      loadFixReview(db, fix.id, (fix.commit_sha as string | null) ?? null),
+      loadFixVerification(db, fix.id, (fix.commit_sha as string | null) ?? null),
+    ]);
 
     if (storedEvents && storedEvents.length > 0) {
       const events = mergeStoredFixTimeline(
@@ -1333,11 +1339,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           status: (e.status ?? undefined) as FixTimelineEvent['status'],
         })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, review, verification, base_branch: baseBranch, source: 'fix_events' } });
     }
 
     const events = synthesizeFixTimeline(dispatch ?? null, fix);
-    return c.json({ ok: true, data: { fix, dispatch, events, review, base_branch: baseBranch, source: 'synthesized' } });
+    return c.json({ ok: true, data: { fix, dispatch, events, review, verification, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
