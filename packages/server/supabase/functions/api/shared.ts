@@ -6,7 +6,7 @@ import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status';
 // stays out of the module graph until a caller actually needs the
 // live client.
 import type { getServiceClient } from '../_shared/db.ts';
-import { reportError } from '../_shared/sentry.ts';
+import { reportError, reportMessage } from '../_shared/sentry.ts';
 import {
   accessibleProjectIds as _accessibleProjectIds,
   accessibleProjectIdsInOrganization as _accessibleProjectIdsInOrganization,
@@ -27,6 +27,7 @@ import {
   isHtmlGatewayDbMessage,
   dbErrorFingerprint,
   dbFailureMessage,
+  emitDbTransientVolumeAlert,
   isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
@@ -51,6 +52,9 @@ import {
  * sentryHonoErrorHandler). They are emitted as a structured console.warn to
  * Supabase Logs instead, queryable via:
  *   metadata.parsed.event = "db_transient_error"
+ * A steady stream on one route sends one Sentry warning
+ * (`db_transient_error_volume`) so a read that times out every time still
+ * surfaces. One timeout does not.
  * An HTML gateway page answers 503 with SAFE_INTERNAL_MESSAGE. The raw page
  * is never the client message, the log line, or the Sentry exception text.
  *
@@ -86,6 +90,11 @@ export function dbError(
         // Gateway HTML collapses to a title. Other messages cap at 500 chars.
         err_message: dbDiagnosticMessage(err?.message),
       }),
+    );
+    emitDbTransientVolumeAlert(
+      c.req.path,
+      (msg, ctx) => reportMessage(msg, 'warning', ctx),
+      { scope: 'mushi:api:db', method: c.req.method, requestId },
     );
     return jsonError(c, 'DB_ERROR', gateway ? SAFE_INTERNAL_MESSAGE : SAFE_DB_MESSAGE, gateway ? 503 : 500);
   }

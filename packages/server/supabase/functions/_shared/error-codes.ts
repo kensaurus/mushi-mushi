@@ -115,7 +115,9 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  * are external infra noise that self-resolves and would regress repeatedly
  * (the same pattern fixed in sentryHonoErrorHandler for client-abort errors).
  * Log them to Supabase Logs instead so they remain queryable without polluting
- * the error budget.
+ * the error budget. A steady stream on one route is the exception: see
+ * emitDbTransientVolumeAlert, which sends one warning so a read that times
+ * out every time still surfaces.
  *
  * SAFETY: the overriding requirement is to NEVER silence a real bug. The gate is
  * therefore biased toward reporting — a genuine coded SQLSTATE is never routed to
@@ -145,6 +147,8 @@ export function isApiErrorCode(value: string): value is ApiErrorCode {
  *   - "upstream request timeout" — Kong/Envoy body when the upstream answered
  *     too late (a gateway 504 with no SQLSTATE). Distinct from Postgres
  *     statement_timeout (57014), which stays reported (MUSHI-cd3477a9).
+ *     One of these is a console warning. emitDbTransientVolumeAlert sends
+ *     one Sentry warning when the same route keeps producing them.
  *   - Cloudflare / gateway HTML (body starts with `<!DOCTYPE` or `<html`, or
  *     names "Error code 502/503/504/520-524", "502 Bad Gateway", …). The raw
  *     page leaks into PostgREST error.message (MUSHI-61dfa948).
@@ -222,6 +226,13 @@ export function dbFailureMessage(
   return `Unknown DB error (${code})`
 }
 
+/** UUID and long numeric-id folding shared by fingerprints and volume alerts. */
+function dbErrorRoute(path: string): string {
+  return (path || 'unknown')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+    .replace(/\/\d{2,}(?=\/|$)/g, '/:n')
+}
+
 /**
  * Group DB exceptions by SQLSTATE and route shape. `dbError` wraps every
  * plain PostgREST error in `new Error` on one line, so Sentry's default
@@ -231,10 +242,7 @@ export function dbFailureMessage(
  */
 export function dbErrorFingerprint(code: string | null | undefined, path: string): string[] {
   const dbCode = (code ?? '').trim() || 'unknown'
-  const route = (path || 'unknown')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
-    .replace(/\/\d{2,}(?=\/|$)/g, '/:n')
-  return ['db-error', dbCode, route]
+  return ['db-error', dbCode, dbErrorRoute(path)]
 }
 
 export function isTransientDbConnectionError(
@@ -312,6 +320,80 @@ export function logDbFailure(
   if (transient) logger.warn(msg, { ...meta, db_code: err?.code ?? null, transient: true })
   else logger.error(msg, meta)
   return transient
+}
+
+/**
+ * How many `db_transient_error` warnings on one route, inside
+ * DB_TRANSIENT_VOLUME_WINDOW_MS, before one Sentry warning is sent.
+ * One gateway timeout stays a console warning. Hitting the threshold inside
+ * the window means the read is timing out every time (MUSHI-cd3477a9 review).
+ */
+export const DB_TRANSIENT_VOLUME_THRESHOLD = 5
+export const DB_TRANSIENT_VOLUME_WINDOW_MS = 60_000
+
+const MAX_TRANSIENT_VOLUME_ROUTES = 500
+const transientVolumeHits = new Map<string, number[]>()
+
+export type DbTransientVolumeContext = {
+  tags: Record<string, string>
+  extra: { count: number; window_ms: number }
+  fingerprint: string[]
+}
+
+/** Drop the in-memory windows. Tests use this so one case cannot leak into the next. */
+export function resetDbTransientVolume(): void {
+  transientVolumeHits.clear()
+}
+
+/**
+ * Count one `db_transient_error` on a route. When the count crosses the
+ * threshold, log `db_transient_error_volume` and call `report` once so the
+ * regression reaches Sentry. Further warnings in the same window do not
+ * alert again; a quiet window lets the next burst alert. UUIDs and long
+ * numeric ids fold into one route, matching dbErrorFingerprint.
+ */
+export function emitDbTransientVolumeAlert(
+  path: string,
+  report: (msg: string, ctx: DbTransientVolumeContext) => void,
+  meta: { scope: string; method: string; requestId?: string },
+  now = Date.now(),
+): boolean {
+  const route = dbErrorRoute(path)
+  const hits = (transientVolumeHits.get(route) ?? []).filter(
+    (t) => now - t < DB_TRANSIENT_VOLUME_WINDOW_MS,
+  )
+  hits.push(now)
+  // Refresh recency so a hot route is not the one evicted.
+  transientVolumeHits.delete(route)
+  transientVolumeHits.set(route, hits)
+  if (transientVolumeHits.size > MAX_TRANSIENT_VOLUME_ROUTES) {
+    const oldest = transientVolumeHits.keys().next().value
+    if (oldest !== undefined && oldest !== route) transientVolumeHits.delete(oldest)
+  }
+  if (hits.length !== DB_TRANSIENT_VOLUME_THRESHOLD) return false
+
+  const windowMs = DB_TRANSIENT_VOLUME_WINDOW_MS
+  const msg = `steady db_transient_error on ${route} (${hits.length} in ${windowMs}ms)`
+  console.warn(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'warn',
+      scope: meta.scope,
+      event: 'db_transient_error_volume',
+      msg,
+      path: route,
+      method: meta.method,
+      ...(meta.requestId ? { requestId: meta.requestId } : {}),
+      count: hits.length,
+      window_ms: windowMs,
+    }),
+  )
+  report(msg, {
+    tags: { path: route, method: meta.method, event: 'db_transient_error_volume' },
+    extra: { count: hits.length, window_ms: windowMs },
+    fingerprint: ['db-transient-volume', route],
+  })
+  return true
 }
 
 /** Generic, non-leaking message for 5xx / DB failures shown to clients. */

@@ -17,7 +17,12 @@
 
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
-import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
+import {
+  dbDiagnosticMessage,
+  emitDbTransientVolumeAlert,
+  isHtmlGatewayDbMessage,
+  SAFE_DB_MESSAGE,
+} from './error-codes.ts'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -72,10 +77,24 @@ export function reportError(
 export function reportMessage(
   msg: string,
   level: 'info' | 'warning' | 'error' | 'fatal',
-  ctx?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+  ctx?: {
+    tags?: Record<string, string>
+    extra?: Record<string, unknown>
+    /** Groups the volume warning by route so one slow path is its own issue. */
+    fingerprint?: string[]
+  },
 ): void {
   if (!inited) return
   Sentry.captureMessage(msg, { level, ...ctx })
+}
+
+/**
+ * `reportMessage`, called as a method. The steady-timeout alert goes through
+ * here so one route that keeps failing reaches Sentry without paging on
+ * every individual gateway timeout.
+ */
+export const sentryCapture = {
+  message: reportMessage,
 }
 
 /** Correlate Sentry issues with Langfuse traces for LLM routes. */
@@ -176,6 +195,9 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
   // drops them; a thrown ProjectAccessReadError used to reach reportError with
   // the raw HTML body (MUSHI-a8a03270). Only that error carries the flag, so
   // an unrelated throw whose text happens to quote HTML still reports.
+  // One timeout stays a console warning. A steady stream on this path sends
+  // one Sentry warning so a route that is slow every time still surfaces
+  // (MUSHI-cd3477a9 review).
   if (err.name === 'ProjectAccessReadError' && (err as { transient?: unknown }).transient === true) {
     console.warn(
       JSON.stringify({
@@ -189,6 +211,11 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
         ...(requestId ? { requestId } : {}),
         err_message: dbDiagnosticMessage(err.message),
       }),
+    )
+    emitDbTransientVolumeAlert(
+      c.req.path,
+      (msg, ctx) => sentryCapture.message(msg, 'warning', ctx),
+      { scope: 'mushi:sentry-hono-handler', method: c.req.method, requestId },
     )
     return c.json(
       {
