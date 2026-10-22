@@ -53,6 +53,7 @@ export default {
   notifications: 'Notifications',
   experiments: 'Experiments',
   research: 'Research',
+  recipe: 'App blueprint',
 
   '-- Account': { type: 'separator', title: 'Account' },
   settings: 'Settings',
