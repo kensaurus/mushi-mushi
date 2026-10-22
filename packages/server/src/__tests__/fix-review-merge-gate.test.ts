@@ -601,3 +601,108 @@ describe('a renamed repo (verification of 90fe9156)', () => {
     expect(mocks.merge.mock.calls[0][1]).toEqual({ owner: 'acme', repo: 'app' })
   })
 })
+
+describe('a service caller (the fix-verifier\'s verified merge, ADR 0035)', () => {
+  async function serviceMerge(over: Record<string, unknown> = {}) {
+    const { gatedMergePullRequest } = await import('../../supabase/functions/_shared/gated-merge.ts')
+    return gatedMergePullRequest(db as never, {
+      projectId: P,
+      token: 'gh-token',
+      ref: { owner: 'acme', repo: 'app' },
+      number: 195,
+      fixAttemptId: FIX,
+      caller: 'service',
+      reason: 'verified_auto_merge',
+      expectedHeadSha: 'sha1',
+      // A service caller cannot override, whatever it passes.
+      override: true,
+      overrideReason: 'trying anyway',
+      confirmPendingReview: true,
+      authMethod: 'jwt',
+      role: 'owner',
+      merge: { mergeMethod: 'squash' },
+      ...over,
+    } as never)
+  }
+
+  it('never overrides a hold, even when it passes override and a console auth method', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
+    const out = await serviceMerge()
+    expect(out).toMatchObject({ ok: false, status: 409, code: 'REVIEW_HOLD' })
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('never merges past a pending first review', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ status: 'running', verdict: null, head_sha: null, reviewed_at: null })] })
+    const out = await serviceMerge()
+    expect(out).toMatchObject({ ok: false, code: 'REVIEW_PENDING' })
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('refuses without a current "merge" verdict on this exact head (fix first, stale, none)', async () => {
+    for (const r of [review({ verdict: 'fix_first' }), review({ verdict: 'merge', head_sha: 'older' })]) {
+      db = makeDb({ fix_attempts: [attempt()], fix_reviews: [r] })
+      expect(await serviceMerge()).toMatchObject({ ok: false, code: 'REVIEW_NOT_MERGE' })
+    }
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [] })
+    expect(await serviceMerge()).toMatchObject({ ok: false, code: 'REVIEW_NOT_MERGE' })
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('refuses a head that moved since the check, and a call that names no head', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge' })] })
+    mocks.head.sha = 'sha2'
+    expect(await serviceMerge()).toMatchObject({ ok: false, status: 409, code: 'HEAD_MOVED' })
+    mocks.head.sha = 'sha1'
+    expect(await serviceMerge({ expectedHeadSha: null })).toMatchObject({ ok: false, status: 400, code: 'HEAD_REQUIRED' })
+    expect(mocks.merge).not.toHaveBeenCalled()
+  })
+
+  it('merges a "merge" verdict pinned to the verified head, audits it as a service merge, and records the merge commit', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge' })] })
+    const out = await serviceMerge()
+    expect(out.ok).toBe(true)
+    expect(mocks.merge).toHaveBeenCalledWith('gh-token', { owner: 'acme', repo: 'app' }, 195, expect.objectContaining({ mergeMethod: 'squash', sha: 'sha1' }))
+    if (out.ok) expect(out.audit).toMatchObject({ merged_by: 'service', service_reason: 'verified_auto_merge', merged_head_sha: 'sha1' })
+    expect(db.table('fix_merge_gates')).toEqual([
+      expect.objectContaining({ fix_attempt_id: FIX, head_sha: 'sha1', merge_sha: 'mergesha', repo: 'acme/app', pr_number: 195 }),
+    ])
+  })
+})
+
+describe('every merge through gated-merge records the merged head for the regression watch (ADR 0035)', () => {
+  it('a console merge of a fix writes merge_sha onto that head\'s row', async () => {
+    db = makeDb({
+      fix_attempts: [attempt()],
+      fix_reviews: [review({ verdict: 'merge' })],
+      fix_merge_gates: [{ id: 'g1', fix_attempt_id: FIX, project_id: P, head_sha: 'sha1', gates: [], passed: true, auto_merge_state: 'skipped', merge_sha: null, merged_at: null }],
+    })
+    const res = await call('POST', MERGE, {})
+    expect(res.status).toBe(200)
+    expect(db.table('fix_merge_gates')).toEqual([expect.objectContaining({ id: 'g1', merge_sha: 'mergesha', auto_merge_state: 'skipped' })])
+    expect(db.table('fix_merge_gates')[0].merged_at).toBeTruthy()
+  })
+
+  it('records nothing when GitHub did not merge', async () => {
+    db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review({ verdict: 'merge' })] })
+    mocks.merge.mockResolvedValue({ merged: false, alreadyMerged: false, message: 'conflict' })
+    await call('POST', MERGE, {})
+    expect(db.table('fix_merge_gates')).toEqual([])
+  })
+})
+
+describe('GET /v1/admin/fixes/:id/timeline — carries the merge checks (ADR 0035)', () => {
+  it('is null before the first check, the head\'s gates after', async () => {
+    db = makeDb({ fix_attempts: [attempt({ commit_sha: 'sha1' })], fix_reviews: [], fix_events: [] })
+    expect((await call('GET', `/v1/admin/fixes/${FIX}/timeline`)).json.data.verification).toBeNull()
+    db = makeDb({
+      fix_attempts: [attempt({ commit_sha: 'sha1' })],
+      fix_reviews: [],
+      fix_events: [],
+      fix_merge_gates: [{ id: 'g1', fix_attempt_id: FIX, head_sha: 'sha1', gates: [{ id: 'ci', status: 'pending', label: 'CI is running', detail: 'x' }], passed: false, second_judge: null, auto_merge_state: 'none', auto_merge_detail: null, merged_at: null, merge_sha: null, evaluated_at: '2026-10-21T10:00:00Z' }],
+    })
+    const res = await call('GET', `/v1/admin/fixes/${FIX}/timeline`)
+    expect(res.json.data.verification).toMatchObject({ headSha: 'sha1', passed: false, autoMerge: { state: 'none', detail: null }, regressions: [] })
+    expect(res.json.data.verification.gates).toEqual([expect.objectContaining({ id: 'ci', status: 'pending' })])
+  })
+})

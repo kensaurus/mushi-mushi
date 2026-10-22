@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/server/supabase/functions/_shared/agent-adapters.ts
  * PURPOSE: The common interface for CLOUD coding agents that Mushi hands a
@@ -834,7 +834,9 @@ export async function applyCloudAgentOutcome(
   const errorText = isFailure ? outcome.error.slice(0, 1000) : noPrErrorText(noPr!).slice(0, 1000)
   const failureCategory = isFailure
     ? failureCategoryFor(target.agent, outcome.failureCategory)
-    : (noPr?.category ?? failureCategoryFor(target.agent, null))
+    : // A finished run with notes but no verdict is not an API error: the console
+      // would offer Retry and the stop-loss would read it as a Cursor fault.
+      (noPr?.category ?? 'unknown')
   const { data: closed, error: closeErr } = await db
     .from('fix_attempts')
     .update({

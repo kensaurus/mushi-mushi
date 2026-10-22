@@ -9,9 +9,11 @@
  * the dispatch row stayed `pending` forever, so a finished fix still read
  * "Dispatched · status: pending".
  *
- * Pure (no imports, no env) so vitest and the permission-less Deno CI run can
- * import it directly.
+ * Pure (only the pure ci-infra.ts, no env) so vitest and the permission-less
+ * Deno CI run can import it directly.
  */
+
+import { describeCiInfra, readFixCiInfra } from './ci-infra.ts'
 
 export type FixTimelineKind =
   | 'dispatched'
@@ -26,6 +28,11 @@ export type FixTimelineKind =
   | 'reviewed'
   /** A review follow-up: a new Cursor agent sent to the PR with the Opus findings (ADR 0032). */
   | 'followup'
+  /** Verified fixes (ADR 0035): every gate passed, merged on proof, a regression after a merge, a revert PR opened. */
+  | 'verified'
+  | 'auto_merged'
+  | 'regressed'
+  | 'revert_opened'
   | 'completed'
   | 'failed'
 
@@ -64,6 +71,8 @@ export interface TimelineFixRow {
   check_run_status: string | null
   check_run_conclusion: string | null
   check_run_updated_at: string | null
+  /** CI verdict for the PR head (Plan 022). An infra stop is not a code failure. */
+  ci_infra?: unknown
   error: string | null
 }
 
@@ -185,7 +194,10 @@ export function synthesizeFixTimeline(
       status: 'ok',
     })
   }
-  if (fix.check_run_status || fix.check_run_conclusion) {
+  const infraEvent = ciInfraEvent(fix)
+  if (infraEvent) {
+    events.push(infraEvent)
+  } else if (fix.check_run_status || fix.check_run_conclusion) {
     const conclusion = (fix.check_run_conclusion ?? '').toLowerCase()
     const ciStatus: FixTimelineStatus =
       conclusion === 'success'
@@ -250,9 +262,37 @@ export function mergeStoredFixTimeline(
   stored: FixTimelineEvent[],
   now: () => string = () => new Date().toISOString(),
 ): FixTimelineEvent[] {
-  const storedKinds = new Set(stored.map((e) => e.kind))
+  // The check_run webhook stored "CI cancelled" (fail) before Mushi knew the
+  // runner died; the attempt's ci_infra verdict corrects it.
+  const infra = ciInfraEvent(fix)
+  const corrected = infra
+    ? stored.map((e) =>
+        e.kind === 'ci_resolved' && e.status === 'fail' && /\b(?:cancel|fail)/i.test(e.label)
+          ? { ...e, label: infra.label, detail: infra.detail ?? e.detail, status: infra.status }
+          : e,
+      )
+    : stored
+  const storedKinds = new Set(corrected.map((e) => e.kind))
   const fill = synthesizeFixTimeline(dispatch, fix, now).filter((e) => !storedKinds.has(e.kind))
-  return sortTimeline([...fill, ...stored])
+  return sortTimeline([...fill, ...corrected])
+}
+
+/**
+ * The CI event for an attempt whose tests stopped on the machine (Plan 022):
+ * "Tests did not run — runner lost on X", pending (the fix is untested, not
+ * failed). Null when the attempt has no infra verdict.
+ */
+function ciInfraEvent(fix: TimelineFixRow): FixTimelineEvent | null {
+  const ci = readFixCiInfra(fix.ci_infra)
+  if (!ci?.infra) return null
+  const waiting = ci.kind === 'waiting_for_runner'
+  return {
+    kind: waiting ? 'ci_started' : 'ci_resolved',
+    at: ci.at || fix.check_run_updated_at || fix.completed_at || fix.started_at || fix.created_at,
+    label: waiting ? 'Waiting for a test machine' : `Tests did not run — ${describeCiInfra(ci)}`,
+    detail: ci.detail,
+    status: 'pending',
+  }
 }
 
 function sortTimeline(events: FixTimelineEvent[]): FixTimelineEvent[] {

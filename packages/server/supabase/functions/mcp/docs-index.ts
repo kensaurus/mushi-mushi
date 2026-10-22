@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 210 pages, generated from llms.txt. */
+/** 214 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -95,6 +95,24 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "billing"],
     headings: ["Reading your usage card", "Usage breakdown", "Predictability controls", "Upgrading your plan", "Changing plan", "Managing payment and invoices", "CLI parity", "Related docs"],
     excerpt: "The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.",
+  },
+  {
+    title: "Checks",
+    url: docUrl("/admin/checks"),
+    route: "/admin/checks",
+    markdown: "admin/checks.md",
+    keywords: ["admin", "checks"],
+    headings: ["App checks", "AI quality"],
+    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+  },
+  {
+    title: "CI runners",
+    url: docUrl("/admin/ci"),
+    route: "/admin/ci",
+    markdown: "admin/ci.md",
+    keywords: ["admin", "ci", "runners"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "When nothing has reported in", "Related pages"],
+    excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {
     title: "CLI device auth",
@@ -583,6 +601,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {
+    title: "Verified merge",
+    url: docUrl("/admin/verified-merge"),
+    route: "/admin/verified-merge",
+    markdown: "admin/verified-merge.md",
+    keywords: ["admin", "verified-merge", "verified", "merge"],
+    headings: ["The gates", "Add the workflow", "What the check does", "The test command", "Run it on your own machine", "Turn on automatic merge", "After the merge", "Check one fix"],
+    excerpt: "Mushi merges an agent's fix on its own only with proof — a test that fails without the fix and passes with it, run in your own CI.",
+  },
+  {
     title: "Voice intake",
     url: docUrl("/admin/voice"),
     route: "/admin/voice",
@@ -723,7 +750,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/agent-pr-review",
     markdown: "concepts/agent-pr-review.md",
     keywords: ["concepts", "agent-pr-review", "agent", "review", "pr"],
-    headings: ["What you see", "What the review checks", "Re-running a review", "Cost and keys", "For operators"],
+    headings: ["What you see", "What the review checks", "Re-running a review", "When the review says \"fix first\"", "Spend-down and its safety stop", "Cost and keys", "For operators"],
     excerpt: "Claude Opus 5.5 reviews every pull request a cloud coding agent opens as a fix, and a \"hold\" stops Mushi from merging it until you choose to.",
   },
   {
@@ -858,8 +885,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/open-source",
     markdown: "concepts/open-source.md",
     keywords: ["concepts", "open-source", "open", "source", "licensing"],
-    headings: ["Open-core, one repo", "Why MIT for the SDK?", "Why AGPLv3 for the server?", "No lock-in", "What's paid and what's free", "Run it yourself", "Trademarks"],
-    excerpt: "What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.",
+    headings: ["Open-core, one repo", "Why MIT for the SDK?", "Why AGPLv3 for the server?", "Why AGPLv3 for the console?", "What the hosted service keeps", "Contributing", "No lock-in", "What's paid and what's free"],
+    excerpt: "What is open in Mushi: MIT SDKs to embed anywhere, an AGPLv3 server and console to self-host, a small commercial edition, and what the hosted service keeps.",
   },
   {
     title: "Connecting your orchestrator (MCP / A2A / REST / AG-UI)",
@@ -1130,6 +1157,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["operating", "maintainers"],
     headings: ["What lives here", "The four independent deploy paths"],
     excerpt: "Runbooks for maintainers running Mushi Cloud or publishing the open-source packages — deployment, releases and status. Not needed to use the SDK.",
+  },
+  {
+    title: "CI runners",
+    url: docUrl("/operating/ci-runners"),
+    route: "/operating/ci-runners",
+    markdown: "operating/ci-runners.md",
+    keywords: ["operating", "ci-runners", "runners", "ci"],
+    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "What CI costs, and where it should run", "Why it costs what it costs", "Your figures", "Advice", "Change where CI runs"],
+    excerpt: "See where your tests run and why a fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.",
   },
   {
     title: "Deployment & releases",
@@ -1443,7 +1479,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/roadmap",
     markdown: "roadmap.md",
     keywords: ["roadmap"],
-    headings: ["Live boards", "Release waves", "Wave E details (in-flight)", "Wave D highlights (shipped)", "Completed highlights (Wave C, v0.8.0)"],
+    headings: ["Live boards", "Release waves", "Wave E details (in-flight)", "Agent fixes you can trust (October 2026)", "Wave D highlights (shipped)", "Completed highlights (Wave C, v0.8.0)"],
     excerpt: "Where Mushi Mushi is headed — upcoming SDK platforms, diagnosis speed targets, and console features, updated as work lands.",
   },
   {
@@ -1524,7 +1560,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/cli",
     markdown: "sdks/cli.md",
     keywords: ["sdks", "cli", "@mushi-mushi/cli"],
-    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "Reporter updates held for review", "Agentic fixes"],
+    headings: ["Console ↔ CLI setup loop", "Setup & health", "mushi doctor", "mushi nudge", "Reports & lessons", "Sentry issues already open", "File a report yourself", "Reporter updates held for review"],
     excerpt: "Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.",
   },
   {

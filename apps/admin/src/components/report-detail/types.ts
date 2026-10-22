@@ -1,3 +1,4 @@
+import type { CiInfraVerdict } from '../../lib/ciTypes'
 interface ReportEnvironment {
   url?: string
   userAgent?: string
@@ -50,6 +51,8 @@ export interface ReportFixAttempt {
   check_run_status: string | null
   check_run_conclusion: string | null
   check_run_updated_at?: string | null
+  /** Latest infra verdict for the PR head (ADR 0033). */
+  ci_infra?: CiInfraVerdict | null
   /** GitHub PR lifecycle state (merged / closed / draft / open). Updated by
    *  the `webhooks-github-indexer` on pull_request events. Null when we
    *  haven't received a webhook yet. */

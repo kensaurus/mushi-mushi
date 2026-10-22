@@ -121,6 +121,32 @@ describe('MergeFixPreflight — Opus review gate', () => {
     expect(onMerged).toHaveBeenCalledWith('fixed')
   })
 
+  it('shows the merge checks for the PR head from the same timeline read', async () => {
+    mocks.apiFetch.mockImplementation(async (url: string) =>
+      url.endsWith('/timeline')
+        ? {
+            ok: true,
+            data: {
+              review: HOLD,
+              verification: {
+                headSha: 'abc1234def',
+                passed: false,
+                secondJudge: null,
+                gates: [{ id: 'fail_to_pass', status: 'not_set_up', label: 'Test proves the fix', detail: 'Add the workflow.' }],
+                autoMerge: { state: 'none', detail: null },
+                regressions: [],
+              },
+            },
+          }
+        : { ok: true, data: {} },
+    )
+    await open()
+    const checks = document.body.querySelector('[data-testid="fix-gate-checklist"]')!
+    expect(checks.textContent).toContain('Not set up')
+    expect(checks.textContent).toContain('Test proves the fix')
+    expect(mocks.apiFetch.mock.calls.some(([url]) => String(url).endsWith('/verification'))).toBe(false)
+  })
+
   it('a hold on an older commit, or while a re-review runs, still needs the override', async () => {
     respond({ ...HOLD, state: 'stale', stale: true, rerunning: true, label: 'Opus review: hold (older commit) · re-review in progress' })
     await open()

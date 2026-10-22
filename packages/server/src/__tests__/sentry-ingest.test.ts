@@ -421,6 +421,38 @@ describe('ingestSentryError — import intake, extra, frames', () => {
   })
 })
 
+describe('sentryLocationTags', () => {
+  it('keeps the tags that locate a handled server error, never user or IP tags', () => {
+    const tags: Array<[string, string]> = [
+      ['path', '/api/v1/admin/inbox/stats'],
+      ['method', 'GET'],
+      ['error_type', 'db'],
+      ['db_code', 'unknown'],
+      ['user.email', 'someone@example.com'],
+      ['user.ip', '13.112.64.109'],
+      ['release', '1.4.2'],
+    ]
+    expect(mod.sentryLocationTags(tags)).toEqual({ path: '/api/v1/admin/inbox/stats', method: 'GET', error_type: 'db', db_code: 'unknown' })
+    expect(mod.sentryLocationTags([['release', '1.4.2']])).toBeNull()
+    expect(mod.sentryLocationTags(undefined)).toBeNull()
+  })
+
+  it('puts the route in the report so a fix agent can find the failing query (MUSHI-MUSHI-SERVER-2E)', async () => {
+    const state: Parameters<typeof makeDbStub>[0] = { links: [], reports: [], inserted: [], updated: [] }
+    await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: { ...EVENT, tags: [...EVENT.tags, ['path', '/api/v1/admin/inbox/stats'], ['method', 'GET'], ['user.ip', '13.112.64.109']] },
+      issue: { id: '4502', shortId: 'MUSHI-MUSHI-SERVER-2E' },
+      triggerClassification: () => {},
+      intake: 'import',
+    })
+    const report = state.inserted.find((i) => i.table === 'reports')!.row
+    expect(report.description).toContain('Where: path=/api/v1/admin/inbox/stats method=GET')
+    expect(report.description).not.toContain('13.112.64.109')
+    expect((report.custom_metadata as Record<string, unknown>).sentryLocation).toEqual({ path: '/api/v1/admin/inbox/stats', method: 'GET' })
+  })
+})
+
 describe('formatSentryExtra', () => {
   it('bounds each value and the whole block', () => {
     const block = mod.formatSentryExtra({ a: 'x'.repeat(1000), b: null, c: 'short' }, 400)!

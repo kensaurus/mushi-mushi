@@ -16,6 +16,8 @@ import { Btn, Checkbox, Input } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
 import { FixReviewSummary } from './FixReviewSummary'
+import { FixGateChecklist } from './FixGateChecklist'
+import type { CiInfraVerdict } from '../../lib/ciTypes'
 
 interface Props {
   fixId: string
@@ -25,6 +27,8 @@ interface Props {
   ciConclusion?: string | null
   ciStatus?: string | null
   ciUpdatedAt?: string | null
+  ciInfra?: CiInfraVerdict | null
+  projectId?: string | null
   busy?: boolean
   onMerged?: (reportStatus: string | null) => void
   /** Compact label for tight layouts (FixCard). */
@@ -39,6 +43,8 @@ export function MergeFixPreflight({
   ciConclusion,
   ciStatus,
   ciUpdatedAt,
+  ciInfra,
+  projectId,
   busy = false,
   onMerged,
   compact = false,
@@ -198,6 +204,10 @@ export function MergeFixPreflight({
             />
           </div>
 
+          <div className="mt-2">
+            <FixGateChecklist fixId={fixId} />
+          </div>
+
           {reviewPending && (
             <p className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.warnSubtle}`}>
               The Opus review is still running. Merging now skips it; wait a few minutes to see what it finds.
@@ -233,6 +243,8 @@ export function MergeFixPreflight({
               ciConclusion={liveCiConclusion}
               ciStatus={ciStatus}
               ciUpdatedAt={ciUpdatedAt}
+              ciInfra={ciInfra}
+              projectId={projectId}
               onRefresh={({ conclusion }) => setLiveCiConclusion(conclusion)}
             />
           </div>

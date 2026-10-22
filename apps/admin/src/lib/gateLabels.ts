@@ -32,14 +32,14 @@ const GATE_IDS = [
 export type GateId = (typeof GATE_IDS)[number]
 
 const GATE_LABELS: Record<GateId, string> = {
-  dead_handler: 'Dead handlers (G1)',
-  mock_leak: 'Mock data in production (G2)',
-  api_contract: 'API contract (G3)',
+  dead_handler: 'Dead handlers',
+  mock_leak: 'Mock data in production',
+  api_contract: 'API contract',
   crawl: 'Live route crawl',
-  status_claim: 'Status claims (G5)',
-  spec_drift: 'OpenAPI spec drift (G6)',
-  orphan_endpoint: 'Unused backend endpoints (G7)',
-  unknown_call: 'Calls to unknown endpoints (G8)',
+  status_claim: 'Status claims',
+  spec_drift: 'OpenAPI spec drift',
+  orphan_endpoint: 'Unused backend endpoints',
+  unknown_call: 'Calls to unknown endpoints',
   schema_drift: 'Database schema drift',
   code_health: 'Code health (bundle size, big files)',
   design_drift: 'Code off the design tokens',

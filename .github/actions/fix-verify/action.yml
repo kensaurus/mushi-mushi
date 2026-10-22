@@ -1,0 +1,73 @@
+# Mushi verify: the fail-to-pass proof (Plan 024, ADR 0035)
+#
+# Runs in a HOST repo, on an agent's pull request. Takes the test files the PR
+# adds or changes and runs them twice with your test command:
+#   1. on the PR head: they must pass;
+#   2. with the PR's non-test files put back to the base (merge-base): they must fail.
+# Then posts a check run named "Mushi verify" on the PR head SHA. Its
+# conclusion is success only for the verdict fail_to_pass; its output.text is
+# the JSON Mushi reads (schema 1). Mushi needs no secret in your repo: it reads
+# the check run with the GitHub access it already has. Node only, no dependencies.
+#
+# Use from the host workflow template: docs/templates/mushi-verify.yml
+#   - uses: kensaurus/mushi-mushi/.github/actions/fix-verify@master
+#     with:
+#       test-command: "pnpm vitest run {files}"
+#
+# Requirements:
+#   - actions/checkout with ref: ${{ github.event.pull_request.head.sha }}
+#     (a pull_request checkout is a merge commit by default, which is not the
+#     code the agent pushed) and fetch-depth: 0 (the merge base must be there);
+#   - Node 20 or newer on the runner, and your dependencies installed;
+#   - permissions: checks: write.
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge
+name: Mushi verify
+description: Prove an agent's fix. Its tests must pass with the fix and fail without it; posts the "Mushi verify" check.
+author: kensaurus
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  test-command:
+    description: >-
+      Command that runs the given test files. {files} is replaced by the
+      shell-quoted paths, e.g. "pnpm vitest run {files}" or "pytest {files}".
+    required: true
+  test-globs:
+    description: >-
+      Optional comma-separated globs that pick the test files instead of the
+      default detection (e.g. "**/*.test.ts,e2e/**/*.spec.ts"). A glob without
+      a slash matches the file name at any depth.
+    required: false
+    default: ''
+  base-ref:
+    description: Branch or commit the PR is compared with. Default is the PR base.
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  timeout-minutes:
+    description: Time limit for each of the two test runs. A run that hits it is an error, not a failure.
+    required: false
+    default: '8'
+  github-token:
+    description: Token that creates the check run (needs checks write).
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  verdict:
+    description: fail_to_pass, no_test, passes_without_fix, fails_with_fix or error.
+    value: ${{ steps.verify.outputs.verdict }}
+
+runs:
+  using: composite
+  steps:
+    - id: verify
+      shell: bash
+      env:
+        INPUT_TEST_COMMAND: ${{ inputs.test-command }}
+        INPUT_TEST_GLOBS: ${{ inputs.test-globs }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: node "$GITHUB_ACTION_PATH/verify.mjs"

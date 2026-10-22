@@ -63,6 +63,12 @@ verify_jwt = false
 [functions.api]
 verify_jwt = false
 
+# The overflow half of the admin API (deploy size limit, 2026-10-21). `api`
+# forwards CI runner, inventory and Ask Mushi paths here with the caller's
+# headers; each route runs its own auth, like in `api`.
+[functions.api-ext]
+verify_jwt = false
+
 # Internal pipeline functions invoked server-to-server from `api` using the
 # service-role key. After Supabase rotated to the new sb_secret_* key format,
 # the platform gateway started rejecting these inter-function calls with
@@ -363,6 +369,17 @@ verify_jwt = false
 # review-followup is invoked by pg_cron (mushi-review-followup, 6-56/10)
 # through the internal caller token; requireServiceRoleAuth inside (ADR 0032).
 [functions.review-followup]
+verify_jwt = false
+
+# ci-jobs-collector is invoked by pg_cron (mushi-ci-jobs-collector, 2-52/10)
+# through the internal caller token; requireServiceRoleAuth inside (Plan 022).
+[functions.ci-jobs-collector]
+verify_jwt = false
+
+# fix-verifier is invoked by pg_cron (mushi-fix-verifier, 4-54/10) and by
+# POST /v1/admin/fixes/:id/verify through the internal caller token;
+# requireServiceRoleAuth inside (ADR 0035).
+[functions.fix-verifier]
 verify_jwt = false
 
 # 2026-09-22: the thirteen internal functions below were still deployed with
