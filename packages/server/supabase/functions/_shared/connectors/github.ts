@@ -17,9 +17,9 @@
  *          the organization's CI policy (fresh repo visibility from GitHub,
  *          runners from ci_runners) and a compare-and-set on the variable's
  *          value and updated_at (409 VARIABLE_MOVED), then writes. Legacy-
- *          backed: the token is the project's stored PAT (never the App
- *          installation, which has no Variables permission, and never the
- *          platform token).
+ *          backed: the token is the project's stored token, else its
+ *          organization's (never the App installation, which has no
+ *          Variables permission, and never the platform token).
  *
  * config: { owner, repo, defaultBranchHint?, migrationsDir?, billingCatalogPath? }  readCredential: the token.
  */
@@ -38,8 +38,8 @@ import {
   normalizePolicy,
   payloadProblem,
   PLACEMENT_ACTIONS,
-  policyVerdict,
-  targetOf,
+  policyVerdictAll,
+  targetsOf,
   variableMatches,
   type PlacementPayload,
   type PolicyRow,
@@ -258,6 +258,11 @@ export const githubConnector: RecipeConnector = {
 const VARIABLES_PERMISSION =
   'The GitHub token Mushi uses for this project cannot change Actions variables. Store a fine-grained token with "Variables: Read and write" on this repository (or a classic token with the repo scope) in the project settings. The Mushi GitHub App does not have that permission.'
 
+/** `owner/repo` as a URL path, each segment encoded. */
+function repoPath(repo: string): string {
+  return repo.split('/').map(encodeURIComponent).join('/')
+}
+
 async function ghWrite(ctx: ConnectorContext, token: string, method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<number> {
   const res = await ctx.fetch(`${API}${path}`, {
     method,
@@ -274,7 +279,7 @@ export async function readActionsVariable(
   repo: string,
   name: string,
 ): Promise<{ status: number; state: VariableState | null }> {
-  const res = await ctx.fetch(`${API}/repos/${repo}/actions/variables/${encodeURIComponent(name)}`, {
+  const res = await ctx.fetch(`${API}/repos/${repoPath(repo)}/actions/variables/${encodeURIComponent(name)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'mushi-mushi-ci' },
   })
   if (res.status === 404) return { status: 404, state: { exists: false, value: null, updatedAt: null } }
@@ -291,17 +296,29 @@ async function actOnRunnerVariable(ctx: ConnectorContext, action: ApprovedConnec
   const token = ctx.writeCredential ?? ctx.readCredential
   if (!token) return { ok: false, code: 'NO_GITHUB_TOKEN', status: 409, detail: 'No GitHub token is stored for this project.' }
 
+  // The repo must still be bound to the project the request was made for.
+  if (!ctx.projectId) return { ok: false, code: 'REPO_NOT_IN_PROJECT', status: 403, detail: 'This change names no project.' }
+  const { data: bindings, error: bindErr } = await ctx.db.from('project_repos').select('repo_url').eq('project_id', ctx.projectId)
+  if (bindErr) return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read the project\'s repositories, so it did not change anything.' }
+  const bound = ((bindings ?? []) as Array<{ repo_url: string | null }>).some((b) => {
+    const m = /github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i.exec(b.repo_url ?? '')
+    return !!m && `${m[1]}/${m[2]}`.toLowerCase() === p.repo.toLowerCase()
+  })
+  if (!bound) return { ok: false, code: 'REPO_NOT_IN_PROJECT', status: 403, detail: `${p.repo} is no longer connected to this project. Nothing was changed.` }
+
   // Policy again, at execution, with the repo's visibility as GitHub says now.
   const { data: policyRow, error: policyErr } = await ctx.db.from('ci_runner_policies').select('*').eq('organization_id', ctx.organizationId).maybeSingle()
   if (policyErr && !/does not exist|schema cache|PGRST205|42P01/i.test(`${policyErr.code ?? ''} ${policyErr.message ?? ''}`)) {
     return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read your CI policy, so it did not change anything.' }
   }
   const policy = normalizePolicy((policyRow as PolicyRow | null) ?? null)
-  const info = await gh(ctx, `/repos/${p.repo}`)
+  const info = await gh(ctx, `/repos/${repoPath(p.repo)}`)
   const visibility = info.status === 200 && typeof info.body?.private === 'boolean' ? (info.body.private ? 'private' : 'public') : 'unknown'
-  const { data: runnerRows } = await ctx.db.from('ci_runners').select('runner_name, status, busy, labels').eq('repo', p.repo)
-  const fallback = action.action === 'delete_actions_variable' ? (p.expectedLabels[0] ?? null) : null
-  const verdict = policyVerdict(policy, { repo: p.repo, visibility, target: targetOf(p.value, fallback), runners: (runnerRows ?? []) as RunnerSeen[] })
+  // This project's runners only: another tenant binding the same repo must not change the verdict.
+  const { data: runnerRows, error: runnersErr } = await ctx.db.from('ci_runners').select('runner_name, status, busy, labels, kind').eq('project_id', ctx.projectId).eq('repo', p.repo)
+  if (runnersErr) return { ok: false, code: 'POLICY_UNREADABLE', status: 409, detail: 'Mushi could not read this repo\'s runners, so it did not change anything.' }
+  const fallbacks = p.fallbackLabels ?? (action.action === 'delete_actions_variable' ? p.expectedLabels : [])
+  const verdict = policyVerdictAll(policy, { repo: p.repo, visibility, targets: targetsOf(p.value, fallbacks), runners: (runnerRows ?? []) as RunnerSeen[] })
   if (!verdict.allowed) return { ok: false, code: verdict.code ?? 'POLICY_REFUSED', status: 403, detail: verdict.reason ?? 'Your CI agreement refuses this change.' }
 
   // Compare-and-set: the variable must be exactly what the person saw.
@@ -318,9 +335,9 @@ async function actOnRunnerVariable(ctx: ConnectorContext, action: ApprovedConnec
   }
 
   let status: number
-  if (action.action === 'delete_actions_variable') status = await ghWrite(ctx, token, 'DELETE', `/repos/${p.repo}/actions/variables/${encodeURIComponent(p.name)}`)
-  else if (now.state.exists) status = await ghWrite(ctx, token, 'PATCH', `/repos/${p.repo}/actions/variables/${encodeURIComponent(p.name)}`, { name: p.name, value: p.value })
-  else status = await ghWrite(ctx, token, 'POST', `/repos/${p.repo}/actions/variables`, { name: p.name, value: p.value })
+  if (action.action === 'delete_actions_variable') status = await ghWrite(ctx, token, 'DELETE', `/repos/${repoPath(p.repo)}/actions/variables/${encodeURIComponent(p.name)}`)
+  else if (now.state.exists) status = await ghWrite(ctx, token, 'PATCH', `/repos/${repoPath(p.repo)}/actions/variables/${encodeURIComponent(p.name)}`, { name: p.name, value: p.value })
+  else status = await ghWrite(ctx, token, 'POST', `/repos/${repoPath(p.repo)}/actions/variables`, { name: p.name, value: p.value })
   if (status === 403) return { ok: false, code: 'GITHUB_VARIABLES_PERMISSION', status: 403, detail: VARIABLES_PERMISSION }
   if (status === 404 || status === 409) return { ok: false, code: 'VARIABLE_MOVED', status: 409, detail: `${p.name} changed while Mushi was writing it. Preview again.` }
   if (status < 200 || status >= 300) return { ok: false, detail: statusReason('GitHub', status) }

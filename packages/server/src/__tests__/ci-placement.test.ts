@@ -211,6 +211,7 @@ describe('buildPlacementPreview', () => {
       expected: { exists: false, value: null, updatedAt: null },
       jobs: [{ workflow: 'CI', job: 'Lint' }, { workflow: 'CI', job: 'Bundle' }],
       expectedLabels: ['kensaurus-local'],
+      fallbackLabels: ['ubuntu-24.04'],
     })
     expect(p.warnings.join(' ')).toMatch(/Runs on main and Dependabot updates keep using GitHub/)
     expect(p.warnings.join(' ')).toMatch(/Jobs already queued keep the runner/)
@@ -258,7 +259,8 @@ describe('buildPlacementPreview', () => {
   it('a revert puts the previous value back, expecting what Mushi left', () => {
     const done = buildPlacementPreview(input()).payload!
     const r = revertPayload(done, { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-22T12:01:00Z' })
-    expect(r).toMatchObject({ value: null, expected: { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-22T12:01:00Z' }, expectedLabels: [] })
+    // Back to no variable: the jobs land on their fallbacks again.
+    expect(r).toMatchObject({ value: null, expected: { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-22T12:01:00Z' }, expectedLabels: ['ubuntu-24.04'], fallbackLabels: ['ubuntu-24.04'] })
     const set = revertPayload({ ...done, expected: { exists: true, value: 'old', updatedAt: 'x' } }, { exists: true, value: 'kensaurus-local', updatedAt: 'y' })
     expect(set).toMatchObject({ value: 'old', expectedLabels: ['old'] })
   })
@@ -302,5 +304,48 @@ describe('evaluateWatch', () => {
 
   it('expires after a week with no matching job', () => {
     expect(evaluateWatch(watch, [], new Date('2026-10-30T12:00:00Z')).status).toBe('expired')
+  })
+})
+
+describe('security review fixes (ADR 0037)', () => {
+  it('matches standby patterns linearly, even pathological ones', () => {
+    const t0 = Date.now()
+    expect(matchesPattern('a'.repeat(100), `${'*a'.repeat(50)}*c`)).toBe(false)
+    expect(Date.now() - t0).toBeLessThan(200)
+    expect(matchesPattern('kensaurus-local-glot-1', 'kensaurus-local-**')).toBe(true)
+    expect(matchesPattern('abc', '*')).toBe(true)
+    expect(matchesPattern('', '*')).toBe(true)
+    expect(matchesPattern('abc', 'a*c*')).toBe(true)
+    expect(matchesPattern('abd', 'a*c')).toBe(false)
+  })
+
+  it('a delete with mixed fallbacks is refused when any job would land on paid GitHub', () => {
+    const MIXED = `name: CI
+on: pull_request
+jobs:
+  a:
+    runs-on: \${{ vars.LINUX_RUNNER || 'kensaurus-local' }}
+    steps: []
+  b:
+    runs-on: \${{ vars.LINUX_RUNNER || 'kensaurus-local' }}
+    steps: []
+  c:
+    runs-on: \${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    steps: []
+`
+    const p = buildPlacementPreview(input({ value: null, parsed: parseRepoWorkflows([{ path: 'ci.yml', text: MIXED }]), current: { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-01T00:00:00Z' } }))
+    expect(p.blocked?.code).toBe('POLICY_NO_PAID_HOSTED')
+    const ok = buildPlacementPreview(input({ value: null, policy: policy({ noPaidHostedOnPrivate: false }), parsed: parseRepoWorkflows([{ path: 'ci.yml', text: MIXED }]), current: { exists: true, value: 'kensaurus-local', updatedAt: '2026-10-01T00:00:00Z' } }))
+    expect(ok.payload?.fallbackLabels).toEqual(['kensaurus-local', 'ubuntu-latest'])
+    expect(ok.payload?.expectedLabels).toEqual(['kensaurus-local', 'ubuntu-latest'])
+  })
+
+  it('an unknown target label is refused under the no-spend rule, not on public repos or without a policy', () => {
+    expect(buildPlacementPreview(input({ value: 'linux-16core' })).blocked?.code).toBe('POLICY_UNKNOWN_TARGET')
+    expect(buildPlacementPreview(input({ value: 'linux-16core', visibility: 'public' })).blocked).toBeNull()
+    expect(buildPlacementPreview(input({ value: 'linux-16core', policy: null })).blocked).toBeNull()
+    // A GitHub-hosted (larger) runner carrying the label does not prove it is yours.
+    const larger = [{ runner_name: 'GitHub Actions 3', status: 'online', labels: ['linux-16core'], kind: 'github_hosted' }]
+    expect(buildPlacementPreview(input({ value: 'linux-16core', runners: larger })).blocked?.code).toBe('POLICY_UNKNOWN_TARGET')
   })
 })

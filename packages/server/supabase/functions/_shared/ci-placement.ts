@@ -32,7 +32,8 @@ export const PLACEMENT_ACTIONS = ['set_actions_variable', 'delete_actions_variab
 export type PlacementAction = (typeof PLACEMENT_ACTIONS)[number]
 /** A variable changed this recently, not by Mushi, gets a warning. */
 export const RECENT_CHANGE_MS = 24 * 60 * 60_000
-const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+/** owner/repo; `.` and `..` are never a segment (they would rewrite the API path). */
+export const REPO_RE = /^(?!\.\.?\/)[A-Za-z0-9._-]+\/(?!\.\.?$)[A-Za-z0-9._-]+$/
 
 export function isAllowedPlacementVariable(name: unknown): boolean {
   return typeof name === 'string' && PLACEMENT_VARIABLE_RE.test(name)
@@ -100,10 +101,34 @@ export function normalizePolicy(row: PolicyRow | null): CiRunnerPolicy | null {
   }
 }
 
-/** `*` matches any run of characters; case-insensitive. */
+/**
+ * `*` matches any run of characters; case-insensitive. A linear two-pointer
+ * glob, not a RegExp: an owner-written pattern like `*a*a*a*c` must not
+ * backtrack.
+ */
 export function matchesPattern(value: string, pattern: string): boolean {
-  const re = new RegExp(`^${pattern.split('*').map((p) => p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i')
-  return re.test(value)
+  const v = value.toLowerCase()
+  const p = pattern.toLowerCase().replace(/\*+/g, '*')
+  let vi = 0
+  let pi = 0
+  let star = -1
+  let mark = 0
+  while (vi < v.length) {
+    if (pi < p.length && p[pi] !== '*' && p[pi] === v[vi]) {
+      vi++
+      pi++
+    } else if (pi < p.length && p[pi] === '*') {
+      star = pi++
+      mark = vi
+    } else if (star >= 0) {
+      pi = star + 1
+      vi = ++mark
+    } else {
+      return false
+    }
+  }
+  while (pi < p.length && p[pi] === '*') pi++
+  return pi === p.length
 }
 
 const sameRepo = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
@@ -126,7 +151,7 @@ export function targetOf(value: string | null, fallbackLabel: string | null): Pl
   return isHostedLabel(value) ? { kind: 'github_hosted', label: value } : { kind: 'self_hosted', label: value }
 }
 
-export type PolicyCode = 'EXTERNAL_CONTROLLER' | 'POLICY_NO_PAID_HOSTED' | 'POLICY_STANDBY_TARGET'
+export type PolicyCode = 'EXTERNAL_CONTROLLER' | 'POLICY_NO_PAID_HOSTED' | 'POLICY_STANDBY_TARGET' | 'POLICY_UNKNOWN_TARGET'
 
 export interface PolicyVerdict {
   allowed: boolean
@@ -141,6 +166,8 @@ export interface RunnerSeen {
   status: string
   busy?: boolean | null
   labels: string[] | null
+  /** ci_runners.kind; a GitHub-hosted (larger) runner never proves a label is yours. */
+  kind?: string | null
 }
 
 /** Runners (one-job runners folded) that carry `label`. */
@@ -181,12 +208,42 @@ export function policyVerdict(
   if (input.target.kind === 'self_hosted') {
     const label = input.target.label
     const standby = (v: string) => policy.standbyRunners.some((p) => matchesPattern(v, p))
-    const carriers = runnersWithLabel(input.runners, label)
+    const carriers = runnersWithLabel(input.runners, label).filter((r) => r.kind !== 'github_hosted')
     if (standby(label) || (carriers.length > 0 && carriers.every((r) => standby(r.runner_name)))) {
       return { allowed: false, code: 'POLICY_STANDBY_TARGET', reason: `“${label}” is a standby runner in your CI agreement: it is never a target.`, controller }
     }
+    // A label no self-hosted runner of this repo carries could be a paid GitHub larger runner.
+    if (carriers.length === 0 && policy.noPaidHostedOnPrivate && input.visibility !== 'public' && !policy.hostedAllowedRepos.some((r) => sameRepo(r, input.repo))) {
+      return {
+        allowed: false,
+        code: 'POLICY_UNKNOWN_TARGET',
+        reason: `No self-hosted runner of ${input.repo} carries “${label}”, so it could be a paid GitHub larger runner. Pick a label one of your runners has.`,
+        controller,
+      }
+    }
   }
   return allow
+}
+
+/** Every place jobs could land: the new value, or with no variable each fallback the moving jobs use. */
+export function targetsOf(value: string | null, fallbacks: readonly string[]): PlacementTarget[] {
+  if (value !== null && value.trim() !== '') return [targetOf(value, null)]
+  const distinct = [...new Set(fallbacks.filter(Boolean))]
+  return distinct.length > 0 ? distinct.map((f) => targetOf(null, f)) : [targetOf(null, null)]
+}
+
+/** The policy for every target: the first refusal wins. */
+export function policyVerdictAll(
+  policy: CiRunnerPolicy | null,
+  input: { repo: string; visibility: 'public' | 'private' | 'unknown'; targets: readonly PlacementTarget[]; runners: readonly RunnerSeen[] },
+): PolicyVerdict {
+  let first: PolicyVerdict | null = null
+  for (const target of input.targets) {
+    const v = policyVerdict(policy, { repo: input.repo, visibility: input.visibility, target, runners: input.runners })
+    first ??= v
+    if (!v.allowed) return v
+  }
+  return first ?? policyVerdict(policy, { repo: input.repo, visibility: input.visibility, target: targetOf(null, null), runners: input.runners })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,6 +311,8 @@ export interface PlacementPayload {
   jobs: Array<{ workflow: string; job: string }>
   /** Where those jobs should land. */
   expectedLabels: string[]
+  /** Every fallback label the moving jobs use (a delete sends each job to its own). */
+  fallbackLabels?: string[]
 }
 
 export function actionFor(value: string | null): PlacementAction {
@@ -272,6 +331,7 @@ export function payloadProblem(p: unknown, action: string): string | null {
   const e = x.expected as Record<string, unknown> | null | undefined
   if (!e || typeof e !== 'object' || typeof e.exists !== 'boolean') return 'The payload has no expected current state (compare-and-set).'
   if (e.exists && typeof e.value !== 'string') return 'The expected current value is missing.'
+  if (x.fallbackLabels !== undefined && (!Array.isArray(x.fallbackLabels) || x.fallbackLabels.some((l) => typeof l !== 'string' || !RUNNER_LABEL_RE.test(l)))) return 'The fallback labels are not runner labels.'
   return null
 }
 
@@ -329,9 +389,10 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
   const warnings: string[] = []
   const jobs = input.parsed ? classifyPlacementJobs(input.parsed, input.variable) : { moves: [], stays: [] }
   const fallback = dominantFallback(jobs.moves)
+  const fallbacks = [...new Set(jobs.moves.map((m) => m.fallback).filter((f): f is string => !!f))]
   const nextTarget = targetOf(input.value, fallback)
   const nowTarget = targetOf(input.current?.exists ? input.current.value : null, fallback)
-  const policy = policyVerdict(input.policy, { repo: input.repo, visibility: input.visibility, target: nextTarget, runners: input.runners })
+  const policy = policyVerdictAll(input.policy, { repo: input.repo, visibility: input.visibility, targets: targetsOf(input.value, fallbacks), runners: input.runners })
   const action = actionFor(input.value)
   const block = (code: string, message: string) => ({ code, message })
   let blocked: PlacementPreview['blocked'] = null
@@ -370,7 +431,7 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
   }
   if (jobs.moves.length > 0) warnings.push('Jobs already queued keep the runner they asked for; the change applies to new runs.')
 
-  const expectedLabels = nextTarget.label ? [nextTarget.label] : []
+  const expectedLabels = input.value !== null ? [input.value] : fallbacks.length > 0 ? fallbacks : nextTarget.label ? [nextTarget.label] : []
   const payload: PlacementPayload | null =
     blocked || !input.current
       ? null
@@ -381,6 +442,7 @@ export function buildPlacementPreview(input: PreviewInput): PlacementPreview {
           expected: { exists: input.current.exists, value: input.current.exists ? input.current.value : null, updatedAt: input.current.exists ? input.current.updatedAt : null },
           jobs: jobs.moves.map((m) => ({ workflow: m.workflow, job: m.job })).slice(0, 50),
           expectedLabels,
+          fallbackLabels: fallbacks.slice(0, 20),
         }
 
   return {
@@ -410,7 +472,8 @@ export function revertPayload(done: PlacementPayload, left: VariableState): Plac
     value: done.expected.exists ? done.expected.value : null,
     expected: left,
     jobs: done.jobs,
-    expectedLabels: done.expected.exists && done.expected.value ? [done.expected.value] : [],
+    expectedLabels: done.expected.exists && done.expected.value ? [done.expected.value] : (done.fallbackLabels ?? []),
+    fallbackLabels: done.fallbackLabels ?? [],
   }
 }
 

@@ -25,6 +25,7 @@ import {
   requestLegacyConnectorAction,
 } from '../../supabase/functions/_shared/connector-actions.ts'
 import { getConnector } from '../../supabase/functions/_shared/connectors/index.ts'
+import { payloadProblem } from '../../supabase/functions/_shared/ci-placement.ts'
 
 const ORG = '0000000a-0000-4000-8000-000000000000'
 const P1 = '1000000a-0000-4000-8000-000000000000'
@@ -61,13 +62,17 @@ function github(state: GhState) {
   }
 }
 
-function setup(over: { policy?: Record<string, unknown> | null; gh?: Partial<GhState> } = {}) {
+function setup(over: { policy?: Record<string, unknown> | null; gh?: Partial<GhState>; runners?: Array<Record<string, unknown>>; unbound?: boolean; failRunners?: boolean } = {}) {
   const db = makeFakeDb(
     {
       ci_runner_policies: over.policy === null ? [] : [{ organization_id: ORG, no_paid_hosted_on_private: true, hosted_allowed_repos: [], external_controllers: [], standby_runners: ['kensaurus-local-*'], ...(over.policy ?? {}) }],
-      ci_runners: [{ project_id: P1, repo: REPO, runner_name: 'alienware-yen-yen-1', status: 'online', busy: false, labels: ['self-hosted', 'kensaurus-local'] }],
+      ci_runners: [
+        { project_id: P1, repo: REPO, runner_name: 'alienware-yen-yen-1', status: 'online', busy: false, labels: ['self-hosted', 'kensaurus-local'], kind: 'self_hosted' },
+        ...(over.runners ?? []),
+      ],
+      project_repos: over.unbound ? [] : [{ project_id: P1, repo_url: `https://github.com/${REPO}` }],
     },
-    { autoId: true },
+    { autoId: true, failRead: (t) => (over.failRunners && t === 'ci_runners' ? 'boom' : null) },
   )
   const gh: GhState = { private: true, variable: null, calls: [], ...over.gh }
   const tokens: string[] = []
@@ -220,5 +225,61 @@ describe('execute', () => {
     const c = getConnector('github')
     const r = await c.act!({ db: setup().db as never, organizationId: ORG, projectId: P1, readCredential: 't', writeCredential: 't', config: {}, fetch: github({ private: true, variable: null, calls: [] }), now: () => NOW }, { id: 'a', action: 'set_actions_variable', payload: payload(), payloadSha256: 'f'.repeat(64) })
     expect(r).toMatchObject({ ok: false, detail: 'The payload does not match what was approved.' })
+  })
+})
+
+describe('security review fixes (ADR 0037)', () => {
+  it('a delete is checked against every fallback: one job falling back to paid GitHub refuses it', async () => {
+    const { db, gh, deps } = setup({ gh: { variable: { value: 'kensaurus-local', updated_at: 't0' } } })
+    const id = await requestAndApprove(
+      db,
+      payload({ value: null, expected: { exists: true, value: 'kensaurus-local', updatedAt: 't0' }, expectedLabels: ['kensaurus-local', 'ubuntu-latest'], fallbackLabels: ['kensaurus-local', 'ubuntu-latest'] }),
+      'delete_actions_variable',
+    )
+    expect(await executeConnectorAction(db as never, id, ORG, 'owner1', deps)).toMatchObject({ ok: false, code: 'POLICY_NO_PAID_HOSTED' })
+    expect(gh.calls.filter((c) => !c.startsWith('GET'))).toEqual([])
+  })
+
+  it('refuses a label no self-hosted runner of this project carries (could be a paid larger runner)', async () => {
+    const { db, gh, deps } = setup({ runners: [{ project_id: P1, repo: REPO, runner_name: 'GitHub Actions 9', status: 'online', labels: ['linux-16core'], kind: 'github_hosted' }] })
+    const id = await requestAndApprove(db, payload({ value: 'linux-16core' }))
+    expect(await executeConnectorAction(db as never, id, ORG, 'owner1', deps)).toMatchObject({ ok: false, code: 'POLICY_UNKNOWN_TARGET', status: 403 })
+    expect(gh.calls.filter((c) => !c.startsWith('GET'))).toEqual([])
+  })
+
+  it('another project\'s runners for the same repo do not count', async () => {
+    const P2 = '1000000b-0000-4000-8000-000000000000'
+    const { db, deps } = setup({ runners: [{ project_id: P2, repo: REPO, runner_name: 'their-runner', status: 'online', labels: ['their-label'], kind: 'self_hosted' }] })
+    const id = await requestAndApprove(db, payload({ value: 'their-label' }))
+    expect(await executeConnectorAction(db as never, id, ORG, 'owner1', deps)).toMatchObject({ ok: false, code: 'POLICY_UNKNOWN_TARGET' })
+  })
+
+  it('fails closed when the runners cannot be read, and when the repo is no longer bound to the project', async () => {
+    const broken = setup({ failRunners: true })
+    const a = await requestAndApprove(broken.db, payload())
+    expect(await executeConnectorAction(broken.db as never, a, ORG, 'owner1', broken.deps)).toMatchObject({ ok: false, code: 'POLICY_UNREADABLE' })
+    const unbound = setup({ unbound: true })
+    const b = await requestAndApprove(unbound.db, payload())
+    expect(await executeConnectorAction(unbound.db as never, b, ORG, 'owner1', unbound.deps)).toMatchObject({ ok: false, code: 'REPO_NOT_IN_PROJECT', status: 403 })
+    expect(unbound.gh.calls.filter((c) => !c.startsWith('GET'))).toEqual([])
+  })
+
+  it('the generic connector-action path refuses placement actions, at request and at execute', async () => {
+    const { requestConnectorAction } = await import('../../supabase/functions/_shared/connector-actions.ts')
+    const db = makeFakeDb({ connector_instances: [{ id: 'i1', kind: 'github', organization_id: ORG, project_id: P1, config: {}, enabled_capabilities: ['act'], read_credential_ref: null, write_credential_ref: 'w' }] }, { autoId: true })
+    const r = await requestConnectorAction(db as never, { organizationId: ORG, instanceId: 'i1', action: 'set_actions_variable', payload: payload(), requestedBy: 'u1' })
+    expect(r).toMatchObject({ ok: false, code: 'USE_CI_PLACEMENT' })
+    db.table('connector_actions').push({ id: 'x1', organization_id: ORG, project_id: P1, connector_instance_id: 'i1', action: 'set_actions_variable', payload: payload(), payload_sha256: await payloadHash(payload()), status: 'approved', approved_by: 'o', expires_at: '2026-10-22T12:30:00Z', requested_at: '2026-10-22T11:59:00Z' })
+    const gh: GhState = { private: true, variable: null, calls: [] }
+    const out = await executeConnectorAction(db as never, 'x1', ORG, 'owner1', { fetch: github(gh), now: () => NOW, resolveCredential: async () => 'instance-token' } as never)
+    expect(out).toMatchObject({ ok: false, code: 'USE_CI_PLACEMENT' })
+    expect(gh.calls).toEqual([])
+  })
+
+  it('encodes the repo in GitHub URLs and refuses dot segments', async () => {
+    const { REPO_RE } = await import('../../supabase/functions/_shared/ci-placement.ts')
+    for (const bad of ['../x', 'a/..', './a', 'a/.', '..', 'a/b/c']) expect(REPO_RE.test(bad), bad).toBe(false)
+    for (const ok of ['kensaurus/glot.it', 'a.b/c..d', 'kensaurus/solo-boss-cloud_backend']) expect(REPO_RE.test(ok), ok).toBe(true)
+    expect(payloadProblem({ ...payload(), repo: '../evil' }, 'set_actions_variable')).toMatch(/owner\/repo/)
   })
 })

@@ -51,6 +51,7 @@ import {
   isAllowedPlacementVariable,
   normalizePolicy,
   PLACEMENT_ACTIONS,
+  REPO_RE,
   revertPayload,
   runnersWithLabel,
   type PlacementPayload,
@@ -70,7 +71,6 @@ import type { Variables } from '../types.ts'
 
 const plog = log.child('ci-placement')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
 export const PLACEMENT_REQUESTS_PER_HOUR = 20
 /** GitHub reads GET /v1/admin/ci/placement may spend on variable values. */
 export const PLACEMENT_READ_CALLS = 6
@@ -159,7 +159,7 @@ async function boundRepos(db: Db, projectId: string): Promise<string[]> {
   const out = new Set<string>()
   for (const r of (data ?? []) as Array<{ repo_url: string | null }>) {
     const ref = parseGithubRepoUrl(r.repo_url ?? '')
-    if (ref) out.add(`${ref.owner}/${ref.repo}`)
+    if (ref && REPO_RE.test(`${ref.owner}/${ref.repo}`)) out.add(`${ref.owner}/${ref.repo}`)
   }
   return [...out]
 }
@@ -171,8 +171,10 @@ async function repoVisibility(db: Db, projectId: string, repo: string): Promise<
   return hit === 'public' || hit === 'private' ? hit : 'unknown'
 }
 
-async function repoRunners(db: Db, repo: string): Promise<RunnerSeen[]> {
-  const { data } = await db.from('ci_runners').select('runner_name, status, busy, labels').eq('repo', repo)
+/** This project's runners for the repo; another tenant binding the same repo never shows up. */
+async function repoRunners(db: Db, projectId: string, repo: string): Promise<RunnerSeen[]> {
+  const { data, error } = await db.from('ci_runners').select('runner_name, status, busy, labels, kind').eq('project_id', projectId).eq('repo', repo)
+  if (error) throw new Error(`ci_runners read failed: ${error.message}`)
   return (data ?? []) as RunnerSeen[]
 }
 
@@ -214,7 +216,7 @@ async function previewFor(c: Context, deps: CiPlacementRouteDeps, db: Db, body: 
   const [{ policy }, visibility, runners, workflows, token, compare] = await Promise.all([
     loadPolicy(db, orgId),
     repoVisibility(db, body.projectId, repo),
-    repoRunners(db, repo),
+    repoRunners(db, body.projectId, repo),
     snapshotWorkflows(db as never, body.projectId, repo),
     deps.resolveToken(db, body.projectId),
     deps.loadCompare(db, body.projectId, now),
@@ -397,7 +399,7 @@ async function getPlacement(c: Context, deps: CiPlacementRouteDeps): Promise<Res
     let calls = PLACEMENT_READ_CALLS
     const out = []
     for (const repo of repos) {
-      const [visibility, runners, workflows] = await Promise.all([repoVisibility(db, access.projectId, repo), repoRunners(db, repo), snapshotWorkflows(db as never, access.projectId, repo)])
+      const [visibility, runners, workflows] = await Promise.all([repoVisibility(db, access.projectId, repo), repoRunners(db, access.projectId, repo), snapshotWorkflows(db as never, access.projectId, repo)])
       const parsed = parseRepoWorkflows(workflows)
       const counts = new Map<string, { jobs: number; fallbacks: Set<string> }>()
       for (const wf of parsed) {
@@ -598,6 +600,18 @@ async function revertRoute(c: Context, deps: CiPlacementRouteDeps): Promise<Resp
   const viewer = denyViewerWrite(c, access.role, 'ask to revert a CI placement change')
   if (viewer) return viewer
   if (row.status !== 'executed') return jsonError(c, 'NOT_EXECUTED', `This change is ${row.status}; only a change that ran can be reverted.`, 409)
+  const { data: pending } = await db
+    .from('connector_actions')
+    .select('id, status')
+    .eq('organization_id', row.organization_id)
+    .eq('payload->>revertOf', row.id)
+    .in('status', ['pending_approval', 'approved', 'executing'])
+  if (Array.isArray(pending) && pending.length > 0) return jsonError(c, 'REVERT_PENDING', 'A revert of this change is already waiting for a decision.', 409)
+  const rate = await deps.claimRateLimit(db, `project:${row.project_id}:ci_placement_request`, PLACEMENT_REQUESTS_PER_HOUR, 3600)
+  if (!rate.allowed) {
+    c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
+    return jsonError(c, 'RATE_LIMITED', `At most ${PLACEMENT_REQUESTS_PER_HOUR} CI placement requests an hour per project.`, 429)
+  }
   const done = row.payload as unknown as PlacementPayload
   const left = (row.result as { next?: VariableState } | null)?.next
   if (!left) return jsonError(c, 'NO_RESULT', 'Mushi did not record what it left, so it cannot build a safe revert.', 409)
@@ -608,7 +622,8 @@ async function revertRoute(c: Context, deps: CiPlacementRouteDeps): Promise<Resp
   if (built.preview.blocked) {
     return jsonError(c, built.preview.blocked.code, built.preview.blocked.message, blockedStatus(built.preview.blocked.code), { preview: built.preview })
   }
-  if (built.preview.current && !(built.preview.current.exists === left.exists && built.preview.current.value === left.value)) {
+  const cur = built.preview.current
+  if (cur && !(cur.exists === left.exists && cur.value === left.value && (!left.updatedAt || !cur.updatedAt || cur.updatedAt === left.updatedAt))) {
     return jsonError(c, 'VARIABLE_MOVED', `${done.name} changed since Mushi set it. Preview the change you want instead of reverting.`, 409)
   }
   const payload = { ...back, expected: built.preview.current ?? left, revertOf: row.id }

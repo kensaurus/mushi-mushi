@@ -401,3 +401,45 @@ describe('revert', () => {
     expect((await s.app.call('POST', '/v1/admin/ci/placement/requests/:id/revert', { params: { id } })).body.error?.code).toBe('VARIABLE_MOVED')
   })
 })
+
+describe('security review fixes (ADR 0037)', () => {
+  async function executed(s: ReturnType<typeof setup>) {
+    const { id, payloadSha256 } = await request(s)
+    await s.app.call('POST', '/v1/admin/ci/placement/requests/:id/approve', { params: { id }, body: { payloadSha256 } })
+    await s.app.call('POST', '/v1/admin/ci/placement/requests/:id/execute', { params: { id } })
+    return id
+  }
+  const revert = (s: ReturnType<typeof setup>, id: string) => s.app.call('POST', '/v1/admin/ci/placement/requests/:id/revert', { params: { id } })
+
+  it('refuses a second revert while one waits, and a revert when the variable was changed and set back', async () => {
+    const s = setup({ policy: { no_paid_hosted_on_private: false } })
+    const id = await executed(s)
+    expect((await revert(s, id)).status).toBe(201)
+    expect(await revert(s, id)).toMatchObject({ status: 409, body: { error: { code: 'REVERT_PENDING' } } })
+
+    const t = setup({ policy: { no_paid_hosted_on_private: false } })
+    const id2 = await executed(t)
+    // Someone set the same value again: same value, newer updated_at.
+    t.gh.variable = { value: 'kensaurus-local', updated_at: '2026-10-22T13:00:00Z' }
+    expect((await revert(t, id2)).body.error?.code).toBe('VARIABLE_MOVED')
+  })
+
+  it('rate-limits reverts like requests', async () => {
+    const s = setup({ policy: { no_paid_hosted_on_private: false } })
+    const id = await executed(s)
+    const limited = setup({ policy: { no_paid_hosted_on_private: false }, rate: false })
+    // Copy the executed row and its watch into a rate-limited app.
+    for (const t of ['connector_actions', 'ci_placement_watches']) limited.db.tables[t] = s.db.table(t).map((r) => ({ ...r }))
+    limited.gh.variable = s.gh.variable
+    expect((await revert(limited, id)).status).toBe(429)
+  })
+
+  it('placement reads only this project\'s runners for a repo', async () => {
+    const s = setup()
+    s.db.table('ci_runners').push({ project_id: '1000000b-0000-4000-8000-000000000000', repo: REPO, runner_name: 'other-tenant-runner', status: 'online', busy: false, labels: ['secret-label'] })
+    const res = await s.app.call('GET', '/v1/admin/ci/placement', { query: { project_id: P1 } })
+    expect(JSON.stringify(res.body.data)).not.toContain('secret-label')
+    const p = await s.app.call('POST', '/v1/admin/ci/placement/preview', { body: body({ value: 'secret-label' }) })
+    expect(p.body.data.blocked?.code).toBe('POLICY_UNKNOWN_TARGET')
+  })
+})

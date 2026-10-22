@@ -17,9 +17,12 @@
  * Legacy-backed GitHub (ADR 0037): a CI placement action names
  * `connector_kind = 'github'` instead of a connector instance, because GitHub
  * runs on the project's own stored token. Execution resolves that token with
- * `legacyGithubToken` (the stored PAT, never the App installation or the
- * platform token); the connector's act() checks the allowlist, the policy and
- * the compare-and-set itself.
+ * `legacyGithubToken` (the project's stored token, else its organization's;
+ * never the App installation or the platform token); the connector's act()
+ * checks the allowlist, the binding, the policy and the compare-and-set
+ * itself. CI placement actions go only through requestLegacyConnectorAction
+ * (the /v1/admin/ci/placement routes build the payload from a preview); the
+ * generic request path refuses them.
  */
 
 import type { getServiceClient } from './db.ts'
@@ -29,6 +32,12 @@ import { getConnector } from './connectors/index.ts'
 import { resolveCredential } from './connectors/credentials.ts'
 import type { ConnectorActionResult } from './connectors/types.ts'
 import { resolveProjectGithubToken } from './github.ts'
+import { PLACEMENT_ACTIONS } from './ci-placement.ts'
+
+/** CI placement actions: only through the /v1/admin/ci/placement routes (ADR 0037). */
+function isPlacementAction(action: string): boolean {
+  return (PLACEMENT_ACTIONS as readonly string[]).includes(action)
+}
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -76,6 +85,9 @@ export async function requestConnectorAction(
   const connector = getConnector((inst as { kind: string }).kind)
   if (!connector.act || !(connector.actions ?? []).includes(input.action)) {
     return { ok: false, code: 'ACTION_NOT_SUPPORTED', message: `${connector.title} has no "${input.action}" action.`, status: 400 }
+  }
+  if (isPlacementAction(input.action)) {
+    return { ok: false, code: 'USE_CI_PLACEMENT', message: 'Ask to change where CI runs through /v1/admin/ci/placement/requests (CI runners → Where CI runs): Mushi builds that change from a preview.', status: 400 }
   }
   const payloadSha256 = await payloadHash(input.payload)
   const { data, error } = await db.from('connector_actions').insert({
@@ -217,6 +229,12 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
     const r = { ok: false, detail: 'Act is not turned on for this connector.' }
     await finish(r)
     return { ok: false, code: 'ACT_DISABLED', message: r.detail, status: 403 }
+  }
+  if (isPlacementAction(row.action)) {
+    // A placement change never runs on a connector instance's credential.
+    const r = { ok: false, detail: 'CI placement changes run only through the CI placement routes.' }
+    await finish(r)
+    return { ok: false, code: 'USE_CI_PLACEMENT', message: r.detail, status: 403 }
   }
   const connector = getConnector(instance.kind)
   const resolve = deps.resolveCredential ?? resolveCredential
