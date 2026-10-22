@@ -895,7 +895,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "concepts/known-holes.md",
     keywords: ["concepts", "known-holes", "known", "holes", "dependencies"],
     headings: ["What Mushi checks", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi", "Where to see it", "Data sources"],
-    excerpt: "Mushi matches the exact versions in your lockfiles and pinned runtimes against published security advisories, and files each one with a fix as a bug with the upgrade to make.",
+    excerpt: "Mushi checks the exact versions in your lockfiles and runtime pins against published advisories, and files each fixable hole as a bug with the upgrade.",
   },
   {
     title: "Multi-repo coordinated fixes",

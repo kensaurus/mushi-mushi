@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/known-holes
 
 ---
 title: Known holes in dependencies
-description: Mushi matches the exact versions in your lockfiles and pinned runtimes against published security advisories, and files each one with a fix as a bug with the upgrade to make.
+description: Mushi checks the exact versions in your lockfiles and runtime pins against published advisories, and files each fixable hole as a bug with the upgrade.
 ---
 
 # Known holes in dependencies
