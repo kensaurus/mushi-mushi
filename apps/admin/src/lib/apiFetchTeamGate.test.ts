@@ -136,6 +136,24 @@ describe('apiFetch team gate for cross-team deep links', () => {
     expect(calls.map((c) => c.url)).toEqual(['http://api.local/v1/admin/dashboard'])
   })
 
+  it('switches at once, without the directory read, when this browser saw the project in another team', async () => {
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', directoryFetch(calls))
+    const m = await freshModules()
+    // An earlier directory read remembered the project's team and its name.
+    await m.readProjectDirectory()
+    m.setActiveOrgIdSnapshot(ORG_A)
+    calls.length = 0
+    window.history.replaceState({}, '', `/reports/x?project=${PROJECT_IN_B}`)
+    const seen: unknown[] = []
+    const onSwitch = (e: Event) => seen.push((e as CustomEvent).detail)
+    window.addEventListener(m.TEAM_AUTO_SWITCH_EVENT, onSwitch)
+    await m.apiFetch('/v1/admin/integrations')
+    window.removeEventListener(m.TEAM_AUTO_SWITCH_EVENT, onSwitch)
+    expect(calls.map((c) => [c.url, c.headers['X-Mushi-Org-Id']])).toEqual([['http://api.local/v1/admin/integrations', ORG_B]])
+    expect(seen).toEqual([{ teamId: ORG_B, teamName: 'glot', projectId: PROJECT_IN_B }])
+  })
+
   it('does not gate team-less reads (scope none)', async () => {
     const calls: Call[] = []
     vi.stubGlobal('fetch', directoryFetch(calls))
