@@ -133,4 +133,4 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
 ## References
 
 - [Mushi web SDK](/sdks/web) / [React Native SDK](/sdks/react-native)
-- [Shake docs](https://docs.shakebugs.com/)
+- [Shake docs](https://docs.shakebugs.com/docs/)
