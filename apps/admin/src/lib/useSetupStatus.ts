@@ -10,7 +10,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react'
-import type { ZodType, ZodTypeDef } from 'zod'
+import type { ZodType } from 'zod'
 import { usePageData } from './usePageData'
 import { invalidateApiCache } from './supabase'
 import { SetupResponseSchema } from './apiSchemas'
@@ -211,7 +211,7 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   // the narrower `SetupStepId` union). Runtime shape is unchanged.
   const generation = useSyncExternalStore(subscribeSetupGeneration, () => setupGeneration, () => 0)
   const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
-    schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
+    schema: SetupResponseSchema as unknown as ZodType<SetupResponse>,
     scope: 'enumeration',
     deps: [generation],
   })
