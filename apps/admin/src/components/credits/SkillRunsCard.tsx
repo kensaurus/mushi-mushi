@@ -35,8 +35,9 @@ export function SkillRunsCard({ projects }: Props) {
   const load = useCallback(async () => {
     const res = await loadSkillRuns()
     if (res.ok && res.data) {
-      setRuns(res.data.runs)
-      setSkills(res.data.skills)
+      // An API without skill runs answers another shape: show none rather than break the page.
+      setRuns(Array.isArray(res.data.runs) ? res.data.runs : [])
+      setSkills(Array.isArray(res.data.skills) ? res.data.skills : [])
     }
   }, [])
   useEffect(() => {
