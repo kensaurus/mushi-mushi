@@ -52,6 +52,9 @@ export function auditCreditsPerDay(audits: AuditCost[]): number {
     .reduce((sum, a) => sum + ((a.last_summary?.credits ?? a.page_limit) + 1) / Math.max(1, a.cadence_days), 0)
 }
 
+/** A search rank check reads 20 results (2 credits per 10) per keyword, weekly. */
+export const RANK_CREDITS_PER_KEYWORD_WEEK = 4
+
 export interface FirecrawlPace {
   perDay: number
   days: number | null
@@ -66,9 +69,11 @@ export function firecrawlPace(input: {
   periodEnd: string | null
   watches: WatchCost[]
   audits?: AuditCost[]
+  rankKeywords?: number
   now: Date
 }): FirecrawlPace {
-  const perDay = watchCreditsPerDay(input.watches) + auditCreditsPerDay(input.audits ?? [])
+  const perDay =
+    watchCreditsPerDay(input.watches) + auditCreditsPerDay(input.audits ?? []) + ((input.rankKeywords ?? 0) * RANK_CREDITS_PER_KEYWORD_WEEK) / 7
   const days = daysLeft(input.periodEnd, input.now)
   const projected = days == null ? null : Math.round(perDay * days)
   const unused = projected == null || input.remaining == null ? null : Math.max(0, input.remaining - projected)
@@ -78,8 +83,8 @@ export function firecrawlPace(input: {
 /** "about 1,000 a day · about 11,000 before Nov 3 · about 53,000 would go unused" */
 export function paceLine(pace: FirecrawlPace, periodEnd: string | null): string {
   const n = (v: number) => Math.round(v).toLocaleString()
-  if (pace.perDay === 0) return 'No site is watched or audited, so nothing is spent.'
-  const parts = [`Watches and audits use about ${n(pace.perDay)} a day`]
+  if (pace.perDay === 0) return 'Nothing is watched, audited or rank-checked, so nothing is spent.'
+  const parts = [`Watches, audits and rank checks use about ${n(pace.perDay)} a day`]
   if (pace.projected != null && periodEnd) parts.push(`about ${n(pace.projected)} before ${shortDate(periodEnd)}`)
   if (pace.unused != null) parts.push(pace.unused > 0 ? `about ${n(pace.unused)} would go unused` : 'the balance runs out first')
   return `${parts.join(' · ')}.`

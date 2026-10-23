@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { expiryLabel, firecrawlPace, paceLine, type WatchCost } from '../../lib/creditPlan'
 import { SiteAuditControl, type AuditRow } from './SiteAuditControl'
+import { SearchRankControl, type RankKeyword } from './SearchRankControl'
 
 /** The most pages one check may read (PUT /v1/admin/projects/:id/site-watch). */
 export const SITE_WATCH_MAX_PAGES = 100
@@ -36,6 +37,8 @@ interface AppWatch {
   firecrawlReady: boolean
   audit: AuditRow | null
   auditFindings: number
+  ranks: RankKeyword[]
+  rankTarget: string | null
   error?: string
 }
 
@@ -58,11 +61,17 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
     let live = true
     void Promise.all(
       projects.map(async (p): Promise<AppWatch> => {
-        const [res, audit] = await Promise.all([
+        const [res, audit, ranks] = await Promise.all([
           apiFetch<{ watch: WatchRow | null; suggestedUrl: string | null; firecrawlReady: boolean }>(`/v1/admin/projects/${p.id}/site-watch`),
           apiFetch<{ audit: AuditRow | null; findings: unknown[] }>(`/v1/admin/projects/${p.id}/site-audit`),
+          apiFetch<{ keywords: RankKeyword[]; target: string | null }>(`/v1/admin/projects/${p.id}/search-ranks`),
         ])
-        const auditPart = { audit: audit.ok ? (audit.data?.audit ?? null) : null, auditFindings: audit.ok ? (audit.data?.findings?.length ?? 0) : 0 }
+        const auditPart = {
+          audit: audit.ok ? (audit.data?.audit ?? null) : null,
+          auditFindings: audit.ok ? (audit.data?.findings?.length ?? 0) : 0,
+          ranks: ranks.ok ? (ranks.data?.keywords ?? []) : [],
+          rankTarget: ranks.ok ? (ranks.data?.target ?? null) : null,
+        }
         if (!res.ok || !res.data) return { projectId: p.id, name: p.name, watch: null, suggestedUrl: null, firecrawlReady: false, error: 'Could not read', ...auditPart }
         return { projectId: p.id, name: p.name, ...res.data, ...auditPart }
       }),
@@ -98,7 +107,8 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
 
   const watches = (apps ?? []).map((a) => a.watch).filter((w): w is WatchRow => w != null)
   const audits = (apps ?? []).map((a) => a.audit).filter((x): x is AuditRow => x != null)
-  const pace = firecrawlPace({ remaining: balance?.remaining ?? null, periodEnd: balance?.periodEnd ?? null, watches, audits, now })
+  const rankKeywords = (apps ?? []).reduce((n, a) => n + a.ranks.length, 0)
+  const pace = firecrawlPace({ remaining: balance?.remaining ?? null, periodEnd: balance?.periodEnd ?? null, watches, audits, rankKeywords, now })
   const resets = expiryLabel(balance?.periodEnd, now, 'resets')
 
   return (
@@ -168,6 +178,17 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                   audit={a.audit}
                   openFindings={a.auditFindings}
                   url={url}
+                  firecrawlReady={a.firecrawlReady}
+                  onChanged={(m) => {
+                    setNotice(m)
+                    if (m.ok) setReloadKey((n) => n + 1)
+                  }}
+                />
+                <SearchRankControl
+                  projectId={a.projectId}
+                  name={a.name}
+                  keywords={a.ranks}
+                  target={a.rankTarget}
                   firecrawlReady={a.firecrawlReady}
                   onChanged={(m) => {
                     setNotice(m)

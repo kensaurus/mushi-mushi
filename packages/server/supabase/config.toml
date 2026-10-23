@@ -432,6 +432,11 @@ verify_jwt = false
 [functions.site-audit]
 verify_jwt = false
 
+# Cron-invoked daily (mushi-search-rank, 04:47) and by api-ext after "Check now";
+# where each app ranks in web search for its keywords, weekly per keyword.
+[functions.search-rank]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

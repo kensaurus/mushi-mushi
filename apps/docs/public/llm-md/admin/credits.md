@@ -44,6 +44,10 @@ Under each app's watch, **Audit links, accessibility and translations weekly** t
 
 Each failing rule files one report listing the pages and evidence, with how to check it is fixed, and spend-down can send it to Cursor. While that report is open, later runs refresh it instead of filing again; a report you dismiss is not filed again; a fixed one that fails again files a new report. **Run now** starts a run (3 an hour per app). The row shows the last run: pages read, rules failing and reports filed.
 
+### Search rank
+
+Each app can also track where it ranks in web search for the words its users would type. **Add keywords** opens a box: one query per line, at most 10, with `@JP`, `@TH` … at the end for another country (US by default). Mushi looks for the app's watched or audited address in the top 20 results, once a week per keyword (about 4 Firecrawl credits each), and **Check now** reads them straight away (3 an hour). Each keyword shows its position, the change since the last check ("#2 (was #5)"), or "not in the top 20"; hover it to see the leading sites. It is a visibility number for you and files no reports.
+
 ## Where the fixes go
 
 Fixes these levers open are on [Fixes](./fixes). The **Opus: merge** filter there lists the open pull requests the Opus review already said to merge.

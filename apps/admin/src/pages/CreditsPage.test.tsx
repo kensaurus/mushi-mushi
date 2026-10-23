@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body: unknown }>,
   watches: {} as Record<string, unknown>,
   audits: {} as Record<string, unknown>,
+  ranks: {} as Record<string, unknown>,
 }))
 
 const KEY = {
@@ -45,6 +46,10 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
     if (method === 'GET' && path.endsWith('/site-watch')) {
       const pid = path.split('/')[4]
       return { ok: true, data: state.watches[pid] }
+    }
+    if (method === 'GET' && path.endsWith('/search-ranks')) {
+      const pid = path.split('/')[4]
+      return { ok: true, data: state.ranks[pid] ?? { keywords: [], target: null } }
     }
     if (method === 'GET' && path.endsWith('/site-audit')) {
       const pid = path.split('/')[4]
@@ -90,6 +95,15 @@ beforeEach(() => {
     p1: { watch: { base_url: 'https://kensaur.us/mushi-mushi', page_limit: 100, status: 'active', estimated_credits_per_month: 6000 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p3: { watch: null, openPages: [], suggestedUrl: 'https://talk.kensaur.us', firecrawlReady: true },
+  }
+  state.ranks = {
+    p2: {
+      target: 'tsumagoi.kensaur.us',
+      keywords: [
+        { id: 'r1', query: '嬬恋 車中泊', country: 'JP', last_rank: 2, last_top: ['carstay.jp'], last_checked_at: '2026-10-23T01:00:00Z', last_error: null, history: [{ at: '2026-10-23T01:00:00Z', rank: 2 }, { at: '2026-10-16T01:00:00Z', rank: 5 }] },
+        { id: 'r2', query: 'Tsumagoi camping', country: 'US', last_rank: null, last_top: [], last_checked_at: '2026-10-23T01:00:00Z', last_error: null, history: [] },
+      ],
+    },
   }
   state.audits = {
     p2: {
@@ -138,7 +152,7 @@ describe('CreditsPage', () => {
     await render()
     expect(host.textContent).toContain('64,175 of 100,000 credits left')
     expect(host.textContent).toContain('resets Nov 3 (11 days)')
-    expect(host.textContent).toContain('Watches and audits use about 271 a day · about 2,981 before Nov 3 · about 61,194 would go unused.')
+    expect(host.textContent).toContain('Watches, audits and rank checks use about 272 a day · about 2,994 before Nov 3 · about 61,181 would go unused.')
     const rows = host.querySelectorAll('[aria-label="Site watch per app"] > li')
     expect(rows).toHaveLength(3)
   })
@@ -160,7 +174,7 @@ describe('site audit on /credits', () => {
     await render()
     expect(host.textContent).toContain('76 pages, 2 rules failing, 2 reports filed.')
     // 260 a day of watches + (76 + 1) / 7 = 11 a day of audit.
-    expect(host.textContent).toContain('Watches and audits use about 271 a day')
+    expect(host.textContent).toContain('Watches, audits and rank checks use about 272 a day')
     const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
     const auditSwitch = (row: Element) =>
       Array.from(row.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
@@ -171,6 +185,22 @@ describe('site audit on /credits', () => {
     const runNow = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Run now'))!
     await act(async () => runNow.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/site-audit/run', method: 'POST', body: null })
+  })
+})
+
+describe('search rank on /credits', () => {
+  it('shows each keyword\'s rank and its change, and saves edited keywords', async () => {
+    await render()
+    expect(host.textContent).toContain('嬬恋 車中泊 (JP): #2 (was #5)')
+    expect(host.textContent).toContain('Tsumagoi camping: not in the top 20')
+    const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
+    const edit = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent === 'Edit keywords')!
+    await act(async () => edit.click())
+    const box = rows[1].querySelector('textarea') as HTMLTextAreaElement
+    expect(box.value).toBe('嬬恋 車中泊 @JP\nTsumagoi camping')
+    const save = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Save'))!
+    await act(async () => save.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/search-ranks', method: 'PUT', body: { keywords: '嬬恋 車中泊 @JP\nTsumagoi camping' } })
   })
 })
 

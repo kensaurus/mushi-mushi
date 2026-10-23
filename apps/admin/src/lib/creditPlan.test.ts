@@ -31,12 +31,12 @@ describe('firecrawlPace', () => {
     const pace = firecrawlPace({ remaining: 64175, periodEnd: '2026-11-03T00:25:32Z', watches, now: NOW })
     expect(pace).toEqual({ perDay: 260, days: 11, projected: 2860, unused: 61315 })
     expect(paceLine(pace, '2026-11-03T00:25:32Z')).toBe(
-      'Watches and audits use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.',
+      'Watches, audits and rank checks use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.',
     )
   })
   it('says when nothing is watched, or when the balance runs out first', () => {
     expect(paceLine(firecrawlPace({ remaining: 100, periodEnd: null, watches: [], now: NOW }), null)).toBe(
-      'No site is watched or audited, so nothing is spent.',
+      'Nothing is watched, audited or rank-checked, so nothing is spent.',
     )
     const tight = firecrawlPace({ remaining: 100, periodEnd: '2026-11-03T00:25:32Z', watches, now: NOW })
     expect(paceLine(tight, '2026-11-03T00:25:32Z')).toContain('the balance runs out first')
