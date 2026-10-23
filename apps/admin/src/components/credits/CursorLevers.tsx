@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/components/credits/CursorLevers.tsx
  * PURPOSE: /credits, Cursor half: each Cursor key's expiry and spend-down
- *          (ADR 0028) as one switch, and review follow-ups (ADR 0032) with
- *          the model each round uses. The forms with every field stay in
- *          Settings → AI keys; this is the on/off view.
+ *          (ADR 0028) as one switch, naming the model it runs on, and review
+ *          follow-ups (ADR 0032) with the model each round uses. The forms
+ *          with every field stay in Settings → AI keys; this is the on/off view.
  */
 
 import { Link } from 'react-router-dom'
@@ -65,6 +65,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
       <ul className="divide-y divide-edge-subtle">
         {keys.map((k) => {
           const line = spendDownLine(k)
+          const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
           const expiry = expiryLabel(k.creditsExpireAt, now)
           const editable = canChange(k, canManageOrg)
           return (
@@ -88,7 +89,10 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
                   }
                 />
               </div>
-              <p className="text-xs text-fg-secondary">{line.text}</p>
+              <p className="text-xs text-fg-secondary">
+                {line.text} Runs on {modelName}.{' '}
+                <Link className="text-brand hover:underline" to="/settings?tab=byok">Change</Link>
+              </p>
               {!k.enabled && !k.creditsExpireAt && (
                 <p className="text-xs text-fg-muted">
                   Set the expiry date first in{' '}
