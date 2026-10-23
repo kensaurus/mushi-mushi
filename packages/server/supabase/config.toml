@@ -437,6 +437,12 @@ verify_jwt = false
 [functions.search-rank]
 verify_jwt = false
 
+# Cron-invoked every 5 minutes (mushi-merge-queue, :01 to :56) and by api-ext
+# after a person queues PRs; "Merge when ready": update branch, wait for CI,
+# merge through the review gate, one PR per repo at a time (ADR 0041).
+[functions.merge-queue]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false
