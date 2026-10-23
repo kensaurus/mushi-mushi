@@ -426,6 +426,12 @@ verify_jwt = false
 [functions.site-watch-poll]
 verify_jwt = false
 
+# Cron-invoked hourly (mushi-site-audit, :29) and by api-ext after "Run now";
+# a scheduled rendered crawl checked by deterministic rules, one report per
+# failing rule (ADR 0040).
+[functions.site-audit]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

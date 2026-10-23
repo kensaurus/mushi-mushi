@@ -33,6 +33,25 @@ export function watchCreditsPerDay(watches: WatchCost[]): number {
     .reduce((sum, w) => sum + (w.estimated_credits_per_month ?? w.page_limit * 60) / 30, 0)
 }
 
+export interface AuditCost {
+  enabled: boolean
+  page_limit: number
+  cadence_days: number
+  /** Credits the last run used (Firecrawl's count), when known. */
+  last_summary?: { credits?: number | null; pages?: number } | null
+}
+
+/**
+ * Credits a day across enabled site audits (ADR 0040): one credit a page per
+ * run plus the map call, spread over the cadence. The last run's real count
+ * when there is one, else the page limit.
+ */
+export function auditCreditsPerDay(audits: AuditCost[]): number {
+  return audits
+    .filter((a) => a.enabled)
+    .reduce((sum, a) => sum + ((a.last_summary?.credits ?? a.page_limit) + 1) / Math.max(1, a.cadence_days), 0)
+}
+
 export interface FirecrawlPace {
   perDay: number
   days: number | null
@@ -46,9 +65,10 @@ export function firecrawlPace(input: {
   remaining: number | null
   periodEnd: string | null
   watches: WatchCost[]
+  audits?: AuditCost[]
   now: Date
 }): FirecrawlPace {
-  const perDay = watchCreditsPerDay(input.watches)
+  const perDay = watchCreditsPerDay(input.watches) + auditCreditsPerDay(input.audits ?? [])
   const days = daysLeft(input.periodEnd, input.now)
   const projected = days == null ? null : Math.round(perDay * days)
   const unused = projected == null || input.remaining == null ? null : Math.max(0, input.remaining - projected)
@@ -58,8 +78,8 @@ export function firecrawlPace(input: {
 /** "about 1,000 a day · about 11,000 before Nov 3 · about 53,000 would go unused" */
 export function paceLine(pace: FirecrawlPace, periodEnd: string | null): string {
   const n = (v: number) => Math.round(v).toLocaleString()
-  if (pace.perDay === 0) return 'No site is watched, so nothing is spent on watching.'
-  const parts = [`Site watches use about ${n(pace.perDay)} a day`]
+  if (pace.perDay === 0) return 'No site is watched or audited, so nothing is spent.'
+  const parts = [`Watches and audits use about ${n(pace.perDay)} a day`]
   if (pace.projected != null && periodEnd) parts.push(`about ${n(pace.projected)} before ${shortDate(periodEnd)}`)
   if (pace.unused != null) parts.push(pace.unused > 0 ? `about ${n(pace.unused)} would go unused` : 'the balance runs out first')
   return `${parts.join(' · ')}.`

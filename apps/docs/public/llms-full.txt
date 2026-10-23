@@ -17089,6 +17089,17 @@ Each app has a row:
 
 A broken page becomes a bug report only after a second check confirms it, and spend-down can then send it to Cursor.
 
+### Site audit
+
+Under each app's watch, **Audit links, accessibility and translations weekly** turns on its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md). Once a week (the first run starts within the hour) Mushi maps the live site, reads every page under its address (up to 200, one Firecrawl credit each) and checks:
+
+- links to the site's own pages, to other sites and to images that are 404, 410, 5xx or unreachable (a 401, 403 or 429 is often a bot wall and does not count; Facebook, Instagram, LinkedIn, X and calendar links are skipped);
+- pages with no title, meta description or ``;
+- on `/th`, `/zh`, `/en` … pages: a title or description in another language, another locale's text in the page, and links that drop the visitor's language;
+- images without alt text.
+
+Each failing rule files one report listing the pages and evidence, with how to check it is fixed, and spend-down can send it to Cursor. While that report is open, later runs refresh it instead of filing again; a report you dismiss is not filed again; a fixed one that fails again files a new report. **Run now** starts a run (3 an hour per app). The row shows the last run: pages read, rules failing and reports filed.
+
 ## Where the fixes go
 
 Fixes these levers open are on [Fixes](./fixes). The **Opus: merge** filter there lists the open pull requests the Opus review already said to merge.

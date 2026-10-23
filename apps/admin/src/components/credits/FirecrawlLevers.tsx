@@ -13,6 +13,7 @@ import { Btn, Input, ResultChip, Toggle } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { expiryLabel, firecrawlPace, paceLine, type WatchCost } from '../../lib/creditPlan'
+import { SiteAuditControl, type AuditRow } from './SiteAuditControl'
 
 /** The most pages one check may read (PUT /v1/admin/projects/:id/site-watch). */
 export const SITE_WATCH_MAX_PAGES = 100
@@ -33,6 +34,8 @@ interface AppWatch {
   watch: WatchRow | null
   suggestedUrl: string | null
   firecrawlReady: boolean
+  audit: AuditRow | null
+  auditFindings: number
   error?: string
 }
 
@@ -55,11 +58,13 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
     let live = true
     void Promise.all(
       projects.map(async (p): Promise<AppWatch> => {
-        const res = await apiFetch<{ watch: WatchRow | null; suggestedUrl: string | null; firecrawlReady: boolean }>(
-          `/v1/admin/projects/${p.id}/site-watch`,
-        )
-        if (!res.ok || !res.data) return { projectId: p.id, name: p.name, watch: null, suggestedUrl: null, firecrawlReady: false, error: 'Could not read' }
-        return { projectId: p.id, name: p.name, ...res.data }
+        const [res, audit] = await Promise.all([
+          apiFetch<{ watch: WatchRow | null; suggestedUrl: string | null; firecrawlReady: boolean }>(`/v1/admin/projects/${p.id}/site-watch`),
+          apiFetch<{ audit: AuditRow | null; findings: unknown[] }>(`/v1/admin/projects/${p.id}/site-audit`),
+        ])
+        const auditPart = { audit: audit.ok ? (audit.data?.audit ?? null) : null, auditFindings: audit.ok ? (audit.data?.findings?.length ?? 0) : 0 }
+        if (!res.ok || !res.data) return { projectId: p.id, name: p.name, watch: null, suggestedUrl: null, firecrawlReady: false, error: 'Could not read', ...auditPart }
+        return { projectId: p.id, name: p.name, ...res.data, ...auditPart }
       }),
     ).then((rows) => {
       if (live) setApps(rows)
@@ -92,7 +97,8 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
   }
 
   const watches = (apps ?? []).map((a) => a.watch).filter((w): w is WatchRow => w != null)
-  const pace = firecrawlPace({ remaining: balance?.remaining ?? null, periodEnd: balance?.periodEnd ?? null, watches, now })
+  const audits = (apps ?? []).map((a) => a.audit).filter((x): x is AuditRow => x != null)
+  const pace = firecrawlPace({ remaining: balance?.remaining ?? null, periodEnd: balance?.periodEnd ?? null, watches, audits, now })
   const resets = expiryLabel(balance?.periodEnd, now, 'resets')
 
   return (
@@ -156,14 +162,27 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                   </div>
                 )}
                 {a.error && <p className="text-xs text-warn">{a.error} this app&apos;s site watch.</p>}
+                <SiteAuditControl
+                  projectId={a.projectId}
+                  name={a.name}
+                  audit={a.audit}
+                  openFindings={a.auditFindings}
+                  url={url}
+                  firecrawlReady={a.firecrawlReady}
+                  onChanged={(m) => {
+                    setNotice(m)
+                    if (m.ok) setReloadKey((n) => n + 1)
+                  }}
+                />
               </li>
             )
           })}
         </ul>
       )}
       <p className="text-xs text-fg-muted">
-        A page that errors, 404s from your own links or stays blank becomes a bug report after a second check confirms it, and
-        spend-down can send it to Cursor. Broken pages per app: Inventory → Discovery.
+        The watch checks pages daily for errors, 404s and blank screens; a broken page becomes a bug report after a second check
+        confirms it. The audit reads every page on a schedule and files one report per failing rule. Spend-down can send both to
+        Cursor. Broken pages per app: Inventory → Discovery.
       </p>
       {notice && <ResultChip tone={notice.ok ? 'success' : 'error'}>{notice.message}</ResultChip>}
       {confirmOff && (

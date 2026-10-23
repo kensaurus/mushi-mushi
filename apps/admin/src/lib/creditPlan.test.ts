@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysLeft, expiryLabel, firecrawlPace, paceLine, watchCreditsPerDay } from './creditPlan'
+import { auditCreditsPerDay, daysLeft, expiryLabel, firecrawlPace, paceLine, watchCreditsPerDay } from './creditPlan'
 
 const NOW = new Date('2026-10-23T02:00:00Z')
 
@@ -31,14 +31,24 @@ describe('firecrawlPace', () => {
     const pace = firecrawlPace({ remaining: 64175, periodEnd: '2026-11-03T00:25:32Z', watches, now: NOW })
     expect(pace).toEqual({ perDay: 260, days: 11, projected: 2860, unused: 61315 })
     expect(paceLine(pace, '2026-11-03T00:25:32Z')).toBe(
-      'Site watches use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.',
+      'Watches and audits use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.',
     )
   })
   it('says when nothing is watched, or when the balance runs out first', () => {
     expect(paceLine(firecrawlPace({ remaining: 100, periodEnd: null, watches: [], now: NOW }), null)).toBe(
-      'No site is watched, so nothing is spent on watching.',
+      'No site is watched or audited, so nothing is spent.',
     )
     const tight = firecrawlPace({ remaining: 100, periodEnd: '2026-11-03T00:25:32Z', watches, now: NOW })
     expect(paceLine(tight, '2026-11-03T00:25:32Z')).toContain('the balance runs out first')
+  })
+})
+
+describe('auditCreditsPerDay', () => {
+  it('spreads a run (pages + the map call) over its cadence, using the last run when known', () => {
+    expect(auditCreditsPerDay([{ enabled: true, page_limit: 139, cadence_days: 7 }])).toBe(20)
+    expect(auditCreditsPerDay([{ enabled: true, page_limit: 200, cadence_days: 7, last_summary: { credits: 69 } }])).toBe(10)
+    expect(auditCreditsPerDay([{ enabled: false, page_limit: 200, cadence_days: 1 }])).toBe(0)
+    const pace = firecrawlPace({ remaining: 1000, periodEnd: '2026-11-03T00:25:32Z', watches: [], audits: [{ enabled: true, page_limit: 139, cadence_days: 7 }], now: NOW })
+    expect(pace.perDay).toBe(20)
   })
 })

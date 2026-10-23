@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body: unknown }>,
   watches: {} as Record<string, unknown>,
+  audits: {} as Record<string, unknown>,
 }))
 
 const KEY = {
@@ -44,6 +45,10 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
     if (method === 'GET' && path.endsWith('/site-watch')) {
       const pid = path.split('/')[4]
       return { ok: true, data: state.watches[pid] }
+    }
+    if (method === 'GET' && path.endsWith('/site-audit')) {
+      const pid = path.split('/')[4]
+      return { ok: true, data: state.audits[pid] ?? { audit: null, findings: [] } }
     }
     return { ok: true, data: {} }
   },
@@ -86,6 +91,12 @@ beforeEach(() => {
     p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p3: { watch: null, openPages: [], suggestedUrl: 'https://talk.kensaur.us', firecrawlReady: true },
   }
+  state.audits = {
+    p2: {
+      audit: { id: 'a2', enabled: true, base_url: 'https://tsumagoi.kensaur.us', page_limit: 139, cadence_days: 7, next_run_at: null, batch_id: null, last_run_at: '2026-10-22T02:00:00Z', last_error: null, last_summary: { pages: 76, credits: 76, reportsFiled: 2 } },
+      findings: [{ rule: 'locale_text_leak' }, { rule: 'locale_link_drop' }],
+    },
+  }
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -127,7 +138,7 @@ describe('CreditsPage', () => {
     await render()
     expect(host.textContent).toContain('64,175 of 100,000 credits left')
     expect(host.textContent).toContain('resets Nov 3 (11 days)')
-    expect(host.textContent).toContain('Site watches use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.')
+    expect(host.textContent).toContain('Watches and audits use about 271 a day · about 2,981 before Nov 3 · about 61,194 would go unused.')
     const rows = host.querySelectorAll('[aria-label="Site watch per app"] > li')
     expect(rows).toHaveLength(3)
   })
@@ -141,6 +152,25 @@ describe('CreditsPage', () => {
     const letsTalk = watchSwitches[2].querySelector('[role="switch"], input[type="checkbox"]') as HTMLButtonElement
     await act(async () => letsTalk.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/site-watch', method: 'PUT', body: { baseUrl: 'https://talk.kensaur.us', pageLimit: 25 } })
+  })
+})
+
+describe('site audit on /credits', () => {
+  it('shows the last run, counts audits in the pace, and turns one on or runs it now', async () => {
+    await render()
+    expect(host.textContent).toContain('76 pages, 2 rules failing, 2 reports filed.')
+    // 260 a day of watches + (76 + 1) / 7 = 11 a day of audit.
+    expect(host.textContent).toContain('Watches and audits use about 271 a day')
+    const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
+    const auditSwitch = (row: Element) =>
+      Array.from(row.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
+        (n.getAttribute('aria-label') ?? n.closest('label')?.textContent ?? '').includes('Audit links'),
+      ) as HTMLButtonElement
+    await act(async () => auditSwitch(rows[0]).click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p1/site-audit', method: 'PUT', body: { enabled: true, baseUrl: 'https://kensaur.us/mushi-mushi' } })
+    const runNow = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Run now'))!
+    await act(async () => runNow.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/site-audit/run', method: 'POST', body: null })
   })
 })
 

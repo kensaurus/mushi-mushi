@@ -718,6 +718,8 @@ forwardToApiExt([
   '/v1/admin/fullstack-audit/stats',
   '/v1/admin/projects/:id/audit',
 ]);
+// site-audit.ts (ADR 0040); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
 registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
