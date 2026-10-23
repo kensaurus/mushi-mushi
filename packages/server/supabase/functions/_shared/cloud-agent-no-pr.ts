@@ -21,6 +21,14 @@
  *          wrong "already fixed" would hide a live bug, so the patterns stay
  *          narrow and the full summary is always kept on the attempt.
  *
+ *          On 2026-10-23, 32 of the 41 no-PR runs still read as no verdict:
+ *          backlog rows (BL-…) that wait on the owner, said in many ways
+ *          ("stays open", "still needs you", "owner’s" with a curly quote).
+ *          Spend-down would re-run each one after its 7-day cooldown. So the
+ *          prompt now asks for a first line `Mushi verdict: <category>`
+ *          (buildCloudAgentPrompt), read before any phrase, and a backlog row
+ *          the agent left unchanged reads as needs_human.
+ *
  * Pure: no Deno globals, no npm: specifiers, so vitest imports it directly.
  */
 
@@ -39,8 +47,14 @@ export type NoPrVerdict =
  */
 const HEAD_CHARS = 600
 
+export const NO_PR_CATEGORIES = ['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'] as const
+
+/** `Mushi verdict: needs_human` on one of the first lines (markdown and backticks allowed). */
+const VERDICT_LINE = /^[\s>*_#-]*mushi verdict[*_]*\s*[:：][\s*_`]*(already_fixed|wrong_repo|not_actionable|needs_human)\b[*_`]*[ \t]*[.:—–-]?[ \t]*/im
+
 const WRONG_REPO = [
-  /\bnot in this (?:repository|repo|checkout)\b/i,
+  /\bnot in this (?:frontend |backend |client |server )?(?:repository|repo|checkout)\b/i,
+  /\bthis (?:[\w-]+ )?checkout cannot (?:read|change)\b/i,
   /\bthis checkout is the (?:frontend|backend|client|server)\b/i,
   /\b(?:lives|belongs|is) in (?:the |another |a different )?(?:backend|frontend|server|other) repo/i,
 ]
@@ -54,13 +68,14 @@ const ALREADY_FIXED = [
   /\bnothing to (?:fix|change)\b/i,
   /\b(?:is|are) (?:loading|rendering|working) (?:correctly|fine|normally)\b/i,
   /\bcould not find a defect\b/i,
-  /\bthe live [^.]{0,80}?\b(?:is not (?:stuck|blank|broken|empty|down)|renders|is rendering|is serving|serves)\b/i,
+  /\bthe live [^.]{0,80}?\b(?:is not (?:stuck|blank|broken|empty|down|showing)|renders|is rendering|is serving|serves)\b/i,
   /\brenders? (?:its|their) [^.]{0,60}\bon the live site\b/i,
+  /\brenders? (?:its|their) (?:main )?content again\b/i,
 ]
 
 /** Nothing in the evidence ties the report to code: a person should look at the source. */
 const NOT_ACTIONABLE = [
-  /\bno code change (?:that )?can be tied\b/i,
+  /\bno code change (?:that )?(?:can be tied|would fix)\b/i,
   /\b(?:payload|event|report) is too thin\b/i,
   /\bwith no stack\b/i,
   /\bdoes not say which\b/i,
@@ -69,10 +84,23 @@ const NOT_ACTIONABLE = [
 
 /** The agent stopped for a decision or review only a person can give. */
 const NEEDS_HUMAN = [
-  /\bneeds? (?:a |an )?(?:product|design|pricing|human|owner) (?:decision|call|review)\b/i,
-  /\bneeds the owner'?s?\b/i,
+  /\bneeds? (?:a |an )?(?:(?:product|design|pricing|human|owner) ){1,2}(?:decision|call|review|sign-?off)\b/i,
+  /\b(?:needs?|requires?) (?:the |an? )?(?:brand )?owner(?:['’]s)?\b/i,
+  /\b(?:is|are) an? (?:owner|product|human) (?:decision|call)\b/i,
+  /\bneeds? (?:you|your)\b/i,
+  /\bstays with the owner\b/i,
+  /\bwait for the next (?:store )?(?:release|build|version)\b/i,
   /\bneedsHumanReview\s*[=:]\s*true\b/i,
 ]
+
+/**
+ * A backlog row (BL-…) the agent left as it was: whatever it waits on (a
+ * device, an account, a decision), the run cannot close it. Both parts must
+ * be in the opening, so a code fix that mentions a BL row is not caught.
+ */
+const BACKLOG_ROW = /\bBL-\d+\b/
+const LEFT_UNCHANGED =
+  /\b(?:changed nothing|nothing (?:in the repo )?was changed|left (?:the code|it|[\w-]+)(?: and docs)? unchanged|(?:stays|remains|is still) (?:open|deferred))\b/i
 
 /** Sentences that only restate the outcome; the reason is the next one. */
 const FILLER = /^(?:no pull request|i did not open a pull request|i did not open a pr|needsHumanReview\s*[=:]\s*true)\.?$/i
@@ -107,14 +135,21 @@ function openingParagraph(text: string): string {
 }
 
 export function classifyNoPrSummary(summary: string | null | undefined): NoPrVerdict {
-  const text = (summary ?? '').trim()
+  let text = (summary ?? '').trim()
   if (!text) return { category: null, reason: null }
+  const declared = VERDICT_LINE.exec(text.slice(0, 200))
+  if (declared) {
+    text = text.slice(0, declared.index) + text.slice(declared.index + declared[0].length)
+    const rest = text.trim()
+    return { category: declared[1].toLowerCase() as (typeof NO_PR_CATEGORIES)[number], reason: rest ? firstSentence(rest) : declared[1] }
+  }
   const head = openingParagraph(text).slice(0, HEAD_CHARS)
   const reason = firstSentence(text)
   if (WRONG_REPO.some((re) => re.test(head))) return { category: 'wrong_repo', reason }
   if (ALREADY_FIXED.some((re) => re.test(head))) return { category: 'already_fixed', reason }
   if (NOT_ACTIONABLE.some((re) => re.test(head))) return { category: 'not_actionable', reason }
   if (NEEDS_HUMAN.some((re) => re.test(head))) return { category: 'needs_human', reason }
+  if (BACKLOG_ROW.test(head) && LEFT_UNCHANGED.test(head)) return { category: 'needs_human', reason }
   return { category: null, reason }
 }
 
