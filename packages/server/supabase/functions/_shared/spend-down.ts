@@ -121,6 +121,38 @@ export function reportsToRetryAfterKeyLimit(
   return out
 }
 
+/** A report whose PR Opus held may run again after this long (ADR 0028 amendment, 2026-10-24). */
+export const HELD_RETRY_AFTER_MS = 12 * 3_600_000
+/** Attempts per report, counting the held ones, after which spend-down stops retrying it. */
+export const HELD_MAX_ATTEMPTS = 3
+
+/**
+ * Reports whose newest attempt opened a PR that the Opus review held, at
+ * least 12 hours ago, with fewer than HELD_MAX_ATTEMPTS attempts: spend-down
+ * may run a new agent on them although the report is still `fixing` and
+ * inside the 7-day cooldown. The new agent's prompt carries what the held
+ * attempt did and why it was held (_shared/prior-attempts.ts), so it does not
+ * start from the same theory. On 2026-10-24, 126 reports sat held while the
+ * Cursor keys idled on "No open report to fix".
+ */
+export function reportsToRetryAfterHold(
+  attempts: Array<{ id: string; report_id: string; created_at: string }>,
+  heldAttemptIds: ReadonlySet<string>,
+  now: Date,
+): Set<string> {
+  const byReport = new Map<string, Array<{ id: string; created_at: string }>>()
+  for (const a of attempts) byReport.set(a.report_id, [...(byReport.get(a.report_id) ?? []), a])
+  const out = new Set<string>()
+  for (const [id, list] of byReport) {
+    if (list.length >= HELD_MAX_ATTEMPTS) continue
+    const latest = list.reduce((x, y) => (y.created_at > x.created_at ? y : x))
+    if (!heldAttemptIds.has(latest.id)) continue
+    if (now.getTime() - Date.parse(latest.created_at) < HELD_RETRY_AFTER_MS) continue
+    out.add(id)
+  }
+  return out
+}
+
 const DAY_MS = 86_400_000
 
 export function spendDownWindow(key: SpendDownKey, now: Date): SpendDownWindow {

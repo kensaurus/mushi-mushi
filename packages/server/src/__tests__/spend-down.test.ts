@@ -45,6 +45,7 @@ import {
   reportHasCheapEvidence,
   reportsWithNoRetryVerdict,
   reportsToRetryAfterKeyLimit,
+  reportsToRetryAfterHold,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -1081,5 +1082,26 @@ describe('reportsToRetryAfterKeyLimit', () => {
     // a: refused 52 min ago → retry. b: only 15 min ago. c: another API error. d: the agent's answer.
     // e: refused three times already. f: a later attempt ran.
     expect([...out]).toEqual(['a'])
+  })
+})
+
+describe('reportsToRetryAfterHold', () => {
+  it('retries a report whose newest PR was held 12 h ago, under three attempts', () => {
+    const now = new Date('2026-10-24T12:00:00Z')
+    const attempts = [
+      { id: 'a1', report_id: 'a', created_at: '2026-10-23T20:00:00Z' },
+      { id: 'b1', report_id: 'b', created_at: '2026-10-24T06:00:00Z' },
+      { id: 'c1', report_id: 'c', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'c2', report_id: 'c', created_at: '2026-10-23T00:00:00Z' },
+      { id: 'd1', report_id: 'd', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'd2', report_id: 'd', created_at: '2026-10-21T00:00:00Z' },
+      { id: 'd3', report_id: 'd', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'e1', report_id: 'e', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'e2', report_id: 'e', created_at: '2026-10-21T00:00:00Z' },
+    ]
+    const held = new Set(['a1', 'b1', 'c2', 'd3', 'e1'])
+    // a: held 16 h ago. b: held only 6 h ago. c: second attempt held. d: three attempts already.
+    // e: the held attempt is not the newest one (a later attempt is merge-approved or still open).
+    expect([...reportsToRetryAfterHold(attempts, held, now)].sort()).toEqual(['a', 'c'])
   })
 })
