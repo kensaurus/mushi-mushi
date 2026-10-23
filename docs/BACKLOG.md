@@ -16,9 +16,9 @@ parked work is visible in one place.
 - **Added 2026-10-22 (licensing posture):** BL-102..BL-105, parked parts and owner gates of ADR 0036.
 - **Added 2026-10-22 (CI cost and speed):** BL-106, BL-107, BL-108, parked parts of ADR 0037.
 - **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-115, an owner decision and parked parts of ADR 0038.
-- **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
+- **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 53 · **Recently closed:** 23 (BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 53 · **Recently closed:** 24 (BL-117 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -134,7 +134,6 @@ parked work is visible in one place.
 | BL-114 | unfinished-feature | Close a `security_advisory` report on its own when every `dependency_vulns` row it carries closes as `fixed` (the upgrade landed outside Mushi), with a timeline note; today the rows close and the report stays open until someone closes it | relevant | low | ADR 0038 (Consequences); `_shared/vuln-watch-db.ts` | — |
 | BL-115 | unfinished-feature | vuln-watch reads every connected repo of a project, not only the primary one (`resolveRecipeRepo` returns the primary repo) | relevant | low | ADR 0038 (Consequences) | — |
 | BL-116 | unfinished-feature | Site audit content check: send each page's Firecrawl markdown (1 credit) to the app's own model setting to find wrong-language copy, stale dates and contradictions, verify the quote in the page, then file. Firecrawl's JSON extraction found 2 real of 287 (2026-10-23) | relevant | low | ADR 0040 (Rejected) | — |
-| BL-117 | unfinished-feature | Site audit cadence and page limit are API-only (`PUT /v1/admin/projects/:id/site-audit` takes `cadenceDays`, `pageLimit`); /credits shows the switch and Run now only | relevant | low | ADR 0040 | — |
 
 ---
 
@@ -142,6 +141,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-117 | Site audit cadence and page limit are API-only; /credits shows the switch and Run now only | 2026-10-23 | `SiteAuditControl` on /credits, while the audit is on: Daily / Every 3 days / Weekly (`cadenceDays` 1, 3, 7) and a page-limit select (`pageLimit`), both through `PUT /v1/admin/projects/:id/site-audit`, plus the credits a run (one per page). A stored cadence outside those three stays selectable. Tests: `CreditsPage.test.tsx`. |
 | BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |
 | BL-008 | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | 2026-10-22 | `packages/web/src/lifecycle-hooks.test.ts` covers `beforeSendFeedback` drop, modify, throw, and the 2s timeout, plus `onCrashedLastRun` (first run `null`, unclean exit `true`, `pagehide` sets `clean`, a thrown hook does not break init). `packages/cli/src/project-create.test.ts` covers `persistProjectCreate` (the `mushi project create` write step): `.env.local` merge, `.cursor/mcp.json` merge that keeps other servers and does not inline the API key, and `saveConfig` keeping `clientId` / `telemetryNoticeShown`. Plan 012 boxes in `docs/execplans/PLANS.md` are ticked. |
 | BL-065 | `firebase-analytics.test.ts` named a `firebase-analytics.signature.test.ts` that was never created | 2026-10-20 | `packages/adapters/src/__tests__/firebase-analytics.signature.test.ts` serves a local JWKS and checks the default RS256 path: a fixture-signed token with `iss` `https://accounts.google.com` or `accounts.google.com` returns 200 and calls the sink; a different key, a tampered payload, a wrong `aud`, and a project-id substring spoof return 401 `INVALID_TOKEN`; a valid signature from another issuer returns 401 `INVALID_ISS`. The unsigned cases stay in `firebase-analytics.test.ts`, which now points at this file. |
