@@ -48,7 +48,30 @@ describe('deriveUpdateCenterView', () => {
     expect(v.mode).toBe('pr_open')
     expect(v.upgradeLabel).toBeNull()
     expect(v.ci).toBe('failing')
+    expect(v.canMerge).toBe(false)
     expect(v.prTargetVersion).toBe('1.31.0')
+  })
+
+  it('offers merge only when the open PR\'s checks passed', () => {
+    const v = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/kensaurus/help-her-take-photo/pull/137',
+      plan: [{ package: '@mushi-mushi/web', from: '1.28.0', to: '1.31.1' }],
+      prState: 'open',
+      checkRunConclusion: 'success',
+    })
+    expect(v.mode).toBe('pr_open')
+    expect(v.ci).toBe('passing')
+    expect(v.canMerge).toBe(true)
+
+    const running = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/kensaurus/help-her-take-photo/pull/137',
+      prState: 'open',
+      checkRunStatus: 'in_progress',
+    })
+    expect(running.ci).toBe('running')
+    expect(running.canMerge).toBe(false)
   })
 
   it('treats an unsynced PR (pr_state null) as open, never as a reason for a duplicate', () => {

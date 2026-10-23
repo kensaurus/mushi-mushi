@@ -89,18 +89,20 @@ app.post('/sdk-release-sync', async (c) => {
       const prNumber = parseInt(prNumberStr, 10)
       const ref: GithubRepoRef = { owner, repo }
 
-      const [pr, checks, deploy] = await Promise.all([
-        fetchPullRequestDetails(token, ref, prNumber).catch(() => null),
-        rawJob.commit_sha
-          ? fetchLatestCheckRun(token, ref, rawJob.commit_sha).catch(() => null)
-          : Promise.resolve(null),
-        rawJob.commit_sha
-          ? fetchLatestDeploymentStatusForSha(token, ref, rawJob.commit_sha).catch(() => null)
-          : Promise.resolve(null),
-      ])
-
+      // The head commit, read before the check runs. Checking them in parallel
+      // used the stored bump commit, so a later lockfile commit whose gate
+      // was green was saved as a failure until the next tick.
+      const pr = await fetchPullRequestDetails(token, ref, prNumber).catch(() => null)
       const prState = pr?.state ?? rawJob.pr_state
       const commitSha = pr?.headSha ?? rawJob.commit_sha
+      const [checks, deploy] = await Promise.all([
+        commitSha
+          ? fetchLatestCheckRun(token, ref, commitSha).catch(() => null)
+          : Promise.resolve(null),
+        commitSha
+          ? fetchLatestDeploymentStatusForSha(token, ref, commitSha).catch(() => null)
+          : Promise.resolve(null),
+      ])
       // A PR merged directly on GitHub reports state='closed' + merged=true — the
       // `merged` flag is authoritative (GitHub never returns state='merged').
       const isMerged = pr?.merged === true || prState === 'merged' || Boolean(rawJob.merged_at)

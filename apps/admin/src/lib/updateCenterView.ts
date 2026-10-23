@@ -59,6 +59,8 @@ export interface UpdateCenterView {
   /** The app reports a version older than the PR moved it to (not shipped yet). */
   appBehindPr: boolean
   ci: 'passing' | 'failing' | 'running' | 'not_checked'
+  /** Open PR whose checks passed: the card offers Merge through the review gate. */
+  canMerge: boolean
 }
 
 /**
@@ -111,7 +113,7 @@ export function deriveUpdateCenterView(
   const appBehindPr = Boolean(prTargetVersion && installed && cmpSemver(installed, prTargetVersion) < 0)
   const upgradeTo = latest ? `Upgrade to ${latest}` : 'Upgrade SDK'
 
-  const base = { packages, prTargetVersion, newerThanPr, appBehindPr, ci: ciFrom(state) }
+  const base = { packages, prTargetVersion, newerThanPr, appBehindPr, ci: ciFrom(state), canMerge: false }
 
   if (state.status === 'queueing' || state.status === 'queued' || state.status === 'running') {
     return { ...base, mode: 'working', upgradeLabel: null }
@@ -130,7 +132,7 @@ export function deriveUpdateCenterView(
       return { ...base, mode: 'pr_merged', upgradeLabel: needsMore ? upgradeTo : null }
     }
     if (state.prState !== 'closed') {
-      return { ...base, mode: 'pr_open', upgradeLabel: null }
+      return { ...base, mode: 'pr_open', upgradeLabel: null, canMerge: base.ci === 'passing' }
     }
   }
   if (state.status === 'completed_no_pr') {
