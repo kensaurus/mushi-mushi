@@ -2,11 +2,16 @@
  * Rule: `mushi-mushi/no-redundant-border-on-chip-tone`
  *
  * CHIP_TONE.*Subtle / CHIP_TONE.* recipes already include a single
- * `border border-<tone>/<opacity>`. Appending another `border` or
- * `border-<tone>/<opacity>` produces duplicate/contradictory Tailwind classes.
+ * `border border-<tone>/<opacity>`. Appending another resting
+ * `border-<tone>/<opacity>` (including responsive variants such as
+ * `md:border-danger/40`) produces duplicate/contradictory Tailwind classes.
  *
- * Prefer the bare CHIP_TONE constant. If you need a stronger border,
- * use a non-Subtle tone or a dedicated recipe (SELECTED_TONE).
+ * `hover:`, `focus:`, `focus-visible:`, `focus-within:` and `active:`
+ * border utilities are the control's state change on that same border,
+ * not a second resting border, so they are not flagged.
+ *
+ * Prefer the bare CHIP_TONE constant. If you need a stronger resting
+ * border, use a non-Subtle tone or a dedicated recipe (SELECTED_TONE).
  *
  * Allowlist: `// mushi-mushi-allowlist: <reason>` on the preceding line.
  */
@@ -15,7 +20,24 @@ import type { Rule } from 'eslint'
 import type { Node, Literal, TemplateLiteral } from 'estree'
 
 const CHIP_TONE_IDENT = /CHIP_TONE\.\w+/
-const REDUNDANT_BORDER = /\bborder(?:\s+border-(?:ok|warn|danger|info|accent|brand)\/\d+|-?(?:ok|warn|danger|info|accent|brand)\/\d+)/
+const TONE_BORDER = /^!?border-(?:ok|warn|danger|info|accent|brand)\/\d+$/
+const INTERACTION_VARIANT = /^(?:hover|focus|focus-visible|focus-within|active)$/
+
+/**
+ * A resting tone border stacked on CHIP_TONE. Interaction-only prefixes
+ * recolour the recipe's own border while the control is hovered or focused.
+ */
+function hasRestingToneBorder(text: string): boolean {
+  for (const token of text.split(/\s+/)) {
+    if (!token) continue
+    const parts = token.split(':')
+    const utility = parts.pop() ?? ''
+    if (!TONE_BORDER.test(utility)) continue
+    if (parts.length > 0 && parts.every((prefix) => INTERACTION_VARIANT.test(prefix))) continue
+    return true
+  }
+  return false
+}
 
 function extractStrings(node: Node): string[] {
   if (node.type === 'Literal' && typeof (node as Literal).value === 'string') {
@@ -68,7 +90,7 @@ const rule: Rule.RuleModule = {
     type: 'suggestion',
     docs: {
       description:
-        'Disallow appending border utilities onto CHIP_TONE recipes that already include a border.',
+        'Disallow appending a resting border onto CHIP_TONE recipes that already include a border.',
     },
     messages: {
       redundantBorder:
@@ -81,18 +103,13 @@ const rule: Rule.RuleModule = {
     function check(node: Node) {
       if (!nodeMentionsChipTone(node)) return
       if (hasAllowlist(context, node)) return
-      const strings = extractStrings(node)
-      const joined = strings.join(' ')
-      // Only flag when CHIP_TONE is concatenated/templated with a redundant border fragment
+      // Only flag when CHIP_TONE is concatenated/templated with a resting
+      // tone border in a literal sibling (the recipe's own border is not a
+      // string in this node).
       const hasChip = CHIP_TONE_IDENT.test(context.sourceCode.getText(node))
       if (!hasChip) return
-      if (REDUNDANT_BORDER.test(joined) && /CHIP_TONE/.test(context.sourceCode.getText(node))) {
-        // Require both CHIP_TONE reference AND a border fragment in the string parts
-        // that is outside the recipe itself (i.e. in a literal sibling)
-        const literalParts = strings.filter((s) => /\bborder\b/.test(s))
-        if (literalParts.length > 0) {
-          context.report({ node, messageId: 'redundantBorder' })
-        }
+      if (extractStrings(node).some((part) => hasRestingToneBorder(part))) {
+        context.report({ node, messageId: 'redundantBorder' })
       }
     }
 
