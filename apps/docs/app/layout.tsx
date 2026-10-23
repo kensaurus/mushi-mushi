@@ -1,5 +1,6 @@
 import { Layout, Navbar } from 'nextra-theme-docs'
-import { Banner, Head } from 'nextra/components'
+import { Anchor, Banner, Head, Search } from 'nextra/components'
+import { GitHubIcon } from 'nextra/icons'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
@@ -108,8 +109,11 @@ const navbar = (
         Mushi Mushi <span className="hidden opacity-60 sm:inline">— docs</span>
       </span>
     }
-    projectLink="https://github.com/kensaurus/mushi-mushi"
   >
+    {/* Accessible name is on the anchor; the icon is decorative. */}
+    <Anchor href="https://github.com/kensaurus/mushi-mushi" aria-label="GitHub repository">
+      <GitHubIcon height="24" aria-hidden="true" />
+    </Anchor>
     {/* Auth-aware chrome: renders avatar pill + "Console" + "Sign out" when
         a session is active (populated via the postMessage bridge in
         migrationProgress.ts), or a "Console" link + "Sign in" button when
@@ -141,6 +145,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           editLink="Edit this page on GitHub"
           feedback={{ content: 'Question? Give us feedback', labels: 'docs-feedback' }}
           sidebar={{ defaultMenuCollapseLevel: 1, toggleButton: true }}
+          // Desktop navbar and mobile sidebar both render this one field.
+          search={<Search aria-label="Search docs" />}
         >
           {children}
         </Layout>
