@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 217 pages, generated from llms.txt. */
+/** 218 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -167,6 +167,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "cost", "usage"],
     headings: ["What's tracked", "Charts", "Controlling costs", "Export", "Related pages"],
     excerpt: "The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.",
+  },
+  {
+    title: "Spend credits",
+    url: docUrl("/admin/credits"),
+    route: "/admin/credits",
+    markdown: "admin/credits.md",
+    keywords: ["admin", "credits", "spend"],
+    headings: ["Cursor: fix bugs", "Firecrawl: find bugs on your live sites", "Where the fixes go"],
+    excerpt: "The console Spend credits page lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them on finding and fixing bugs behind one switch each.",
   },
   {
     title: "Dashboard",

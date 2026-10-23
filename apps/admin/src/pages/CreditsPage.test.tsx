@@ -1,0 +1,152 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * /credits ("Spend credits"): each Cursor key's spend-down as a switch, review
+ * follow-ups with their models, the Firecrawl balance and what the site
+ * watches use before it resets, and a site watch switch per app.
+ */
+
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const state = vi.hoisted(() => ({
+  calls: [] as Array<{ path: string; method: string; body: unknown }>,
+  watches: {} as Record<string, unknown>,
+}))
+
+const KEY = {
+  id: 'k1',
+  label: 'hirose',
+  keyHint: 'crsr_e76…c203',
+  scope: 'project',
+  status: 'active',
+  enabled: false,
+  creditsExpireAt: '2026-10-28T23:59:00Z',
+  model: null,
+  dailyLimit: 30,
+  windowDays: 14,
+  state: 'off',
+  startsAt: null,
+  dispatchedToday: 0,
+  remainingToday: 0,
+  projects: [{ id: 'p1', name: 'mushi-mushi' }],
+  lastRunAt: null,
+  lastSummary: null,
+}
+
+vi.mock('../lib/supabase', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  apiFetch: async (path: string, opts: { method?: string; body?: string } = {}) => {
+    const method = opts.method ?? 'GET'
+    state.calls.push({ path, method, body: opts.body ? JSON.parse(opts.body) : null })
+    if (method === 'GET' && path.endsWith('/site-watch')) {
+      const pid = path.split('/')[4]
+      return { ok: true, data: state.watches[pid] }
+    }
+    return { ok: true, data: {} }
+  },
+}))
+
+vi.mock('../lib/usePageData', () => ({
+  usePageData: (path: string | null) => {
+    const data =
+      path === '/v1/admin/byok/credits'
+        ? { keys: [{ id: 'fc', provider: 'firecrawl', credits: { kind: 'credits', remaining: 64175, limit: 100000, used: null, periodEnd: '2026-11-03T00:25:32Z', unit: 'credits', source: 'x' } }] }
+        : path === '/v1/admin/byok/spend-down'
+          ? { projectId: 'p1', keys: [KEY] }
+          : path === '/v1/admin/byok/review-followups'
+            ? { available: true, canManage: true, settings: { enabled: true, keyId: null, model: 'grok-4.7?reasoning_effort=xhigh', escalationModel: 'claude-opus-5-5', dailyLimit: 200 } }
+            : path === '/v1/admin/projects'
+              ? { projects: [{ id: 'p1', name: 'mushi-mushi' }, { id: 'p2', name: 'tsumagoi' }, { id: 'p3', name: 'lets-talk' }] }
+              : null
+    return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
+  },
+}))
+vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
+vi.mock('../components/PageHeaderBar', async () => {
+  const { createElement: h } = await import('react')
+  return { PageHeaderBar: ({ title }: { title: string }) => h('h1', null, title) }
+})
+
+import { CreditsPage, firecrawlBalance } from './CreditsPage'
+
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let root: Root
+let host: HTMLDivElement
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-23T02:00:00Z'))
+  state.calls = []
+  state.watches = {
+    p1: { watch: { base_url: 'https://kensaur.us/mushi-mushi', page_limit: 100, status: 'active', estimated_credits_per_month: 6000 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
+    p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
+    p3: { watch: null, openPages: [], suggestedUrl: 'https://talk.kensaur.us', firecrawlReady: true },
+  }
+  host = document.createElement('div')
+  document.body.appendChild(host)
+  root = createRoot(host)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  host.remove()
+  vi.useRealTimers()
+})
+
+async function render() {
+  await act(async () => {
+    root.render(createElement(MemoryRouter, null, createElement(CreditsPage)))
+  })
+  await act(async () => {
+    await Promise.resolve()
+  })
+}
+
+function toggle(label: string): HTMLButtonElement | HTMLInputElement {
+  const el = Array.from(host.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
+    (n.getAttribute('aria-label') ?? n.closest('label')?.textContent ?? '').includes(label),
+  )
+  if (!el) throw new Error(`no toggle "${label}"`)
+  return el as HTMLButtonElement
+}
+
+describe('CreditsPage', () => {
+  it('shows the Cursor key expiry and the follow-up models, and turns spend-down on with one switch', async () => {
+    await render()
+    expect(host.textContent).toContain('expires Oct 28 (6 days)')
+    expect(host.textContent).toContain('the last round on claude-opus-5-5')
+    await act(async () => toggle('Fix open bugs before the credits expire').click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
+  })
+
+  it('shows the Firecrawl balance, the pace to its reset, and a switch per app', async () => {
+    await render()
+    expect(host.textContent).toContain('64,175 of 100,000 credits left')
+    expect(host.textContent).toContain('resets Nov 3 (11 days)')
+    expect(host.textContent).toContain('Site watches use about 260 a day · about 2,860 before Nov 3 · about 61,315 would go unused.')
+    const rows = host.querySelectorAll('[aria-label="Site watch per app"] > li')
+    expect(rows).toHaveLength(3)
+  })
+
+  it('widens a capped watch, and starts one for an unwatched app from its suggested address', async () => {
+    await render()
+    const widen = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Watch up to 100 pages'))!
+    await act(async () => widen.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/site-watch', method: 'PUT', body: { baseUrl: 'https://tsumagoi.kensaur.us', pageLimit: 100 } })
+    const watchSwitches = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
+    const letsTalk = watchSwitches[2].querySelector('[role="switch"], input[type="checkbox"]') as HTMLButtonElement
+    await act(async () => letsTalk.click())
+    expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/site-watch', method: 'PUT', body: { baseUrl: 'https://talk.kensaur.us', pageLimit: 25 } })
+  })
+})
+
+describe('firecrawlBalance', () => {
+  it('takes the first Firecrawl key that reported a balance', () => {
+    expect(firecrawlBalance({ keys: [{ id: 'a', provider: 'firecrawl', credits: { kind: 'error' } }, { id: 'b', provider: 'firecrawl', credits: { kind: 'credits', remaining: 5, limit: 10, periodEnd: null } }] })).toEqual({ remaining: 5, limit: 10, periodEnd: null })
+    expect(firecrawlBalance(null)).toBeNull()
+  })
+})

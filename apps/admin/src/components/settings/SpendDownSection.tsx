@@ -118,7 +118,10 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
       <p className="text-xs text-fg-muted">
         Before a key&apos;s credits expire, Mushi sends open bugs to Cursor on its own, best first, so the credits
         fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
-        every fix opens a draft pull request for you to review.
+        every fix opens a draft pull request for you to review.{' '}
+        <Link className="text-brand underline-offset-2 hover:underline" to="/credits">
+          Every way to spend expiring credits
+        </Link>
       </p>
       {followups && <p className="text-xs tabular-nums text-fg-secondary">{followups}</p>}
       <ul className="divide-y divide-edge-subtle">
