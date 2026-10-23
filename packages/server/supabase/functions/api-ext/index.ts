@@ -13,7 +13,7 @@
  *
  *          Routes here: CI runners and placement (Plan 022), inventory, Ask Mushi,
  *          verified fixes (Plan 024), known holes in dependencies (ADR 0038),
- *          the merge queue (ADR 0041).
+ *          the merge queue (ADR 0041), skill runs (ADR 0042).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -36,6 +36,7 @@ import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
 import { registerVulnerabilityRoutes } from '../api/routes/vulnerabilities.ts'
 import { registerSiteAuditRoutes } from '../api/routes/site-audit.ts'
 import { registerMergeQueueRoutes } from '../api/routes/merge-queue.ts'
+import { registerSkillRunRoutes } from '../api/routes/skill-runs.ts'
 import { registerSearchRankRoutes } from '../api/routes/search-rank.ts'
 
 ensureSentry('api-ext')
@@ -61,6 +62,7 @@ registerUxRunsRoutes(app)
 registerVulnerabilityRoutes(app)
 registerSiteAuditRoutes(app)
 registerMergeQueueRoutes(app)
+registerSkillRunRoutes(app)
 registerSearchRankRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
