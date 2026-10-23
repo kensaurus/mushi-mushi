@@ -375,14 +375,14 @@ main :not(pre) > code {
   font-size: 0.65rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--mushi-vermillion-ink);
+  /* Nextra's bar is neutral-900 (#171717) with slate-50 type in light, and a
+     #212121–#383838 gradient with white type in dark. Vermillion-ink
+     (#7a1f15) is for paper and sits at ~1.7:1 on that bar. Inherit the bar's
+     own type color so the label stays an eyebrow and clears WCAG AA. */
+  color: inherit;
   margin-right: 0.75rem;
   font-weight: 700;
   vertical-align: 1px;
-}
-
-.dark .docs-banner-eyebrow {
-  color: color-mix(in oklch, var(--mushi-vermillion) 70%, var(--mushi-dark-ink));
 }
 
 /* ---------------------------------------------------------------------------
