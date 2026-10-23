@@ -5,7 +5,7 @@
  *          accepts the new @mushi-mushi/* versions. Pure edit: version,
  *          resolved, integrity and the ranges that point at those packages,
  *          taken from the npm packument. pnpm and yarn lockfiles are named,
- *          not rewritten (ADR 0042).
+ *          not rewritten (ADR 0043).
  */
 
 const SCOPE = '@mushi-mushi/'

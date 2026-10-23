@@ -9,7 +9,7 @@
  * package manager CLI, and the PR opens after that. Mushi never writes a
  * workflow into a host repo.
  *
- * ADR 0042: with no workflow, package-lock.json (v2 or v3) @mushi-mushi/*
+ * ADR 0043: with no workflow, package-lock.json (v2 or v3) @mushi-mushi/*
  * entries are updated in the bump commit. pnpm and yarn lockfiles are left
  * as they are and the PR names the install command.
  */

@@ -305,7 +305,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     }
 
     // ADR 0019: the workflow is read on the default branch. When it is there,
-    // the package manager refreshes the lockfile. ADR 0042 edits an npm
+    // the package manager refreshes the lockfile. ADR 0043 edits an npm
     // lockfile only when that workflow is absent.
     const helperPresent = await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)
     const ghLog = {

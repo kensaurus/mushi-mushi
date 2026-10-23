@@ -1,4 +1,4 @@
-# 0042. SDK upgrade PRs update npm lock entries when the host has no lockfile workflow
+# 0043. SDK upgrade PRs update npm lock entries when the host has no lockfile workflow
 
 Status: Proposed            Date: 2026-10-23
 
