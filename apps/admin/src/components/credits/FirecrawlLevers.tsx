@@ -81,8 +81,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
     return () => {
       live = false
     }
-    // `ids` stands for the project list; reloadKey re-reads after a change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `ids` stands for the project list (a new array each render); reloadKey re-reads after a change.
   }, [ids, reloadKey])
 
   async function put(app: AppWatch, baseUrl: string, pageLimit: number, done: string) {

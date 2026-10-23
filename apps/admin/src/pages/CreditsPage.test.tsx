@@ -142,6 +142,8 @@ function toggle(label: string): HTMLButtonElement | HTMLInputElement {
 describe('CreditsPage', () => {
   it('shows the Cursor key expiry and the follow-up models, and turns spend-down on with one switch', async () => {
     await render()
+    // The page opens with the one thing to do: a key with an expiry date is not spending down.
+    expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
     expect(host.textContent).toContain('the last round on claude-opus-5-5')
     await act(async () => toggle('Fix open bugs before the credits expire').click())
