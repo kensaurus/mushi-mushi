@@ -17,6 +17,7 @@
 
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
+import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -56,7 +57,13 @@ export function ensureSentry(functionName?: string): void {
 
 export function reportError(
   err: unknown,
-  ctx?: { tags?: Record<string, string>; extra?: Record<string, unknown> },
+  ctx?: {
+    tags?: Record<string, string>
+    extra?: Record<string, unknown>
+    /** Replaces Sentry's stack fingerprint. `dbError` passes one so different
+     *  SQLSTATEs on the same wrapper line do not collapse into one issue. */
+    fingerprint?: string[]
+  },
 ): void {
   if (!inited) return
   Sentry.captureException(err, ctx)
@@ -165,7 +172,42 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     )
   }
 
-  reportError(err, {
+  // Pooler resets and Cloudflare HTML pages are infra noise. dbError() already
+  // drops them; a thrown ProjectAccessReadError used to reach reportError with
+  // the raw HTML body (MUSHI-a8a03270). Only that error carries the flag, so
+  // an unrelated throw whose text happens to quote HTML still reports.
+  if (err.name === 'ProjectAccessReadError' && (err as { transient?: unknown }).transient === true) {
+    console.warn(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'warn',
+        scope: 'mushi:sentry-hono-handler',
+        event: 'db_transient_error',
+        msg: 'transient DB connectivity failure — not an app bug, not reported to Sentry',
+        path: c.req.path,
+        method: c.req.method,
+        ...(requestId ? { requestId } : {}),
+        err_message: dbDiagnosticMessage(err.message),
+      }),
+    )
+    return c.json(
+      {
+        ok: false,
+        error: {
+          code: 'DB_ERROR',
+          message: SAFE_DB_MESSAGE,
+          ...(requestId ? { requestId } : {}),
+        },
+      },
+      500,
+    )
+  }
+
+  // A gateway HTML page never becomes the Sentry exception text.
+  const reported = isHtmlGatewayDbMessage(err.message)
+    ? Object.assign(new Error(dbDiagnosticMessage(err.message)), { name: err.name, stack: err.stack, cause: err.cause })
+    : err
+  reportError(reported, {
     tags: {
       path: c.req.path,
       method: c.req.method,
@@ -173,10 +215,10 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     },
     extra: {
       cause:
-        err.cause !== undefined
-          ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
+        reported.cause !== undefined
+          ? String((reported.cause as { message?: string }).message ?? reported.cause).slice(0, 500)
           : null,
-      message: err.message,
+      message: reported.message.slice(0, 500),
       ...(requestId ? { requestId } : {}),
     },
   })

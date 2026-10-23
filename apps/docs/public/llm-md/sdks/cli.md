@@ -117,6 +117,7 @@ mushi reports reopen <id>
 mushi reports dismiss <id>
 mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
+mushi reports file --title "…" --description "…" [--severity high] [--component checkout]
 
 mushi lessons list
 mushi lessons show <id>
@@ -138,6 +139,22 @@ mushi sentry import --query "level:error" --cursor <next>   # next page, printed
 
 It needs the Sentry org slug, project slug and an auth token with `event:read`
 and `project:read` (console: **Integrations → Sentry**).
+
+### File a report yourself
+
+For a bug you found yourself, or a backlog item you want an agent to fix,
+`mushi reports file` adds a report to the app's queue. It goes through the same
+triage as a user report, so it gets a diagnosis and can be sent to `mushi fix`.
+
+```bash
+mushi reports file --title "Checkout adds tax twice" \
+  --description "Cart with 2 items shows the tax line twice on /checkout. Done when the total matches the cart."
+mushi reports file --title "Bump sharp to 0.34" --description "..." --severity low --component build --project <uuid>
+```
+
+`--severity` (critical, high, medium, low) and `--component` are hints that
+triage may refine. It needs a key with the `mcp:write` scope; each app takes at
+most 30 filed reports an hour. The MCP tool is `file_report`.
 
 ### Reporter updates held for review
 
@@ -200,6 +217,11 @@ mushi fixes merge <fixId>
 mushi fixes merge <fixId> --method squash   # default
 mushi fixes merge <fixId> --method merge
 mushi fixes merge <fixId> --json
+
+# The verified-merge gates for the PR's current head (ADR 0035)
+mushi fixes verify <fixId>
+mushi fixes verify <fixId> --rerun   # re-check now, then show
+mushi fixes verify <fixId> --json
 ```
 
 **Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
@@ -208,6 +230,33 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+
+### `mushi verify`
+
+The `mushi-verify` workflow that proves an agent's fix with a test that fails
+without it, filled in with your project's runner labels and test command. Full
+guide: [Verified merge](/admin/verified-merge).
+
+```bash
+mushi verify workflow                                           # print it
+mushi verify workflow --out .github/workflows/mushi-verify.yml  # write it
+mushi verify workflow --project <projectId> --json
+```
+
+### `mushi runner`
+
+Where your tests run and why a fix waits to land. Full guide: [CI runners](/operating/ci-runners).
+
+```bash
+mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
+mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
+mushi runner key                                  # a runner key (can only report runner health), saved, never printed
+mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
+mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills
+mushi runner add --repo owner/name --dry-run      # set this machine up as a runner, safe defaults
+mushi runner audit [--repo owner/name | --all]    # list self-hosted runners and flag the odd ones
+```
 
 ---
 
@@ -472,9 +521,22 @@ mushi integrations test github
 mushi keys list
 MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup"
 
+# Spend down a Cursor key's expiring credits on open bugs (draft PRs only)
+mushi keys spend-down                                   # status of every Cursor key
+mushi keys spend-down <keyId> --on --expires 2026-10-31 \
+  --model 'grok-4.7?reasoning_effort=xhigh&context=500k' --per-day 20
+
 mushi slack status
 mushi slack test
 ```
+
+Spend-down mode starts `--window-days` (default 14) before the credits expire
+and dispatches the best open reports of the apps the key already pays for,
+inside each app's auto-fix limits. A key shared by the whole organization is
+changed by an owner or admin in the console (Settings, AI keys, Cursor).
+It pauses an app on its own when that app's recent agent pull requests review
+poorly, then sends one test fix a day until they recover
+([agent PR review](/concepts/agent-pr-review#spend-down-and-its-safety-stop)).
 
 ---
 

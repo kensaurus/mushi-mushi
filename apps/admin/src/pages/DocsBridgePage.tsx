@@ -283,5 +283,3 @@ export function DocsBridgePage() {
     </div>
   )
 }
-
-export default DocsBridgePage

@@ -15,6 +15,7 @@
  *       GET|POST|PATCH|DELETE /v1/admin/orgs/:orgId/accounts (AccountsRegisterCard)
  *       GET /v1/admin/orgs/:orgId/spend + bill imports (SpendLedgerCard)
  *       GET /v1/admin/orgs/:orgId/monetization (MonetizationCard)
+ *       GET /v1/admin/ci/overview?days=7 (CiRunnersCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
  * that was never checked renders as healthy. A read the server could not
  * finish is listed in a callout (`readErrors`) and its cells read "Could not
@@ -42,6 +43,7 @@ import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
 import { AccountsRegisterCard } from '../components/portfolio/AccountsRegisterCard'
 import { SpendLedgerCard } from '../components/portfolio/SpendLedgerCard'
+import { CiRunnersCard } from '../components/portfolio/CiRunnersCard'
 import { PortfolioCardTile, PortfolioCompactRow } from '../components/portfolio/PortfolioCardTile'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -56,7 +58,7 @@ export function PortfolioPage() {
   if (!orgId) {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeaderBar title="Portfolio" />
+        <PageHeaderBar title="Apps" />
         <div className="flex flex-1 items-center justify-center">
           <EmptyState title="No team selected" description="Pick a team in the switcher at the top to see all of its apps." />
         </div>
@@ -117,9 +119,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
       <PageHeaderBar
-        title="Portfolio"
+        title="Apps"
         description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
-        helpTitle="About Portfolio"
+        helpTitle="About apps"
         helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
         helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
         helpFlowPath="/portfolio"
@@ -221,6 +223,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             </PanelErrorBoundary>
             <PanelErrorBoundary label="Funnel across apps">
               <FunnelCard orgId={orgId} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="CI runners">
+              <CiRunnersCard />
             </PanelErrorBoundary>
           </section>
 

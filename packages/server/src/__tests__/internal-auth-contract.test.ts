@@ -43,6 +43,10 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   // Main HTTP API — uses `adminOrApiKey` / `apiKeyAuth` / `jwtAuth` per
   // route, which is the correct auth surface for user-facing endpoints.
   api: 'Per-route JWT / API-key auth via _shared/auth middlewares',
+  // The overflow half of `api` (deploy size limit, 2026-10-21): `api` forwards
+  // CI runner, inventory and Ask Mushi paths here, and every route keeps its
+  // own adminOrApiKey / apiKeyAuth / jwtAuth gate on the forwarded headers.
+  'api-ext': 'Per-route JWT / API-key auth via _shared/auth middlewares (routes forwarded from api)',
   // Health check — verify_jwt=false by design so external monitors, load
   // balancers, and synthetic checks can reach it without credentials. Exposes
   // no user data (only {status, db, version}); DB probe is a no-table

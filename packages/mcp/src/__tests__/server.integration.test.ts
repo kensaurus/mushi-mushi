@@ -136,6 +136,8 @@ describe('MCP protocol handshake', () => {
       'add_byok_key',
       'test_byok_key',
       'remove_byok_key',
+      // Spend-down mode (ADR 0028): turning it on spends Cursor credits.
+      'set_byok_spend_down',
       'approve_qa_story',
       'reply_to_reporter',
       // Plan 018: reporter loop
@@ -153,6 +155,7 @@ describe('MCP protocol handshake', () => {
       'reopen_report',
       // Sentry pull-import creates reports and spends classification budget
       'import_sentry_issues',
+      'file_report',
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.
       'ask_codebase',
@@ -161,6 +164,8 @@ describe('MCP protocol handshake', () => {
       'propose_recipe_change',
       'propose_portfolio_change',
       'request_connector_action',
+      // Changing where CI runs: a request a person approves (ADR 0037).
+      'request_ci_placement_change',
       // Run-now tools: each starts a server-side run (repo reads, live probes).
       'run_radar',
       'refresh_recipe',

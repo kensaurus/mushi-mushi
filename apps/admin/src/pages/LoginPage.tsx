@@ -93,7 +93,7 @@ export function LoginPage() {
   // Fresh signups land on the wizard (first action = send a test report);
   // returning users go to the dashboard. An explicit `?next=` / router
   // state still wins for both.
-  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/dashboard'
+  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/reports'
   const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
 
   useEffect(() => {

@@ -110,6 +110,7 @@ and stub their server payloads so they can run without a live DB.
 | `dynamic-title.spec.ts`           | `<title>` re-counts live (pending reports / in-flight fixes) and the freshness pill pulses on load   |
 | `favicon-badge.spec.ts`           | Tab favicon shows an unread dot when new reports land while the tab is backgrounded                  |
 | `reports-bulk-undo.spec.ts`       | **Wave T.2** — bulk dismiss writes a mutation row and the `Undo` toast round-trips through `/undo`   |
+| `confirmation-coverage.spec.ts`   | Destructive actions open a confirm dialog, then the spec cancels. A missing control fails the test. The only skip is missing Supabase credentials (BL-064). |
 | `staged-realtime-banner.spec.ts`  | **Wave T.3** — the "N new rows · Apply · Discard" banner renders and announces via `aria-live`       |
 | `chart-annotations.spec.ts`       | **Wave T.5** — `<ChartAnnotations>` overlay renders a dot per `chart-events` row and filters by kind |
 | `dead-buttons.spec.ts`            | **Wave T** — sweeps 16 Advanced routes for `data-hero-primary` / `data-inbox-primary` / `data-tabbed-sub-nav-tab` CTAs and asserts none land on the 404 fallback |

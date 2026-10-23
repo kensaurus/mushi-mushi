@@ -1,12 +1,17 @@
 /**
  * Codebase graph analyze job runner — builds UA-shaped graph JSON from
  * project_codebase_files. Inspired by Understand-Anything (MIT).
+ *
+ * The graph is one jsonb row. Writes go through write_codebase_graph
+ * (90s timeout, per-project advisory lock, lz4). A second job for the same
+ * project is put back on the queue instead of waiting out statement_timeout.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getIndexFingerprint, loadExploreGraph } from './codebase-understand.ts'
 import { invalidateCodebaseUnderstandCaches } from './codebase-impact-resolve.ts'
 import { buildGraphFromIndex, fingerprintFile, mergeGraphUpdate } from './codebase-graph-build.ts'
+import { listIndexedFilePaths, pruneGraphToLivePaths, writeCodebaseGraph } from './codebase-graph-write.ts'
 import { log } from './logger.ts'
 import { runWikiIngestForProject } from './wiki-ingest.ts'
 
@@ -29,6 +34,38 @@ const ANALYZE_DRAIN_DEFAULT_LIMIT = 5
 const ANALYZE_DRAIN_MAX_LIMIT = 20
 /** A drain stops starting new jobs after this long, inside the edge wall clock. */
 const ANALYZE_DRAIN_BUDGET_MS = 100 * 1000
+/**
+ * A sibling still 'running' from before this is a dead worker, not a live
+ * graph write. The stale reaper uses a longer window; blocking on it would
+ * freeze the project until that reaper runs.
+ */
+const ANALYZE_SIBLING_ACTIVE_MS = 8 * 60 * 1000
+
+/** Put a claimed job back on the queue. Only touches a row this worker still owns. */
+async function releaseAnalyzeJob(db: SupabaseClient, jobId: string, error: string): Promise<void> {
+  await db
+    .from('codebase_analyze_jobs')
+    .update({
+      status: 'queued',
+      started_at: null,
+      error: error.slice(0, 500),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', jobId)
+    .eq('status', 'running')
+}
+
+async function finishAnalyzeJob(
+  db: SupabaseClient,
+  jobId: string,
+  plan: Record<string, unknown>,
+): Promise<void> {
+  const now = new Date().toISOString()
+  await db
+    .from('codebase_analyze_jobs')
+    .update({ status: 'completed', error: null, finished_at: now, updated_at: now, plan })
+    .eq('id', jobId)
+}
 
 export async function runCodebaseAnalyzeJob(
   db: SupabaseClient,
@@ -81,7 +118,36 @@ export async function runCodebaseAnalyzeJob(
       return { ok: true, status: 'completed', pathsAnalyzed: wiki.processed }
     }
 
+    // One graph writer per project. A second job waits on the jsonb row and
+    // the wait counts toward statement_timeout (Sentry 7786063319).
+    const siblingSince = new Date(Date.now() - ANALYZE_SIBLING_ACTIVE_MS).toISOString()
+    const { data: sibling, error: siblingErr } = await db
+      .from('codebase_analyze_jobs')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('status', 'running')
+      .neq('id', jobId)
+      .neq('trigger', 'wiki_ingest')
+      .gt('started_at', siblingSince)
+      .limit(1)
+      .maybeSingle()
+    if (siblingErr) throw new Error(`codebase_analyze_jobs read failed: ${siblingErr.message}`)
+    if (sibling) {
+      await releaseAnalyzeJob(db, jobId, 'Requeued: another analyze job is running for this project.')
+      return { ok: true, status: 'skipped', error: 'another analyze job is running for this project' }
+    }
+
     const fingerprint = await getIndexFingerprint(db, projectId)
+    const { data: graphMeta, error: graphMetaErr } = await db
+      .from('project_codebase_graph')
+      .select('index_fingerprint')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (graphMetaErr) throw new Error(`project_codebase_graph read failed: ${graphMetaErr.message}`)
+    if (graphMeta?.index_fingerprint === fingerprint) {
+      await finishAnalyzeJob(db, jobId, { unchanged: true })
+      return { ok: true, status: 'completed', pathsAnalyzed: 0 }
+    }
 
     const { data: project } = await db.from('projects').select('name').eq('id', projectId).maybeSingle()
     // Every read below is checked: a failed read used to build an empty
@@ -126,17 +192,26 @@ export async function runCodebaseAnalyzeJob(
       nextGraph,
       changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
     )
+    // Drop nodes for tombstoned or deleted files. The merge keeps every path
+    // it is not given, so a push that only admits written files used to
+    // accumulate ghosts until the jsonb upsert timed out.
+    const livePaths = await listIndexedFilePaths(db, projectId)
+    const pruned = pruneGraphToLivePaths(merged, livePaths)
 
-    // Through an RPC with its own 60 s statement timeout: the largest graph is
-    // ~12 MB of JSON and a plain upsert hit the role's 8 s limit (Sentry
-    // MUSHI-MUSHI-SERVER-2Q). See migration 20261014120000.
-    const { error: graphWriteErr } = await db.rpc('write_codebase_graph', {
-      p_project_id: projectId,
-      p_index_fingerprint: fingerprint,
-      p_commit_sha: repo?.commit_sha ?? null,
-      p_graph: merged,
+    // RPC: 90s timeout, lz4 toast, advisory lock. A busy lock is requeued;
+    // a statement timeout is retried once inside writeCodebaseGraph.
+    // See migrations 20261014120000 and 20261020123834.
+    const written = await writeCodebaseGraph(db, {
+      projectId,
+      indexFingerprint: fingerprint,
+      commitSha: repo?.commit_sha ?? null,
+      graph: pruned,
     })
-    if (graphWriteErr) throw new Error(`project_codebase_graph write failed: ${graphWriteErr.message}`)
+    if (!written.ok && written.busy) {
+      await releaseAnalyzeJob(db, jobId, 'Requeued: another graph write holds this project.')
+      return { ok: true, status: 'skipped', error: 'graph write busy' }
+    }
+    if (!written.ok) throw new Error(`project_codebase_graph write failed: ${written.message}`)
 
     const fpRows = fileRows.map((r) => ({
       project_id: projectId,
@@ -151,17 +226,7 @@ export async function runCodebaseAnalyzeJob(
     }
 
     await invalidateCodebaseUnderstandCaches(db, projectId)
-
-    await db
-      .from('codebase_analyze_jobs')
-      .update({
-        status: 'completed',
-        error: null,
-        finished_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        plan: { node_count: merged.nodes.length, edge_count: merged.edges.length },
-      })
-      .eq('id', jobId)
+    await finishAnalyzeJob(db, jobId, { node_count: pruned.nodes.length, edge_count: pruned.edges.length })
 
     return { ok: true, status: 'completed', pathsAnalyzed: changedPaths.length || fileRows.length }
   } catch (err) {

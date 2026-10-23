@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory stand-in for the supabase-js query builder, covering the
  * subset the voice-inbox modules use: from().select/insert/update/upsert/delete
- * with eq / not-in / order / limit / range / maybeSingle / single, `count`
+ * with eq / not-in / ilike / order / limit / range / maybeSingle / single, `count`
  * (with or without `head`), plus rpc(). `failRead` makes a table's reads fail.
  *
  * Filters on JSON paths use the PostgREST `col->>key` spelling. Unique keys
@@ -17,6 +17,8 @@ interface FakeDbOptions {
   /** table → columns that form a unique key (insert conflicts return 23505). */
   uniques?: Record<string, string[]>
   rpc?: (fn: string, args: Record<string, unknown>) => unknown
+  /** Make an rpc fail as PostgREST does (e.g. PGRST202 for a function that is not applied yet); null lets it run. */
+  rpcError?: (fn: string) => { code: string; message: string } | null
   /** Mint a uuid `id` on insert when the row has none (mimics `default gen_random_uuid()`). */
   autoId?: boolean
   /**
@@ -28,8 +30,10 @@ interface FakeDbOptions {
    * Make a read fail the way PostgREST reports an error: return a message to
    * fail `from(table).select(...)`, or null to let it run. Used by the
    * fail-open suites to prove a failed read never renders as "nothing found".
+   * A message fails with code XX000; `{ code, message }` sets the code (e.g.
+   * 42P01 for a table that does not exist yet).
    */
-  failRead?: (table: string) => string | null
+  failRead?: (table: string) => string | { code: string; message: string } | null
   /**
    * PostgREST `max_rows`: no select returns more rows than this, whatever
    * `limit` / `range` ask for (1,000 on Supabase). Unset = no cap.
@@ -65,6 +69,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   private _order: Array<{ key: string; ascending: boolean }> = []
   private returning = false
   private onConflict: string[] | null = null
+  private ignoreDuplicates = false
   /** select(cols, { count: 'exact', head }) — return the match count, and no rows when head. */
   private counting: { head: boolean } | null = null
 
@@ -91,10 +96,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.payload = payload
     return this
   }
-  upsert(payload: Row | Row[], opts?: { onConflict?: string }): this {
+  upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }): this {
     this.op = 'upsert'
     this.payload = payload
     this.onConflict = opts?.onConflict ? opts.onConflict.split(',').map((s) => s.trim()) : null
+    this.ignoreDuplicates = opts?.ignoreDuplicates === true
     return this
   }
   delete(): this {
@@ -146,14 +152,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
   }
   /**
    * `or('a.is.null,b.neq.x')`: flat PostgREST alternatives of `is.null`,
-   * `eq` and `neq`. `neq` never matches a NULL / absent column, as in Postgres
+   * `eq`, `neq`, `in` and the comparisons `lt` / `gt` / `lte` / `gte`. `neq` never matches a NULL / absent column, as in Postgres
    * (`NULL <> 'x'` is NULL), so a filter that forgets `is.null` fails here too.
    */
   or(filters: string): this {
     // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
     const parts = filters.split(/,(?![^(]*\))/)
     const alternatives = parts.map((part) => {
-      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in)\.(.*)$/.exec(part.trim())
+      const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt|lte|gte)\.(.*)$/.exec(part.trim())
       if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
       const [, key, negated, op, raw] = m
       return (r: Row): boolean => {
@@ -169,6 +175,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         if (op === 'in') {
           const values = raw.replace(/^\(|\)$/g, '').split(',').map((s) => s.trim())
           hit = values.includes(String(v))
+        } else if (op === 'lt' || op === 'gt' || op === 'lte' || op === 'gte') {
+          const a = String(v)
+          hit = op === 'lt' ? a < raw : op === 'gt' ? a > raw : op === 'lte' ? a <= raw : a >= raw
         } else {
           hit = op === 'eq' ? String(v) === raw : String(v) !== raw
         }
@@ -188,6 +197,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
       const v = readPath(r, key)
       return v !== null && v !== undefined && String(v) < String(value)
     })
+    return this
+  }
+  /** `ilike(col, '%x%')`: case-insensitive LIKE (`%` any run, `_` one character, `\` escapes). */
+  ilike(key: string, pattern: string): this {
+    const source = pattern.replace(/\\(.)|([%_])|([^%_\\]+)/g, (_m, esc: string, wild: string, lit: string) =>
+      esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : wild === '%' ? '.*' : wild === '_' ? '.' : lit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const re = new RegExp(`^${source}$`, 'is')
+    this.filters.push((r) => re.test(String(readPath(r, key) ?? '')))
     return this
   }
   gte(key: string, value: unknown): this {
@@ -256,7 +273,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     switch (this.op) {
       case 'select': {
         const failure = this.db.options.failRead?.(this.table) ?? null
-        if (failure) return { data: null, error: { code: 'XX000', message: failure }, count: null }
+        if (failure) {
+          const error = typeof failure === 'string' ? { code: 'XX000', message: failure } : failure
+          return { data: null, error, count: null }
+        }
         return this.finish(this.matches())
       }
       case 'insert': {
@@ -279,6 +299,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         const stored: Row[] = []
         for (const item of items) {
           const existing = keys ? rows.find((r) => keys.every((k) => r[k] === item[k])) : undefined
+          // ignoreDuplicates (ON CONFLICT DO NOTHING): the stored row is left alone and not returned.
+          if (existing && this.ignoreDuplicates) continue
           if (existing) {
             Object.assign(existing, item)
             stored.push(existing)
@@ -331,8 +353,10 @@ export class FakeDb {
     return new FakeQuery(this, name, 'select')
   }
 
-  async rpc(fn: string, args: Record<string, unknown> = {}): Promise<{ data: unknown; error: null }> {
+  async rpc(fn: string, args: Record<string, unknown> = {}): Promise<{ data: unknown; error: { code: string; message: string } | null }> {
     this.rpcCalls.push({ fn, args })
+    const error = this.options.rpcError?.(fn) ?? null
+    if (error) return { data: null, error }
     return { data: this.options.rpc ? this.options.rpc(fn, args) : null, error: null }
   }
 }

@@ -408,8 +408,13 @@ export function buildManifestTools(deps: {
         }
 
         const path = interpolatePath(spec.path, args, ctx);
+        // A route with no {projectId} in its path picks the project from
+        // X-Mushi-Project-Id; without it an account-level key gets 400
+        // PROJECT_REQUIRED even though the caller named one (2026-10-23:
+        // get_spend_down_status, list_byok_keys).
+        const named = typeof args.projectId === 'string' && args.projectId ? args.projectId : undefined;
         const init: RequestInit & { headers: Record<string, string> } = {
-          headers: ctx.authHeaders,
+          headers: named ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': named } : ctx.authHeaders,
         };
         if (spec.method !== 'GET') init.method = spec.method;
         const body = buildBody(spec, args, ctx);

@@ -178,12 +178,16 @@ mushi fixes refresh-ci <fixId>
 ## Merging from the console
 
 After CI passes (or you've reviewed manually), merge the draft PR without leaving
-Mushi. This is **user-confirmed** — Mushi never auto-merges.
+Mushi. This is **user-confirmed**: Mushi merges only what you merge or queue,
+or what passes [verified merge](/admin/verified-merge) when you turned it on.
 
 ### Where merge appears
 
 - **Report detail** → fix card → **Merge PR** (confirm popover)
-- **Fixes list** → completed row with open PR
+- **Fixes list** → completed row with open PR. The **Opus: merge** filter
+  (`/fixes?status=review_merge`) lists only the open PRs whose latest Opus
+  review said merge; select them and use the bulk **Merge** action
+  (see [Merge when ready](#merge-when-ready)).
 - **Pipeline flow** on the report detail page
 
 The UI picks the **primary fix attempt** — if a later retry failed but an earlier
@@ -226,6 +230,31 @@ mushi fixes merge <fixId>
 mushi fixes merge <fixId> --method squash
 ```
 
+### Merge when ready
+
+The bulk **Merge** action queues the selected PRs by default (ADR 0041). Most
+repos require a branch to be up to date before it merges, so merging one PR
+leaves the others in that repo behind; the queue does the clicks for you:
+
+1. One PR per repo at a time. A branch that is behind gets GitHub's
+   **Update branch**; then the queue waits for CI on the new commit.
+2. It merges only when the Opus review of that exact commit says **merge**
+   (the update is a new commit, so Opus reviews it again first) and CI is
+   green. A hold or fix-first stops the PR until you decide.
+3. A merge conflict goes to a Cursor agent on the PR's branch, with your
+   review follow-up key and model, only while
+   [review follow-ups](/concepts/agent-pr-review#when-the-review-says-fix-first) are on, at most twice per PR.
+4. Each merge marks the report Fixed and tells the reporter, as a console
+   merge does.
+
+The **Merge when ready** panel on `/fixes` shows each queued PR, what it is
+waiting for, and why one needs you. **Remove** takes a PR out. You can leave
+the page; the queue runs every 5 minutes.
+
+**Merge now** (in the same dialog) tries each PR once. The PRs that did not
+merge stay listed above the table with GitHub's reason and a
+**Merge them when ready** button.
+
 ### Prerequisites
 
 | Requirement | Why |
@@ -239,6 +268,7 @@ mushi fixes merge <fixId> --method squash
 
 ## See also
 
+- [Verified merge](/admin/verified-merge) — the gates an agent's PR passes before Mushi merges it on its own.
 - [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) — how auto-fix works internally.
 - [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes) — coordinated multi-repo runs.
 - [Connecting your orchestrator](/concepts/orchestrator-interop) — dispatch via MCP, A2A, or REST.

@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/lib/navBadges.test.ts
- * PURPOSE: Lock the nav-meta slice set Quick and Beginner request.
+ * PURPOSE: Lock the nav-meta slice set the sidebar requests.
  *
  * `layoutHeroFromStats` used to read the current page's slices. After it
  * was deleted, that page must not add slices unless its badge is actually
@@ -10,11 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { navSlicesForPaths } from './navBadges'
-import { SIMPLE_NAV_GROUPS } from './navRegistry'
-
-function paths(mode: 'quick' | 'beginner'): string[] {
-  return SIMPLE_NAV_GROUPS.flatMap((group) => group[mode])
-}
+import { CORE_NAV_PATHS } from './navRegistry'
 
 describe('navSlicesForPaths', () => {
   it('always asks for dashboard, and /health does not repeat it', () => {
@@ -33,24 +29,23 @@ describe('navSlicesForPaths', () => {
     expect(navSlicesForPaths(['/team?view=billing'])).toEqual(['dashboard'])
   })
 
-  it('Quick and Beginner sidebars request only their own badges', () => {
-    expect(navSlicesForPaths(paths('quick'))).toEqual([
+  it('the core sidebar requests only its own badges', () => {
+    expect(navSlicesForPaths(CORE_NAV_PATHS)).toEqual([
       'dashboard',
       'fixes',
       'integrations',
       'onboarding',
-      'projects',
       'settings',
     ])
-    expect(navSlicesForPaths(paths('beginner'))).toEqual([
+  })
+
+  it('an enabled Lab adds that page\'s badge and nothing else', () => {
+    expect(navSlicesForPaths([...CORE_NAV_PATHS, '/releases'])).toEqual([
       'dashboard',
       'fixes',
       'integrations',
-      'mcp',
       'onboarding',
-      'projects',
-      'qaCoverage',
-      'repo',
+      'releases',
       'settings',
     ])
   })

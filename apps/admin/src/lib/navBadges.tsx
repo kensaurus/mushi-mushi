@@ -76,8 +76,8 @@ import {
  * badge counters (`projectCount`, `pendingInvites`, …), not `slices.*`.
  * `navSlicesForPaths` always asks for `dashboard` (Home badge and
  * `healthIssues`), so `/health` does not repeat it. Layout sends the union
- * for the visible sidebar, so Quick and Beginner stop paying for the stats
- * routes Advanced shows.
+ * for the visible sidebar (the nine core pages plus enabled Labs), not the
+ * open page.
  */
 const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/onboarding': ['onboarding'],

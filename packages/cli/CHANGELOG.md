@@ -1,5 +1,46 @@
 # @mushi-mushi/cli
 
+## 0.33.0
+
+### Minor Changes
+
+- 6c0155f: New `mushi runner` commands (ADR 0033): see where your tests run and why a fix waits to land.
+
+  - `mushi runner status` shows your machines, runners (online, busy, offline, memory, out-of-memory kills), how long jobs wait and run, how many failures were the test machine and how many were code, and what to do first.
+  - `mushi runner heartbeat` sends this machine's memory, swap, load and runner services every 2 minutes (`--once` for a timer, `--dry-run` to see the JSON). The machine id is hashed; no file contents, environment values or process arguments are sent.
+  - `mushi runner hooks install --dir <runner>` adds GitHub job hooks that report each job's memory peak and out-of-memory kills. They always exit 0 and never fail a job.
+  - `mushi runner add --repo owner/name` sets this machine up as a GitHub Actions runner with safe defaults: private repos only, one job per runner, a dedicated non-admin user, a memory cap, its own label, a checked download, and optional `--block-lan` and `--wsl-isolate`. `--dry-run` prints the whole plan.
+  - `mushi runner key` creates a runner key (scope `runner:write`) and saves it without printing it. The heartbeat and the job hooks only ever use a runner key: a CI job can read the hook's key file, and if it steals a runner key all it can do is send fake numbers. Your CLI key never goes on a runner. `hooks install` and `add` create one for you unless `MUSHI_RUNNER_KEY` is set.
+  - `mushi runner audit` lists the self-hosted runners on your repos and flags ones Mushi did not set up, any named like the Shai-Hulud backdoor, weak fork approval and `pull_request_target` workflows.
+
+- 897e79d: `mushi runner compare` shows what your CI costs and how fast it runs, per repo: GitHub-hosted versus your own machines, included minutes per GitHub account, speed factors, what-ifs and advice (ADR 0037). Read-only; money is always marked as an estimate. On WSL2, `mushi runner heartbeat` now also sends a hash of the VM's boot id so distros on one PC count as one machine for electricity.
+- b9c7667: `mushi runner placement show|preview|request|revert` (ADR 0037): see where each repo's CI runs and which runner variables its workflows read, dry-run a change (what moves, what stays and why, the target runners, cost, your CI policy's verdict), and ask for it. Nothing changes until a team owner or admin approves and runs it in the console.
+- 51407d0: Verified merge from the terminal (ADR 0035): an agent's fix merges on its own only with proof.
+
+  - `mushi fixes verify <fixId>` shows the gates for the fix PR's current head, each as a mark, a word, a label and what to do: Opus review, CI, a test that fails without the fix and passes with it, no tests weakened, a small change, and a second review. It also shows whether Mushi merged it and any regression after the merge, with the revert PR. `--rerun` re-checks the gates first; `--json` prints the payload.
+  - `mushi verify workflow` prints the `mushi-verify` GitHub workflow filled in with your project's runner labels and test command, or writes it with `--out .github/workflows/mushi-verify.yml`.
+
+- 9a492e4: File a report by hand. `mushi reports file --title --description [--severity] [--component] [--project]` and the new MCP write tool `file_report` add a free-form report to an app's queue, for a bug you found yourself or a backlog item you want an agent to fix. The report goes through the same triage as a user report, so it gets a diagnosis and can then be sent to `mushi fix` or `dispatch_fix`. Severity and component are hints that triage may refine. It needs a key with the `mcp:write` scope; each app takes at most 30 filed reports an hour, and viewers cannot file.
+
+  `mushi design dispatch-findings [--max-files N]` sends the latest design scan's findings to an agent, one report per file and a few files per call, skipping token-definition files (the console's "Send findings to agent").
+
+### Patch Changes
+
+- 148ba7f: `mushi project create` still writes the same `.env.local`, `.cursor/mcp.json`, and saved CLI config. Those writes now go through one helper so the unit tests can check the merge.
+- 32daae2: AI keys can now be used by all your apps: a key added in the console defaults to "All my apps" and serves every app in every organization you own, after each app's own key and its organization's key. `list_byok_keys` and `mushi keys list` show each key's scope (project, organization or universal). `add_byok_key` and `mushi keys add` still add a key to one app; organization and all-apps keys are added in the console.
+
+## 0.32.0
+
+### Minor Changes
+
+- 238acef: Every pull request a cloud coding agent opens as a fix now gets an independent review by Claude Opus 5.5 on your own Anthropic key: merge, fix first or hold, with findings, removed behaviour and decisions that need you. A "hold" stops every Mushi merge path (the console, `merge_fix`, `mushi fixes merge`) until a project member overrides it in the console with a reason; the CLI and MCP cannot override. Mushi merges only the commit it reviewed. `get_fix_timeline` returns the review, `merge_fix` reports it, and the CLI adds `mushi fixes review <fixId> [--show]`.
+
+## 0.31.0
+
+### Minor Changes
+
+- f80c828: Spend down expiring Cursor credits on open bugs. A Cursor key can be given the date its credits expire, a model and a number of fixes per day; from a chosen number of days before that date, Mushi sends the best open reports of the apps that key already pays for to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. New MCP tools `get_spend_down_status` and `set_byok_spend_down`, and the CLI command `mushi keys spend-down`.
+
 ## 0.30.6
 
 ### Patch Changes

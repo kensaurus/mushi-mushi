@@ -58,3 +58,45 @@ describe('shouldShowPdcaFlow (QA 169)', () => {
     expect(shouldShowPdcaFlow({ ...base, loopVisualsHidden: true })).toBe(false)
   })
 })
+
+describe('deriveDashboardInsight agrees with the To-do page (audit 2026-10-20, B2)', () => {
+  const QUIET2 = { openBacklog: 0, fixesInProgress: 0, fixesFailed: 0, integrationIssues: 0, reports14d: 42 }
+  it('open critical reports lead the sentence with the same count the To-do card shows', () => {
+    const i = deriveDashboardInsight({ ...QUIET2, openCritical14d: 7 })
+    expect(i.tone).toBe('warn')
+    expect(i.sentence).toMatch(/^7 critical reports need a decision/)
+    expect(i.action?.to).toBe('/reports?status=open&severity=critical&days=14')
+  })
+  it('mentions the untriaged count beside the critical count', () => {
+    const i = deriveDashboardInsight({ ...QUIET2, openCritical14d: 1, openBacklog: 3 })
+    expect(i.sentence).toContain('1 critical report needs a decision · 3 new reports not yet triaged')
+  })
+  it('says nothing needs you only when nothing does', () => {
+    const i = deriveDashboardInsight({ ...QUIET2, openCritical14d: 0 })
+    expect(i.tone).toBe('ok')
+    expect(i.sentence).toMatch(/^Nothing needs you right now/)
+  })
+})
+
+describe('Home and To-do read the same "needs you" number (audit 2026-10-20, B2)', () => {
+  it('the Home insight and the To-do first card quote the same critical count from one payload', async () => {
+    const { buildInboxCards } = await import('./actionInboxFromDashboard')
+    const data = {
+      counts: { reports14d: 42, openBacklog: 0, openCritical14d: 7, fixesTotal: 0, openPrs: 0, llmCalls14d: 0, llmTokens14d: 0, llmFailures14d: 0 },
+      fixSummary: { total: 0, completed: 0, failed: 0, inProgress: 0, openPrs: 0 },
+      integrations: [],
+    } as unknown as Parameters<typeof buildInboxCards>[0]
+    const card = buildInboxCards(data)[0]?.action
+    const insight = deriveDashboardInsight({
+      openBacklog: 0,
+      openCritical14d: data!.counts!.openCritical14d,
+      fixesInProgress: 0,
+      fixesFailed: 0,
+      integrationIssues: 0,
+      reports14d: 42,
+    })
+    expect(card?.title).toBe('7 critical reports need a decision')
+    expect(insight.sentence.startsWith('7 critical reports need a decision')).toBe(true)
+    expect(card?.primary).toMatchObject({ to: insight.action?.to })
+  })
+})

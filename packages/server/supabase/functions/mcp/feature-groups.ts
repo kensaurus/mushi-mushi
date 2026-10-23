@@ -64,6 +64,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_report_evidence: 'triage',
   triage_issue: 'triage',
   import_sentry_issues: 'triage',
+  file_report: 'triage',
   query_lessons: 'triage',
   list_lessons: 'triage',
   suggest_fix: 'triage',
@@ -118,6 +119,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   transition_status: 'fixes',
   merge_fix: 'fixes',
   refresh_ci: 'fixes',
+  get_ci_overview: 'fixes',
+  get_ci_costs: 'fixes',
+  request_ci_placement_change: 'fixes',
+  get_fix_verification: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
   request_reporter_info: 'fixes',
@@ -173,6 +178,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   add_byok_key: 'setup',
   test_byok_key: 'setup',
   remove_byok_key: 'setup',
+  get_spend_down_status: 'setup',
+  set_byok_spend_down: 'setup',
 
   // audit
   run_fullstack_audit: 'audit',

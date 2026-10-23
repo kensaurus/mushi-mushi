@@ -70,7 +70,7 @@ export function FixesSnapshotStrip({
         ) : null}
         {!compact ? (
           <StatCard
-            label={statLabels?.completed ?? 'Completed'}
+            label={statLabels?.completed ?? 'Fixed'}
             value={stats.completed}
             accent="text-ok"
             tooltip={completedTooltip(stats)}

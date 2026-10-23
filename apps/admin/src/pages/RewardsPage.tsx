@@ -95,10 +95,10 @@ export function RewardsPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-rewards">
       <PageHeaderBar
-        title="Rewards"
+        title="Tester rewards"
         icon={<IconRewards />}
         description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
-        helpTitle="About Rewards"
+        helpTitle="About tester rewards"
         helpWhatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
         helpUseCases={[
           'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',

@@ -28,6 +28,7 @@
  */
 
 import { Hono } from 'npm:hono@4'
+import { reconcileFixedFindings } from '../_shared/modernization-dispatch-db.ts'
 import { z } from 'npm:zod@3'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
@@ -189,7 +190,8 @@ const findingSchema = z.object({
     name: z.string().describe('Package/dep name as it appears in the manifest.'),
     currentVersion: z.string(),
     suggestedVersion: z.string().describe('Copy the npm latest stable given for this package.'),
-    severity: z.enum(['major', 'minor', 'security', 'deprecated']),
+    // No 'security': known holes come from advisory data (vuln-watch, ADR 0038 decision 10), never a model's guess.
+    severity: z.enum(['major', 'minor', 'deprecated']),
     summary: z.string().min(20).max(400)
       .describe('2-3 sentences: what changed, why upgrading matters, and any breaking-change risk.'),
     changelogUrl: z.string().url().nullable().optional(),
@@ -323,7 +325,7 @@ async function processRepo(
       model: MODERNIZER_MODEL,
       effort: MODERNIZER_EFFORT,
       schema: findingSchema,
-      system: `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark security CVEs as 'security'; deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Return at most 8 findings — only flag genuinely actionable ones.`,
+      system: `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Do not judge security: known vulnerabilities are checked separately from advisory data. Return at most 8 findings — only flag genuinely actionable ones.`,
       prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
       // Up to 8 findings of ~400 chars, plus room for adaptive thinking.
       maxTokens: 2_000 + THINKING_HEADROOM_TOKENS,
@@ -359,7 +361,7 @@ async function processRepo(
     }
     if (!insData) continue
 
-    if (!insData.related_report_id && (f.severity === 'security' || f.severity === 'major' || f.severity === 'deprecated')) {
+    if (!insData.related_report_id && (f.severity === 'major' || f.severity === 'deprecated')) {
       const { data: report, error: reportErr } = await db.from('reports').insert({
         project_id: row.project_id,
         // Without it the column default 'widget' showed a dependency bot as a
@@ -370,10 +372,10 @@ async function processRepo(
         description: `[Library Modernization] ${f.name} ${f.currentVersion} → ${f.suggestedVersion}\n\n${f.summary}`,
         summary: `Update ${f.name} (${f.severity})`,
         component: f.name,
-        // Only real security findings deserve inbox attention; routine major
-        // bumps at 'medium' drowned actual user bugs (2026-08: an inbox of 8
-        // reports was 8 modernizer nags) — file them as 'low' chores.
-        severity: f.severity === 'security' ? 'high' : 'low',
+        // Routine major bumps at 'medium' drowned actual user bugs (2026-08: an
+        // inbox of 8 reports was 8 modernizer nags) — file them as 'low'
+        // chores. Security reports come from vuln-watch (ADR 0038).
+        severity: 'low',
         status: 'classified',
         confidence: 0.9,
         bug_ontology_tags: ['modernization', f.severity],
@@ -455,7 +457,12 @@ app.post('/library-modernizer', async (c) => {
     }
   }
 
-  return c.json({ ok: true, processed: summary.length, results: summary })
+  // Findings whose report was fixed are done (idempotent; also runs on the
+  // console's read). A failure is logged, never fatal.
+  const reconciled = await reconcileFixedFindings(db, [...new Set((rows ?? []).map((r) => r.project_id as string))])
+  if (reconciled.error) log.warn('modernization reconcile failed (non-fatal)', { error: reconciled.error })
+
+  return c.json({ ok: true, processed: summary.length, results: summary, resolved: reconciled.resolved })
 })
 
 Deno.serve(app.fetch)

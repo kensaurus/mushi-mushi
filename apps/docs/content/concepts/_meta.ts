@@ -9,6 +9,8 @@ export default {
   classification: 'Classification pipeline',
   'knowledge-graph': 'Knowledge graph',
   'fix-orchestrator': 'Fix drafts & PRs',
+  'agent-pr-review': 'Agent PR review',
+  'known-holes': 'Known holes in dependencies',
   'multi-repo-fixes': 'Multi-repo coordinated fixes',
   'judge-loop': 'Judge & self-improvement',
   'anti-gaming': 'Anti-gaming & reputation',

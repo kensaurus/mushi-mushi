@@ -35,6 +35,8 @@ import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
 import {
   STATUS_OPTIONS,
+  queueStageLabel,
+  queueStatusLabel,
   type QueueItem,
   type QueueSummary,
   type StatusFilter,
@@ -253,6 +255,7 @@ export function DLQPage() {
           label="Status"
           value={filter}
           options={STATUS_OPTIONS as unknown as string[]}
+          optionLabel={queueStatusLabel}
           onChange={(e) => onFilterChange(e.currentTarget.value as StatusFilter)}
         />
         {summary && summary.stages.length > 0 && (
@@ -260,6 +263,7 @@ export function DLQPage() {
             label="Stage"
             value={stage}
             options={summary.stages}
+            optionLabel={queueStageLabel}
             onChange={(e) => setStage(e.currentTarget.value)}
           />
         )}
@@ -342,7 +346,7 @@ export function DLQPage() {
         (() => {
           const isDeadLetter = filter === 'dead_letter'
           const stages = Array.from(new Set(items.map((i) => i.stage)))
-          const stageHint = stages.length === 1 ? ` All in the ${stages[0]} stage.` : ''
+          const stageHint = stages.length === 1 ? ` All in the ${queueStageLabel(stages[0])} stage.` : ''
           return (
             <RecommendedAction
               tone={isDeadLetter ? 'urgent' : 'info'}

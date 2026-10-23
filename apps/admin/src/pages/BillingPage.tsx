@@ -30,6 +30,7 @@ import { usePageCopy } from '../lib/copy'
 import { useBillingUx, resolveQuickBillingTab } from '../lib/billingModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { describeBillingError } from '../lib/billingErrors'
+import { formatPlanQuotaChip } from '../lib/billingUsageForecast'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
@@ -282,7 +283,15 @@ export function BillingPage() {
       >
         {!ux.hideOverviewChrome && (
         <SignalChip tone="neutral" className="font-mono">
-          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} / mo
+          {formatPlanQuotaChip(
+            stats.planDisplayName,
+            stats.diagnosesLimit,
+            // Hobby has no explicit report limit on stats: the free quota is it.
+            stats.reportsLimit ??
+              (stats.planId === 'hobby'
+                ? billing?.free_limit_reports_per_month ?? stats.freeLimitReports
+                : null),
+          )}
         </SignalChip>
         )}
       </PageHeaderBar>

@@ -5,21 +5,21 @@
 /**
  * FILE: apps/admin/src/components/Layout.navSlices.test.tsx
  * PURPOSE: Pin which nav-meta slices Layout asks `useNavCounts` for.
- *          Quick and Beginner ask only for the visible sidebar's badges; the
- *          open page adds nothing when it is not in the sidebar. Advanced
- *          asks for every slice (null).
+ *          The one sidebar (core pages plus enabled Labs) asks only for
+ *          the visible badges. The open page adds nothing when it is not
+ *          in the sidebar — that union existed for `layoutHeroFromStats`,
+ *          which has no caller.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AdminMode } from '../lib/mode'
 import { navSlicesForPaths } from '../lib/navBadges'
-import { SIMPLE_NAV_GROUPS } from '../lib/navRegistry'
+import { CORE_NAV_PATHS } from '../lib/navRegistry'
 
 const state = vi.hoisted(() => ({
-  mode: 'quickstart' as AdminMode,
+  enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
 }))
 
@@ -31,16 +31,17 @@ vi.mock('../lib/useNavCounts', () => ({
   toneForBacklog: () => 'warn',
 }))
 
-vi.mock('../lib/mode', () => ({
-  useAdminMode: () => ({
-    mode: state.mode,
-    setMode: () => {},
-    cycleMode: () => {},
-    isQuickstart: state.mode === 'quickstart',
-    isBeginner: state.mode === 'beginner',
-    isAdvanced: state.mode === 'advanced',
-  }),
-}))
+vi.mock('../lib/labs', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('../lib/labs')
+  return {
+    ...actual,
+    useLabs: () => ({
+      enabled: state.enabledLabs,
+      isEnabled: (id: string) => state.enabledLabs.has(id),
+      setEnabled: () => {},
+    }),
+  }
+})
 
 vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, signOut: async () => {} }),
@@ -91,6 +92,7 @@ let root: Root | null = null
 let container: HTMLDivElement | null = null
 
 beforeEach(() => {
+  state.enabledLabs = new Set()
   state.sliceCalls = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
@@ -105,34 +107,53 @@ afterEach(() => {
   container = null
 })
 
-function renderAt(pathname: string, mode: AdminMode): readonly string[] | null | undefined {
-  state.mode = mode
+function renderAt(pathname: string): void {
   act(() => {
     root!.render(
       createElement(MemoryRouter, { initialEntries: [pathname] }, createElement(Layout, null, createElement(Null))),
     )
   })
-  return state.sliceCalls.at(-1)
 }
 
-function sidebarPaths(mode: 'quick' | 'beginner'): string[] {
-  return SIMPLE_NAV_GROUPS.flatMap((group) => group[mode])
+function expectSlices(expected: readonly string[]): void {
+  expect(state.sliceCalls.length).toBeGreaterThan(0)
+  for (const slices of state.sliceCalls) {
+    expect(slices).toEqual(expected)
+  }
 }
 
 describe('Layout nav-meta slices', () => {
-  it('Quick asks only for the sidebar badges, not the open page', () => {
-    const slices = renderAt('/releases', 'quickstart')
-    expect(slices).toEqual(navSlicesForPaths(sidebarPaths('quick')))
-    expect(slices).not.toContain('releases')
+  it('asks only for the core sidebar badges, not the open page', () => {
+    renderAt('/releases')
+    const expected = navSlicesForPaths(CORE_NAV_PATHS)
+    expectSlices(expected)
+    expect(expected).not.toContain('releases')
+    expect(expected).toEqual([
+      'dashboard',
+      'fixes',
+      'integrations',
+      'onboarding',
+      'settings',
+    ])
   })
 
-  it('Beginner asks only for the sidebar badges, not the open page', () => {
-    const slices = renderAt('/billing', 'beginner')
-    expect(slices).toEqual(navSlicesForPaths(sidebarPaths('beginner')))
-    expect(slices).not.toContain('billing')
+  it('does not add /billing or /health when those pages are not in the sidebar', () => {
+    renderAt('/billing')
+    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expect(state.sliceCalls.at(-1)).not.toContain('billing')
+
+    state.sliceCalls = []
+    renderAt('/health')
+    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
-  it('Advanced asks for every slice', () => {
-    expect(renderAt('/releases', 'advanced')).toBeNull()
+  it('adds a Lab’s slice only when that Lab is in the sidebar', () => {
+    state.enabledLabs = new Set(['releases'])
+    renderAt('/billing')
+    const expected = navSlicesForPaths([...CORE_NAV_PATHS, '/releases'])
+    expectSlices(expected)
+    expect(expected).toContain('releases')
+    expect(expected).not.toContain('billing')
   })
 })

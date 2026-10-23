@@ -190,9 +190,10 @@ export function GraphPage() {
   const [search, setSearch] = useState('')
   const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<NodeType>>(new Set(NODE_TYPES))
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(new Set(EDGE_TYPES))
-  // Table first: with a few hundred nodes the canvas is a hairball, while the
-  // table ranks clusters by size.
-  const [view, setView] = useState<ViewMode>('table')
+  // Graph first: the table opens on a column of raw node UUIDs, which reads
+  // as broken. Sparse graphs render the storyboard, dense ones the canvas,
+  // and the table stays one click away for ranking clusters by size.
+  const [view, setView] = useState<ViewMode>('graph')
   const surfaceFiltersApplied = useRef(false)
   const [hideSingletons, setHideSingletons] = useState(true)
   const [layoutSeed, setLayoutSeed] = useState(0)
@@ -629,7 +630,7 @@ export function GraphPage() {
         title={copy?.title ?? 'Bug clusters'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        helpTitle={copy?.help?.title ?? 'About Bug clusters'}
+        helpTitle={copy?.help?.title ?? 'About bug clusters'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'

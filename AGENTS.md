@@ -38,6 +38,8 @@ Portfolio and radar features never lead a public surface; the claim is
 
 The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
 
+**Engineering yardstick** ([ADR 0039](./docs/adr/0039-better-models-make-mushi-better.md)). Before you build or change a feature, ask: *"When the models get better, does this get better on its own?"* The model is a setting, never a constant (project or organization column → edge secret → code default). Facts and safety (advisory matching, merge gates, test proof, budgets, permissions) are deterministic code; judgement (diagnosis, fix plans, review) goes to the model. Feed the model evidence, not prompt workarounds, and store outcomes per model so "better" shows.
+
 **Decision memory.** Before proposing a change to architecture, dependencies, conventions, positioning, or testing posture, read [`docs/adr/INDEX.md`](./docs/adr/INDEX.md). Do not contradict an Accepted ADR silently — surface it, cite the ADR, and ask. A reversal produces a superseding ADR, by the human, on purpose. New decisions that meet the bar in the index land as an ADR in the same PR.
 
 **Parked work.** Read [`docs/BACKLOG.md`](./docs/BACKLOG.md) before planning. New parked work adds a `BL-` row in the same PR.
@@ -78,6 +80,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | --- | --- |
 | `fast-filter` | Stage-1 cheap triage before `classify-report` (invoked by `api`) |
 | `ci-sync` | Polls GitHub check-runs for open fix PRs |
+| `ci-jobs-collector` | Every 10 minutes (:02 to :52; Plan 022, ADR 0033): reads GitHub Actions runs updated in the last 2 h on every branch of each project's repos (≤40 calls a tick, fair across projects), classifies each job (`_shared/ci-infra.ts`: runner lost, waiting for a runner and queue expired are infra, never code failures) into `ci_jobs`, derives `ci_runners` (one-job `<label>-<seconds>` runners fold into their label), reads the repo runner list when the token has Administration: read, records each repo's visibility and owner once a day (Metadata: read; ADR 0037: public repos run GitHub minutes free), and deletes job rows and samples older than 30 days. Hosted vs self-hosted comes from the job's `runner_group_name` ("GitHub Actions" = hosted). `GET /v1/admin/ci/overview?refresh=1` live-syncs queued and running jobs at most once a minute per project. Host health arrives through `POST /v1/ingest/runner` with a `runner:write` key only (`mushi runner heartbeat` / job hooks). Cost and speed (ADR 0037): `GET /v1/admin/ci/compare` (SQL aggregate `ci_runner_comparison`, cost figures per organization in `ci_cost_settings`; MCP `get_ci_costs`, `mushi runner compare`), read-only; money is always estimated. Where CI runs (ADR 0037): `api/routes/ci-placement.ts` previews and requests a change to one allowlisted repo variable (`LINUX_RUNNER`, `RUNNER_<WORKFLOW>`) as a legacy-backed GitHub `connector_actions` row; an owner/admin console session approves (1 h) and executes it; the GitHub connector's act() checks the allowlist, `ci_runner_policies` and a compare-and-set (409 `VARIABLE_MOVED`) with the project's stored PAT; each tick also evaluates `ci_placement_watches` from `ci_jobs` (the next 10 moved jobs). Never runner labels, registrations or a dispatcher |
 | `retention-sweep` | Applies data-retention policies |
 | `stripe-webhooks` | Stripe subscription + invoice events |
 | `slack-interactions` | Slack interactive payloads + threaded replies |
@@ -110,14 +113,22 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
 | `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump; weekly signups/activations per app on `gtm_weekday`) once a day at its `send_hour_utc` to Slack, Discord, Teams, Telegram (each through one project's existing connection), email or push (Plan 020 §9; `operator_digest_settings`, off by default) |
 | `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
-| `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl crawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key) and files each newly broken page (5xx, linked 4xx, load error, judge-confirmed breakage) as a report with `source = 'site_watch'`; one open finding per page in `site_watch_pages` |
+| `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl crawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key) and records each broken page (5xx, linked 4xx, load error, judged breakage) as a suspect in `site_watch_pages`. A suspect files as a report with `source = 'site_watch'` only after a second failure (ADR 0029): a confirm scrape on the project's own key (`/v2/scrape`, `waitFor` 10 s, fresh; ≤6 per run shared fairly across watches, never on the platform env key) still sees it broken, or, for 5xx/4xx/load errors only, two checks in a row. Low-severity fallbacks: a confident judged break left inconclusive for 2 checks ("unconfirmed"), a 5xx found healthy 3 times in 7 days ("intermittent"). Judge fail-open is never evidence; a healthy confirm drops the suspect; one open finding per page |
+| `site-audit` | Hourly at :29, and right after "Run now" (`POST /v1/admin/projects/:id/site-audit/run`, 3 an hour per app); the site audit (ADR 0040, `site_audits`, off by default, billed to the project's Firecrawl key): every `cadence_days` (default 7) maps the live site and starts a fresh Firecrawl batch scrape (html + links + markdown, ≤`page_limit` pages under `base_url`, the site watch's user agent), then on a later tick runs deterministic rules (`_shared/site-audit.ts`: dead internal/external links and images by 404/410/5xx/unreachable only, missing title/description/lang, localized metadata in another script, another locale's text in the body, links that drop the locale, images without alt) and files one report per failing rule (`source = 'site_audit'`, `site_audit_findings`); an open report is refreshed, a dismissed one never refiled, a fixed one refiled when the rule fails again. Settings and Run now on /credits |
+| `search-rank` | Daily at 04:47, and right after "Check now" (`POST /v1/admin/projects/:id/search-ranks/run`, 3 an hour per app); search rank check: for each keyword in `search_rank_keywords` not checked in 7 days (≤40 a run), Firecrawl `/v2/search` top 20 in its country on the app's own Firecrawl key, stores the app's position (`_shared/search-rank.ts`, its watched/audited address as target), the leading hosts and a `search_rank_history` row. Keywords edited on /credits; files no reports |
+| `spend-down-worker` | Every 10 minutes (:08 to :58); spend-down mode (ADR 0028): for each Cursor key with spend-down on and inside its window (`byok_keys.credits_expire_at` minus `spend_down_window_days`), dispatches the best open reports of the apps the key already serves (ADR 0023 order) as automatic `cursor_cloud` fixes, up to `spend_down_daily_limit` a day, inside each app's auto-fix caps, ≤3 running per app; the stop-loss (ADR 0028 amendment) pauses an app when, over its spend-down runs of the last 14 days (newest 40, 20+ samples, after its last Resume), the one-sided 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app gets 1 probe dispatch a day and resumes on 25% / 30% / 45% point estimates, 2 merged probes (which also reset its window), aging out, or Resume (`POST /v1/admin/byok/spend-down/projects/:projectId/resume`, console); logs `spend-down.paused` / `spend-down.resumed` once per change; one tick per key via the `byok_keys.spend_down_claimed_until` lease; writes `spend_down_last_summary`. `GET /v1/admin/byok/spend-down` adds each key's 7-day scoreboard (runs → PRs → Opus verdicts → merged, latest review cost per PR) computed on read, per-app detail limited to the caller's apps |
+| `agent-pr-review` | Every 10 minutes (:03 to :53), and on `POST /v1/admin/fixes/:id/review`; the agent PR review gate (ADR 0030): claims up to 3 due `fix_reviews`, one per project, re-reviews of a pushed PR before first reviews (queued when a cloud agent's PR is accepted as a fix, and 5 min after a push to a reviewed PR), each under a `run_id` claim token, sends the report, PR description, CI state and a budgeted diff to Claude Opus 5.5 on the project's own Anthropic key (skipped, with the reason stored, without one or when `project_settings.agent_pr_review_enabled` is off), stores the merge / fix_first / hold verdict with tokens and cost, adds a `reviewed` fix event and one PR comment. `{ backfill: true, limit }` queues open cloud-agent PRs that have none |
+| `review-followup` | Every 10 minutes (:06 to :56); review follow-ups (ADR 0032): when an Opus review (ADR 0030) says `fix_first` on a PR's current head, starts one NEW Cursor agent on that PR (`repos[].prUrl`, `workOnCurrentBranch: true`, `autoCreatePR: false`, deterministic agent id) with the report's summary and diagnosis and every finding, to fix exactly those, add tests and push to the same branch. Only PRs a cloud agent opened (`cursor_cloud` / `github_cloud_agent`), whose live head is the agent's own branch in the base repo (no forks); once per (fix attempt, reviewed head), ≤2 per PR, never on hold / merge / a closed or merged PR / auto-fix off; findings screened (only files the PR changed; none reading as instructions to the agent or whose fix carries a foreign URL or a shell command). Key and model per organization (`organizations.review_followup_*`; `review_followup_escalation_model` runs a PR's last round on a stronger model, ADR 0032 amendment 2026-10-23; off by default, `review_followup_enabled_at` + 3 days of backlog, 30 a day; deleting the chosen key turns it off; never the platform env key; model checked against the key's `GET /v1/models`, cached 1 h, unlisted waits); inside the app's auto-fix caps (`checkAutofixBudget` counts follow-ups), not stopped by the spend-down stop-loss. `run_id` claims; Cursor 4xx skips (`cursor_rejected`), 5xx/429 back off on `cursor_failures`; a deleted key stops the run's watch (`key_removed`), never falls back; polls the agent, cancels it after 6 h, re-queues the review with force on a push, `followup` fix events, `verdict_after` once the new head is reviewed (`fix_review_followups`). CI repair (ADR 0032 amendment, 2026-10-22): a `merge` review whose head fails CI on the code (`ci_jobs`, latest attempt per job; never an infra stop, an approval or a workflow-file error) queues one `kind = 'ci_repair'` follow-up under the same caps and rules, with the failing check names and a screened, bounded log excerpt (`GET /actions/jobs/{id}/logs`), asking the agent to make CI green without weakening tests |
+| `fix-verifier` | Every 10 minutes (:04 to :54), and on `POST /v1/admin/fixes/:id/verify`; verified fixes (ADR 0035, Plan 024): for each open cloud-agent PR whose Opus review is about its head (≤10 a tick, ≤3 per app), stores the merge gates for that head in `fix_merge_gates` under a `run_id` claim: Opus review merge, CI green (an infra stop is pending, ADR 0033), the host's **Mushi verify** check (`docs/templates/mushi-verify.yml`: a changed test fails without the fix and passes with it), no weakened tests (deleted test files, removed assertions, `.skip`/`.only`/`@ts-ignore`/`eslint-disable`…, CI config, lockfiles, snapshots over 50 lines, the app's protected globs), the diff budget (`verify_max_files` / `verify_max_lines`), then a second review by another model family on the app's own OpenAI or OpenRouter key (never the platform key; none = unavailable). When all pass and `project_settings.verified_auto_merge` is on (off by default), merges under the daily limit through `gatedMergePullRequest` as a service caller pinned to the head (it can never override a hold). Watches Mushi merges for 72 h (CI on the merge commit, a reopened report, a new report in a changed file) into `fix_regressions`, sets `fix_attempts.regressed_at` (counted as a hold by the spend-down stop-loss) and, with `auto_revert = 'pr'`, opens a `mushi/revert-<sha>` PR only when no later commit touched the fix's files; never merges a revert |
+| `vuln-watch` | Daily at 05:25 UTC, and on "Check now" (`POST /v1/admin/projects/:id/vulnerabilities/scan`, also started by `POST /v1/admin/projects/:id/radar/run`); known holes (ADR 0038): reads the primary repo's lockfiles (npm, pnpm, yarn, composer, poetry, uv, pinned requirements, go.sum) and runtime pins (Dockerfile `FROM`, `.nvmrc`, `.tool-versions`, composer `config.platform.php`, go.mod `toolchain`) at the default-branch head, skipping fixtures and examples; matches exact versions on OSV.dev `querybatch` (runtimes through OSV's Bitnami and Go `stdlib` records, plus the hand-kept `runtime_advisories` table for the days before OSV has them, php2shell first), caches records in `vuln_advisories` (refetched when OSV's `modified` changes, ≤300 a run), enriches from CISA KEV (daily) and EPSS (`vuln_cve_signals`), stores `dependency_vulns` (coordinates only, never a lockfile), files one `security_advisory` report per (package, fixed version) per repo for production versions with a fix, status `classified` with a plain-English template and no model call (no diagnosis quota), up to `project_settings.vuln_reports_daily_limit` (default 10) a day, and records gate `portfolio_radar_vulns` (rules `known_vulnerable_dependency`, `runtime_end_of_life` from endoflife.date). Severity: KEV → critical; EPSS ≥ 0.1, CVSS ≥ 9 or a critical label → high; imported → +1; dev-only → info, never filed. Only package names and versions leave Mushi |
+| `merge-queue` | Every 5 minutes (:01 to :56), and right after a person queues PRs on `/fixes` (`POST /v1/admin/merge-queue`, console only); "Merge when ready" (ADR 0041): one queued PR per repo at a time (`fix_merge_queue`): behind → GitHub update-branch, CI running → wait, CI failed / branch protection → blocked with the reason (re-checked only where nothing else in the repo moves), clean → merged as a service caller through `gatedMergePullRequest` pinned to the head (needs an Opus merge verdict on that exact head; a stale one is re-queued and waited for), then `finalizeFixMerge`; a conflict → a Cursor agent on the PR branch with the organization's review follow-up key and model, only while follow-ups are on, ≤2 per PR, given up after 90 min without a push; `merge_queue` fix events |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit and UX-run paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22; public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -194,9 +205,12 @@ The admin console `/code-health` page reads the data back via `GET /v1/admin/cod
 
 Project-level API keys are stored encrypted in the `byok_keys` table via
 Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
-`resolveLlmKey(provider, projectId)` function in `_shared/byok.ts` reads from
-`byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
-columns for backwards compatibility, then falls back to the environment variable.
+`resolveLlmKey(provider, projectId)` function in `_shared/byok.ts` tries, in
+order: the project's own `byok_keys` rows, the legacy
+`project_settings.byok_<provider>_key_ref` column, its organization's shared
+rows (ADR 0023), the universal rows of its organization's owners (ADR 0031),
+then the environment variable. A row has exactly one owner (`project_id`,
+`organization_id` or `owner_user_id`); new console keys default to universal.
 
 Keys are managed self-service in the admin console. **Settings → AI keys**
 (`ByokPanel`) lists the key pool for every slug below and adds keys through
@@ -273,12 +287,14 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set` |
-| **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
-| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
+| **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
+| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
-| **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add`, `mushi connectors list/status/actions` |
+| **CI runners** (ADR 0033, 0037) | `mushi runner status/compare/placement show/preview/request/revert/heartbeat/hooks install/key/add/audit` |
+| **Verified merge** (ADR 0035) | `mushi verify workflow` (the `mushi-verify` workflow for your repo; a fix's gates: `mushi fixes verify`) |
+| **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add/spend-down`, `mushi connectors list/status/actions` |
 | **Portfolio** (account-level key) | `mushi portfolio show/findings/resources/groups`, `mushi funnel show/set/growth`, `mushi accounts list/add/edit/remove/export/domain`, `mushi spend show/import/remove` |
 | **Billing** | `mushi usage`, `mushi billing status/cap`, `mushi budgets show/autofix` |
 
@@ -338,7 +354,10 @@ MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup ke
 mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes tail --report-id <reportId>
 mushi fixes refresh-ci <fixId>
-mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed
+mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed (refuses an Opus "hold"; overrides happen in the console)
+mushi fixes review <fixId> --show      # the Opus review of the PR (ADR 0030)
+mushi fixes verify <fixId> [--rerun]   # the verified-merge gates for the PR head (ADR 0035)
+mushi verify workflow --out .github/workflows/mushi-verify.yml  # the fail-to-pass workflow
 
 # ── Diagnoses usage + billing ─────────────────────────────────────────────
 mushi usage                            # diagnoses used / limit / cap for this period
@@ -350,7 +369,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **117 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **124 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -449,6 +468,31 @@ webhook.
 
 Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerge`).
 
+**Review gate (ADR 0030).** Every request merge goes through
+`_shared/gated-merge.ts` (this route, the console's generic PR merge, the
+UX-run merge and the SDK-upgrade merge; a test fails on any other caller of
+GitHub's merge). It reads the PR and keys on GitHub's current `base.repo`, so
+the repo must be one of the project's repos (403 `REPO_NOT_IN_PROJECT`; 409
+`REPO_RENAMED` when only its old name is connected); PR URLs are stored
+canonical (`canonicalPrUrl`, 400 otherwise). It refuses a PR (found by
+`fix_reviews.repo_id` or `repo`, + `pr_number`, across all projects, and PATCH
+cannot rewrite a fix's PR once set) whose
+latest completed Opus review (`fix_reviews`,
+written by `agent-pr-review`) says `hold`, with 409 `REVIEW_HOLD`: also while
+a re-review runs and on newer commits (a re-run never clears a verdict). Only
+a console session of a non-viewer overrides, with `override: true` and an
+`overrideReason` (audited); API keys (CLI, MCP) get 403
+`OVERRIDE_NEEDS_CONSOLE`. GitHub merges only the head SHA the gate saw (409
+`HEAD_MOVED` otherwise); a failed review read is a 503. `fix_first` merges; no
+review merges as before and reports "Not reviewed"; a verdict about an older
+commit reads "stale"; while a fix's first review runs, an API key gets 409
+`REVIEW_PENDING` and a console user confirms first. `POST /v1/admin/fixes/:id/review` re-runs a review
+(non-viewers, 3 an hour per fix, 409 while one runs; a hold on its own
+commit only from the console) and a PR push
+(`pull_request.synchronize`) re-queues it; the verdict rides on
+`GET /v1/admin/fixes/:id/timeline` (`data.review`, MCP `get_fix_timeline`).
+CLI: `mushi fixes review`.
+
 ### Draft → ready → merge
 
 1. `fix-worker` opens a **draft** PR, then calls `markPullRequestReady()` (GraphQL —
@@ -462,6 +506,7 @@ Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerg
 ```bash
 mushi fixes refresh-ci <fixId>
 mushi fixes merge <fixId> [--method squash|merge|rebase]
+mushi fixes review <fixId> [--show]
 ```
 
 Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in
@@ -631,7 +676,7 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 | Understand | `ask`, `tour`, `domains`, `knowledge` | `api/routes/codebase-understand.ts` |
 | Map | `graph`, `layers` | `GET …/codebase/explore` (+ UA graph JSON when `symbols=1`) |
 | Search | `search` | `POST …/codebase/search` (semantic + name modes) |
-| Index | `index` (Advanced mode) | scope settings + analyze job debug |
+| Index | `index` | scope settings + analyze job debug |
 
 **Workers & tables (Jun 2026):**
 
@@ -890,7 +935,7 @@ Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
 - **Cloud agents**: `_shared/agent-adapters.ts` (`cursor_cloud` via `_shared/cursor-cloud.ts` v1 API, `github_cloud_agent` via `_shared/github-agent-tasks.ts`, `anthropic_managed` stub); `fix-worker` dispatches and writes `fix_attempts` up front; completion via `cursor-webhook` (v0 callback) or `agent-status-poll` (cron `5-55/5`); unknown agents are a 400 at `POST /v1/admin/fixes/dispatch`.
 - **A2A 1.0 wire format** (`taskPushNotificationConfig`, StreamResponse callbacks, `/.well-known/agent-card.json`) with 0.3 aliases.
 - **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
-- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` runs there with `--warn`, report-only).
+- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`; `check:env-source-parity` fails the build when a source read is missing from every `.env.example`).
 
 ## ExecPlans
 

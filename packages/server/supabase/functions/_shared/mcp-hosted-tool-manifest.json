@@ -64,7 +64,7 @@
   },
   "merge_fix": {
     "scope": "mcp:write",
-    "description": "Squash-merge a fix PR into the repo's default branch and mark the report fixed. Destructive and irreversible from Mushi — there is no unmerge endpoint, only a manual revert PR outside this tool. Confirm CI is green and the diff is reviewed before calling.",
+    "description": "Squash-merge a fix PR into the repo's default branch and mark the report fixed. Destructive and irreversible from Mushi — there is no unmerge endpoint, only a manual revert PR outside this tool. A PR whose Opus review says hold is refused; only a person in the console can override it. Confirm CI is green and the diff is reviewed before calling.",
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/merge",
     "required": ["fixId"],
@@ -92,6 +92,20 @@
       "sentryProject": "{sentryProject}"
     },
     "hints": { "destructive": false, "idempotent": true }
+  },
+  "file_report": {
+    "scope": "mcp:write",
+    "description": "File a free-form report on a project; it is triaged like any other report.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/reports",
+    "required": ["title", "description"],
+    "body": {
+      "title": "{title}",
+      "description": "{description}",
+      "severity": "{severity}",
+      "component": "{component}"
+    },
+    "hints": { "destructive": false, "idempotent": false }
   },
   "reopen_report": {
     "scope": "mcp:write",
@@ -280,14 +294,14 @@
   },
   "list_byok_keys": {
     "scope": "mcp:read",
-    "description": "List validated and quarantined pooled BYOK keys plus read-only legacy credential metadata for the authenticated project.",
+    "description": "List validated and quarantined pooled BYOK keys this project uses, each with its scope (project, organization or universal), plus read-only legacy credential metadata for the authenticated project.",
     "method": "GET",
     "path": "/v1/admin/byok/keys",
     "hints": { "destructive": false, "idempotent": true }
   },
   "add_byok_key": {
     "scope": "mcp:write",
-    "description": "Store and validate a pooled BYOK key before runtime activation.",
+    "description": "Store and validate a pooled BYOK key for this project before runtime activation. Organization and universal keys are added in the console.",
     "method": "POST",
     "path": "/v1/admin/byok/keys",
     "body": {
@@ -316,6 +330,28 @@
     "path": "/v1/admin/byok/keys/{keyId}",
     "required": ["keyId"],
     "hints": { "destructive": true, "idempotent": true }
+  },
+  "get_spend_down_status": {
+    "scope": "mcp:read",
+    "description": "Spend-down status of this project's Cursor keys.",
+    "method": "GET",
+    "path": "/v1/admin/byok/spend-down",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "set_byok_spend_down": {
+    "scope": "mcp:write",
+    "description": "Set spend-down mode for one of this project's own Cursor keys.",
+    "method": "PATCH",
+    "path": "/v1/admin/byok/keys/{keyId}/spend-down",
+    "required": ["keyId"],
+    "body": {
+      "enabled": "{enabled}",
+      "creditsExpireAt": "{creditsExpireAt}",
+      "model": "{model}",
+      "dailyLimit": "{dailyLimit}",
+      "windowDays": "{windowDays}"
+    },
+    "hints": { "destructive": false, "idempotent": true }
   },
   "run_fullstack_audit": {
     "scope": "mcp:write",
@@ -430,6 +466,28 @@
     "description": "Code health your CI pushed: god files with fixes, bundle and file-size trends, and a summary.",
     "method": "GET",
     "path": "/v1/admin/code-health?project_id={projectId}&days={days|30}"
+  },
+  "get_ci_overview": {
+    "scope": "mcp:read",
+    "description": "Where tests run and why fixes wait: machines, runners, jobs with infra vs code verdicts, queue and run times, and advice.",
+    "method": "GET",
+    "path": "/v1/admin/ci/overview?project_id={projectId}&days={days|7}&refresh={refresh}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ci_costs": {
+    "scope": "mcp:read",
+    "description": "What CI costs and how fast it runs, per repo: GitHub-hosted vs your own machines, included minutes, speed factors, what-ifs and advice (estimated).",
+    "method": "GET",
+    "path": "/v1/admin/ci/compare?project_id={projectId}&days={days|30}",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_fix_verification": {
+    "scope": "mcp:read",
+    "description": "Merge checks for a fix's current PR head: Opus review, CI, fail-to-pass proof, weakened tests, size, second review; automatic merge state and regressions.",
+    "method": "GET",
+    "path": "/v1/admin/fixes/{fixId}/verification",
+    "required": ["fixId"],
+    "hints": { "destructive": false, "idempotent": true }
   },
   "explain_finding": {
     "scope": "mcp:read",

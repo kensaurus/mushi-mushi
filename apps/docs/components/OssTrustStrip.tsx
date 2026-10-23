@@ -1,14 +1,13 @@
 /**
  * Open-source trust strip — linked chips (license, self-host, repo, dogfood).
  */
-import { MUSHI_OSS } from '@mushi-mushi/brand'
 import Link from 'next/link'
-import { LANDING_TRUST_LINKS } from '@/lib/landing-copy'
+import { LANDING_TRUST_HEADLINE, LANDING_TRUST_LINKS } from '@/lib/landing-copy'
 
 export function OssTrustStrip() {
   return (
     <div className="landing-trust not-prose" aria-label="Open source trust">
-      <p className="landing-trust__headline">{MUSHI_OSS.trustStrip}</p>
+      <p className="landing-trust__headline">{LANDING_TRUST_HEADLINE}</p>
       <ul className="landing-trust__list">
         {LANDING_TRUST_LINKS.map((item) => {
           const external = item.href.startsWith('http')

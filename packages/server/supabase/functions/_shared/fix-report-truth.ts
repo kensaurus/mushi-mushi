@@ -45,6 +45,8 @@ export interface TruthAttempt {
   pr_state?: string | null
   merged_at?: string | null
   check_run_conclusion?: string | null
+  /** CI verdict for the PR head (Plan 022): an infra stop buckets as `ci_infra`. */
+  ci_infra?: unknown
   failure_category?: string | null
   error?: string | null
   created_at?: string | null
@@ -81,6 +83,13 @@ export interface ReportFixTruth {
   /** Failure breakdown key for a `failed` report, else null. */
   failureBucket: string | null
 }
+
+/**
+ * A cloud agent's no-PR verdicts (`NO_PR_CATEGORIES` in cloud-agent-no-pr.ts,
+ * kept here so this file imports nothing else): the agent's answer, not a
+ * failure a new run clears.
+ */
+const AGENT_VERDICT_CATEGORIES: ReadonlySet<string> = new Set(['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human'])
 
 function ts(a: TruthAttempt): number {
   const t = Date.parse(a.created_at ?? a.started_at ?? '')
@@ -167,10 +176,14 @@ export function deriveReportFixTruth(input: {
     }
   }
   // A rejected key is cleared by a working key, not by retrying the same
-  // run. Any other hard failure (status = failed) can be retried; skipped
-  // runs, closed PRs and red CI need a person to decide first.
+  // run. Any other hard failure (status = failed) can be retried, except an
+  // agent's own verdict (it read the code and said it needs a person, was
+  // fixed already, is in another repo, or is not code): the same run gives
+  // the same answer, so a retry only spends credits. Skipped runs, closed
+  // PRs and red CI need a person to decide first.
   const latestStatus = (latest.status ?? '').toLowerCase()
-  const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed'
+  const agentVerdict = AGENT_VERDICT_CATEGORIES.has((latest.failure_category ?? '').toLowerCase())
+  const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed' && !agentVerdict
 
   return {
     ...base,

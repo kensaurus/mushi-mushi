@@ -63,6 +63,12 @@ verify_jwt = false
 [functions.api]
 verify_jwt = false
 
+# The overflow half of the admin API (deploy size limit, 2026-10-21). `api`
+# forwards CI runner, inventory and Ask Mushi paths here with the caller's
+# headers; each route runs its own auth, like in `api`.
+[functions.api-ext]
+verify_jwt = false
+
 # Internal pipeline functions invoked server-to-server from `api` using the
 # service-role key. After Supabase rotated to the new sb_secret_* key format,
 # the platform gateway started rejecting these inter-function calls with
@@ -349,6 +355,39 @@ verify_jwt = false
 [functions.agent-status-poll]
 verify_jwt = false
 
+# spend-down-worker is invoked by pg_cron (mushi-spend-down, 28,58 * * * *)
+# through the internal caller token; requireServiceRoleAuth inside (ADR 0028).
+[functions.spend-down-worker]
+verify_jwt = false
+
+# agent-pr-review is invoked by pg_cron (mushi-agent-pr-review, 3-53/10) and
+# by POST /v1/admin/fixes/:id/review through the internal caller token;
+# requireServiceRoleAuth inside (ADR 0030).
+[functions.agent-pr-review]
+verify_jwt = false
+
+# review-followup is invoked by pg_cron (mushi-review-followup, 6-56/10)
+# through the internal caller token; requireServiceRoleAuth inside (ADR 0032).
+[functions.review-followup]
+verify_jwt = false
+
+# ci-jobs-collector is invoked by pg_cron (mushi-ci-jobs-collector, 2-52/10)
+# through the internal caller token; requireServiceRoleAuth inside (Plan 022).
+[functions.ci-jobs-collector]
+verify_jwt = false
+
+# fix-verifier is invoked by pg_cron (mushi-fix-verifier, 4-54/10) and by
+# POST /v1/admin/fixes/:id/verify through the internal caller token;
+# requireServiceRoleAuth inside (ADR 0035).
+[functions.fix-verifier]
+verify_jwt = false
+
+# vuln-watch is invoked by pg_cron (mushi-vuln-watch, 05:25 UTC) and by
+# POST /v1/admin/projects/:id/vulnerabilities/scan through the internal
+# caller token; requireServiceRoleAuth inside (ADR 0038).
+[functions.vuln-watch]
+verify_jwt = false
+
 # 2026-09-22: the thirteen internal functions below were still deployed with
 # the platform default verify_jwt = true, so the gateway rejected the internal
 # caller token before requireServiceRoleAuth ran: anomaly-detector 401'd on
@@ -385,6 +424,23 @@ verify_jwt = false
 # Cron-invoked hourly (mushi-site-watch-poll, :14) and by the api after "Check now";
 # reads Firecrawl monitor checks and files broken live pages as reports (ADR 0024).
 [functions.site-watch-poll]
+verify_jwt = false
+
+# Cron-invoked hourly (mushi-site-audit, :29) and by api-ext after "Run now";
+# a scheduled rendered crawl checked by deterministic rules, one report per
+# failing rule (ADR 0040).
+[functions.site-audit]
+verify_jwt = false
+
+# Cron-invoked daily (mushi-search-rank, 04:47) and by api-ext after "Check now";
+# where each app ranks in web search for its keywords, weekly per keyword.
+[functions.search-rank]
+verify_jwt = false
+
+# Cron-invoked every 5 minutes (mushi-merge-queue, :01 to :56) and by api-ext
+# after a person queues PRs; "Merge when ready": update branch, wait for CI,
+# merge through the review gate, one PR per repo at a time (ADR 0041).
+[functions.merge-queue]
 verify_jwt = false
 
 # Invoked by the api function or by another internal function.

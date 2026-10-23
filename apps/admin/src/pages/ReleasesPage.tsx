@@ -13,6 +13,7 @@ import { publishReleaseRequest } from '../lib/releasePublish'
 import { useEntitlements } from '../lib/useEntitlements'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePageData } from '../lib/usePageData'
+import { statsWithProjectPresence } from '../lib/projectPresence'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -573,7 +574,7 @@ export function ReleasesPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
-  const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
+  const stats = statsWithProjectPresence(statsData, EMPTY_RELEASES_STATS)
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickReleasesTab(stats)
   const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)

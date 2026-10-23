@@ -9,13 +9,13 @@ import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
-    'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt.',
-  proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
+    'For solo builders who make apps with AI coding assistants such as Cursor or Claude Code. When a real user runs into a bug, they report it from inside your app. Mushi explains the cause in plain English and hands your AI assistant a fix to start from. It works on its own: you do not need Sentry or any other error-tracking service.',
+  proofLine: 'Every bug in one list, whether a user reported it or an error tracker caught it. Open source: the code is public on GitHub.',
   /**
    * Stage-fit proof under the CTAs: what it costs to try and what you can
    * read. No star count — at this stage a small number is anti-proof.
    */
-  reassure: 'Free Cloud: 50 diagnoses a month, no credit card. Self-hosting is free.',
+  reassure: 'Free to start: 50 diagnoses a month, no credit card. Running it on your own server is free too.',
   star: {
     label: 'Star on GitHub',
     href: MUSHI_CANONICAL_URLS.repo,
@@ -52,7 +52,7 @@ export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
     // the editor picker, not a demo. New id so the funnel counts the new
     // button on its own.
     id: 'landing-connect',
-    label: 'Connect your editor',
+    label: 'Connect your code editor',
     href: '/connect',
     kind: 'secondary',
     external: false,
@@ -68,11 +68,11 @@ export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
 
 export const LANDING_SIXTY_SECOND = {
   intro:
-    'Run the wizard. It detects your framework, installs the SDK, writes env vars, and prints the snippet.',
+    'Run one command in your project. A setup wizard works out which framework your app is built with, installs the Mushi SDK (the small library that adds the report button), saves your settings and prints the one snippet to paste.',
   afterBreak:
-    'When something breaks in prod, the report lands in your queue with a plain-English read on the cause and what to change. Pull it into your editor over MCP.',
+    'When something breaks for a real user, the report lands in your Mushi list with a plain-English read on the cause and what to change. Your AI editor can read it directly over MCP, the standard way AI editors connect to outside tools.',
   pricing:
-    '50 diagnoses/month on the free tier — no card. Self-host in under five minutes if you want.',
+    '50 diagnoses a month on the free plan, no card needed. You can also run it on your own server in under five minutes.',
 } as const
 
 /** "Get started in 60 seconds" terminal section (ProofPinSection). The steps moved under the hero. */
@@ -90,15 +90,15 @@ export const LANDING_HOW_IT_WORKS = {
   steps: [
     {
       title: 'Install in one click',
-      desc: 'Add Mushi to your editor with a button below, or run npx mushi-mushi in your app. Sign-in happens in your browser; there is no key to paste.',
+      desc: 'Connect Mushi to your AI code editor with one of the buttons below, and add a small report button to your app with one command (npx mushi-mushi). You sign in through your browser; there is no key to copy and paste.',
     },
     {
       title: 'Your users report bugs',
-      desc: 'A small widget in your app sends what they saw, with the screenshot, console and network tail. Sentry errors can come in too.',
+      desc: 'When something looks wrong, a user taps the report button and writes a sentence or two. Mushi attaches a screenshot and the technical trail behind it (recent browser errors and network calls), so the user never has to explain the tech. Alerts from error trackers such as Sentry can come in too.',
     },
     {
       title: 'Mushi diagnoses it and opens a fix you review',
-      desc: 'You get the likely cause in plain English and a ready fix in your editor, or a draft pull request with its checks. You review it and merge.',
+      desc: 'You get the likely cause in plain English and a suggested fix in your editor. If you like, an AI coding agent writes the change as a pull request (a proposed code change that waits for your approval). A second AI reviews it first; you decide whether to merge it.',
     },
   ],
 } as const
@@ -109,12 +109,12 @@ export const LANDING_HOW_IT_WORKS = {
  * sign-in on first use; a static key header would switch that sign-in off.
  */
 export const LANDING_ONE_CLICK = {
-  heading: 'Add Mushi to your editor',
-  note: 'No key to paste. The first time your editor calls Mushi, your browser opens Mushi to sign in (or sign up free), then you choose which apps it can reach.',
+  heading: 'Add Mushi to your AI code editor',
+  note: 'No key to paste. The first time your editor calls Mushi, your browser opens so you can sign in (or sign up free). Then you choose which of your apps it may see.',
   cursorAlt: 'Add Mushi to Cursor',
   vscodeLabel: 'Install in VS Code',
   claudeLabel: 'Claude Code',
-  npxLabel: 'Add the bug widget to your app',
+  npxLabel: 'Add the report button to your app',
   npxCmd: 'npx mushi-mushi',
   moreLabel: 'Windsurf, Zed and more editors',
   moreHref: '/connect',
@@ -128,33 +128,41 @@ export interface LandingFaqItem {
 
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
+    q: 'What is Mushi Mushi, in plain terms?',
+    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
+  },
+  {
+    q: 'Who makes it, and can I use it today?',
+    a: 'Mushi Mushi is built by Kensaurus 合同会社, a small company in Japan, and it runs on the company\'s own apps and sites. The hosted service is live, the libraries are published on npm, and the source code is public on GitHub. The native iOS, Android and Flutter libraries are still previews.',
+  },
+  {
     q: 'Is Mushi Mushi a Sentry alternative?',
     a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
     q: 'Do I need Sentry to use it?',
-    a: 'No. Mushi is standalone by default. If you already run Sentry, point an issue-alert webhook at Mushi and errors land in the same queue as user reports — deduped, diagnosed in plain English, and resolved back into Sentry when the fix merges.',
+    a: 'No. Mushi works on its own. If you already use Sentry (a popular service that records errors when code crashes), you can point its alerts at Mushi. Those errors then land in the same list as user reports, with duplicates merged, each one explained in plain English and marked resolved in Sentry when the fix is merged.',
   },
   {
-    q: 'What does `npx mushi-mushi` do?',
-    a: 'It runs a setup wizard that detects your framework (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
+    q: 'What does npx mushi-mushi do?',
+    a: 'It runs a setup wizard. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi library, saves your settings (environment variables) and prints the snippet to paste.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
-    a: 'Connect your editor over MCP with `npx mushi-mushi setup --ide cursor`. Bug reports arrive as plain-English diagnoses your agent can read, and the fix prompt is ready to apply without leaving the editor.',
+    a: 'Connect your editor to Mushi with the command npx mushi-mushi setup --ide cursor (it uses MCP, the standard way AI editors connect to outside tools). Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
   },
   {
     q: 'Is it open source? Can I self-host?',
-    a: 'Yes — SDKs are MIT-licensed and the server is AGPLv3. You can self-host the whole stack with one command, and the free cloud tier includes 50 diagnoses a month with no card.',
+    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: 50 diagnoses a month, no card.',
   },
   {
     q: 'Which frameworks are supported?',
-    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android, and Flutter SDKs are in preview and install from the GitHub repo.',
+    a: 'Web: React, Vue, Svelte, Angular, and any other site through the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android and Flutter SDKs are previews and install from the GitHub repo.',
   },
 ] as const
 
 export const LANDING_MEDIA_INTRO =
-  'Admin console, the SDK on a real app (glot.it), and light/dark screenshots — click a frame to open the live surface.'
+  'The Mushi dashboard, the report button on a real app (glot.it), and light and dark screenshots. Click a picture to open the live page.'
 
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 
@@ -164,14 +172,14 @@ export const LANDING_WHAT_THIS_IS = {
    * definition. Category and promise come from the brand SSOT so it cannot
    * drift from the eyebrow, the npm cards or the JSON-LD.
    */
-  definition: `Mushi Mushi is ${lowerFirst(MUSHI_TAGLINE_V2.category)}, an open-source bug-reporting SDK and queue: ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
-  who: 'Built for solo founders who ship with AI and lose afternoons debugging code they did not fully write.',
+  definition: `Mushi Mushi is ${lowerFirst(MUSHI_TAGLINE_V2.category)}, an open-source tool that gives every bug your users report a ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
+  who: 'Solo founders who build with AI tools and then lose whole afternoons fixing code they did not fully write themselves. People who work this way are often called vibe coders.',
   boundary:
-    'Works inside your editor — not another dashboard. Sentry, Linear, and Slack plug into the same queue; none of them are required to start.',
+    'It works inside your code editor, not as yet another dashboard to check. Sentry, Linear and Slack can feed into the same list, but you need none of them to start.',
 } as const
 
 export const LANDING_WHERE_TO_START_INTRO =
-  'Pick the path that matches what you are doing right now — each card links to the right next step.'
+  'Pick the card that matches what you are doing right now. Each one links to the right next step.'
 
 export interface LandingPathCard {
   title: string
@@ -184,20 +192,20 @@ export interface LandingPathCard {
 
 export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
   {
-    title: 'I use Cursor / Claude',
-    desc: 'Connect Mushi to your editor first — read reports and pull fix prompts without leaving the window.',
+    title: 'I build with Cursor or Claude Code',
+    desc: 'Connect Mushi to your editor first, so your AI assistant can read bug reports and fix prompts without leaving the window.',
     href: '/quickstart/incident-loop',
     cmd: 'npx mushi-mushi setup --ide cursor',
   },
   {
     title: 'I have a web or mobile app',
-    desc: 'Drop in the SDK, file the first report, get a plain-English read in about 10 seconds.',
+    desc: 'Add the report button (the SDK), send a first test report, and get a plain-English read in about 10 seconds.',
     href: '/quickstart/react',
     cmd: 'npx mushi-mushi',
   },
   {
-    title: 'I operate the console',
-    desc: 'Create a project, connect GitHub, and walk through the onboarding checklist.',
+    title: 'I want the web dashboard',
+    desc: 'Create a project, connect GitHub (where your code lives), and follow the setup checklist.',
     // Absolute URL (not `/admin/onboarding`) so the apex-redirect CloudFront
     // Function — which treats `/admin/*` as a docs-nested prefix — never gets
     // a chance to send this to the *documentation* page instead of the app.
@@ -208,7 +216,7 @@ export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
 ] as const
 
 export const LANDING_QUICKSTART_INTRO =
-  'Classification lands in about 10 seconds today; we are chasing sub-10. Pick a starting point:'
+  'A first diagnosis usually arrives in about 10 seconds. Pick a starting point:'
 
 export interface LandingPlatformCard {
   title: string
@@ -254,7 +262,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     icon: LANDING_BRAND_MARK,
     href: '/quickstart/incident-loop',
     cmd: 'npx mushi-mushi',
-    desc: 'Broken prod → plain-English read → paste-ready fix prompt in Cursor.',
+    desc: 'A bug in your live app → a plain-English read → a fix prompt ready to paste into Cursor.',
     badge: 'Start here',
   },
   {
@@ -264,7 +272,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     iconColor: '#D97757',
     href: '/quickstart/mcp',
     cmd: 'npx mushi-mushi setup --ide cursor',
-    desc: 'Ask your editor what broke — fix briefs from Claude, Cursor, or Codex. No second LLM key.',
+    desc: 'Ask your editor what broke and get a fix brief, in Claude, Cursor or Codex. No extra AI key needed.',
     badge: 'Editor-first',
   },
   {
@@ -274,7 +282,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     iconColor: '#61DAFB',
     href: '/quickstart/react',
     cmd: 'npx mushi-mushi',
-    desc: 'Wizard installs the SDK, writes env vars, optional test report.',
+    desc: 'The wizard installs the SDK, saves your settings and can send a test report.',
   },
   {
     title: 'Mobile',
@@ -283,7 +291,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     iconColor: '#02569B',
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
-    desc: 'React Native and Capacitor: shake-to-report and an offline queue. iOS, Android, and Flutter SDKs in preview.',
+    desc: 'React Native and Capacitor: shake the phone to report, and reports wait until the phone is back online. iOS, Android and Flutter SDKs are previews.',
     badge: 'Mobile',
   },
 ] as const
@@ -302,7 +310,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   },
   {
     label: 'What lands in your queue',
-    foil: 'A stack trace',
+    foil: 'A stack trace (the technical record of where the code failed)',
     mushi: 'A short user note plus the screenshot they were looking at',
   },
   {
@@ -328,7 +336,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'From your IDE',
     foil: 'Sentry\'s MCP server lets Cursor or Claude Code read issues and ask Seer',
-    mushi: 'Cursor reads the report + relevant lessons and proposes the diff',
+    mushi: 'Cursor reads the report and the relevant lessons, then proposes the code change',
   },
   {
     label: 'Where it runs',
@@ -355,25 +363,25 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
     step: 'Step 1',
     name: 'User reports',
     glyph: 'report',
-    role: 'On glot.it, a learner shakes the phone instead of emailing support. Mushi keeps the screen and what they were doing.',
+    role: 'On glot.it, a Thai-learning app we run, a learner shakes the phone instead of emailing support. Mushi keeps a picture of the screen and what they were doing.',
   },
   {
     step: 'Step 2',
     name: 'Plain read',
     glyph: 'diagnose',
-    role: 'Severity and cause in English you already use — not a raw stack trace.',
+    role: 'How serious it is and what probably caused it, in everyday English instead of a wall of error code.',
   },
   {
     step: 'Step 3',
     name: 'One row',
     glyph: 'group',
-    role: 'Twenty reports about the same broken checkout button collapse to one issue.',
+    role: 'Twenty people reporting the same broken checkout button become one item, not twenty.',
   },
   {
     step: 'Step 4',
     name: 'Draft PR',
     glyph: 'ship',
-    role: 'Optional: an agent opens a PR on your repo. You merge, edit, or ignore it.',
+    role: 'Optional: an AI coding agent proposes the fix as a pull request, and a second AI reviews it. You merge it, edit it or ignore it.',
   },
 ] as const
 
@@ -422,18 +430,18 @@ export const LANDING_MEDIATOR = {
   inbound: [
     { label: 'Your users', detail: 'Widget or shake-to-report, with a screenshot and the console tail', href: '/quickstart/react' },
     { label: 'Sentry', detail: 'An issue-alert webhook drops errors into the same queue', href: '/plugins/sentry' },
-    { label: 'Datadog · Bugsnag · Crashlytics · more', detail: 'Monitoring webhooks translated into reports by @mushi-mushi/adapters', href: '/sdks/adapters' },
+    { label: 'Datadog · Bugsnag · Crashlytics · more', detail: 'Alerts from other monitoring tools, turned into reports', href: '/sdks/adapters' },
     { label: 'Your voice', detail: 'Dictate a bug from an iOS Shortcut, Slack, or a Telegram bot', href: '/integrations/voice-intake' },
   ],
   outbound: [
     { label: 'Your editor', detail: 'Cursor or Claude Code reads the diagnosis and fix prompt over MCP', href: '/quickstart/mcp' },
-    { label: 'Cloud coding agents', detail: 'A Cursor Cloud Agent drafts the fix and opens a PR', href: '/plugins/cursor-cloud' },
+    { label: 'Cloud coding agents', detail: 'A Cursor agent in the cloud drafts the fix and opens a pull request', href: '/plugins/cursor-cloud' },
     { label: 'Linear · Jira · GitHub Issues', detail: 'An issue is filed when a report is classified', href: '/plugins/linear' },
     { label: 'Slack · Discord · Teams', detail: 'Slack gets a card with buttons to dispatch a fix or resolve', href: '/plugins/slack' },
   ],
-  core: 'One queue: deduplicated, diagnosed in plain English, remembered as lessons',
+  core: 'One list: duplicates merged, each bug explained in plain English, past fixes remembered as lessons',
   gating:
-    'The SDK, the widget, the diagnosis and the MCP server work on Free Cloud. Plugins need Indie or above on Mushi Cloud, or a self-hosted stack.',
+    'The SDK, the report button, the diagnosis and the editor connection (MCP server) all work on the free plan. Plugins for other tools need the Indie plan or above on Mushi Cloud, or your own server.',
 } as const satisfies {
   inbound: readonly LandingMediatorLink[]
   outbound: readonly LandingMediatorLink[]
@@ -443,8 +451,8 @@ export const LANDING_MEDIATOR = {
 
 /** Landing pricing strip — tier rows come from PRICING_TIERS (lib/public-copy.ts). */
 export const LANDING_PRICING_STRIP = {
-  heading: 'Pricing you can predict',
-  lead: 'You pay per diagnosis, not per event. Duplicates collapse, noise is filtered, and both are free. Every paid plan has a spend cap.',
+  heading: 'What it costs',
+  lead: 'You pay per diagnosis (one bug that Mushi explains), not for every error it sees. Duplicate reports and noise are filtered out for free. Every paid plan has a spending cap, so the bill cannot run away.',
   tierIds: ['free', 'indie', 'pro', 'self-host'] as const,
   cta: 'Full pricing and the estimator →',
   href: '/pricing',
@@ -453,18 +461,18 @@ export const LANDING_PRICING_STRIP = {
 
 /** Community line under the closing CTA. */
 export const LANDING_COMMUNITY = {
-  lead: 'Shipped an app an AI mostly wrote, and hear about bugs from users? Tell us what you do with those messages today.',
+  lead: 'Shipped an app that an AI mostly wrote, and hear about bugs from users? Tell us what you do with those messages today.',
   label: 'GitHub Discussions →',
   href: `${MUSHI_CANONICAL_URLS.repo}/discussions`,
 } as const
 
 export const LANDING_OPERATOR = {
-  question: 'Run the 60-second proof',
+  question: 'Try it on your own app',
   soloCta: 'Start free →',
   soloHref: `${ADMIN_DEMO_BASE}/signup?src=landing-closing`,
   soloCtaId: 'landing-closing',
   teamLead:
-    'Need SSO, audit trails, or adapters for a team? Setup notes live in the operators docs on GitHub.',
+    'Setting it up for a team, with single sign-on (SSO) or audit logs? The operator notes on GitHub cover that.',
   teamCta: 'Operators docs →',
   teamHref: `${MUSHI_CANONICAL_URLS.repo}/tree/master/docs/operators`,
 } as const
@@ -472,25 +480,34 @@ export const LANDING_OPERATOR = {
 export const LANDING_MEDIA_CAPTIONS = {
   adminTour: {
     alt: 'Animated guided tour through the Mushi admin console — reports, fixes, and integrations',
-    captionStrong: 'Console triage',
-    captionRest: '· for operators who need the queue, not another IDE tab',
+    captionStrong: 'Bug list',
+    captionRest: '· the web dashboard, for when you want the whole list of bugs in front of you',
   },
   glotit: {
     alt: 'glot.it dogfood — user taps the Mushi feedback widget, submits a bug report',
     captionStrong: 'Real users',
-    captionRest: '· shake / tap report on glot.it, a Thai-learning app we run in prod',
+    captionRest: '· a shake or tap sends a report on glot.it, a Thai-learning app we run',
   },
   dashboard: {
-    alt: 'Mushi admin dashboard — PDCA cockpit',
+    alt: 'Mushi admin dashboard — an overview of reports and fixes',
     captionStrong: 'Dashboard',
-    captionRest: '· light and dark stills of the same cockpit',
+    captionRest: '· the same overview in light and dark mode',
   },
   reportDetail: {
     alt: 'Report detail — screenshot, classification, and fix timeline',
     captionStrong: 'One report',
-    captionRest: '· screenshot + plain read + fix timeline',
+    captionRest: '· the screenshot, the plain-English read and the fix history',
   },
 } as const
+
+/**
+ * Trust-strip headline for the landing. The brand ladder's
+ * MUSHI_OSS.trustStrip says the same thing in developer shorthand
+ * ("self-hostable", "no second LLM key"); this is the plain version a
+ * first-time visitor can read.
+ */
+export const LANDING_TRUST_HEADLINE =
+  'Open source (MIT-licensed SDKs) · run it on your own server if you like · no extra AI key needed'
 
 export const LANDING_TRUST_LINKS = [
   {
@@ -515,7 +532,7 @@ export const LANDING_TRUST_LINKS = [
   },
   {
     label: 'Security',
-    text: 'RLS · BYOK · retention sweep',
+    text: 'Each account sees only its own data',
     href: '/security',
   },
 ] as const

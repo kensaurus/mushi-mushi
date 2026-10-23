@@ -1,13 +1,13 @@
 // Tests for the upload selection and compaction in deploy-edge-function.mjs.
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
-import { compactSource, functionUploadFiles, parseFingerprint, readVerifyJwtFromConfig, stripCommentsAndIndent } from './deploy-edge-function.mjs'
+import { compactSource, functionUploadFiles, functionUploadRoots, parseFingerprint, readVerifyJwtFromConfig, stripCommentsAndIndent } from './deploy-edge-function.mjs'
 
 const ts = createRequire(join(fileURLToPath(new URL('../packages/server/', import.meta.url)), 'package.json'))('typescript')
 const compact = (src, rel = 'supabase/functions/x/index.ts') => compactSource(ts, rel, Buffer.from(src, 'utf8')).toString('utf8')
@@ -31,6 +31,29 @@ describe('functionUploadFiles', () => {
       writeFileSync(join(shared, 'only-tests.ts'), 'export const unused = 5\n')
       const got = functionUploadFiles([join(fn, 'index.ts'), join(fn, 'index.test.ts')]).map((f) => f.slice(root.length + 1).replace(/\\/g, '/')).sort()
       assert.deepEqual(got, ['_shared/a.ts', '_shared/data.json', '_shared/deep/b.ts', '_shared/lazy.ts', 'fn/index.ts'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('functionUploadRoots', () => {
+  it('starts at the entrypoint: a module the function no longer imports is not uploaded', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-deploy-'))
+    try {
+      const fn = join(root, 'api')
+      const ext = join(root, 'api-ext')
+      mkdirSync(join(fn, 'routes'), { recursive: true })
+      mkdirSync(ext, { recursive: true })
+      writeFileSync(join(fn, 'index.ts'), "import { kept } from './routes/kept.ts'\n")
+      writeFileSync(join(fn, 'routes', 'kept.ts'), 'export const kept = 1\n')
+      writeFileSync(join(fn, 'routes', 'moved.ts'), 'export const moved = 2\n')
+      writeFileSync(join(fn, 'deno.json'), '{}\n')
+      writeFileSync(join(ext, 'index.ts'), "import { moved } from '../api/routes/moved.ts'\n")
+      const rel = (files) => files.map((f) => f.slice(root.length + 1).replace(/\\/g, '/')).sort()
+      const apiFiles = [join(fn, 'index.ts'), join(fn, 'routes', 'kept.ts'), join(fn, 'routes', 'moved.ts'), join(fn, 'deno.json')]
+      assert.deepEqual(rel(functionUploadFiles(functionUploadRoots(apiFiles, join(fn, 'index.ts')))), ['api/deno.json', 'api/index.ts', 'api/routes/kept.ts'])
+      assert.deepEqual(rel(functionUploadFiles(functionUploadRoots([join(ext, 'index.ts')], join(ext, 'index.ts')))), ['api-ext/index.ts', 'api/routes/moved.ts'])
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -112,5 +135,30 @@ describe('readVerifyJwtFromConfig', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+// Supabase answers HTTP 413 ("Function source code exceeds the maximum
+// deployment size (5 MB)") on a size it measures itself. `api` deployed at
+// 4,559,475 compacted upload bytes and failed at 4,639,303 (#571,
+// 2026-10-22). Stay under the last size known to deploy, so CI fails here
+// instead of the deploy failing after merge. Over budget: move a
+// self-contained route group to `api-ext` (see _shared/edge-proxy.ts).
+const API_UPLOAD_BUDGET_BYTES = 4_540_000
+
+describe('api upload size', () => {
+  it('stays under the last size known to deploy', () => {
+    const root = fileURLToPath(new URL('../', import.meta.url))
+    const fnDir = join(root, 'packages/server/supabase/functions/api')
+    const walk = (d) => readdirSync(d).flatMap((n) => {
+      const p = join(d, n)
+      return statSync(p).isDirectory() ? walk(p) : [p]
+    })
+    const files = functionUploadFiles(functionUploadRoots(walk(fnDir), join(fnDir, 'index.ts')))
+    const bytes = files.reduce((n, f) => n + compactSource(ts, relative(root, f), readFileSync(f)).length, 0)
+    assert.ok(
+      bytes < API_UPLOAD_BUDGET_BYTES,
+      `api uploads ${bytes} bytes (budget ${API_UPLOAD_BUDGET_BYTES}); move a route group to api-ext`,
+    )
   })
 })

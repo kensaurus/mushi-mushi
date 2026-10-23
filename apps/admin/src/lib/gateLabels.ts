@@ -26,20 +26,21 @@ const GATE_IDS = [
   'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
+  'portfolio_radar_vulns',
   'store_review',
 ] as const
 
 export type GateId = (typeof GATE_IDS)[number]
 
 const GATE_LABELS: Record<GateId, string> = {
-  dead_handler: 'Dead handlers (G1)',
-  mock_leak: 'Mock data in production (G2)',
-  api_contract: 'API contract (G3)',
-  crawl: 'Live route crawl (G4)',
-  status_claim: 'Status claims (G5)',
-  spec_drift: 'OpenAPI spec drift (G6)',
-  orphan_endpoint: 'Unused backend endpoints (G7)',
-  unknown_call: 'Calls to unknown endpoints (G8)',
+  dead_handler: 'Dead handlers',
+  mock_leak: 'Mock data in production',
+  api_contract: 'API contract',
+  crawl: 'Live route crawl',
+  status_claim: 'Status claims',
+  spec_drift: 'OpenAPI spec drift',
+  orphan_endpoint: 'Unused backend endpoints',
+  unknown_call: 'Calls to unknown endpoints',
   schema_drift: 'Database schema drift',
   code_health: 'Code health (bundle size, big files)',
   design_drift: 'Code off the design tokens',
@@ -49,6 +50,7 @@ const GATE_LABELS: Record<GateId, string> = {
   radar: 'Mushi setup checks',
   portfolio_radar: 'App hole checks',
   portfolio_radar_ci: 'App hole checks (from your CI)',
+  portfolio_radar_vulns: 'Known holes in dependencies',
   store_review: 'Store review checklist',
 }
 
@@ -79,6 +81,7 @@ const GATE_INFO: Record<GateId, GateInfo> = {
   radar: { checks: 'Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
   portfolio_radar: { checks: 'App hole checks, daily (04:05 UTC): store listings, domains, certificates, security headers, provider keys.', page: { label: 'Open the portfolio', to: '/portfolio' } },
   portfolio_radar_ci: { checks: 'App hole checks pushed from your CI (mushi radar scan --push).', page: { label: 'Open the portfolio', to: '/portfolio' } },
+  portfolio_radar_vulns: { checks: 'Lockfiles and pinned runtimes checked against OSV.dev, CISA KEV and EPSS, daily (05:25 UTC).', page: { label: 'Open dependency holes', to: '/health?view=code' } },
   store_review: { checks: 'The App Store and Play review checklist, read from the repo.', page: { label: 'Open the store checks', to: '/releases?tab=store' } },
 }
 

@@ -210,6 +210,7 @@ export function ProjectBillingCard({
         usageSeries={project.usage_series}
         diagnosesUsed={project.diagnoses_used ?? null}
         diagnosesLimit={project.limit_diagnoses ?? null}
+        complimentary={isComplimentary}
       />
 
       {!isComplimentary && (

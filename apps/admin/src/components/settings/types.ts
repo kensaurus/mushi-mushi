@@ -7,7 +7,7 @@
  * still carry (`firecrawl`, `health`, …) are not tabs: lib/settingsTabs.ts
  * maps them onto these.
  */
-export const SETTINGS_TAB_IDS = ['general', 'byok', 'tools', 'voice', 'sdk'] as const
+export const SETTINGS_TAB_IDS = ['general', 'byok', 'tools', 'voice', 'sdk', 'labs'] as const
 
 export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[number]
 

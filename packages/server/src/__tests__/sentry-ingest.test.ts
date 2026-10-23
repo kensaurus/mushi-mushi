@@ -255,6 +255,24 @@ describe('ingestSentryError — transient database outages are not filed', () =>
     expect(state.inserted).toHaveLength(0)
   })
 
+  it('skips the hosted gateway body on a repo-binding lookup', async () => {
+    const result = await ingest({
+      title: 'Error: project_settings.github_repo_url lookup failed: Project not specified.',
+      issue_id: '9010',
+      extra: { message: 'project_settings.github_repo_url lookup failed: Project not specified.' },
+    })
+    expect(result.outcome).toBe('ignored')
+    expect(state.inserted).toHaveLength(0)
+  })
+
+  it('still files a caller sentence that only resembles the gateway body', async () => {
+    const result = await ingest({
+      title: 'Error: Project not specified by the caller',
+      issue_id: '9011',
+    })
+    expect(result.outcome).toBe('created')
+  })
+
   it('skips a thrown error whose title is the pooler reset (MUSHI-MUSHI-SERVER-2S)', async () => {
     const result = await ingest({
       title: `Error: project_repos.repo_url lookup failed: ${POOLER}`,
@@ -400,6 +418,38 @@ describe('ingestSentryError — import intake, extra, frames', () => {
     expect(meta.intake).toBe('import')
     expect(meta.sentryShortId).toBe('GLOT-IT-C4')
     expect(meta.sentryFrames).toEqual(['stores/mistake-patterns.ts'])
+  })
+})
+
+describe('sentryLocationTags', () => {
+  it('keeps the tags that locate a handled server error, never user or IP tags', () => {
+    const tags: Array<[string, string]> = [
+      ['path', '/api/v1/admin/inbox/stats'],
+      ['method', 'GET'],
+      ['error_type', 'db'],
+      ['db_code', 'unknown'],
+      ['user.email', 'someone@example.com'],
+      ['user.ip', '13.112.64.109'],
+      ['release', '1.4.2'],
+    ]
+    expect(mod.sentryLocationTags(tags)).toEqual({ path: '/api/v1/admin/inbox/stats', method: 'GET', error_type: 'db', db_code: 'unknown' })
+    expect(mod.sentryLocationTags([['release', '1.4.2']])).toBeNull()
+    expect(mod.sentryLocationTags(undefined)).toBeNull()
+  })
+
+  it('puts the route in the report so a fix agent can find the failing query (MUSHI-MUSHI-SERVER-2E)', async () => {
+    const state: Parameters<typeof makeDbStub>[0] = { links: [], reports: [], inserted: [], updated: [] }
+    await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: { ...EVENT, tags: [...EVENT.tags, ['path', '/api/v1/admin/inbox/stats'], ['method', 'GET'], ['user.ip', '13.112.64.109']] },
+      issue: { id: '4502', shortId: 'MUSHI-MUSHI-SERVER-2E' },
+      triggerClassification: () => {},
+      intake: 'import',
+    })
+    const report = state.inserted.find((i) => i.table === 'reports')!.row
+    expect(report.description).toContain('Where: path=/api/v1/admin/inbox/stats method=GET')
+    expect(report.description).not.toContain('13.112.64.109')
+    expect((report.custom_metadata as Record<string, unknown>).sentryLocation).toEqual({ path: '/api/v1/admin/inbox/stats', method: 'GET' })
   })
 })
 

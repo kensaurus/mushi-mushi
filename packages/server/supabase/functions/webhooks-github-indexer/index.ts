@@ -30,9 +30,24 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
+import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
+import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
-import { isAdvisoryCheckRun } from '../_shared/github.ts';
+import { isAdvisoryCheckRun, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import {
+  ciGithub,
+  ciJobRow,
+  fetchJob,
+  fetchJobAnnotations,
+  fixCiInfraFromRows,
+  needsAnnotations,
+  noteRunnersFromJobs,
+  repoFullName,
+  upsertCiJobs,
+  type GhJob,
+} from '../_shared/ci-jobs.ts';
+import { describeCiInfra, type FixCiInfra } from '../_shared/ci-infra.ts';
 import { extractRelativeImports } from '../_shared/codebase-graph-build.ts';
 import {
   chunkKey,
@@ -41,6 +56,11 @@ import {
   type PlannedChunk,
   type StoredChunk,
 } from '../_shared/codebase-index-plan.ts';
+import {
+  CODEBASE_CHUNK_UPSERT_BATCH,
+  upsertCodebaseChunks,
+  type CodebaseChunkWrite,
+} from '../_shared/codebase-chunk-upsert.ts';
 import { envInt } from '../_shared/env-int.ts';
 import { runInBackground } from '../_shared/background.ts';
 import {
@@ -83,9 +103,10 @@ ensureSentry('webhooks-github-indexer');
 
 const log = rootLog.child('webhooks-github-indexer');
 const app = new Hono();
-// A repo-binding lookup that hit a pooler outage (MUSHI-MUSHI-SERVER-2S) is
-// a warn and a 503: the delivery still shows failed and can be redelivered,
-// but Sentry gets no event. Anything else is reported.
+// A repo-binding lookup that hit a pooler outage (MUSHI-MUSHI-SERVER-2S) or
+// the hosted gateway body "Project not specified." is a warn and a 503: the
+// delivery still shows failed and can be redelivered, but Sentry gets no
+// event. Anything else is reported.
 app.onError((err, c) => {
   if (err instanceof RepoLookupError && isTransientDbConnectionError(err.dbError)) {
     log.warn(err.message, { db_code: err.dbError.code ?? null, transient: true });
@@ -363,21 +384,29 @@ async function handlePullRequestState(
       state?: string;
       closed_at?: string | null;
       delivery_id?: string;
-      head?: { ref?: string };
+      head?: { ref?: string; sha?: string };
     };
     repository?: { full_name?: string };
   },
   deliveryId: string,
 ): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  // ADR 0030: Mushi stores PR URLs canonical (lowercase owner/repo); rows
+  // written before that keep GitHub's casing, so match either spelling.
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   let { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!attempt) {
     // Cloud-agent fallback: match by head ref while pr_url is still NULL.
@@ -419,7 +448,9 @@ async function handlePullRequestState(
     const reread = await db
       .from('fix_attempts')
       .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
-      .eq('pr_url', prUrl)
+      .in('pr_url', prUrlForms)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     attempt = reread.data;
     if (!attempt) {
@@ -428,6 +459,27 @@ async function handlePullRequestState(
         { status: 202, headers: { 'Content-Type': 'application/json' } },
       );
     }
+  }
+
+  // New commits on a reviewed PR (ADR 0030): follow the head and queue a
+  // review of it. The old verdict keeps gating merges (a hold stays a hold)
+  // until the new review completes.
+  if (payload.action === 'synchronize') {
+    const head = payload.pull_request?.head?.sha ?? null;
+    if (head && head !== attempt.commit_sha) {
+      await db.from('fix_attempts').update({ commit_sha: head }).eq('id', attempt.id);
+    }
+    const requeued = await requeueReviewForNewHead(
+      db,
+      { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+      head,
+    );
+    log.info('PR synchronize: agent PR review', { fixAttemptId: attempt.id, head, review: requeued });
+    // A push does not change the PR's lifecycle state: no pr_state event.
+    return new Response(
+      JSON.stringify({ ok: true, fix_attempt_id: attempt.id, synchronize: true, review: requeued }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   // Derive the new lifecycle state.
@@ -501,6 +553,7 @@ async function handleCheckRun(
       pull_requests?: Array<{ head?: { ref?: string } }>;
     };
     repository?: { full_name?: string };
+    installation?: { id?: number };
   },
   deliveryId: string,
 ): Promise<Response> {
@@ -546,12 +599,26 @@ async function handleCheckRun(
   const conclusion = (run.conclusion ?? '').toLowerCase();
   const resolved = conclusion.length > 0;
 
+  // A cancelled / failed job may be the machine, not the code (Plan 022,
+  // ADR 0033): read the job and its annotations (two calls at most) before
+  // telling the timeline "CI failed".
+  const infra =
+    resolved && (conclusion === 'cancelled' || conclusion === 'failure')
+      ? await classifyCheckRunJob(db, {
+          projectId: attempt.project_id,
+          repo: payload.repository?.full_name ?? null,
+          checkRunId: run.id ?? null,
+          installationId: payload.installation?.id ?? null,
+        })
+      : null;
+
   await db
     .from('fix_attempts')
     .update({
       check_run_status: status || null,
       check_run_conclusion: conclusion || null,
       check_run_updated_at: new Date().toISOString(),
+      ...(infra ? { ci_infra: infra } : {}),
     })
     .eq('id', attempt.id);
 
@@ -559,8 +626,12 @@ async function handleCheckRun(
     fix_attempt_id: attempt.id,
     project_id: attempt.project_id,
     kind: resolved ? 'ci_resolved' : 'ci_started',
-    status: resolved ? (conclusion === 'success' ? 'ok' : 'fail') : 'pending',
-    label: resolved ? `CI ${conclusion}` : `CI ${status.replace(/_/g, ' ') || 'running'}`,
+    status: resolved ? (conclusion === 'success' ? 'ok' : infra?.infra ? 'pending' : 'fail') : 'pending',
+    label: resolved
+      ? infra?.infra
+        ? `Tests did not run — ${describeCiInfra(infra)}`
+        : `CI ${conclusion}`
+      : `CI ${status.replace(/_/g, ' ') || 'running'}`,
     detail: run.name ?? null,
     at: run.completed_at ?? run.started_at ?? new Date().toISOString(),
     dedupe_key: `check_run:${run.id ?? deliveryId}:${resolved ? 'done' : 'start'}`,
@@ -569,6 +640,94 @@ async function handleCheckRun(
 
   return new Response(
     JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: resolved ? conclusion : status }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+/**
+ * Classify the job behind a cancelled / failed Actions check run (an
+ * Actions check run's id is its job id): one job read and one annotation
+ * read, stored in ci_jobs. Returns the verdict in `fix_attempts.ci_infra`
+ * shape, or null when the job could not be read (not an Actions check, no
+ * token, no Actions: read). Never throws: the webhook still records CI.
+ */
+async function classifyCheckRunJob(
+  db: ReturnType<typeof getDb>,
+  input: { projectId: string; repo: string | null; checkRunId: number | null; installationId: number | null },
+): Promise<FixCiInfra | null> {
+  const repo = repoFullName(input.repo);
+  if (!repo || !input.checkRunId) return null;
+  try {
+    const token = await resolveCiGithubToken(db, input.projectId, input.installationId);
+    if (!token) return null;
+    const gh = ciGithub(token, 2);
+    const job = await fetchJob(gh, repo, input.checkRunId);
+    if (!job) return null;
+    const annotations = needsAnnotations(job) ? await fetchJobAnnotations(gh, job.check_run_url) : null;
+    const now = new Date();
+    const row = ciJobRow({ projectId: input.projectId, repo, job, annotations, source: 'webhook', now });
+    if (!row) return null;
+    await upsertCiJobs(db, [row]);
+    await noteRunnersFromJobs(db, [row], now);
+    return fixCiInfraFromRows([row], now);
+  } catch (err) {
+    log.warn('check_run job classification failed (non-fatal)', {
+      repo,
+      checkRunId: input.checkRunId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * Handle `workflow_job.*` (queued, waiting, in_progress, completed): store
+ * the job in ci_jobs for every project bound to the repository, through
+ * the same mapper as the poll (Plan 022). A completed cancelled / failed job
+ * gets one annotation read so a lost runner is told apart from a code
+ * failure. Deliveries need the App (or a repo webhook) subscribed to
+ * workflow_job; without them the 10-minute ci-jobs-collector covers it.
+ */
+async function handleWorkflowJob(
+  payload: { action?: string; workflow_job?: GhJob; repository?: { full_name?: string }; installation?: { id?: number } },
+): Promise<Response> {
+  const job = payload.workflow_job;
+  const repo = repoFullName(payload.repository?.full_name ?? null);
+  if (!job || !repo) {
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_workflow_job' }), { status: 202 });
+  }
+  const db = getDb();
+  const projectIds = await projectIdsForRepo(db, repo);
+  if (projectIds.length === 0) {
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_project_for_repo', repo }), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  let annotations: string[] | null = null;
+  if (needsAnnotations(job)) {
+    try {
+      const token = await resolveCiGithubToken(db, projectIds[0], payload.installation?.id ?? null);
+      if (token) annotations = await fetchJobAnnotations(ciGithub(token, 1), job.check_run_url);
+    } catch (err) {
+      log.warn('workflow_job annotation read failed (non-fatal)', { repo, err: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const now = new Date();
+  const rows = projectIds
+    .map((projectId) => ciJobRow({ projectId, repo, job, annotations, source: 'webhook', now }))
+    .filter((r): r is NonNullable<typeof r> => r != null);
+  const stored = await upsertCiJobs(db, rows);
+  if (stored.error) {
+    log.warn('workflow_job upsert failed', { repo, err: stored.error });
+    return new Response(JSON.stringify({ ok: false, error: { code: 'DB_ERROR', message: stored.error } }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  await noteRunnersFromJobs(db, rows, now);
+  return new Response(
+    JSON.stringify({ ok: true, stored: stored.written, ci: rows[0]?.ci_kind ?? null }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 }
@@ -656,9 +815,11 @@ async function handleFixPrMerged(payload: {
   pull_request?: { html_url?: string; number?: number; merged_at?: string | null };
   repository?: { full_name?: string };
 }): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url;
-  if (!prUrl)
+  const rawPrUrl = payload.pull_request?.html_url;
+  if (!rawPrUrl)
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
+  const prUrl = canonicalPrUrl(rawPrUrl) ?? rawPrUrl;
+  const prUrlForms = [...new Set([prUrl, rawPrUrl])];
 
   const db = getDb();
   const { data: attempt } = await db
@@ -666,7 +827,11 @@ async function handleFixPrMerged(payload: {
     .select(
       'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, summary, rationale, files_changed',
     )
-    .eq('pr_url', prUrl)
+    .in('pr_url', prUrlForms)
+    // Both spellings can match (a row from before canonical URLs and one
+    // after): newest first, so maybeSingle never errors on two rows.
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!attempt) {
@@ -1184,7 +1349,7 @@ async function loadStoredChunks(
 }
 
 /** Row columns for a chunk, without the embedding. */
-function chunkRow(projectId: string, c: IndexChunk) {
+function chunkRow(projectId: string, c: IndexChunk): CodebaseChunkWrite {
   return {
     project_id: projectId,
     file_path: c.path,
@@ -1203,8 +1368,8 @@ function chunkRow(projectId: string, c: IndexChunk) {
 
 /**
  * Re-write the metadata of chunks whose text did not change (un-tombstone,
- * new imports, moved lines). The embedding column is not in the payload, so
- * the stored embedding is kept and nothing is paid for.
+ * new imports, moved lines). The embedding is omitted, so the stored vector
+ * stays and the IVFFlat index is not rewritten.
  */
 async function refreshChunks(
   db: ReturnType<typeof getDb>,
@@ -1215,11 +1380,9 @@ async function refreshChunks(
   let failed = 0;
   let lastError: string | undefined;
   const paths = new Set<string>();
-  for (let i = 0; i < chunks.length; i += 200) {
-    const batch = chunks.slice(i, i + 200);
-    const { error } = await db
-      .from('project_codebase_files')
-      .upsert(batch.map((c) => chunkRow(projectId, c)), { onConflict: 'project_id,file_path,symbol_name' });
+  for (let i = 0; i < chunks.length; i += CODEBASE_CHUNK_UPSERT_BATCH) {
+    const batch = chunks.slice(i, i + CODEBASE_CHUNK_UPSERT_BATCH);
+    const { error } = await upsertCodebaseChunks(db, batch.map((c) => chunkRow(projectId, c)));
     if (error) {
       failed += batch.length;
       lastError = `chunk refresh failed: ${error.message}`;
@@ -1573,14 +1736,11 @@ async function sweepIndexRepo(
       continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { error } = await db.from('project_codebase_files').upsert(
-        {
-          ...chunkRow(projectId, batch[j]),
-          embedding: embeddings[j],
-          embedding_model: 'text-embedding-3-small',
-        },
-        { onConflict: 'project_id,file_path,symbol_name' },
-      );
+      const { error } = await upsertCodebaseChunks(db, [{
+        ...chunkRow(projectId, batch[j]),
+        embedding: embeddings[j],
+        embedding_model: 'text-embedding-3-small',
+      }]);
       if (error) {
         skipped++;
         continue;
@@ -1817,16 +1977,14 @@ async function indexPushForProject(
     }
     for (let j = 0; j < batch.length; j++) {
       const c = batch[j];
-      // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
-      // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.
-      const { error } = await db.from('project_codebase_files').upsert(
-        {
-          ...chunkRow(projectId, c),
-          embedding: embeddings[j],
-          embedding_model: 'text-embedding-3-small',
-        },
-        { onConflict: 'project_id,file_path,symbol_name' },
-      );
+      // upsert_codebase_chunks targets uq_codebase_chunks
+      // (project_id, file_path, symbol_name) NULLS NOT DISTINCT. Its own
+      // statement_timeout is 30s; the authenticator role's is 8s.
+      const { error } = await upsertCodebaseChunks(db, [{
+        ...chunkRow(projectId, c),
+        embedding: embeddings[j],
+        embedding_model: 'text-embedding-3-small',
+      }]);
       if (error) {
         upsertFailures++;
         log.error('chunk upsert failed', {
@@ -2076,7 +2234,7 @@ app.post('/webhooks-github-indexer', async (c) => {
         number?: number;
         draft?: boolean;
         state?: string;
-        head?: { ref?: string };
+        head?: { ref?: string; sha?: string };
       };
       repository?: { full_name?: string };
     };
@@ -2086,6 +2244,8 @@ app.post('/webhooks-github-indexer', async (c) => {
       'ready_for_review',
       'converted_to_draft',
       'closed',
+      // New commits: re-queue the agent PR review of a reviewed fix (ADR 0030).
+      'synchronize',
     ]);
     if (!supportedActions.has(prPayload.action ?? '')) {
       return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202);
@@ -2110,8 +2270,16 @@ app.post('/webhooks-github-indexer', async (c) => {
         pull_requests?: Array<{ head?: { ref?: string } }>;
       };
       repository?: { full_name?: string };
+      installation?: { id?: number };
     };
     return await handleCheckRun(crPayload, deliveryId);
+  }
+
+  // workflow_job.*: job timing and runner for the CI view (Plan 022).
+  if (event === 'workflow_job') {
+    return await handleWorkflowJob(
+      JSON.parse(raw) as { action?: string; workflow_job?: GhJob; repository?: { full_name?: string }; installation?: { id?: number } },
+    );
   }
 
   // release.published / deployment_status success (production): the host

@@ -22,7 +22,6 @@ import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type Resu
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
-import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
@@ -56,7 +55,6 @@ import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { ConfigHelp } from '../components/ConfigHelp'
-import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import {
@@ -124,6 +122,7 @@ export function OnboardingPage() {
         error: activation.error,
         reload: activation.reload,
         hasAnyProject: activation.hasAnyProject,
+        resolved: activation.resolved,
         activeProject: activation.activeProject,
         selectors: activation.selectors,
         isStepIncomplete: activation.isStepIncomplete,
@@ -248,8 +247,13 @@ export function OnboardingPage() {
   // that follows the first report would swap the diagnosis out from under
   // the user the moment it landed.
   const viewParam = searchParams.get('view')
+  // Decided on a resolved setup answer only: while the fetch is pending or
+  // failed the page used to read "no project" and latch the first-run
+  // screen for the whole session, so a project with dozens of reports kept
+  // showing "Step 2 of 2 · See your first diagnosis" (audit 2026-10-20, B5).
   const firstRunEligible =
     !setupCliMode &&
+    setup.resolved &&
     (!setup.hasAnyProject || (project != null && setup.isStepIncomplete('first_report_received')))
   const [firstRunHeld, setFirstRunHeld] = useState(false)
   useEffect(() => {
@@ -413,7 +417,7 @@ export function OnboardingPage() {
 
   usePublishPageContext({
     route: '/onboarding',
-    title: `${activeTabMeta.label} · Setup`,
+    title: `${activeTabMeta.label} · Set up`,
     summary: activeTabMeta.description,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
@@ -581,7 +585,7 @@ export function OnboardingPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-onboarding">
       <PageHeaderBar
-        title={copy?.title ?? 'Setup'}
+        title={copy?.title ?? 'Set up'}
         icon={<IconBolt />}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
@@ -616,7 +620,6 @@ export function OnboardingPage() {
       )}
 
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
-      <OnboardingModeIntroCard />
 
       <PagePosture
         maxRows={3}
@@ -786,14 +789,6 @@ export function OnboardingPage() {
 
       {effectiveTab === 'overview' && (
         <>
-      {activationEnabled && (
-        <OnboardingActivationLanes
-          project={project ?? null}
-          stats={stats}
-          preflight={activation.preflight}
-          className="mb-4"
-        />
-      )}
       {!stats.hasAnyProject ? (
         <CliSetupGuide projectId={stats.projectId} className="mb-4" />
       ) : null}

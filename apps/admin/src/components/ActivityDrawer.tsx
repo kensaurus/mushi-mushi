@@ -27,6 +27,8 @@ type EventKind =
   | 'started'
   | 'ci_started'
   | 'pr_state_changed'
+  | 'reviewed'
+  | 'followup'
 
 interface ActivityEvent {
   at: string
@@ -50,6 +52,8 @@ const KIND_META: Record<EventKind, { glyph: string; tone: string; caption: strin
   ci_started:       { glyph: '⟳', tone: 'text-warn',   caption: 'CI started',      family: 'ci' },
   ci_resolved:      { glyph: '✓', tone: 'text-ok',     caption: 'CI resolved',     family: 'ci' },
   pr_state_changed: { glyph: '↻', tone: 'text-info',   caption: 'PR state',        family: 'pr' },
+  reviewed:         { glyph: '◎', tone: 'text-info',   caption: 'Opus review',     family: 'pr' },
+  followup:         { glyph: '↺', tone: 'text-info',   caption: 'Review follow-up', family: 'fix' },
   completed:        { glyph: '●', tone: 'text-ok',     caption: 'Completed',       family: 'lifecycle' },
   failed:           { glyph: '✕', tone: 'text-danger', caption: 'Failed',          family: 'lifecycle' },
 }

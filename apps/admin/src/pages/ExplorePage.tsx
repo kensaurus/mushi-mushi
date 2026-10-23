@@ -585,7 +585,7 @@ export function ExplorePage() {
   if (!projectId) {
     return (
       <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-explore">
-        <PageHeaderBar title={copy?.title ?? 'Explore'} />
+        <PageHeaderBar title={copy?.title ?? 'Code map'} />
         <PagePosture
           slots={[
             {
@@ -619,7 +619,7 @@ export function ExplorePage() {
     return (
       <div className="space-y-4">
         <PageHeaderBar
-          title={copy?.title ?? 'Explore'}
+          title={copy?.title ?? 'Code map'}
           projectScope={stats.projectName ?? undefined}
         />
         <ExploreUnderstandEmpty

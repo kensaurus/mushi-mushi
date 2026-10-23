@@ -7,8 +7,14 @@
 // Auth:    requireServiceRoleAuth (internal only).
 //
 // Firecrawl runs each watch's crawl on its own schedule and bills the
-// project's Firecrawl key. This function only reads results: for each
-// active watch, the checks finished since the last one read, oldest first.
+// project's Firecrawl key. For each active watch this function reads the
+// checks finished since the last one read, oldest first, and records each
+// broken page as a suspect. Then it settles every watch's suspects in
+// parallel: a confirm scrape on the project's own key (at most
+// CONFIRM_SCRAPES_PER_RUN per run shared fairly across watches, 1 credit
+// each, none on the platform env key, none that could overrun the run
+// deadline) or a second failing check decides whether a suspect files
+// (ADR 0029). Settling runs on every poll, so a suspect is retried hourly.
 // See _shared/site-watch.ts.
 // ============================================================
 
@@ -19,14 +25,21 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveFirecrawl } from '../_shared/firecrawl.ts'
 import { queueReportClassification } from '../_shared/report-classification.ts'
 import {
+  allocateConfirms,
   checkPages,
   checksToProcess,
+  CONFIRM_RUN_DEADLINE_MS,
+  CONFIRM_SCRAPES_PER_RUN,
+  confirmScrape,
   FirecrawlMonitorError,
   getMonitor,
   listChecks,
   monitorNeedsReconcile,
+  pendingConfirmsByWatch,
   processCheck,
+  settleSuspects,
   updateMonitor,
+  type ConfirmBudget,
   type ProcessDeps,
 } from '../_shared/site-watch.ts'
 
@@ -62,6 +75,7 @@ interface WatchRow {
 
 Deno.serve(
   withSentry('site-watch-poll', async (req: Request) => {
+    const runStart = Date.now()
     const authResp = requireServiceRoleAuth(req)
     if (authResp) return authResp
     const db = getServiceClient()
@@ -88,8 +102,10 @@ Deno.serve(
     }
 
     const results: Array<Record<string, unknown>> = []
+    // Watches whose checks were read; they are settled after every watch is read.
+    const ready: Array<{ w: WatchRow; line: Record<string, unknown>; confirmKey: string | null }> = []
     for (const w of (watches ?? []) as WatchRow[]) {
-      const line: Record<string, unknown> = { projectId: w.project_id, checks: 0, filed: 0, resolved: 0 }
+      const line: Record<string, unknown> = { projectId: w.project_id, checks: 0, filed: 0, resolved: 0, confirmScrapes: 0, dismissed: 0 }
       try {
         const fc = await resolveFirecrawl(db, w.project_id)
         if (!fc) {
@@ -123,16 +139,20 @@ Deno.serve(
         const todo = checksToProcess(checks, w.last_check_id)
         for (const check of todo) {
           const pages = await checkPages(fc.key, w.firecrawl_monitor_id!, check.id)
-          const r = await processCheck(db, w, pages, deps)
+          const r = await processCheck(db, w, pages, deps, check.id)
           line.checks = (line.checks as number) + 1
-          line.filed = (line.filed as number) + r.filed
           line.resolved = (line.resolved as number) + r.resolved
           await db
             .from('site_watches')
             .update({
               last_check_id: check.id,
               last_checked_at: check.finishedAt ?? new Date().toISOString(),
-              last_summary: { ...(check.summary ?? {}), broken: r.broken, actualCredits: check.actualCredits ?? null },
+              last_summary: {
+                ...(check.summary ?? {}),
+                broken: r.broken,
+                suspects: r.suspects,
+                actualCredits: check.actualCredits ?? null,
+              },
               last_error: null,
               updated_at: new Date().toISOString(),
             })
@@ -151,7 +171,9 @@ Deno.serve(
             })
             .eq('id', w.id)
         }
-        results.push({ ...line, status: 'ok' })
+        // Confirm scrapes bill the project's own key (own or shared, ADR
+        // 0023), never the platform's FIRECRAWL_API_KEY fallback.
+        ready.push({ w, line, confirmKey: fc.source === 'byok' ? fc.key : null })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         const lost = err instanceof FirecrawlMonitorError && err.status === 404
@@ -172,6 +194,41 @@ Deno.serve(
         results.push({ ...line, status: 'error' })
       }
     }
+
+    // Settle every read watch, new check or not, so a suspect left
+    // unconfirmed (budget, a Firecrawl hiccup) is retried within the hour.
+    // The run's confirm scrapes are shared fairly (oldest pending suspect
+    // first, one per watch before any gets a second), and all watches settle
+    // in parallel so every confirm can finish by the run deadline.
+    const now = new Date()
+    let allocation = new Map<string, number>()
+    try {
+      const confirmable = ready.filter((r) => r.confirmKey).map((r) => r.w)
+      allocation = allocateConfirms(await pendingConfirmsByWatch(db, confirmable, now), CONFIRM_SCRAPES_PER_RUN)
+    } catch (err) {
+      plog.warn('site watch confirm allocation failed', { err: String(err).slice(0, 300) })
+    }
+    await Promise.all(
+      ready.map(async ({ w, line, confirmKey }) => {
+        const budget: ConfirmBudget = {
+          remaining: confirmKey ? (allocation.get(w.id) ?? 0) : 0,
+          deadline: runStart + CONFIRM_RUN_DEADLINE_MS,
+        }
+        try {
+          const settled = await settleSuspects(db, w, {
+            ...deps,
+            confirm: (url) =>
+              confirmKey ? confirmScrape(confirmKey, url) : Promise.resolve({ kind: 'unavailable', reason: 'NO_PROJECT_KEY' }),
+            budget,
+            canConfirm: confirmKey !== null,
+          })
+          results.push({ ...line, filed: settled.filed, confirmScrapes: settled.scrapes, dismissed: settled.dismissed, status: 'ok' })
+        } catch (err) {
+          plog.warn('site watch settle failed', { projectId: w.project_id, err: String(err).slice(0, 300) })
+          results.push({ ...line, status: 'error' })
+        }
+      }),
+    )
     return json({ ok: true, data: { watches: results.length, results } })
   }),
 )
