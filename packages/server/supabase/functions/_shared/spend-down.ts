@@ -88,6 +88,39 @@ export function reportsWithNoRetryVerdict(
   return out
 }
 
+/** Cursor refused to start an agent because the account ran out (no agent ran, nothing was spent). */
+const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required/i
+const KEY_LIMIT_RETRY_AFTER_MS = 30 * 60_000
+const KEY_LIMIT_MAX_RETRIES = 2
+
+/**
+ * Reports whose latest dispatch Cursor refused for the account's usage limit,
+ * at least 30 minutes ago and at most twice in the window: spend-down may send
+ * them again although they were dispatched recently. On 2026-10-23 a key
+ * switched to a model its account had used up refused 47 reports in an hour,
+ * and the 7-day re-dispatch cooldown then kept them from the keys that still
+ * had credits.
+ */
+export function reportsToRetryAfterKeyLimit(
+  attempts: Array<{ report_id: string; failure_category: string | null; error?: string | null; created_at: string }>,
+  now: Date,
+): Set<string> {
+  const byReport = new Map<string, Array<{ failure_category: string | null; error?: string | null; created_at: string }>>()
+  for (const a of attempts) byReport.set(a.report_id, [...(byReport.get(a.report_id) ?? []), a])
+  const out = new Set<string>()
+  for (const [id, list] of byReport) {
+    const sorted = [...list].sort((x, y) => (x.created_at < y.created_at ? 1 : -1))
+    const latest = sorted[0]
+    const limited = (a: { failure_category: string | null; error?: string | null }) =>
+      a.failure_category === 'cursor_api_error' && KEY_LIMIT_RE.test(a.error ?? '')
+    if (!limited(latest)) continue
+    if (now.getTime() - Date.parse(latest.created_at) < KEY_LIMIT_RETRY_AFTER_MS) continue
+    if (sorted.filter(limited).length > KEY_LIMIT_MAX_RETRIES) continue
+    out.add(id)
+  }
+  return out
+}
+
 const DAY_MS = 86_400_000
 
 export function spendDownWindow(key: SpendDownKey, now: Date): SpendDownWindow {
