@@ -125,7 +125,7 @@ function BannerChecklist({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
+        className={`mb-4 inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
             ? CHIP_TONE.okSubtle
             : CHIP_TONE.warnSubtle
