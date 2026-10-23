@@ -140,8 +140,17 @@ export function imageTargets(page: AuditPage): string[] {
  * The page rules: metadata, locale and alt text. Links and images are
  * checked separately (they need the network), in `linkFindings`.
  */
+/**
+ * A render with no title, no description and no lang at all is a page
+ * Firecrawl failed to read, not a page missing all three: on 2026-10-23 two
+ * mushi-mushi docs pages came back that way and both had all three live.
+ */
+export function isUnreadableRender(page: AuditPage): boolean {
+  return !page.title?.trim() && !page.description?.trim() && !page.language?.trim()
+}
+
 export function pageFindings(page: AuditPage, siblings: ReadonlySet<string>): PageFinding[] {
-  if (!isDocumentUrl(page.url) || (page.statusCode != null && page.statusCode >= 400)) return []
+  if (!isDocumentUrl(page.url) || (page.statusCode != null && page.statusCode >= 400) || isUnreadableRender(page)) return []
   const out: PageFinding[] = []
   const missing = [!page.title?.trim() && 'title', !page.description?.trim() && 'meta description', !page.language?.trim() && 'html lang'].filter(Boolean)
   if (missing.length) out.push({ rule: 'page_metadata_missing', page: page.url, evidence: `no ${missing.join(', ')}` })

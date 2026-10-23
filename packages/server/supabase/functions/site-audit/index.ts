@@ -33,6 +33,7 @@ import { SITE_WATCH_USER_AGENT } from '../_shared/site-watch.ts'
 import {
   isBrokenStatus,
   isDocumentUrl,
+  isUnreadableRender,
   linkFindings,
   linkTargets,
   pageFindings,
@@ -278,7 +279,8 @@ async function finishRun(db: SupabaseClient, d: Required<SiteAuditDeps>, a: Site
   const filed = await fileFindings(db, a, (project as { name?: string } | null)?.name ?? 'this app', findings, nowIso)
   const byRule: Record<string, number> = {}
   for (const f of findings) byRule[f.rule] = (byRule[f.rule] ?? 0) + 1
-  const summary = { pages: batch.pages.length, targetsChecked: tested.checked.length, targetsSkipped: tested.skipped, findings: byRule, reportsFiled: filed, credits: batch.credits }
+  const unreadable = batch.pages.filter((p) => isDocumentUrl(p.url) && isUnreadableRender(p)).length
+  const summary = { pages: batch.pages.length, unreadable, targetsChecked: tested.checked.length, targetsSkipped: tested.skipped, findings: byRule, reportsFiled: filed, credits: batch.credits }
   await db
     .from('site_audits')
     .update({
