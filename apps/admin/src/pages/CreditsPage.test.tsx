@@ -1,15 +1,17 @@
 /**
  * @vitest-environment jsdom
  *
- * /credits ("Spend credits"): each Cursor key's spend-down as a switch, review
- * follow-ups with their models, the Firecrawl balance and what the site
- * watches use before it resets, and a site watch switch per app.
+ * /credits ("Spend credits"): each Cursor key's spend-down as a switch, the
+ * model it runs on, review follow-ups with their models, the Firecrawl
+ * balance and what the site watches use before it resets, and a site watch
+ * switch per app.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SpendDownKeyStatus } from '../components/settings/spendDown'
 
 const state = vi.hoisted(() => ({
   calls: [] as Array<{ path: string; method: string; body: unknown }>,
@@ -18,7 +20,7 @@ const state = vi.hoisted(() => ({
   ranks: {} as Record<string, unknown>,
 }))
 
-const KEY = {
+const KEY: SpendDownKeyStatus = {
   id: 'k1',
   label: 'hirose',
   keyHint: 'crsr_e76…c203',
@@ -145,6 +147,7 @@ describe('CreditsPage', () => {
     // The page opens with the one thing to do: a key with an expiry date is not spending down.
     expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
+    expect(host.textContent).toContain("Runs on each app's Cursor model")
     expect(host.textContent).toContain('Rounds run on Grok 4.7 (Extra high); the last round on Claude Opus 5.5.')
     await act(async () => toggle('Fix open bugs before the credits expire').click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
@@ -203,6 +206,27 @@ describe('search rank on /credits', () => {
     const save = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Save'))!
     await act(async () => save.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/search-ranks', method: 'PUT', body: { keywords: '嬬恋 車中泊 @JP\nTsumagoi camping' } })
+  })
+})
+
+describe('Cursor key model on /credits', () => {
+  it('names the model spend-down runs on, and links to Settings to change it', async () => {
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    const key = (id: string, model: string | null): SpendDownKeyStatus => ({ ...KEY, id, model, state: 'active', enabled: true, dispatchedToday: 3 })
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [key('k1', 'claude-opus-5-5?effort=high&context=1m'), key('k2', null)] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    const text = host.textContent ?? ''
+    expect(text).toContain('Spending down: 3 of 30 fixes today')
+    expect(text).toContain('on Claude Opus 5.5 (High, 1M)')
+    expect(text).toContain("each app's Cursor model")
+    const changes = Array.from(host.querySelectorAll('a')).filter((a) => a.textContent === 'Change')
+    expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
   })
 })
 
