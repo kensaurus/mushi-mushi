@@ -171,12 +171,12 @@ test('a hold blocks; failed CI blocks with the check names', async () => {
     merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'Opus said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
   }))
   assertEquals(out, 'blocked')
-  assertEquals(lastState(held.writes)?.detail, 'Opus said hold.')
+  assertEquals(String(lastState(held.writes)?.detail).includes('only you can override a hold'), true)
 
   const red = setup(row())
   const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
   assertEquals(out2, 'blocked')
-  assertEquals(lastState(red.writes)?.detail, 'CI failed: required.')
+  assertEquals(String(lastState(red.writes)?.detail).startsWith('CI failed: required.'), true)
 })
 
 test('a conflict starts one Cursor agent on the PR branch; at the cap it needs a person', async () => {
