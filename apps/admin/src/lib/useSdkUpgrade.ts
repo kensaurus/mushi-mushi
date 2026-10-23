@@ -13,6 +13,7 @@ import { apiFetch, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { openSseStream, type SseEvent } from './sseClient'
 import { describeActionError } from './actionError'
+import { lockfileNoteFrom } from './updateCenterView'
 
 export type SdkUpgradeStatus =
   | 'idle'
@@ -53,6 +54,8 @@ export interface SdkUpgradeState {
   workflowUrl?: string
   /** Set once the upgrade PR merged (from the job row or a sync). */
   mergedAt?: string
+  /** Plain sentence when the PR's lockfile still needs a package-manager command. */
+  lockfileNote?: string
 }
 
 interface JobRow {
@@ -158,7 +161,13 @@ export function useSdkUpgrade(projectId: string) {
       const d = res.data
       if (d.status === 'completed') {
         reachedTerminal.current = true
-        const next = { status: 'completed' as const, jobId, prUrl: d.pr_url ?? undefined, plan: d.plan ?? undefined }
+        const next = {
+          status: 'completed' as const,
+          jobId,
+          prUrl: d.pr_url ?? undefined,
+          plan: d.plan ?? undefined,
+          lockfileNote: lockfileNoteFrom(d.error) ?? undefined,
+        }
         persistTerminal(projectId, next)
         setState(next)
         return
@@ -217,7 +226,13 @@ export function useSdkUpgrade(projectId: string) {
                 const p = JSON.parse(raw.data) as SsePayload
                 if (p.status === 'completed') {
                   reachedTerminal.current = true
-                  const next = { status: 'completed' as const, jobId, prUrl: p.prUrl ?? undefined, plan: p.plan ?? undefined }
+                  const next = {
+                    status: 'completed' as const,
+                    jobId,
+                    prUrl: p.prUrl ?? undefined,
+                    plan: p.plan ?? undefined,
+                    lockfileNote: lockfileNoteFrom(p.error) ?? undefined,
+                  }
                   persistTerminal(projectId, next)
                   setState(next)
                 } else if (p.status === 'completed_no_pr') {
@@ -288,6 +303,7 @@ export function useSdkUpgrade(projectId: string) {
             deployStatus: job.deploy_status ?? undefined,
             deployUrl: job.deploy_url ?? undefined,
             mergedAt: job.merged_at ?? undefined,
+            lockfileNote: lockfileNoteFrom(job.error) ?? undefined,
           }
           persistTerminal(projectId, next)
           setState(next)
@@ -383,6 +399,7 @@ export function useSdkUpgrade(projectId: string) {
             deployUrl: prior?.deploy_url ?? undefined,
             mergedAt: prior?.merged_at ?? undefined,
             error: data.message,
+            lockfileNote: lockfileNoteFrom(prior?.error) ?? undefined,
           }
           persistTerminal(projectId, next)
           setState(next)

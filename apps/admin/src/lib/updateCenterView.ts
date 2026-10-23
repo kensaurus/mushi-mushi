@@ -59,6 +59,8 @@ export interface UpdateCenterView {
   /** The app reports a version older than the PR moved it to (not shipped yet). */
   appBehindPr: boolean
   ci: 'passing' | 'failing' | 'running' | 'not_checked'
+  /** Set when the open upgrade PR still needs a package-manager command for its lockfile. */
+  lockfileNote: string | null
 }
 
 /**
@@ -79,6 +81,12 @@ function cmpSemver(a: string, b: string): number {
     if (d !== 0) return d
   }
   return 0
+}
+
+/** The upgrade worker stores this sentence on the job when it cannot edit the lockfile. */
+export function lockfileNoteFrom(error: string | null | undefined): string | null {
+  if (!error || !/this PR needs `/i.test(error)) return null
+  return error
 }
 
 function ciFrom(state: SdkUpgradeState): UpdateCenterView['ci'] {
@@ -111,7 +119,14 @@ export function deriveUpdateCenterView(
   const appBehindPr = Boolean(prTargetVersion && installed && cmpSemver(installed, prTargetVersion) < 0)
   const upgradeTo = latest ? `Upgrade to ${latest}` : 'Upgrade SDK'
 
-  const base = { packages, prTargetVersion, newerThanPr, appBehindPr, ci: ciFrom(state) }
+  const base = {
+    packages,
+    prTargetVersion,
+    newerThanPr,
+    appBehindPr,
+    ci: ciFrom(state),
+    lockfileNote: state.lockfileNote ?? lockfileNoteFrom(state.error),
+  }
 
   if (state.status === 'queueing' || state.status === 'queued' || state.status === 'running') {
     return { ...base, mode: 'working', upgradeLabel: null }

@@ -150,6 +150,124 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     expect(body.split('\n').filter((l) => l.includes(LOCKFILE_HELPER_DOCS_URL))).toHaveLength(1)
     expect(lastUpdate(queries).status).toBe('completed')
   })
+
+  it('helper absent and package-lock.json present: the commit updates @mushi-mushi entries, including core nested under web', async () => {
+    const lock = {
+      name: 'host',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { dependencies: { '@mushi-mushi/web': '^1.29.0' } },
+        'node_modules/@mushi-mushi/web': {
+          version: '1.29.0',
+          resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.29.0.tgz',
+          integrity: 'sha512-oldweb',
+          dependencies: { '@mushi-mushi/core': '^1.29.0' },
+        },
+        'node_modules/@mushi-mushi/web/node_modules/@mushi-mushi/core': {
+          version: '1.29.0',
+          resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.29.0.tgz',
+          integrity: 'sha512-oldcore',
+          dependencies: { '@noble/hashes': '^2.2.0' },
+        },
+        'node_modules/@noble/hashes': {
+          version: '2.2.0',
+          resolved: 'https://registry.npmjs.org/@noble/hashes/-/hashes-2.2.0.tgz',
+          integrity: 'sha512-noble',
+        },
+      },
+    }
+    state.ghRoutes = [
+      ['/git/blobs/locksha', { content: b64(JSON.stringify(lock)), encoding: 'base64' }],
+      [`/repos/${OWNER}/${REPO}/git/trees/`, { tree: [
+        { path: 'package.json', type: 'blob', sha: 'pkgsha' },
+        { path: 'package-lock.json', type: 'blob', sha: 'locksha' },
+      ] }],
+      [`/repos/${OWNER}/${REPO}/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/repos/${OWNER}/${REPO}/contents/`, null],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = String(url)
+      const web = u.includes('%2Fweb') || u.includes('%2fweb')
+      const body = web
+        ? { 'dist-tags': { latest: '1.31.0' }, versions: { '1.31.0': { version: '1.31.0', dependencies: { '@mushi-mushi/core': '^1.31.0' }, dist: { tarball: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz', integrity: 'sha512-web' } } } }
+        : { 'dist-tags': { latest: '1.31.5' }, versions: { '1.31.5': { version: '1.31.5', dependencies: { '@noble/hashes': '^2.2.0' }, dist: { tarball: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.31.5.tgz', integrity: 'sha512-core' } } } }
+      return { ok: true, json: async () => body }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const { db } = runnerDb()
+      state.db = db
+      const result = await runSdkUpgradeJob(JOB)
+      expect(result).toMatchObject({ ok: true, status: 'completed' })
+      expect(gh.createPrFromFiles).not.toHaveBeenCalled()
+      expect(gh.createBranchWithSingleCommit).toHaveBeenCalledTimes(1)
+      const commit = (gh.createBranchWithSingleCommit.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      const files = commit.files as Array<{ path: string; contents: string }>
+      expect(files.map((f) => f.path)).toEqual(['package.json', 'package-lock.json'])
+      const written = JSON.parse(files[1].contents)
+      expect(written.packages['node_modules/@mushi-mushi/web'].version).toBe('1.31.0')
+      expect(written.packages['node_modules/@mushi-mushi/web'].integrity).toBe('sha512-web')
+      expect(written.packages['node_modules/@mushi-mushi/web/node_modules/@mushi-mushi/core'].version).toBe('1.31.5')
+      expect(written.packages['node_modules/@noble/hashes'].integrity).toBe('sha512-noble')
+      const pr = (gh.openPullRequestForBranch.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      expect(String(pr.body)).toContain('npm ci')
+      expect(String(pr.body)).not.toContain('This PR needs')
+      expect(pr.labels).toEqual(['mushi-sdk-upgrade'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('helper present: does not edit a package-lock.json that is in the tree', async () => {
+    state.helperPresent = true
+    state.ghRoutes = [
+      [`/repos/${OWNER}/${REPO}/git/trees/`, { tree: [
+        { path: 'package.json', type: 'blob', sha: 'pkgsha' },
+        { path: 'package-lock.json', type: 'blob', sha: 'locksha' },
+      ] }],
+      [`/repos/${OWNER}/${REPO}/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/repos/${OWNER}/${REPO}/contents/`, null],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+    vi.stubGlobal('fetch', () => { throw new Error('registry should not be called') })
+    try {
+      const { db } = runnerDb()
+      state.db = db
+      await runSdkUpgradeJob(JOB)
+      const commit = (gh.createBranchWithSingleCommit.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      expect((commit.files as Array<{ path: string }>).map((f) => f.path)).toEqual(['package.json'])
+      expect(gh.createPrFromFiles).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('pnpm lockfile: the PR names pnpm install --lockfile-only and does not rewrite the lockfile', async () => {
+    state.ghRoutes = [
+      [`/repos/${OWNER}/${REPO}/git/trees/`, { tree: [
+        { path: 'package.json', type: 'blob', sha: 'pkgsha' },
+        { path: 'pnpm-lock.yaml', type: 'blob', sha: 'locksha' },
+      ] }],
+      [`/repos/${OWNER}/${REPO}/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/repos/${OWNER}/${REPO}/contents/`, null],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+    vi.stubGlobal('fetch', () => { throw new Error('registry should not be called') })
+    try {
+      const { db, queries } = runnerDb()
+      state.db = db
+      await runSdkUpgradeJob(JOB)
+      const opts = (gh.createPrFromFiles.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      const files = opts.files as Array<{ path: string }>
+      expect(files.map((f) => f.path)).toEqual(['package.json'])
+      expect(String(opts.body)).toContain('This PR needs `pnpm install --lockfile-only`.')
+      expect(lastUpdate(queries).error).toBe('This PR needs `pnpm install --lockfile-only`.')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('runSdkUpgradeJob — linked repo choice', () => {
