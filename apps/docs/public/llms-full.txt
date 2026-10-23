@@ -3575,7 +3575,7 @@ Publishing tab and all `/tester/*` routes.
 - [Evolution loop](/concepts/evolution-loop) — the underlying architecture Bounties extends
 - [Rewards & contributor identity](/concepts/rewards) — the host-app rewards engine Bounties reuses
 - [Anti-gaming & reputation](/concepts/anti-gaming) — the fraud-detection layer
-- [`docs/research/tester-marketplace-research-2026-05-22.md`](../../../../docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
+- [Tester marketplace research](https://github.com/kensaurus/mushi-mushi/blob/master/docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
 
 ---
 
@@ -10921,7 +10921,7 @@ benefits from AI triage + AGPLv3 open source + self-host.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [LogRocket session URL API](https://docs.logrocket.com/reference/session-url)
+- [LogRocket session URL API](https://docs.logrocket.com/reference/get-session-url)
 - [LogRocket identify API](https://docs.logrocket.com/reference/identify)
 
 ---
@@ -11761,7 +11761,7 @@ warnings. The framework-level migration mechanics are upstream:
 
 - React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
-- Svelte SPA → **SvelteKit**: [official SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 
 ## Env-var prefix mapping
 
@@ -11850,7 +11850,7 @@ the server-side HTML, you'll see:
 
 - [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
-- [SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
 
 ---
@@ -11876,7 +11876,7 @@ still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
 brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
-  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/vue-2-nes)
+  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
   for Vue 2.7 with security backports.
 
 ## What changes (high level)
@@ -14776,8 +14776,7 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 
 ## Live boards
 
-- **[Public roadmap board](https://github.com/users/kensaurus/projects/1)** — every active issue, sorted by Wave + milestone.
-- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC.
+- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC. Active work is tracked here.
 - **[Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — design conversation, Q&A, show-and-tell.
 
 ## Release waves
@@ -21655,7 +21654,7 @@ If the search fails, an error banner shows the specific error code:
 
 Research results are stored in your Supabase project. They are never shared with other
 tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
 
 ---
 

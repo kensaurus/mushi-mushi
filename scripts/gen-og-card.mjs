@@ -14,8 +14,9 @@
  *
  * Output: docs/social-preview/og-card.png at 1200×630 (the size Open Graph,
  * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ where the
- * docs site serves it (scripts/sync-docs-og-card.mjs makes the same copy in the
- * docs prebuild, so a build never ships a stale card; keep both). The file
+ * docs site serves it and to apps/testers/public/ where the bounties site
+ * serves it (scripts/sync-docs-og-card.mjs makes the same copies in the docs
+ * prebuild, so a build never ships a stale card; keep all three). The file
  * apps/docs/lib/structured-data.ts declares the same size
  * and docs-meta.test.ts reads the PNG header, so change all three together.
  *
@@ -37,6 +38,7 @@ import { MUSHI_CANONICAL_URLS, MUSHI_OSS, MUSHI_TAGLINE_V2, editorialTokens } fr
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = join(ROOT, 'docs/social-preview/og-card.png')
 const DOCS_COPY = join(ROOT, 'apps/docs/public/social-preview/og-card.png')
+const TESTERS_COPY = join(ROOT, 'apps/testers/public/og-card.png')
 const WIDTH = 1200
 const HEIGHT = 630
 
@@ -136,8 +138,10 @@ async function main() {
   }
   mkdirSync(dirname(DOCS_COPY), { recursive: true })
   copyFileSync(OUT, DOCS_COPY)
+  mkdirSync(dirname(TESTERS_COPY), { recursive: true })
+  copyFileSync(OUT, TESTERS_COPY)
   const kb = (statSync(OUT).size / 1024).toFixed(0)
-  console.log(`[gen-og-card] wrote docs/social-preview/og-card.png (${WIDTH}×${HEIGHT}, ${kb} KB) and the apps/docs/public copy`)
+  console.log(`[gen-og-card] wrote docs/social-preview/og-card.png (${WIDTH}×${HEIGHT}, ${kb} KB) plus the docs and testers copies`)
 }
 
 main().catch((err) => {
