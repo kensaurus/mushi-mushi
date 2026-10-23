@@ -61,9 +61,26 @@ test('each crawled page links the live replacement', () => {
     const count = text.split(url).length - 1
     assert.ok(count >= 1, `${rel} is missing ${url}`)
   }
-  // The SPA guide names the SvelteKit docs twice (intro and references).
-  const spa = read('apps/docs/content/migrations/spa-to-ssr.mdx')
-  assert.equal(spa.split('https://svelte.dev/docs/kit/creating-a-project').length - 1, 2)
+})
+
+test('the SvelteKit URL is not pinned to an exact occurrence count', () => {
+  const url = 'https://svelte.dev/docs/kit/creating-a-project'
+  // One mention and several mentions are both the live replacement.
+  const present = (text) => text.split(url).length - 1 >= 1
+  assert.equal(present(`See ${url}.`), true)
+  assert.equal(present([url, url, url].join('\n')), true)
+  assert.equal(present('no such link'), false)
+
+  // An exact-count lock on this URL breaks the next doc edit that adds or drops a mention.
+  const pinned = read('scripts/reported-doc-links.test.mjs')
+    .split('\n')
+    .filter(
+      (line) =>
+        line.includes('creating-a-project') &&
+        line.includes('assert.equal(') &&
+        /,\s*2\s*\)/.test(line),
+    )
+  assert.deepEqual(pinned, [])
 })
 
 test('the SvelteKit entry says there is no official SPA migration guide', () => {
