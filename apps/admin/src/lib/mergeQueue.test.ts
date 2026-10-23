@@ -4,9 +4,9 @@ import { isActiveQueueRow, mergeQueueSummary, prLink } from './mergeQueue'
 describe('merge queue copy', () => {
   it('summarises the queue in one line, leaving empty parts out', () => {
     expect(mergeQueueSummary([{ state: 'queued' }, { state: 'waiting' }, { state: 'resolving' }, { state: 'blocked' }, { state: 'merged' }])).toBe(
-      '3 to merge · 1 needs you · 1 merged today',
+      '3 to merge · 1 held · 1 merged today',
     )
-    expect(mergeQueueSummary([{ state: 'blocked' }, { state: 'blocked' }])).toBe('2 need you')
+    expect(mergeQueueSummary([{ state: 'blocked' }, { state: 'blocked' }])).toBe('2 held')
     expect(mergeQueueSummary([{ state: 'removed' }])).toBe('')
   })
   it('treats blocked as active and merged or removed as done', () => {
