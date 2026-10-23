@@ -148,6 +148,7 @@ import {
 } from '../_shared/agent-adapters.ts';
 import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
 import { confirmBaseRef } from '../_shared/github-branch.ts';
+import { isCursorKeyLimitError } from '../_shared/spend-down.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -1552,6 +1553,12 @@ ${
       };
       if (EXPECTED_FAILURE_CATEGORIES.has(failureCategory)) {
         log.warn('Fix worker stopped by guardrail', logFields);
+      } else if (failureCategory === 'cursor_api_error' && isCursorKeyLimitError(errMsg)) {
+        // The Cursor account ran out of usage: an account state, shown on the
+        // fix and the spend-down card and retried on another key by
+        // spend-down, not a server bug. 47 of the 59 "Fix worker failed"
+        // events by 2026-10-23 (MUSHI-MUSHI-SERVER-28).
+        log.warn('Fix worker stopped: Cursor account out of usage', logFields);
       } else {
         log.error('Fix worker failed', logFields);
       }

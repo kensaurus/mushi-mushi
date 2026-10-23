@@ -46,6 +46,7 @@ import {
   reportsWithNoRetryVerdict,
   reportsToRetryAfterKeyLimit,
   reportsToRetryAfterHold,
+  isCursorKeyLimitError,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -1060,6 +1061,14 @@ describe('spendDownStopLoss: a fix that regressed after a Mushi merge counts as 
     expect(spendDownStopLoss({ runs: [...probes, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ resumedBy: 'probes' })
     const regressedProbe = probes.map((r, i) => (i === 0 ? { ...r, regressedAt: '2026-10-20T08:30:00.000Z' } : r))
     expect(spendDownStopLoss({ runs: [...regressedProbe, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ paused: true, resumedBy: null })
+  })
+})
+
+describe('isCursorKeyLimitError', () => {
+  it('matches Cursor refusing a dispatch for the account usage limit, nothing else', () => {
+    expect(isCursorKeyLimitError('Cursor API 400 usage_limit_exceeded: On-demand usage is required.')).toBe(true)
+    expect(isCursorKeyLimitError("Cursor API 400 validation_error: Failed to verify existence of branch 'main'")).toBe(false)
+    expect(isCursorKeyLimitError(null)).toBe(false)
   })
 })
 

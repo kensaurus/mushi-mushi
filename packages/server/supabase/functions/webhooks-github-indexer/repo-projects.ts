@@ -44,6 +44,10 @@ export function isRepoUrl(url: unknown, fullName: string): boolean {
   return !!m && `${m[1]}/${m[2]}`.toLowerCase() === fullName.toLowerCase()
 }
 
+function isStatementTimeout(err: DbError | null | undefined): boolean {
+  return !!err && (err.code === '57014' || /statement timeout/i.test(err.message ?? ''))
+}
+
 /** Escape LIKE wildcards; repo names may contain `_`. */
 function likeLiteral(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`)
@@ -63,11 +67,17 @@ export async function projectIdsForRepo(db: Db, fullName: string | null | undefi
     { table: 'project_settings', column: 'codebase_repo_url' },
     { table: 'organization_integration_settings', column: 'github_repo_url' },
   ]
+  const lookup = ({ table, column }: { table: string; column: string }): Promise<QueryResult> => {
+    const key = table === 'organization_integration_settings' ? 'organization_id' : 'project_id'
+    return db.from(table).select(`${key}, ${column}`).ilike(column, pattern)
+  }
+  const first: QueryResult[] = await Promise.all(sources.map(lookup))
+  // These tables hold a few rows each, so a statement timeout here means the
+  // database was stalled for the whole 8 s, not a slow query: try that lookup
+  // once more before failing a delivery GitHub will not resend on its own
+  // (MUSHI-MUSHI-SERVER-2X).
   const results = await Promise.all(
-    sources.map(({ table, column }) => {
-      const key = table === 'organization_integration_settings' ? 'organization_id' : 'project_id'
-      return db.from(table).select(`${key}, ${column}`).ilike(column, pattern)
-    }),
+    first.map((res, i) => (isStatementTimeout(res.error) ? lookup(sources[i]) : res)),
   )
   const ids = new Set<string>()
   const orgIds = new Set<string>()
