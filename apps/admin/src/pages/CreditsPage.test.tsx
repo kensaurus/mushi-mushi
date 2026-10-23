@@ -165,6 +165,20 @@ describe('CreditsPage', () => {
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
   })
 
+  it('underlines sentence links with the accent colour', async () => {
+    await render()
+    const links = [...host.querySelectorAll('p a')]
+    expect(links.length).toBeGreaterThan(0)
+    for (const link of links) {
+      const classes = link.className.split(/\s+/)
+      expect(classes, link.textContent ?? '').toContain('underline')
+      // LINK_ACCENT is text-accent-foreground, the console's sentence-link
+      // colour. text-brand is a different token (and fails the secondary-link audit).
+      expect(classes, link.textContent ?? '').toContain('text-accent-foreground')
+      expect(classes, link.textContent ?? '').not.toContain('text-brand')
+    }
+  })
+
   it('shows the Firecrawl balance, the pace to its reset, and a switch per app', async () => {
     await render()
     expect(host.textContent).toContain('64,175 of 100,000 credits left')

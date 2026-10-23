@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Btn, Toggle } from '../ui'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import type { AuditCost } from '../../lib/creditPlan'
@@ -85,7 +86,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
       {audit?.last_error && <p className="text-xs text-warn">{audit.last_error}</p>}
       {on && openFindings > 0 && (
         <p className="text-xs text-fg-muted">
-          Its reports are on <Link className="text-brand hover:underline" to="/reports">Reports</Link>; spend-down sends them to Cursor.
+          Its reports are on <Link className={LINK_ACCENT} to="/reports">Reports</Link>; spend-down sends them to Cursor.
         </p>
       )}
     </div>

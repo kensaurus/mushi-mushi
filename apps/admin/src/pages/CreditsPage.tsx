@@ -14,6 +14,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Callout, Section } from '../components/ui'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
@@ -121,8 +122,8 @@ export function CreditsPage() {
       </Section>
 
       <p className="text-xs text-fg-muted">
-        Fixes these levers open: <Link className="text-brand hover:underline" to="/fixes">Fixes</Link>, and the ones Opus already approved under{' '}
-        <Link className="text-brand hover:underline" to="/fixes?status=review_merge">Opus: merge</Link>.
+        Fixes these levers open: <Link className={LINK_ACCENT} to="/fixes">Fixes</Link>, and the ones Opus already approved under{' '}
+        <Link className={LINK_ACCENT} to="/fixes?status=review_merge">Opus: merge</Link>.
       </p>
     </div>
   )

@@ -157,6 +157,7 @@ describe('FixesPage', () => {
     await render('/fixes?status=failed')
     expect(document.querySelector('[data-testid="fixes-bulk-action-bar"]')).not.toBeNull()
     expect(document.body.textContent).toContain('Checkout button does nothing')
+    expect(document.querySelector('th .sr-only')?.textContent).toBe('Status stripe')
   })
 
   it('QA 96 + 241: row Retry asks first and sends the failed attempt’s agent', async () => {

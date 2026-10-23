@@ -7,6 +7,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useEffect, useMemo, useState } from 'react'
+import { showMobileWordmarkH1, useMainHasH1 } from '../lib/mobileWordmarkHeading'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
@@ -142,6 +143,7 @@ function ScrollToHashAnchor() {
 export function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
+  const pageHasH1 = useMainHasH1(pathname)
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   // The phone and desktop headers both stay in the DOM (CSS picks one), but
@@ -753,6 +755,11 @@ export function Layout({ children }: { children: ReactNode }) {
             once the page banners stacked under it; the wordmark lives in the
             menu drawer. The switchers truncate instead of overflowing. */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
+          {/* The wordmark h1 lives in the desktop sidebar, which is
+              display:none below md, and in the drawer only while it is open.
+              Pages that already render an h1 (dashboard, connect, editorial
+              errors) keep that one; every other phone page gets this. */}
+          {showMobileWordmarkH1(mobileOpen, pageHasH1) && <h1 className="sr-only">mushi mushi</h1>}
           <Btn
             type="button"
             variant="ghost"

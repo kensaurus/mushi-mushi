@@ -9,6 +9,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { ResultChip, Toggle } from '../ui'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
 import { expiryLabel } from '../../lib/creditPlan'
@@ -51,7 +52,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
   if (keys.length === 0 && !fu) {
     return (
       <p className="text-sm text-fg-muted">
-        No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
+        No Cursor key yet. <Link className={LINK_ACCENT} to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
         and Mushi can send open bugs to Cursor before its credits expire.
       </p>
     )
@@ -92,7 +93,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
               {!k.enabled && !k.creditsExpireAt && (
                 <p className="text-xs text-fg-muted">
                   Set the expiry date first in{' '}
-                  <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
+                  <Link className={LINK_ACCENT} to="/settings?tab=byok">Settings → AI keys</Link>.
                 </p>
               )}
               {!editable && <p className="text-xs text-fg-muted">An owner or admin of this key can change it.</p>}
@@ -130,7 +131,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           </p>
           <p className="text-xs text-fg-muted">
             Models, key and daily limit:{' '}
-            <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
+            <Link className={LINK_ACCENT} to="/settings?tab=byok">Settings → AI keys</Link>.
           </p>
         </div>
       )}
