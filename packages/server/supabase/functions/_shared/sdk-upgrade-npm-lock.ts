@@ -4,8 +4,9 @@
  *          update package-lock.json (lockfileVersion 2 or 3) so `npm ci`
  *          accepts the new @mushi-mushi/* versions. Pure edit: version,
  *          resolved, integrity and the ranges that point at those packages,
- *          taken from the npm packument. pnpm and yarn lockfiles are named,
- *          not rewritten (ADR 0043).
+ *          taken from the npm packument. A nested copy whose parent range
+ *          rejects the chosen version refuses the edit. pnpm and yarn
+ *          lockfiles are named, not rewritten (ADR 0043).
  */
 
 const SCOPE = '@mushi-mushi/'
@@ -310,6 +311,74 @@ function writeJson(original: string, value: unknown): string {
   return text
 }
 
+/** `node_modules/a/node_modules/b` → `node_modules/a`. A hoisted entry has no parent. */
+function parentPackageKey(key: string): string | null {
+  const at = key.lastIndexOf('/node_modules/')
+  if (at < 0) return null
+  return key.slice(0, at)
+}
+
+function metaRanges(meta: Meta, depName: string): string[] {
+  const ranges: string[] = []
+  for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies'] as const) {
+    const range = meta[field][depName]
+    if (range) ranges.push(range)
+  }
+  return ranges
+}
+
+function declaredRanges(entry: Record<string, unknown>, depName: string): string[] {
+  const ranges: string[] = []
+  for (const field of DEP_FIELDS) {
+    const section = entry[field]
+    if (!section || typeof section !== 'object' || Array.isArray(section)) continue
+    const range = (section as Record<string, unknown>)[depName]
+    if (typeof range === 'string') ranges.push(range)
+  }
+  return ranges
+}
+
+/**
+ * Ranges the parent will declare for `depName` after this patch. A parent that
+ * is itself being rewritten contributes the packument ranges (the old ones
+ * are replaced). Empty means the parent will not ask for this package.
+ */
+function rangesParentWillDeclare(
+  parentKey: string,
+  parent: Record<string, unknown>,
+  depName: string,
+  targets: Map<string, Meta>,
+): string[] {
+  const parentName = installedName(parentKey, parent)
+  const parentMeta = parentName ? targets.get(parentName) : undefined
+  if (parentMeta) return metaRanges(parentMeta, depName)
+  return declaredRanges(parent, depName)
+}
+
+function legacyParentRanges(
+  parentName: string,
+  parent: Record<string, unknown>,
+  depName: string,
+  targets: Map<string, Meta>,
+): string[] {
+  const parentMeta = targets.get(parentName)
+  if (parentMeta) return metaRanges(parentMeta, depName)
+  const req = parent.requires
+  if (req && typeof req === 'object' && !Array.isArray(req)) {
+    const range = (req as Record<string, unknown>)[depName]
+    if (typeof range === 'string') return [range]
+  }
+  return declaredRanges(parent, depName)
+}
+
+/** Null when every declared range accepts `version`. */
+function nestedRangeRefusal(name: string, version: string, ranges: string[], parentLabel: string): string | null {
+  const missed = ranges.filter((range) => !semverSatisfies(version, range))
+  if (ranges.length > 0 && missed.length === 0) return null
+  const shown = missed.length ? missed.join(', ') : 'no declared range'
+  return `nested ${name}@${version} does not satisfy ${shown} required by ${parentLabel}`
+}
+
 export function patchNpmLockfile(
   lockText: string,
   opts: {
@@ -365,23 +434,45 @@ export function patchNpmLockfile(
   for (const [key, raw] of Object.entries(pkgs)) {
     const name = installedName(key, raw)
     const meta = name ? targets.get(name) : undefined
-    if (!meta || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    if (!name || !meta || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue
     const entry = raw as Record<string, unknown>
+    const parentKey = parentPackageKey(key)
+    if (parentKey !== null) {
+      const parentRaw = pkgs[parentKey]
+      const parent = parentRaw && typeof parentRaw === 'object' && !Array.isArray(parentRaw)
+        ? parentRaw as Record<string, unknown>
+        : null
+      const ranges = parent ? rangesParentWillDeclare(parentKey, parent, name, targets) : []
+      const reason = nestedRangeRefusal(name, meta.version, ranges, parentKey)
+      if (reason) return { ok: false, reason }
+    }
     const missing = blockingDep(pkgs, meta)
     if (missing) return { ok: false, reason: `lock has no entry for ${missing} that satisfies the new manifest` }
     applyEntry(entry, meta)
   }
   const legacy = lock.dependencies
-  if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) patchLegacy(legacy as Record<string, unknown>, targets)
+  if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+    const legacyResult = patchLegacy(legacy as Record<string, unknown>, targets, null)
+    if (!legacyResult.ok) return legacyResult
+  }
   return { ok: true, text: writeJson(lockText, lock) }
 }
 
-function patchLegacy(node: Record<string, unknown>, targets: Map<string, Meta>): void {
+function patchLegacy(
+  node: Record<string, unknown>,
+  targets: Map<string, Meta>,
+  parent: { name: string; entry: Record<string, unknown> } | null,
+): { ok: true } | { ok: false; reason: string } {
   for (const [name, raw] of Object.entries(node)) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
     const entry = raw as Record<string, unknown>
     const meta = targets.get(name)
     if (meta && typeof entry.version === 'string' && !entry.version.includes(':')) {
+      if (parent) {
+        const ranges = legacyParentRanges(parent.name, parent.entry, name, targets)
+        const reason = nestedRangeRefusal(name, meta.version, ranges, parent.name)
+        if (reason) return { ok: false, reason }
+      }
       entry.version = meta.version
       entry.resolved = meta.resolved
       entry.integrity = meta.integrity
@@ -394,8 +485,12 @@ function patchLegacy(node: Record<string, unknown>, targets: Map<string, Meta>):
       }
     }
     const nested = entry.dependencies
-    if (nested && typeof nested === 'object' && !Array.isArray(nested)) patchLegacy(nested as Record<string, unknown>, targets)
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const child = patchLegacy(nested as Record<string, unknown>, targets, { name, entry })
+      if (!child.ok) return child
+    }
   }
+  return { ok: true }
 }
 
 export function packageManagerOf(pkgText: string): LockKind | null {

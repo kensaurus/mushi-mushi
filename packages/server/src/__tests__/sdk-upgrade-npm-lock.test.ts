@@ -1,11 +1,13 @@
 /**
  * FILE: sdk-upgrade-npm-lock.test.ts
- * PURPOSE: ADR 0042 — an upgrade without the host lockfile workflow rewrites
+ * PURPOSE: ADR 0043 — an upgrade without the host lockfile workflow rewrites
  *          package-lock.json v3 @mushi-mushi entries (including a transitive
  *          @mushi-mushi/core nested under @mushi-mushi/web) and leaves every
  *          other entry alone. pnpm and yarn are named, not edited.
  */
 
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   bumpedRanges,
@@ -124,6 +126,19 @@ function patch(text: string, corePack = packs) {
   })
 }
 
+describe('ADR citation', () => {
+  it('amends 0019 as ADR 0043, and this file says 0043', () => {
+    const index = readFileSync(resolve(__dirname, '../../../../docs/adr/INDEX.md'), 'utf8')
+    const row = index.split('\n').find((line) => line.includes('0019-sdk-upgrade-lockfile-helper.md'))
+    expect(row).toContain('[0043](0043-npm-lock-entries-on-sdk-upgrade.md)')
+    expect(row).not.toContain('0042')
+    expect(existsSync(resolve(__dirname, '../../../../docs/adr/0043-npm-lock-entries-on-sdk-upgrade.md'))).toBe(true)
+    const header = readFileSync(resolve(__dirname, 'sdk-upgrade-npm-lock.test.ts'), 'utf8').split('\n').slice(0, 8).join('\n')
+    expect(header).toContain('ADR 0043')
+    expect(header).not.toContain('ADR 0042')
+  })
+})
+
 describe('semverSatisfies', () => {
   it('applies caret, including 0.x', () => {
     expect(semverSatisfies('1.33.2', '^1.31.0')).toBe(true)
@@ -195,6 +210,13 @@ describe('patchNpmLockfile', () => {
         resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz',
         integrity: 'sha512-oldweb',
         requires: { '@mushi-mushi/core': '^1.31.0' },
+        dependencies: {
+          '@mushi-mushi/core': {
+            version: '1.31.0',
+            resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.31.0.tgz',
+            integrity: 'sha512-oldcore',
+          },
+        },
       },
       '@mushi-mushi/core': {
         version: '1.31.0',
@@ -207,7 +229,108 @@ describe('patchNpmLockfile', () => {
     if (!legacy.ok) return
     const deps = JSON.parse(legacy.text).dependencies
     expect(deps['@mushi-mushi/web']).toMatchObject({ version: WEB, integrity: 'sha512-web', requires: { '@mushi-mushi/core': '^1.33.1' } })
+    expect(deps['@mushi-mushi/web'].dependencies['@mushi-mushi/core'].version).toBe(CORE)
     expect(deps['@mushi-mushi/core'].version).toBe(CORE)
+  })
+
+  it('updates a nested copy when that parent range accepts the chosen version', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/widget'] = {
+      version: '2.0.0',
+      resolved: 'https://registry.npmjs.org/widget/-/widget-2.0.0.tgz',
+      integrity: 'sha512-widget',
+      dependencies: { '@mushi-mushi/core': '^1.0.0' },
+    }
+    packages['node_modules/widget/node_modules/@mushi-mushi/core'] = {
+      version: '1.2.0',
+      resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.2.0.tgz',
+      integrity: 'sha512-core120',
+      dependencies: { '@noble/hashes': '^2.2.0' },
+    }
+    const result = patch(JSON.stringify(body, null, 2) + '\n')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const out = JSON.parse(result.text).packages
+    expect(out['node_modules/widget/node_modules/@mushi-mushi/core'].version).toBe(CORE)
+    expect(out['node_modules/widget'].dependencies).toEqual({ '@mushi-mushi/core': '^1.0.0' })
+  })
+
+  it('refuses a nested copy whose parent range rejects the chosen version', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/old-plugin'] = {
+      version: '1.0.0',
+      resolved: 'https://registry.npmjs.org/old-plugin/-/old-plugin-1.0.0.tgz',
+      integrity: 'sha512-oldplugin',
+      dependencies: { '@mushi-mushi/core': '^0.24.0' },
+    }
+    packages['node_modules/old-plugin/node_modules/@mushi-mushi/core'] = {
+      version: '0.24.1',
+      resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-0.24.1.tgz',
+      integrity: 'sha512-core024',
+      dependencies: { '@noble/hashes': '^1.0.0' },
+    }
+    const result = patch(JSON.stringify(body, null, 2) + '\n')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('^0.24.0')
+    expect(result.reason).toContain('node_modules/old-plugin')
+    expect(result.reason).toContain(`@mushi-mushi/core@${CORE}`)
+  })
+
+  it('refuses a nested copy whose parent declares no range', () => {
+    const body = lock()
+    const packages = body.packages as Record<string, Record<string, unknown>>
+    packages['node_modules/widget'] = {
+      version: '2.0.0',
+      resolved: 'https://registry.npmjs.org/widget/-/widget-2.0.0.tgz',
+      integrity: 'sha512-widget',
+    }
+    packages['node_modules/widget/node_modules/@mushi-mushi/core'] = {
+      version: '1.2.0',
+      resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.2.0.tgz',
+      integrity: 'sha512-core120',
+    }
+    const result = patch(JSON.stringify(body, null, 2) + '\n')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('no declared range')
+    expect(result.reason).toContain('node_modules/widget')
+  })
+
+  it('refuses a v2 legacy nested copy whose parent range rejects the chosen version', () => {
+    const v2 = JSON.parse(raw) as { lockfileVersion: number; dependencies: Record<string, unknown> }
+    v2.lockfileVersion = 2
+    v2.dependencies = {
+      '@mushi-mushi/web': {
+        version: '1.31.0',
+        resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz',
+        integrity: 'sha512-oldweb',
+        requires: { '@mushi-mushi/core': '^1.31.0' },
+      },
+      '@mushi-mushi/core': {
+        version: '1.31.0',
+        resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-1.31.0.tgz',
+        integrity: 'sha512-oldcore',
+      },
+      'old-plugin': {
+        version: '1.0.0',
+        requires: { '@mushi-mushi/core': '^0.24.0' },
+        dependencies: {
+          '@mushi-mushi/core': {
+            version: '0.24.1',
+            resolved: 'https://registry.npmjs.org/@mushi-mushi/core/-/core-0.24.1.tgz',
+            integrity: 'sha512-core024',
+          },
+        },
+      },
+    }
+    const result = patch(JSON.stringify(v2, null, 2) + '\n')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('^0.24.0')
+    expect(result.reason).toContain('old-plugin')
   })
 
   it('refuses a lockfile it cannot make pass npm ci', () => {

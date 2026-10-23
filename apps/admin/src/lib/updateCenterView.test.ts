@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveUpdateCenterView, normalizeVersion } from './updateCenterView'
+import { LOCKFILE_NOTE_PREFIX, deriveUpdateCenterView, lockfileNoteFrom, normalizeVersion } from './updateCenterView'
 
 const MUSHI = {
   sdk_package: '@mushi-mushi/web',
@@ -89,7 +89,7 @@ describe('deriveUpdateCenterView', () => {
   })
 
   it('shows the lockfile command on an open PR and ignores other errors', () => {
-    const note = 'This PR needs `pnpm install --lockfile-only`.'
+    const note = `${LOCKFILE_NOTE_PREFIX}\`pnpm install --lockfile-only\`.`
     const open = deriveUpdateCenterView(GLOT, {
       status: 'completed',
       prUrl: 'https://github.com/kensaurus/glot.it/pull/303',
@@ -98,6 +98,16 @@ describe('deriveUpdateCenterView', () => {
     })
     expect(open.mode).toBe('pr_open')
     expect(open.lockfileNote).toBe(note)
+    const fromError = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/kensaurus/glot.it/pull/303',
+      error: note,
+    })
+    expect(fromError.lockfileNote).toBe(note)
+    expect(lockfileNoteFrom(note)).toBe(note)
+    // The worker's sentence is matched by prefix, not a loose regex.
+    expect(lockfileNoteFrom(note.toLowerCase())).toBeNull()
+    expect(lockfileNoteFrom(`CI failed. ${note}`)).toBeNull()
     const other = deriveUpdateCenterView(GLOT, {
       status: 'completed',
       prUrl: 'https://github.com/kensaurus/glot.it/pull/303',

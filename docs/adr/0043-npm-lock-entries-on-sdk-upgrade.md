@@ -34,14 +34,18 @@ worker can copy without running npm.
    has the workflow still gets one bump commit and a PR after the workflow
    pushes, or after 30 minutes.
 2. **With no workflow, and a `package-lock.json` or `npm-shrinkwrap.json` of
-   lockfileVersion 2 or 3**, the same commit updates every
-   `node_modules/@mushi-mushi/<pkg>` entry that the bump reaches: `version`,
+   lockfileVersion 2 or 3**, the same commit updates the
+   `node_modules/@mushi-mushi/<pkg>` entries the bump reaches: `version`,
    `resolved` and `integrity` from the npm packument for that exact version,
    the host manifest ranges, and the `@mushi-mushi/*` ranges inside those
    entries (including a transitive `@mushi-mushi/core` required by
    `@mushi-mushi/web`). A transitive package whose locked version already
-   satisfies the new range stays. A lockfileVersion 1 file, or a new
-   non-`@mushi-mushi` dependency the lock cannot satisfy, is not guessed.
+   satisfies the new range stays. A nested copy is rewritten only when the
+   chosen version satisfies the range its parent entry declares; otherwise
+   the lockfile is left unchanged and the job falls back to the manual npm
+   command, so a 0.x copy kept for an incompatible range is not moved. A
+   lockfileVersion 1 file, or a new non-`@mushi-mushi` dependency the lock
+   cannot satisfy, is not guessed.
 3. **pnpm and yarn lockfiles are not edited.** The PR body and the console
    Update center say this PR needs `pnpm install --lockfile-only` (yarn:
    `yarn install`). The PR still opens so the bump is reviewable; CI stays

@@ -72,7 +72,7 @@ vi.mock('../../supabase/functions/_shared/github-pr.ts', () => ({
 
 import { runSdkUpgradeJob } from '../../supabase/functions/_shared/sdk-upgrade-runner.ts'
 import { LOCKFILE_WAIT_MS, syncAwaitingLockfileJobs } from '../../supabase/functions/_shared/sdk-upgrade-lockfile.ts'
-import { LOCKFILE_HELPER_DOCS_URL } from '../../supabase/functions/_shared/sdk-upgrade-pr.ts'
+import { LOCKFILE_HELPER_DOCS_URL, LOCKFILE_NOTE_PREFIX, lockfileNeedsSentence } from '../../supabase/functions/_shared/sdk-upgrade-pr.ts'
 
 const PKG = { name: 'host', dependencies: { '@mushi-mushi/web': '^1.29.0' } }
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64')
@@ -267,6 +267,25 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('lockfile note prefix', () => {
+  it('is the sentence the worker stores and the console matches by prefix', () => {
+    const pnpm = lockfileNeedsSentence(['pnpm install --lockfile-only'])
+    expect(pnpm).toBe(`${LOCKFILE_NOTE_PREFIX}\`pnpm install --lockfile-only\`.`)
+    const both = lockfileNeedsSentence(['pnpm install --lockfile-only', 'yarn install'])
+    expect(both).toBe(`${LOCKFILE_NOTE_PREFIX}\`pnpm install --lockfile-only\` and \`yarn install\`.`)
+
+    const worker = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/sdk-upgrade-pr.ts'), 'utf8')
+    expect(worker).toContain('export const LOCKFILE_NOTE_PREFIX')
+    expect(worker).toContain('`${LOCKFILE_NOTE_PREFIX}')
+
+    const consoleView = readFileSync(resolve(__dirname, '../../../../apps/admin/src/lib/updateCenterView.ts'), 'utf8')
+    const declared = consoleView.match(/export const LOCKFILE_NOTE_PREFIX = '([^']*)'/)
+    expect(declared?.[1]).toBe(LOCKFILE_NOTE_PREFIX)
+    expect(consoleView).toContain('startsWith(LOCKFILE_NOTE_PREFIX)')
+    expect(consoleView).not.toContain('/this PR needs `/i')
   })
 })
 

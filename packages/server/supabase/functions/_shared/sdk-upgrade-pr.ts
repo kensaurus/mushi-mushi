@@ -35,11 +35,18 @@ export const LOCKFILE_HELPER_DOCS_URL = 'https://kensaur.us/mushi-mushi/docs/adm
  */
 export type LockfileOutcome = 'refreshed' | 'helper_missing' | 'timeout' | 'npm_updated' | 'manual'
 
+/**
+ * Sentence prefix stored on a completed job (`error`) when the lockfile still
+ * needs a package-manager command. The console's `lockfileNoteFrom` matches
+ * this exact prefix (`apps/admin/src/lib/updateCenterView.ts`).
+ */
+export const LOCKFILE_NOTE_PREFIX = 'This PR needs '
+
 /** The sentence the PR body and the Update center share. */
 export function lockfileNeedsSentence(commands: readonly string[]): string {
   const list = commands.length > 0 ? commands : ['npm install --package-lock-only']
-  if (list.length === 1) return `This PR needs \`${list[0]}\`.`
-  return `This PR needs ${list.map((c) => `\`${c}\``).join(' and ')}.`
+  if (list.length === 1) return `${LOCKFILE_NOTE_PREFIX}\`${list[0]}\`.`
+  return `${LOCKFILE_NOTE_PREFIX}${list.map((c) => `\`${c}\``).join(' and ')}.`
 }
 
 type Headers = Record<string, string>

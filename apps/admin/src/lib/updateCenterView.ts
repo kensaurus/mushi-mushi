@@ -83,9 +83,16 @@ function cmpSemver(a: string, b: string): number {
   return 0
 }
 
+/**
+ * Sentence prefix the upgrade worker stores on a completed job (`error`)
+ * when the lockfile still needs a package-manager command.
+ * Keep equal to `LOCKFILE_NOTE_PREFIX` in `_shared/sdk-upgrade-pr.ts`.
+ */
+export const LOCKFILE_NOTE_PREFIX = 'This PR needs '
+
 /** The upgrade worker stores this sentence on the job when it cannot edit the lockfile. */
 export function lockfileNoteFrom(error: string | null | undefined): string | null {
-  if (!error || !/this PR needs `/i.test(error)) return null
+  if (!error?.startsWith(LOCKFILE_NOTE_PREFIX)) return null
   return error
 }
 
