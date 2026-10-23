@@ -210,6 +210,8 @@ export interface ReportDetail {
   component: string | null
   confidence: number | null
   status: string
+  /** Where the report came from (widget, site_audit, sentry, …). */
+  source?: string | null
   reporter_token_hash: string
   /** Set when grouped under a canonical report; required to close as a duplicate. */
   report_group_id?: string | null

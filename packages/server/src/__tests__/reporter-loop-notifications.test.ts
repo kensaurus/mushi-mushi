@@ -204,6 +204,30 @@ describe('status transitions', () => {
     expect(fake.table('reporter_notifications')).toHaveLength(0)
   })
 
+  it('a false alarm tells nobody, and another dismiss reason still does', async () => {
+    const told = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(told as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'classified',
+      newStatus: 'dismissed',
+      closedReason: 'wont_fix',
+    })
+    expect(told.table('reporter_notifications').some((r) => r.notification_type === 'dismissed')).toBe(true)
+
+    const silent = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(silent as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'classified',
+      newStatus: 'dismissed',
+      closedReason: 'false_alarm',
+    })
+    expect(silent.table('reporter_notifications')).toHaveLength(0)
+  })
+
   describe('duplicate close — exactly one notice', () => {
     const CANONICAL = 'r-canonical'
     const grouped = {

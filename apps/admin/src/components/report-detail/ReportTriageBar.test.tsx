@@ -305,3 +305,52 @@ describe('ReportTriageBar with no code location', () => {
     expect(container.textContent).not.toContain('no stack trace or file to change')
   })
 })
+
+function labeledSelect(label: string): HTMLSelectElement | null {
+  const lab = Array.from(container.querySelectorAll('label')).find((l) => l.textContent?.startsWith(label))
+  return lab?.querySelector('select') ?? null
+}
+
+describe('ReportTriageBar false alarm', () => {
+  async function openClose(source: string) {
+    const onTriage = vi.fn(async () => {})
+    await act(async () => {
+      root.render(
+        createElement(ReportTriageBar, {
+          report: { ...REPORT, source } as ReportDetail,
+          onTriage,
+          saving: false,
+          savedAt: null,
+          dispatchState: { status: 'idle' },
+          onRequestDispatch: vi.fn(),
+          dispatchBlock: { blocked: false, reason: null },
+          isDispatchBusy: false,
+        }),
+      )
+    })
+    const status = labeledSelect('Status')
+    await act(async () => {
+      status!.value = 'dismissed'
+      status!.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    return { onTriage, reason: labeledSelect('Why close it?') }
+  }
+
+  it('offers a false alarm on a site-audit report and stores it', async () => {
+    const { onTriage, reason } = await openClose('site_audit')
+    expect(Array.from(reason!.options).map((o) => o.textContent)).toContain("False alarm (Mushi's check was wrong)")
+    await act(async () => {
+      reason!.value = 'false_alarm'
+      reason!.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => buttonByText('Close report')!.click())
+    expect(onTriage).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'false_alarm' })
+  })
+
+  it('does not offer a false alarm on a widget report', async () => {
+    const { reason } = await openClose('widget')
+    const labels = Array.from(reason!.options).map((o) => o.textContent)
+    expect(labels).not.toContain("False alarm (Mushi's check was wrong)")
+    expect(labels).toContain("Couldn't reproduce it")
+  })
+})
