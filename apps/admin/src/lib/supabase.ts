@@ -198,6 +198,8 @@ async function waitForTenant(scope: 'enumeration' | 'project' | 'none'): Promise
   const crossTeam = await loadCrossTeam()
   if (tenantGate?.projectId === projectId) return settleWithin(tenantGate.promise)
   if (!crossTeam.urlProjectNeedsTeamCheck(projectId, getActiveOrgIdSnapshot())) return
+  // Seen in another team before: switch now instead of waiting on the read.
+  if (crossTeam.switchToKnownTeam(projectId)) return
   // Signed out: nothing to resolve yet. Leave the gate unset so the check
   // runs again after sign-in instead of being spent on a 401.
   if (!(await getAccessToken())) return
