@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
 
 ---
 title: SDK upgrade lockfile helper
-description: Add one workflow so upgrade PRs refresh the lockfile with your package manager. Without it, npm lockfiles are updated in the bump commit; pnpm and yarn PRs name the install command CI needs.
+description: Upgrade PRs update npm lockfiles in the bump commit; add one workflow to refresh pnpm or yarn lockfiles with your package manager.
 ---
 
 # SDK upgrade lockfile helper
