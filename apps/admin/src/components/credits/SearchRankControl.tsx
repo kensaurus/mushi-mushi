@@ -47,12 +47,11 @@ function lines(keywords: RankKeyword[]): string {
 export function SearchRankControl({ projectId, name, keywords, target, firecrawlReady, onChanged }: Props) {
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const path = `/v1/admin/projects/${projectId}/search-ranks`
 
   async function save() {
     if (draft == null) return
     setBusy(true)
-    const res = await apiFetch(path, { method: 'PUT', body: JSON.stringify({ keywords: draft }) })
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/search-ranks`, { method: 'PUT', body: JSON.stringify({ keywords: draft }) })
     setBusy(false)
     if (res.ok) setDraft(null)
     onChanged(res.ok ? { ok: true, message: `${name}: keywords saved; Check now reads them, or they are checked within a day.` } : { ok: false, message: res.error?.message ?? 'Not saved.' })
@@ -60,7 +59,7 @@ export function SearchRankControl({ projectId, name, keywords, target, firecrawl
 
   async function checkNow() {
     setBusy(true)
-    const res = await apiFetch(`${path}/run`, { method: 'POST' })
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/search-ranks/run`, { method: 'POST' })
     setBusy(false)
     onChanged(res.ok ? { ok: true, message: `${name}: checking search ranks now.` } : { ok: false, message: res.error?.message ?? 'Not started.' })
   }

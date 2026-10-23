@@ -9,7 +9,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { ResultChip, Toggle } from '../ui'
-import { apiFetch } from '../../lib/supabase'
+import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
 import { expiryLabel } from '../../lib/creditPlan'
 import { spendDownLine, spendDownOutOfWork, type SpendDownKeyStatus, type SpendDownResponse } from '../settings/spendDown'
@@ -35,9 +35,9 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
   const canManageOrg = followups?.canManage === true
   const fu = followups?.available ? followups.settings : undefined
 
-  async function patch(id: string, path: string, body: Record<string, unknown>, done: string) {
+  async function save(id: string, request: () => Promise<ApiResult<unknown>>, done: string) {
     setBusy(id)
-    const res = await apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) })
+    const res = await request()
     setBusy(null)
     setNotice(
       res.ok
@@ -76,7 +76,11 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
                   checked={k.enabled}
                   disabled={!editable || busy === k.id || (!k.enabled && !k.creditsExpireAt)}
                   onChange={(v) =>
-                    void patch(k.id, `/v1/admin/byok/keys/${k.id}/spend-down`, { enabled: v }, v ? 'Spend-down on.' : 'Spend-down off.')
+                    void save(
+                      k.id,
+                      () => apiFetch(`/v1/admin/byok/keys/${k.id}/spend-down`, { method: 'PATCH', body: JSON.stringify({ enabled: v }) }),
+                      v ? 'Spend-down on.' : 'Spend-down off.',
+                    )
                   }
                 />
               </div>
@@ -107,7 +111,11 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
               checked={fu.enabled}
               disabled={!canManageOrg || busy === 'followups'}
               onChange={(v) =>
-                void patch('followups', '/v1/admin/byok/review-followups', { enabled: v }, v ? 'Review follow-ups on.' : 'Review follow-ups off.')
+                void save(
+                  'followups',
+                  () => apiFetch('/v1/admin/byok/review-followups', { method: 'PATCH', body: JSON.stringify({ enabled: v }) }),
+                  v ? 'Review follow-ups on.' : 'Review follow-ups off.',
+                )
               }
             />
           </div>

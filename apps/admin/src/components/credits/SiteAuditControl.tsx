@@ -10,7 +10,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Btn, Toggle } from '../ui'
-import { apiFetch } from '../../lib/supabase'
+import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import type { AuditCost } from '../../lib/creditPlan'
 
@@ -48,11 +48,9 @@ export function auditLine(a: AuditRow, openFindings: number): string {
 
 export function SiteAuditControl({ projectId, name, audit, openFindings, url, firecrawlReady, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
-  const path = `/v1/admin/projects/${projectId}/site-audit`
-
-  async function send(method: 'PUT' | 'POST', target: string, body: unknown, done: string) {
+  async function send(request: () => Promise<ApiResult<unknown>>, done: string) {
     setBusy(true)
-    const res = await apiFetch(target, { method, body: body ? JSON.stringify(body) : undefined })
+    const res = await request()
     setBusy(false)
     onChanged(res.ok ? { ok: true, message: done } : { ok: false, message: res.error?.message ?? 'Not saved. Retry in a moment.' })
   }
@@ -67,11 +65,18 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
           checked={on}
           disabled={busy || (!on && !canStart)}
           onChange={(v) =>
-            void send('PUT', path, { enabled: v, baseUrl: audit?.base_url ?? url }, v ? `${name}: site audit on; the first run starts within the hour.` : `${name}: site audit off.`)
+            void send(
+              () =>
+                apiFetch(`/v1/admin/projects/${projectId}/site-audit`, {
+                  method: 'PUT',
+                  body: JSON.stringify({ enabled: v, baseUrl: audit?.base_url ?? url }),
+                }),
+              v ? `${name}: site audit on; the first run starts within the hour.` : `${name}: site audit off.`,
+            )
           }
         />
         {on && !audit?.batch_id && (
-          <Btn size="sm" variant="ghost" type="button" loading={busy} onClick={() => void send('POST', `${path}/run`, null, `${name}: site audit started.`)}>
+          <Btn size="sm" variant="ghost" type="button" loading={busy} onClick={() => void send(() => apiFetch(`/v1/admin/projects/${projectId}/site-audit/run`, { method: 'POST' }), `${name}: site audit started.`)}>
             Run now
           </Btn>
         )}
