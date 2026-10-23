@@ -69,12 +69,14 @@ interface InventoryActionNode {
   metadata?: Record<string, unknown>
 }
 
-type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
+type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'review_merge' | 'merged' | 'failed'
 
 const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'inflight', label: 'In flight' },
   { id: 'pr_open', label: 'PR open' },
+  // Open PRs the Opus review said to merge: the ones waiting on you.
+  { id: 'review_merge', label: 'Opus: merge' },
   { id: 'merged', label: 'Shipped' },
   { id: 'failed', label: 'Failed / skipped' },
 ]
@@ -95,7 +97,7 @@ type RetryRequest =
  * old bookmarks, from before the tabs were removed) opens In flight.
  */
 function bucketFromUrl(status: string | null, tab: string | null): StatusBucket {
-  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'merged') return status
+  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'review_merge' || status === 'merged') return status
   if (!status && tab === 'pipeline') return 'inflight'
   return 'all'
 }
@@ -119,6 +121,7 @@ function inStatusBucket(fix: FixAttempt, bucket: StatusBucket): boolean {
   // Every attempt with an open PR, whatever CI says: the rule /repo counts by,
   // so "PR open" is the same number on both pages. A red-CI PR is also in Failed.
   if (bucket === 'pr_open') return matchesRepoFilter(fix, 'open')
+  if (bucket === 'review_merge') return fix.review_verdict === 'merge' && matchesRepoFilter(fix, 'open')
   return bucketize(fix) === bucket
 }
 
@@ -359,7 +362,7 @@ export function FixesPage() {
     [fixes, reportFilter],
   )
   const bucketCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
+    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, review_merge: 0, merged: 0, failed: 0 }
     for (const f of scopedFixes) {
       for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id)) counts[b.id] += 1
     }
