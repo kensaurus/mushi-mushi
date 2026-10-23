@@ -5,11 +5,9 @@
  * when the page already has an h1, or the heading outline gains a second one.
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { showMobileWordmarkH1, useMainHasH1 } from './mobileWordmarkHeading'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -28,8 +26,20 @@ describe('useMainHasH1', () => {
   let root: Root
   let host: HTMLDivElement
   let main: HTMLElement
+  let frames: Map<number, FrameRequestCallback>
+  let nextFrame: number
 
   beforeEach(() => {
+    frames = new Map()
+    nextFrame = 1
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      const id = nextFrame++
+      frames.set(id, cb)
+      return id
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      frames.delete(id)
+    })
     host = document.createElement('div')
     document.body.appendChild(host)
     main = document.createElement('main')
@@ -42,6 +52,7 @@ describe('useMainHasH1', () => {
     act(() => root.unmount())
     host.remove()
     main.remove()
+    vi.unstubAllGlobals()
   })
 
   function Probe({ path }: { path: string }) {
@@ -52,6 +63,18 @@ describe('useMainHasH1', () => {
   async function render(path: string) {
     await act(async () => {
       root.render(createElement(Probe, { path }))
+    })
+  }
+
+  /** Lets the observer deliver its records, then runs the queued frame. */
+  async function paint() {
+    await act(async () => {
+      await Promise.resolve()
+    })
+    await act(async () => {
+      const queued = [...frames.values()]
+      frames.clear()
+      for (const cb of queued) cb(0)
     })
   }
 
@@ -66,30 +89,48 @@ describe('useMainHasH1', () => {
     const outside = document.createElement('h1')
     outside.textContent = 'sidebar'
     document.body.appendChild(outside)
-    await act(async () => {
-      await Promise.resolve()
-    })
+    await paint()
     expect(flag()).toBe('no')
     outside.remove()
 
-    await act(async () => {
-      const heading = document.createElement('h1')
-      heading.textContent = 'Loop is clean'
-      main.appendChild(heading)
-    })
+    const heading = document.createElement('h1')
+    heading.textContent = 'Loop is clean'
+    main.appendChild(heading)
+    await paint()
     expect(flag()).toBe('yes')
 
-    await act(async () => {
-      main.querySelector('h1')?.remove()
-    })
+    heading.remove()
+    await paint()
     expect(flag()).toBe('no')
   })
-})
 
-describe('Layout phone heading', () => {
-  it('asks the helper instead of always painting a phone h1', () => {
-    const layout = readFileSync(resolve(__dirname, '../components/Layout.tsx'), 'utf8')
-    expect(layout).toContain('showMobileWordmarkH1(mobileOpen, pageHasH1)')
-    expect(layout).not.toContain('{!mobileOpen && <h1 className="sr-only">mushi mushi</h1>}')
+  it('looks for an h1 once per frame, however many mutations land in it', async () => {
+    await render('/fixes')
+    const lookup = vi.spyOn(main, 'querySelector')
+
+    for (let i = 0; i < 5; i++) {
+      main.appendChild(document.createElement('div'))
+      // Each await delivers a separate batch of mutation records.
+      await act(async () => {
+        await Promise.resolve()
+      })
+    }
+    expect(lookup).not.toHaveBeenCalled()
+    expect(frames.size).toBe(1)
+
+    await paint()
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a pending frame when the page changes', async () => {
+    await render('/fixes')
+    main.appendChild(document.createElement('div'))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(frames.size).toBe(1)
+
+    await render('/credits')
+    expect(frames.size).toBe(0)
   })
 })

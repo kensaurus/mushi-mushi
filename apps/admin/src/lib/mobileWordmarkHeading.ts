@@ -19,7 +19,9 @@ export function showMobileWordmarkH1(drawerOpen: boolean, pageHasH1: boolean): b
  * Whether `<main id="main-content">` already contains an h1. The wordmark
  * itself sits in the phone header, outside main, so it is not counted.
  * A mutation observer covers lazy pages that mount their heading after
- * the first paint.
+ * the first paint. It watches every page in the shell, so a burst of
+ * mutations (a table re-rendering) costs one h1 lookup per frame, not one
+ * per batch.
  */
 export function useMainHasH1(pathname: string): boolean {
   const [has, setHas] = useState(false)
@@ -31,9 +33,19 @@ export function useMainHasH1(pathname: string): boolean {
     }
     const sync = () => setHas(main.querySelector('h1') != null)
     sync()
-    const observer = new MutationObserver(sync)
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        sync()
+      })
+    })
     observer.observe(main, { childList: true, subtree: true })
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
   }, [pathname])
   return has
 }
