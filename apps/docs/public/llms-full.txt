@@ -18457,7 +18457,7 @@ leaves the others in that repo behind; the queue does the clicks for you:
    merge does.
 
 The **Merge when ready** panel on `/fixes` shows each queued PR, what it is
-waiting for, and why one needs you. **Remove** takes a PR out. You can leave
+waiting for, and why one is held (red CI, an Opus "fix first" or "hold", no review). **Remove** takes a PR out. You can leave
 the page; the queue runs every 5 minutes.
 
 **Merge now** (in the same dialog) tries each PR once. The PRs that did not
@@ -22244,18 +22244,25 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-upgrade-lockfile
 
 ---
 title: SDK upgrade lockfile helper
-description: Add one workflow to your repo so Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.
+description: Upgrade PRs update npm lockfiles in the bump commit; add one workflow to refresh pnpm or yarn lockfiles with your package manager.
 ---
 
 # SDK upgrade lockfile helper
 
-**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files. It
-does not touch your lockfile, so without help the PR fails a frozen install
-(`npm ci`, `pnpm install --frozen-lockfile`) until someone runs the package
-manager by hand.
+**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files.
 
-Add the workflow below once, and every upgrade PR arrives with the lockfile
-already refreshed by your own package manager.
+- **npm** (`package-lock.json` lockfileVersion 2 or 3) and this workflow is
+  not in the repo: the same commit updates the `@mushi-mushi/*` lockfile
+  entries — version, resolved URL, integrity, and the ranges that depend on
+  them — from the npm registry, so `npm ci` can pass.
+- **pnpm or yarn**: Mushi leaves that lockfile as it is. The PR and the
+  Update center say `pnpm install --lockfile-only` (or `yarn install`). Run
+  it and push the lockfile onto the PR branch.
+- **This workflow**: Mushi pushes the bump first and waits. Your package
+  manager refreshes the lockfile, then the PR opens.
+
+Add the workflow below once when you want every package manager handled the
+same way.
 
 ## How it works
 
@@ -22270,8 +22277,9 @@ already refreshed by your own package manager.
 5. If no lockfile commit arrives within 30 minutes, the PR opens anyway with a
    **Lockfile not refreshed** note. Check the workflow run on that branch.
 
-Without the workflow, nothing changes: the PR opens at once and its body links
-here.
+Without the workflow, an npm repo still gets the `@mushi-mushi/*` lockfile
+entries in the bump commit. A pnpm or yarn repo gets the PR immediately, and
+the PR body names the install command above.
 
 ## Add the workflow
 
@@ -22354,14 +22362,17 @@ token to `.npmrc`.
 `@master` follows the latest action. To pin, replace `master` with a commit
 SHA from this repository; the action has no release tags of its own.
 
-## Why Mushi does not write the lockfile or the workflow
+## Why the workflow still exists
 
-- **The lockfile:** only the package manager can write it correctly. A
-  hand-edited pnpm v9 lockfile breaks on peer-suffixed keys, and npm cannot run
-  inside Mushi's edge runtime.
-- **The workflow:** writing files under `.github/workflows` needs the GitHub
-  App's `workflows` permission, which Mushi does not request (least privilege,
-  ADR 0016). You add the file once; Mushi only reads it.
+npm lock entries for `@mushi-mushi/*` are a small, exact edit: version,
+tarball URL, and integrity from the registry, plus the ranges that point at
+those packages. pnpm v9 and yarn lockfiles stay the package manager's own
+format; Mushi names the command instead of guessing the keys. This workflow
+runs that package manager for every lockfile, with `--ignore-scripts`.
+
+Mushi still does not write `.github/workflows` into your repo. That needs the
+GitHub App's `workflows` permission, which Mushi does not request (least
+privilege, ADR 0016). You add the file once; Mushi only reads it.
 
 ## Limits
 
