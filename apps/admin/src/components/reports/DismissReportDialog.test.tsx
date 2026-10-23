@@ -43,11 +43,20 @@ function button(text: string): HTMLButtonElement | undefined {
   return Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === text)
 }
 
-async function render(onClose = vi.fn(), onDismissed = vi.fn()) {
+async function render(
+  onClose = vi.fn(),
+  onDismissed = vi.fn(),
+  report: { id: string; source?: string | null } = { id: 'r1' },
+) {
   await act(async () => {
-    root.render(createElement(DismissReportDialog, { report: { id: 'r1' }, onClose, onDismissed }))
+    root.render(createElement(DismissReportDialog, { report, onClose, onDismissed }))
   })
   return { onClose, onDismissed }
+}
+
+function reasonLabels(): string[] {
+  const select = document.body.querySelector('select') as HTMLSelectElement
+  return Array.from(select.options).map((o) => o.textContent ?? '')
 }
 
 describe('DismissReportDialog', () => {
@@ -73,6 +82,29 @@ describe('DismissReportDialog', () => {
       '/v1/admin/reports/r1',
       expect.objectContaining({ body: JSON.stringify({ status: 'dismissed', closed_reason: 'not_reproducible' }) }),
     )
+  })
+
+  it('offers a false alarm for a site-audit report and stores that reason', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: null })
+    await render(vi.fn(), vi.fn(), { id: 'r1', source: 'site_audit' })
+    expect(reasonLabels()).toContain("False alarm (Mushi's check was wrong)")
+    const select = document.body.querySelector('select') as HTMLSelectElement
+    await act(async () => {
+      select.value = 'false_alarm'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain("Closed as a false alarm: nobody is told. Mushi's check was wrong.")
+    await act(async () => button('Dismiss')?.click())
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/v1/admin/reports/r1',
+      expect.objectContaining({ body: JSON.stringify({ status: 'dismissed', closed_reason: 'false_alarm' }) }),
+    )
+  })
+
+  it('does not offer a false alarm for a widget report', async () => {
+    await render(vi.fn(), vi.fn(), { id: 'r1', source: 'widget' })
+    expect(reasonLabels()).not.toContain("False alarm (Mushi's check was wrong)")
+    expect(reasonLabels()).toContain("Couldn't reproduce it")
   })
 
   it('Keep / Cancel closes without a request', async () => {
