@@ -145,7 +145,7 @@ describe('CreditsPage', () => {
     // The page opens with the one thing to do: a key with an expiry date is not spending down.
     expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
-    expect(host.textContent).toContain('the last round on claude-opus-5-5')
+    expect(host.textContent).toContain('Rounds run on Grok 4.7 (Extra high); the last round on Claude Opus 5.5.')
     await act(async () => toggle('Fix open bugs before the credits expire').click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
   })
@@ -210,5 +210,16 @@ describe('firecrawlBalance', () => {
   it('takes the first Firecrawl key that reported a balance', () => {
     expect(firecrawlBalance({ keys: [{ id: 'a', provider: 'firecrawl', credits: { kind: 'error' } }, { id: 'b', provider: 'firecrawl', credits: { kind: 'credits', remaining: 5, limit: 10, periodEnd: null } }] })).toEqual({ remaining: 5, limit: 10, periodEnd: null })
     expect(firecrawlBalance(null)).toBeNull()
+  })
+})
+
+describe('FirecrawlLevers while the project list loads', () => {
+  it('says it is reading instead of claiming nothing is watched', async () => {
+    const { FirecrawlLevers } = await import('../components/credits/FirecrawlLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(FirecrawlLevers, { balance: null, projects: null, now: new Date() })))
+    })
+    expect(host.textContent).toContain('Reading each app')
+    expect(host.textContent).not.toContain('nothing is spent')
   })
 })

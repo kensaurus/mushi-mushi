@@ -61,7 +61,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
     <div className="space-y-1 pl-3 border-l border-edge-subtle">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Toggle
-          label="Audit links, accessibility and translations weekly"
+          label={`Audit links, accessibility and translations ${!audit || audit.cadence_days === 7 ? 'weekly' : audit.cadence_days === 1 ? 'daily' : `every ${audit.cadence_days} days`}`}
           checked={on}
           disabled={busy || (!on && !canStart)}
           onChange={(v) =>
