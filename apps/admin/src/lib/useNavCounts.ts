@@ -331,6 +331,29 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
   }
 }
 
+/**
+ * Realtime-driven refreshes, at most one per REALTIME_MIN_INTERVAL_MS. Each
+ * nav-meta read costs the server seconds, and with background workers
+ * writing fix_events and reports every few seconds the sidebar re-read it
+ * about every 8 s on a page nobody touched (seen 2026-10-23: 14 reads in 2
+ * minutes). Changes inside the window share one trailing read.
+ */
+const REALTIME_MIN_INTERVAL_MS = 15_000
+let lastRealtimeLoadAt = 0
+let realtimeTimer: ReturnType<typeof setTimeout> | null = null
+
+function requestRealtimeLoad(ctx: LoadContext): void {
+  if (realtimeTimer) return
+  const wait = lastRealtimeLoadAt + REALTIME_MIN_INTERVAL_MS - Date.now()
+  const go = () => {
+    realtimeTimer = null
+    lastRealtimeLoadAt = Date.now()
+    requestLoad(liveCtx ?? ctx, true)
+  }
+  if (wait <= 0) go()
+  else realtimeTimer = setTimeout(go, wait)
+}
+
 /** The context the `live` caller last asked for; `refreshNavCounts` reuses it. */
 let liveCtx: LoadContext | null = null
 
@@ -389,7 +412,7 @@ export function useNavCounts(
   useRealtimeReload(
     NAV_COUNT_TABLES,
     () => {
-      requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, true)
+      requestRealtimeLoad({ key, inventoryEnabled, isSuperAdmin, slices })
     },
     { debounceMs: 1500, enabled: live },
   )
