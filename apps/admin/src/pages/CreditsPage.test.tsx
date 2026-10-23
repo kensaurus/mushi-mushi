@@ -165,15 +165,8 @@ describe('CreditsPage', () => {
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
   })
 
-  it('underlines sentence links with the accent colour, and ignores other anchors', async () => {
+  it('underlines sentence links with the accent colour', async () => {
     await render()
-    // A button-styled link (not inside a sentence) must not be required to
-    // carry `underline`. Querying every anchor would fail this fixture.
-    const buttonLink = document.createElement('a')
-    buttonLink.className = 'inline-flex rounded-md bg-brand text-brand-fg'
-    buttonLink.textContent = 'Create upgrade'
-    host.appendChild(buttonLink)
-
     const links = [...host.querySelectorAll('p a')]
     expect(links.length).toBeGreaterThan(0)
     for (const link of links) {
@@ -184,7 +177,6 @@ describe('CreditsPage', () => {
       expect(classes, link.textContent ?? '').toContain('text-accent-foreground')
       expect(classes, link.textContent ?? '').not.toContain('text-brand')
     }
-    expect(buttonLink.className.split(/\s+/)).not.toContain('underline')
   })
 
   it('shows the Firecrawl balance, the pace to its reset, and a switch per app', async () => {
