@@ -72,12 +72,14 @@ describe('pageFindings', () => {
     expect(droppedLocaleLinks(th, 'th', siblings)).toEqual(['/events/pizza-night-trial-2026-10-24'])
   })
 
-  it('reports missing metadata and images without alt, and skips sitemaps and error pages', () => {
-    const bare = page({ title: '', description: null, language: null, html: '<img src="/hero.png"><img src="/d.png" aria-hidden="true"><img src="/c.png" alt="">' })
+  it('reports missing metadata and images without alt, and skips sitemaps, error pages and unreadable renders', () => {
+    const bare = page({ title: '', description: null, html: '<img src="/hero.png"><img src="/d.png" aria-hidden="true"><img src="/c.png" alt="">' })
     expect(pageFindings(bare, new Set())).toEqual([
-      { rule: 'page_metadata_missing', page: bare.url, evidence: 'no title, meta description, html lang' },
+      { rule: 'page_metadata_missing', page: bare.url, evidence: 'no title, meta description' },
       { rule: 'image_alt_missing', page: bare.url, evidence: '1 image(s): hero.png' },
     ])
+    // No title, description or lang at all: Firecrawl did not read the page (2026-10-23, two docs pages).
+    expect(pageFindings(page({ title: '', description: null, language: null }), new Set())).toEqual([])
     expect(pageFindings(page({ url: 'https://x.dev/sitemap.xml', title: '' }), new Set())).toEqual([])
     expect(pageFindings(page({ statusCode: 503, title: '' }), new Set())).toEqual([])
     expect(isDocumentUrl('https://talk.kensaur.us/notes/fight-starts.md')).toBe(false)
