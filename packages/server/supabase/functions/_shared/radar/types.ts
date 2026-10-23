@@ -81,10 +81,13 @@ export const RADAR_RULE_IDS = [
   'provider_limit_unset',
   // ADR 0028 — a Cursor key set to spend down that dispatched nothing.
   'spend_down_idle',
+  // ADR 0038 — known holes in dependencies and the runtime (vuln-watch).
+  'known_vulnerable_dependency',
+  'runtime_end_of_life',
 ] as const
 export type RadarRuleId = (typeof RADAR_RULE_IDS)[number]
 
-export type RadarRuleSource = 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi'
+export type RadarRuleSource = 'public_probe' | 'repo_scan' | 'host_ci' | 'connector' | 'mushi' | 'advisory_feed'
 
 export interface RadarRuleMeta {
   id: RadarRuleId
@@ -135,6 +138,8 @@ export const RADAR_RULES: Readonly<Record<RadarRuleId, RadarRuleMeta>> = {
   key_in_client_bundle: { id: 'key_in_client_bundle', title: 'No secret keys in the built app', source: 'host_ci', prevents: 'Anyone who opens the app or site reads the key out of the bundle and spends on it.' },
   paid_feature_no_kill_switch: { id: 'paid_feature_no_kill_switch', title: 'Paid features can be switched off', source: 'repo_scan', prevents: 'A runaway paid feature keeps spending until a new build ships.' },
   provider_limit_unset: { id: 'provider_limit_unset', title: 'AI providers have a spending limit', source: 'connector', prevents: 'A leaked key or a loop spends without a ceiling; Mushi cannot cap your own provider keys.' },
+  known_vulnerable_dependency: { id: 'known_vulnerable_dependency', title: 'No known holes in your dependencies', source: 'advisory_feed', prevents: 'An attacker uses a published hole in a package or runtime version your app ships, before any user reports a bug.' },
+  runtime_end_of_life: { id: 'runtime_end_of_life', title: 'Runtime still gets security fixes', source: 'advisory_feed', prevents: 'The next hole in PHP, Node.js, Python or Go is never fixed for the version you run.' },
   spend_down_idle: { id: 'spend_down_idle', title: 'Spend-down is not idle', source: 'mushi', prevents: 'A Cursor key set to spend itself down sits inside its window and dispatches nothing, so the credits expire unused.' },
 }
 

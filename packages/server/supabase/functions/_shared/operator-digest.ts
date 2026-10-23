@@ -169,7 +169,7 @@ async function readAllOrThrow<T>(
 }
 
 type RunRow = { id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }
-const DIGEST_RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci']
+const DIGEST_RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci', 'portfolio_radar_vulns']
 
 /** product_funnel conversion windows for the team funnel definition (same values as api events-admin FUNNEL_WINDOWS). */
 const GTM_WINDOWS: Record<string, string> = { '1h': '1 hour', '1d': '1 day', '7d': '7 days', '30d': '30 days' }

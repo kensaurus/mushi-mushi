@@ -718,6 +718,12 @@ forwardToApiExt([
   '/v1/admin/fullstack-audit/stats',
   '/v1/admin/projects/:id/audit',
 ]);
+// site-audit.ts (ADR 0040); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
+// merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id']);
+// search-rank.ts; deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/search-ranks', '/v1/admin/projects/:id/search-ranks/run']);
 registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
@@ -774,6 +780,8 @@ forwardToApiExt([
   '/v1/admin/projects/:id/verify-workflow',
   '/v1/admin/projects/:id/verify-workflow/pr',
 ]);
+// Known holes in dependencies and the runtime (ADR 0038).
+forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 
 registerA2ATaskRoutes(app);
 

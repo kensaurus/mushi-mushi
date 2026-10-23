@@ -34,6 +34,8 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
+import { queueMerges } from '../lib/mergeQueue'
+import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
@@ -69,12 +71,14 @@ interface InventoryActionNode {
   metadata?: Record<string, unknown>
 }
 
-type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
+type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'review_merge' | 'merged' | 'failed'
 
 const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'inflight', label: 'In flight' },
   { id: 'pr_open', label: 'PR open' },
+  // Open PRs the Opus review said to merge: the ones waiting on you.
+  { id: 'review_merge', label: 'Opus: merge' },
   { id: 'merged', label: 'Shipped' },
   { id: 'failed', label: 'Failed / skipped' },
 ]
@@ -95,7 +99,7 @@ type RetryRequest =
  * old bookmarks, from before the tabs were removed) opens In flight.
  */
 function bucketFromUrl(status: string | null, tab: string | null): StatusBucket {
-  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'merged') return status
+  if (status === 'failed' || status === 'inflight' || status === 'pr_open' || status === 'review_merge' || status === 'merged') return status
   if (!status && tab === 'pipeline') return 'inflight'
   return 'all'
 }
@@ -119,6 +123,7 @@ function inStatusBucket(fix: FixAttempt, bucket: StatusBucket): boolean {
   // Every attempt with an open PR, whatever CI says: the rule /repo counts by,
   // so "PR open" is the same number on both pages. A red-CI PR is also in Failed.
   if (bucket === 'pr_open') return matchesRepoFilter(fix, 'open')
+  if (bucket === 'review_merge') return fix.review_verdict === 'merge' && matchesRepoFilter(fix, 'open')
   return bucketize(fix) === bucket
 }
 
@@ -185,6 +190,10 @@ export function FixesPage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<string | null>(null)
   const [bulkMergeConfirm, setBulkMergeConfirm] = useState(false)
+  // Why each PR of a "Merge now" did not merge, kept on the page (a toast
+  // with only a count hid which PR failed and why).
+  const [mergeFailures, setMergeFailures] = useState<Array<{ fix: FixAttempt; reason: string }>>([])
+  const [queueRefresh, setQueueRefresh] = useState(0)
   const urlStatus = searchParams.get('status')
   const urlBucket = bucketFromUrl(urlStatus, tabParam)
   const [statusBucket, setStatusBucket] = useState<StatusBucket>(urlBucket)
@@ -359,7 +368,7 @@ export function FixesPage() {
     [fixes, reportFilter],
   )
   const bucketCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
+    const counts: Record<StatusBucket, number> = { all: 0, inflight: 0, pr_open: 0, review_merge: 0, merged: 0, failed: 0 }
     for (const f of scopedFixes) {
       for (const b of STATUS_BUCKETS) if (inStatusBucket(f, b.id)) counts[b.id] += 1
     }
@@ -629,14 +638,41 @@ export function FixesPage() {
     [selectedFixes],
   )
 
-  // Merge runs sequentially: GitHub write calls are far more sensitive to
-  // secondary-rate-limits than the read-only dispatch fan-out, and a serial
-  // loop lets us surface honest "3 / 8 merged…" progress as each PR lands.
+  // "Merge when ready" (ADR 0041): the server updates each branch, waits for
+  // CI and an Opus "merge" on the final commit, then merges, one PR per repo
+  // at a time. The default, because merging one PR leaves the others in a
+  // repo that requires up-to-date branches behind their base.
+  const queueFixes = useCallback(async (toQueue: FixAttempt[]) => {
+    if (toQueue.length === 0) return
+    setBulkBusy(true)
+    setBulkProgress(`Queueing ${toQueue.length}…`)
+    const res = await queueMerges(toQueue.map((f) => f.id))
+    setBulkBusy(false)
+    setBulkProgress(null)
+    if (!res.ok || !res.data) {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Could not queue the merges.' })
+      return
+    }
+    const { queued, skipped } = res.data
+    const queuedIds = new Set(toQueue.map((f) => f.id).filter((id) => !skipped.some((s) => s.fixId === id)))
+    setSelectedIds((prev) => new Set([...prev].filter((id) => !queuedIds.has(id))))
+    setMergeFailures((prev) => prev.filter((m) => !queuedIds.has(m.fix.id)))
+    setQueueRefresh((n) => n + 1)
+    toast.push({
+      tone: skipped.length ? 'warning' : 'success',
+      message: `Queued ${queued} ${pluralize(queued, 'PR', 'PRs')} to merge when ready${skipped.length ? ` · ${skipped.length} skipped: ${[...new Set(skipped.map((s) => s.reason))].join(' ')}` : ''}`,
+    })
+  }, [toast])
+
+  // "Merge now" runs sequentially: GitHub write calls are far more sensitive
+  // to secondary-rate-limits than the read-only dispatch fan-out, and a
+  // serial loop shows honest "3 / 8 merged…" progress as each PR lands.
   const mergeSelected = useCallback(async () => {
     if (selectedMergeable.length === 0) return
     setBulkBusy(true)
+    setMergeFailures([])
     let ok = 0
-    let failed = 0
+    const failures: Array<{ fix: FixAttempt; reason: string }> = []
     for (let i = 0; i < selectedMergeable.length; i++) {
       const fix = selectedMergeable[i]
       setBulkProgress(`Merging ${i + 1} / ${selectedMergeable.length}…`)
@@ -649,15 +685,16 @@ export function FixesPage() {
           return next
         })
       } else {
-        failed += 1
+        failures.push({ fix, reason: result.error ?? 'GitHub did not merge it.' })
       }
     }
     setBulkBusy(false)
     setBulkProgress(null)
-    if (failed === 0) {
+    setMergeFailures(failures)
+    if (failures.length === 0) {
       toast.push({ tone: 'success', message: `Merged ${ok} ${pluralize(ok, 'PR', 'PRs')} · linked reports marked Fixed` })
     } else {
-      toast.push({ tone: 'warning', message: `Merged ${ok} \u00b7 ${failed} could not merge (check CI / branch protection)` })
+      toast.push({ tone: 'warning', message: `Merged ${ok} · ${failures.length} did not merge; the reasons are listed above the table` })
     }
     void loadFixes()
   }, [selectedMergeable, loadFixes, toast])
@@ -893,6 +930,34 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
+      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+
+      {mergeFailures.length > 0 && (
+        <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold text-warn-foreground">
+              {mergeFailures.length} {pluralize(mergeFailures.length, 'pull request', 'pull requests')} did not merge
+            </h3>
+            <div className="flex gap-1.5">
+              <Btn size="sm" loading={bulkBusy} onClick={() => void queueFixes(mergeFailures.map((m) => m.fix))}>
+                Merge {mergeFailures.length === 1 ? 'it' : 'them'} when ready
+              </Btn>
+              <Btn size="sm" variant="ghost" onClick={() => setMergeFailures([])}>Dismiss</Btn>
+            </div>
+          </div>
+          <ul className="space-y-1">
+            {mergeFailures.map(({ fix, reason }) => (
+              <li key={fix.id} className="text-2xs text-fg-secondary">
+                <a href={fix.pr_url} target="_blank" rel="noreferrer" className="font-mono hover:underline">
+                  #{fix.pr_number ?? '?'}
+                </a>{' '}
+                {fixReportLabel(fix)}: <span className="text-fg-muted">{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <InflightDispatches dispatches={mergedDispatches} />
 
       {fixes.length === 0 ? (
@@ -1074,20 +1139,44 @@ export function FixesPage() {
 
       {bulkMergeConfirm && selectedMergeable.length > 0 ? (
         <ConfirmDialog
-          title={`Merge ${selectedMergeable.length} ${pluralize(selectedMergeable.length, 'PR', 'PRs')}?`}
-          body={`Each PR is squash-merged into your default branch via GitHub, the linked report is marked Fixed, the reporter is notified, and your connected integrations run. PRs with failing CI or branch protection may be rejected — they stay open for you to review. ${selectedFixes.length > selectedMergeable.length ? `(${selectedFixes.length - selectedMergeable.length} of your selected fixes have no mergeable PR and will be skipped.)` : ''}`}
-          confirmLabel={`Merge ${selectedMergeable.length}`}
+          title={`Merge ${selectedMergeable.length} ${pluralize(selectedMergeable.length, 'PR', 'PRs')}`}
+          body={`Merge when ready: Mushi updates each branch with your default branch, waits for CI and for an Opus "merge" on the final commit, then squash-merges, one PR per repo at a time, so a merge never leaves the next PR behind. A merge conflict goes to a Cursor agent when review follow-ups are on. Each merged fix marks its report Fixed and tells the reporter. You can leave this page.${selectedFixes.length > selectedMergeable.length ? ` ${selectedFixes.length - selectedMergeable.length} selected ${pluralize(selectedFixes.length - selectedMergeable.length, 'fix has', 'fixes have')} no open PR and ${pluralize(selectedFixes.length - selectedMergeable.length, 'is', 'are')} skipped.` : ''}`}
+          details={
+            <ul className="max-h-40 overflow-y-auto space-y-0.5">
+              {selectedMergeable.map((f) => (
+                <li key={f.id} className="truncate">
+                  <span className="font-mono">#{f.pr_number ?? '?'}</span> {fixReportLabel(f)}
+                </li>
+              ))}
+            </ul>
+          }
+          confirmLabel={`Merge when ready (${selectedMergeable.length})`}
           cancelLabel="Cancel"
-          tone="danger"
           loading={bulkBusy}
           onConfirm={() => {
             setBulkMergeConfirm(false)
-            void mergeSelected()
+            void queueFixes(selectedMergeable)
           }}
           onCancel={() => {
             if (!bulkBusy) setBulkMergeConfirm(false)
           }}
-        />
+        >
+          <p className="text-2xs text-fg-muted">
+            Or{' '}
+            <button
+              type="button"
+              className="underline underline-offset-2 hover:text-fg"
+              disabled={bulkBusy}
+              onClick={() => {
+                setBulkMergeConfirm(false)
+                void mergeSelected()
+              }}
+            >
+              merge now
+            </button>
+            : each PR that GitHub can merge this minute merges; the rest are listed with the reason.
+          </p>
+        </ConfirmDialog>
       ) : null}
     </div>
   )

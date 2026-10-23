@@ -51,7 +51,7 @@ import { publicFetch } from '../../_shared/safe-fetch.ts'
 import { filterToGroup } from '../../_shared/project-groups.ts'
 import { RECIPE_ELEMENT_KEYS, type ElementState, type RecipeElementKey } from '../../_shared/recipe-types.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
-import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
+import { RADAR_CI_GATE, RADAR_GATE, RADAR_VULN_GATE } from '../../_shared/radar/run.ts'
 import { jsonError, OPEN_REPORT_STATUSES } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { composeRecipe, latestPerGate, loadLatestDesignScans, type ComposeDeps } from './recipe-compose.ts'
@@ -61,7 +61,7 @@ const plog = log.child('portfolio')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const PORTFOLIO_PAGE_SIZE = 25
 const COMPOSE_CONCURRENCY = 4
-const RADAR_COLUMN_GATES = [RADAR_GATE, RADAR_CI_GATE]
+const RADAR_COLUMN_GATES = [RADAR_GATE, RADAR_CI_GATE, RADAR_VULN_GATE]
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -375,7 +375,7 @@ const STATUS_RANK: Record<string, number> = { error: 4, fail: 3, warn: 2, pass: 
 
 /**
  * Radar column from the latest scheduled run and the latest host-CI run
- * (`portfolio_radar` + `portfolio_radar_ci`). Never-run is `never_run`; a run that found nothing
+ * (`portfolio_radar` + `portfolio_radar_ci` + `portfolio_radar_vulns`). Never-run is `never_run`; a run that found nothing
  * declared to check is `nothing_to_check` — neither reads as green.
  */
 export function radarColumn(runs: readonly RunRow[], findings: readonly OpenFindingRow[]): PortfolioRadarColumn {

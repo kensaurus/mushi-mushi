@@ -1,0 +1,66 @@
+/**
+ * FILE: merge-queue.test.ts
+ * PURPOSE: "Merge when ready" decisions (ADR 0041) on the states the
+ *          2026-10-23 console bulk merge met: BEHIND after another merge,
+ *          a conflict, CI running or failed on the head, a closed PR.
+ */
+import { describe, expect, it } from 'vitest'
+import { checksView, conflictPrompt, nextQueueStep, queueLine } from '../../supabase/functions/_shared/merge-queue.ts'
+
+const pr = (over: Partial<Parameters<typeof nextQueueStep>[0]> = {}) => ({
+  state: 'open',
+  merged: false,
+  draft: false,
+  mergeable: true,
+  mergeableState: 'clean',
+  headSha: 'abc',
+  ...over,
+})
+const green = { pending: 0, failed: [] }
+
+describe('nextQueueStep', () => {
+  it('merges a clean or unstable PR with green checks', () => {
+    expect(nextQueueStep(pr(), green)).toEqual({ do: 'merge' })
+    expect(nextQueueStep(pr({ mergeableState: 'unstable' }), green)).toEqual({ do: 'merge' })
+  })
+  it('updates a branch that is behind (the twm #201/#204/#205 case), even with old checks running', () => {
+    expect(nextQueueStep(pr({ mergeableState: 'behind' }), { pending: 2, failed: [] })).toEqual({ do: 'update' })
+  })
+  it('resolves a conflict before anything else (the tsumagoi #839 case)', () => {
+    expect(nextQueueStep(pr({ mergeableState: 'dirty', mergeable: false }), { pending: 0, failed: ['CI'] })).toEqual({ do: 'resolve' })
+  })
+  it('waits while GitHub computes or CI runs, and blocks on failed CI', () => {
+    expect(nextQueueStep(pr({ mergeable: null, mergeableState: 'unknown' }), green).do).toBe('wait')
+    expect(nextQueueStep(pr(), { pending: 1, failed: [] })).toEqual({ do: 'wait', reason: 'CI is running (1 check left).' })
+    expect(nextQueueStep(pr(), { pending: 0, failed: ['required', 'lint'] })).toEqual({ do: 'blocked', reason: 'CI failed: required, lint.' })
+    expect(nextQueueStep(pr({ mergeableState: 'blocked' }), green).do).toBe('blocked')
+  })
+  it('is done when merged, drops a closed PR, and marks a draft ready', () => {
+    expect(nextQueueStep(pr({ merged: true, state: 'closed' }), green)).toEqual({ do: 'done' })
+    expect(nextQueueStep(pr({ state: 'closed' }), green).do).toBe('drop')
+    expect(nextQueueStep(pr({ draft: true }), green)).toEqual({ do: 'ready' })
+  })
+})
+
+describe('checksView / conflictPrompt / queueLine', () => {
+  it('counts unfinished runs and names failures (neutral and skipped are fine)', () => {
+    expect(
+      checksView([
+        { name: 'build', status: 'in_progress' },
+        { name: 'required', status: 'completed', conclusion: 'failure' },
+        { name: 'lighthouse', status: 'completed', conclusion: 'neutral' },
+        { name: 'e2e', status: 'completed', conclusion: 'skipped' },
+      ]),
+    ).toEqual({ pending: 1, failed: ['required'] })
+  })
+  it('asks the agent to keep both sides and to say needs_human otherwise', () => {
+    const p = conflictPrompt({ prUrl: 'https://github.com/o/r/pull/1', baseRef: 'main', headRef: 'fix/x' })
+    expect(p).toContain('git merge origin/main')
+    expect(p).toContain('Mushi verdict: needs_human')
+    expect(p).not.toMatch(/report|reporter/i)
+  })
+  it('reads each state as one line', () => {
+    expect(queueLine({ state: 'queued', detail: null })).toBe('Queued to merge.')
+    expect(queueLine({ state: 'waiting', detail: 'CI is running (2 checks left).' })).toBe('CI is running (2 checks left).')
+  })
+})

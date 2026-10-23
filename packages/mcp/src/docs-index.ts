@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 216 pages, generated from llms.txt. */
+/** 218 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -167,6 +167,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "cost", "usage"],
     headings: ["What's tracked", "Charts", "Controlling costs", "Export", "Related pages"],
     excerpt: "The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.",
+  },
+  {
+    title: "Spend credits",
+    url: docUrl("/admin/credits"),
+    route: "/admin/credits",
+    markdown: "admin/credits.md",
+    keywords: ["admin", "credits", "spend"],
+    headings: ["Cursor: fix bugs", "Firecrawl: find bugs on your live sites", "Site audit", "Search rank", "Where the fixes go"],
+    excerpt: "Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.",
   },
   {
     title: "Dashboard",
@@ -887,6 +896,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "knowledge-graph", "knowledge", "graph"],
     headings: ["Storage", "Why both pgvector and AGE?", "Indexing", "Bug Ontology"],
     excerpt: "How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.",
+  },
+  {
+    title: "Known holes in dependencies",
+    url: docUrl("/concepts/known-holes"),
+    route: "/concepts/known-holes",
+    markdown: "concepts/known-holes.md",
+    keywords: ["concepts", "known-holes", "known", "holes", "dependencies"],
+    headings: ["What Mushi checks", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi", "Where to see it", "Data sources"],
+    excerpt: "Mushi checks the exact versions in your lockfiles and runtime pins against published advisories, and files each fixable hole as a bug with the upgrade.",
   },
   {
     title: "Multi-repo coordinated fixes",
