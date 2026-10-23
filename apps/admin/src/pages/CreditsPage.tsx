@@ -99,6 +99,7 @@ export function CreditsPage() {
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs">
+        {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
         <CursorLevers
           spendDown={spendDown.data ?? null}
           followups={followups.data ?? null}
@@ -111,7 +112,7 @@ export function CreditsPage() {
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">
-        <FirecrawlLevers balance={balance} projects={projects.data?.projects ?? []} now={now} />
+        <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
       </Section>
 
       <p className="text-xs text-fg-muted">
