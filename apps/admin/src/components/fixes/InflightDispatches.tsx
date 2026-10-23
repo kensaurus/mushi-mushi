@@ -65,14 +65,17 @@ export function InflightDispatches({ dispatches }: Props) {
         </div>
       )}
       {needsAttention.length > 0 && (
-        <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">
-            Stopped dispatches — needs attention
-          </h3>
+        // Folded to one line: five full cards pushed the fix list below the
+        // fold, and the reasons are only read when acting on one.
+        <details className="group space-y-1.5">
+          <summary className="cursor-pointer text-xs font-semibold text-fg-secondary uppercase tracking-wide">
+            {needsAttention.length} stopped {needsAttention.length === 1 ? 'dispatch needs' : 'dispatches need'} attention
+            <span className="ml-1 font-normal normal-case tracking-normal text-fg-muted group-open:hidden">· show why</span>
+          </summary>
           {needsAttention.map((d) => (
             <DispatchCard key={d.id} d={d} showReason />
           ))}
-        </div>
+        </details>
       )}
     </div>
   )

@@ -1,0 +1,250 @@
+/**
+ * FILE: packages/server/supabase/functions/merge-queue/worker.test.ts
+ * PURPOSE: One "Merge when ready" tick (ADR 0041) against a fake database,
+ *          GitHub and Cursor: behind → update branch, conflict → one agent,
+ *          clean → gated merge pinned to the head, a stale merge verdict →
+ *          wait for the re-review, one PR per repo per tick.
+ *
+ * Run with:
+ *   cd packages/server/supabase/functions && deno test --no-lock --node-modules-dir merge-queue/worker.test.ts
+ */
+
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import type { PullRequestDetails } from '../_shared/github.ts'
+import { processRow, runMergeQueue, type MergeQueueDeps, type QueueRow } from './worker.ts'
+
+const { test } = Deno
+
+function assertEquals(actual: unknown, expected: unknown, msg = '') {
+  const a = JSON.stringify(actual)
+  const e = JSON.stringify(expected)
+  if (a !== e) throw new Error(`${msg} expected ${e}, got ${a}`)
+}
+
+type Row = Record<string, unknown>
+
+/** Just enough of the PostgREST builder for the worker: filters, update, insert, single reads. */
+function fakeDb(tables: Record<string, Row[]>) {
+  const writes: Array<{ table: string; op: string; value: Row }> = []
+  const from = (table: string) => {
+    let rows = [...(tables[table] ?? [])]
+    let patch: Row | null = null
+    let inserted: Row | null = null
+    const b: Record<string, unknown> = {}
+    const chain = (fn: () => void) => (..._a: unknown[]) => (fn(), b)
+    b.select = chain(() => {})
+    b.order = chain(() => {})
+    b.limit = chain(() => {})
+    b.or = chain(() => {})
+    b.eq = (col: string, v: unknown) => ((rows = rows.filter((r) => r[col] === v)), b)
+    b.in = (col: string, vs: unknown[]) => ((rows = rows.filter((r) => vs.includes(r[col]))), b)
+    b.update = (p: Row) => ((patch = p), b)
+    b.insert = (p: Row) => ((inserted = p), b)
+    b.maybeSingle = () => Promise.resolve({ data: rows[0] ?? null, error: null })
+    b.then = (ok: (v: unknown) => unknown) => {
+      if (patch) {
+        for (const r of rows) {
+          Object.assign(r, patch)
+          writes.push({ table, op: 'update', value: { id: r.id, ...patch } })
+        }
+      }
+      if (inserted) writes.push({ table, op: 'insert', value: inserted })
+      return Promise.resolve({ data: rows, error: null }).then(ok)
+    }
+    return b
+  }
+  return { db: { from } as unknown as SupabaseClient, writes }
+}
+
+const attempt = {
+  id: 'fa1',
+  project_id: 'p1',
+  report_id: 'r1',
+  agent: 'cursor_cloud',
+  branch: 'cursor/fix-1',
+  commit_sha: 'h1',
+  pr_url: 'https://github.com/o/r/pull/7',
+  pr_number: 7,
+  repo_id: null,
+  summary: 'Null check on the cart page',
+}
+
+function row(over: Partial<QueueRow> = {}): QueueRow {
+  return {
+    id: 'q1',
+    fix_attempt_id: 'fa1',
+    project_id: 'p1',
+    repo: 'o/r',
+    pr_number: 7,
+    state: 'queued',
+    detail: null,
+    head_sha: null,
+    queued_by: 'u1',
+    conflict_agents: 0,
+    cursor_agent_id: null,
+    agent_started_at: null,
+    agent_head_sha: null,
+    ...over,
+  }
+}
+
+function pull(over: Partial<PullRequestDetails> = {}): PullRequestDetails {
+  return {
+    state: 'open',
+    merged: false,
+    draft: false,
+    mergeable: true,
+    mergeableState: 'clean',
+    headSha: 'h1',
+    headRef: 'cursor/fix-1',
+    baseRef: 'main',
+    ...over,
+  } as PullRequestDetails
+}
+
+function deps(over: Partial<MergeQueueDeps> = {}): MergeQueueDeps {
+  return {
+    now: () => new Date('2026-10-23T09:00:00Z'),
+    token: () => Promise.resolve('gh-token'),
+    pull: () => Promise.resolve(pull()),
+    checks: () => Promise.resolve({ pending: 0, failed: [] }),
+    finalize: (() => Promise.resolve({ justMerged: true, reportStatus: 'fixed' })) as never,
+    cursorKey: () => Promise.resolve({ ok: true, apiKey: 'ck', model: 'grok-4.7' }),
+    updateBranch: () => Promise.reject(new Error('unexpected update')),
+    ready: () => Promise.reject(new Error('unexpected ready')),
+    merge: () => Promise.reject(new Error('unexpected merge')),
+    requeueReview: () => Promise.reject(new Error('unexpected requeue')),
+    createAgent: () => Promise.reject(new Error('unexpected agent')),
+    agentDone: () => Promise.resolve({ done: false, result: null }),
+    ...over,
+  }
+}
+
+function setup(qRow: QueueRow) {
+  return fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...qRow }], fix_events: [] })
+}
+
+const lastState = (writes: Array<{ table: string; value: Row }>) =>
+  writes.filter((w) => w.table === 'fix_merge_queue' && 'state' in w.value).at(-1)?.value
+
+test('a branch behind its base is updated, and waits for CI on the new head', async () => {
+  const { db, writes } = setup(row())
+  let updated = 0
+  const out = await processRow(db, row(), deps({
+    pull: () => Promise.resolve(pull({ mergeableState: 'behind' })),
+    updateBranch: () => (updated++, Promise.resolve({ ok: true, conflict: false })),
+  }))
+  assertEquals(out, 'updated')
+  assertEquals(updated, 1)
+  assertEquals(lastState(writes)?.state, 'waiting')
+})
+
+test('a clean PR with green CI is merged through the gate, pinned to the head it checked', async () => {
+  const { db, writes } = setup(row())
+  let input: Record<string, unknown> | null = null
+  const out = await processRow(db, row(), deps({
+    merge: ((_db: unknown, i: Record<string, unknown>) => {
+      input = i
+      return Promise.resolve({ ok: true, result: { merged: true }, gate: {}, audit: {} })
+    }) as never,
+  }))
+  assertEquals(out, 'merged')
+  assertEquals([input!.caller, input!.expectedHeadSha, input!.reason], ['service', 'h1', 'merge_queue'])
+  assertEquals(lastState(writes)?.state, 'merged')
+  assertEquals(writes.some((w) => w.table === 'fix_events' && (w.value as Row).kind === 'merge_queue'), true)
+})
+
+test('a stale "merge" verdict after an update waits for the re-review instead of blocking', async () => {
+  const { db, writes } = setup(row())
+  let requeued = 0
+  const out = await processRow(db, row(), deps({
+    merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_NOT_MERGE', message: 'x', review: { verdict: 'merge', stale: true, rerunning: false } })) as never,
+    requeueReview: (() => (requeued++, Promise.resolve('requeued'))) as never,
+  }))
+  assertEquals(out, 'waiting')
+  assertEquals(requeued, 1)
+})
+
+test('a hold blocks; failed CI blocks with the check names', async () => {
+  const held = setup(row())
+  const out = await processRow(held.db, row(), deps({
+    merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'Opus said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
+  }))
+  assertEquals(out, 'blocked')
+  assertEquals(lastState(held.writes)?.detail, 'Opus said hold.')
+
+  const red = setup(row())
+  const out2 = await processRow(red.db, row(), deps({ checks: () => Promise.resolve({ pending: 0, failed: ['required'] }) }))
+  assertEquals(out2, 'blocked')
+  assertEquals(lastState(red.writes)?.detail, 'CI failed: required.')
+})
+
+test('a conflict starts one Cursor agent on the PR branch; at the cap it needs a person', async () => {
+  const { db, writes } = setup(row())
+  const created: Row[] = []
+  const out = await processRow(db, row(), deps({
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    createAgent: ((_k: string, input: Row) => (created.push(input), Promise.resolve({ agentId: 'a1' }))) as never,
+  }))
+  assertEquals(out, 'resolving')
+  assertEquals([created[0].prUrl, created[0].workOnCurrentBranch, created[0].autoCreatePR, created[0].model], ['https://github.com/o/r/pull/7', true, false, 'grok-4.7'])
+  assertEquals(lastState(writes)?.conflict_agents, 1)
+
+  const capped = setup(row({ conflict_agents: 2 }))
+  const out2 = await processRow(capped.db, row({ conflict_agents: 2 }), deps({
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    createAgent: () => Promise.reject(new Error('must not start')),
+  }))
+  assertEquals(out2, 'blocked')
+})
+
+test('a conflict without follow-ups on says why instead of starting an agent', async () => {
+  const { db, writes } = setup(row())
+  const out = await processRow(db, row(), deps({
+    pull: () => Promise.resolve(pull({ mergeable: false, mergeableState: 'dirty' })),
+    cursorKey: () => Promise.resolve({ ok: false, reason: 'Review follow-ups are off.' }),
+  }))
+  assertEquals(out, 'blocked')
+  assertEquals(lastState(writes)?.detail, 'Merge conflict. Review follow-ups are off.')
+})
+
+test('a resolving row continues once the agent pushed a new head', async () => {
+  const r = row({ state: 'resolving', cursor_agent_id: 'a1', agent_head_sha: 'h1', agent_started_at: '2026-10-23T08:30:00Z', conflict_agents: 1 })
+  const { db, writes } = setup(r)
+  const out = await processRow(db, r, deps({ pull: () => Promise.resolve(pull({ headSha: 'h2' })) }))
+  assertEquals(out, 'resolved')
+  assertEquals(lastState(writes)?.state, 'waiting')
+})
+
+test('a tick takes one PR per repo, and a blocked row only where nothing else moves', async () => {
+  const rows = [
+    row({ id: 'a', repo: 'o/r', state: 'waiting' }),
+    row({ id: 'b', repo: 'o/r', state: 'queued' }),
+    row({ id: 'c', repo: 'o/r', state: 'blocked' }),
+    row({ id: 'd', repo: 'o/s', state: 'blocked' }),
+  ].map((r) => ({ ...r, claimed_until: null }))
+  const { db } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [] })
+  const seen: string[] = []
+  await runMergeQueue(db, deps({
+    pull: (_t, ref) => (seen.push(ref.repo), Promise.resolve(pull({ state: 'closed' }))),
+  }))
+  assertEquals(seen.sort(), ['r', 's'])
+})
+
+test('a repo keeps working on the PR already in progress when a whole app was queued at once', async () => {
+  const at = '2026-10-23T08:00:00Z'
+  const rows = [
+    row({ id: 'q-new', repo: 'o/r', state: 'queued', pr_number: 3 }),
+    row({ id: 'q-ci', repo: 'o/r', state: 'waiting', pr_number: 9 }),
+    row({ id: 'q-old', repo: 'o/r', state: 'queued', pr_number: 1 }),
+    row({ id: 'q-leased', repo: 'o/s', state: 'queued', pr_number: 2 }),
+    row({ id: 'q-other', repo: 'o/s', state: 'queued', pr_number: 4 }),
+  ].map((r) => ({ ...r, queued_at: at, claimed_until: r.id === 'q-leased' ? '2026-10-23T09:03:00Z' : null }))
+  const { db } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [] })
+  const seen: number[] = []
+  await runMergeQueue(db, deps({
+    pull: (_t, _ref, n) => (seen.push(n), Promise.resolve(pull({ state: 'closed' }))),
+  }))
+  // o/r: the waiting PR #9, not a tie-broken queued one; o/s: held by the leased row.
+  assertEquals(seen, [9])
+})

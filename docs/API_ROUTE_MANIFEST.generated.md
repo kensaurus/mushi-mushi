@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-23 · **737** routes.
+> Generated: 2026-10-23 · **740** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 192 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 377 |
+| `jwtAuth` | 380 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -253,6 +253,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/marketplace/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | GET | `/v1/admin/me/lifecycle-emails` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lifecycle-emails.ts` |
 | PUT | `/v1/admin/me/lifecycle-emails` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lifecycle-emails.ts` |
+| GET | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| POST | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| DELETE | `/v1/admin/merge-queue/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
 | GET | `/v1/admin/migrations/progress` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | DELETE | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | PUT | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
