@@ -20,7 +20,7 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+  **Today:** a report is sorted and explained within seconds, with a paste-ready fix prompt on the report page or a fix brief through the MCP tools. **Target:** the whole diagnosis in under 10 seconds. MCP needs a Mushi account and a project key, not a separate OpenAI or Anthropic key.
 
 ## No MCP? Copy the fix prompt
 
@@ -29,7 +29,7 @@ your coding agent**. You get one self-contained prompt (diagnosis, suggested fix
 repro steps, page and browser, the key console lines, likely files, and what
 "done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
 MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent pull context and close the report itself.
+the agent fetch the details and close the report itself.
 
 ## Prerequisites
 
@@ -312,12 +312,30 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
+## What you need
 
-## Start here (MCP)
+- An app you are building, for the web or for phones.
+- A Mushi account. The free plan is enough, and the setup wizard signs you in through your browser.
+- Optional: an AI code editor such as Cursor or Claude Code, so it can read bug reports and fix them for you.
 
-1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
-2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
+## The fastest way: one command
+
+Run this in your app's folder:
+
+```bash
+npx mushi-mushi
+```
+
+`npx` runs a tool from npm (the public library of JavaScript packages) without
+installing it for good. This one is the Mushi setup wizard: it works out which
+framework your app uses, signs you in through your browser, installs the SDK
+(the small library that adds the report button), saves your settings and can
+send a test report.
+
+## Start here (editor first)
+
+1. [Incident loop](/quickstart/incident-loop): a bug in your live app → a plain-English diagnosis → a fix in your editor
+2. [MCP server](/quickstart/mcp): connect Cursor, VS Code or Claude to Mushi
 
 ## Pick your stack
 
@@ -335,17 +353,18 @@ Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via brows
 npx mushi-mushi
 ```
 
-The wizard opens your browser, you click **Approve**, picks or creates a project,
-installs the SDK, and writes `.env.local`.
+The wizard opens your browser so you can click **Approve**. It then picks or
+creates a project, installs the SDK and writes your settings to `.env.local`.
 
 **Option B — manual:**
 
-See [Project ID & API keys](/concepts/credentials) for env var names per framework.
+See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
 
-  The SDK needs only framework-prefixed project id + API key (see
+  The SDK needs only two settings: your project ID and API key, named with the
+  prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is for **self-hosting the backend** — you do
-  not need Supabase or an LLM key to use the SDK.
+  The repo's root `.env.example` is only for **running the Mushi server
+  yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting
 

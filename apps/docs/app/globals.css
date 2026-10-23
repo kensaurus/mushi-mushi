@@ -1115,6 +1115,10 @@ main :not(pre) > code {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  /* overflow: hidden makes the hero a block formatting context, which sits
+     beside the floated "Copy page" button instead of under it; on a 390px
+     phone that left the H1 and lead in a ~200px column. Clear the float. */
+  clear: both;
   padding-block: 2.5rem 3rem;
   min-height: min(72vh, 40rem);
   display: flex;

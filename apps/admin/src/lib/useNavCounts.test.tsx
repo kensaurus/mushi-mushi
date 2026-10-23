@@ -23,7 +23,13 @@ const fallback = vi.hoisted(() => ({ fetchNavSlicesFallback: vi.fn() }))
 const entitlements = vi.hoisted(() => ({ isSuperAdmin: false, inventory: false }))
 
 vi.mock('./supabase', () => ({ apiFetch: api.apiFetch }))
-vi.mock('./realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
+const realtime = vi.hoisted(() => ({ onChange: null as null | (() => void) }))
+vi.mock('./realtime', () => ({
+  useRealtimeReload: (_tables: unknown, onChange: () => void) => {
+    realtime.onChange = onChange
+    return { channelState: 'idle' }
+  },
+}))
 vi.mock('./useEntitlements', () => ({
   useEntitlements: () => ({
     isSuperAdmin: entitlements.isSuperAdmin,
@@ -200,6 +206,32 @@ describe('useNavCounts', () => {
       '/v1/admin/workspace/nav-meta?include=counts&slices=lessons&fresh=1',
     )
     expect(seen.layout.flaggedDevices).toBe(4)
+  })
+
+  it('realtime changes re-read at most once per 15 s, the last change still picked up', async () => {
+    // Background workers write fix_events every few seconds; each nav-meta
+    // read costs the server seconds (2026-10-23: 14 reads in 2 minutes).
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    await renderReaders(['layout'], ['fixes'])
+    expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    vi.useFakeTimers()
+    try {
+      await act(async () => realtime.onChange!())
+      const afterFirst = api.apiFetch.mock.calls.length
+      await act(async () => {
+        realtime.onChange!()
+        realtime.onChange!()
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(api.apiFetch).toHaveBeenCalledTimes(afterFirst)
+      await act(async () => {
+        vi.advanceTimersByTime(15_000)
+      })
+      expect(api.apiFetch).toHaveBeenCalledTimes(afterFirst + 1)
+      expect(String(api.apiFetch.mock.calls.at(-1)![0])).toContain('fresh=1')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('refreshNavCounts does nothing before the sidebar has loaded', async () => {

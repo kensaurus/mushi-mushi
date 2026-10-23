@@ -27,11 +27,61 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+## The problem it solves
+
+AI coding assistants let one person build and ship an app in days. Then a real
+user hits something broken: a button that does nothing, a page in the wrong
+language, a score that shows 0. Often nothing crashed, so error monitoring
+(services such as Sentry that record when code fails) never notices. The user
+gives up or sends a vague message, and the builder loses an afternoon trying to
+understand code they did not write themselves.
+
+Mushi closes that gap. The user's report becomes a clear explanation and a fix
+your AI assistant can start from.
+
+## A real example from our own sites
+
+This happened on the websites run by Kensaurus, the company behind Mushi.
+Mushi's site audit, an automatic weekly check of every page, found two problems
+that no error alert had caught:
+
+- an "Edit this page" link that led nowhere, and
+- Japanese text showing up on English pages.
+
+Nothing had crashed, so ordinary monitoring stayed quiet. Mushi filed each
+problem as a bug report. Within the hour, an AI coding agent in Cursor had
+written the fixes and opened them as pull requests: proposed code changes that
+wait for approval. A second AI, Claude Opus, reviewed each change and approved
+it before it was merged.
+
+## What this is (and is not)
+
+Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that gives every bug your users report a plain-English diagnosis + a ready fix, in your editor.
+
+**Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
+
+A few words you will see on this page:
+
+- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
+- **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
+- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
+- **Self-host**: run Mushi on your own server instead of using the hosted service.
+
+## Where it stands today
+
+Mushi Mushi is live and free to try. The hosted service runs at
+kensaur.us/mushi-mushi, the libraries are published on npm, and the source code
+is public on GitHub. It is built by Kensaurus 合同会社, a small company in Japan,
+and runs on the company's own apps and sites. The native iOS, Android and
+Flutter libraries are still previews.
+
 ## This is what a diagnosis looks like
 
-A user writes one or two sentences about what went wrong. Mushi reads them with
-the screenshot, console and network tail, and writes back a plain-English title,
-a severity, the likely cause and a suggested fix. Below is a real one.
+A user writes one or two sentences about what went wrong. Mushi reads them
+together with the screenshot and the technical log from their browser, and
+writes back a plain-English title, how serious it is, the likely cause and a
+suggested fix. Below is a real one.
 
   
 
@@ -39,29 +89,29 @@ a severity, the likely cause and a suggested fix. Below is a real one.
 
   
 
-## What this is (and is not)
+## Get started
 
-Mushi Mushi is the bug mediator for AI-built apps, an open-source bug-reporting SDK and queue: plain-English diagnosis + a ready fix, in your editor.
+## Install it in your app
 
-## Get started with the SDK
+## Works with Sentry, or without it
 
-## Install in your framework
-
-## One queue. Sentry flows in, fixes flow out.
+Sentry is a popular service that records errors when an app's code crashes.
+Many developers already use it, and Mushi does not ask you to give it up.
 
 Sentry is built around what the code threw, with a User Feedback widget and
 replay alongside. Mushi starts from what the user reported, ingests Sentry's
 errors too, explains each one in plain English, and hands your agent a fix
 prompt to start from. With or without Sentry.
 
-Sentry is one on-ramp of several. Bugs come in from your users, your
-monitoring and your voice; fixes and status go out to your editor, your coding
-agents, your tracker and your chat. Nothing has to be ripped out.
+Sentry is one way in among several. Bugs come in from your users, your
+monitoring tools and even your voice; fixes and status updates go out to your
+editor, your AI coding agents, your task tracker and your team chat. Nothing has
+to be ripped out.
 
   
 
-See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
-sequence diagram and component-by-component spec.
+For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
+the full sequence diagram and a component-by-component spec.
 
 ---
 
@@ -76,7 +126,7 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+  **Today:** a report is sorted and explained within seconds, with a paste-ready fix prompt on the report page or a fix brief through the MCP tools. **Target:** the whole diagnosis in under 10 seconds. MCP needs a Mushi account and a project key, not a separate OpenAI or Anthropic key.
 
 ## No MCP? Copy the fix prompt
 
@@ -85,7 +135,7 @@ your coding agent**. You get one self-contained prompt (diagnosis, suggested fix
 repro steps, page and browser, the key console lines, likely files, and what
 "done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
 MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent pull context and close the report itself.
+the agent fetch the details and close the report itself.
 
 ## Prerequisites
 
@@ -368,12 +418,30 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
+## What you need
 
-## Start here (MCP)
+- An app you are building, for the web or for phones.
+- A Mushi account. The free plan is enough, and the setup wizard signs you in through your browser.
+- Optional: an AI code editor such as Cursor or Claude Code, so it can read bug reports and fix them for you.
 
-1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
-2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
+## The fastest way: one command
+
+Run this in your app's folder:
+
+```bash
+npx mushi-mushi
+```
+
+`npx` runs a tool from npm (the public library of JavaScript packages) without
+installing it for good. This one is the Mushi setup wizard: it works out which
+framework your app uses, signs you in through your browser, installs the SDK
+(the small library that adds the report button), saves your settings and can
+send a test report.
+
+## Start here (editor first)
+
+1. [Incident loop](/quickstart/incident-loop): a bug in your live app → a plain-English diagnosis → a fix in your editor
+2. [MCP server](/quickstart/mcp): connect Cursor, VS Code or Claude to Mushi
 
 ## Pick your stack
 
@@ -391,17 +459,18 @@ Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via brows
 npx mushi-mushi
 ```
 
-The wizard opens your browser, you click **Approve**, picks or creates a project,
-installs the SDK, and writes `.env.local`.
+The wizard opens your browser so you can click **Approve**. It then picks or
+creates a project, installs the SDK and writes your settings to `.env.local`.
 
 **Option B — manual:**
 
-See [Project ID & API keys](/concepts/credentials) for env var names per framework.
+See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
 
-  The SDK needs only framework-prefixed project id + API key (see
+  The SDK needs only two settings: your project ID and API key, named with the
+  prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is for **self-hosting the backend** — you do
-  not need Supabase or an LLM key to use the SDK.
+  The repo's root `.env.example` is only for **running the Mushi server
+  yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting
 
@@ -2456,18 +2525,18 @@ description: Mushi's core ideas in one place — capture, plain-English diagnosi
 
 The loop in plain terms:
 
-1. **Capture** — users report what felt broken (shake, tap, or widget) with screenshot and context.
-2. **Plain read** — severity, category, and cause in English your team already uses.
-3. **Connect** — similar reports collapse to one row; hot spots emerge from the graph.
-4. **Fix** — optional agent drafts a PR; you merge, edit, or ignore.
-5. **Verify** — automated replay checks the fix before you ship.
-6. **Remember** — past fixes become rules your editor sees on the next PR.
+1. **Capture**: users report what felt broken (by shaking the phone, tapping, or using the widget), and Mushi adds a screenshot and what they were doing.
+2. **Plain read**: how serious it is, what kind of problem it is and the likely cause, in everyday English.
+3. **Connect**: similar reports merge into one item, and the parts of the app that break most often stand out.
+4. **Fix**: optionally, an AI agent drafts the fix as a pull request (a proposed code change); you merge it, edit it or ignore it.
+5. **Verify**: an automated replay checks the fix before you ship it.
+6. **Remember**: past fixes become rules your editor sees on the next pull request.
 
 ## Primary paths
 
-- [Architecture](/concepts/architecture) — components and data flow
-- [How classification works](/concepts/classification) — Stage 1 / Stage 2
-- [How fixes get drafted](/concepts/fix-orchestrator) — sandbox → draft PR
+- [Architecture](/concepts/architecture): the parts of Mushi and how data flows between them
+- [How classification works](/concepts/classification): how a report is filtered, then sorted and explained, in two passes
+- [How fixes get drafted](/concepts/fix-orchestrator): how an AI agent writes a fix and opens a draft pull request
 
 ## Everything else
 
