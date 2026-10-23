@@ -18,6 +18,7 @@ import {
   MAX_CONFLICT_AGENTS,
   conflictPrompt,
   nextQueueStep,
+  reviewRefusal,
   type ChecksView,
 } from '../_shared/merge-queue.ts'
 
@@ -200,26 +201,20 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
         merge: { mergeMethod: 'squash', commitTitle: attempt.summary ? `fix: ${attempt.summary.slice(0, 72)}` : undefined },
       })
       if (!outcome.ok) {
-        // An updated branch has a new head, so its "merge" verdict is stale
-        // until Opus reviews the new commit: ask for that review (the push
-        // webhook does too) and wait for it.
-        const review = outcome.review
-        if (outcome.code === 'REVIEW_NOT_MERGE' && review?.verdict === 'merge' && (review.stale || review.rerunning)) {
-          if (!review.rerunning) {
-            await deps.requeueReview(
-              db,
-              { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
-              head,
-              now(),
-            )
-          }
-          await set({ state: 'waiting', detail: 'Opus is reviewing the updated commit; it merges when the verdict is merge.', head_sha: head })
-          return 'waiting'
+        // A stale "merge" verdict after an update waits for the re-review
+        // (asked for here too; the push webhook asks as well); a fix-first,
+        // a hold or no review is held with a reason that says what happens next.
+        const r = reviewRefusal(outcome.code, outcome.message, outcome.review)
+        if (r.requeueReview) {
+          await deps.requeueReview(
+            db,
+            { fixAttemptId: attempt.id, projectId: attempt.project_id, reportId: attempt.report_id, prUrl: attempt.pr_url },
+            head,
+            now(),
+          )
         }
-        // A moved head or a first review still running is just another tick; a hold or a fix-first needs a person.
-        const again = outcome.code === 'HEAD_MOVED' || outcome.code === 'REVIEW_PENDING'
-        await set({ state: again ? 'waiting' : 'blocked', detail: outcome.message, head_sha: head })
-        return again ? 'waiting' : 'blocked'
+        await set({ state: r.state, detail: r.detail, head_sha: head })
+        return r.state
       }
       if (!outcome.result.merged) {
         await set({ state: 'waiting', detail: outcome.result.message ?? 'GitHub did not merge yet; trying again.', head_sha: head })

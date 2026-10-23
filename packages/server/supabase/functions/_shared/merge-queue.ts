@@ -64,11 +64,45 @@ export function nextQueueStep(pr: PullView, checks: ChecksView): QueueStep {
   if (s === 'dirty' || pr.mergeable === false) return { do: 'resolve' }
   if (s === 'behind') return { do: 'update' }
   if (pr.mergeable == null || s === 'unknown') return { do: 'wait', reason: 'GitHub is still working out whether it can merge.' }
-  if (checks.failed.length) return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}.` }
+  if (checks.failed.length) {
+    return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
+  }
   if (checks.pending > 0) return { do: 'wait', reason: `CI is running (${checks.pending} check${checks.pending === 1 ? '' : 's'} left).` }
   if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return { do: 'merge' }
   if (s === 'blocked') return { do: 'blocked', reason: 'Branch protection blocks it (a required review or check is missing).' }
   return { do: 'wait', reason: `GitHub says "${s}".` }
+}
+
+/**
+ * What a refused gated merge means for the queue row, in words the console
+ * shows (2026-10-23: "Mushi merges on its own only when the Opus review of this
+ * exact commit says merge" told nobody what to do). A held row does not hold
+ * its repo; it is looked at again whenever nothing else there moves.
+ */
+export function reviewRefusal(
+  code: string,
+  message: string,
+  review: { verdict?: string | null; stale?: boolean; rerunning?: boolean } | null,
+): { state: 'waiting' | 'blocked'; detail: string; requeueReview: boolean } {
+  if (code === 'HEAD_MOVED' || code === 'REVIEW_PENDING') return { state: 'waiting', detail: message, requeueReview: false }
+  const verdict = review?.verdict ?? null
+  if (verdict === 'merge' && (review?.stale || review?.rerunning)) {
+    return { state: 'waiting', detail: 'Opus is reviewing the updated commit; it merges when the verdict is merge.', requeueReview: !review?.rerunning }
+  }
+  if (verdict === 'fix_first') {
+    return {
+      state: 'blocked',
+      detail: 'Opus says fix first on this commit. With review follow-ups on, an agent fixes its findings and Opus reviews the push; the queue merges it once the verdict is merge.',
+      requeueReview: false,
+    }
+  }
+  if (verdict === 'hold' || code === 'REVIEW_HOLD') {
+    return { state: 'blocked', detail: 'Opus says hold on this commit. Open the fix to read why; only you can override a hold.', requeueReview: false }
+  }
+  if (!verdict) {
+    return { state: 'blocked', detail: 'This pull request has no Opus review yet. Start one from the fix (Review), or merge it yourself.', requeueReview: false }
+  }
+  return { state: 'blocked', detail: message, requeueReview: false }
 }
 
 /** The check runs of a head, reduced to what `nextQueueStep` reads. */
