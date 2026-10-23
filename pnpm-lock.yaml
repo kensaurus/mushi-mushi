@@ -13,7 +13,7 @@ overrides:
   postcss: ^8.5.18
   '@connectrpc/connect-node>undici': ^6.27.0
   js-yaml@4: '>=4.3.2 <5'
-  hono: '>=4.13.5 <5'
+  hono: '>=4.13.11 <5'
   fastify: '>=5.12.5 <6'
   mermaid: '>=11.16.1 <12'
   dompurify: '>=3.4.17 <4'
@@ -949,8 +949,8 @@ importers:
         specifier: '>=5.12.5 <6'
         version: 5.12.5
       hono:
-        specifier: '>=4.13.5 <5'
-        version: 4.13.7
+        specifier: '>=4.13.11 <5'
+        version: 4.13.13
     devDependencies:
       '@mushi-mushi/eslint-config':
         specifier: workspace:*
@@ -1239,8 +1239,8 @@ importers:
         specifier: '>=4'
         version: 5.2.1
       hono:
-        specifier: '>=4.13.5 <5'
-        version: 4.13.7
+        specifier: '>=4.13.11 <5'
+        version: 4.13.13
     devDependencies:
       '@mushi-mushi/eslint-config':
         specifier: workspace:*
@@ -1471,8 +1471,8 @@ importers:
         specifier: ^2.108.2
         version: 2.108.2
       hono:
-        specifier: '>=4.13.5 <5'
-        version: 4.13.7
+        specifier: '>=4.13.11 <5'
+        version: 4.13.13
       supabase:
         specifier: ^2.108.0
         version: 2.108.0
@@ -3284,7 +3284,7 @@ packages:
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: '>=4.13.5 <5'
+      hono: '>=4.13.11 <5'
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -7406,8 +7406,8 @@ packages:
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
 
-  hono@4.13.7:
-    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
+  hono@4.13.13:
+    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@7.0.2:
@@ -12481,9 +12481,9 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
       use-sync-external-store: 1.6.0(react@19.2.7)
 
-  '@hono/node-server@1.19.17(hono@4.13.7)':
+  '@hono/node-server@1.19.17(hono@4.13.13)':
     dependencies:
-      hono: 4.13.7
+      hono: 4.13.13
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -12794,7 +12794,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.1(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.7)
+      '@hono/node-server': 1.19.17(hono@4.13.13)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -12804,7 +12804,7 @@ snapshots:
       eventsource-parser: 3.1.0
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.13.7
+      hono: 4.13.13
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -16799,7 +16799,7 @@ snapshots:
 
   highlight.js@10.7.3: {}
 
-  hono@4.13.7: {}
+  hono@4.13.13: {}
 
   hosted-git-info@7.0.2:
     dependencies:
