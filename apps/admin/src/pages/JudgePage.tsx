@@ -966,7 +966,7 @@ export function JudgePage() {
                   next.delete('filter')
                   setSearchParams(next, { replace: true })
                 }}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 text-2xs border-warn/40 ${CHIP_TONE.warnSubtle} hover:bg-warn/20 focus-visible:ring-1 focus-visible:ring-warn/60`}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-2xs ${CHIP_TONE.warnSubtle} hover:bg-warn/20 focus-visible:ring-1 focus-visible:ring-warn/60`}
                 aria-label="Clear disagreement filter"
               >
                 <span>Disagreements only</span>

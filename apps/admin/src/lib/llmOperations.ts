@@ -30,7 +30,7 @@ export const OPERATION_CATEGORY_CLASS: Record<OperationCategory, string> = {
   release: `${CHIP_TONE.okSubtle} hover:bg-ok-muted/70`,
   intel: 'border-brand/35 bg-brand/12 text-brand border border-brand/28 hover:bg-brand/15',
   lessons: 'border-accent/25 bg-surface-overlay text-fg-secondary hover:bg-surface-overlay/80',
-  qa: `border-info/25 ${CHIP_TONE.infoSubtle} hover:bg-info-muted/50`,
+  qa: `${CHIP_TONE.infoSubtle} hover:bg-info-muted/50`,
   ops: 'border-edge bg-surface-overlay text-fg-muted hover:bg-surface-overlay/80',
   other: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted hover:bg-surface-overlay',
 }

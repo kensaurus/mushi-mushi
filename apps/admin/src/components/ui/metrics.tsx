@@ -240,7 +240,7 @@ const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70 border border-danger/30',
+  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -517,15 +517,15 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: `border-info/35 ${CHIP_TONE.infoSubtle}`,
+    chipClass: CHIP_TONE.infoSubtle,
   },
   counted: {
     Icon: IconTerminal,
-    chipClass: `border-brand/35 ${CHIP_TONE.brand}`,
+    chipClass: CHIP_TONE.brand,
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: `border-ok/35 ${CHIP_TONE.okSubtle}`,
+    chipClass: CHIP_TONE.okSubtle,
   },
 }
 
