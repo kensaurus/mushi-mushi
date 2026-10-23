@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Btn, Input, ResultChip, Toggle } from '../ui'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { expiryLabel, firecrawlPace, paceLine, type WatchCost } from '../../lib/creditPlan'
@@ -123,7 +124,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
       ) : (
         <p className="text-sm text-fg-muted">
           No Firecrawl key yet.{' '}
-          <Link className="text-brand hover:underline" to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
+          <Link className={LINK_ACCENT} to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
         </p>
       )}
       {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
@@ -159,7 +160,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                 ) : !a.firecrawlReady ? (
                   <p className="text-xs text-fg-muted">
                     This app has no Firecrawl key it can use. Add one, or share yours with all your apps, in{' '}
-                    <Link className="text-brand hover:underline" to="/settings?tab=tools">Settings → Web tools</Link>.
+                    <Link className={LINK_ACCENT} to="/settings?tab=tools">Settings → Web tools</Link>.
                   </p>
                 ) : (
                   <div className="max-w-md">

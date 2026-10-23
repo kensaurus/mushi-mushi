@@ -150,6 +150,15 @@ describe('CreditsPage', () => {
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
   })
 
+  it('underlines links in a sentence so color is not their only cue', async () => {
+    await render()
+    const links = [...host.querySelectorAll('a')]
+    expect(links.length).toBeGreaterThan(0)
+    for (const link of links) {
+      expect(link.className.split(/\s+/), link.textContent ?? '').toContain('underline')
+    }
+  })
+
   it('shows the Firecrawl balance, the pace to its reset, and a switch per app', async () => {
     await render()
     expect(host.textContent).toContain('64,175 of 100,000 credits left')

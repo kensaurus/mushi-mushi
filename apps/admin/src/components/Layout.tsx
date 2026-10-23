@@ -751,6 +751,10 @@ export function Layout({ children }: { children: ReactNode }) {
             once the page banners stacked under it; the wordmark lives in the
             menu drawer. The switchers truncate instead of overflowing. */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
+          {/* The wordmark h1 lives in the desktop sidebar, which is
+              display:none below md, and in the drawer only while it is open.
+              Keep one h1 in the tree when that drawer is closed. */}
+          {!mobileOpen && <h1 className="sr-only">mushi mushi</h1>}
           <Btn
             type="button"
             variant="ghost"
