@@ -33,6 +33,7 @@ import { SITE_WATCH_USER_AGENT } from '../_shared/site-watch.ts'
 import {
   isBrokenStatus,
   isDocumentUrl,
+  isUnreadableRender,
   linkFindings,
   linkTargets,
   pageFindings,
@@ -106,8 +107,16 @@ function toPage(raw: Record<string, unknown>): AuditPage | null {
     description: str(m.description),
     language: str(m.language),
     ogImage: str(m.ogImage) ?? str(m['og:image']),
-    html: typeof raw.html === 'string' ? raw.html : null,
-    markdown: typeof raw.markdown === 'string' ? raw.markdown : null,
+    // Keep only what the rules read, so a 200-page batch of 500 KB pages fits
+    // in the edge runtime: the <img> tags, and the lines of the body with kana.
+    html: typeof raw.html === 'string' ? (raw.html.match(/<img\b[^>]*>/gi) ?? []).join('') : null,
+    markdown:
+      typeof raw.markdown === 'string'
+        ? raw.markdown
+            .split('\n')
+            .filter((line) => /[\u3040-\u30FF]/.test(line))
+            .join('\n')
+        : null,
     links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
   }
 }
@@ -270,7 +279,8 @@ async function finishRun(db: SupabaseClient, d: Required<SiteAuditDeps>, a: Site
   const filed = await fileFindings(db, a, (project as { name?: string } | null)?.name ?? 'this app', findings, nowIso)
   const byRule: Record<string, number> = {}
   for (const f of findings) byRule[f.rule] = (byRule[f.rule] ?? 0) + 1
-  const summary = { pages: batch.pages.length, targetsChecked: tested.checked.length, targetsSkipped: tested.skipped, findings: byRule, reportsFiled: filed, credits: batch.credits }
+  const unreadable = batch.pages.filter((p) => isDocumentUrl(p.url) && isUnreadableRender(p)).length
+  const summary = { pages: batch.pages.length, unreadable, targetsChecked: tested.checked.length, targetsSkipped: tested.skipped, findings: byRule, reportsFiled: filed, credits: batch.credits }
   await db
     .from('site_audits')
     .update({

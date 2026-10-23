@@ -44,7 +44,8 @@ interface AppWatch {
 
 interface Props {
   balance: FirecrawlBalance | null
-  projects: Array<{ id: string; name: string }>
+  /** null while the project list is still loading. */
+  projects: Array<{ id: string; name: string }> | null
   now: Date
 }
 
@@ -55,9 +56,10 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [confirmOff, setConfirmOff] = useState<AppWatch | null>(null)
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null)
-  const ids = projects.map((p) => p.id).join(',')
+  const ids = projects?.map((p) => p.id).join(',') ?? null
 
   useEffect(() => {
+    if (projects == null) return
     let live = true
     void Promise.all(
       projects.map(async (p): Promise<AppWatch> => {
