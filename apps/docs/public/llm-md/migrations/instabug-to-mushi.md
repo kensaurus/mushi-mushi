@@ -161,4 +161,4 @@ have a clean snapshot to compare against.
 - [Mushi Mushi web SDK](/sdks/web)
 - [Mushi Mushi React Native SDK](/sdks/react-native)
 - [Mushi Mushi admin console](/admin)
-- [Luciq (Instabug) docs](https://docs.luciq.cloud/)
+- [Luciq (Instabug) docs](https://docs.luciq.ai/)
