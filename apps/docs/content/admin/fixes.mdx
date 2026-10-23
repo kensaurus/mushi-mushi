@@ -185,7 +185,9 @@ Mushi. This is **user-confirmed** — Mushi never auto-merges.
 ### Where merge appears
 
 - **Report detail** → fix card → **Merge PR** (confirm popover)
-- **Fixes list** → completed row with open PR
+- **Fixes list** → completed row with open PR. The **Opus: merge** filter
+  (`/fixes?status=review_merge`) lists only the open PRs whose latest Opus
+  review said merge; select them and use the bulk **Merge** action.
 - **Pipeline flow** on the report detail page
 
 The UI picks the **primary fix attempt** — if a later retry failed but an earlier
