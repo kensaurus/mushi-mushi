@@ -306,6 +306,18 @@ async function resolve(
   return 'resolving'
 }
 
+const IN_PROGRESS: Record<string, number> = { resolving: 0, waiting: 1, queued: 2, blocked: 3 }
+
+/**
+ * The PR a repo works on: the one already in progress (a conflict agent, or
+ * CI on an updated branch), then the oldest queued. One console request
+ * queues a whole app at the same instant, so `queued_at` alone ties and a
+ * tick picked a different PR each time: four in CI at once (2026-10-23).
+ */
+export function queueOrder(a: { state: string; queued_at: string; pr_number: number }, b: { state: string; queued_at: string; pr_number: number }): number {
+  return (IN_PROGRESS[a.state] ?? 9) - (IN_PROGRESS[b.state] ?? 9) || (a.queued_at ?? '').localeCompare(b.queued_at ?? '') || a.pr_number - b.pr_number
+}
+
 export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, projectId?: string): Promise<Record<string, number>> {
   const now = deps.now ?? (() => new Date())
   const nowIso = now().toISOString()
@@ -313,10 +325,12 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   if (projectId) q = q.eq('project_id', projectId)
   const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
   if (error) throw new Error(`merge-queue read failed: ${error.message}`)
-  const rows = ((data ?? []) as Array<QueueRow & { claimed_until: string | null }>).filter((r) => !r.claimed_until || r.claimed_until < nowIso)
-  // One active row per repo (the oldest not blocked), then some blocked re-checks.
+  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string }>
+  // A row leased by a tick still running holds its repo.
+  const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
+  const rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
+  // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
-  const repos = new Set<string>()
   for (const r of rows) {
     if (r.state === 'blocked' || repos.has(r.repo)) continue
     repos.add(r.repo)
