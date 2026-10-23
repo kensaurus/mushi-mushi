@@ -77,7 +77,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   const shown = rows.filter((r) => r.state !== 'removed')
   if (shown.length === 0) return null
   const merged = shown.filter((r) => r.state === 'merged')
-  // Rows that need you first, then the one each repo is working on.
+  // Held rows first (each says why), then the one each repo is working on.
   const listed = [...active].sort((a, b) => Number(b.state === 'blocked') - Number(a.state === 'blocked'))
 
   return (

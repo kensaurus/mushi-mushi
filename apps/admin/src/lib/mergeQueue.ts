@@ -32,7 +32,7 @@ export const MERGE_QUEUE_STATE_LABEL: Record<MergeQueueState, string> = {
   queued: 'Queued',
   waiting: 'Waiting',
   resolving: 'Agent resolving',
-  blocked: 'Needs you',
+  blocked: 'Held',
   merged: 'Merged',
   removed: 'Removed',
 }
@@ -50,14 +50,14 @@ export function isActiveQueueRow(row: Pick<MergeQueueRow, 'state'>): boolean {
   return row.state === 'queued' || row.state === 'waiting' || row.state === 'resolving' || row.state === 'blocked'
 }
 
-/** "4 to merge · 1 needs you · 6 merged today" (empty parts left out). */
+/** "4 to merge · 1 held · 6 merged today" (empty parts left out). */
 export function mergeQueueSummary(rows: Array<Pick<MergeQueueRow, 'state'>>): string {
   const moving = rows.filter((r) => r.state === 'queued' || r.state === 'waiting' || r.state === 'resolving').length
   const blocked = rows.filter((r) => r.state === 'blocked').length
   const merged = rows.filter((r) => r.state === 'merged').length
   const parts: string[] = []
   if (moving) parts.push(`${moving} to merge`)
-  if (blocked) parts.push(`${blocked} need${blocked === 1 ? 's' : ''} you`)
+  if (blocked) parts.push(`${blocked} held`)
   if (merged) parts.push(`${merged} merged today`)
   return parts.join(' · ')
 }
