@@ -693,6 +693,21 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db as unknown as Parameters<typeof loadReportFixTruths>[0],
       fixes.map((f) => f.report_id as string),
     );
+    // The latest completed Opus verdict per attempt (ADR 0030), so /fixes can
+    // list the open PRs the review already said to merge. A read failure
+    // leaves it null: the list still loads.
+    const verdicts = new Map<string, string>();
+    if (fixes.length > 0) {
+      const { data: reviews } = await db
+        .from('fix_reviews')
+        .select('fix_attempt_id, verdict, created_at')
+        .in('fix_attempt_id', fixes.map((f) => f.id as string))
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null }>) {
+        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, r.verdict);
+      }
+    }
     const enriched = fixes.map((f) => {
       const t = loaded.truths.get(f.report_id as string);
       const report = loaded.reports.get(f.report_id as string);
@@ -707,6 +722,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         is_latest_attempt: t ? t.latestAttemptId === f.id : null,
         retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
         credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
+        review_verdict: verdicts.get(f.id as string) ?? null,
       };
     });
 
