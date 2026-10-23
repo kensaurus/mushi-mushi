@@ -443,6 +443,12 @@ verify_jwt = false
 [functions.merge-queue]
 verify_jwt = false
 
+# Cron-invoked every 10 minutes (mushi-skill-runs, :07 to :57) and by api-ext
+# after a person starts a run; files each round of a skill run as a report and
+# hands Opus-approved round PRs to the merge queue (ADR 0042).
+[functions.skill-runs]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

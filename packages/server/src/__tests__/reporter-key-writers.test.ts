@@ -67,6 +67,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['_shared/vuln-watch-db.ts reporter_token_hash', 'sentinel'], // 'cron:vuln-watch' (ADR 0038)
+  ['skill-runs/index.ts reporter_token_hash', 'sentinel'], // 'cron:skill-runs' (ADR 0042: a skill-run round has no reporter)
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'
   ['webhooks-linear-agent/index.ts reporter_token_hash', 'sentinel'], // 'linear-agent'
 ])

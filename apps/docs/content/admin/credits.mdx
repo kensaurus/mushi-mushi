@@ -1,6 +1,6 @@
 ---
 title: Spend credits
-description: Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.
+description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.
 ---
 
 # Spend credits
@@ -16,6 +16,16 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 - **Fix open bugs before the credits expire** turns [spend-down](../concepts/agent-pr-review#spend-down-and-its-safety-stop) on or off for that key. While it is on, Mushi sends your best open reports to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. The switch is off until the key has an expiry date; set it in Settings → AI keys. A key your organization shares can be changed by an owner or admin, and someone else's universal key only by its owner.
 - When every app has nothing left to send, the row says so. Watching more of your live sites (below) is the way to find more.
 - **Review follow-ups** sends a pull request the Opus review marked "fix first" back to a new Cursor agent with the review's findings, at most twice per pull request and never on a "hold". The line names the model each round uses; when a **Last round model** is set in Settings → AI keys, the second round, which only happens after the first did not satisfy the reviewer, runs on it (for example Opus while the first stays on Grok).
+
+## Cursor: improve your apps with skills
+
+A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
+
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
+- **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+
+Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
 ## Firecrawl: find bugs on your live sites
 

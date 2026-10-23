@@ -722,6 +722,8 @@ forwardToApiExt([
 forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
 // merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id']);
+// skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/skill-runs', '/v1/admin/projects/:id/skill-runs', '/v1/admin/projects/:id/skill-runs/:runId/stop']);
 // search-rank.ts; deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/projects/:id/search-ranks', '/v1/admin/projects/:id/search-ranks/run']);
 registerCodeHealthRoutes(app);
