@@ -184,6 +184,10 @@ export function expandPreset(config: MushiConfig): MushiConfig {
 // `@types/node` to stay browser-safe (see env-config.ts).
 declare const process: { env: Record<string, string | undefined> };
 
+// `import.meta.env` is declared locally because the core package intentionally
+// omits vite/client types so it stays bundler-agnostic (see env-config.ts).
+type MetaWithEnv = ImportMeta & { env?: Record<string, unknown> };
+
 /**
  * `MUSHI_SILENT=1` (or `true`) suppresses all validation warnings, for hosts
  * that intentionally pass extra keys or want a quiet console. Read defensively
@@ -198,8 +202,7 @@ function isSilenced(): boolean {
     /* no `process` in this runtime */
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = (import.meta as any).env;
+    const env = (import.meta as MetaWithEnv).env;
     if (env && typeof env === 'object' && (truthy(env.MUSHI_SILENT) || truthy(env.VITE_MUSHI_SILENT))) return true;
   } catch {
     /* no `import.meta` in this runtime */

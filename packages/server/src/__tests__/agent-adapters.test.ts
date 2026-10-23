@@ -143,6 +143,9 @@ describe('prompt + branch conventions', () => {
     expect(prompt).toContain('`develop`')
     expect(prompt).toContain(`MUSHI-${REPORT}`)
     expect(prompt).toContain('Never merge')
+    // A run with no PR states its verdict on the first line (cloud-agent-no-pr.ts reads it).
+    expect(prompt).toContain('`Mushi verdict: <verdict>`')
+    for (const v of ['already_fixed', 'wrong_repo', 'not_actionable', 'needs_human']) expect(prompt).toContain(`\`${v}\``)
   })
 
   it('never asks for a speculative NEEDS_INVESTIGATION PR (cloud prompt and fix-worker prompt)', () => {

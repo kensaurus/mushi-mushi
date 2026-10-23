@@ -273,6 +273,7 @@ const GATE_IDS = [
   'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
+  'portfolio_radar_vulns',
   'store_review',
 ] as const;
 /** gate_findings.severity CHECK constraint (migration 20260504000000). */
@@ -1752,6 +1753,67 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       return jsonResult(
         await apiCall(`/v1/admin/ci/overview?${qs}`, undefined, args.refresh ? { minTimeoutMs: 60_000 } : undefined),
       );
+    },
+  );
+
+  server.registerTool(
+    'get_ci_costs',
+    {
+      title: titleOf('get_ci_costs'),
+      description: descOf('get_ci_costs'),
+      annotations: annotationsFor('get_ci_costs'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        dataDays: z.number().optional(),
+        lowConfidence: z.boolean().optional().describe('Under 7 days of data'),
+        source: z.string().optional(),
+        sourceNote: z.string().nullable().optional(),
+        rates: z.unknown().optional().describe('GitHub list prices and the date they were read'),
+        fields: z.record(z.string(), z.string()).optional().describe('measured | estimated per field'),
+        settings: z.array(z.looseObject({})).optional(),
+        repos: z.array(z.looseObject({})).optional(),
+        rows: z.array(z.looseObject({})).optional().describe('Per repo × runner class: wait, run time, pass rate, minutes, cost'),
+        accounts: z.array(z.looseObject({})).optional().describe('Included minutes per GitHub owner'),
+        machines: z.array(z.looseObject({})).optional(),
+        speed: z.array(z.looseObject({})).optional(),
+        whatIfs: z.array(z.looseObject({})).optional(),
+        explain: z.looseObject({}).optional(),
+        advice: z.array(CI_ADVICE_OUTPUT).optional(),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/compare?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'request_ci_placement_change',
+    {
+      title: titleOf('request_ci_placement_change'),
+      description: descOf('request_ci_placement_change'),
+      annotations: annotationsFor('request_ci_placement_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        variable: z.string().regex(/^(?:LINUX_RUNNER|RUNNER_[A-Z0-9_]{1,60})$/).describe('LINUX_RUNNER or RUNNER_<WORKFLOW>'),
+        value: z.string().min(1).max(100).nullable().describe('One runner label, or null to remove the variable'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
+      return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
     },
   );
 

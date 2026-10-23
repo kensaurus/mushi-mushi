@@ -81,6 +81,8 @@ export interface CiJobInput {
   completed_at?: string | null
   runner_id?: number | null
   runner_name?: string | null
+  /** "GitHub Actions" for GitHub-hosted runners; the runner group otherwise. Null until a runner takes the job. */
+  runner_group_name?: string | null
   labels?: readonly string[] | null
   steps?: ReadonlyArray<{ status?: string | null; started_at?: string | null }> | null
 }
@@ -121,18 +123,33 @@ const CRASH_SIGNAL: Record<string, string> = {
 }
 
 const GITHUB_HOSTED_LABEL_RE = /^(?:ubuntu|windows|macos)-[\w.-]+$/i
+/** The runner group GitHub puts every standard GitHub-hosted runner in. */
+export const GITHUB_HOSTED_GROUP = 'GitHub Actions'
 
 /**
- * Where a job ran, from its labels (and runner name): `self-hosted` →
- * self_hosted; only ubuntu-* / windows-* / macos-* labels, or a runner named
- * "GitHub Actions N" → github_hosted; anything else → unknown (a larger
- * GitHub runner and a custom-labelled machine look alike).
+ * Where a job ran. In order:
+ *   1. a `self-hosted` label                                   → self_hosted
+ *   2. a runner named "GitHub Actions N"                       → github_hosted
+ *   3. the runner group (set once a runner took the job):
+ *      "GitHub Actions" → github_hosted; any other group (a
+ *      self-hosted runner's group, "Default" unless renamed)   → self_hosted
+ *   4. only ubuntu-* / windows-* / macos-* labels              → github_hosted
+ *   5. anything else                                           → unknown
+ *
+ * REGRESSION (2026-10-22): `runs-on: kensaurus-local` carries no
+ * `self-hosted` label, so 518 jobs that ran on the Alienware were stored as
+ * `unknown` and every cost figure built on runner_kind was wrong. GitHub's
+ * `runner_group_name` already told them apart ("Default" vs "GitHub Actions").
+ * A queued job has no group yet, so a custom label stays unknown until a
+ * runner takes it.
  */
-export function runnerKindOf(job: Pick<CiJobInput, 'labels' | 'runner_name'>): CiRunnerKind {
+export function runnerKindOf(job: Pick<CiJobInput, 'labels' | 'runner_name' | 'runner_group_name'>): CiRunnerKind {
   const labels = (job.labels ?? []).map((l) => String(l).trim()).filter(Boolean)
   if (labels.some((l) => l.toLowerCase() === 'self-hosted')) return 'self_hosted'
-  if (labels.length > 0 && labels.every((l) => GITHUB_HOSTED_LABEL_RE.test(l))) return 'github_hosted'
   if (/^GitHub Actions \d+$/i.test(job.runner_name ?? '')) return 'github_hosted'
+  const group = (job.runner_group_name ?? '').trim()
+  if (group) return group.toLowerCase() === GITHUB_HOSTED_GROUP.toLowerCase() ? 'github_hosted' : 'self_hosted'
+  if (labels.length > 0 && labels.every((l) => GITHUB_HOSTED_LABEL_RE.test(l))) return 'github_hosted'
   return 'unknown'
 }
 

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 214 pages, generated from llms.txt. */
+/** 218 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -169,6 +169,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.",
   },
   {
+    title: "Spend credits",
+    url: docUrl("/admin/credits"),
+    route: "/admin/credits",
+    markdown: "admin/credits.md",
+    keywords: ["admin", "credits", "spend"],
+    headings: ["Cursor: fix bugs", "Firecrawl: find bugs on your live sites", "Site audit", "Search rank", "Where the fixes go"],
+    excerpt: "Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.",
+  },
+  {
     title: "Dashboard",
     url: docUrl("/admin/dashboard"),
     route: "/admin/dashboard",
@@ -176,6 +185,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "dashboard"],
     headings: ["What to look for first", "Flow canvas", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
     excerpt: "The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.",
+  },
+  {
+    title: "Design system",
+    url: docUrl("/admin/design"),
+    route: "/admin/design",
+    markdown: "admin/design.md",
+    keywords: ["admin", "design", "system"],
+    headings: ["Tokens", "The deviance score", "How an edit becomes a draft PR", "Related"],
+    excerpt: "The Design system page shows your tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft pull request.",
   },
   {
     title: "Docs bridge",
@@ -455,6 +473,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "realtime", "real-time", "collaboration"],
     headings: ["Presence", "Comments", "Writing a comment", "Editing and deleting", "Timestamps", "Notifications", "Audit log", "See also"],
     excerpt: "How Mushi report pages support real-time collaboration — see who else is viewing a report and watch new comments arrive without a refresh.",
+  },
+  {
+    title: "App blueprint",
+    url: docUrl("/admin/recipe"),
+    route: "/admin/recipe",
+    markdown: "admin/recipe.md",
+    keywords: ["admin", "recipe", "app", "blueprint"],
+    headings: ["Refresh and status", "Diagram and list", "What \"not connected\" means", "Side panel", "Risk checks", "Related"],
+    excerpt: "The App blueprint page shows what this app is built from, the state of each part, and the draft pull request a change opens.",
   },
   {
     title: "Releases",
@@ -871,6 +898,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.",
   },
   {
+    title: "Known holes in dependencies",
+    url: docUrl("/concepts/known-holes"),
+    route: "/concepts/known-holes",
+    markdown: "concepts/known-holes.md",
+    keywords: ["concepts", "known-holes", "known", "holes", "dependencies"],
+    headings: ["What Mushi checks", "What becomes a report", "How bad is it", "The fix", "What leaves Mushi", "Where to see it", "Data sources"],
+    excerpt: "Mushi checks the exact versions in your lockfiles and runtime pins against published advisories, and files each fixable hole as a bug with the upgrade.",
+  },
+  {
     title: "Multi-repo coordinated fixes",
     url: docUrl("/concepts/multi-repo-fixes"),
     route: "/concepts/multi-repo-fixes",
@@ -1164,7 +1200,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/operating/ci-runners",
     markdown: "operating/ci-runners.md",
     keywords: ["operating", "ci-runners", "runners", "ci"],
-    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "Machine health: heartbeat and job hooks", "The runner key", "What is sent, and what never is", "Add your own machine as a runner", "Is it worth it?"],
+    headings: ["Your fix failed, or the test machine stopped", "The CI view", "GitHub permissions", "What CI costs, and where it should run", "Why it costs what it costs", "Your figures", "Advice", "Change where CI runs"],
     excerpt: "See where your tests run and why a fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.",
   },
   {

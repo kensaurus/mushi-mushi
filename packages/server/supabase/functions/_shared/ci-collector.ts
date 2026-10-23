@@ -37,8 +37,9 @@ import {
   ciGithub,
   ciJobRow,
   collectRunJobs,
-  fetchJobResult,
   fetchJobAnnotations,
+  fetchJobResult,
+  fetchRepoVisibility,
   needsAnnotations,
   upsertCiJobs,
   listRepoRunners,
@@ -49,6 +50,7 @@ import {
   type CiGithub,
   type GhRun,
 } from './ci-jobs.ts'
+import { evaluateWatch, type WatchJob } from './ci-placement.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -69,13 +71,25 @@ export const SETTLE_CALLS_PER_LIVE_SYNC = 4
 const LIVE_JOB_STATUSES = ['queued', 'in_progress', 'waiting', 'requested', 'pending']
 /** A runner list GitHub refused is asked again after this long. */
 export const RUNNER_PERMISSION_RECHECK_MS = 24 * 60 * 60_000
+/** A repo's visibility is read again after this long (one call per repo a day). */
+export const VISIBILITY_RECHECK_MS = 24 * 60 * 60_000
 
 export type PermissionState = 'ok' | 'missing' | 'unknown'
+export type RepoVisibility = 'public' | 'private' | 'unknown'
 export interface RepoPermissions {
   jobs: PermissionState
   runners: PermissionState
   checkedAt?: string
   runnersCheckedAt?: string
+  /**
+   * Repo visibility from GET /repos/{o}/{r} (Metadata: read), read once a day.
+   * Public repos run standard GitHub-hosted minutes free; private repos pay
+   * after the plan's included minutes (Plan 022 Phase 7).
+   */
+  visibility?: RepoVisibility
+  visibilityCheckedAt?: string
+  /** The repo owner's login: GitHub's included minutes are per owner account. */
+  owner?: string
 }
 
 export interface CollectorDeps {
@@ -162,7 +176,7 @@ async function collectRepo(
   prior: RepoPermissions | undefined,
   now: Date,
   opts: { mode: 'collect' | 'live' },
-): Promise<{ jobs?: PermissionState; runners?: PermissionState; stored: number; error: string | null }> {
+): Promise<{ jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null }; stored: number; error: string | null }> {
   let runs: GhRun[] = []
   let jobsState: PermissionState | undefined
   if (opts.mode === 'collect') {
@@ -203,6 +217,14 @@ async function collectRepo(
     }
   }
 
+  // Visibility once a day, after the runner list, and only with budget to spare.
+  let visibility: { value: RepoVisibility; owner: string | null } | undefined
+  const visibilityDue = !prior?.visibilityCheckedAt || now.getTime() - Date.parse(prior.visibilityCheckedAt) >= VISIBILITY_RECHECK_MS
+  if (opts.mode === 'collect' && visibilityDue && gh.budget.remaining > 1) {
+    const v = await fetchRepoVisibility(gh, binding.repo)
+    if (v.status !== 0) visibility = { value: v.visibility, owner: v.owner }
+  }
+
   const due = await runsToRead(db, binding.projectId, binding.repo, runs)
   const out = await collectRunJobs(db, gh, {
     projectId: binding.projectId,
@@ -212,17 +234,29 @@ async function collectRepo(
     now,
     maxAnnotationCalls: opts.mode === 'live' ? 1 : 3,
   })
-  return { jobs: jobsState, runners: runnersState, stored: out.rows.length, error: out.error }
+  return { jobs: jobsState, runners: runnersState, visibility, stored: out.rows.length, error: out.error }
 }
 
-function mergePermissions(prior: RepoPermissions | undefined, got: { jobs?: PermissionState; runners?: PermissionState }, now: Date): RepoPermissions {
+function mergePermissions(
+  prior: RepoPermissions | undefined,
+  got: { jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null } },
+  now: Date,
+): RepoPermissions {
   const nowIso = now.toISOString()
-  return {
+  const out: RepoPermissions = {
     jobs: got.jobs ?? prior?.jobs ?? 'unknown',
     runners: got.runners ?? prior?.runners ?? 'unknown',
     checkedAt: got.jobs ? nowIso : prior?.checkedAt,
     runnersCheckedAt: got.runners ? nowIso : prior?.runnersCheckedAt,
   }
+  // A failed read (403/5xx → unknown) keeps the last known visibility.
+  const visibility = got.visibility && got.visibility.value !== 'unknown' ? got.visibility.value : prior?.visibility
+  if (visibility) out.visibility = visibility
+  const checked = got.visibility ? nowIso : prior?.visibilityCheckedAt
+  if (checked) out.visibilityCheckedAt = checked
+  const owner = got.visibility?.owner ?? prior?.owner
+  if (owner) out.owner = owner
+  return out
 }
 
 export interface CollectorSummary {
@@ -234,6 +268,8 @@ export interface CollectorSummary {
   /** Stale queued / running jobs re-read by id this tick. */
   settled: number
   deleted: { jobs: number | null; samples: number | null }
+  /** CI placement watches updated this tick (ADR 0037). */
+  watches: number
 }
 
 export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projectIds?: string[]; calls?: number } = {}): Promise<CollectorSummary> {
@@ -251,7 +287,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
 
   let remaining = opts.calls ?? COLLECTOR_CALLS_PER_TICK
   const share = Math.max(COLLECTOR_MIN_CALLS_PER_PROJECT, Math.ceil(remaining / Math.max(1, order.length)))
-  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null } }
+  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null }, watches: 0 }
   const tokens = new Map<string, string | null>()
 
   for (const projectId of order) {
@@ -294,6 +330,7 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
   }
 
   summary.settled = await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_TICK, now, bindings, tokens })
+  summary.watches = await runPlacementWatches(db, now).catch(() => 0)
   summary.deleted = await deleteExpiredCiRows(db, now)
   return summary
 }
@@ -381,6 +418,51 @@ export async function settleStaleLiveJobs(
   if (fresh.length === 0) return gone.length
   const stored = await upsertCiJobs(db, fresh)
   return (stored.error ? 0 : fresh.length) + gone.length
+}
+
+/**
+ * After a CI placement change ran (ADR 0037): look at the next jobs that read
+ * the variable, in ci_jobs (no GitHub call), and mark each open watch ok,
+ * alert (a job asked for another label or waited over 30 min) or expired.
+ * Before the ci_placement_watches table exists this does nothing.
+ */
+export async function runPlacementWatches(db: Db, now: Date): Promise<number> {
+  const { data, error } = await db
+    .from('ci_placement_watches')
+    .select('id, project_id, repo, jobs, expected_labels, started_at, status')
+    .eq('status', 'watching')
+    .order('started_at', { ascending: true })
+    .limit(50)
+  if (error || !Array.isArray(data)) return 0
+  let updated = 0
+  for (const w of data as Array<{ id: string; project_id: string | null; repo: string; jobs: Array<{ workflow: string; job: string }> | null; expected_labels: string[] | null; started_at: string }>) {
+    let q = db
+      .from('ci_jobs')
+      .select('workflow_name, job_name, runner_labels, queue_seconds, gh_created_at, head_branch, html_url')
+      .eq('repo', w.repo)
+      .gte('gh_created_at', w.started_at)
+      .order('gh_created_at', { ascending: true })
+      .limit(300)
+    if (w.project_id) q = q.eq('project_id', w.project_id)
+    const { data: jobs, error: jobsErr } = await q
+    if (jobsErr) continue
+    const r = evaluateWatch({ jobs: w.jobs ?? [], expectedLabels: w.expected_labels ?? [], startedAt: w.started_at }, (jobs ?? []) as WatchJob[], now)
+    await db
+      .from('ci_placement_watches')
+      .update({
+        status: r.status,
+        jobs_seen: r.jobsSeen,
+        unexpected: r.unexpected.length,
+        slow: r.slow.length,
+        detail: { unexpected: r.unexpected.slice(0, 10), slow: r.slow.slice(0, 10) },
+        last_checked_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('id', w.id)
+      .eq('status', 'watching')
+    updated++
+  }
+  return updated
 }
 
 /** Retention: ci_jobs and ci_runner_job_samples are kept 30 days. */

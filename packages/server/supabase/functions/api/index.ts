@@ -34,7 +34,6 @@ import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
 import { registerA2ATaskRoutes } from './routes/a2a-tasks.ts';
 import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
-import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
 import { registerEraseSubjectRoutes } from './routes/erase-subject.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
@@ -60,7 +59,6 @@ import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
-import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
@@ -79,7 +77,6 @@ import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
-import { registerUxRunsRoutes } from './routes/ux-runs.ts';
 import { registerPullRequestRoutes } from './routes/pull-requests.ts';
 import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
 import { registerProjectGroupRoutes } from './routes/project-groups.ts';
@@ -668,7 +665,18 @@ registerDoctorRoutes(app);
 
 forwardToApiExt(['/v1/admin/inventory', '/v1/admin/inventory/*']);
 
-registerQaCoverageRoutes(app);
+forwardToApiExt([
+  // qa-coverage.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:pid/platform-rollup',
+  '/v1/admin/projects/:pid/qa-coverage',
+  '/v1/admin/projects/:pid/qa-coverage-summary',
+  '/v1/admin/projects/:pid/qa-coverage/stats',
+  '/v1/admin/projects/:pid/qa-stories',
+  '/v1/admin/projects/:pid/qa-stories/:sid',
+  '/v1/admin/projects/:pid/qa-stories/:sid/run',
+  '/v1/admin/projects/:pid/qa-stories/:sid/runs',
+  '/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence',
+]);
 
 registerRewardsRoutes(app);
 
@@ -705,7 +713,17 @@ registerDbAdvisorsRoutes(app);
 registerContentQualityRoutes(app);
 registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
-registerFullstackAuditRoutes(app);
+forwardToApiExt([
+  // fullstack-audit.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/fullstack-audit/stats',
+  '/v1/admin/projects/:id/audit',
+]);
+// site-audit.ts (ADR 0040); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
+// merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id']);
+// search-rank.ts; deploy size limit, 2026-10-23.
+forwardToApiExt(['/v1/admin/projects/:id/search-ranks', '/v1/admin/projects/:id/search-ranks/run']);
 registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
@@ -724,9 +742,19 @@ registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 // Agent skills (skills.ts); deploy size limit, 2026-10-22.
 forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
+// Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
+forwardToApiExt(['/v1/admin/byok/anthropic/models']);
 registerSdkUpgradeRoutes(app);
 registerUxCloudRoutes(app);
-registerUxRunsRoutes(app);
+forwardToApiExt([
+  // ux-runs.ts; deploy size limit, 2026-10-22.
+  '/v1/admin/projects/:pid/ux-runs',
+  '/v1/admin/projects/:pid/ux-runs/:runId',
+  '/v1/admin/projects/:pid/ux-runs/:runId/merge',
+  '/v1/admin/projects/:pid/ux-runs/:runId/pull-request',
+  '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
+  '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -752,6 +780,8 @@ forwardToApiExt([
   '/v1/admin/projects/:id/verify-workflow',
   '/v1/admin/projects/:id/verify-workflow/pr',
 ]);
+// Known holes in dependencies and the runtime (ADR 0038).
+forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 
 registerA2ATaskRoutes(app);
 

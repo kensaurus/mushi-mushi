@@ -40,7 +40,7 @@ describe('PDCA model rules', () => {
     expect(pdcaModelError('primary_model', 'claude-haiku-4-5-20251001')).toBeNull()
     const consoleTypes = readFileSync(resolve(__dirname, '../../../../apps/admin/src/components/iterate/types.ts'), 'utf-8')
     const choices = [...consoleTypes.slice(consoleTypes.indexOf('export const MODEL_OPTIONS')).matchAll(/value: '([^']+)'/g)].map((m) => m[1])
-    expect(choices).toEqual(['claude-opus-5-5', 'claude-haiku-4-5'])
+    expect(choices).toEqual(['claude-opus-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'])
     for (const id of [PDCA_DEFAULT_MODEL, ...choices]) expect(pdcaModelError('primary_model', id)).toBeNull()
   })
 

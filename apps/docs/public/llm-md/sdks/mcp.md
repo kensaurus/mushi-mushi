@@ -20,7 +20,7 @@ into your IDE.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.28.0`. The default for
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.0`. The default for
   Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
   Windsurf. Your client launches the server as a subprocess and pipes
   JSON-RPC over stdio.
@@ -72,7 +72,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **121-tool** catalog and
+on npm for the full **124-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 

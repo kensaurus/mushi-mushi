@@ -53,7 +53,7 @@ const job = (id: number, runId: number, status: string) => ({
   labels: ['self-hosted', 'glot'],
 })
 
-function github(opts: { runs?: unknown[]; runners?: { status: number; body: unknown } } = {}) {
+function github(opts: { runs?: unknown[]; runners?: { status: number; body: unknown }; repo?: { status: number; body: unknown } } = {}) {
   const calls: string[] = []
   const fetchImpl = async (url: string) => {
     calls.push(url)
@@ -65,6 +65,10 @@ function github(opts: { runs?: unknown[]; runners?: { status: number; body: unkn
     }
     if (url.includes('/actions/runners')) {
       const r = opts.runners ?? { status: 403, body: { message: 'Resource not accessible by personal access token' } }
+      return new Response(JSON.stringify(r.body), { status: r.status })
+    }
+    if (/\/repos\/[^/]+\/[^/?]+$/.test(url)) {
+      const r = opts.repo ?? { status: 200, body: { private: false, owner: { login: 'kensaurus', type: 'User' } } }
       return new Response(JSON.stringify(r.body), { status: r.status })
     }
     if (url.includes('/actions/runs?')) {
@@ -100,18 +104,33 @@ describe('runCiCollector', () => {
     const db = makeFakeDb({ project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/glot.it', github_app_installation_id: null }] })
     const gh = github({ runs: [run(1, 'completed', 30), run(2, 'in_progress', 5), run(3, 'completed', 300)] })
     const first = await runCiCollector(db as never, deps(gh.fetchImpl))
-    // runs list + runner list + jobs of run 1 and run 2 (run 3 is outside the window).
-    expect(gh.calls).toHaveLength(4)
+    // runs list + runner list + repo visibility + jobs of run 1 and run 2 (run 3 is outside the window).
+    expect(gh.calls).toHaveLength(5)
     expect(first.stored).toBe(2)
     expect(db.table('ci_jobs').map((j) => j.run_id).sort()).toEqual([1, 2])
     const state = db.table('ci_collector_state')[0]
-    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing' } })
+    expect(state.permissions).toMatchObject({ 'kensaurus/glot.it': { jobs: 'ok', runners: 'missing', visibility: 'public', owner: 'kensaurus' } })
 
     gh.calls.length = 0
     await runCiCollector(db as never, deps(gh.fetchImpl, new Date(NOW.getTime() + 10 * 60_000)))
     // The refused runner list is not asked again; finished run 1 is not re-read; running run 2 is.
     expect(gh.calls.some((u) => u.includes('/actions/runners'))).toBe(false)
     expect(gh.calls.filter((u) => u.includes('/jobs'))).toEqual([expect.stringContaining('/actions/runs/2/jobs')])
+    // Visibility is read once a day, not every tick.
+    expect(gh.calls.some((u) => u.endsWith('/repos/kensaurus/glot.it'))).toBe(false)
+  })
+
+  it('records a private repo, reads visibility again after a day, and keeps the last known value when GitHub refuses', async () => {
+    const db = makeFakeDb({ project_repos: [{ project_id: P1, repo_url: 'https://github.com/kensaurus/yen-yen', github_app_installation_id: null }] })
+    const priv = github({ runs: [], repo: { status: 200, body: { private: true, owner: { login: 'kensaurus' } } } })
+    await runCiCollector(db as never, deps(priv.fetchImpl))
+    expect(db.table('ci_collector_state')[0].permissions['kensaurus/yen-yen']).toMatchObject({ visibility: 'private', visibilityCheckedAt: NOW.toISOString() })
+
+    const refused = github({ runs: [], repo: { status: 403, body: {} } })
+    const nextDay = new Date(NOW.getTime() + 25 * 60 * 60_000)
+    await runCiCollector(db as never, deps(refused.fetchImpl, nextDay))
+    expect(refused.calls.some((u) => u.endsWith('/repos/kensaurus/yen-yen'))).toBe(true)
+    expect(db.table('ci_collector_state')[0].permissions['kensaurus/yen-yen']).toMatchObject({ visibility: 'private', visibilityCheckedAt: nextDay.toISOString() })
   })
 
   it('shares the tick budget, least recently collected project first', async () => {
@@ -282,3 +301,31 @@ describe('settleStaleLiveJobs', () => {
   })
 })
 
+
+describe('runPlacementWatches (ADR 0037)', () => {
+  it('marks a watch ok after 10 moved jobs ran where expected, alert on a wrong label, and leaves others alone', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const started = new Date(NOW.getTime() - 60 * 60_000).toISOString()
+    const jobs = (n: number, labels: string[], repo = 'kensaurus/yen-yen') =>
+      Array.from({ length: n }, (_, i) => ({ project_id: P1, repo, workflow_name: 'CI', job_name: 'Lint', runner_labels: labels, queue_seconds: 20, head_branch: 'feat/x', html_url: null, gh_created_at: new Date(Date.parse(started) + (i + 1) * 60_000).toISOString() }))
+    const db = makeFakeDb({
+      ci_placement_watches: [
+        { id: 'w1', project_id: P1, repo: 'kensaurus/yen-yen', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w2', project_id: P1, repo: 'kensaurus/glot.it', jobs: [{ workflow: 'CI', job: 'Lint' }], expected_labels: ['kensaurus-local'], started_at: started, status: 'watching' },
+        { id: 'w3', project_id: P1, repo: 'kensaurus/x', jobs: [], expected_labels: [], started_at: started, status: 'ok' },
+      ],
+      ci_jobs: [...jobs(11, ['kensaurus-local']), ...jobs(1, ['ubuntu-24.04'], 'kensaurus/glot.it')],
+    })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(2)
+    const w = Object.fromEntries(db.table('ci_placement_watches').map((r) => [r.id, r]))
+    expect(w.w1).toMatchObject({ status: 'ok', jobs_seen: 10, unexpected: 0 })
+    expect(w.w2).toMatchObject({ status: 'alert', jobs_seen: 1, unexpected: 1 })
+    expect(w.w3.status).toBe('ok')
+  })
+
+  it('does nothing before the table exists', async () => {
+    const { runPlacementWatches } = await import('../../supabase/functions/_shared/ci-collector.ts')
+    const db = makeFakeDb({}, { failRead: (t) => (t === 'ci_placement_watches' ? { code: '42P01', message: 'missing' } : null) })
+    expect(await runPlacementWatches(db as never, NOW)).toBe(0)
+  })
+})

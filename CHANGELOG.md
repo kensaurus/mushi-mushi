@@ -10,11 +10,11 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v1.33.x
 
-Latest tag: `v1.33.1`
+Latest tag: `v1.33.2`
 
 ### Packages bumped
 
-- `@mushi-mushi/core` → 1.33.1
+- `@mushi-mushi/core` → 1.33.2
 - `@mushi-mushi/web` → 1.33.1
 
 ## v1.32.x
@@ -489,6 +489,14 @@ Latest tag: `v1.0.3`
 - `@mushi-mushi/vue` → 1.0.3
 - `@mushi-mushi/web` → 1.0.0
 
+## v0.33.x
+
+Latest tag: `v0.33.0`
+
+### Packages bumped
+
+- `@mushi-mushi/cli` → 0.33.0
+
 ## v0.32.x
 
 Latest tag: `v0.32.0`
@@ -520,6 +528,7 @@ Latest tag: `v0.29.2`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.29.2
+- `@mushi-mushi/mcp` → 0.29.0
 
 ## v0.28.x
 
@@ -905,7 +914,7 @@ Latest tag: `v0.9.1`
 
 ## v0.8.x
 
-Latest tag: `v0.8.7`
+Latest tag: `v0.8.8`
 
 ### Highlights
 
@@ -928,7 +937,7 @@ Latest tag: `v0.8.7`
 - `@mushi-mushi/svelte` → 0.8.4
 - `@mushi-mushi/vue` → 0.8.4
 - `@mushi-mushi/web` → 0.8.0
-- `mushi-mushi` → 0.8.7
+- `mushi-mushi` → 0.8.8
 
 ## v0.7.x
 
@@ -966,7 +975,7 @@ Latest tag: `v0.7.17`
 
 ## v0.6.x
 
-Latest tag: `v0.6.7`
+Latest tag: `v0.6.8`
 
 ### Highlights
 
@@ -992,7 +1001,7 @@ Latest tag: `v0.6.7`
 - `@mushi-mushi/node` → 0.6.0
 - `@mushi-mushi/plugin-cursor-cloud` → 0.6.2
 - `@mushi-mushi/plugin-sdk` → 0.6.0
-- `create-mushi-mushi` → 0.6.7
+- `create-mushi-mushi` → 0.6.8
 - `mushi-mushi` → 0.6.5
 
 ## v0.5.x

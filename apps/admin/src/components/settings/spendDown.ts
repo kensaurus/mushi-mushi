@@ -156,15 +156,40 @@ export function spendDownPauses(k: SpendDownKeyStatus): SpendDownPause[] {
     }))
 }
 
+/** The spend-down worker's stop reason when an app has nothing left to dispatch (_shared/spend-down.ts). */
+const SPEND_DOWN_NO_REPORT = 'No open report to fix'
+
 /**
- * Why the last tick dispatched nothing to some apps, one phrase per app.
+ * Why the last tick dispatched nothing to some apps. Apps with the same
+ * reason share one line ("glot.it, yen-yen and 4 more: …"), so seven apps out
+ * of work read as one sentence, not seven.
  * Pauses are left to spendDownPauses, which reads the live state: a pause the
  * last tick recorded may already have lifted.
  */
 export function spendDownStops(k: SpendDownKeyStatus): string[] {
   const names = new Map(k.projects.map((p) => [p.id, p.name]))
   const livePaused = new Set(k.projects.filter((p) => p.stopLoss?.paused).map((p) => p.id))
-  return (k.lastSummary?.projects ?? [])
-    .filter((p) => p.dispatched === 0 && p.stopped && !p.paused && !livePaused.has(p.projectId))
-    .map((p) => `${names.get(p.projectId) ?? 'An app'}: ${p.stopped}`)
+  const byReason = new Map<string, string[]>()
+  for (const p of k.lastSummary?.projects ?? []) {
+    if (p.dispatched !== 0 || !p.stopped || p.paused || livePaused.has(p.projectId)) continue
+    byReason.set(p.stopped, [...(byReason.get(p.stopped) ?? []), names.get(p.projectId) ?? 'An app'])
+  }
+  return [...byReason].map(([reason, apps]) => `${appList(apps)}: ${reason}`)
+}
+
+function appList(apps: string[]): string {
+  if (apps.length <= 3) return apps.length < 3 ? apps.join(' and ') : `${apps[0]}, ${apps[1]} and ${apps[2]}`
+  return `${apps[0]}, ${apps[1]} and ${apps.length - 2} more`
+}
+
+/**
+ * The key is in its window with credits to spend, but the last tick found no
+ * report to send in any app: every open report was tried in the last 7 days
+ * or settled by the agent's verdict. The credits wait for new reports.
+ */
+export function spendDownOutOfWork(k: SpendDownKeyStatus): boolean {
+  const ticked = k.lastSummary?.projects ?? []
+  if (k.state !== 'active' || k.dispatchedToday > 0 || ticked.length === 0) return false
+  return ticked.every((p) => p.dispatched === 0 && (p.stopped === SPEND_DOWN_NO_REPORT || p.paused))
+    && ticked.some((p) => p.stopped === SPEND_DOWN_NO_REPORT)
 }

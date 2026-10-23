@@ -26,6 +26,7 @@ export default {
   fixes: 'Fix orchestrator',
   'verified-merge': 'Verified merge',
   ci: 'CI runners',
+  credits: 'Spend credits',
   repo: 'Repo graph',
   explore: 'Codebase Atlas',
   'ux-runs': 'UX runs',
@@ -40,6 +41,7 @@ export default {
   'code-health': 'Code health',
   drift: 'Drift scanner',
   anomalies: 'Anomaly detection',
+  design: 'Design system',
   content: 'Content quality',
   judge: 'Judge dashboard',
   lessons: 'Lessons',
@@ -55,6 +57,7 @@ export default {
   notifications: 'Notifications',
   experiments: 'Experiments',
   research: 'Research',
+  recipe: 'App blueprint',
 
   '-- Account': { type: 'separator', title: 'Account' },
   settings: 'Settings',

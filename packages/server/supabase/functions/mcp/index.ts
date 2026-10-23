@@ -349,6 +349,7 @@ const LIST_GATE_FINDINGS_GATES = [
   'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
+  'portfolio_radar_vulns',
   'store_review',
 ] as const
 
@@ -639,6 +640,15 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         headers: ctx.authHeaders,
         body: JSON.stringify({ element: args.element, changes: args.changes, title: args.title, dryRun: args.confirm !== true }),
       })
+    },
+  },
+  request_ci_placement_change: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for request_ci_placement_change')
+      const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value ?? null, ...(typeof args.reason === 'string' && args.reason ? { reason: args.reason } : {}) }
+      return apiCall('/v1/admin/ci/placement/requests', { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify(body) })
     },
   },
   request_connector_action: {
@@ -2136,6 +2146,8 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_release_calendar',
   'get_code_health',
   'get_ci_overview',
+  'get_ci_costs',
+  'request_ci_placement_change',
   'get_fix_verification',
   'explain_finding',
   'get_repo_diagram',
