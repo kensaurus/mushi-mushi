@@ -266,6 +266,8 @@ describe('projectCapacity', () => {
   it('takes the tightest of the key, the 3-running bound and the auto-fix cap', () => {
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(2)
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 2, autofixMaxPerDay: 3 })).toBe(1)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(0)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 1, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: 30 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 5, openCloudAttempts: 4, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(0)
   })
@@ -417,7 +419,7 @@ describe('runSpendDownForKey', () => {
       dispatch: async () => ({ ok: true }),
     })
     expect(busy.dispatched).toBe(0)
-    expect(busy.projects[0].stopped).toBe('Three fixes already running')
+    expect(busy.projects[0].stopped).toBe('3 running already (the app\'s limit)')
   })
 
   it('does nothing outside the window', async () => {

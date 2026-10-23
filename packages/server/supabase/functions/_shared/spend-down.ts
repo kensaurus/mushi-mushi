@@ -401,8 +401,10 @@ export function projectCapacity(args: {
   openCloudAttempts: number
   autofixDispatchesToday: number
   autofixMaxPerDay: number | null
+  /** project_settings.autofix_max_concurrent: fewer agents at once where the app's CI is slow or shared. */
+  maxConcurrent?: number | null
 }): number {
-  const byConcurrency = SPEND_DOWN_MAX_OPEN_PER_PROJECT - args.openCloudAttempts
+  const byConcurrency = (args.maxConcurrent ?? SPEND_DOWN_MAX_OPEN_PER_PROJECT) - args.openCloudAttempts
   const byAutofixCap =
     args.autofixMaxPerDay == null ? Number.POSITIVE_INFINITY : args.autofixMaxPerDay - args.autofixDispatchesToday
   return Math.max(0, Math.min(args.remainingForKey, byConcurrency, byAutofixCap))

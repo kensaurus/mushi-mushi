@@ -49,6 +49,7 @@ import {
   SPEND_DOWN_STOP_AUTOFIX_OFF,
   SPEND_DOWN_STOP_NO_REPORT,
   projectCapacity,
+  SPEND_DOWN_MAX_OPEN_PER_PROJECT,
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
   reportsToRetryAfterKeyLimit,
@@ -346,10 +347,11 @@ export async function runSpendDownForKey(
         openCloudAttempts: await openCloudAttempts(db, projectId),
         autofixDispatchesToday: budget.dispatchesToday,
         autofixMaxPerDay: budget.maxDispatchesPerDay,
+        maxConcurrent: (s.autofix_max_concurrent as number | null) ?? null,
       }),
     )
     if (capacity <= 0) {
-      if (!probe) outcome.stopped = 'Three fixes already running'
+      if (!probe) outcome.stopped = `${(s.autofix_max_concurrent as number | null) ?? SPEND_DOWN_MAX_OPEN_PER_PROJECT} running already (the app's limit)`
       continue
     }
     const candidates = await candidatesFor(db, projectId, now)
