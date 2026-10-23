@@ -12,6 +12,7 @@ import { ResultChip, Toggle } from '../ui'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
 import { expiryLabel } from '../../lib/creditPlan'
+import { cursorModelLabel } from '../../lib/cursorModelLabel'
 import { spendDownLine, spendDownOutOfWork, type SpendDownKeyStatus, type SpendDownResponse } from '../settings/spendDown'
 import type { ReviewFollowupsResponse } from '../settings/reviewFollowups'
 
@@ -58,6 +59,9 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
 
   return (
     <div className="space-y-3">
+      {keys.length > 0 && (
+        <p className="text-xs text-fg-muted">The Cursor keys the open app can use. Another app&apos;s keys show when you switch to it.</p>
+      )}
       <ul className="divide-y divide-edge-subtle">
         {keys.map((k) => {
           const line = spendDownLine(k)
@@ -121,8 +125,8 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           </div>
           <p className="text-xs text-fg-secondary">
             When Opus says &ldquo;fix first&rdquo;, a new agent fixes exactly its findings on the same pull request (two rounds at most).
-            {' '}Rounds run on {fu.model ?? "each app's model"}
-            {fu.escalationModel ? `; the last round on ${fu.escalationModel}` : ''}.
+            {' '}Rounds run on {cursorModelLabel(fu.model) ?? "each app's model"}
+            {fu.escalationModel ? `; the last round on ${cursorModelLabel(fu.escalationModel)}` : ''}.
           </p>
           <p className="text-xs text-fg-muted">
             Models, key and daily limit:{' '}
