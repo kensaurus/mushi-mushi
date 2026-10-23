@@ -48,7 +48,7 @@ If the search fails, an error banner shows the specific error code:
 
 Research results are stored in your Supabase project. They are never shared with other
 tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
 
 ---
 
