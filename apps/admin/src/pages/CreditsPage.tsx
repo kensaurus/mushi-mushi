@@ -18,6 +18,7 @@ import { LINK_ACCENT } from '../lib/chipTone'
 import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
+import { SkillRunsCard } from '../components/credits/SkillRunsCard'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -80,7 +81,7 @@ export function CreditsPage() {
         icon={<IconCost />}
         description="Credits that expire, and every way Mushi can spend them finding and fixing your bugs."
         helpTitle="About Spend credits"
-        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs and answers review findings; Firecrawl checks your live sites for broken pages that become bug reports."
+        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
       <PagePosture
@@ -110,6 +111,10 @@ export function CreditsPage() {
             followups.reload()
           }}
         />
+      </Section>
+
+      <Section title="Cursor: improve your apps with skills">
+        <SkillRunsCard projects={projects.data ? (projects.data.projects ?? []) : null} />
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">

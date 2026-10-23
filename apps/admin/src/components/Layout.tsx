@@ -361,11 +361,13 @@ export function Layout({ children }: { children: ReactNode }) {
     return sections
   }, [isSuperAdmin, isOperator, has, labs.enabled])
 
-  // One nav-meta request for the sidebar: only the slices the listed pages
-  // and the current page's hero read.
+  // One nav-meta request for the one sidebar (core pages plus enabled
+  // Labs). The current pathname used to be unioned in so
+  // `layoutHeroFromStats` could fill the route hero; that reader is gone,
+  // and a page that is not in the sidebar does not read these slices.
   const navSlices = useMemo(
-    () => navSlicesForPaths([...visibleNav.flatMap((s) => s.items.map((i) => i.path)), pathname]),
-    [visibleNav, pathname],
+    () => navSlicesForPaths(visibleNav.flatMap((s) => s.items.map((i) => i.path))),
+    [visibleNav],
   )
   const navCounts = useNavCounts({ live: true, slices: navSlices })
 

@@ -469,7 +469,8 @@ describe('fairness', () => {
       { id: 'c1', project_id: 'C' },
       { id: 'd1', project_id: 'D' },
     ]
-    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
+    expect(pickFairBatch(rows).map((r) => r.id)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    expect(pickFairBatch(rows, 3).map((r) => r.id)).toEqual(['a1', 'b1', 'c1'])
   })
 
   it('reviews a re-queued PR before older first reviews, still one per project', async () => {
@@ -479,7 +480,7 @@ describe('fairness', () => {
       queue: [row('first-a', 'A'), row('first-b', 'B'), row('first-c', 'C'), row('first-d', 'D')],
     })
     const s = await runAgentPrReview(db, {}, deps())
-    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c'])
+    expect(s.results.map((r) => r.reviewId)).toEqual(['again-a', 'first-b', 'first-c', 'first-d'])
     const reads = findQueries(queries, 'fix_reviews', 'select').filter((q) => hasFilter(q, 'eq', 'status'))
     expect(reads.some((q) => hasFilter(q, 'not', 'verdict'))).toBe(true)
     expect(reads.some((q) => hasFilter(q, 'is', 'verdict'))).toBe(true)
