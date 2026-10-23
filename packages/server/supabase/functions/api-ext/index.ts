@@ -33,6 +33,8 @@ import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
 import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
 import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
 import { registerVulnerabilityRoutes } from '../api/routes/vulnerabilities.ts'
+import { registerSiteAuditRoutes } from '../api/routes/site-audit.ts'
+import { registerSearchRankRoutes } from '../api/routes/search-rank.ts'
 
 ensureSentry('api-ext')
 
@@ -55,6 +57,8 @@ registerQaCoverageRoutes(app)
 registerFullstackAuditRoutes(app)
 registerUxRunsRoutes(app)
 registerVulnerabilityRoutes(app)
+registerSiteAuditRoutes(app)
+registerSearchRankRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

@@ -155,6 +155,8 @@ describe('ReviewFollowupsSection', () => {
     expect(mocks.paths).toContain(`/v1/admin/byok/cursor/models?keyId=${HIROSE}`)
     await act(async () => change(selectByLabel('Model'), 'grok-4.7'))
     await act(async () => change(selectByLabel('Reasoning effort'), 'xhigh'))
+    // The last of a PR's two rounds can run on a stronger model (ADR 0032 amendment).
+    await act(async () => change(selectByLabel('Last round model'), 'composer-2.5'))
     const limit = Array.from(document.body.querySelectorAll('label'))
       .find((l) => l.textContent?.includes('Follow-ups per day'))
     const input = (limit?.htmlFor ? document.getElementById(limit.htmlFor) : limit?.querySelector('input')) as HTMLInputElement
@@ -166,6 +168,7 @@ describe('ReviewFollowupsSection', () => {
       enabled: true,
       keyId: HIROSE,
       model: 'grok-4.7?reasoning_effort=xhigh',
+      escalationModel: 'composer-2.5',
       dailyLimit: 40,
     })
     expect(mocks.reload).toHaveBeenCalled()

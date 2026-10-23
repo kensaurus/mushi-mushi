@@ -223,6 +223,27 @@ export function followupTrigger(input: {
   return { queue: true }
 }
 
+/**
+ * The Cursor model spec for one follow-up (ADR 0032 amendment, 2026-10-23).
+ * A PR's last round (FOLLOWUP_MAX_PER_PR) runs on the escalation model when
+ * the organization set one: the earlier round already failed to satisfy the
+ * reviewer, so the harder edit goes to the stronger model while first rounds
+ * stay on the cheaper one. Otherwise the organization's model, else the
+ * app's default. `priorDispatched` counts this PR's earlier follow-ups Cursor
+ * accepted (the same count the per-PR limit uses).
+ */
+export function followupModelSpec(input: {
+  model: string | null
+  escalationModel: string | null
+  appDefault: string | null
+  priorDispatched: number
+}): { spec: string | null; escalated: boolean } {
+  if (input.escalationModel && input.priorDispatched >= FOLLOWUP_MAX_PER_PR - 1) {
+    return { spec: input.escalationModel, escalated: true }
+  }
+  return { spec: input.model ?? input.appDefault, escalated: false }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CI on the reviewed head (CI-repair follow-ups)
 // ─────────────────────────────────────────────────────────────────────────────

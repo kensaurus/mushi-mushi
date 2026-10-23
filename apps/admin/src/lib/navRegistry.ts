@@ -560,6 +560,16 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   // ── Account ───────────────────────────────────────────────────────────────
   {
+    id: 'nav:credits',
+    path: '/credits',
+    label: 'Spend credits',
+    sectionId: 'workspace',
+    iconKey: 'cost',
+    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.',
+    paletteKeywords: ['credits', 'spend credits', 'spend down', 'spend-down', 'expiring credits', 'cursor credits', 'firecrawl credits', 'usage', 'site watch', 'follow-ups', 'budget'],
+    paletteGroup: 'Workspace',
+  },
+  {
     id: 'nav:settings',
     path: '/settings',
     label: 'Settings',
