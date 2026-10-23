@@ -88,15 +88,6 @@ export function reportMessage(
   Sentry.captureMessage(msg, { level, ...ctx })
 }
 
-/**
- * `reportMessage`, called as a method. The steady-timeout alert goes through
- * here so one route that keeps failing reaches Sentry without paging on
- * every individual gateway timeout.
- */
-export const sentryCapture = {
-  message: reportMessage,
-}
-
 /** Correlate Sentry issues with Langfuse traces for LLM routes. */
 export function tagLangfuseTrace(traceId: string): void {
   if (!inited || !traceId) return
@@ -214,7 +205,7 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     )
     emitDbTransientVolumeAlert(
       c.req.path,
-      (msg, ctx) => sentryCapture.message(msg, 'warning', ctx),
+      (msg, ctx) => reportMessage(msg, 'warning', ctx),
       { scope: 'mushi:sentry-hono-handler', method: c.req.method, requestId },
     )
     return c.json(

@@ -30,12 +30,11 @@
  *          We pin the discrimination at the response level (status code +
  *          body shape) AND on the structured-warn side-effect (so a future
  *          refactor that "helpfully" re-introduces a `captureMessage` call
- *          will trip a test). The Sentry side-effect is short-circuited at
- *          runtime here because no SENTRY_DSN_SERVER env var is set under
- *          vitest.
+ *          will trip a test). The Sentry SDK is mocked and initialised with a
+ *          placeholder DSN, so captures land on the mock, never the network.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   DB_TRANSIENT_VOLUME_THRESHOLD,
@@ -43,7 +42,28 @@ import {
   resetDbTransientVolume,
 } from '../../supabase/functions/_shared/error-codes.ts'
 import { ProjectAccessReadError } from '../../supabase/functions/_shared/project-access.ts'
-import { sentryCapture, sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
+import { ensureSentry, sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
+
+const sentrySdk = vi.hoisted(() => ({
+  init: vi.fn(),
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+  setTag: vi.fn(),
+}))
+vi.mock('npm:@sentry/deno@^9', () => sentrySdk)
+
+const globals = globalThis as { Deno?: unknown }
+const previousDeno = globals.Deno
+beforeAll(() => {
+  globals.Deno = {
+    env: { get: (k: string) => (k === 'SENTRY_DSN_SERVER' ? 'https://public@sentry.invalid/1' : undefined) },
+  }
+  ensureSentry('api')
+  expect(sentrySdk.init).toHaveBeenCalledTimes(1)
+})
+afterAll(() => {
+  globals.Deno = previousDeno
+})
 
 interface MinimalContext {
   req: { path: string; method: string }
@@ -79,19 +99,18 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
   const _console = (globalThis as unknown as { console: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void } }).console
   let warnSpy: ReturnType<typeof vi.spyOn>
   let errorSpy: ReturnType<typeof vi.spyOn>
-  let volumeSpy: ReturnType<typeof vi.spyOn>
+  const volumeSpy = sentrySdk.captureMessage
 
   beforeEach(() => {
     resetDbTransientVolume()
     warnSpy = vi.spyOn(_console, 'warn').mockImplementation(() => {})
     errorSpy = vi.spyOn(_console, 'error').mockImplementation(() => {})
-    volumeSpy = vi.spyOn(sentryCapture, 'message')
+    volumeSpy.mockClear()
   })
 
   afterEach(() => {
     warnSpy.mockRestore()
     errorSpy.mockRestore()
-    volumeSpy.mockRestore()
   })
 
   it('returns 499 client_closed_request for the canonical Deno status-0 RangeError', async () => {
@@ -221,11 +240,11 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     const res = sentryHonoErrorHandler(err, ctx as never)
     expect(res.status).toBe(500)
     expect(volumeSpy).toHaveBeenCalledTimes(1)
-    const [msg, level, sent] = volumeSpy.mock.calls[0]!
-    expect(level).toBe('warning')
+    const [msg, sent] = volumeSpy.mock.calls[0]!
     expect(String(msg)).toContain(path)
     expect(String(msg)).toContain(String(DB_TRANSIENT_VOLUME_THRESHOLD))
     expect(sent).toMatchObject({
+      level: 'warning',
       tags: { path, method: 'GET', event: 'db_transient_error_volume' },
       extra: { count: DB_TRANSIENT_VOLUME_THRESHOLD, window_ms: DB_TRANSIENT_VOLUME_WINDOW_MS },
       fingerprint: ['db-transient-volume', path],
