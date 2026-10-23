@@ -2,7 +2,7 @@
  * radar.ts — the hole checks (Plan 020 Phase 1, ADR 0017).
  *
  *   GET  /v1/admin/projects/:id/radar        adminOrApiKey(mcp:read)  every detector's state
- *   POST /v1/admin/projects/:id/radar/run    adminOrApiKey(mcp:write) run now (1 per 10 min)
+ *   POST /v1/admin/projects/:id/radar/run    adminOrApiKey(mcp:write) run now (1 per 10 min), and vuln-watch (ADR 0038)
  *   GET  /v1/admin/orgs/:orgId/radar         adminOrApiKey(mcp:read)  open findings across the org
  *   POST /v1/ingest/radar                    apiKeyAuth               the host CI's scan (portfolio_radar_ci)
  *
@@ -19,6 +19,7 @@ import { adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { runInBackground } from '../../_shared/background.ts'
+import { invokeVulnWatch } from '../../_shared/vuln-watch-invoke.ts'
 import { defaultRadarRunDeps } from '../../_shared/radar/default-deps.ts'
 import { CI_ONLY_RULES, RADAR_CI_GATE, RADAR_GATE, readRadar, recordCiRadar, runRadar, type RadarRunDeps } from '../../_shared/radar/run.ts'
 import { isRepoScanPath } from '../../_shared/radar/repo-scan.ts'
@@ -47,6 +48,8 @@ export interface RadarRouteDeps {
   run: RadarRunDeps
   runInBackground: typeof runInBackground
   runRadar: typeof runRadar
+  /** Also re-check known holes (vuln-watch, ADR 0038); absent in tests that do not need it. */
+  invokeVulnWatch?: (projectId: string) => void
 }
 
 export const defaultRadarDeps: RadarRouteDeps = {
@@ -57,6 +60,7 @@ export const defaultRadarDeps: RadarRouteDeps = {
   run: defaultRadarRunDeps,
   runInBackground,
   runRadar,
+  invokeVulnWatch,
 }
 
 async function projectAccess(c: Context, db: Db): Promise<{ ok: true; projectId: string } | { ok: false; response: Response }> {
@@ -139,6 +143,7 @@ export function registerRadarRoutes(app: Hono<{ Variables: Variables }>, deps: R
       }),
       'radar-run',
     )
+    deps.invokeVulnWatch?.(access.projectId)
     return c.json({ ok: true, data: { started: true, projectId: access.projectId, startedAt: now.toISOString() } }, 202)
   })
 

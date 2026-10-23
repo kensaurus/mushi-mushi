@@ -158,7 +158,7 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
-    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/deploy-edge-function.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs scripts/check-surface-parity.test.mjs scripts/check-docs-versions.test.mjs scripts/check-dependency-overrides.test.mjs scripts/check-workflow-expressions.test.mjs scripts/gen-route-manifest.test.mjs scripts/e2e-realworld-workflow.test.mjs scripts/generate-llms-full.test.mjs scripts/confirmation-coverage-skip.test.mjs scripts/check-env-source-parity.test.mjs scripts/fix-verify-action.test.mjs scripts/actions-archive.test.mjs scripts/hono-version.test.mjs",
+    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/deploy-edge-function.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs scripts/check-surface-parity.test.mjs scripts/check-docs-versions.test.mjs scripts/check-docs-links.test.mjs scripts/check-dependency-overrides.test.mjs scripts/check-katex-version.test.mjs scripts/check-workflow-expressions.test.mjs scripts/gen-route-manifest.test.mjs scripts/e2e-realworld-workflow.test.mjs scripts/generate-llms-full.test.mjs scripts/confirmation-coverage-skip.test.mjs scripts/check-env-source-parity.test.mjs scripts/fix-verify-action.test.mjs scripts/actions-archive.test.mjs scripts/hono-version.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:console-knowledge && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes && pnpm check:llms-docs",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
@@ -191,7 +191,7 @@
       "hono": ">=4.13.11 <5",
       "fastify": ">=5.12.5 <6",
       "mermaid": ">=11.16.1 <12",
-      "dompurify": ">=3.4.16 <4",
+      "dompurify": ">=3.4.17 <4",
       "vitest": ">=4.1.11 <5",
       "devalue": "5.9.3",
       "@angular/core": ">=22.1.0 <23",
@@ -215,7 +215,8 @@
       "smol-toml@1": ">=1.9.0 <2",
       "@ai-sdk/provider-utils@4": ">=4.0.33 <5",
       "uuid@7": ">=11.1.1 <12",
-      "@react-navigation/core@7": ">=7.23.0 <8"
+      "@react-navigation/core@7": ">=7.23.0 <8",
+      "katex": ">=0.18.2 <0.19"
     }
   }
 }

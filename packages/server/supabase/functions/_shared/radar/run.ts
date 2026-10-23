@@ -38,6 +38,10 @@ type Db = ReturnType<typeof getServiceClient>
 
 export const RADAR_GATE = 'portfolio_radar'
 export const RADAR_CI_GATE = 'portfolio_radar_ci'
+/** vuln-watch's run (ADR 0038): known holes in dependencies and the runtime. */
+export const RADAR_VULN_GATE = 'portfolio_radar_vulns'
+/** Rules only vuln-watch answers; the daily radar run leaves them alone. */
+export const VULN_RULES: readonly RadarRuleId[] = ['known_vulnerable_dependency', 'runtime_end_of_life']
 /** A host-CI policy report newer than this makes the scheduled run skip its own repo read. */
 export const CI_FACTS_FRESH_DAYS = 14
 /** Rules only the host's CI can check (whole-repo scans; Mushi never clones). */
@@ -263,7 +267,8 @@ function findingRows(projectId: string, runId: string, results: readonly Detecto
   }))
 }
 
-async function recordRun(db: Db, projectId: string, gate: string, triggeredBy: string, commitSha: string | null, results: DetectorResult[], extra: Record<string, unknown>, now: Date): Promise<RadarRunSummary> {
+/** Store one gate run and its findings (the radar, the host-CI push, vuln-watch). */
+export async function recordRun(db: Db, projectId: string, gate: string, triggeredBy: string, commitSha: string | null, results: DetectorResult[], extra: Record<string, unknown>, now: Date): Promise<RadarRunSummary> {
   const status = runStatus(results)
   const summary = {
     results: results.map((r) => ({ ruleId: r.ruleId, state: r.state, reason: r.reason.slice(0, 500), findings: r.findings.length })),
@@ -382,7 +387,7 @@ export interface RadarDetectorView {
   reason: string
   checkedAt: string | null
   /** Which run answered: Mushi's scheduled check or the host's CI. */
-  from: 'portfolio_radar' | 'portfolio_radar_ci' | null
+  from: 'portfolio_radar' | 'portfolio_radar_ci' | 'portfolio_radar_vulns' | null
   findings: Array<{ id: string; severity: string; message: string; filePath: string | null; line: number | null; fix: string | null; target: string | null }>
 }
 
@@ -390,14 +395,15 @@ export interface RadarView {
   projectId: string
   checkedAt: string | null
   ciCheckedAt: string | null
+  vulnsCheckedAt: string | null
   status: 'never_run' | 'pass' | 'warn' | 'fail' | 'skipped' | 'error'
   detectors: RadarDetectorView[]
 }
 
 /** Every radar rule, answered by the newest of the two runs that checked it; never green by default. */
 export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
-  const [run, ci] = await Promise.all([latestRun(db, projectId, RADAR_GATE), latestRun(db, projectId, RADAR_CI_GATE)])
-  const runIds = [run?.id, ci?.id].filter((x): x is string => Boolean(x))
+  const [run, ci, vulns] = await Promise.all([latestRun(db, projectId, RADAR_GATE), latestRun(db, projectId, RADAR_CI_GATE), latestRun(db, projectId, RADAR_VULN_GATE)])
+  const runIds = [run?.id, ci?.id, vulns?.id].filter((x): x is string => Boolean(x))
   const { data: rows } = runIds.length
     ? await db.from('gate_findings').select('id, gate_run_id, severity, rule_id, message, file_path, line, suggested_fix').in('gate_run_id', runIds).eq('allowlisted', false).limit(1000)
     : { data: [] }
@@ -407,6 +413,7 @@ export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
     const pick = [
       { gate: 'portfolio_radar' as const, r: run },
       { gate: 'portfolio_radar_ci' as const, r: ci },
+      { gate: 'portfolio_radar_vulns' as const, r: vulns },
     ]
       .map(({ gate, r }) => ({ gate, r, res: (r?.summary?.results as Array<{ ruleId: string; state: DetectorState; reason: string }> | undefined)?.find((x) => x.ruleId === ruleId) }))
       .filter((x) => x.res && x.r)
@@ -420,7 +427,9 @@ export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
     if (!hit) {
       const reason = ruleId === 'key_in_client_bundle'
         ? 'Not checked yet. This check reads your built app in CI: add `mushi radar scan --push` after the build step of your existing CI job.'
-        : CI_ONLY_RULES.includes(ruleId)
+        : VULN_RULES.includes(ruleId)
+          ? 'Not checked yet. Lockfiles and runtime pins are checked daily at 05:25 UTC.'
+          : CI_ONLY_RULES.includes(ruleId)
           ? 'Not checked yet. This check runs in your CI: add `mushi radar scan --push` to your existing CI job.'
           : 'Not checked yet.'
       return { ruleId, title: meta.title, prevents: meta.prevents, source: meta.source, state: 'unknown', reason, checkedAt: null, from: null, findings: [] }
@@ -439,11 +448,11 @@ export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
         .map((f) => ({ id: f.id, severity: f.severity, message: f.message, filePath: f.file_path, line: f.line, fix: f.suggested_fix?.fix ?? null, target: f.suggested_fix?.target ?? null })),
     }
   })
-  const statuses = [run?.status, ci?.status].filter(Boolean) as string[]
+  const statuses = [run?.status, ci?.status, vulns?.status].filter(Boolean) as string[]
   const status: RadarView['status'] = statuses.length === 0
     ? 'never_run'
     : statuses.includes('error') ? 'error' : statuses.includes('fail') ? 'fail' : statuses.includes('warn') ? 'warn' : statuses.every((s) => s === 'skipped') ? 'skipped' : 'pass'
-  return { projectId, checkedAt: run?.completed_at ?? null, ciCheckedAt: ci?.completed_at ?? null, status, detectors }
+  return { projectId, checkedAt: run?.completed_at ?? null, ciCheckedAt: ci?.completed_at ?? null, vulnsCheckedAt: vulns?.completed_at ?? null, status, detectors }
 }
 
 export type { RepoFacts }

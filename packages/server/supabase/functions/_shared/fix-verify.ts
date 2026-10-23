@@ -475,6 +475,86 @@ export function isDependencyReport(report: { summary?: string | null; descriptio
   return /\b(dependenc(?:y|ies)|upgrade|bump(?:ed|s)?|outdated|vulnerab\w*|CVE-\d{4}-\d+|lock ?file|npm audit|package version)\b/i.test(text)
 }
 
+/** The manifests that govern each lockfile (ADR 0038 decision 8). */
+const LOCKFILE_MANIFESTS: Readonly<Record<string, readonly string[]>> = {
+  'package-lock.json': ['package.json'],
+  'npm-shrinkwrap.json': ['package.json'],
+  'pnpm-lock.yaml': ['package.json', 'pnpm-workspace.yaml'],
+  'yarn.lock': ['package.json'],
+  'bun.lock': ['package.json'],
+  'bun.lockb': ['package.json'],
+  'deno.lock': ['deno.json', 'deno.jsonc', 'package.json'],
+  'composer.lock': ['composer.json'],
+  'poetry.lock': ['pyproject.toml'],
+  'uv.lock': ['pyproject.toml'],
+  'Pipfile.lock': ['Pipfile'],
+  'go.sum': ['go.mod'],
+  'Cargo.lock': ['Cargo.toml'],
+  'Gemfile.lock': ['Gemfile', 'gems.rb'],
+  'Podfile.lock': ['Podfile'],
+}
+
+export interface DependencyReportLike {
+  source?: string | null
+  summary?: string | null
+  description?: string | null
+  component?: string | null
+  /** For `security_advisory` reports: { kind, package, ecosystem, … } (vuln-watch). */
+  environment?: unknown
+}
+
+function dirOf(path: string): string {
+  const i = path.lastIndexOf('/')
+  return i < 0 ? '' : path.slice(0, i)
+}
+
+/** A package name as it can appear in a manifest line (PyPI names compare loosely). */
+function namePattern(name: string, ecosystem: string | null): RegExp {
+  const esc = name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  if (ecosystem === 'PyPI') return new RegExp(`(^|[\\s"'=\\[,])${esc.replace(/(\\\.|-|_)/g, '[-_.]')}([\\s"'=<>~!\\[\\],;]|$)`, 'i')
+  // Not after "/" or "@": `@types/lodash` does not name `lodash`.
+  return new RegExp(`(^|["'\\s=:])${esc}(["'\\s@=:<>~^]|$)`, 'i')
+}
+
+/**
+ * ADR 0035 gate 5, amended by ADR 0038 decision 8: a lockfile may change only
+ * when the report is about a dependency AND the same PR changes the manifest
+ * that lockfile governs (same folder, or a workspace manifest below it). For
+ * a `security_advisory` report about a package, that manifest diff must also
+ * name the advisory's package (a bump or an override). A lockfile-only
+ * change still fails; a person can merge it.
+ */
+export function lockfileAllowance(files: readonly PrFile[], report: DependencyReportLike | null): { allowed: boolean; reason: string | null } {
+  const changed = files.map((f) => ({ ...f, path: norm(f.filename) }))
+  const locks = changed.filter((f) => isLockFile(f.path))
+  if (locks.length === 0) return { allowed: true, reason: null }
+  const security = report?.source === 'security_advisory'
+  if (!security && !isDependencyReport(report)) return { allowed: false, reason: `changes lockfile ${listOf(locks.map((l) => l.path))} for a report that is not about a dependency` }
+  const env = (report?.environment && typeof report.environment === 'object' ? report.environment : {}) as { kind?: unknown; package?: unknown; ecosystem?: unknown }
+  const pkg = security && env.kind === 'package' && typeof env.package === 'string' ? env.package : null
+  const pattern = pkg ? namePattern(pkg, typeof env.ecosystem === 'string' ? env.ecosystem : null) : null
+  for (const lock of locks) {
+    const base = lock.path.split('/').pop() ?? lock.path
+    const names = LOCKFILE_MANIFESTS[base] ?? []
+    const dir = dirOf(lock.path)
+    const manifests = changed.filter((f) => {
+      if (f.status === 'removed' || !names.includes(f.path.split('/').pop() ?? '')) return false
+      const d = dirOf(f.path)
+      return d === dir || dir === '' || d.startsWith(`${dir}/`)
+    })
+    if (manifests.length === 0) {
+      return { allowed: false, reason: `changes lockfile ${lock.path} without the ${names[0] ?? 'manifest'} it comes from` }
+    }
+    if (pattern && !manifests.some((m) => {
+      const { added, removed } = changedLines(m.patch)
+      return [...added, ...removed].some((l) => pattern.test(l))
+    })) {
+      return { allowed: false, reason: `changes lockfile ${lock.path}, but its manifest change does not name ${pkg}` }
+    }
+  }
+  return { allowed: true, reason: null }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Gates 5 and 6: protected paths and the diff budget
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,7 +564,7 @@ function listOf(paths: string[], max = 3): string {
   return paths.length > max ? `${shown} and ${paths.length - max} more` : shown
 }
 
-export function protectedGate(a: DiffAnalysis, opts: { allowLockfiles?: boolean } = {}): VerifyGate {
+export function protectedGate(a: DiffAnalysis, opts: { allowLockfiles?: boolean; lockfileReason?: string | null } = {}): VerifyGate {
   const problems: string[] = []
   if (!a.complete) problems.push('GitHub listed only part of the changed files')
   if (a.testFilesDeleted.length > 0) problems.push(`deletes test file ${listOf(a.testFilesDeleted)}`)
@@ -495,7 +575,7 @@ export function protectedGate(a: DiffAnalysis, opts: { allowLockfiles?: boolean 
     problems.push(`adds ${markers.join(', ')}`)
   }
   if (a.ciConfigTouched.length > 0) problems.push(`changes CI config ${listOf(a.ciConfigTouched)}`)
-  if (a.lockfilesTouched.length > 0 && !opts.allowLockfiles) problems.push(`changes lockfile ${listOf(a.lockfilesTouched)}`)
+  if (a.lockfilesTouched.length > 0 && !opts.allowLockfiles) problems.push(opts.lockfileReason ?? `changes lockfile ${listOf(a.lockfilesTouched)}`)
   if (a.snapshotLines > SNAPSHOT_LINE_LIMIT) problems.push(`updates ${a.snapshotLines} snapshot lines (limit ${SNAPSHOT_LINE_LIMIT})`)
   if (a.protectedTouched.length > 0) problems.push(`touches protected path ${listOf([...new Set(a.protectedTouched.map((p) => p.file))])}`)
 
@@ -954,8 +1034,10 @@ export interface VerificationInput {
   files: PrFile[]
   filesComplete: boolean
   settings: Pick<VerifySettings, 'verifyMaxFiles' | 'verifyMaxLines' | 'verifyProtectedGlobs'>
-  /** The report is about a dependency: lockfile changes are allowed. */
+  /** lockfileAllowance(): the lockfile changes pair with their manifest bump. */
   allowLockfiles?: boolean
+  /** Why they do not, for the gate's detail. */
+  lockfileReason?: string | null
   secondJudge: SecondJudgeState
   now: Date
 }
@@ -976,7 +1058,7 @@ export function evaluateVerification(input: VerificationInput): VerificationResu
     reviewGate(input.review, input.headSha),
     ciGate(input.checks, { now: input.now, ciInfra: input.ciInfra }),
     failToPassGate(input.checks, input.headSha, input.workflowInstalled),
-    protectedGate(analysis, { allowLockfiles: input.allowLockfiles }),
+    protectedGate(analysis, { allowLockfiles: input.allowLockfiles, lockfileReason: input.lockfileReason }),
     budgetGate(analysis, { maxFiles: input.settings.verifyMaxFiles, maxLines: input.settings.verifyMaxLines }),
   ]
   const othersPass = first.every((g) => g.status === 'pass')
