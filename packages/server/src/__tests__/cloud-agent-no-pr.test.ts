@@ -90,6 +90,63 @@ describe('classifyNoPrSummary on real Cursor summaries', () => {
   })
 })
 
+describe('classifyNoPrSummary on the 2026-10-20 runs still filed as API errors (2026-10-23)', () => {
+  it('reads a backlog row the agent left unchanged, or one waiting on the owner, as needs_human', () => {
+    const owner = [
+      'I left BL-040 unchanged because it needs your next store-version bump: `scripts/setup-native-auth.mjs` is an OTA native-fingerprint input.',
+      'BL-041 needs a bundled Android APK cold start on a device, so I changed nothing and did not open a pull request.',
+      'BL-069 needs an iPad Air (M3) Instruments profile of cold start and Home: YEN-YEN-MOBILE-45 has no stack or breadcrumbs, so I changed nothing.',
+      "BL-264 stays open because closing it requires an owner sign-off to defer Supabase off `/reserve`'s eager JavaScript graph.",
+      'BL-034 stays deferred: choosing Capacitor Secure Storage over the Supabase JS session default is a product decision that also needs a device, so I changed nothing.',
+      'BL-780’s migrations are already recorded as live; what is left is a real-yen test on each payment rail, which need the owner’s money and device, so I changed nothing.',
+      "This needs the brand owner's PayPay for Business account: add a sub-user and turn on payment mail.",
+      'BL-041 still has to wait for the next store release: changing it now would block every over-the-air update.',
+      'BL-074 stays open until the owner buys and binds 施設賠償責任保険. ADR 0032 already withholds any venue-coverage claim, so I left the code and docs unchanged.',
+      'BL-800 stays with the owner: the camp list still omits Tsumagoi Work&Camp, so I changed nothing.',
+      'I changed nothing: #4 and #6 were already closed on 2026-10-14, while #1 still targets Actions majors, so closing or merging them is an owner decision on those breaking upgrades.',
+      'BL-511 still needs you: production `payment_deadline_workflow_enabled` is false, so I changed nothing.',
+      'BL-055 needs an owner product decision before any code change: lucky drops are already on Hold, so I changed nothing and did not open a pull request.',
+      'BL-271 needs Kenji’s signed-in Reddit session: this environment is blocked by Reddit and has no stored login, so I changed nothing and did not open a pull request.',
+    ]
+    for (const s of owner) expect(classifyNoPrSummary(s).category, s).toBe('needs_human')
+  })
+
+  it('reads the other verdicts in that batch', () => {
+    const cases: Array<[string, string]> = [
+      ['I left the code unchanged: BL-1112 is a books posting in the owner’s private `solo-boss-cloud_backend`, which this tsumagoi checkout cannot read or change.', 'wrong_repo'],
+      ['No pull request. `paymentRouteFor` and `localReturnEfiled` are not in this frontend repo, so a change here cannot fix the route.', 'wrong_repo'],
+      ['The live Tutor page is not showing that error screen, so I did not open a pull request.', 'already_fixed'],
+      ['All 25 reported pages render their main content again. I did not open a pull request, because I could not find a code defect that still blanks them.', 'already_fixed'],
+      ['I did not open a pull request. On current `main`, nothing uses `canvasRef` without declaring it, so there is no code change that would fix this report.', 'not_actionable'],
+    ]
+    for (const [summary, category] of cases) expect(classifyNoPrSummary(summary).category, summary).toBe(category)
+  })
+
+  it('does not settle a code fix that only mentions a backlog row', () => {
+    expect(classifyNoPrSummary('BL-212 is the crash in Settings.tsx; the null guard was missing, so I could not finish the test.').category).toBeNull()
+    expect(classifyNoPrSummary('The dialog stays open after Save because the handler never resolves.').category).toBeNull()
+  })
+})
+
+describe('classifyNoPrSummary reads the declared verdict line first', () => {
+  it('takes `Mushi verdict:` from the first line and the next sentence as the reason', () => {
+    const v = classifyNoPrSummary('Mushi verdict: needs_human\n\nBL-586 needs a paid re-render or an owner photo.\n\nDetails…')
+    expect(v).toEqual({ category: 'needs_human', reason: 'BL-586 needs a paid re-render or an owner photo.' })
+    expect(classifyNoPrSummary('**Mushi verdict:** `wrong_repo` — the fee check is in the backend.').category).toBe('wrong_repo')
+    expect(classifyNoPrSummary('Mushi verdict: already_fixed').reason).toBe('already_fixed')
+  })
+
+  it('beats a phrase that would read otherwise, and ignores a verdict line deep in the notes', () => {
+    expect(classifyNoPrSummary('Mushi verdict: not_actionable\nThe live page is not blank, but the event has no route.').category).toBe('not_actionable')
+    const deep = `I could not find the cause. ${'Checked another file. '.repeat(20)}\nMushi verdict: already_fixed`
+    expect(classifyNoPrSummary(deep).category).toBeNull()
+  })
+
+  it('ignores an unknown verdict word', () => {
+    expect(classifyNoPrSummary('Mushi verdict: maybe\nI ran out of time.').category).toBeNull()
+  })
+})
+
 describe('classifyNoPrSummary stays silent when unsure', () => {
   it('no summary, or a summary with no verdict, is no verdict', () => {
     expect(classifyNoPrSummary(null)).toEqual({ category: null, reason: null })

@@ -317,7 +317,8 @@ You have the full repository \`${ctx.repoOwner}/${ctx.repoName}\` checked out. T
 2. Make the smallest change that fixes the bug. Add or update a test when you change behaviour. Do not refactor unrelated code.
 3. Open the pull request as a DRAFT against \`${ctx.baseRef}\`. Title it \`fix: <short summary> (MUSHI-${ctx.reportId})\` and include the line \`Mushi report: ${ctx.reportId}\` in the description, followed by what you changed and why.
 4. Never merge, never force-push, never touch secrets or CI credentials. A human reviews every line before merge.
-5. If you cannot find the cause, do NOT open a pull request. Finish the run without one and explain in your final message what you checked and what to look at next. A pull request that only adds notes, markdown or TODO comments is not a fix: Mushi flags it as needs-investigation and leaves the report open.`
+5. If you cannot find the cause, do NOT open a pull request. Finish the run without one and explain in your final message what you checked and what to look at next. A pull request that only adds notes, markdown or TODO comments is not a fix: Mushi flags it as needs-investigation and leaves the report open.
+6. When you finish without a pull request, make the first line of your final message \`Mushi verdict: <verdict>\`, where <verdict> is one of: \`already_fixed\` (the bug no longer happens on \`${ctx.baseRef}\` or the live site), \`wrong_repo\` (the code to change is in another repository), \`not_actionable\` (nothing in the evidence ties it to code), \`needs_human\` (it waits on a person: a decision, an account, a device, money). Leave the line out if none fits. Mushi reads it to decide whether to run an agent on this report again.`
 }
 
 /** Branch the agent is asked to use; the Cursor helper owns the prefix/validation rules. */
