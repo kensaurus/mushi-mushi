@@ -38,9 +38,9 @@ export function RealDiagnosisCard() {
           <dd>{D.suggestedFix}</dd>
           <dt>In your editor</dt>
           <dd>
-            Your agent calls <code>{D.editorCmd}</code> and gets one paste-ready fix prompt: this
-            diagnosis, the reproduction steps, the suggested fix and the relevant code. No second
-            LLM key.
+            Your AI assistant asks Mushi for the report (the <code>{D.editorCmd}</code> tool) and
+            gets one fix prompt, ready to paste: this diagnosis, the steps to reproduce the bug, the
+            suggested fix and the relevant code. You do not need an AI key of your own for this.
           </dd>
         </dl>
         <Link

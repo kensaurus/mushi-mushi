@@ -111,22 +111,22 @@ export const CONNECT_SKILLS = {
 } as const
 
 export const QUICKSTART_HUB_LEDE =
-  'Start here if you vibe-code: the incident loop gets you from broken prod to a paste-ready fix prompt in Cursor — usually under a few minutes.'
+  'New here? Setup is one command. If you build with AI tools (vibe coding), start with the incident loop: it takes you from a bug in your live app to a fix prompt you can paste into Cursor, usually in a few minutes.'
 
 export const QUICKSTART_ONE_KEY_CALLOUT =
-  'One key for both surfaces. The wizard mints a single API key for the SDK (sending reports) and the CLI (mushi doctor, mushi billing, etc.). Same key also works for read-only MCP tools in your editor.'
+  'One key does it all. The wizard creates a single API key (a password your app uses to talk to Mushi) for the SDK, which sends reports, and for the command-line tool (mushi doctor, mushi billing and so on). The same key also works for the read-only MCP tools in your editor.'
 
 export const CONCEPTS_INDEX_LEDE =
-  'When a user feels something break, Mushi captures it, explains it in plain English, and can hand your editor a fix — without another dashboard to babysit.'
+  'When a user runs into something broken, Mushi records it, explains it in plain English and can hand your editor a fix, without another dashboard to babysit.'
 
 export const ADMIN_INDEX_LEDE =
   'See what users reported, what broke, and what got fixed — the console mirror of the loop on your landing page.'
 
 export const INCIDENT_LOOP_LEDE =
-  'Broken prod → plain-English read in your queue → paste-ready fix prompt in Cursor. This is the default path for vibe coders.'
+  'The incident loop takes you from "a user hit a bug in my live app" to "my AI assistant is fixing it". The bug arrives in your Mushi list with a plain-English read, and you paste a ready-made fix prompt into Cursor. It is the default path for vibe coders.'
 
 export const MCP_QUICKSTART_LEDE =
-  'Ask your editor what broke. Mushi sends back the report, the plain-English read, and a fix brief — without leaving the window.'
+  'Ask your editor what broke. Over MCP (the standard way AI editors connect to outside tools), Mushi sends back the report, the plain-English read and a fix brief, without you leaving the window.'
 
 export const CURSOR_INTEGRATION_LEDE =
   'Your AI wrote the code. When prod breaks, pull the report and fix context into Cursor — plain English first, diff second.'
@@ -152,7 +152,7 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     id: 'self-host',
     name: 'Self-host',
     monthly: 'Free forever',
-    diagnoses: 'Unlimited (your own LLM key)',
+    diagnoses: 'Unlimited (your own AI key)',
     retention: 'Your choice',
     seats: 'Unlimited',
     highlights: 'Full OSS stack — MIT SDK, AGPLv3 server, bring your own LLM keys',
