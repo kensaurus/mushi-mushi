@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-21T11:27:40.640Z",
+  "generatedAt": "2026-10-23T03:17:21.481Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -352,6 +352,15 @@
       "route_path": "/research",
       "kind": "page",
       "content_hash": "bafe177221bcfd58fb7c5815dda0c9947ddef4d49dc25059ace9a19f905b2345"
+    },
+    {
+      "doc_path": "pages/credits.md",
+      "section": "main",
+      "title": "Spend credits",
+      "body": "# Spend credits\n\nExpiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.\n\nRoute: /credits\nSection: Workspace\n\nKeywords: credits, spend credits, spend down, spend-down, expiring credits, cursor credits, firecrawl credits, usage, site watch, follow-ups, budget\n\nUse this page when the user asks about: credits, spend credits, spend down, spend-down, expiring credits, cursor credits",
+      "route_path": "/credits",
+      "kind": "page",
+      "content_hash": "0bb8c5e4b71da5ac50e3cf671e62714670e134bbceb82e61fa82fc723f2825de"
     },
     {
       "doc_path": "pages/settings.md",

@@ -33,6 +33,8 @@ export interface ReviewFollowupSettings {
   offReason?: string | null
   keyId: string | null
   model: string | null
+  /** The model for a PR's last follow-up round (ADR 0032 amendment); null = the same model. */
+  escalationModel?: string | null
   dailyLimit: number
 }
 

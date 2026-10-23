@@ -61,6 +61,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/modernization-dispatch-db.ts reporter_token_hash', 'sentinel'], // 'console:modernization-dispatch'
   ['_shared/report-file.ts reporter_token_hash', 'sentinel'], // 'admin-filed' (no SDK reporter behind a filed report)
   ['_shared/voice-intake.ts reporter_token_hash', 'sentinel'], // 'voice-intake'
+  ['site-audit/index.ts reporter_token_hash', 'sentinel'], // 'site-audit' (ADR 0040: no reporter behind an audit report)
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged

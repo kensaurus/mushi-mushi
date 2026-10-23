@@ -234,7 +234,7 @@ describe('SpendDownSection', () => {
     await render(true)
     expect(document.body.textContent).toContain('Nothing left to send')
     const hrefs = Array.from(document.body.querySelectorAll('a')).map((a) => a.getAttribute('href'))
-    expect(hrefs).toEqual(['/reports', '/inventory?tab=discovery', '/qa-coverage'])
+    expect(hrefs).toEqual(['/credits', '/reports', '/inventory?tab=discovery', '/qa-coverage'])
   })
 
   it('renders nothing when the app has no Cursor key', async () => {

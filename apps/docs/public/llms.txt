@@ -50,6 +50,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Connect & Update](https://kensaur.us/mushi-mushi/docs/admin/connect): Connect & Update wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi project, and shows when your installed SDK is out of date.
 - [Content quality](https://kensaur.us/mushi-mushi/docs/admin/content): The Content quality page queues AI-generated copy, release notes and knowledge snippets that scored poorly or were flagged, so you can fix them.
 - [Cost & usage](https://kensaur.us/mushi-mushi/docs/admin/cost): The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.
+- [Spend credits](https://kensaur.us/mushi-mushi/docs/admin/credits): Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.
 - [Dashboard](https://kensaur.us/mushi-mushi/docs/admin/dashboard): The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.
 - [Design system](https://kensaur.us/mushi-mushi/docs/admin/design): The Design system page shows your tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft pull request.
 - [Docs bridge](https://kensaur.us/mushi-mushi/docs/admin/docs-bridge): The docs bridge is the console's silent sign-in relay that lets the Mushi docs site fill live snippets with your project details when you are signed in.
