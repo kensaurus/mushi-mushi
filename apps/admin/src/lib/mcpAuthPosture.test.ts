@@ -13,6 +13,14 @@ describe('mcpAuthPosture', () => {
     expect(mcpAuthPosture({ ...ready, state: 'approving' }).title).toBe('Approving access')
   })
 
+  it('a blocked return link is not described as a failed approval', () => {
+    const copy = mcpAuthPosture({ ...ready, state: 'handoff_blocked' })
+    expect(copy.title).toBe('Could not open the return link')
+    expect(copy.next).toMatch(/was approved/)
+    expect(copy.title).not.toBe('Approval did not go through')
+    expect(mcpAuthPosture({ ...ready, approveFailed: false }).title).toBe('Approve access')
+  })
+
   it('a failed project load, an empty account, and a failed approve each say what to do', () => {
     expect(mcpAuthPosture({ ...ready, projects: 'failed' }).next).toMatch(/Reload this page/)
     expect(mcpAuthPosture({ ...ready, projects: 'empty' }).next).toMatch(/Create a project/)
@@ -32,6 +40,7 @@ describe('mcpAuthPosture', () => {
     expect(mcpAuthPosture({ ...ready, state: 'error', fault: 'missing_txn' }).next).toMatch(/Restart the connection/)
     expect(mcpAuthPosture({ ...ready, state: 'error', fault: 'expired' }).title).toMatch(/expired/)
     expect(mcpAuthPosture({ ...ready, state: 'denied' }).next).toMatch(/retry the login/)
-    expect(mcpAuthPosture({ ...ready, state: 'complete' }).next).toMatch(/close this tab/)
+    expect(mcpAuthPosture({ ...ready, state: 'complete' }).next).toMatch(/Return to your MCP client/)
+    expect(mcpAuthPosture({ ...ready, state: 'complete' }).next).not.toMatch(/close this tab/)
   })
 })

@@ -24,7 +24,9 @@
  *   4. The browser navigates to that redirect — usually the MCP client's
  *      localhost callback — and the terminal/IDE finishes the login itself.
  *   A PagePosture status line above the card names the current state and the
- *   one next step. Approve, deny, and the redirect stay as they are.
+ *   one next step, and terminal screens do not repeat that line in a heading.
+ *   An approval failure is recorded only when the approve request fails. A
+ *   return link this page will not open is not an approval failure.
  *
  * DEPENDENCIES:
  *   - apiFetch (lib/supabase)
@@ -129,8 +131,11 @@ export function McpAuthPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [selectedProject, setSelectedProject] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  /** Set only in the approve request's failure path. A message is not one. */
+  const [approveFailed, setApproveFailed] = useState(false)
 
   useEffect(() => {
+    setApproveFailed(false)
     if (!txn) {
       setFault('missing_txn')
       setState('error')
@@ -187,6 +192,7 @@ export function McpAuthPage() {
     if (!approveBody) return
     setState('approving')
     setErrorMessage(null)
+    setApproveFailed(false)
     const res = await apiFetch<{ redirect_to: string }>('/v1/mcp-oauth/approve', {
       method: 'POST',
       body: JSON.stringify(approveBody),
@@ -196,7 +202,14 @@ export function McpAuthPage() {
         setState('redirecting')
         return
       }
+      // Approved, but the return link is one this page must not open.
+      setErrorMessage(null)
+      setApproveFailed(false)
+      setState('handoff_blocked')
+      return
     }
+    // Only this branch is an approval failure. Do not infer it from errorMessage.
+    setApproveFailed(true)
     setState('ready')
     setErrorMessage(
       res.error?.code === 'FORBIDDEN'
@@ -225,7 +238,7 @@ export function McpAuthPage() {
     state,
     fault,
     projects,
-    approveFailed: state === 'ready' && errorMessage != null,
+    approveFailed,
   })
   const status = (
     <McpAuthStatus
@@ -244,6 +257,15 @@ export function McpAuthPage() {
           aria-label="Loading authorization request"
         />
         <p className="text-sm text-fg-muted">Loading authorization request…</p>
+      </div>
+    )
+  }
+
+  if (state === 'handoff_blocked') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
+        <PlugIcon />
       </div>
     )
   }
@@ -270,10 +292,6 @@ export function McpAuthPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         {status}
         <XCircleIcon />
-        <h1 className="text-xl font-semibold text-fg">Access denied</h1>
-        <p className="max-w-sm text-sm text-fg-muted">
-          The MCP client was not connected. You can close this tab. Retry the login from your client if this was a mistake.
-        </p>
       </div>
     )
   }
@@ -283,7 +301,6 @@ export function McpAuthPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         {status}
         <PlugIcon />
-        <h1 className="text-xl font-semibold text-fg">Connection complete</h1>
         <p className="max-w-sm text-sm text-fg-muted">{errorMessage}</p>
       </div>
     )
@@ -294,9 +311,8 @@ export function McpAuthPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         {status}
         <XCircleIcon />
-        <h1 className="text-xl font-semibold text-fg">Can't complete this connection</h1>
         <div className="w-full max-w-md text-left">
-          <ErrorAlert title="Connection failed" message={errorMessage ?? 'Something went wrong.'} />
+          <ErrorAlert message={errorMessage ?? 'Something went wrong.'} />
         </div>
       </div>
     )
@@ -441,7 +457,7 @@ export function McpAuthPage() {
         )}
 
         {/* Error */}
-        {errorMessage && (
+        {approveFailed && errorMessage && (
           <div className="mb-4">
             <ErrorAlert title="Couldn't approve connection" message={errorMessage} />
           </div>

@@ -8,8 +8,12 @@
 
 export type McpAuthPostureTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
-/** Mirrors the consent page's own states. */
-export type McpAuthConsentState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'denied' | 'complete' | 'error'
+/**
+ * Mirrors the consent page's own states. `handoff_blocked` is an approve
+ * call that succeeded whose return link this page will not open — not an
+ * approval failure.
+ */
+export type McpAuthConsentState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'handoff_blocked' | 'denied' | 'complete' | 'error'
 
 /**
  * Why the consent page is not showing the approve form. Null while the
@@ -68,17 +72,23 @@ export function mcpAuthPosture(input: {
         title: 'Return to your MCP client',
         next: 'The connection is approved. If this tab does not move, switch back to your terminal or editor.',
       }
+    case 'handoff_blocked':
+      return {
+        tone: 'warn',
+        title: 'Could not open the return link',
+        next: 'The connection was approved. Go back to your MCP client. This page will not open that address.',
+      }
     case 'denied':
       return {
         tone: 'warn',
         title: 'Access denied',
-        next: 'The MCP client was not connected. Close this tab, or retry the login from your client.',
+        next: 'The MCP client was not connected. Close this tab, or retry the login from your client if this was a mistake.',
       }
     case 'complete':
       return {
         tone: 'ok',
         title: 'Connection complete',
-        next: 'Return to your MCP client. You can close this tab.',
+        next: 'Return to your MCP client.',
       }
     case 'error':
       return postureForFault(input.fault)
