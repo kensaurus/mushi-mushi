@@ -116,6 +116,7 @@ function deps(over: Partial<MergeQueueDeps> = {}): MergeQueueDeps {
     requeueReview: () => Promise.reject(new Error('unexpected requeue')),
     createAgent: () => Promise.reject(new Error('unexpected agent')),
     agentDone: () => Promise.resolve({ done: false, result: null }),
+    behindBy: () => Promise.resolve(0),
     ...over,
   }
 }
@@ -247,4 +248,25 @@ test('a repo keeps working on the PR already in progress when a whole app was qu
   }))
   // o/r: the waiting PR #9, not a tie-broken queued one; o/s: held by the leased row.
   assertEquals(seen, [9])
+})
+
+test('a PR held on red CI is updated when its base moved, and stays held when it did not', async () => {
+  const red = { pending: 0, failed: ['gate'] }
+  const moved = setup(row({ state: 'blocked' }))
+  let updated = 0
+  const out = await processRow(moved.db, row({ state: 'blocked' }), deps({
+    checks: () => Promise.resolve(red),
+    pull: () => Promise.resolve(pull({ mergeableState: 'blocked' })),
+    behindBy: () => Promise.resolve(3),
+    updateBranch: () => (updated++, Promise.resolve({ ok: true, conflict: false })),
+  }))
+  assertEquals([out, updated, lastState(moved.writes)?.state], ['updated', 1, 'waiting'])
+
+  const same = setup(row({ state: 'blocked' }))
+  const out2 = await processRow(same.db, row({ state: 'blocked' }), deps({
+    checks: () => Promise.resolve(red),
+    pull: () => Promise.resolve(pull({ mergeableState: 'blocked' })),
+    behindBy: () => Promise.resolve(0),
+  }))
+  assertEquals([out2, lastState(same.writes)?.state], ['blocked', 'blocked'])
 })
