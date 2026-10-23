@@ -27,11 +27,18 @@ interface Draft {
   enabled: boolean;
   keyId: string;
   model: string;
+  escalationModel: string;
   dailyLimit: string;
 }
 
 function draftFrom(s: ReviewFollowupSettings): Draft {
-  return { enabled: s.enabled, keyId: s.keyId ?? '', model: s.model ?? '', dailyLimit: String(s.dailyLimit) };
+  return {
+    enabled: s.enabled,
+    keyId: s.keyId ?? '',
+    model: s.model ?? '',
+    escalationModel: s.escalationModel ?? '',
+    dailyLimit: String(s.dailyLimit),
+  };
 }
 
 export function ReviewFollowupsSection() {
@@ -57,6 +64,7 @@ export function ReviewFollowupsSection() {
         enabled: draft.enabled,
         keyId: draft.keyId || null,
         model: draft.model.trim() || null,
+        escalationModel: draft.escalationModel.trim() || null,
         dailyLimit: Number(draft.dailyLimit),
       }),
     });
@@ -81,7 +89,7 @@ export function ReviewFollowupsSection() {
       </p>
       <p className="text-xs text-fg-secondary">
         {settings.enabled
-          ? `On: up to ${settings.dailyLimit} a day, on ${chosen ? followupKeyLabel(chosen) : "the key each app's fixes use"}${settings.model ? `, model ${settings.model}` : ''}.`
+          ? `On: up to ${settings.dailyLimit} a day, on ${chosen ? followupKeyLabel(chosen) : "the key each app's fixes use"}${settings.model ? `, model ${settings.model}` : ''}${settings.escalationModel ? `, last round on ${settings.escalationModel}` : ''}.`
           : 'Off.'}
       </p>
       {!settings.enabled && settings.offReason && <p className="text-xs text-warn">{settings.offReason}</p>}
@@ -124,7 +132,7 @@ export function ReviewFollowupsSection() {
               label="Cursor key"
               helpId="byok.review_followups"
               value={draft.keyId}
-              onChange={(e) => setDraft({ ...draft, keyId: e.target.value, model: '' })}
+              onChange={(e) => setDraft({ ...draft, keyId: e.target.value, model: '', escalationModel: '' })}
             >
               <option value="">The key each app&apos;s fixes use</option>
               {keys.map((k) => (
@@ -140,6 +148,14 @@ export function ReviewFollowupsSection() {
               label="Model"
               emptyLabel="Each app's Cursor model"
               tooltip="Checked against this key's Cursor model list before every follow-up."
+            />
+            <CursorModelPicker
+              value={draft.escalationModel}
+              onChange={(escalationModel) => setDraft({ ...draft, escalationModel })}
+              keyId={draft.keyId || undefined}
+              label="Last round model"
+              emptyLabel="Same as Model"
+              tooltip="A pull request gets at most two follow-ups. The second runs only after the first did not satisfy the reviewer, so a stronger model (for example Opus) can take it while the first stays on the cheaper one."
             />
             <Input
               label="Follow-ups per day"

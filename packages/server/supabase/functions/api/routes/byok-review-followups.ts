@@ -192,6 +192,17 @@ export function registerByokReviewFollowupRoutes(app: Hono<{ Variables: Variable
         return bad(c, 'INVALID_CURSOR_MODEL', 'model must be a Cursor model id, optionally with ?param=value pairs.')
       } else patch.review_followup_model = body.model.trim()
     }
+    if (body.escalationModel !== undefined) {
+      // The model for a PR's last follow-up round (ADR 0032 amendment, 2026-10-23).
+      if (body.escalationModel === null || body.escalationModel === '') patch.review_followup_escalation_model = null
+      else if (
+        typeof body.escalationModel !== 'string' ||
+        body.escalationModel.length > 300 ||
+        !parseCursorModelSpec(body.escalationModel)
+      ) {
+        return bad(c, 'INVALID_CURSOR_MODEL', 'escalationModel must be a Cursor model id, optionally with ?param=value pairs.')
+      } else patch.review_followup_escalation_model = body.escalationModel.trim()
+    }
     if (body.dailyLimit !== undefined) {
       const n = body.dailyLimit
       if (typeof n !== 'number' || !Number.isInteger(n) || n < FOLLOWUP_DAILY_LIMIT_MIN || n > FOLLOWUP_DAILY_LIMIT_MAX) {

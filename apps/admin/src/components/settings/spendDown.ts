@@ -157,7 +157,7 @@ export function spendDownPauses(k: SpendDownKeyStatus): SpendDownPause[] {
 }
 
 /** The spend-down worker's stop reason when an app has nothing left to dispatch (_shared/spend-down.ts). */
-export const SPEND_DOWN_NO_REPORT = 'No open report to fix'
+const SPEND_DOWN_NO_REPORT = 'No open report to fix'
 
 /**
  * Why the last tick dispatched nothing to some apps. Apps with the same

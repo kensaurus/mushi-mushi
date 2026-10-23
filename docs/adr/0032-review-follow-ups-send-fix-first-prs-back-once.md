@@ -291,3 +291,42 @@ CI by hand.
   is left for later.
 - Before the migration is applied, CI repairs are not queued (the insert
   names the new column); findings follow-ups are unaffected.
+
+## Amendment (2026-10-23): the last round can run on a stronger model
+
+### Context
+
+Plan and review already run on the strongest model (Claude writes the
+diagnosis, Opus reviews every agent PR, ADR 0030); the edits run on a cheaper
+Cursor model (Grok 4.7 on the dogfood apps). On 2026-10-23 the owner's Cursor
+account still had Opus usage days before it expired, while 35 fix_first PRs
+sat open across the apps. A PR's second follow-up happens only when the first
+did not satisfy the reviewer: the case where a stronger model is worth its
+price.
+
+### Decision
+
+- `organizations.review_followup_escalation_model` (nullable Cursor model
+  spec). When set, a PR's last follow-up round (`FOLLOWUP_MAX_PER_PR`, the
+  round after one Cursor accepted) runs on it; earlier rounds keep
+  `review_followup_model`, else the app's Cursor model
+  (`followupModelSpec`, `_shared/review-followup.ts`).
+- The escalation model is checked against the key's model list like the
+  other; one the key cannot run waits, never falls back.
+- The dispatched event says "last round on the escalation model" and its
+  payload carries `escalated: true`, so the scoreboard can compare rounds.
+- Nothing else changes: still two rounds per PR, never on hold.
+
+### Rejected
+
+- **Escalating on hold.** Rejected above; a stronger model does not make an
+  owner decision.
+- **Opus for every round.** It spends the expensive model on edits the
+  cheaper one already gets merged (mushi-mushi: 16 of 20 Grok PRs "merge" in
+  the week to 2026-10-23).
+
+### Consequences
+
+- With the setting empty, behaviour is unchanged.
+- When a better model ships, it becomes the escalation model with no code
+  change (ADR 0039).
