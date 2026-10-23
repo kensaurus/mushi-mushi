@@ -36,7 +36,7 @@ interface Props {
 }
 
 /** "Last run 2 days ago: 139 pages, 4 rules failing, 4 reports filed." */
-export function auditLine(a: AuditRow, openFindings: number): string {
+function auditLine(a: AuditRow, openFindings: number): string {
   if (a.batch_id) return 'Running now: Firecrawl is reading the pages.'
   if (!a.last_run_at) return a.enabled ? 'First run starts within the hour.' : 'Never run.'
   const s = a.last_summary ?? {}

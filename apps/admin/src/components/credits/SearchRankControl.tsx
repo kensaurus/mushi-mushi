@@ -31,7 +31,7 @@ interface Props {
 }
 
 /** "#2", "#2 (was #5)", "not in the top 20", "not checked yet". */
-export function rankLabel(k: RankKeyword): string {
+function rankLabel(k: RankKeyword): string {
   if (!k.last_checked_at) return 'not checked yet'
   if (k.last_error) return 'could not check'
   const now = k.last_rank == null ? 'not in the top 20' : `#${k.last_rank}`

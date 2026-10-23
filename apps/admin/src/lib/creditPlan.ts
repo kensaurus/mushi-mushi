@@ -9,7 +9,7 @@
 const DAY_MS = 86_400_000
 
 /** Whole days from `now` until `until` (rounded up); null when unknown, 0 once past. */
-export function daysLeft(until: string | null | undefined, now: Date): number | null {
+function daysLeft(until: string | null | undefined, now: Date): number | null {
   if (!until) return null
   const t = Date.parse(until)
   if (!Number.isFinite(t)) return null
@@ -27,7 +27,7 @@ export interface WatchCost {
  * Credits a day across the active watches. Firecrawl's estimate when it gave
  * one, else the upper bound the watch card quotes (2 credits a page a day).
  */
-export function watchCreditsPerDay(watches: WatchCost[]): number {
+function watchCreditsPerDay(watches: WatchCost[]): number {
   return watches
     .filter((w) => w.status === 'active')
     .reduce((sum, w) => sum + (w.estimated_credits_per_month ?? w.page_limit * 60) / 30, 0)
@@ -46,14 +46,14 @@ export interface AuditCost {
  * run plus the map call, spread over the cadence. The last run's real count
  * when there is one, else the page limit.
  */
-export function auditCreditsPerDay(audits: AuditCost[]): number {
+function auditCreditsPerDay(audits: AuditCost[]): number {
   return audits
     .filter((a) => a.enabled)
     .reduce((sum, a) => sum + ((a.last_summary?.credits ?? a.page_limit) + 1) / Math.max(1, a.cadence_days), 0)
 }
 
 /** A search rank check reads 20 results (2 credits per 10) per keyword, weekly. */
-export const RANK_CREDITS_PER_KEYWORD_WEEK = 4
+const RANK_CREDITS_PER_KEYWORD_WEEK = 4
 
 export interface FirecrawlPace {
   perDay: number
@@ -90,7 +90,7 @@ export function paceLine(pace: FirecrawlPace, periodEnd: string | null): string 
   return `${parts.join(' · ')}.`
 }
 
-export function shortDate(iso: string): string {
+function shortDate(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }

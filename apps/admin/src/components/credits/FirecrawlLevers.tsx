@@ -17,7 +17,7 @@ import { SiteAuditControl, type AuditRow } from './SiteAuditControl'
 import { SearchRankControl, type RankKeyword } from './SearchRankControl'
 
 /** The most pages one check may read (PUT /v1/admin/projects/:id/site-watch). */
-export const SITE_WATCH_MAX_PAGES = 100
+const SITE_WATCH_MAX_PAGES = 100
 
 export interface FirecrawlBalance {
   remaining: number | null
