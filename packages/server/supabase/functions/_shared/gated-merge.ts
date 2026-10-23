@@ -192,3 +192,74 @@ async function recordMergedHeads(db: SupabaseClient, attemptIds: string[], headS
     // The regression watch misses this merge; the merge itself stands.
   }
 }
+
+export interface TrainMember {
+  fixAttemptId: string
+  prNumber: number
+  /** The member PR's head the train merged in. */
+  headSha: string
+}
+
+export type GatedTrainOutcome =
+  | { ok: false; code: 'REPO_NOT_IN_PROJECT' | 'MEMBER_REFUSED' | 'REVIEW_UNAVAILABLE'; message: string; refused: Array<{ prNumber: number; reason: string }> }
+  | { ok: true; result: MergeResult }
+
+/**
+ * Merge a release train (ADR 0044): one PR that carries several fix PRs.
+ * Every member is held to what a service merge of it alone is held to
+ * (ADR 0030, 0035): an Opus "merge" verdict on the exact head the train
+ * merged in, no hold on any review of it, no pending first review. The train
+ * PR merges with a merge commit (so GitHub marks each member PR merged),
+ * pinned to the train head CI passed; each member's merged head is recorded
+ * for the regression watch.
+ */
+export async function gatedTrainMerge(
+  db: SupabaseClient,
+  input: { projectId: string; token: string; ref: GithubRepoRef; trainPr: number; trainHeadSha: string; members: TrainMember[]; commitTitle?: string },
+): Promise<GatedTrainOutcome> {
+  const own = await connectedRepoRefs(db, input.projectId)
+  if (!own.some((r) => sameRepo(r, input.ref))) {
+    return { ok: false, code: 'REPO_NOT_IN_PROJECT', message: `${input.ref.owner}/${input.ref.repo} is not one of this project's repositories.`, refused: [] }
+  }
+  const refused: Array<{ prNumber: number; reason: string }> = []
+  for (const m of input.members) {
+    const found = await loadReviewsForPr(db, {
+      projectId: input.projectId,
+      repo: `${input.ref.owner}/${input.ref.repo}`.toLowerCase(),
+      aliases: [],
+      repoId: null,
+      number: m.prNumber,
+      fixAttemptId: m.fixAttemptId,
+    })
+    const gate = decidePrGate(found, m.headSha, SERVICE_CALLER, m.fixAttemptId)
+    if (!gate.ok) {
+      if (gate.code === 'REVIEW_UNAVAILABLE') return { ok: false, code: 'REVIEW_UNAVAILABLE', message: gate.message, refused: [] }
+      refused.push({ prNumber: m.prNumber, reason: gate.message })
+      continue
+    }
+    if (gate.review.state !== 'merge' || gate.review.headSha !== m.headSha || gate.overridden || gate.mergedBeforeReview) {
+      refused.push({ prNumber: m.prNumber, reason: 'The Opus review of this exact commit does not say merge.' })
+    }
+  }
+  if (refused.length) {
+    return { ok: false, code: 'MEMBER_REFUSED', message: `${refused.length} pull request${refused.length === 1 ? '' : 's'} in the train no longer pass the review gate.`, refused }
+  }
+  const result = await mergeGithubPullRequest(input.token, input.ref, input.trainPr, {
+    mergeMethod: 'merge',
+    sha: input.trainHeadSha,
+    ...(input.commitTitle ? { commitTitle: input.commitTitle } : {}),
+  })
+  if (result.merged && !result.alreadyMerged && result.sha) {
+    try {
+      const { data } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url, pr_number').in('id', input.members.map((m) => m.fixAttemptId))
+      const mergedAt = new Date().toISOString()
+      for (const a of (data ?? []) as MergedHeadTarget[]) {
+        const head = input.members.find((m) => m.fixAttemptId === a.id)?.headSha
+        if (head) await recordMergedHead(db, a, { headSha: head, mergeSha: result.sha, mergedAt })
+      }
+    } catch {
+      // The regression watch misses these merges; the merge itself stands.
+    }
+  }
+  return { ok: true, result }
+}
