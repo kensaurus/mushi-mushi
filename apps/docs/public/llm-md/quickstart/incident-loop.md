@@ -9,7 +9,7 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+  **Today:** a report is sorted and explained within seconds, with a paste-ready fix prompt on the report page or a fix brief through the MCP tools. **Target:** the whole diagnosis in under 10 seconds. MCP needs a Mushi account and a project key, not a separate OpenAI or Anthropic key.
 
 ## No MCP? Copy the fix prompt
 
@@ -18,7 +18,7 @@ your coding agent**. You get one self-contained prompt (diagnosis, suggested fix
 repro steps, page and browser, the key console lines, likely files, and what
 "done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
 MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent pull context and close the report itself.
+the agent fetch the details and close the report itself.
 
 ## Prerequisites
 

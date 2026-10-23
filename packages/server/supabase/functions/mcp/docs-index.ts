@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["This is what a diagnosis looks like", "See it in action", "What this is (and is not)", "Get started with the SDK", "Install in your framework", "One queue. Sentry flows in, fixes flow out."],
+    headings: ["The problem it solves", "A real example from our own sites", "What this is (and is not)", "Where it stands today", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -1380,7 +1380,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "fix", "first", "bug", "60", "seconds", "choose", "stack"],
-    headings: ["Start here (MCP)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
+    headings: ["What you need", "The fastest way: one command", "Start here (editor first)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
     excerpt: "Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
