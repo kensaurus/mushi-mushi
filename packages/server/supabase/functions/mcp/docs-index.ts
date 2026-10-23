@@ -175,7 +175,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/credits.md",
     keywords: ["admin", "credits", "spend"],
     headings: ["Cursor: fix bugs", "Firecrawl: find bugs on your live sites", "Site audit", "Search rank", "Where the fixes go"],
-    excerpt: "The console Spend credits page lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them on finding and fixing bugs behind one switch each.",
+    excerpt: "Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.",
   },
   {
     title: "Dashboard",
