@@ -15,8 +15,9 @@
  * Output: docs/social-preview/og-card.png at 1200×630 (the size Open Graph,
  * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ where the
  * docs site serves it and to apps/testers/public/ where the bounties site
- * serves it (scripts/sync-docs-og-card.mjs makes the same copies in the docs
- * prebuild, so a build never ships a stale card; keep all three). The file
+ * serves it. Each app's prebuild runs scripts/sync-docs-og-card.mjs with its
+ * own target (`docs` or `testers`), so that build refreshes the card it ships
+ * and does not rewrite the other app's copy. Keep all three. The file
  * apps/docs/lib/structured-data.ts declares the same size
  * and docs-meta.test.ts reads the PNG header, so change all three together.
  *
