@@ -103,11 +103,21 @@ async function followupCursorKey(db: SupabaseClient, projectId: string) {
   return { ok: true as const, apiKey, model }
 }
 
+async function githubBehindBy(token: string, ref: GithubRepoRef, base: string, head: string): Promise<number> {
+  const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/compare/${encodeURIComponent(base)}...${head}`, {
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return 0
+  const body = (await res.json()) as { behind_by?: number }
+  return body.behind_by ?? 0
+}
+
 const liveDeps: MergeQueueDeps = {
   token: async (db, attempt) => resolveProjectGithubToken(db as never, attempt.project_id, await installationIdForAttempt(db as never, attempt as never)),
   pull: fetchPullRequestDetails,
   checks: githubChecks,
   updateBranch: githubUpdateBranch,
+  behindBy: githubBehindBy,
   ready: markPullRequestReady,
   merge: gatedMergePullRequest,
   finalize: finalizeFixMerge,

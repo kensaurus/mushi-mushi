@@ -52,6 +52,8 @@ export interface MergeQueueDeps {
   pull: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   checks: (token: string, ref: GithubRepoRef, sha: string) => Promise<ChecksView>
   updateBranch: (token: string, ref: GithubRepoRef, n: number, headSha: string) => Promise<{ ok: boolean; conflict: boolean; message?: string }>
+  /** Commits on `base` that `head` does not have yet (GitHub compare). */
+  behindBy: (token: string, ref: GithubRepoRef, base: string, head: string) => Promise<number>
   ready: (token: string, ref: GithubRepoRef, n: number) => Promise<{ ok: boolean; message?: string }>
   merge: typeof gatedMergePullRequest
   finalize: typeof finalizeFixMerge
@@ -158,10 +160,28 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
     case 'wait':
       await set({ state: 'waiting', detail: step.reason, head_sha: head })
       return 'waiting'
-    case 'blocked':
+    case 'blocked': {
+      // GitHub reports a PR with red checks as "blocked", not "behind", even
+      // when its base moved. When it is behind, update it: the base may now
+      // carry the fix (2026-10-23: PRs that failed on a stale SDK or a
+      // security audit stayed held after main fixed both). Once updated it is
+      // not behind until main moves again, so this cannot loop.
+      if (step.reason.startsWith('CI failed') && head && pull.baseRef) {
+        const behind = await deps.behindBy(token, ref, pull.baseRef, head).catch(() => 0)
+        if (behind > 0) {
+          const r = await deps.updateBranch(token, ref, row.pr_number, head)
+          if (r.ok) {
+            await set({ state: 'waiting', detail: `CI failed on an older base; updated with ${behind} new commit${behind === 1 ? '' : 's'} from ${pull.baseRef} and checking again.`, head_sha: head })
+            await event(db, row, 'pending', 'Merge queue: branch updated', 'CI had failed on an older base; GitHub merged the new base into it and CI runs again.', `mq-update:${row.id}:${head}`)
+            return 'updated'
+          }
+          if (r.conflict) return resolve(db, row, attempt, pull, head, deps, set, now)
+        }
+      }
       await set({ state: 'blocked', detail: step.reason, head_sha: head })
       if (row.state !== 'blocked') await event(db, row, 'fail', 'Merge queue: needs you', step.reason, `mq-blocked:${row.id}:${head}`)
       return 'blocked'
+    }
     case 'ready': {
       const r = await deps.ready(token, ref, row.pr_number)
       await set({ state: 'waiting', detail: r.ok ? 'Marked ready for review; checking again.' : `Could not mark it ready: ${r.message ?? 'GitHub refused'}`, head_sha: head })
