@@ -11,7 +11,7 @@ import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { featureRequestDispatchBlock, shortRepoName } from '../../lib/dispatchConfirm'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
-import { CLOSE_REASONS, closeReasonSentryNotice } from '../../lib/closeReasons'
+import { closeReasonsFor, closeReasonSentryNotice } from '../../lib/closeReasons'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { trackAdHoc } from '../../lib/track'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
@@ -182,7 +182,7 @@ export function ReportTriageBar({
             className="!w-auto"
           >
             <option value="">No reason</option>
-            {CLOSE_REASONS.map((r) => (
+            {closeReasonsFor(report.source).map((r) => (
               <option key={r.value} value={r.value} disabled={r.needsGroup && !report.report_group_id}>
                 {r.label}
                 {r.needsGroup && !report.report_group_id ? ' (group it first)' : ''}

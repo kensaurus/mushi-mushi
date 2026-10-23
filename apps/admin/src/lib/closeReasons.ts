@@ -4,7 +4,8 @@
  *          and the bulk bar, so every close path offers the same reasons.
  *
  * The reporter sees matching copy ("We couldn't reproduce it. Reply if it
- * happens again."); spam closes silently. Values are
+ * happens again."); spam and a false alarm close silently. A false alarm is
+ * offered only when Mushi's own check filed the report. Values are
  * `reports_closed_reason_check`. Missing info is not a close — use "Ask for
  * more info" in the Reporter view instead.
  */
@@ -14,6 +15,18 @@ export interface CloseReason {
   label: string
   /** Needs the report grouped under its canonical one first (report page only). */
   needsGroup?: boolean
+  /** Only when Mushi's own check filed the report. There is no human reporter. */
+  ownCheck?: boolean
+}
+
+/**
+ * `reports.source` values Mushi files itself. A false alarm is only offered
+ * for these — the same set the API accepts (`MUSHI_CHECK_SOURCES`).
+ */
+export const MUSHI_CHECK_SOURCES: readonly string[] = ['site_audit', 'site_watch', 'security_advisory']
+
+export function isMushiCheckSource(source: string | null | undefined): boolean {
+  return typeof source === 'string' && MUSHI_CHECK_SOURCES.includes(source)
 }
 
 export const CLOSE_REASONS: readonly CloseReason[] = [
@@ -22,10 +35,16 @@ export const CLOSE_REASONS: readonly CloseReason[] = [
   { value: 'working_as_intended', label: 'Works as intended' },
   { value: 'duplicate', label: 'Same as another report', needsGroup: true },
   { value: 'spam', label: 'Spam (reporter is not told)' },
+  { value: 'false_alarm', label: "False alarm (Mushi's check was wrong)", ownCheck: true },
 ]
 
-/** Reasons that need no per-report check, so a list or bulk close can offer them. */
-export const QUICK_CLOSE_REASONS: readonly CloseReason[] = CLOSE_REASONS.filter((r) => !r.needsGroup)
+/** Reasons a list or bulk close can offer without looking at each report. */
+export const QUICK_CLOSE_REASONS: readonly CloseReason[] = CLOSE_REASONS.filter((r) => !r.needsGroup && !r.ownCheck)
+
+/** Reasons the close picker may offer for a report from `source`. */
+export function closeReasonsFor(source: string | null | undefined): readonly CloseReason[] {
+  return isMushiCheckSource(source) ? CLOSE_REASONS : CLOSE_REASONS.filter((r) => !r.ownCheck)
+}
 
 /**
  * The message the reporter gets, word for word, for the confirm dialog
@@ -59,6 +78,7 @@ export function closeReasonSentryNotice(reason: string): string {
 /** What closing tells the reporter(s), for the confirm dialog. */
 export function closeReasonNotice(reason: string, count = 1): string {
   if (reason === 'spam') return count === 1 ? 'Closed as spam: the reporter is not told.' : 'Closed as spam: reporters are not told.'
+  if (reason === 'false_alarm') return "Closed as a false alarm: nobody is told. Mushi's check was wrong."
   const who = count === 1 ? 'The reporter sees' : 'Each reporter sees'
   return `${who} “${REPORTER_SEES[reason] ?? 'Closed.'}”`
 }

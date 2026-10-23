@@ -4,16 +4,19 @@
  *          with the exact message the reporter will see underneath.
  */
 
-import { closeReasonNotice, QUICK_CLOSE_REASONS } from '../../lib/closeReasons'
+import { closeReasonNotice, closeReasonsFor } from '../../lib/closeReasons'
 
 interface Props {
   value: string
   onChange: (value: string) => void
   /** Reports being closed, for the "Each reporter sees" wording. */
   count?: number
+  /** `reports.source`. A false alarm is offered only for Mushi's own checks. */
+  source?: string | null
 }
 
-export function CloseReasonSelect({ value, onChange, count = 1 }: Props) {
+export function CloseReasonSelect({ value, onChange, count = 1, source }: Props) {
+  const reasons = closeReasonsFor(source).filter((r) => !r.needsGroup)
   return (
     <div className="mt-3 space-y-1.5">
       <label className="block text-xs font-medium text-fg-secondary" htmlFor="close-reason">
@@ -26,7 +29,7 @@ export function CloseReasonSelect({ value, onChange, count = 1 }: Props) {
         className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
       >
         <option value="">No reason</option>
-        {QUICK_CLOSE_REASONS.map((r) => (
+        {reasons.map((r) => (
           <option key={r.value} value={r.value}>
             {r.label}
           </option>
