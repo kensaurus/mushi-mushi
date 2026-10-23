@@ -230,3 +230,21 @@ test('a tick takes one PR per repo, and a blocked row only where nothing else mo
   }))
   assertEquals(seen.sort(), ['r', 's'])
 })
+
+test('a repo keeps working on the PR already in progress when a whole app was queued at once', async () => {
+  const at = '2026-10-23T08:00:00Z'
+  const rows = [
+    row({ id: 'q-new', repo: 'o/r', state: 'queued', pr_number: 3 }),
+    row({ id: 'q-ci', repo: 'o/r', state: 'waiting', pr_number: 9 }),
+    row({ id: 'q-old', repo: 'o/r', state: 'queued', pr_number: 1 }),
+    row({ id: 'q-leased', repo: 'o/s', state: 'queued', pr_number: 2 }),
+    row({ id: 'q-other', repo: 'o/s', state: 'queued', pr_number: 4 }),
+  ].map((r) => ({ ...r, queued_at: at, claimed_until: r.id === 'q-leased' ? '2026-10-23T09:03:00Z' : null }))
+  const { db } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: rows, fix_events: [] })
+  const seen: number[] = []
+  await runMergeQueue(db, deps({
+    pull: (_t, _ref, n) => (seen.push(n), Promise.resolve(pull({ state: 'closed' }))),
+  }))
+  // o/r: the waiting PR #9, not a tie-broken queued one; o/s: held by the leased row.
+  assertEquals(seen, [9])
+})
