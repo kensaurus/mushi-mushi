@@ -301,5 +301,10 @@ describe('dbError transient log line', () => {
     shared.dbError(c as never, err)
     expect(reportMessage).toHaveBeenCalledTimes(1)
     expect(reportError).not.toHaveBeenCalled()
+    // The per-error log line is the fleet-wide signal, so it never stops.
+    const transientLines = warn.mock.calls
+      .map((call) => JSON.parse(String(call[0])) as { event: string })
+      .filter((line) => line.event === 'db_transient_error')
+    expect(transientLines).toHaveLength(DB_TRANSIENT_VOLUME_THRESHOLD + 1)
   })
 })

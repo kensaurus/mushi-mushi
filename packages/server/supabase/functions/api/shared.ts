@@ -54,7 +54,8 @@ import {
  *   metadata.parsed.event = "db_transient_error"
  * A steady stream on one route sends one Sentry warning
  * (`db_transient_error_volume`) so a read that times out every time still
- * surfaces. One timeout does not.
+ * surfaces. One timeout does not. That count is per isolate, so the log
+ * line above stays the fleet-wide signal.
  * An HTML gateway page answers 503 with SAFE_INTERNAL_MESSAGE. The raw page
  * is never the client message, the log line, or the Sentry exception text.
  *

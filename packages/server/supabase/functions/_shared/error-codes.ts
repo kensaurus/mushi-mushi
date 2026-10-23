@@ -327,6 +327,14 @@ export function logDbFailure(
  * DB_TRANSIENT_VOLUME_WINDOW_MS, before one Sentry warning is sent.
  * One gateway timeout stays a console warning. Hitting the threshold inside
  * the window means the read is timing out every time (MUSHI-cd3477a9 review).
+ *
+ * The count lives in one edge-runtime isolate's memory, not across the fleet.
+ * When traffic spreads over many short-lived isolates, a route that fails on
+ * every request can stay under the threshold in each of them, and this alert
+ * never fires. Fleet-wide volume is only visible from the `db_transient_error`
+ * log line that every failure writes (Supabase Logs:
+ * `metadata.parsed.event = "db_transient_error"`, grouped by `path`); alert on
+ * that, not on this warning alone.
  */
 export const DB_TRANSIENT_VOLUME_THRESHOLD = 5
 export const DB_TRANSIENT_VOLUME_WINDOW_MS = 60_000
@@ -350,7 +358,8 @@ export function resetDbTransientVolume(): void {
  * threshold, log `db_transient_error_volume` and call `report` once so the
  * regression reaches Sentry. Further warnings in the same window do not
  * alert again; a quiet window lets the next burst alert. UUIDs and long
- * numeric ids fold into one route, matching dbErrorFingerprint.
+ * numeric ids fold into one route, matching dbErrorFingerprint. Counts are
+ * per isolate (see DB_TRANSIENT_VOLUME_THRESHOLD).
  */
 export function emitDbTransientVolumeAlert(
   path: string,
