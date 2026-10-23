@@ -88,6 +88,24 @@ describe('deriveUpdateCenterView', () => {
     expect(behind.appBehindPr).toBe(true)
   })
 
+  it('shows the lockfile command on an open PR and ignores other errors', () => {
+    const note = 'This PR needs `pnpm install --lockfile-only`.'
+    const open = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/kensaurus/glot.it/pull/303',
+      plan: PLAN_142,
+      lockfileNote: note,
+    })
+    expect(open.mode).toBe('pr_open')
+    expect(open.lockfileNote).toBe(note)
+    const other = deriveUpdateCenterView(GLOT, {
+      status: 'completed',
+      prUrl: 'https://github.com/kensaurus/glot.it/pull/303',
+      error: 'Reused the existing open upgrade PR',
+    })
+    expect(other.lockfileNote).toBeNull()
+  })
+
   it('shows the lockfile wait as its own state with no button', () => {
     const v = deriveUpdateCenterView(GLOT, { status: 'awaiting_lockfile', jobId: 'j' })
     expect(v.mode).toBe('awaiting_lockfile')

@@ -2,6 +2,10 @@
 
 Status: Accepted (owner, 2026-10-03)            Date: 2026-10-03
 
+Amended in part by [0042](0042-npm-lock-entries-on-sdk-upgrade.md): when the
+host has no workflow, npm package-lock entries for `@mushi-mushi/*` are
+updated in the bump commit. pnpm and yarn stay on this decision.
+
 Related: [0016](0016-mushi-as-the-app-recipe-control-plane.md) (least-privilege
 GitHub App permissions; changes reach a host only as reviewed PRs).
 

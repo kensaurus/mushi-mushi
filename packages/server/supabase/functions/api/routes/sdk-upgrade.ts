@@ -152,7 +152,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       // Surface the most recent job tied to this PR when available (cockpit resume).
       const { data: priorJob } = await db
         .from('sdk_upgrade_jobs')
-        .select('id, status, pr_url, plan, release_status, pr_state, check_run_conclusion, deploy_status, deploy_url')
+        .select('id, status, pr_url, plan, error, release_status, pr_state, check_run_conclusion, deploy_status, deploy_url')
         .eq('project_id', projectId)
         .eq('pr_url', decision.prUrl)
         .order('created_at', { ascending: false })
