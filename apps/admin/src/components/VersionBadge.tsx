@@ -180,15 +180,15 @@ function VersionPill({
 }) {
   const toneClass =
     tone === 'sdk'
-      ? `border-info/35 ${CHIP_TONE.infoSubtle}`
+      ? CHIP_TONE.infoSubtle
       : tone === 'admin'
-        ? `border-accent/35 ${CHIP_TONE.accentSubtle}`
+        ? CHIP_TONE.accentSubtle
         : tone === 'tool'
-          ? `border-warn/35 ${CHIP_TONE.warnSubtle}`
+          ? CHIP_TONE.warnSubtle
           : tone === 'plugin'
-            ? `border-accent/35 ${CHIP_TONE.accentSubtle}`
+            ? CHIP_TONE.accentSubtle
             : tone === 'runtime'
-              ? `border-ok/35 ${CHIP_TONE.okSubtle}`
+              ? CHIP_TONE.okSubtle
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
