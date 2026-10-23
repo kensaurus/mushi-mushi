@@ -106,8 +106,16 @@ function toPage(raw: Record<string, unknown>): AuditPage | null {
     description: str(m.description),
     language: str(m.language),
     ogImage: str(m.ogImage) ?? str(m['og:image']),
-    html: typeof raw.html === 'string' ? raw.html : null,
-    markdown: typeof raw.markdown === 'string' ? raw.markdown : null,
+    // Keep only what the rules read, so a 200-page batch of 500 KB pages fits
+    // in the edge runtime: the <img> tags, and the lines of the body with kana.
+    html: typeof raw.html === 'string' ? (raw.html.match(/<img\b[^>]*>/gi) ?? []).join('') : null,
+    markdown:
+      typeof raw.markdown === 'string'
+        ? raw.markdown
+            .split('\n')
+            .filter((line) => /[\u3040-\u30FF]/.test(line))
+            .join('\n')
+        : null,
     links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
   }
 }
