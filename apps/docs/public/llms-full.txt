@@ -10870,7 +10870,7 @@ have a clean snapshot to compare against.
 - [Mushi Mushi web SDK](/sdks/web)
 - [Mushi Mushi React Native SDK](/sdks/react-native)
 - [Mushi Mushi admin console](/admin)
-- [Luciq (Instabug) docs](https://docs.luciq.cloud/)
+- [Luciq (Instabug) docs](https://docs.luciq.ai/)
 
 ---
 
@@ -11431,7 +11431,7 @@ better than running either tool alone.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [Pendo identify API](https://help.pendo.io/resources/support-library/api/index.html)
+- [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)
 
 ---
 
@@ -11803,7 +11803,7 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
 ## References
 
 - [Mushi web SDK](/sdks/web) / [React Native SDK](/sdks/react-native)
-- [Shake docs](https://docs.shakebugs.com/)
+- [Shake docs](https://docs.shakebugs.com/docs/)
 
 ---
 
@@ -11830,7 +11830,7 @@ warnings. The framework-level migration mechanics are upstream:
 
 - React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
-- Svelte SPA → **SvelteKit**: [official SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 
 ## Env-var prefix mapping
 
@@ -11919,7 +11919,7 @@ the server-side HTML, you'll see:
 
 - [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
-- [SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
 
 ---
@@ -11945,7 +11945,7 @@ still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
 brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
-  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/vue-2-nes)
+  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
   for Vue 2.7 with security backports.
 
 ## What changes (high level)
@@ -21819,7 +21819,7 @@ If the search fails, an error banner shows the specific error code:
 
 Research results are stored in your Supabase project. They are never shared with other
 tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
 
 ---
 
