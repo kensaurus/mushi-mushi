@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-22 · **731** routes.
+> Generated: 2026-10-23 · **743** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 192 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 371 |
+| `jwtAuth` | 383 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -253,6 +253,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/marketplace/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | GET | `/v1/admin/me/lifecycle-emails` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lifecycle-emails.ts` |
 | PUT | `/v1/admin/me/lifecycle-emails` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lifecycle-emails.ts` |
+| GET | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| POST | `/v1/admin/merge-queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
+| DELETE | `/v1/admin/merge-queue/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/merge-queue.ts` |
 | GET | `/v1/admin/migrations/progress` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | DELETE | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | PUT | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
@@ -391,12 +394,20 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
+| GET | `/v1/admin/projects/:id/search-ranks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
+| PUT | `/v1/admin/projects/:id/search-ranks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
+| POST | `/v1/admin/projects/:id/search-ranks/run` | `jwtAuth` | `packages/server/supabase/functions/api/routes/search-rank.ts` |
 | POST | `/v1/admin/projects/:id/sentry/import` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sentry-import.ts` |
 | POST | `/v1/admin/projects/:id/setup-funnel/diagnosis-viewed` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| GET | `/v1/admin/projects/:id/site-audit` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-audit.ts` |
+| PUT | `/v1/admin/projects/:id/site-audit` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-audit.ts` |
+| POST | `/v1/admin/projects/:id/site-audit/run` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-audit.ts` |
 | DELETE | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
 | GET | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
 | PUT | `/v1/admin/projects/:id/site-watch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
 | POST | `/v1/admin/projects/:id/site-watch/run` | `jwtAuth` | `packages/server/supabase/functions/api/routes/site-watch.ts` |
+| POST | `/v1/admin/projects/:id/skill-runs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/skill-runs.ts` |
+| POST | `/v1/admin/projects/:id/skill-runs/:runId/stop` | `jwtAuth` | `packages/server/supabase/functions/api/routes/skill-runs.ts` |
 | GET | `/v1/admin/projects/:id/store` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | POST | `/v1/admin/projects/:id/store/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | GET | `/v1/admin/projects/:id/store/reviews` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-review-intake.ts` |
@@ -561,6 +572,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/settings/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/settings/test-slack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/onboarding-setup.ts` |
+| GET | `/v1/admin/skill-runs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/skill-runs.ts` |
 | GET | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | POST | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | DELETE | `/v1/admin/sso/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |

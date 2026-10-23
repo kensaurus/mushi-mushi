@@ -113,4 +113,4 @@ better than running either tool alone.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [Pendo identify API](https://help.pendo.io/resources/support-library/api/index.html)
+- [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)

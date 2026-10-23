@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 217 pages, generated from llms.txt. */
+/** 218 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["This is what a diagnosis looks like", "See it in action", "What this is (and is not)", "Get started with the SDK", "Install in your framework", "One queue. Sentry flows in, fixes flow out."],
+    headings: ["The problem it solves", "A real example from our own sites", "What this is (and is not)", "Where it stands today", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -167,6 +167,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "cost", "usage"],
     headings: ["What's tracked", "Charts", "Controlling costs", "Export", "Related pages"],
     excerpt: "The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.",
+  },
+  {
+    title: "Spend credits",
+    url: docUrl("/admin/credits"),
+    route: "/admin/credits",
+    markdown: "admin/credits.md",
+    keywords: ["admin", "credits", "spend"],
+    headings: ["Cursor: fix bugs", "Cursor: improve your apps with skills", "Firecrawl: find bugs on your live sites", "Site audit", "Search rank", "Where the fixes go"],
+    excerpt: "Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.",
   },
   {
     title: "Dashboard",
@@ -1371,7 +1380,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "fix", "first", "bug", "60", "seconds", "choose", "stack"],
-    headings: ["Start here (MCP)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
+    headings: ["What you need", "The fastest way: one command", "Start here (editor first)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
     excerpt: "Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {

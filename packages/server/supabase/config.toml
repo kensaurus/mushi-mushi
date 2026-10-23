@@ -426,6 +426,29 @@ verify_jwt = false
 [functions.site-watch-poll]
 verify_jwt = false
 
+# Cron-invoked hourly (mushi-site-audit, :29) and by api-ext after "Run now";
+# a scheduled rendered crawl checked by deterministic rules, one report per
+# failing rule (ADR 0040).
+[functions.site-audit]
+verify_jwt = false
+
+# Cron-invoked daily (mushi-search-rank, 04:47) and by api-ext after "Check now";
+# where each app ranks in web search for its keywords, weekly per keyword.
+[functions.search-rank]
+verify_jwt = false
+
+# Cron-invoked every 5 minutes (mushi-merge-queue, :01 to :56) and by api-ext
+# after a person queues PRs; "Merge when ready": update branch, wait for CI,
+# merge through the review gate, one PR per repo at a time (ADR 0041).
+[functions.merge-queue]
+verify_jwt = false
+
+# Cron-invoked every 10 minutes (mushi-skill-runs, :07 to :57) and by api-ext
+# after a person starts a run; files each round of a skill run as a report and
+# hands Opus-approved round PRs to the merge queue (ADR 0042).
+[functions.skill-runs]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false

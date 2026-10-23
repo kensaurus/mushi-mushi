@@ -68,6 +68,7 @@ import {
   FOLLOWUP_QUEUE_EXPIRY_MS,
   followupAgentInput,
   followupDispatchGate,
+  followupModelSpec,
   followupScoreboard,
   followupTrigger,
   cursorBackoffMs,
@@ -113,6 +114,7 @@ const MODELS: CursorModelInfo[] = [
     ],
   },
   { id: 'composer-2.5', aliases: ['composer'] },
+  { id: 'claude-opus-5-5' },
   { id: 'gpt-6', variants: [{ params: [{ id: 'fast', value: 'true' }] }] },
 ]
 
@@ -611,6 +613,23 @@ describe('review-followup worker', () => {
     expect(d.calls.create).toHaveLength(0)
     expect(rowOf(db)).toMatchObject({ status: 'queued', skip_reason: 'model_not_listed', run_id: null })
     expect(String(rowOf(db).error)).toContain('grok-5')
+  })
+
+  it('escalation (ADR 0032 amendment): the first round stays on the org model, the last round runs on the escalation model', async () => {
+    const first = seed({ org: { review_followup_escalation_model: 'claude-opus-5-5' } })
+    const d1 = deps()
+    await runReviewFollowups(first as never, d1)
+    expect(buildCreateAgentV1Body(d1.calls.create[0].input as never).model).toEqual({ id: 'grok-4.7', params: [{ id: 'reasoning_effort', value: 'xhigh' }] })
+
+    const prior: Row = { id: 'f-old', fix_attempt_id: ATTEMPT, project_id: P1, report_id: REPORT, head_sha_before: 'old-head', status: 'completed', cursor_agent_id: 'bc-old', created_at: NOW.toISOString() }
+    const last = seed({ org: { review_followup_escalation_model: 'claude-opus-5-5' }, followups: [prior] })
+    const d2 = deps()
+    await runReviewFollowups(last as never, d2)
+    expect(d2.calls.create).toHaveLength(1)
+    expect(buildCreateAgentV1Body(d2.calls.create[0].input as never).model).toEqual({ id: 'claude-opus-5-5' })
+    const row = last.table('fix_review_followups').find((r) => r.id !== 'f-old')!
+    expect(row).toMatchObject({ status: 'dispatched', model: 'claude-opus-5-5' })
+    expect(last.table('fix_events')).toEqual([expect.objectContaining({ label: 'Follow-up dispatched', detail: expect.stringContaining('last round on the escalation model') })])
   })
 
   it('a model list that cannot be read waits; no model at all uses the account default', async () => {
@@ -1467,5 +1486,18 @@ describe('review fixes (PR #571)', () => {
     expect(summary.discovered).toBe(0)
     const calls = warn.mock.calls.filter((c) => c[0] === 'review follow-up enqueue failed')
     expect(calls).toEqual([['review follow-up enqueue failed', { count: 1, err: 'disk full' }]])
+  })
+})
+
+describe('followupModelSpec (ADR 0032 amendment, 2026-10-23)', () => {
+  const base = { model: 'grok-4.7?reasoning_effort=xhigh', escalationModel: 'claude-opus-5-5', appDefault: 'composer-2.5' }
+  it('uses the org model before the last round and the escalation model on it', () => {
+    expect(followupModelSpec({ ...base, priorDispatched: 0 })).toEqual({ spec: 'grok-4.7?reasoning_effort=xhigh', escalated: false })
+    expect(followupModelSpec({ ...base, priorDispatched: 1 })).toEqual({ spec: 'claude-opus-5-5', escalated: true })
+  })
+  it('without an escalation model every round uses the org model, else the app default', () => {
+    expect(followupModelSpec({ ...base, escalationModel: null, priorDispatched: 1 })).toEqual({ spec: 'grok-4.7?reasoning_effort=xhigh', escalated: false })
+    expect(followupModelSpec({ ...base, model: null, escalationModel: null, priorDispatched: 0 })).toEqual({ spec: 'composer-2.5', escalated: false })
+    expect(followupModelSpec({ model: null, escalationModel: null, appDefault: null, priorDispatched: 0 })).toEqual({ spec: null, escalated: false })
   })
 })

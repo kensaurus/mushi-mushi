@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 217
+Pages: 218
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -27,11 +27,61 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+## The problem it solves
+
+AI coding assistants let one person build and ship an app in days. Then a real
+user hits something broken: a button that does nothing, a page in the wrong
+language, a score that shows 0. Often nothing crashed, so error monitoring
+(services such as Sentry that record when code fails) never notices. The user
+gives up or sends a vague message, and the builder loses an afternoon trying to
+understand code they did not write themselves.
+
+Mushi closes that gap. The user's report becomes a clear explanation and a fix
+your AI assistant can start from.
+
+## A real example from our own sites
+
+This happened on the websites run by Kensaurus, the company behind Mushi.
+Mushi's site audit, an automatic weekly check of every page, found two problems
+that no error alert had caught:
+
+- an "Edit this page" link that led nowhere, and
+- Japanese text showing up on English pages.
+
+Nothing had crashed, so ordinary monitoring stayed quiet. Mushi filed each
+problem as a bug report. Within the hour, an AI coding agent in Cursor had
+written the fixes and opened them as pull requests: proposed code changes that
+wait for approval. A second AI, Claude Opus, reviewed each change and approved
+it before it was merged.
+
+## What this is (and is not)
+
+Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that gives every bug your users report a plain-English diagnosis + a ready fix, in your editor.
+
+**Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
+
+A few words you will see on this page:
+
+- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
+- **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
+- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
+- **Self-host**: run Mushi on your own server instead of using the hosted service.
+
+## Where it stands today
+
+Mushi Mushi is live and free to try. The hosted service runs at
+kensaur.us/mushi-mushi, the libraries are published on npm, and the source code
+is public on GitHub. It is built by Kensaurus 合同会社, a small company in Japan,
+and runs on the company's own apps and sites. The native iOS, Android and
+Flutter libraries are still previews.
+
 ## This is what a diagnosis looks like
 
-A user writes one or two sentences about what went wrong. Mushi reads them with
-the screenshot, console and network tail, and writes back a plain-English title,
-a severity, the likely cause and a suggested fix. Below is a real one.
+A user writes one or two sentences about what went wrong. Mushi reads them
+together with the screenshot and the technical log from their browser, and
+writes back a plain-English title, how serious it is, the likely cause and a
+suggested fix. Below is a real one.
 
   
 
@@ -39,29 +89,29 @@ a severity, the likely cause and a suggested fix. Below is a real one.
 
   
 
-## What this is (and is not)
+## Get started
 
-Mushi Mushi is the bug mediator for AI-built apps, an open-source bug-reporting SDK and queue: plain-English diagnosis + a ready fix, in your editor.
+## Install it in your app
 
-## Get started with the SDK
+## Works with Sentry, or without it
 
-## Install in your framework
-
-## One queue. Sentry flows in, fixes flow out.
+Sentry is a popular service that records errors when an app's code crashes.
+Many developers already use it, and Mushi does not ask you to give it up.
 
 Sentry is built around what the code threw, with a User Feedback widget and
 replay alongside. Mushi starts from what the user reported, ingests Sentry's
 errors too, explains each one in plain English, and hands your agent a fix
 prompt to start from. With or without Sentry.
 
-Sentry is one on-ramp of several. Bugs come in from your users, your
-monitoring and your voice; fixes and status go out to your editor, your coding
-agents, your tracker and your chat. Nothing has to be ripped out.
+Sentry is one way in among several. Bugs come in from your users, your
+monitoring tools and even your voice; fixes and status updates go out to your
+editor, your AI coding agents, your task tracker and your team chat. Nothing has
+to be ripped out.
 
   
 
-See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
-sequence diagram and component-by-component spec.
+For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
+the full sequence diagram and a component-by-component spec.
 
 ---
 
@@ -76,7 +126,7 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** classification in seconds; a paste-ready fix prompt on the report page, or the fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+  **Today:** a report is sorted and explained within seconds, with a paste-ready fix prompt on the report page or a fix brief through the MCP tools. **Target:** the whole diagnosis in under 10 seconds. MCP needs a Mushi account and a project key, not a separate OpenAI or Anthropic key.
 
 ## No MCP? Copy the fix prompt
 
@@ -85,7 +135,7 @@ your coding agent**. You get one self-contained prompt (diagnosis, suggested fix
 repro steps, page and browser, the key console lines, likely files, and what
 "done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
 MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent pull context and close the report itself.
+the agent fetch the details and close the report itself.
 
 ## Prerequisites
 
@@ -368,12 +418,30 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
+## What you need
 
-## Start here (MCP)
+- An app you are building, for the web or for phones.
+- A Mushi account. The free plan is enough, and the setup wizard signs you in through your browser.
+- Optional: an AI code editor such as Cursor or Claude Code, so it can read bug reports and fix them for you.
 
-1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
-2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
+## The fastest way: one command
+
+Run this in your app's folder:
+
+```bash
+npx mushi-mushi
+```
+
+`npx` runs a tool from npm (the public library of JavaScript packages) without
+installing it for good. This one is the Mushi setup wizard: it works out which
+framework your app uses, signs you in through your browser, installs the SDK
+(the small library that adds the report button), saves your settings and can
+send a test report.
+
+## Start here (editor first)
+
+1. [Incident loop](/quickstart/incident-loop): a bug in your live app → a plain-English diagnosis → a fix in your editor
+2. [MCP server](/quickstart/mcp): connect Cursor, VS Code or Claude to Mushi
 
 ## Pick your stack
 
@@ -391,17 +459,18 @@ Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via brows
 npx mushi-mushi
 ```
 
-The wizard opens your browser, you click **Approve**, picks or creates a project,
-installs the SDK, and writes `.env.local`.
+The wizard opens your browser so you can click **Approve**. It then picks or
+creates a project, installs the SDK and writes your settings to `.env.local`.
 
 **Option B — manual:**
 
-See [Project ID & API keys](/concepts/credentials) for env var names per framework.
+See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
 
-  The SDK needs only framework-prefixed project id + API key (see
+  The SDK needs only two settings: your project ID and API key, named with the
+  prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is for **self-hosting the backend** — you do
-  not need Supabase or an LLM key to use the SDK.
+  The repo's root `.env.example` is only for **running the Mushi server
+  yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting
 
@@ -2456,18 +2525,18 @@ description: Mushi's core ideas in one place — capture, plain-English diagnosi
 
 The loop in plain terms:
 
-1. **Capture** — users report what felt broken (shake, tap, or widget) with screenshot and context.
-2. **Plain read** — severity, category, and cause in English your team already uses.
-3. **Connect** — similar reports collapse to one row; hot spots emerge from the graph.
-4. **Fix** — optional agent drafts a PR; you merge, edit, or ignore.
-5. **Verify** — automated replay checks the fix before you ship.
-6. **Remember** — past fixes become rules your editor sees on the next PR.
+1. **Capture**: users report what felt broken (by shaking the phone, tapping, or using the widget), and Mushi adds a screenshot and what they were doing.
+2. **Plain read**: how serious it is, what kind of problem it is and the likely cause, in everyday English.
+3. **Connect**: similar reports merge into one item, and the parts of the app that break most often stand out.
+4. **Fix**: optionally, an AI agent drafts the fix as a pull request (a proposed code change); you merge it, edit it or ignore it.
+5. **Verify**: an automated replay checks the fix before you ship it.
+6. **Remember**: past fixes become rules your editor sees on the next pull request.
 
 ## Primary paths
 
-- [Architecture](/concepts/architecture) — components and data flow
-- [How classification works](/concepts/classification) — Stage 1 / Stage 2
-- [How fixes get drafted](/concepts/fix-orchestrator) — sandbox → draft PR
+- [Architecture](/concepts/architecture): the parts of Mushi and how data flows between them
+- [How classification works](/concepts/classification): how a report is filtered, then sorted and explained, in two passes
+- [How fixes get drafted](/concepts/fix-orchestrator): how an AI agent writes a fix and opens a draft pull request
 
 ## Everything else
 
@@ -3575,7 +3644,7 @@ Publishing tab and all `/tester/*` routes.
 - [Evolution loop](/concepts/evolution-loop) — the underlying architecture Bounties extends
 - [Rewards & contributor identity](/concepts/rewards) — the host-app rewards engine Bounties reuses
 - [Anti-gaming & reputation](/concepts/anti-gaming) — the fraud-detection layer
-- [`docs/research/tester-marketplace-research-2026-05-22.md`](../../../../docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
+- [`docs/research/tester-marketplace-research-2026-05-22.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
 
 ---
 
@@ -10801,7 +10870,7 @@ have a clean snapshot to compare against.
 - [Mushi Mushi web SDK](/sdks/web)
 - [Mushi Mushi React Native SDK](/sdks/react-native)
 - [Mushi Mushi admin console](/admin)
-- [Luciq (Instabug) docs](https://docs.luciq.cloud/)
+- [Luciq (Instabug) docs](https://docs.luciq.ai/)
 
 ---
 
@@ -11362,7 +11431,7 @@ better than running either tool alone.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [Pendo identify API](https://help.pendo.io/resources/support-library/api/index.html)
+- [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)
 
 ---
 
@@ -11734,7 +11803,7 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
 ## References
 
 - [Mushi web SDK](/sdks/web) / [React Native SDK](/sdks/react-native)
-- [Shake docs](https://docs.shakebugs.com/)
+- [Shake docs](https://docs.shakebugs.com/docs/)
 
 ---
 
@@ -11761,7 +11830,7 @@ warnings. The framework-level migration mechanics are upstream:
 
 - React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
-- Svelte SPA → **SvelteKit**: [official SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 
 ## Env-var prefix mapping
 
@@ -11850,7 +11919,7 @@ the server-side HTML, you'll see:
 
 - [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
-- [SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
 
 ---
@@ -11876,7 +11945,7 @@ still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
 brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
-  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/vue-2-nes)
+  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
   for Vue 2.7 with security backports.
 
 ## What changes (high level)
@@ -17054,6 +17123,72 @@ for chargeback / showback reporting in multi-team setups.
 
 ---
 
+## Spend credits
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/credits
+
+---
+title: Spend credits
+description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.
+---
+
+# Spend credits
+
+**Route:** `/credits`
+
+Cursor and Firecrawl credits that lapse at the end of a period are worth more spent on your apps. This page shows when each key's credits expire and lists every place Mushi can spend them, with a switch for each. The full form behind each switch stays where it was (Settings → AI keys, Settings → Web tools, Inventory → Discovery); this page answers one question: is anything spending them, and on what?
+
+## Cursor: fix bugs
+
+Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
+
+- **Fix open bugs before the credits expire** turns [spend-down](../concepts/agent-pr-review#spend-down-and-its-safety-stop) on or off for that key. While it is on, Mushi sends your best open reports to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. The switch is off until the key has an expiry date; set it in Settings → AI keys. A key your organization shares can be changed by an owner or admin, and someone else's universal key only by its owner.
+- When every app has nothing left to send, the row says so. Watching more of your live sites (below) is the way to find more.
+- **Review follow-ups** sends a pull request the Opus review marked "fix first" back to a new Cursor agent with the review's findings, at most twice per pull request and never on a "hold". The line names the model each round uses; when a **Last round model** is set in Settings → AI keys, the second round, which only happens after the first did not satisfy the reviewer, runs on it (for example Opus while the first stays on Grok).
+
+## Cursor: improve your apps with skills
+
+A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
+
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
+- **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+
+Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
+
+## Firecrawl: find bugs on your live sites
+
+The first line is the Firecrawl balance and when it resets. Unused credits do not roll over. The next line is the pace: what the site watches use a day, what that comes to before the reset, and what would go unused at that pace.
+
+Each app has a row:
+
+- **Watch the live site daily** turns its [live-site watch](./inventory) on or off. Turning it on uses the address shown, the app's suggested address, or one you type, at 25 pages a check. Turning it off asks first, then deletes the Firecrawl monitor; reports it already filed stay.
+- **Watch up to 100 pages** appears when a watch reads fewer pages than one check allows.
+- An app with no Firecrawl key it can use says so. Add a key, or share yours with all your apps, in Settings → Web tools.
+
+A broken page becomes a bug report only after a second check confirms it, and spend-down can then send it to Cursor.
+
+### Site audit
+
+Under each app's watch, **Audit links, accessibility and translations weekly** turns on its [site audit](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0040-site-audit-deterministic-live-site-checks.md). Once a week (the first run starts within the hour) Mushi maps the live site, reads every page under its address (up to 200, one Firecrawl credit each) and checks:
+
+- links to the site's own pages, to other sites and to images that are 404, 410, 5xx or unreachable (a 401, 403 or 429 is often a bot wall and does not count; Facebook, Instagram, LinkedIn, X and calendar links are skipped);
+- pages with no title, meta description or ``;
+- on `/th`, `/zh`, `/en` … pages: a title or description in another language, another locale's text in the page, and links that drop the visitor's language;
+- images without alt text.
+
+Each failing rule files one report listing the pages and evidence, with how to check it is fixed, and spend-down can send it to Cursor. While that report is open, later runs refresh it instead of filing again; a report you dismiss is not filed again; a fixed one that fails again files a new report. **Run now** starts a run (3 an hour per app). The row shows the last run: pages read, rules failing and reports filed.
+
+### Search rank
+
+Each app can also track where it ranks in web search for the words its users would type. **Add keywords** opens a box: one query per line, at most 10, with `@JP`, `@TH` … at the end for another country (US by default). Mushi looks for the app's watched or audited address in the top 20 results, once a week per keyword (about 4 Firecrawl credits each), and **Check now** reads them straight away (3 an hour). Each keyword shows its position, the change since the last check ("#2 (was #5)"), or "not in the top 20"; hover it to see the leading sites. It is a visibility number for you and files no reports.
+
+## Where the fixes go
+
+Fixes these levers open are on [Fixes](./fixes). The **Opus: merge** filter there lists the open pull requests the Opus review already said to merge.
+
+---
+
 ## Dashboard
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/dashboard
@@ -18252,12 +18387,16 @@ mushi fixes refresh-ci <fixId>
 ## Merging from the console
 
 After CI passes (or you've reviewed manually), merge the draft PR without leaving
-Mushi. This is **user-confirmed** — Mushi never auto-merges.
+Mushi. This is **user-confirmed**: Mushi merges only what you merge or queue,
+or what passes [verified merge](/admin/verified-merge) when you turned it on.
 
 ### Where merge appears
 
 - **Report detail** → fix card → **Merge PR** (confirm popover)
-- **Fixes list** → completed row with open PR
+- **Fixes list** → completed row with open PR. The **Opus: merge** filter
+  (`/fixes?status=review_merge`) lists only the open PRs whose latest Opus
+  review said merge; select them and use the bulk **Merge** action
+  (see [Merge when ready](#merge-when-ready)).
 - **Pipeline flow** on the report detail page
 
 The UI picks the **primary fix attempt** — if a later retry failed but an earlier
@@ -18299,6 +18438,31 @@ From the CLI (requires `mcp:write` API key):
 mushi fixes merge <fixId>
 mushi fixes merge <fixId> --method squash
 ```
+
+### Merge when ready
+
+The bulk **Merge** action queues the selected PRs by default (ADR 0041). Most
+repos require a branch to be up to date before it merges, so merging one PR
+leaves the others in that repo behind; the queue does the clicks for you:
+
+1. One PR per repo at a time. A branch that is behind gets GitHub's
+   **Update branch**; then the queue waits for CI on the new commit.
+2. It merges only when the Opus review of that exact commit says **merge**
+   (the update is a new commit, so Opus reviews it again first) and CI is
+   green. A hold or fix-first stops the PR until you decide.
+3. A merge conflict goes to a Cursor agent on the PR's branch, with your
+   review follow-up key and model, only while
+   [review follow-ups](/concepts/agent-pr-review#when-the-review-says-fix-first) are on, at most twice per PR.
+4. Each merge marks the report Fixed and tells the reporter, as a console
+   merge does.
+
+The **Merge when ready** panel on `/fixes` shows each queued PR, what it is
+waiting for, and why one needs you. **Remove** takes a PR out. You can leave
+the page; the queue runs every 5 minutes.
+
+**Merge now** (in the same dialog) tries each PR once. The PRs that did not
+merge stay listed above the table with GitHub's reason and a
+**Merge them when ready** button.
 
 ### Prerequisites
 
@@ -21655,7 +21819,7 @@ If the search fails, an error banner shows the specific error code:
 
 Research results are stored in your Supabase project. They are never shared with other
 tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
 
 ---
 

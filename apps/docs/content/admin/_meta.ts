@@ -26,6 +26,7 @@ export default {
   fixes: 'Fix orchestrator',
   'verified-merge': 'Verified merge',
   ci: 'CI runners',
+  credits: 'Spend credits',
   repo: 'Repo graph',
   explore: 'Codebase Atlas',
   'ux-runs': 'UX runs',

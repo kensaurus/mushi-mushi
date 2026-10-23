@@ -51,11 +51,13 @@ export interface FollowupSettings {
   offReason: string | null
   keyId: string | null
   model: string | null
+  /** The model for a PR's last follow-up round (ADR 0032 amendment, 2026-10-23); null = the same model. */
+  escalationModel: string | null
   dailyLimit: number
 }
 
 export const FOLLOWUP_SETTINGS_COLUMNS =
-  'id, review_followup_enabled, review_followup_enabled_at, review_followup_off_reason, review_followup_key_id, review_followup_model, review_followup_daily_limit'
+  'id, review_followup_enabled, review_followup_enabled_at, review_followup_off_reason, review_followup_key_id, review_followup_model, review_followup_escalation_model, review_followup_daily_limit'
 
 export function followupSettingsFromRow(row: Record<string, unknown> | null | undefined): FollowupSettings {
   const limit = Number(row?.review_followup_daily_limit)
@@ -66,6 +68,10 @@ export function followupSettingsFromRow(row: Record<string, unknown> | null | un
     offReason: typeof row?.review_followup_off_reason === 'string' ? row.review_followup_off_reason : null,
     keyId: typeof row?.review_followup_key_id === 'string' ? row.review_followup_key_id : null,
     model: typeof row?.review_followup_model === 'string' && row.review_followup_model.trim() ? row.review_followup_model.trim() : null,
+    escalationModel:
+      typeof row?.review_followup_escalation_model === 'string' && row.review_followup_escalation_model.trim()
+        ? row.review_followup_escalation_model.trim()
+        : null,
     dailyLimit: Number.isInteger(limit) && limit > 0 ? limit : FOLLOWUP_DEFAULT_DAILY_LIMIT,
   }
 }

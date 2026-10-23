@@ -105,6 +105,7 @@ import {
   FOLLOWUP_VERDICT_WINDOW_MS,
   followupAgentInput,
   followupDispatchGate,
+  followupModelSpec,
   followupTrigger,
   repoUrlFromPrUrl,
   screenFindings,
@@ -590,7 +591,12 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
   // The key that pays, then the model it may run (fail closed).
   const key = await d.resolveKey(db, { projectId: row.project_id, organizationId: ctx.organizationId, keyId: settings.keyId })
   if (!key.ok) return wait(key.reason)
-  const spec = settings.model ?? (typeof s.cursor_default_model === 'string' && s.cursor_default_model.trim() ? s.cursor_default_model.trim() : null)
+  const { spec, escalated } = followupModelSpec({
+    model: settings.model,
+    escalationModel: settings.escalationModel,
+    appDefault: typeof s.cursor_default_model === 'string' && s.cursor_default_model.trim() ? s.cursor_default_model.trim() : null,
+    priorDispatched: ((priorData ?? []) as PriorFollowup[]).filter((p) => p.id !== row.id && p.cursor_agent_id).length,
+  })
   let model: string | null = null
   if (spec) {
     let models: CursorModelInfo[]
@@ -749,9 +755,9 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     label: isCiRepair ? 'CI repair dispatched' : 'Follow-up dispatched',
     detail: isCiRepair
       ? `${sentCount} failing check(s) sent to Cursor to make CI green without weakening tests${model ? ` (${model})` : ''}: ${ciChecks.join(', ').slice(0, 300)}.`
-      : `${sentCount} Opus finding(s) sent to Cursor${model ? ` (${model})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
+      : `${sentCount} Opus finding(s) sent to Cursor${model ? ` (${model}${escalated ? ', last round on the escalation model' : ''})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
     dedupe: `followup-dispatched:${row.id}`,
-    payload: { agentId: created.agentId, runId: created.runId, model, keyId: key.keyId, headSha: row.head_sha_before, kind: isCiRepair ? 'ci_repair' : 'findings', ...(isCiRepair ? { checks: ciChecks } : {}) },
+    payload: { agentId: created.agentId, runId: created.runId, model, ...(escalated ? { escalated: true } : {}), keyId: key.keyId, headSha: row.head_sha_before, kind: isCiRepair ? 'ci_repair' : 'findings', ...(isCiRepair ? { checks: ciChecks } : {}) },
     at: nowIso,
   })
   log.info('review-followup.dispatched', {

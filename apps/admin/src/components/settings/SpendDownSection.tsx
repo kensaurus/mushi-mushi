@@ -10,16 +10,20 @@
  *          paused, with why. A paused app still gets one probe fix a day;
  *          Resume clears its stop-loss evidence (owner or admin). One line
  *          above the keys shows what review follow-ups (ADR 0032) made of
- *          fix-first PRs in the same period.
+ *          fix-first PRs in the same period. When a key has credits but no
+ *          app has a report left to send, it says so and links to where new
+ *          work comes from (reports, a watched live site, QA stories).
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
 import { Btn, Checkbox, Input, ResultChip } from '../ui';
 import {
   spendDownLine,
+  spendDownOutOfWork,
   spendDownPauses,
   spendDownScoreLine,
   spendDownStops,
@@ -114,7 +118,10 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
       <p className="text-xs text-fg-muted">
         Before a key&apos;s credits expire, Mushi sends open bugs to Cursor on its own, best first, so the credits
         fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
-        every fix opens a draft pull request for you to review.
+        every fix opens a draft pull request for you to review.{' '}
+        <Link className="text-brand underline-offset-2 hover:underline" to="/credits">
+          Every way to spend expiring credits
+        </Link>
       </p>
       {followups && <p className="text-xs tabular-nums text-fg-secondary">{followups}</p>}
       <ul className="divide-y divide-edge-subtle">
@@ -159,6 +166,25 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
                   {s}
                 </p>
               ))}
+              {spendDownOutOfWork(k) && (
+                <div className="space-y-1 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2.5 py-2 text-xs">
+                  <p className="text-fg-secondary">
+                    Nothing left to send: every open report was tried in the last 7 days or the agent said it needs a
+                    person. These credits wait until new bugs come in.
+                  </p>
+                  <p className="flex flex-wrap gap-x-3 gap-y-1">
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/reports">
+                      See open reports
+                    </Link>
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/inventory?tab=discovery">
+                      Watch a live site for broken pages
+                    </Link>
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/qa-coverage">
+                      Add QA stories
+                    </Link>
+                  </p>
+                </div>
+              )}
               {readOnly && !open && (
                 <p className="text-xs text-fg-muted">
                   {k.scope === 'universal'
