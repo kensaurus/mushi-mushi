@@ -288,3 +288,24 @@ Deno.test('manifest tools advertise the catalog outputSchema', async () => {
   }
   assertEquals(withOutput > 5, true, `only ${withOutput} manifest tools carry an outputSchema`);
 });
+
+Deno.test('a manifest tool scopes to the projectId the caller named (account-level key)', async () => {
+  const calls: Array<{ path: string; init: RequestInit & { headers: Record<string, string> } }> = [];
+  const tools = buildManifestTools({
+    apiCall: (path, init) => {
+      calls.push({ path, init: init as RequestInit & { headers: Record<string, string> } });
+      return Promise.resolve({ keys: [] });
+    },
+    requireString: () => {},
+    McpError: TestMcpError,
+    ERR_INVALID_PARAMS: -32602,
+  });
+  const context = { authHeaders: { Authorization: 'Bearer redacted' } };
+  await tools.get_spend_down_status.handler({ projectId: '67a6453c-375d-41d7-833a-b33471159442' }, context);
+  await tools.list_byok_keys.handler({}, context);
+  assertEquals(calls[0].path, '/v1/admin/byok/spend-down');
+  assertEquals(calls[0].init.headers['X-Mushi-Project-Id'], '67a6453c-375d-41d7-833a-b33471159442');
+  assertEquals(calls[0].init.headers.Authorization, 'Bearer redacted');
+  // No project named: the connection's own headers, unchanged.
+  assertEquals(calls[1].init.headers['X-Mushi-Project-Id'], undefined);
+});
