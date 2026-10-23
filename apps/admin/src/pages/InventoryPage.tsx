@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -163,7 +164,12 @@ export function InventoryPage() {
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
-  const [tab, setTab] = useState<Tab>('stories')
+  // `?tab=discovery` opens a tab directly (Settings → Spend-down links to the site watch).
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = params.get('tab')
+    return INVENTORY_TABS.some((t) => t.id === asked) ? (asked as Tab) : 'stories'
+  })
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string

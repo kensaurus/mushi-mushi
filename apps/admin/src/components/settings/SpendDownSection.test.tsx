@@ -7,6 +7,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SpendDownKeyStatus } from './spendDown'
 
@@ -61,7 +62,7 @@ describe('SpendDownSection', () => {
   let container: HTMLDivElement
   let root: Root
   async function render(canManageShared: boolean) {
-    await act(async () => root.render(createElement(SpendDownSection, { canManageShared })))
+    await act(async () => root.render(createElement(MemoryRouter, null, createElement(SpendDownSection, { canManageShared }))))
   }
   beforeEach(() => {
     mocks.apiFetch.mockReset()
@@ -217,6 +218,23 @@ describe('SpendDownSection', () => {
       'Review follow-ups, last 7 days: 12 sent → 9 pushed, 2 no change, 1 running → Opus after: 4 merge, 3 fix first, 1 hold (50% fix first → merge), 1 awaiting review',
     )
     mocks.followups = null
+  })
+
+  it('says when every app is out of work, and links to where new work comes from', async () => {
+    mocks.keys = [
+      {
+        ...KEY,
+        enabled: true,
+        state: 'active',
+        dispatchedToday: 0,
+        projects: [{ id: 'p1', name: 'glot.it' }],
+        lastSummary: { dispatched: 0, projects: [{ projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }] },
+      },
+    ]
+    await render(true)
+    expect(document.body.textContent).toContain('Nothing left to send')
+    const hrefs = Array.from(document.body.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toEqual(['/reports', '/inventory?tab=discovery', '/qa-coverage'])
   })
 
   it('renders nothing when the app has no Cursor key', async () => {

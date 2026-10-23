@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  spendDownOutOfWork,
   spendDownLine,
   spendDownPauses,
   spendDownScoreLine,
@@ -72,6 +73,28 @@ describe('spendDownStops', () => {
         },
       }),
     ).toEqual(['yen-yen: Daily auto-fix dispatch quota reached (3/3).'])
+  })
+
+  it('folds apps with the same reason into one line', () => {
+    const projects = ['glot.it', 'yen-yen', 'tsumagoi', 'lets-talk', 'solo-boss'].map((name, i) => ({ id: `p${i}`, name }))
+    const stopped = (ids: number[], reason: string) => ids.map((i) => ({ projectId: `p${i}`, dispatched: 0, stopped: reason }))
+    const k = { ...base, projects, lastSummary: { projects: [...stopped([0, 1, 2, 3], 'No open report to fix'), ...stopped([4], 'Auto-fix is off')] } }
+    expect(spendDownStops(k)).toEqual(['glot.it, yen-yen and 2 more: No open report to fix', 'solo-boss: Auto-fix is off'])
+    const three = { ...k, lastSummary: { projects: stopped([0, 1, 2], 'No open report to fix') } }
+    expect(spendDownStops(three)).toEqual(['glot.it, yen-yen and tsumagoi: No open report to fix'])
+  })
+})
+
+describe('spendDownOutOfWork', () => {
+  const idle = { projectId: 'p1', dispatched: 0, stopped: 'No open report to fix' }
+  it('is true when the key could spend but every app had nothing to send', () => {
+    expect(spendDownOutOfWork({ ...base, dispatchedToday: 0, lastSummary: { projects: [idle, { projectId: 'p2', dispatched: 0, paused: true, stopped: 'Paused' }] } })).toBe(true)
+  })
+  it('is false when something was sent, an app stopped for another reason, or the window is not open', () => {
+    expect(spendDownOutOfWork({ ...base, dispatchedToday: 2, lastSummary: { projects: [idle] } })).toBe(false)
+    expect(spendDownOutOfWork({ ...base, dispatchedToday: 0, lastSummary: { projects: [idle, { projectId: 'p2', dispatched: 0, stopped: 'Daily auto-fix dispatch quota reached (3/3).' }] } })).toBe(false)
+    expect(spendDownOutOfWork({ ...base, dispatchedToday: 0, state: 'not_started', lastSummary: { projects: [idle] } })).toBe(false)
+    expect(spendDownOutOfWork({ ...base, dispatchedToday: 0, lastSummary: null })).toBe(false)
   })
 })
 
