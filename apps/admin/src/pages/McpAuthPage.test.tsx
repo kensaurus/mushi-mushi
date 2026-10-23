@@ -68,6 +68,9 @@ describe('McpAuthPage — a request that is no longer pending', () => {
     await renderWith({ status: 'approved', token_delivered: false })
     expect(host.textContent).toContain('has not picked it up')
     expect(host.textContent).not.toContain('already handled')
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('Your client has not picked this up')
+    expect(posture?.textContent).toContain('localhost')
   })
 
   it('approved and collected: says the connection is complete', async () => {
@@ -79,6 +82,9 @@ describe('McpAuthPage — a request that is no longer pending', () => {
 describe('McpAuthPage', () => {
   it('offers all, picked and one-project access, defaulting to all projects', async () => {
     await render()
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('Approve access')
+    expect(posture?.textContent).toContain('Choose which projects this client can reach')
     expect(host.textContent).toContain('All my projects')
     expect(host.textContent).toContain('Only the projects I pick')
     expect(host.textContent).toContain('One project')
@@ -98,6 +104,17 @@ describe('McpAuthPage', () => {
     await act(async () => { button('Approve connection').click() })
     expect(approveBody()).toEqual({ txn: TXN, access: 'account' })
     expect(assign).toHaveBeenCalled()
+    expect(host.querySelector('[data-page-posture]')?.textContent).toContain('Return to your MCP client')
+  })
+
+  it('a missing transaction says to restart from the MCP client', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/mcp-auth'] }, createElement(McpAuthPage)))
+    })
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('No authorization request')
+    expect(posture?.textContent).toContain('Restart the connection from your MCP client')
   })
 
   it('picked projects need at least one tick and post their ids', async () => {

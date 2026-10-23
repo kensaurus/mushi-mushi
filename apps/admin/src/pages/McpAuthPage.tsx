@@ -23,6 +23,8 @@
  *      redirect URL with the authorization code.
  *   4. The browser navigates to that redirect — usually the MCP client's
  *      localhost callback — and the terminal/IDE finishes the login itself.
+ *   A PagePosture status line above the card names the current state and the
+ *   one next step. Approve, deny, and the redirect stay as they are.
  *
  * DEPENDENCIES:
  *   - apiFetch (lib/supabase)
@@ -33,6 +35,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { StatusBannerShell } from '../components/StatusBannerShell'
 import { Btn, ErrorAlert } from '../components/ui'
 import { CHIP_TONE } from '../lib/chipTone'
 import {
@@ -44,6 +48,13 @@ import {
   type McpAuthAccessPlan,
   type McpAuthProjectRow,
 } from '../lib/mcpAuthProjects'
+import {
+  mcpAuthFaultForStatus,
+  mcpAuthPosture,
+  type McpAuthConsentState,
+  type McpAuthFault,
+  type McpAuthPostureCopy,
+} from '../lib/mcpAuthPosture'
 
 type TxnInfo = {
   status: 'pending' | 'approved' | 'denied' | 'expired'
@@ -65,7 +76,23 @@ function assignRedirect(url: string): boolean {
   return true
 }
 
-type PageState = 'loading' | 'ready' | 'approving' | 'redirecting' | 'denied' | 'complete' | 'error'
+function McpAuthStatus({ posture, pulse }: { posture: McpAuthPostureCopy; pulse: boolean }) {
+  return (
+    <div className="w-full max-w-lg text-left">
+      <PagePosture
+        slots={[
+          {
+            id: 'mcp-auth-status',
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <StatusBannerShell tone={posture.tone} title={posture.title} subtitle={posture.next} pulseDot={pulse} />
+            ),
+          },
+        ]}
+      />
+    </div>
+  )
+}
 
 function PlugIcon() {
   return (
@@ -93,7 +120,8 @@ export function McpAuthPage() {
   const [params] = useSearchParams()
   const txn = (params.get('txn') ?? '').trim()
 
-  const [state, setState] = useState<PageState>('loading')
+  const [state, setState] = useState<McpAuthConsentState>('loading')
+  const [fault, setFault] = useState<McpAuthFault>(null)
   const [txnInfo, setTxnInfo] = useState<TxnInfo | null>(null)
   const [plan, setPlan] = useState<McpAuthAccessPlan | null>(null)
   const [projectsLoadFailed, setProjectsLoadFailed] = useState(false)
@@ -104,6 +132,7 @@ export function McpAuthPage() {
 
   useEffect(() => {
     if (!txn) {
+      setFault('missing_txn')
       setState('error')
       setErrorMessage('Missing transaction id. Restart the connection from your MCP client (e.g. `claude mcp login mushi`).')
       return
@@ -118,6 +147,7 @@ export function McpAuthPage() {
       ])
       if (cancelled) return
       if (!txnRes?.ok || !txnRes.data) {
+        setFault(txnRes?.error?.code === 'NOT_FOUND' ? 'not_found' : 'unavailable')
         setState('error')
         setErrorMessage(
           txnRes?.error?.code === 'NOT_FOUND'
@@ -128,10 +158,12 @@ export function McpAuthPage() {
       }
       if (txnRes.data.status !== 'pending') {
         const handled = mcpAuthHandledMessage(txnRes.data.status, txnRes.data.token_delivered)
+        setFault(mcpAuthFaultForStatus(txnRes.data.status, txnRes.data.token_delivered))
         setState(handled.kind)
         setErrorMessage(handled.message)
         return
       }
+      setFault(null)
       setTxnInfo(txnRes.data)
       const accessPlan = mcpAuthAccessPlan(projRes)
       setProjectsLoadFailed(!projRes?.ok)
@@ -186,9 +218,26 @@ export function McpAuthPage() {
     setState('denied')
   }
 
+  let projects: 'ok' | 'failed' | 'empty' = 'ok'
+  if (projectsLoadFailed) projects = 'failed'
+  else if ((plan?.modes.length ?? 0) === 0) projects = 'empty'
+  const posture = mcpAuthPosture({
+    state,
+    fault,
+    projects,
+    approveFailed: state === 'ready' && errorMessage != null,
+  })
+  const status = (
+    <McpAuthStatus
+      posture={posture}
+      pulse={state === 'loading' || state === 'approving' || state === 'redirecting'}
+    />
+  )
+
   if (state === 'loading') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
         <span
           className="h-10 w-10 animate-spin rounded-full border-4 border-brand/25 border-t-brand motion-reduce:animate-none"
           role="status"
@@ -202,6 +251,7 @@ export function McpAuthPage() {
   if (state === 'redirecting') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
         <span
           className="h-10 w-10 animate-spin rounded-full border-4 border-brand/25 border-t-brand motion-reduce:animate-none"
           role="status"
@@ -218,6 +268,7 @@ export function McpAuthPage() {
   if (state === 'denied') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Access denied</h1>
         <p className="max-w-sm text-sm text-fg-muted">
@@ -230,6 +281,7 @@ export function McpAuthPage() {
   if (state === 'complete') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
         <PlugIcon />
         <h1 className="text-xl font-semibold text-fg">Connection complete</h1>
         <p className="max-w-sm text-sm text-fg-muted">{errorMessage}</p>
@@ -240,6 +292,7 @@ export function McpAuthPage() {
   if (state === 'error') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {status}
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Can't complete this connection</h1>
         <div className="w-full max-w-md text-left">
@@ -259,6 +312,7 @@ export function McpAuthPage() {
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 py-10">
+      {status}
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
