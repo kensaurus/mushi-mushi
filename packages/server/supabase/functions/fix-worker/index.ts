@@ -160,6 +160,9 @@ import { FIX_OUTPUT_CONTRACT, fixSchema, isEditEntry, type FixOutput } from '../
 import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
 import { loadFixRecipeBlock } from '../_shared/fix-recipe-block.ts';
+import { PRIOR_ATTEMPTS_MAX, priorAttemptsBlock } from '../_shared/prior-attempts.ts';
+import type { FollowupFinding } from '../_shared/review-followup.ts';
+import { sanitizeForLLM } from '../_shared/sanitize.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -1989,7 +1992,8 @@ async function dispatchToCloudAgent(
     (report.category as string | null | undefined) ?? null,
   );
   const basePrompt = buildUserPrompt(report, settings, codeContext, { ...repo, defaultBranch: baseRef }, [], inventoryAnchor, '');
-  const prompt = buildCloudAgentPrompt(basePrompt, {
+  const earlier = await loadPriorAttemptsBlock(db, log, dispatch.report_id, fixAttemptId);
+  const prompt = buildCloudAgentPrompt(earlier ? `${basePrompt.trimEnd()}\n\n${earlier}` : basePrompt, {
     reportId: dispatch.report_id,
     repoOwner: repo.owner,
     repoName: repo.repo,
@@ -2145,6 +2149,59 @@ async function dispatchToCloudAgent(
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
+}
+
+/**
+ * What earlier attempts on this report did (their Opus reviews, or why the
+ * agent stopped), so a re-dispatch does not repeat a rejected theory.
+ * Best-effort: a read failure dispatches without it.
+ */
+async function loadPriorAttemptsBlock(db: ReturnType<typeof getServiceClient>, log: Logger, reportId: string, currentAttemptId: string): Promise<string> {
+  try {
+    const { data: attempts } = await db
+      .from('fix_attempts')
+      .select('id, created_at, status, pr_url, merged_at, error')
+      .eq('report_id', reportId)
+      .neq('id', currentAttemptId)
+      .order('created_at', { ascending: false })
+      .limit(PRIOR_ATTEMPTS_MAX);
+    const rows = (attempts ?? []) as Array<{ id: string; created_at: string; status: string | null; pr_url: string | null; merged_at: string | null; error: string | null }>;
+    if (!rows.length) return '';
+    const { data: reviews } = await db
+      .from('fix_reviews')
+      .select('fix_attempt_id, verdict, summary, fixes_report, findings, completed_at')
+      .in('fix_attempt_id', rows.map((r) => r.id))
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false });
+    const latest = new Map<string, Record<string, unknown>>();
+    for (const r of (reviews ?? []) as Array<Record<string, unknown>>) {
+      if (!latest.has(r.fix_attempt_id as string)) latest.set(r.fix_attempt_id as string, r);
+    }
+    return priorAttemptsBlock(
+      rows.map((a) => {
+        const r = latest.get(a.id);
+        return {
+          createdAt: a.created_at,
+          status: a.status,
+          prUrl: a.pr_url,
+          mergedAt: a.merged_at,
+          note: a.error,
+          review: r
+            ? {
+                verdict: (r.verdict as string | null) ?? null,
+                summary: (r.summary as string | null) ?? null,
+                fixesReport: (r.fixes_report as boolean | null) ?? null,
+                findings: Array.isArray(r.findings) ? (r.findings as FollowupFinding[]) : [],
+              }
+            : null,
+        };
+      }),
+      (t) => sanitizeForLLM(t).text,
+    );
+  } catch (err) {
+    log.warn('earlier attempts unavailable for the agent prompt (non-fatal)', { reportId, err: err instanceof Error ? err.message : String(err) });
+    return '';
+  }
 }
 
 async function failDispatch(
