@@ -13,7 +13,7 @@ import { navSlicesForPaths } from './navBadges'
 import { CORE_NAV_PATHS } from './navRegistry'
 
 describe('navSlicesForPaths', () => {
-  it('always asks for dashboard, and /health does not repeat it', () => {
+  it('always asks for dashboard, /health included', () => {
     expect(navSlicesForPaths([])).toEqual(['dashboard'])
     expect(navSlicesForPaths(['/inbox', '/reports'])).toEqual(['dashboard'])
     expect(navSlicesForPaths(['/health'])).toEqual(['dashboard', 'health'])
