@@ -3644,7 +3644,7 @@ Publishing tab and all `/tester/*` routes.
 - [Evolution loop](/concepts/evolution-loop) — the underlying architecture Bounties extends
 - [Rewards & contributor identity](/concepts/rewards) — the host-app rewards engine Bounties reuses
 - [Anti-gaming & reputation](/concepts/anti-gaming) — the fraud-detection layer
-- [`docs/research/tester-marketplace-research-2026-05-22.md`](../../../../docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
+- [`docs/research/tester-marketplace-research-2026-05-22.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier
 
 ---
 
@@ -10870,7 +10870,7 @@ have a clean snapshot to compare against.
 - [Mushi Mushi web SDK](/sdks/web)
 - [Mushi Mushi React Native SDK](/sdks/react-native)
 - [Mushi Mushi admin console](/admin)
-- [Luciq (Instabug) docs](https://docs.luciq.cloud/)
+- [Luciq (Instabug) docs](https://docs.luciq.ai/)
 
 ---
 
@@ -11431,7 +11431,7 @@ better than running either tool alone.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [Pendo identify API](https://help.pendo.io/resources/support-library/api/index.html)
+- [Pendo identify API](https://support.pendo.io/hc/en-us/articles/360031862272-Install-Pendo-on-a-single-page-web-application)
 
 ---
 
@@ -11803,7 +11803,7 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
 ## References
 
 - [Mushi web SDK](/sdks/web) / [React Native SDK](/sdks/react-native)
-- [Shake docs](https://docs.shakebugs.com/)
+- [Shake docs](https://docs.shakebugs.com/docs/)
 
 ---
 
@@ -11830,7 +11830,7 @@ warnings. The framework-level migration mechanics are upstream:
 
 - React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
-- Svelte SPA → **SvelteKit**: [official SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 
 ## Env-var prefix mapping
 
@@ -11919,7 +11919,7 @@ the server-side HTML, you'll see:
 
 - [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
-- [SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
 
 ---
@@ -11945,7 +11945,7 @@ still on Vue 2 must use the vanilla `@mushi-mushi/web` SDK; this guide
 brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
-  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/vue-2-nes)
+  recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
   for Vue 2.7 with security backports.
 
 ## What changes (high level)
@@ -17129,7 +17129,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/credits
 
 ---
 title: Spend credits
-description: Spend credits lists expiring Cursor and Firecrawl credits and puts every way Mushi can spend them finding and fixing bugs behind one switch.
+description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi can spend them fixing bugs, improving apps with skills and checking sites.
 ---
 
 # Spend credits
@@ -17145,6 +17145,16 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 - **Fix open bugs before the credits expire** turns [spend-down](../concepts/agent-pr-review#spend-down-and-its-safety-stop) on or off for that key. While it is on, Mushi sends your best open reports to Cursor on its own, inside each app's auto-fix limits, and every fix opens a draft pull request. The switch is off until the key has an expiry date; set it in Settings → AI keys. A key your organization shares can be changed by an owner or admin, and someone else's universal key only by its owner.
 - When every app has nothing left to send, the row says so. Watching more of your live sites (below) is the way to find more.
 - **Review follow-ups** sends a pull request the Opus review marked "fix first" back to a new Cursor agent with the review's findings, at most twice per pull request and never on a "hold". The line names the model each round uses; when a **Last round model** is set in Settings → AI keys, the second round, which only happens after the first did not satisfy the reviewer, runs on it (for example Opus while the first stays on Grok).
+
+## Cursor: improve your apps with skills
+
+A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
+
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
+- **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+
+Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
 ## Firecrawl: find bugs on your live sites
 
@@ -21809,7 +21819,7 @@ If the search fails, an error banner shows the specific error code:
 
 Research results are stored in your Supabase project. They are never shared with other
 tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
-their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+their [privacy policy](https://www.firecrawl.dev/privacy-policy) for data handling details.
 
 ---
 

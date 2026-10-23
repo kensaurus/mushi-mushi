@@ -44,6 +44,7 @@ import {
   rankSpendDownCandidates,
   reportHasCheapEvidence,
   reportsWithNoRetryVerdict,
+  reportsToRetryAfterKeyLimit,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -1056,5 +1057,29 @@ describe('spendDownStopLoss: a fix that regressed after a Mushi merge counts as 
     expect(spendDownStopLoss({ runs: [...probes, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ resumedBy: 'probes' })
     const regressedProbe = probes.map((r, i) => (i === 0 ? { ...r, regressedAt: '2026-10-20T08:30:00.000Z' } : r))
     expect(spendDownStopLoss({ runs: [...regressedProbe, ...sample({ merge: 3, fixFirst: 17, startMin: 10 })] }, PAUSED, AT)).toMatchObject({ paused: true, resumedBy: null })
+  })
+})
+
+describe('reportsToRetryAfterKeyLimit', () => {
+  const now = new Date('2026-10-23T13:00:00Z')
+  const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required. Enable on-demand usage at https://www.cursor.com/dashboard?tab=settings to continue using Background Agents.'
+  it('lets a report Cursor refused for the usage limit go again after 30 minutes, at most twice', () => {
+    const out = reportsToRetryAfterKeyLimit(
+      [
+        { report_id: 'a', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:08:00Z' },
+        { report_id: 'b', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:45:00Z' },
+        { report_id: 'c', failure_category: 'cursor_api_error', error: 'Cursor API 500 internal', created_at: '2026-10-23T11:00:00Z' },
+        { report_id: 'd', failure_category: 'needs_human', error: 'Agent says this needs a person', created_at: '2026-10-23T10:00:00Z' },
+        { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T10:00:00Z' },
+        { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T11:00:00Z' },
+        { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:00:00Z' },
+        { report_id: 'f', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T09:00:00Z' },
+        { report_id: 'f', failure_category: null, error: null, created_at: '2026-10-23T12:00:00Z' },
+      ],
+      now,
+    )
+    // a: refused 52 min ago → retry. b: only 15 min ago. c: another API error. d: the agent's answer.
+    // e: refused three times already. f: a later attempt ran.
+    expect([...out]).toEqual(['a'])
   })
 })

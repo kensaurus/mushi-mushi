@@ -51,6 +51,7 @@ import {
   projectCapacity,
   rankSpendDownCandidates,
   reportsWithNoRetryVerdict,
+  reportsToRetryAfterKeyLimit,
   remainingToday,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
@@ -193,14 +194,15 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
 
   const { data: attempts, error: attemptsErr } = await db
     .from('fix_attempts')
-    .select('report_id, failure_category, created_at')
+    .select('report_id, failure_category, error, created_at')
     .eq('project_id', projectId)
     .in('report_id', rows.map((r) => r.id))
   if (attemptsErr) throw new Error(`spend-down: fix attempts read failed: ${attemptsErr.message}`)
-  const settled = reportsWithNoRetryVerdict(
-    (attempts ?? []) as Array<{ report_id: string; failure_category: string | null; created_at: string }>,
-  )
-  return rankSpendDownCandidates(rows.filter((r) => !recentlyDispatched.has(r.id) && !settled.has(r.id)))
+  const attemptRows = (attempts ?? []) as Array<{ report_id: string; failure_category: string | null; error: string | null; created_at: string }>
+  const settled = reportsWithNoRetryVerdict(attemptRows)
+  // A dispatch Cursor refused for the account's usage limit ran no agent: it does not start the cooldown.
+  const keyLimited = reportsToRetryAfterKeyLimit(attemptRows, now)
+  return rankSpendDownCandidates(rows.filter((r) => (!recentlyDispatched.has(r.id) || keyLimited.has(r.id)) && !settled.has(r.id)))
 }
 
 async function openCloudAttempts(db: SupabaseClient, projectId: string): Promise<number> {
