@@ -141,6 +141,23 @@ describe('deriveReportFixTruth precedence', () => {
     expect(t).toMatchObject({ state: 'failed', retryable: true, credential: null })
   })
 
+  it("an agent's own no-PR verdict is failed but not retryable: a new run gives the same answer", () => {
+    for (const failure_category of ['needs_human', 'already_fixed', 'wrong_repo', 'not_actionable']) {
+      const t = deriveReportFixTruth({
+        reportId: 'r',
+        report: { id: 'r', status: 'classified' },
+        attempts: [{ ...base, status: 'failed', failure_category, error: 'Agent says this needs a person: pick a copy.' }],
+      })
+      expect(t).toMatchObject({ state: 'failed', retryable: false })
+    }
+    const api = deriveReportFixTruth({
+      reportId: 'r',
+      report: { id: 'r', status: 'classified' },
+      attempts: [{ ...base, status: 'failed', failure_category: 'cursor_api_error', error: 'Cursor 500' }],
+    })
+    expect(api.retryable).toBe(true)
+  })
+
   it('a dismissed report never counts, and a reopened one ignores its old merge', () => {
     const merged = { ...base, status: 'completed', pr_url: 'u', pr_number: 9, pr_state: 'merged', merged_at: 'x' }
     expect(deriveReportFixTruth({ reportId: 'r', report: { id: 'r', status: 'dismissed' }, attempts: [{ ...base, status: 'failed' }] }).state).toBe('resolved')
