@@ -100,7 +100,11 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Toggle
-            label="Audit links, accessibility and translations"
+            label={
+              !on && audit
+                ? `Audit links, accessibility and translations ${cadencePhrase(audit.cadence_days)}`
+                : 'Audit links, accessibility and translations'
+            }
             checked={on}
             disabled={busy || (!on && !canStart)}
             onChange={(v) =>
@@ -116,7 +120,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
               ariaLabel="How often to audit"
               value={String(audit.cadence_days)}
               options={cadenceOptions(audit.cadence_days)}
-              className={busy ? 'pointer-events-none opacity-40' : ''}
+              disabled={busy}
               onChange={(id) => {
                 const days = Number(id)
                 if (busy || days === audit.cadence_days) return
@@ -150,7 +154,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
               </option>
             ))}
           </select>
-          <span className="tabular-nums">{audit.page_limit.toLocaleString()} credits a run, one per page.</span>
+          <span className="tabular-nums">Up to {audit.page_limit.toLocaleString()} credits a run, one per page.</span>
         </p>
       )}
       {audit && <p className="text-xs text-fg-secondary">{auditLine(audit, openFindings)}</p>}

@@ -60,6 +60,8 @@ interface SegmentedControlProps<T extends string> {
   wrap?: boolean
   /** Horizontal scroll strip for many tabs — keeps one row on narrow viewports. */
   scrollable?: boolean
+  /** Segments cannot be chosen. Assistive tech and keyboard users hear the control as unavailable. */
+  disabled?: boolean
   className?: string
 }
 
@@ -79,13 +81,15 @@ export function SegmentedControl<T extends string>({
   size = 'md',
   wrap = false,
   scrollable = false,
+  disabled = false,
   className = '',
 }: SegmentedControlProps<T>) {
   const track = (
     <div
       role="radiogroup"
       aria-label={ariaLabel ?? label}
-      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
+      aria-disabled={disabled || undefined}
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${disabled ? 'opacity-40 ' : ''}${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -95,7 +99,11 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            onClick={() => onChange(opt.id)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return
+              onChange(opt.id)
+            }}
             // Selected = the soft SELECTED_TONE wash, not the filled brand
             // action colour. A filled tab competed with the page's one
             // primary button (Connect: "Studio" tab vs "Add to Cursor").

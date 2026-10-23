@@ -221,7 +221,7 @@ describe('site audit on /credits', () => {
       Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li')).find((li) => li.textContent?.includes(name))!
     expect(row('mushi-mushi').querySelector('[aria-label="How often to audit"]')).toBeNull()
     const tsumagoi = row('tsumagoi')
-    expect(tsumagoi.textContent).toContain('139 credits a run, one per page.')
+    expect(tsumagoi.textContent).toContain('Up to 139 credits a run, one per page.')
     expect(Array.from(tsumagoi.querySelectorAll('[role="radio"]')).map((b) => b.textContent)).toEqual(['Daily', 'Every 3 days', 'Weekly'])
     expect(tsumagoi.querySelector('[aria-label="How often to audit"] [aria-checked="true"]')?.textContent).toBe('Weekly')
     const daily = Array.from(tsumagoi.querySelectorAll('[role="radio"]')).find((b) => b.textContent === 'Daily') as HTMLButtonElement
@@ -255,7 +255,7 @@ describe('site audit on /credits', () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(row('tsumagoi').textContent).toContain('200 credits a run, one per page.')
+    expect(row('tsumagoi').textContent).toContain('Up to 200 credits a run, one per page.')
   })
 })
 
