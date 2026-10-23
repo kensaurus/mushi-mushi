@@ -66,6 +66,16 @@ test('each crawled page links the live replacement', () => {
   assert.equal(spa.split('https://svelte.dev/docs/kit/creating-a-project').length - 1, 2)
 })
 
+test('the SvelteKit entry says there is no official SPA migration guide', () => {
+  const sentence = 'There is no official SPA→SvelteKit migration guide'
+  for (const rel of [
+    'apps/docs/content/migrations/spa-to-ssr.mdx',
+    'apps/docs/public/llm-md/migrations/spa-to-ssr.md',
+  ]) {
+    assert.ok(read(rel).includes(sentence), `${rel} is missing the SvelteKit guide note`)
+  }
+})
+
 test('testers og:image file is the 1200×630 card the layout advertises', () => {
   const testers = readFileSync(join(ROOT, 'apps/testers/public/og-card.png'))
   const docs = readFileSync(join(ROOT, 'apps/docs/public/social-preview/og-card.png'))
