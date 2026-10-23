@@ -21,7 +21,9 @@ warnings. The framework-level migration mechanics are upstream:
 
 - React SPA → **Next.js** App Router: [official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - Vue SPA → **Nuxt 3**: [official Nuxt migration guide](https://nuxt.com/docs/migration/overview)
-- Svelte SPA → **SvelteKit**: [official SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- Svelte SPA → **SvelteKit**: [creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
+
+There is no official SPA→SvelteKit migration guide; the link above is only how to create a project.
 
 ## Env-var prefix mapping
 
@@ -110,5 +112,5 @@ the server-side HTML, you'll see:
 
 - [Next.js: Migrating from Create React App](https://nextjs.org/docs/app/building-your-application/upgrading/from-create-react-app)
 - [Nuxt 3 migration guide](https://nuxt.com/docs/migration/overview)
-- [SvelteKit migration guide](https://kit.svelte.dev/docs/migrating-to-sveltekit)
+- [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
 - [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
