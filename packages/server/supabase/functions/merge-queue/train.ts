@@ -320,7 +320,7 @@ export async function runTrainTick(
   let baseRef: string | null = null
   const ids = args.rows.map((r) => r.fix_attempt_id)
   const [{ data: reviews }, { data: attempts }] = await Promise.all([
-    db.from('fix_reviews').select('fix_attempt_id, verdict, head_sha, status').in('fix_attempt_id', ids),
+    db.from('fix_reviews').select('fix_attempt_id, verdict, head_sha, status, completed_at, created_at').in('fix_attempt_id', ids),
     db.from('fix_attempts').select('id, report_id').in('id', ids),
   ])
   const reportIds = ((attempts ?? []) as Array<{ id: string; report_id: string | null }>).map((a) => a.report_id).filter((x): x is string => !!x)
@@ -329,7 +329,10 @@ export async function runTrainTick(
     const pull = await deps.pull(args.token, ref, r.pr_number)
     if (!pull) continue
     baseRef ??= pull.baseRef ?? null
-    const rev = ((reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null; status: string }>).find((x) => x.fix_attempt_id === r.fix_attempt_id)
+    // The latest completed review decides; a queued or running one means a re-review is on its way.
+    const mine = ((reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null; status: string; completed_at: string | null; created_at: string }>).filter((x) => x.fix_attempt_id === r.fix_attempt_id)
+    const rev = mine.filter((x) => x.status === 'completed').sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at))[0]
+    const reviewing = mine.some((x) => x.status === 'queued' || x.status === 'running')
     const att = ((attempts ?? []) as Array<{ id: string; report_id: string | null }>).find((a) => a.id === r.fix_attempt_id)
     const rep = ((reports ?? []) as Array<{ id: string; severity: string | null; source: string | null }>).find((x) => x.id === att?.report_id)
     const c: TrainCandidate = {
@@ -354,7 +357,7 @@ export async function runTrainTick(
       continue
     }
     // An approved PR got a new commit: ask Opus to review the new head.
-    if (c.verdict === 'merge' && c.headSha && c.verdictHead !== c.headSha && rev?.status !== 'queued' && rev?.status !== 'running') {
+    if (c.verdict === 'merge' && c.headSha && c.verdictHead !== c.headSha && !reviewing) {
       const { data: a } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url').eq('id', r.fix_attempt_id).maybeSingle()
       const at = a as { id: string; project_id: string; report_id: string; pr_url: string } | null
       if (at) await deps.requeueReview(db, { fixAttemptId: at.id, projectId: at.project_id, reportId: at.report_id, prUrl: at.pr_url }, c.headSha, now)

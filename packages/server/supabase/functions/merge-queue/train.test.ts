@@ -204,3 +204,17 @@ test('a linear-history repo gets a squash; each member PR is then closed as ship
   assertEquals(tables.fix_merge_queue.map((r) => r.state), ['merged', 'merged'])
 })
 
+test('the latest completed review decides who rides, not the first row found', async () => {
+  const rows = [qrow('a', 1)]
+  const { db, tables } = setup(rows, {
+    fix_reviews: [
+      { fix_attempt_id: 'fa-a', verdict: 'hold', head_sha: 'old', status: 'completed', completed_at: '2026-10-22T00:00:00Z', created_at: '2026-10-22T00:00:00Z' },
+      { fix_attempt_id: 'fa-a', verdict: 'merge', head_sha: 'h1', status: 'completed', completed_at: '2026-10-23T00:00:00Z', created_at: '2026-10-23T00:00:00Z' },
+    ],
+  })
+  const d = deps()
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'started')
+  assertEquals((tables.release_trains[0].members as Row[]).map((m) => m.prNumber), [1])
+})
+
