@@ -202,6 +202,55 @@ export function mergeFindings(list: readonly AuditFinding[]): AuditFinding[] {
   return [...by.values()].sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || a.path.localeCompare(b.path))
 }
 
+/** Pure: the first selector an axe finding's evidence names. */
+function firstSelector(f: AuditFinding): string | null {
+  const line = f.evidence[0] ?? ''
+  const at = line.indexOf(': ')
+  const sel = at < 0 ? '' : line.slice(at + 2).split(' | ')[0].trim()
+  return sel && sel !== 'no selector' ? sel : null
+}
+
+/**
+ * Pure: the same axe rule failing on the same element on several pages is one
+ * cause (a shared token or component), so it becomes one finding naming every
+ * page instead of one report a page. On 2026-10-24 `.text-danger` failed
+ * color-contrast on four console pages.
+ */
+export function groupSharedCauses(list: readonly AuditFinding[]): AuditFinding[] {
+  const groups = new Map<string, AuditFinding[]>()
+  const rest: AuditFinding[] = []
+  for (const f of list) {
+    const sel = f.kind === 'axe' ? firstSelector(f) : null
+    if (!sel) {
+      rest.push(f)
+      continue
+    }
+    const key = `${f.rule}|${sel}`
+    groups.set(key, [...(groups.get(key) ?? []), f])
+  }
+  const out = [...rest]
+  for (const [key, fs] of groups) {
+    if (fs.length < 2) {
+      out.push(...fs)
+      continue
+    }
+    const pages = [...fs].sort((a, b) => a.path.localeCompare(b.path))
+    const sel = key.slice(key.indexOf('|') + 1)
+    const names = pages.map((f) => f.screen)
+    out.push({
+      ...pages[0],
+      fingerprint: createHash('sha1').update(`shared|axe|${key}`).digest('hex').slice(0, 16),
+      screen: `${pages.length} screens`,
+      viewports: [...new Set(pages.flatMap((f) => f.viewports))],
+      severity: pages.some((f) => f.severity === 'high') ? 'high' : pages[0].severity,
+      summary: `${pages[0].summary.replace(/ \(\d+ elements?\)$/, '')} on \`${sel}\` (${names.join(', ')})`,
+      evidence: pages.flatMap((f) => f.evidence.map((e) => `${f.screen} (${pagePath(f.path)}): ${e}`)).slice(0, MAX_EVIDENCE),
+      doneWhen: `axe reports no ${pages[0].rule} violation on ${names.join(', ')}.`,
+    })
+  }
+  return out.sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || a.path.localeCompare(b.path))
+}
+
 /** The marker a filed report carries, found later by the reports search. */
 export function auditMarker(fingerprint: string): string {
   return `mushi-ux-audit:${fingerprint}`
@@ -266,7 +315,7 @@ const TASTE_RE = /\b(could|consider|might|maybe|perhaps|prefer|nicer|cleaner|mor
 const REVIEW_PROMPT = (screen: string, files: string[]) => `You check one screen of a signed-in web app, "${screen}", for concrete UI defects.
 ${files.length === 2 ? 'The images desktop.png (1440px wide) and mobile.png (390px wide) show the screen' : `The image ${files[0]} shows the screen`}. ${files.length === 2 ? 'They are' : 'It is'} in the current folder: read ${files.length === 2 ? 'both' : 'it'}.
 Report only defects a user would notice and a developer can fix: elements overlapping or clipped, text cut off or unreadable against its background, a broken or misaligned layout, a control pushed off-screen at phone width, an empty or broken state where content should be, or two numbers on this screen that contradict each other.
-Do not report taste, copy preferences, "could be better", or anything you are unsure of. Name the element and where it is.
+Do not report taste, copy preferences, "could be better", or anything you are unsure of. Content cut at the edge of a row or table that scrolls sideways is not a defect. Name the element and where it is.
 Answer with ONLY this JSON: {"defects":[{"kind":"${VISUAL_KINDS.join('|')}","viewport":"desktop|mobile|both","element":"...","where":"...","problem":"...","severity":"high|medium|low","done_when":"..."}]} with at most 3 defects, or {"defects":[]}.`
 
 /** Pure: the visual findings in a review answer; incomplete, unknown or taste entries are dropped. */
@@ -464,7 +513,7 @@ export async function runAudit(opts: AuditOptions): Promise<AuditResult> {
       }
       progress(`audited ${s.label}`)
     }
-    const merged = mergeFindings(findings)
+    const merged = groupSharedCauses(mergeFindings(findings))
     const blocked = blockedSummary(session.guard.blocked)
     writeFileSync(join(dir, 'findings.json'), JSON.stringify({ runId, url: opts.url, screens: surfaces.length, blocked, findings: merged }, null, 2))
     writeFileSync(join(dir, 'summary.md'), summaryMarkdown(opts.url, surfaces.length, merged, blocked))

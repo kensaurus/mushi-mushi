@@ -10,6 +10,7 @@ import {
   filedRecently,
   findingsFromProbes,
   fingerprintOf,
+  groupSharedCauses,
   mergeFindings,
   pagePath,
   pickScreens,
@@ -95,6 +96,34 @@ describe('mergeFindings and fingerprints', () => {
     expect(filedRecently({ abc: '2026-10-20T00:00:00Z' }, 'abc', now)).toBe(true)
     expect(filedRecently({ abc: '2026-10-01T00:00:00Z' }, 'abc', now)).toBe(false)
     expect(filedRecently({}, 'abc', now)).toBe(false)
+  })
+})
+
+describe('groupSharedCauses', () => {
+  const contrast = (path: string, label: string, target: string) =>
+    findingsFromProbes({ key: path, path, label }, desktop, {
+      ...clean,
+      axe: [{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet contrast', count: 1, targets: [target] }],
+    })
+
+  it('files one finding for the same rule on the same element across pages', () => {
+    const out = groupSharedCauses([
+      ...contrast('/admin/reports', 'Bugs', '.text-danger'),
+      ...contrast('/admin/fixes', 'Fixes', '.text-danger'),
+      ...contrast('/admin/team', 'Team', '.chip'),
+    ])
+    expect(out).toHaveLength(2)
+    const shared = out.find((f) => f.screen === '2 screens')!
+    expect(shared.summary).toContain('`.text-danger`')
+    expect(shared.summary).toContain('Fixes, Bugs')
+    expect(shared.evidence.join('\n')).toContain('Bugs (/admin/reports)')
+    expect(shared.fingerprint).not.toBe(fingerprintOf({ path: '/admin/fixes' }, 'axe', 'color-contrast'))
+    expect(out.find((f) => f.screen === 'Team')?.fingerprint).toBe(fingerprintOf({ path: '/admin/team' }, 'axe', 'color-contrast'))
+  })
+
+  it('leaves a rule seen on one page alone', () => {
+    const one = contrast('/admin/reports', 'Bugs', '.text-danger')
+    expect(groupSharedCauses(one)).toEqual(one)
   })
 })
 
