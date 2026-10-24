@@ -41,7 +41,7 @@ export function DogfoodNarrativeBanner() {
   // /reports, mushi-ux audit 2026-10-24). It still collapses in the rare
   // case it turns out empty (no reports, no top component).
   if (setup.loading || dashboardQuery.loading) {
-    return <div aria-hidden="true" data-testid="narrative-placeholder" className="mb-3 h-12.5 rounded-md border border-chrome-border bg-chrome/50 motion-safe:animate-pulse" />
+    return <div aria-hidden="true" data-testid="narrative-placeholder" className="mb-3 h-36 sm:h-12.5 rounded-md border border-chrome-border bg-chrome/50 motion-safe:animate-pulse" />
   }
   if (!setup.activeProject) return null
   // No bugs yet → the rest of the inbox UI is already empty-state, no
