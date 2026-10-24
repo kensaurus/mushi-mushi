@@ -29,7 +29,7 @@ import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
-import { pagesForStory, storedQaStoryScript, type StoryPageRef } from './story-script.ts'
+import { pagesForStory, qaStoryInsertRow, storedQaStoryScript, type StoryPageRef } from './story-script.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -96,6 +96,7 @@ interface UserStory {
   persona?: string
   pages?: string[]
   actions?: string[]
+  auth_required?: boolean
 }
 
 async function openGithubPr(opts: {
@@ -329,32 +330,30 @@ Write a comprehensive Playwright TDD test for this user story.`
     }
 
     // Playwright stays on the PR. The scheduled row is Firecrawl actions when
-    // the model returned some the runner can execute and the story is not
-    // behind a login wall — otherwise the cron skips `local` forever.
+    // the model returned some the runner can execute, the story is not behind
+    // a login wall, and a public URL is known. Otherwise the cron skips
+    // `local` instead of recording `no_target_url` every tick.
     const approvalStatus = automation_mode === 'auto' ? 'approved' : 'pending_review'
     const stored = storedQaStoryScript({
       playwright: output.contents,
       firecrawlActions: output.firecrawl_actions,
       pages: storyPages,
       baseUrls: [base_url, app?.base_url, app?.staging_url, app?.preview_url],
+      story,
+    })
+    const row = qaStoryInsertRow({
+      projectId: project_id,
+      name: story.title,
+      prompt: story.goal,
+      stored,
+      approvalStatus,
+      automationMode: automation_mode,
+      storyId: story.id,
+      generationModel: TEST_GEN_MODEL,
     })
     const { data: qaStory, error: qaErr } = await db
       .from('qa_stories')
-      .insert({
-        project_id,
-        name: story.title,
-        prompt: story.goal,
-        script: stored.script,
-        script_lang: stored.script_lang,
-        browser_provider: stored.browser_provider,
-        ...(stored.target_url ? { target_url: stored.target_url } : {}),
-        source: 'test_gen_from_story',
-        approval_status: approvalStatus,
-        automation_mode,
-        origin_story_node_id: story.id,
-        generation_model: TEST_GEN_MODEL,
-        enabled: automation_mode === 'auto',
-      })
+      .insert(row)
       .select('id')
       .single()
 

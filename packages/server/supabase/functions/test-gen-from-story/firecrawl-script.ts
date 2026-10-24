@@ -63,20 +63,22 @@ function bounded(value: unknown, max: number): string | null | undefined {
   return value
 }
 
+// The generator prompt's types. executeJavascript is not one of them, so a
+// model-written `script` is never stored for the scheduled runner.
+const ACTION_TYPES = new Set(['wait', 'click', 'write', 'press', 'scroll', 'screenshot', 'scrape'])
+
 function sanitizeAction(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const rec = value as Record<string, unknown>
-  if (typeof rec.type !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(rec.type)) return null
+  if (typeof rec.type !== 'string' || !ACTION_TYPES.has(rec.type)) return null
   const selector = bounded(rec.selector, 500)
   const text = bounded(rec.text, 500)
   const key = bounded(rec.key, 40)
-  const script = bounded(rec.script, 2_000)
-  if (selector === null || text === null || key === null || script === null) return null
+  if (selector === null || text === null || key === null) return null
   const out: Record<string, unknown> = { type: rec.type }
   if (selector) out.selector = selector
   if (text) out.text = text
   if (key) out.key = key
-  if (script) out.script = script
   if (rec.milliseconds !== undefined) {
     if (typeof rec.milliseconds !== 'number' || !Number.isFinite(rec.milliseconds) || rec.milliseconds < 0 || rec.milliseconds > 30_000) return null
     out.milliseconds = rec.milliseconds

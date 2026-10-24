@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { pagesForStory, storedQaStoryScript } from '../../supabase/functions/test-gen-from-story/story-script.ts'
+import { usableFirecrawlScript } from '../../supabase/functions/test-gen-from-story/firecrawl-script.ts'
+import { pagesForStory, qaStoryInsertRow, storedQaStoryScript } from '../../supabase/functions/test-gen-from-story/story-script.ts'
 
 const PLAYWRIGHT = "import { test, expect } from '@playwright/test'\n"
 const ACTIONS = `
@@ -109,15 +110,93 @@ describe('storedQaStoryScript', () => {
     }
   })
 
-  it('does not point Firecrawl at a machine the cloud cannot reach', () => {
+  it('keeps the Playwright spec when no public URL is known', () => {
+    for (const baseUrls of [undefined, [], ['http://localhost:3000', 'http://10.0.0.5', 'https://192.168.1.20']]) {
+      const stored = storedQaStoryScript({
+        playwright: PLAYWRIGHT,
+        firecrawlActions: ACTIONS,
+        pages: PRICING,
+        baseUrls,
+      })
+      expect(stored).toEqual({
+        script: PLAYWRIGHT,
+        script_lang: 'playwright-ts',
+        browser_provider: 'local',
+        target_url: null,
+      })
+    }
+  })
+
+  it('keeps the Playwright spec when no page is linked and the persona is signed in', () => {
+    for (const persona of [
+      'admin',
+      'Administrator',
+      'signed-in user',
+      'logged in member',
+      'authenticated',
+      'subscriber',
+      'registered user',
+      'account holder',
+      'member',
+    ]) {
+      const stored = storedQaStoryScript({
+        playwright: PLAYWRIGHT,
+        firecrawlActions: ACTIONS,
+        pages: [],
+        baseUrls: ['https://app.example.com'],
+        story: { persona },
+      })
+      expect(`${persona}: ${stored.browser_provider}`).toBe(`${persona}: local`)
+      expect(stored.script).toBe(PLAYWRIGHT)
+    }
+  })
+
+  it('keeps the Playwright spec when the story itself requires auth', () => {
     const stored = storedQaStoryScript({
       playwright: PLAYWRIGHT,
       firecrawlActions: ACTIONS,
       pages: PRICING,
-      baseUrls: ['http://localhost:3000', 'http://10.0.0.5', 'https://192.168.1.20'],
+      baseUrls: ['https://app.example.com'],
+      story: { auth_required: true, persona: 'buyer' },
     })
-    expect(stored.browser_provider).toBe('firecrawl_actions')
-    expect(stored.target_url).toBeNull()
+    expect(stored).toEqual({
+      script: PLAYWRIGHT,
+      script_lang: 'playwright-ts',
+      browser_provider: 'local',
+      target_url: null,
+    })
+  })
+
+  it('schedules Firecrawl for a guest story, including a public page viewed by an admin', () => {
+    for (const persona of [undefined, 'end user', 'learner', 'buyer', 'guest', 'visitor', 'signed-out admin']) {
+      const stored = storedQaStoryScript({
+        playwright: PLAYWRIGHT,
+        firecrawlActions: ACTIONS,
+        pages: [],
+        baseUrls: ['https://app.example.com'],
+        story: { persona },
+      })
+      expect(`${String(persona)}: ${stored.browser_provider}`).toBe(`${String(persona)}: firecrawl_actions`)
+    }
+
+    const explicitGuest = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: [],
+      baseUrls: ['https://app.example.com'],
+      story: { auth_required: false, persona: 'admin' },
+    })
+    expect(explicitGuest.browser_provider).toBe('firecrawl_actions')
+
+    const publicPage = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: PRICING,
+      baseUrls: ['https://app.example.com'],
+      story: { persona: 'admin' },
+    })
+    expect(publicPage.browser_provider).toBe('firecrawl_actions')
+    expect(publicPage.target_url).toBe('https://app.example.com/pricing')
   })
 })
 
@@ -133,15 +212,124 @@ describe('pagesForStory', () => {
   })
 })
 
+describe('usableFirecrawlScript', () => {
+  it('keeps only the action types the prompt lists and drops script', () => {
+    const stored = usableFirecrawlScript(`
+actions:
+  - type: wait
+    milliseconds: 500
+  - type: click
+    selector: "#go"
+    script: "fetch('https://evil.test')"
+  - type: write
+    text: hello
+  - type: press
+    key: Enter
+  - type: scroll
+    direction: down
+  - type: screenshot
+    fullPage: true
+  - type: scrape
+`)
+    expect(JSON.parse(stored!)).toEqual({
+      actions: [
+        { type: 'wait', milliseconds: 500 },
+        { type: 'click', selector: '#go' },
+        { type: 'write', text: 'hello' },
+        { type: 'press', key: 'Enter' },
+        { type: 'scroll', direction: 'down' },
+        { type: 'screenshot', fullPage: true },
+        { type: 'scrape' },
+      ],
+    })
+    expect(stored).not.toContain('evil.test')
+    expect(stored).not.toContain('script')
+  })
+
+  it('rejects an action type the runner was not asked to store', () => {
+    expect(usableFirecrawlScript('actions:\n  - type: executeJavascript\n    script: alert(1)\n')).toBeNull()
+    expect(usableFirecrawlScript('actions:\n  - type: pdf\n')).toBeNull()
+    expect(usableFirecrawlScript('actions:\n  - type: click\n    selector: a\n  - type: navigate\n')).toBeNull()
+    const story = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: 'actions:\n  - type: executeJavascript\n    script: alert(1)\n',
+      pages: PRICING,
+      baseUrls: ['https://app.example.com'],
+    })
+    expect(story.browser_provider).toBe('local')
+    expect(story.script).toBe(PLAYWRIGHT)
+  })
+})
+
+describe('qaStoryInsertRow', () => {
+  it('copies the stored script into the qa_stories insert', () => {
+    const stored = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: PRICING,
+      baseUrls: ['https://app.example.com'],
+    })
+    const row = qaStoryInsertRow({
+      projectId: 'p1',
+      name: 'See pricing',
+      prompt: 'View the pricing page',
+      stored,
+      approvalStatus: 'pending_review',
+      automationMode: 'review',
+      storyId: 'see-pricing',
+      generationModel: 'test-model',
+    })
+    expect(row).toEqual({
+      project_id: 'p1',
+      name: 'See pricing',
+      prompt: 'View the pricing page',
+      script: stored.script,
+      script_lang: 'firecrawl-actions',
+      browser_provider: 'firecrawl_actions',
+      target_url: 'https://app.example.com/pricing',
+      source: 'test_gen_from_story',
+      approval_status: 'pending_review',
+      automation_mode: 'review',
+      origin_story_node_id: 'see-pricing',
+      generation_model: 'test-model',
+      enabled: false,
+    })
+    expect(row.script).not.toBe(PLAYWRIGHT)
+
+    const local = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: [{ id: 'account', path: '/account', auth_required: true }],
+      baseUrls: ['https://app.example.com'],
+    })
+    const localRow = qaStoryInsertRow({
+      projectId: 'p1',
+      name: 'See account',
+      prompt: 'View the account page',
+      stored: local,
+      approvalStatus: 'approved',
+      automationMode: 'auto',
+      storyId: 'see-account',
+      generationModel: 'test-model',
+    })
+    expect(localRow.browser_provider).toBe('local')
+    expect(localRow.script_lang).toBe('playwright-ts')
+    expect(localRow.script).toBe(PLAYWRIGHT)
+    expect(localRow.enabled).toBe(true)
+    expect(localRow.approval_status).toBe('approved')
+    expect(Object.hasOwn(localRow, 'target_url')).toBe(false)
+  })
+})
+
 describe('test-gen-from-story insert', () => {
-  it('persists the helper result and still commits the Playwright spec', () => {
+  it('inserts the helper payload and still commits the Playwright spec', () => {
     const src = readFileSync(
       resolve(__dirname, '../../supabase/functions/test-gen-from-story/index.ts'),
       'utf8',
     )
-    expect(src).toMatch(/storedQaStoryScript\(/)
-    expect(src).toMatch(/script_lang: stored\.script_lang/)
-    expect(src).toMatch(/browser_provider: stored\.browser_provider/)
+    expect(src).toMatch(/storedQaStoryScript\(\{[^}]*\bstory\b/)
+    expect(src).toMatch(/const row = qaStoryInsertRow\(/)
+    expect(src).toMatch(/\.insert\(row\)/)
     expect(src).not.toMatch(/browser_provider:\s*'local'/)
     expect(src).toMatch(/contents: output\.contents/)
   })
