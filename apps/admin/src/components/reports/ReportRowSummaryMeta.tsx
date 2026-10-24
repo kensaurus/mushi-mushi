@@ -118,10 +118,16 @@ export function ReportRowMeta({ row }: Props) {
   const sdkDetail = row.sdk_package
     ? `${row.sdk_package}${row.sdk_version ? `@${row.sdk_version}` : ''}`
     : null
+  const app = row.project_name ? (
+    <MetaChip tooltip={`App: ${row.project_name}`}>
+      <span className="max-w-36 truncate">{row.project_name}</span>
+    </MetaChip>
+  ) : null
 
   if (!path && !traceShort) {
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {app}
         <MetaChip tone={capture.tone} tooltip={capture.tooltip}>
           {capture.label}
         </MetaChip>
@@ -135,6 +141,7 @@ export function ReportRowMeta({ row }: Props) {
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      {app}
       <MetaChip tone={capture.tone} tooltip={capture.tooltip}>
         {capture.label}
       </MetaChip>
