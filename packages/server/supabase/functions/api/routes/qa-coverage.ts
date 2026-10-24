@@ -131,7 +131,11 @@ export function qaApiKeyScope(opts: {
 async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
   const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
   const gate = adminOrApiKey({ scope: needed });
-  return gate(c, async () => {
+  // adminOrApiKey awaits this callback and drops whatever it returns. Hono
+  // only keeps a Response returned by this middleware. A 403 left inside the
+  // callback becomes a 500 ("context is not finalized").
+  let denied: Response | null = null;
+  const result = await gate(c, async () => {
     if (c.get('authMethod') === 'apiKey') {
       const decision = qaApiKeyScope({
         isOrgScoped: Boolean(c.get('isOrgScopedKey')),
@@ -139,7 +143,8 @@ async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
         routeProjectId: c.req.param('pid'),
       });
       if (!decision.ok) {
-        return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+        denied = c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+        return;
       }
       // Project keys stay blank so resolveProject trusts the key's project
       // and qaViewerDenied does not re-check the owner's role.
@@ -147,6 +152,8 @@ async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
     }
     await next();
   });
+  if (denied) return denied;
+  return result;
 }
 
 export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
