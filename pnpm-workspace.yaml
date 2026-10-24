@@ -108,6 +108,14 @@ patchedDependencies:
 
 auditConfig:
   ignoreGhsas:
+    # zod <4.6.6 (GHSA-mrhx-c7xc-m3w5, high): memory exhaustion validating an
+    # oversized constrained collection. Every zod 4 copy is overridden to
+    # >=4.6.6 and the admin app moved to zod 4. The one left is zod 3.25.76 at
+    # apps__docs > @react-three/fiber > expo > @expo/cli > zod: there is no
+    # patched 3.x, @expo/cli needs the zod 3 API, and it only runs in the docs
+    # build (the image-size path below); it never validates untrusted input.
+    # Remove when apps/docs drops @react-three/fiber or @expo/cli moves to zod 4.
+    - 'GHSA-mrhx-c7xc-m3w5'
     - 'GHSA-qwww-vcr4-c8h2'
     # image-size: two infinite-loop DoS advisories in the ICNS
     # (GHSA-w3rx-r6r6-pgpr) and JXL/HEIF (GHSA-5p2g-fcmc-qvqq) parsers.
@@ -176,6 +184,10 @@ minimumReleaseAgeExclude:
   # (not RSC). Remove the ignore when react-router-dom@8.3+ ships.
   - 'postcss'
   - 'brace-expansion'
+  # body-parser 2.4.0 (2026-10-22) clears GHSA-27r3-jxmh-p828 (high DoS) on
+  # examples/realworld/backend-express > express. Pinned exactly so the
+  # exclusion admits only this release. Drop the entry after 2026-10-29.
+  - 'body-parser@2.4.0'
   - 'react-router'
   - 'react-router-dom'
   # Security-patched transitive dep. fast-uri 3.1.6 / 4.1.3 clear the SSRF,
