@@ -12,6 +12,7 @@ import {
   stableKey,
   submitPayload,
   WORK_AGENT_KIND,
+  missingWriteScope,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -143,3 +144,14 @@ describe('mushi work: submitting to Mushi', () => {
     expect(env).toMatchObject({ GH_CONFIG_DIR: '/tmp/empty', GIT_SSH_COMMAND: 'false', GIT_TERMINAL_PROMPT: '0' })
   })
 })
+
+describe('mushi work checks the key can write before an agent runs', () => {
+  it('names the scopes it has, the one it needs, and the exact command', () => {
+    expect(missingWriteScope(['report:write', 'mcp:read'], 'p-1')).toBe(
+      'This CLI key has report:write, mcp:read; mushi work also needs mcp:write to record the fix and queue its review. Run: mushi login --upgrade-scope --project-id p-1',
+    )
+    expect(missingWriteScope(['report:write', 'mcp:read', 'mcp:write'], 'p-1')).toBeNull()
+    expect(missingWriteScope(undefined, 'p-1')).toBeNull()
+  })
+})
+

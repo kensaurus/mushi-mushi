@@ -20,6 +20,7 @@ import type { Command } from 'commander'
 import { apiCall, requireConfig, requireUuid } from '../cli-shared.js'
 import type { CliConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
+import type { WhoamiData } from '../cli-types.js'
 
 /** The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
 export const WORK_AGENT_KIND = 'mcp'
@@ -457,6 +458,23 @@ async function preflight(repoDir: string): Promise<void> {
   await git(repoDir, ['rev-parse', '--git-dir'])
 }
 
+/**
+ * Registering the fix and queuing its review are admin writes (mcp:write).
+ * Check before an agent spends anything, and say exactly how to fix it.
+ */
+export function missingWriteScope(scopes: readonly string[] | undefined, projectId: string | undefined): string | null {
+  if (!scopes || scopes.includes('mcp:write')) return null
+  const have = scopes.length ? scopes.join(', ') : 'no scopes'
+  return `This CLI key has ${have}; mushi work also needs mcp:write to record the fix and queue its review. Run: mushi login --upgrade-scope${projectId ? ` --project-id ${projectId}` : ''}`
+}
+
+async function requireWriteScope(cfg: CliConfig): Promise<void> {
+  const res = await apiCall<WhoamiData>('/v1/sync/whoami', cfg)
+  const scopes = res.ok ? (res.data as { scopes?: string[] } | undefined)?.scopes : undefined
+  const problem = missingWriteScope(scopes, cfg.projectId)
+  if (problem) throw new MushiCliError('E_AUTH_MISSING', problem, `mushi login --upgrade-scope${cfg.projectId ? ` --project-id ${cfg.projectId}` : ''}`)
+}
+
 export function registerWorkCommands(program: Command): void {
   program
     .command('work')
@@ -489,6 +507,7 @@ export function registerWorkCommands(program: Command): void {
         return
       }
       await preflight(opts.repoDir)
+      await requireWriteScope(cfg)
       const results = []
       for (const d of picked) {
         log(`report ${d.id}: ${cap(d.summary, 80)}`)
