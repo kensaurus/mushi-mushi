@@ -11,6 +11,10 @@
  *          completed segments tinted ok-muted, future segments edge-subtle —
  *          mirroring the affordance Linear uses for workflow state and GitHub
  *          uses for PR status (Open → Review → Merged).
+ *
+ *          Each bar is `role="img"` so its `aria-label` is allowed. A bare
+ *          span is generic, and axe `aria-prohibited-attr` rejects
+ *          `aria-label` on that role (reports table Status column).
  */
 
 import { Tooltip } from '../ui'
@@ -68,7 +72,7 @@ export function StatusStepper({
   if (status === 'dismissed') {
     return (
       <div className={`flex items-center gap-1 ${className}`}>
-        <span className="h-1 w-full rounded-full bg-surface-overlay" aria-label="Dismissed" />
+        <span role="img" className="h-1 w-full rounded-full bg-surface-overlay" aria-label="Dismissed" />
         {size === 'full' && (
           <span className="text-2xs text-fg-faint ml-1">Dismissed</span>
         )}
@@ -107,6 +111,7 @@ export function StatusStepper({
         return (
           <Tooltip key={step} portal content={tooltip} className="flex-1 min-w-0">
             <span
+              role="img"
               aria-label={tooltipBase}
               className={`${barHeight} w-full rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
             />

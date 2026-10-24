@@ -9,6 +9,9 @@
  * Why (2026-10-04 console audit): every bar rendered 0 px wide. Tooltip
  * wraps its child in an `inline-flex` span, and that span — not the
  * segment — is the flex item, so it needs the flex sizing.
+ *
+ * Segment names sit on `role="img"`. A generic span with `aria-label`
+ * is an axe `aria-prohibited-attr` violation.
  */
 
 import { act, createElement } from 'react'
@@ -36,9 +39,16 @@ describe('StatusStepper', () => {
     const segments = host.querySelectorAll('[aria-label="Received"], [aria-label="Classified"], [aria-label="Fixing"], [aria-label="Fixed"]')
     expect(segments).toHaveLength(4)
     for (const seg of segments) {
+      expect(seg.getAttribute('role')).toBe('img')
       expect(seg.className).toContain('w-full')
       expect(seg.parentElement?.className).toContain('flex-1')
     }
+  })
+
+  it('names the dismissed bar as an image', () => {
+    act(() => root.render(createElement(StatusStepper, { status: 'dismissed' })))
+    const bar = host.querySelector('[aria-label="Dismissed"]')
+    expect(bar?.getAttribute('role')).toBe('img')
   })
 
   it('lets the table bar row grow next to its "4/4" label', () => {
