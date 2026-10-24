@@ -5,6 +5,15 @@
  * swatch). Contrast uses the design-plane function. Gamut is linear sRGB
  * with no channel clamp, so an out-of-gamut token fails here instead of
  * being silently clipped to a different painted colour.
+ *
+ * Server suite on purpose. Ratios come from `design-color.ts`, the
+ * design-plane function (byte-identical with the CLI engine). Admin tests
+ * cannot import it: `apps/admin/tsconfig.json` sets `rootDir` to `./src`,
+ * and a test under that root that imports this module fails typecheck
+ * (TS6059). `light-warn-contrast.test.ts` lives here for the same reason.
+ * The danger token comments in the admin stylesheets name this file.
+ * `cssBlock` throws if a theme block moves, so a relocated stylesheet
+ * fails here instead of passing an empty read.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -12,6 +21,7 @@ import { describe, expect, it } from 'vitest'
 import { contrastRatio, parseCssColor } from '../../supabase/functions/_shared/design-color.ts'
 
 const adminStyles = resolve(__dirname, '../../../../apps/admin/src/styles')
+const segmentedControl = resolve(__dirname, '../../../../apps/admin/src/components/ui/forms.tsx')
 
 /** Interior of the first `marker` rule. `marker` includes the opening brace. */
 function cssBlock(css: string, marker: string): string {
@@ -45,17 +55,20 @@ function color(block: string, name: string) {
   return parsed
 }
 
+/** L, C, H of one `oklch(L C H)` declaration. Alpha and extra channels fail. */
+function parseOklch(decl: string): { L: number; C: number; H: number } {
+  const m = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(decl)
+  if (!m) throw new Error(`not oklch: ${decl}`)
+  return { L: Number(m[1]), C: Number(m[2]), H: Number(m[3]) }
+}
+
 /**
  * OKLCH → linear-light sRGB, unclamped. Same OKLab matrices as
  * design-color.ts, stopping before the sRGB transfer and the 0..1 clamp.
  * A channel outside [0, 1] is outside the sRGB gamut.
  */
 function linearSrgbChannels(decl: string): [number, number, number] {
-  const m = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(decl)
-  if (!m) throw new Error(`not oklch: ${decl}`)
-  const L = Number(m[1])
-  const C = Number(m[2])
-  const H = Number(m[3])
+  const { L, C, H } = parseOklch(decl)
   const rad = (H * Math.PI) / 180
   const A = C * Math.cos(rad)
   const B = C * Math.sin(rad)
@@ -88,7 +101,8 @@ const LIGHT = cssBlock(readFileSync(resolve(adminStyles, 'base-and-density.css')
 describe('danger contrast', () => {
   it('keeps one in-gamut dark red (hue 25)', () => {
     const decl = oklchDecl(DARK, '--color-danger')
-    expect(decl).toBe('oklch(0.72 0.17 25)')
+    // Hue only. Lightness and chroma may move when contrast and gamut still hold.
+    expect(parseOklch(decl).H).toBe(25)
     expectInsideSrgb(decl)
   })
 
@@ -105,7 +119,7 @@ describe('danger contrast', () => {
 
   it('keeps one in-gamut light red (hue 25)', () => {
     const decl = oklchDecl(LIGHT, '--color-danger')
-    expect(decl).toBe('oklch(0.48 0.19 25)')
+    expect(parseOklch(decl).H).toBe(25)
     expectInsideSrgb(decl)
   })
 
@@ -118,5 +132,30 @@ describe('danger contrast', () => {
 
   it('clears 4.5:1 for light danger-fg on the solid fill', () => {
     expect(contrastRatio(color(LIGHT, '--color-danger-fg'), color(LIGHT, '--color-danger'))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('clears 4.5:1 for danger text on danger-muted in both themes', () => {
+    for (const block of [DARK, LIGHT]) {
+      expect(contrastRatio(color(block, '--color-danger'), color(block, '--color-danger-muted'))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('clears 4.5:1 for brand-foreground on the active segment wash in both themes', () => {
+    for (const block of [DARK, LIGHT]) {
+      expect(
+        contrastRatio(color(block, '--color-brand-foreground'), color(block, '--color-brand-subtle')),
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('paints the active segment count with the full brand-foreground token', () => {
+    const forms = readFileSync(segmentedControl, 'utf8')
+    expect(forms).toContain("active ? 'text-brand-foreground' : 'text-fg-faint'")
+    expect(forms).not.toMatch(/text-brand-foreground\/\d+/)
+  })
+
+  it('is named from the admin danger token comments', () => {
+    expect(DARK).toContain('danger-contrast.test.ts')
+    expect(LIGHT).toContain('danger-contrast.test.ts')
   })
 })
