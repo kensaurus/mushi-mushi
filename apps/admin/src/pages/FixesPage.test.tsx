@@ -14,6 +14,8 @@
  *   93   A "Common causes" chip narrows the failed list to that cause.
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
+ *        The fix list stays on the skeleton until the merge queue is known,
+ *        and the queue card is already there when the list appears.
  */
 
 import { act, createElement } from 'react'
@@ -262,6 +264,68 @@ describe('FixesPage', () => {
     expect(new URLSearchParams(currentSearch).get('status')).toBe('failed')
     expect(new URLSearchParams(currentSearch).get('cause')).not.toBeNull()
     expect(document.body.textContent).toContain('Cause')
+  })
+
+  it('holds the fix list until the merge queue is known, then shows the card with it', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    let releaseQueue: () => void = () => {}
+    const base = mocks.apiFetch.getMockImplementation()!
+    let queueCalls = 0
+    mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (String(path).startsWith('/v1/admin/merge-queue')) {
+        queueCalls += 1
+        if (queueCalls === 1) {
+          return new Promise((resolve) => {
+            releaseQueue = () => resolve({
+              ok: true,
+              data: {
+                rows: [{
+                  id: 'q1',
+                  fix_attempt_id: 'f1',
+                  project_id: 'p1',
+                  repo: 'acme/app',
+                  pr_number: 4,
+                  state: 'queued',
+                  detail: 'Queued.',
+                  head_sha: null,
+                  queued_at: '2026-10-25T00:00:00Z',
+                  updated_at: '2026-10-25T00:00:00Z',
+                  merged_at: null,
+                  conflict_agents: 0,
+                }],
+                trains: [],
+                release: [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 }],
+              },
+            })
+          })
+        }
+        // A refresh must not be required to put the card back.
+        return new Promise(() => {})
+      }
+      return base(path, init)
+    })
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/fixes'] },
+          createElement(ToastProvider, null, createElement(Routes, null, createElement(Route, {
+            path: '/fixes',
+            element: createElement(FixesPage),
+          }))),
+        ),
+      )
+    })
+    await flush()
+    expect(document.body.textContent).not.toContain('Checkout button does nothing')
+    expect(document.querySelector('[aria-label="Loading fixes"]')).not.toBeNull()
+
+    await act(async () => { releaseQueue() })
+    await flush()
+    expect(document.body.textContent).toContain('Checkout button does nothing')
+    expect(document.body.textContent).toContain('Merge when ready')
+    expect(document.querySelector('[aria-label="Merge queue"]')).not.toBeNull()
   })
 
   it('QA 91: counts every attempt and loads older ones', async () => {

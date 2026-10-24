@@ -2,6 +2,8 @@
  * FILE: apps/admin/src/pages/FixesPage.tsx
  * PURPOSE: V5.3 §2.10 + §2.18 — the auto-fix pipeline dashboard.
  *          Page-level orchestration only: data loading, polling, retry-all.
+ *          The merge queue is loaded with the list so the queue card is in
+ *          the list's first paint (a late card was the layout shift on /fixes).
  *          Presentation lives in components/fixes/* so each piece (KPIs,
  *          recommendation banner, in-flight list, per-fix card) can evolve
  *          and be reasoned about in isolation.
@@ -34,7 +36,7 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
-import { queueMerges } from '../lib/mergeQueue'
+import { loadMergeQueue, queueMerges, type MergeQueueSnapshot } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
@@ -194,6 +196,10 @@ export function FixesPage() {
   // with only a count hid which PR failed and why).
   const [mergeFailures, setMergeFailures] = useState<Array<{ fix: FixAttempt; reason: string }>>([])
   const [queueRefresh, setQueueRefresh] = useState(0)
+  // Null until the first queue read finishes. The list waits on this so the
+  // merge card does not insert above it after paint (CLS on /fixes).
+  const [queue, setQueue] = useState<MergeQueueSnapshot | null>(null)
+  const queueRef = useRef<MergeQueueSnapshot | null>(null)
   const urlStatus = searchParams.get('status')
   const urlBucket = bucketFromUrl(urlStatus, tabParam)
   const [statusBucket, setStatusBucket] = useState<StatusBucket>(urlBucket)
@@ -206,6 +212,8 @@ export function FixesPage() {
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
   const cancelledRef = useRef(false)
+  const projectIdRef = useRef(activeProjectId)
+  projectIdRef.current = activeProjectId
 
   const loadFixes = useCallback(async () => {
     if (inFlightRef.current) return
@@ -213,10 +221,18 @@ export function FixesPage() {
     setError(false)
     setIsValidating(true)
     try {
-      const [fixRes, dispRes, sumRes] = await Promise.all([
+      const [fixRes, dispRes, sumRes, queueRes] = await Promise.all([
         apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
+        // No app selected: the panel does not ask (an unscoped read is every
+        // app). Later refreshes keep the snapshot the panel already shows;
+        // it polls and re-reads when the page queues PRs.
+        !projectIdRef.current
+          ? Promise.resolve({ ok: true as const, data: { rows: [] } })
+          : queueRef.current
+            ? Promise.resolve({ ok: true as const, data: queueRef.current })
+            : loadMergeQueue(projectIdRef.current),
       ])
       if (cancelledRef.current) return
       if (fixRes.ok && fixRes.data) {
@@ -225,9 +241,17 @@ export function FixesPage() {
       } else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
+      const nextQueue = queueRes.ok && queueRes.data ? queueRes.data : { rows: [] }
+      queueRef.current = nextQueue
+      setQueue(nextQueue)
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
     } catch {
-      if (!cancelledRef.current) setError(true)
+      if (!cancelledRef.current) {
+        setError(true)
+        // Don't pin queueRef: Retry should read the queue again. An empty
+        // snapshot only unblocks the skeleton behind the error alert.
+        setQueue((prev) => prev ?? { rows: [] })
+      }
     } finally {
       inFlightRef.current = false
       if (!cancelledRef.current) {
@@ -819,7 +843,10 @@ export function FixesPage() {
     void loadFixes()
   }, [reloadStats, loadFixes])
 
-  if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
+  // Hold the skeleton until the merge queue is known (empty or not). The
+  // card sits above the list; painting the list first, then inserting the
+  // card, dropped it from y 427 to y 843 (CLS ~0.22 on /fixes).
+  if (loading || queue === null) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
 
   return (
@@ -930,7 +957,7 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} snapshot={queue} />
 
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">

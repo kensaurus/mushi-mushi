@@ -127,9 +127,16 @@ export async function queueMerges(fixIds: string[]) {
   })
 }
 
+/** One read of the queue: rows, trains, and each app's release cadence. */
+export interface MergeQueueSnapshot {
+  rows: MergeQueueRow[]
+  trains?: ReleaseTrain[]
+  release?: ReleaseSettings[]
+}
+
 export async function loadMergeQueue(projectId: string | null) {
   const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
-  return apiFetch<{ rows: MergeQueueRow[]; trains?: ReleaseTrain[]; release?: ReleaseSettings[] }>(`/v1/admin/merge-queue${qs}`, { cache: 'no-store' })
+  return apiFetch<MergeQueueSnapshot>(`/v1/admin/merge-queue${qs}`, { cache: 'no-store' })
 }
 
 export async function saveReleaseSettings(projectId: string, patch: Partial<Pick<ReleaseSettings, 'mode' | 'intervalMinutes' | 'maxMembers'>>) {

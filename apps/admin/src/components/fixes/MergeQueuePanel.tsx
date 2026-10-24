@@ -12,9 +12,13 @@
  *          Release trains (ADR 0044, the default): approved PRs ride one
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
+ *
+ *          The page passes `snapshot` from the same load as the fix list.
+ *          The card is in that first paint; the panel does not blank it
+ *          while a refresh is in flight.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl } from '../ui'
 import { useToast } from '../../lib/toast'
 import {
@@ -30,6 +34,7 @@ import {
   saveReleaseSettings,
   trainLine,
   type MergeQueueRow,
+  type MergeQueueSnapshot,
   type ReleaseMode,
   type ReleaseSettings,
   type ReleaseTrain,
@@ -48,15 +53,21 @@ interface Props {
   refreshKey: number
   /** A row merged: the page reloads its fixes. */
   onMerged?: () => void
+  /**
+   * Queue the page already loaded before painting the fix list. The card's
+   * first paint is this snapshot, so the list under it does not jump when
+   * the request returns.
+   */
+  snapshot: MergeQueueSnapshot
 }
 
-export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
+export function MergeQueuePanel({ projectId, refreshKey, onMerged, snapshot }: Props) {
   const toast = useToast()
-  const [rows, setRows] = useState<MergeQueueRow[]>([])
+  const [rows, setRows] = useState<MergeQueueRow[]>(snapshot.rows)
   const [showMerged, setShowMerged] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
-  const [trains, setTrains] = useState<ReleaseTrain[]>([])
-  const [release, setRelease] = useState<ReleaseSettings | null>(null)
+  const [trains, setTrains] = useState<ReleaseTrain[]>(snapshot.trains ?? [])
+  const [release, setRelease] = useState<ReleaseSettings | null>(snapshot.release?.find((r) => r.projectId === projectId) ?? null)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -72,12 +83,27 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     })
   }, [projectId, onMerged])
 
+  // Do not blank the card before `load` returns. The page seeds `snapshot`
+  // so the card is already in the fix list's first paint; clearing here
+  // unmounted it and dropped the list ~416px (CLS on /fixes, 2026-10-25).
+  // A project switch still drops the previous app's rows.
+  const seenProject = useRef(projectId)
+  const skipInitialLoad = useRef(true)
   useEffect(() => {
-    setRows([])
-    setTrains([])
-    setRelease(null)
+    const projectChanged = seenProject.current !== projectId
+    if (projectChanged) {
+      seenProject.current = projectId
+      setRows([])
+      setTrains([])
+      setRelease(null)
+    }
+    if (!projectChanged && skipInitialLoad.current) {
+      skipInitialLoad.current = false
+      return
+    }
+    skipInitialLoad.current = false
     void load()
-  }, [load, refreshKey])
+  }, [load, refreshKey, projectId])
 
   const active = rows.filter(isActiveQueueRow)
   const movingTrain = trains.some((t) => t.state === 'building' || t.state === 'testing')
