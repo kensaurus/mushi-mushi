@@ -127,6 +127,29 @@ export async function queueMerges(fixIds: string[]) {
   })
 }
 
+/** What `/v1/admin/merge-queue` returns, shaped for the fixes page. */
+export interface MergeQueueSnapshot {
+  rows: MergeQueueRow[]
+  trains: ReleaseTrain[]
+  release: ReleaseSettings | null
+}
+
+export function emptyMergeQueueSnapshot(): MergeQueueSnapshot {
+  return { rows: [], trains: [], release: null }
+}
+
+/** Keeps a failed or empty read as an empty queue so the page can paint once. */
+export function toMergeQueueSnapshot(
+  data: { rows?: MergeQueueRow[]; trains?: ReleaseTrain[]; release?: ReleaseSettings[] } | null | undefined,
+  projectId: string | null,
+): MergeQueueSnapshot {
+  return {
+    rows: data?.rows ?? [],
+    trains: data?.trains ?? [],
+    release: data?.release?.find((r) => r.projectId === projectId) ?? null,
+  }
+}
+
 export async function loadMergeQueue(projectId: string | null) {
   const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
   return apiFetch<{ rows: MergeQueueRow[]; trains?: ReleaseTrain[]; release?: ReleaseSettings[] }>(`/v1/admin/merge-queue${qs}`, { cache: 'no-store' })

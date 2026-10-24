@@ -14,6 +14,8 @@
  *   93   A "Common causes" chip narrows the failed list to that cause.
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
+ *        The summary strip is reserved while loading, and the merge queue
+ *        paints with the list rather than after it.
  */
 
 import { act, createElement } from 'react'
@@ -273,5 +275,66 @@ describe('FixesPage', () => {
     await flush()
     expect(mocks.apiFetch.mock.calls.some(([p]) => String(p).includes('offset=1'))).toBe(true)
     expect(document.querySelector('[data-testid="header"]')?.textContent).toContain('2 attempts')
+  })
+
+  it('reserves the summary strip and paints the merge queue with the fix list', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    const queuePayload = {
+      ok: true,
+      data: {
+        rows: [{
+          id: 'q1',
+          fix_attempt_id: 'f1',
+          project_id: 'p1',
+          repo: 'acme/app',
+          pr_number: 12,
+          state: 'queued',
+          detail: 'Waiting for CI',
+          head_sha: null,
+          queued_at: '2026-10-24T00:00:00Z',
+          updated_at: '2026-10-24T00:00:00Z',
+          merged_at: null,
+          conflict_agents: 0,
+        }],
+        trains: [],
+        release: [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 }],
+      },
+    }
+    let resolveFixes: (v: unknown) => void = () => {}
+    let resolveQueue: (v: unknown) => void = () => {}
+    let queueCalls = 0
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.startsWith('/v1/admin/fixes?')) {
+        return new Promise((resolve) => { resolveFixes = () => resolve({ ok: true, data: { fixes: mocks.fixes, total: 1 } }) })
+      }
+      if (path.startsWith('/v1/admin/merge-queue')) {
+        queueCalls += 1
+        if (queueCalls === 1) return new Promise((resolve) => { resolveQueue = () => resolve(queuePayload) })
+        return Promise.resolve(queuePayload)
+      }
+      return base(path, init)
+    })
+
+    await render('/fixes')
+    const summary = document.querySelector('[data-testid="fixes-loading-summary"]')
+    expect(summary).not.toBeNull()
+    expect(document.querySelector('table')).toBeNull()
+    expect(summary!.compareDocumentPosition(document.querySelector('[aria-label="Loading fixes"]')!) & Node.DOCUMENT_POSITION_CONTAINS).not.toBe(0)
+
+    await act(async () => {
+      resolveFixes(null)
+      resolveQueue(null)
+    })
+    await flush()
+
+    expect(document.querySelector('[data-testid="fixes-loading-summary"]')).toBeNull()
+    const queue = document.querySelector('[aria-label="Merge queue"]')
+    const table = document.querySelector('table')
+    expect(queue).not.toBeNull()
+    expect(table).not.toBeNull()
+    expect(queue!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(document.body.textContent).toContain('Merge when ready')
   })
 })

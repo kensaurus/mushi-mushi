@@ -3,9 +3,11 @@
  * PURPOSE: Layout-shaped placeholder for any list/table page (Reports,
  *          Fixes, Audit, DLQ, Notifications, Marketplace, Anti-gaming…).
  *          Mirrors PageHeader + filter-bar + N-row table so first paint
- *          doesn't shift when data lands.
+ *          doesn't shift when data lands. `leading` reserves blocks that
+ *          sit above the filters (summary cards, merge queue).
  */
 
+import type { ReactNode } from 'react'
 import { Card, Skeleton } from '../ui'
 
 interface TableSkeletonProps {
@@ -17,6 +19,8 @@ interface TableSkeletonProps {
   showFilters?: boolean
   /** Show a 4-tile KPI strip above the filters (e.g. Reports page). */
   showKpiStrip?: boolean
+  /** Blocks that sit between the header and the filters (summary, queue). */
+  leading?: ReactNode
   /** Optional accessible label override. */
   label?: string
 }
@@ -32,6 +36,7 @@ export function TableSkeleton({
   columns = 5,
   showFilters = true,
   showKpiStrip = false,
+  leading,
   label = 'Loading',
 }: TableSkeletonProps) {
   return (
@@ -51,6 +56,8 @@ export function TableSkeleton({
           ))}
         </div>
       )}
+
+      {leading}
 
       {showFilters && (
         <Card className="p-2.5 flex flex-wrap gap-2">

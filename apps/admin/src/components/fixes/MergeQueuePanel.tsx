@@ -12,6 +12,10 @@
  *          Release trains (ADR 0044, the default): approved PRs ride one
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
+ *
+ *          The fixes page passes the queue it already loaded, so this card
+ *          is in the same paint as the attempt list. A later refetch must
+ *          not blank the card first — that insert is a layout shift.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -30,6 +34,7 @@ import {
   saveReleaseSettings,
   trainLine,
   type MergeQueueRow,
+  type MergeQueueSnapshot,
   type ReleaseMode,
   type ReleaseSettings,
   type ReleaseTrain,
@@ -48,16 +53,27 @@ interface Props {
   refreshKey: number
   /** A row merged: the page reloads its fixes. */
   onMerged?: () => void
+  /** Queue already loaded with the attempt list, so the card does not pop in later. */
+  initial: MergeQueueSnapshot
 }
 
-export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
+export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Props) {
   const toast = useToast()
-  const [rows, setRows] = useState<MergeQueueRow[]>([])
+  const [rows, setRows] = useState<MergeQueueRow[]>(initial.rows)
   const [showMerged, setShowMerged] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
-  const [trains, setTrains] = useState<ReleaseTrain[]>([])
-  const [release, setRelease] = useState<ReleaseSettings | null>(null)
+  const [trains, setTrains] = useState<ReleaseTrain[]>(initial.trains)
+  const [release, setRelease] = useState<ReleaseSettings | null>(initial.release)
   const [saving, setSaving] = useState(false)
+  // A project switch drops the previous app's queue before paint. The first
+  // mount keeps `initial` so the card is present with the list.
+  const [seenProjectId, setSeenProjectId] = useState(projectId)
+  if (seenProjectId !== projectId) {
+    setSeenProjectId(projectId)
+    setRows([])
+    setTrains([])
+    setRelease(null)
+  }
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -73,9 +89,6 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   }, [projectId, onMerged])
 
   useEffect(() => {
-    setRows([])
-    setTrains([])
-    setRelease(null)
     void load()
   }, [load, refreshKey])
 

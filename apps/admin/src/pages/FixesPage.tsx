@@ -5,6 +5,10 @@
  *          Presentation lives in components/fixes/* so each piece (KPIs,
  *          recommendation banner, in-flight list, per-fix card) can evolve
  *          and be reasoned about in isolation.
+ *
+ *          The loading skeleton reserves the summary strip, and the merge
+ *          queue is loaded with the attempt list, so neither block inserts
+ *          above the list after first paint (layout shift on /fixes).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,7 +19,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { Btn, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
+import { Btn, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner, Skeleton } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
@@ -34,7 +38,7 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
-import { queueMerges } from '../lib/mergeQueue'
+import { emptyMergeQueueSnapshot, loadMergeQueue, queueMerges, toMergeQueueSnapshot, type MergeQueueSnapshot } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
@@ -132,6 +136,23 @@ interface CodebaseStats {
   indexed_files: number
 }
 
+/** Banner + 6 summary tiles, the same stack the loaded page paints above the list. */
+function FixesLoadingLead() {
+  return (
+    <div className="flex flex-col gap-4">
+      <Skeleton className="h-16 w-full rounded-md" />
+      <div data-testid="fixes-loading-summary" className="space-y-3 rounded-md border border-edge-subtle bg-surface-raised p-3">
+        <Skeleton className="h-4 w-40" />
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function FixesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
@@ -148,6 +169,7 @@ export function FixesPage() {
 
   const {
     data: statsData,
+    loading: statsLoading,
     reload: reloadStats,
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
@@ -173,6 +195,9 @@ export function FixesPage() {
   // sit above (audit 2026-10-20, B3): reconcile server stats with the list.
   const fixesStats = useMemo(() => reconcileFixesStats(serverFixesStats, dispatches), [serverFixesStats, dispatches])
   const [summary, setSummary] = useState<FixSummary | null>(null)
+  // Loaded in the same request as the attempt list so "Merge when ready"
+  // is already in the tree when the list first paints.
+  const [queueSnapshot, setQueueSnapshot] = useState<MergeQueueSnapshot>(emptyMergeQueueSnapshot())
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
   const [baseBranches, setBaseBranches] = useState<Record<string, string | null>>({})
   const [inventoryActions, setInventoryActions] = useState<Record<string, InventoryActionNode | null>>({})
@@ -206,6 +231,8 @@ export function FixesPage() {
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
   const cancelledRef = useRef(false)
+  const activeProjectIdRef = useRef(activeProjectId)
+  activeProjectIdRef.current = activeProjectId
 
   const loadFixes = useCallback(async () => {
     if (inFlightRef.current) return
@@ -213,10 +240,11 @@ export function FixesPage() {
     setError(false)
     setIsValidating(true)
     try {
-      const [fixRes, dispRes, sumRes] = await Promise.all([
+      const [fixRes, dispRes, sumRes, queueRes] = await Promise.all([
         apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
+        loadMergeQueue(activeProjectIdRef.current),
       ])
       if (cancelledRef.current) return
       if (fixRes.ok && fixRes.data) {
@@ -225,6 +253,7 @@ export function FixesPage() {
       } else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
+      setQueueSnapshot(toMergeQueueSnapshot(queueRes.ok ? queueRes.data : null, activeProjectIdRef.current))
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
     } catch {
       if (!cancelledRef.current) setError(true)
@@ -819,8 +848,20 @@ export function FixesPage() {
     void loadFixes()
   }, [reloadStats, loadFixes])
 
-  if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
+  // Stats and the queue share this first paint with the list. Revealing the
+  // list earlier lets the summary cards and "Merge when ready" push it down.
+  if (loading || (statsLoading && !statsData)) {
+    return (
+      <TableSkeleton
+        rows={6}
+        columns={5}
+        showFilters
+        label="Loading fixes"
+        leading={<FixesLoadingLead />}
+      />
+    )
+  }
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-fixes">
@@ -930,7 +971,12 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      <MergeQueuePanel
+        projectId={activeProjectId ?? null}
+        refreshKey={queueRefresh}
+        onMerged={loadFixes}
+        initial={queueSnapshot}
+      />
 
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">
