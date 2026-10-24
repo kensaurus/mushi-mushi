@@ -265,8 +265,9 @@ export function FixesPage() {
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
         // A queue failure used to reject this whole batch and replace the
-        // list with "Failed to load fix attempts."
-        loadMergeQueue(projectId).catch(() => ({ ok: false as const })),
+        // list with "Failed to load fix attempts." No app chosen: no read, as
+        // the panel's own load (an unfiltered read lists every app's queue).
+        projectId ? loadMergeQueue(projectId).catch(() => ({ ok: false as const })) : Promise.resolve({ ok: false as const }),
       ])
       if (cancelledRef.current) return
       if (fixRes.ok && fixRes.data) {

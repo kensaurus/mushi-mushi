@@ -76,6 +76,7 @@ const mocks = vi.hoisted(() => ({
   statsLoading: false,
   statsData: null as Record<string, unknown> | null,
   hideFixesSnapshot: true,
+  projectId: 'p1' as string | null,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
@@ -98,7 +99,7 @@ vi.mock('../lib/realtime', () => ({
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
-vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
+vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => mocks.projectId }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/track', () => ({ trackSelf: vi.fn() }))
 vi.mock('../lib/fixesModeUx', () => ({
@@ -146,6 +147,7 @@ beforeEach(() => {
   mocks.statsLoading = false
   mocks.statsData = { ...EMPTY_FIXES_STATS, hasAnyProject: true }
   mocks.hideFixesSnapshot = true
+  mocks.projectId = 'p1'
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -373,6 +375,15 @@ describe('FixesPage', () => {
     expect(document.body.textContent).toContain('Merge when ready')
     expect(queueCalls).toBe(1)
     expectReserve(queue!.firstElementChild, FIXES_QUEUE_RESERVE)
+  })
+
+  it('reads no merge queue without an active app (an unfiltered read lists every app)', async () => {
+    mocks.projectId = null
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    await render('/fixes')
+    const queueCalls = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/merge-queue'))
+    expect(queueCalls).toEqual([])
   })
 
   it('does not refetch the queue on mount under StrictMode', async () => {
