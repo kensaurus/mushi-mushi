@@ -120,7 +120,10 @@ export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: nu
   const clean = (t: string | null) => (t ?? '').replace(/\[[^\]]*\]/g, '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120)
   const lines = args.members.map((m) => `- #${m.prNumber} ${clean(m.title) || '(no title)'}`)
   return {
-    title: `release: ${n} fix${n === 1 ? '' : 'es'} (${date})${args.attempt > 1 ? ` · retry ${args.attempt}` : ''}`,
+    // A conventional-commit type the hosts' PR-title checks accept, and one
+    // their release pipelines treat as a release (2026-10-24: yen-yen's check
+    // rejected "release:", so every train there failed on its title).
+    title: `fix: release train, ${n} fix${n === 1 ? '' : 'es'} (${date})${args.attempt > 1 ? `, retry ${args.attempt}` : ''}`,
     body: [
       `Mushi release train: ${n} pull request${n === 1 ? '' : 's'} Opus approved, merged together so they ship as one deploy and one release (ADR 0044).`,
       '',
