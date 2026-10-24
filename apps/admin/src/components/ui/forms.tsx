@@ -108,7 +108,8 @@ export function SegmentedControl<T extends string>({
           >
             {opt.label}
             {opt.count !== undefined && (
-              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground/80' : 'text-fg-faint'}`}>
+              // Full token: brand-foreground/80 on brand-subtle is 3.8:1 in light mode.
+              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}

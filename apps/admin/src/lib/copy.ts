@@ -1709,6 +1709,11 @@ export function usePageCopy(path: string): PageCopy | null {
  * Reports inbox to the user's actual project. Lives here so future
  * projects (not just the glot-it dogfood) inherit the same voice — change
  * the wording in one place and every project gets it. §2.3.
+ *
+ * `draftedFixes` and `mergedFixes` are for `component` only: open or draft
+ * PRs still waiting, and merged PRs. They are not a project-wide attempt
+ * total, and the drafted count is not `total - merged` (that remainder
+ * tracked the inbox's report count).
  */
 export function renderDogfoodNarrative(params: {
   projectName: string
@@ -1724,8 +1729,8 @@ export function renderDogfoodNarrative(params: {
   if (mergedFixes > 0) {
     const merged = mergedFixes === 1 ? '1 fix already merged' : `${mergedFixes} fixes already merged`
     const drafted =
-      draftedFixes > mergedFixes
-        ? ` and ${draftedFixes - mergedFixes} more drafted.`
+      draftedFixes > 0
+        ? ` and ${draftedFixes} more drafted.`
         : '.'
     return `${headline} ${merged}${drafted}`
   }
