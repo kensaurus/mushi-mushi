@@ -13,10 +13,11 @@
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
  *
- *          A long owner/repo#N is unbreakable monospace. Visible refs are
- *          #N (the repo name without the owner when a train has no PR yet);
- *          the full owner/repo#N is the link title, so line 1 at 390px is
- *          the badge and #PR. Refs still use wrap-anywhere, and the reason
+ *          A long owner/repo#N is unbreakable monospace. Queue and merged
+ *          rows show #N, or the repo name without the owner plus #N when
+ *          those rows span more than one repo (a phone has no hover). A
+ *          train with no PR yet shows that repo name. The full owner/repo#N
+ *          is the link title. Refs still use wrap-anywhere, and the reason
  *          uses a content flex basis (flex-auto, not flex-1) so it wraps
  *          onto its own line instead of collapsing to zero width.
  */
@@ -49,15 +50,20 @@ const MODE_OPTIONS = [
 
 const POLL_MS = 30_000
 
-/** Visible pull-request ref. The full owner/repo#N stays on the title. */
-function shortPrRef(repo: string, prNumber: number): { label: string; title: string } {
-  return { label: `#${prNumber}`, title: `${repo}#${prNumber}` }
-}
-
-/** Repo label when a train has no pull request number yet. */
+/** Repo label without the owner. A train with no pull request uses this alone. */
 function shortRepoName(repo: string): string {
   const slash = repo.lastIndexOf('/')
   return slash === -1 ? repo : repo.slice(slash + 1)
+}
+
+/**
+ * Visible pull-request ref. Queue and merged rows use repo#N (no owner)
+ * when those rows span more than one repo. The full owner/repo#N is the
+ * title. The href is built here, while prNumber is already a number.
+ */
+function shortPrRef(repo: string, prNumber: number, distinguishRepos = false): { label: string; title: string; href: string } {
+  const label = distinguishRepos ? `${shortRepoName(repo)}#${prNumber}` : `#${prNumber}`
+  return { label, title: `${repo}#${prNumber}`, href: prLink({ repo, pr_number: prNumber }) }
 }
 
 interface Props {
@@ -134,6 +140,8 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   const merged = shown.filter((r) => r.state === 'merged')
   // Held rows first (each says why), then the one each repo is working on.
   const listed = [...active].sort((a, b) => Number(b.state === 'blocked') - Number(a.state === 'blocked'))
+  // Queue and merged rows only. A train from another repo does not count.
+  const multiRepo = new Set(shown.map((r) => r.repo)).size > 1
   const batching = (release?.mode ?? 'train') === 'train'
   // One line per repo: its train on the way, or when the next one leaves.
   const repos = [...new Set([...active.map((r) => r.repo), ...trains.filter((t) => t.state === 'building' || t.state === 'testing').map((t) => t.repo)])]
@@ -201,8 +209,8 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             return (
             <li key={l.repo} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
               <Badge tone={l.moving ? 'accent' : 'neutral'}>{l.moving ? 'Train' : 'Next train'}</Badge>
-              {ref && typeof prNumber === 'number' ? (
-                <a href={prLink({ repo: l.repo, pr_number: prNumber })} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
+              {ref ? (
+                <a href={ref.href} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
                   {ref.label}
                 </a>
               ) : (
@@ -217,11 +225,11 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       {listed.length > 0 && (
         <ul className="divide-y divide-edge-subtle">
           {listed.map((r) => {
-            const ref = shortPrRef(r.repo, r.pr_number)
+            const ref = shortPrRef(r.repo, r.pr_number, multiRepo)
             return (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
               <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
-              <a href={prLink(r)} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
+              <a href={ref.href} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
                 {ref.label}
               </a>
               {/* flex-auto (basis auto), not flex-1 (basis 0%): a 0% basis stays on the ref's line and collapses the reason. */}
@@ -244,10 +252,10 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           {showMerged && (
             <ul className="mt-1 space-y-0.5">
               {merged.map((r) => {
-                const ref = shortPrRef(r.repo, r.pr_number)
+                const ref = shortPrRef(r.repo, r.pr_number, multiRepo)
                 return (
                 <li key={r.id} className="text-2xs text-fg-muted">
-                  <a href={prLink(r)} title={ref.title} target="_blank" rel="noreferrer" className="wrap-anywhere font-mono hover:text-fg hover:underline">
+                  <a href={ref.href} title={ref.title} target="_blank" rel="noreferrer" className="wrap-anywhere font-mono hover:text-fg hover:underline">
                     {ref.label}
                   </a>{' '}
                   merged {r.merged_at ? <RelativeTime value={r.merged_at} /> : null}
