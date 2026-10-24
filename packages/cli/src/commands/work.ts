@@ -287,7 +287,15 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return r.stdout.trim()
 }
 
+/**
+ * The base for worktrees and PRs: GitHub's default branch, read with `gh`.
+ * A clone's origin/HEAD can name any branch (a clone of a local checkout
+ * points it at whatever was checked out): PR #646 was opened against a
+ * feature branch, and GitHub closed it when that branch was deleted.
+ */
 async function defaultBranch(repoDir: string): Promise<string> {
+  const gh = await runProc('gh', ['repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name'], { cwd: repoDir, timeoutMs: 30_000 })
+  if (gh.code === 0 && gh.stdout.trim()) return gh.stdout.trim()
   const r = await runProc('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: repoDir })
   if (r.code === 0 && r.stdout.trim()) return r.stdout.trim().replace(/^origin\//, '')
   for (const b of ['main', 'master']) {
