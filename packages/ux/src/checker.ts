@@ -131,14 +131,14 @@ You may open at most 3 files from this repository (for example a class or compon
 Keep it when the diff makes that change (or a reasonable part of it) without breaking behaviour, accessibility or the design system. Revert it when it does nothing useful, does something else, or risks breaking the screen.
 Answer with ONLY this JSON: {"verdict":"keep"|"revert","confidence":"low"|"medium"|"high","reason":"..."}`
 
-interface Ask {
+export interface Ask {
   text: string | null
   costUsd: number | null
   error?: string
 }
 
 /** One question to Claude Code, headless and read-only, in `cwd`. */
-async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal, maxTurns = 4): Promise<Ask> {
+export async function askClaudeCode(prompt: string, cwd: string, model: string, signal?: AbortSignal, maxTurns = 4): Promise<Ask> {
   const args = ['-p', '--model', model, '--tools', 'Read', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--max-turns', String(maxTurns), '--no-session-persistence', '--output-format', 'json']
   let last: Ask = { text: null, costUsd: null, error: 'Claude Code did not run.' }
   // One retry: a call that failed in a second with no output (studio run on
@@ -163,7 +163,7 @@ async function askClaudeCode(prompt: string, cwd: string, model: string, signal?
 }
 
 /** One question to the Anthropic API, with the images inline. */
-async function askApi(prompt: string, images: Buffer[], model: string, client: Anthropic): Promise<Ask> {
+export async function askApi(prompt: string, images: Buffer[], model: string, client: Anthropic, labels: readonly string[] = ['a.png', 'b.png']): Promise<Ask> {
   try {
     const msg = await client.messages.create({
       model,
@@ -173,7 +173,7 @@ async function askApi(prompt: string, images: Buffer[], model: string, client: A
           role: 'user',
           content: [
             ...images.flatMap((png, i) => [
-              { type: 'text' as const, text: i === 0 ? 'a.png:' : 'b.png:' },
+              { type: 'text' as const, text: `${labels[i] ?? `image ${i + 1}`}:` },
               { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: png.toString('base64') } },
             ]),
             { type: 'text', text: prompt },

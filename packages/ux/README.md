@@ -65,6 +65,7 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux ui` | The studio: start runs and watch them |
 | `mushi-ux run --dev "<cmd with {port}>"` | Run the loop from the terminal |
 | `mushi-ux discover --url <url>` | List the screens, change nothing |
+| `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi reports (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
 | `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
 | `mushi-ux open <runId>` | The local dashboard for a past run |
@@ -80,6 +81,22 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `--no-judge` / `--no-preflight` / `--no-dashboard` | — | Skip the review, the agent check, or the local dashboard |
 
 Run state and screenshots live in `.mushi/ux/<runId>/`. The run adds its folders to `.git/info/exclude`, so `git status` stays clean. `--sync` refuses a run whose app reports to a different Mushi project than your login.
+
+## Audit signed-in screens
+
+`mushi-ux audit` checks the live app the way a signed-in user sees it and files what is wrong as Mushi reports, so the fix loop picks them up. It never edits code and never opens a fresh browser: point it at a cached, signed-in profile.
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --review claude-code --file --dry-run
+```
+
+- Maps the screens under the URL's path behind the write guard, one per route (`--max-pages`, default 15; `--states N` also opens up to N dialogs or tabs a page), and captures each on desktop (1440×900) and phone (390×844).
+- Files measured problems first: serious accessibility rules, a page that scrolls sideways, console errors, content that jumps while loading. `--review` adds concrete visual defects a model finds on whole pages (overlap, clipping, unreadable text, contradicting numbers), each with a "Done when".
+- `--file` files at most 15 reports a run, one per screen and problem, and skips one filed in the last 14 days or still open. It needs `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`; without them it writes `to-file.json` next to the summary. `--dry-run` files nothing.
+- `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand.
+- Output: `~/.cache/mushi/ux-audits/<run>/` (summary, findings, screenshots).
 
 ## On GitHub Actions
 

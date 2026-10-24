@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import type { Page } from 'playwright'
 import { gotoPatiently, replay, settle, surfaceUrl, type BrowserSession } from './capture.js'
 import { isDestructiveLabel } from './guard.js'
-import { isWorthVisiting, routesFromSource, sitemapPaths } from './routes.js'
+import { isWorthVisiting, routesFromSource, sitemapPaths, trimTrailingSlashes } from './routes.js'
 import type { ReplayStep, Surface, SurfaceKind } from './types.js'
 
 export interface DiscoverOptions {
@@ -24,6 +24,20 @@ export interface DiscoverOptions {
   maxStatesPerPage?: number
   /** Paths never visited (globs on pathname), on top of sign-out routes. */
   excludePaths?: string[]
+  /**
+   * Only pathnames equal to or under this prefix are visited, e.g.
+   * `/mushi-mushi/admin` for a console that shares its origin with docs and
+   * a landing site. Omit for the whole origin.
+   */
+  scopePath?: string
+  /**
+   * When two pages count as the same: 'shape' (default) by DOM structure, so
+   * `/reports/1` and `/reports/2` are worked on once; 'route' by pathname with
+   * ids collapsed and the query ignored, for an app shell whose sidebar and
+   * header make every page hash alike (the console kept 3 of 75 loads by
+   * shape, 2026-10-24).
+   */
+  dedupe?: 'shape' | 'route'
   /**
    * Visit only startPaths (and the tabs, dialogs and menus they open): no
    * routes from the source or sitemap, no following links. Set when the
@@ -43,6 +57,25 @@ const MAX_REDIRECT_FOLLOWS = 3
 const LOADS_PER_PAGE = 5
 const SIGN_IN_PATH_RE = /\/(log-?in|sign-?in|auth)\b/i
 const SIGN_OUT_PATH_RE =/\/(log-?out|sign-?out|logoff)\b/i
+
+/** @internal Exported for tests only. Pure: `pathname` is `scope` or under it (`/a/admin` covers `/a/admin/x`, not `/a/administer`). */
+export function inScope(pathname: string, scope: string | undefined): boolean {
+  if (!scope) return true
+  const s = trimTrailingSlashes(scope) || '/'
+  if (s === '/') return true
+  return pathname === s || pathname.startsWith(`${s}/`)
+}
+
+/** @internal Exported for tests only. Pure: a route key: the pathname with ids (numbers, uuids, long hex) collapsed, the query dropped. */
+export function routeKey(path: string): string {
+  const q = path.search(/[?#]/)
+  const pathname = q < 0 ? path : path.slice(0, q)
+  const collapsed = pathname
+    .split('/')
+    .map((seg) => (/^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(seg) ? ':id' : seg))
+    .join('/')
+  return trimTrailingSlashes(collapsed) || '/'
+}
 
 /** Pure: same-origin, normalized path (no hash), or null to skip. */
 export function normalizeLink(href: string, baseUrl: string): string | null {
@@ -184,7 +217,9 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
     ...(only ? [] : (opts.sourceDir ? routesFromSource(opts.sourceDir) : []).filter(isWorthVisiting)),
     ...(only ? [] : (await sitemapPaths(opts.baseUrl)).filter(isWorthVisiting)),
   ]
-  const queue = [...new Set(seeded)]
+  // Out-of-scope paths never enter the queue: they would spend page loads (a site sitemap lists docs and landing pages).
+  const scoped = (p: string) => inScope(new URL(p, opts.baseUrl).pathname, opts.scopePath)
+  const queue = [...new Set(seeded)].filter(scoped)
   progress(only ? `${queue.length} page(s) you named` : `${queue.length} start path(s) from the source, sitemap and options`)
   const visited = new Set<string>()
   const seenShapes = new Set<string>()
@@ -287,7 +322,9 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
         // A page the person named is always worked on: in an app shell several
         // routes share one structure while loading, and glot.it lost /words,
         // /chat and /account to this check (2026-10-06).
-        if (seenShapes.has(shape) && !only) continue
+        if (opts.dedupe === 'route') {
+          if (seenShapes.has(`route:${routeKey(here)}`) && !only) continue
+        } else if (seenShapes.has(shape) && !only) continue
         title = pageLabel(await page.title(), here, surfaces)
         links = await page.$$eval('a[href]', (as) =>
           as.map((a) => ({ href: a.getAttribute('href') ?? '', label: (a as HTMLElement).innerText.trim() })),
@@ -297,14 +334,14 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
         progress(`skipped ${path}: it changed while being read (${(err as Error).message.split('\n')[0].slice(0, 120)})`)
         continue
       }
-      seenShapes.add(shape)
+      seenShapes.add(opts.dedupe === 'route' ? `route:${routeKey(here)}` : shape)
       surfaces.push({ key: surfaceKey(here, []), kind: 'page', path: here, steps: [], label: title, domHash: shape })
       progress(`page ${here}`)
 
       for (const { href, label } of links) {
         if (isDestructiveLabel(label)) continue
         const next = normalizeLink(href, page.url())
-        if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
+        if (!only && next && scoped(next) && !visited.has(next) && !queue.includes(next)) queue.push(next)
       }
 
       // Same rule for its tabs and dialogs: a failed read skips that state only.
@@ -322,7 +359,7 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
         if (after.pathname + after.search !== here) {
           // The "tab" was a link in disguise; crawl it as a page.
           const next = normalizeLink(page.url(), opts.baseUrl)
-          if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
+          if (!only && next && scoped(next) && !visited.has(next) && !queue.includes(next)) queue.push(next)
           continue
         }
         let kind: SurfaceKind | null
