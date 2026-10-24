@@ -48,7 +48,32 @@ describe('deriveUpdateCenterView', () => {
     expect(v.mode).toBe('pr_open')
     expect(v.upgradeLabel).toBeNull()
     expect(v.ci).toBe('failing')
+    expect(v.canMerge).toBe(false)
     expect(v.prTargetVersion).toBe('1.31.0')
+  })
+
+  it('offers merge only when the open PR checks passed', () => {
+    const open = {
+      status: 'completed' as const,
+      prUrl: 'https://github.com/kensaurus/glot.it/pull/142',
+      prState: 'open' as const,
+    }
+    const green = deriveUpdateCenterView(GLOT, { ...open, checkRunConclusion: 'success' })
+    expect(green.mode).toBe('pr_open')
+    expect(green.ci).toBe('passing')
+    expect(green.canMerge).toBe(true)
+
+    const running = deriveUpdateCenterView(GLOT, { ...open, checkRunStatus: 'in_progress' })
+    expect(running.ci).toBe('running')
+    expect(running.canMerge).toBe(false)
+
+    const skipped = deriveUpdateCenterView(GLOT, { ...open, checkRunConclusion: 'skipped' })
+    expect(skipped.ci).toBe('passing')
+    expect(skipped.canMerge).toBe(false)
+
+    const merged = deriveUpdateCenterView(GLOT, { ...open, prState: 'merged', checkRunConclusion: 'success' })
+    expect(merged.mode).toBe('pr_merged')
+    expect(merged.canMerge).toBe(false)
   })
 
   it('treats an unsynced PR (pr_state null) as open, never as a reason for a duplicate', () => {

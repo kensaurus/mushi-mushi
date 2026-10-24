@@ -3,14 +3,17 @@
  *
  * Every line here comes from real state (see lib/updateCenterView.ts): the
  * version your app reports vs the latest release, and the latest upgrade job.
- * When the app is current there is no upgrade button; when an upgrade PR is
- * already open it is shown with its CI state instead of offering a new one.
+ * When the app is current there is no upgrade button. An open upgrade PR is
+ * shown with its CI state (re-read from GitHub when this card opens, at most
+ * once a minute). A green check offers Merge through the review gate.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Tooltip, CopyButton, HelpBanner } from '../ui'
 import { JobStatusPill } from '../ui/job-status-pill'
 import { BumpPlanTable } from './BumpPlanTable'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { useSdkUpgrade } from '../../lib/useSdkUpgrade'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { CodeInline } from '../CodePanel'
@@ -98,8 +101,9 @@ const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; tone: string }> =
 }
 
 export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
-  const { state, createUpgradePr, refreshUpgradePr, syncStatus } = useSdkUpgrade(project.id)
+  const { state, createUpgradePr, refreshUpgradePr, syncStatus, mergePr } = useSdkUpgrade(project.id)
   const view = deriveUpdateCenterView(project, state)
+  const [confirmMerge, setConfirmMerge] = useState(false)
 
   const isInFlight = ['queueing', 'queued', 'running', 'awaiting_lockfile'].includes(state.status)
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
@@ -177,10 +181,17 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
             </span>
             <span className={`${CHIP} ${ci.tone}`}>{ci.label}</span>
           </p>
+          {/* ADR 0019: the upgrade worker still does not write the lockfile. */}
           <p className="text-2xs text-fg-muted">
-            Review and merge it on GitHub. Lockfile: your Mushi lockfile workflow refreshes it on
-            the PR branch; without one, run your package manager after merging.
+            {view.canMerge
+              ? 'CI is green. Merge it here, or open the pull request to review the diff. The review gate still applies.'
+              : 'Open the pull request to review the diff. Merge shows up here once CI is green.'}{' '}
+            Lockfile: your Mushi lockfile workflow refreshes it on the PR branch; without one, run
+            your package manager after merging.
           </p>
+          {state.error && !state.reused && (
+            <p className="text-xs text-danger-foreground" role="alert">{state.error}</p>
+          )}
         </div>
       )}
       {view.mode === 'pr_merged' && (
@@ -205,10 +216,23 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       <div className="flex flex-wrap items-center gap-3">
         {hasGithubReady ? (
           <>
+            {view.canMerge && state.jobId ? (
+              <Btn
+                size="md"
+                variant="primary"
+                className="gap-2"
+                loading={state.releaseStatus === 'merging'}
+                disabled={isInFlight || state.releaseStatus === 'merging'}
+                onClick={() => setConfirmMerge(true)}
+              >
+                <IconCheck className="h-4 w-4" aria-hidden />
+                Merge
+              </Btn>
+            ) : null}
             {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.prUrl ? (
               <Btn
                 size="md"
-                variant={view.mode === 'pr_open' ? 'primary' : 'ghost'}
+                variant={view.mode === 'pr_open' && !view.canMerge ? 'primary' : 'ghost'}
                 className="gap-2"
                 href={state.prUrl}
               >
@@ -313,6 +337,21 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       )}
 
       {hasGithubReady && <LockfileHelperDisclosure />}
+
+      {confirmMerge && state.jobId ? (
+        <ConfirmDialog
+          title={`Merge upgrade PR ${prLabel}?`}
+          body="Squash-merge this pull request into the default branch. It goes through the same review gate as every other merge. A merge cannot be undone from Mushi."
+          confirmLabel="Merge PR"
+          tone="danger"
+          onCancel={() => setConfirmMerge(false)}
+          onConfirm={() => {
+            const jobId = state.jobId
+            setConfirmMerge(false)
+            if (jobId) void mergePr(jobId)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
