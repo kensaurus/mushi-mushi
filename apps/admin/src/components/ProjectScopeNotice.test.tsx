@@ -19,10 +19,12 @@ const projects = [
   { project_id: PROJECT_B, project_name: 'yen-yen' },
 ]
 
+const setupState = vi.hoisted(() => ({ loaded: true }))
+
 vi.mock('../lib/useSetupStatus', () => ({
   useSetupStatus: (activeProjectId?: string | null) => ({
-    data: { projects },
-    activeProject: projects.find((p) => p.project_id === activeProjectId) ?? projects[0],
+    data: setupState.loaded ? { projects } : null,
+    activeProject: setupState.loaded ? (projects.find((p) => p.project_id === activeProjectId) ?? projects[0]) : null,
   }),
 }))
 
@@ -42,6 +44,7 @@ let root: Root
 let host: HTMLDivElement
 
 beforeEach(() => {
+  setupState.loaded = true
   window.localStorage.clear()
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -68,6 +71,13 @@ describe('ProjectScopeNotice', () => {
     expect(notice()!.textContent).toContain('This page shows one app at a time: yen-yen.')
     expect(notice()!.getAttribute('role')).toBe('status')
     expect(pageData()).toBe(`reports for ${PROJECT_B}`)
+  })
+
+  it('renders at first paint while setup loads, so the page below does not move', async () => {
+    setupState.loaded = false
+    await render(`/reports?project=${PROJECT_B}&apps=all`)
+    expect(notice()!.textContent).toContain('This page shows one app at a time:')
+    expect(notice()!.textContent).not.toContain('yen-yen')
   })
 
   it('also shows when All apps comes from storage', async () => {
