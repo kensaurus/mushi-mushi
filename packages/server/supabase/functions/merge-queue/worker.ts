@@ -11,6 +11,8 @@ import type { gatedMergePullRequest } from '../_shared/gated-merge.ts'
 import type { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { isExpress } from '../_shared/merge-train.ts'
+import { runTrainTick, trainSettingsFrom, type TrainDeps } from './train.ts'
 import { canonicalPrUrl } from '../_shared/pr-substance.ts'
 import { deterministicCursorAgentId, type CreateCursorAgentV1Input } from '../_shared/cursor-cloud.ts'
 import {
@@ -43,7 +45,7 @@ export interface QueueRow {
 }
 
 const ROW_COLUMNS =
-  'id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, queued_at, claimed_until'
+  'id, train_id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, queued_at, claimed_until'
 
 /** Everything that talks to GitHub, Cursor or the merge path; index.ts wires the live ones. */
 export interface MergeQueueDeps {
@@ -61,6 +63,8 @@ export interface MergeQueueDeps {
   createAgent: (apiKey: string, input: CreateCursorAgentV1Input) => Promise<{ agentId: string }>
   agentDone: (apiKey: string, agentId: string) => Promise<{ done: boolean; result: string | null }>
   requeueReview: typeof requeueReviewForNewHead
+  /** Release trains (ADR 0044); absent → every app merges PR by PR. */
+  train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'finalize' | 'requeueReview' | 'now'>
 }
 
 export interface AttemptRow {
@@ -321,6 +325,21 @@ async function resolve(
   return 'resolving'
 }
 
+/** Queue rows whose fix is an express one (ADR 0044): it merges alone, as before trains. */
+async function expressRowIds(db: SupabaseClient, rows: Array<{ id: string; fix_attempt_id: string }>): Promise<Set<string>> {
+  if (!rows.length) return new Set()
+  const { data: atts } = await db.from('fix_attempts').select('id, report_id').in('id', rows.map((r) => r.fix_attempt_id))
+  const reportIds = ((atts ?? []) as Array<{ report_id: string | null }>).map((a) => a.report_id).filter((x): x is string => !!x)
+  const { data: reps } = reportIds.length ? await db.from('reports').select('id, severity, source').in('id', reportIds) : { data: [] }
+  const out = new Set<string>()
+  for (const r of rows) {
+    const rid = ((atts ?? []) as Array<{ id: string; report_id: string | null }>).find((a) => a.id === r.fix_attempt_id)?.report_id
+    const rep = ((reps ?? []) as Array<{ id: string; severity: string | null; source: string | null }>).find((x) => x.id === rid)
+    if (rep && isExpress(rep)) out.add(r.id)
+  }
+  return out
+}
+
 const IN_PROGRESS: Record<string, number> = { resolving: 0, waiting: 1, queued: 2, blocked: 3 }
 
 /**
@@ -340,10 +359,48 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   if (projectId) q = q.eq('project_id', projectId)
   const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
   if (error) throw new Error(`merge-queue read failed: ${error.message}`)
-  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string }>
+  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; train_id: string | null }>
   // A row leased by a tick still running holds its repo.
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
-  const rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
+  let rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
+  const tally: Record<string, number> = {}
+
+  // Release trains (ADR 0044): apps in train mode batch their approved PRs;
+  // only express fixes (security advisories, critical bugs) merge alone.
+  if (deps.train) {
+    const projectIds = [...new Set(rows.map((r) => r.project_id))]
+    const { data: settings } = projectIds.length
+      ? await db.from('project_settings').select('project_id, release_mode, train_interval_minutes, train_max_members').in('project_id', projectIds)
+      : { data: [] }
+    const trainProjects = new Map(((settings ?? []) as Array<{ project_id: string; release_mode?: string | null; train_interval_minutes?: number | null; train_max_members?: number | null }>)
+      .filter((s) => (s.release_mode ?? 'train') === 'train')
+      .map((s) => [s.project_id, trainSettingsFrom(s)]))
+    const express = await expressRowIds(db, rows.filter((r) => trainProjects.has(r.project_id)))
+    const byRepo = new Map<string, typeof rows>()
+    for (const r of rows) if (trainProjects.has(r.project_id) && !express.has(r.id) && r.state !== 'resolving') byRepo.set(r.repo, [...(byRepo.get(r.repo) ?? []), r])
+    for (const [repo, repoRows] of byRepo) {
+      if (repos.has(repo)) continue
+      const lead = repoRows[0]
+      const until = new Date(now().getTime() + LEASE_MS).toISOString()
+      const { data: claimed } = await db.from('fix_merge_queue').update({ claimed_until: until }).eq('id', lead.id).or(`claimed_until.is.null,claimed_until.lt.${nowIso}`).select('id')
+      if (!claimed || (claimed as unknown[]).length === 0) continue
+      repos.add(repo)
+      let outcome: string
+      try {
+        const { data: att } = await db.from('fix_attempts').select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, repo_id, summary').eq('id', lead.fix_attempt_id).maybeSingle()
+        const token = att ? await deps.token(db, att as AttemptRow) : null
+        outcome = token
+          ? await runTrainTick(db, { repo, projectId: lead.project_id, token, rows: repoRows, settings: trainProjects.get(lead.project_id)! }, { ...deps.train, pull: deps.pull, checks: deps.checks, updateBranch: deps.updateBranch, finalize: deps.finalize, requeueReview: deps.requeueReview, now })
+          : 'no_token'
+      } catch (err) {
+        log.warn('release train tick failed', { repo, err: err instanceof Error ? err.message : String(err) })
+        outcome = 'train_error'
+      }
+      await db.from('fix_merge_queue').update({ claimed_until: null }).eq('id', lead.id)
+      tally[`train_${outcome}`] = (tally[`train_${outcome}`] ?? 0) + 1
+    }
+    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
+  }
   // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
   for (const r of rows) {
@@ -359,7 +416,6 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     repos.add(r.repo)
     picked.push(r)
   }
-  const tally: Record<string, number> = {}
   for (const row of picked) {
     const until = new Date(now().getTime() + LEASE_MS).toISOString()
     const { data: claimed } = await db
