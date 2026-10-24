@@ -2165,7 +2165,7 @@
     },
     "get_qa_story_run": {
       "title": "QA story run detail",
-      "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.",
+      "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Optional projectId selects the app (an account connection passes the story's project; project_id is accepted too) and defaults to the configured project. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.",
       "scope": "mcp:read",
       "annotations": {
         "title": "QA story run detail",
@@ -2183,6 +2183,10 @@
           "runId": {
             "type": "string",
             "description": "Run id (uuid) to fetch detail for (`run_id` is accepted too.)"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project. Pass the story's project on an account connection. (`project_id` is accepted too.)",
+            "type": "string"
           }
         },
         "required": [
@@ -3583,7 +3587,7 @@
     },
     "list_qa_story_runs": {
       "title": "Recent QA story runs",
-      "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed.",
+      "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Optional projectId selects the app (an account connection passes the story's project; project_id is accepted too) and defaults to the configured project. Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Recent QA story runs",
@@ -3597,6 +3601,10 @@
           "storyId": {
             "type": "string",
             "description": "QA story id (uuid)"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project. Pass the story's project on an account connection. (`project_id` is accepted too.)",
+            "type": "string"
           },
           "limit": {
             "default": 10,
