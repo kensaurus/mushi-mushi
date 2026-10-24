@@ -9,6 +9,7 @@
  *          The loading skeleton reserves the summary strip, and the merge
  *          queue is loaded with the attempt list, so neither block inserts
  *          above the list after first paint (layout shift on /fixes).
+ *          A failed queue read does not take the list down with it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -196,7 +197,8 @@ export function FixesPage() {
   const fixesStats = useMemo(() => reconcileFixesStats(serverFixesStats, dispatches), [serverFixesStats, dispatches])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   // Loaded in the same request as the attempt list so "Merge when ready"
-  // is already in the tree when the list first paints.
+  // is already in the tree when the list first paints. A rejection leaves
+  // the queue empty and does not fail the list.
   const [queueSnapshot, setQueueSnapshot] = useState<MergeQueueSnapshot>(emptyMergeQueueSnapshot())
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
   const [baseBranches, setBaseBranches] = useState<Record<string, string | null>>({})
@@ -239,12 +241,15 @@ export function FixesPage() {
     inFlightRef.current = true
     setError(false)
     setIsValidating(true)
+    const projectId = activeProjectIdRef.current
     try {
       const [fixRes, dispRes, sumRes, queueRes] = await Promise.all([
         apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
         apiFetch<{ dispatches: DispatchJob[] }>('/v1/admin/fixes/dispatches'),
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
-        loadMergeQueue(activeProjectIdRef.current),
+        // A queue failure used to reject this whole batch and replace the
+        // list with "Failed to load fix attempts."
+        loadMergeQueue(projectId).catch(() => ({ ok: false as const })),
       ])
       if (cancelledRef.current) return
       if (fixRes.ok && fixRes.data) {
@@ -253,7 +258,9 @@ export function FixesPage() {
       } else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
-      setQueueSnapshot(toMergeQueueSnapshot(queueRes.ok ? queueRes.data : null, activeProjectIdRef.current))
+      if (projectId === activeProjectIdRef.current) {
+        setQueueSnapshot(toMergeQueueSnapshot(queueRes.ok ? queueRes.data : null, projectId))
+      }
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
     } catch {
       if (!cancelledRef.current) setError(true)

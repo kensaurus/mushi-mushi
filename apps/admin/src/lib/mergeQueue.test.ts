@@ -26,7 +26,7 @@ describe('merge queue copy', () => {
     expect(trainLine(null, { lastAt: null, intervalMinutes: 360, now, ready: 0 })).toBe('')
   })
   it('turns a queue payload into the card snapshot, empty when the read failed', () => {
-    expect(toMergeQueueSnapshot(null, 'p1')).toEqual({ rows: [], trains: [], release: null })
+    expect(toMergeQueueSnapshot(null, 'p1')).toEqual({ projectId: 'p1', rows: [], trains: [], release: null })
     expect(toMergeQueueSnapshot({
       rows: [],
       trains: [],

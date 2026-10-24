@@ -14,11 +14,13 @@
  *          release. The panel shows each repo's train and the app's cadence.
  *
  *          The fixes page passes the queue it already loaded, so this card
- *          is in the same paint as the attempt list. A later refetch must
- *          not blank the card first — that insert is a layout shift.
+ *          is in the same paint as the attempt list. That snapshot is the
+ *          card's data: the mount does not refetch it, and a later snapshot
+ *          for this project replaces the rows in place. A refetch must not
+ *          blank the card first — that insert is a layout shift.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl } from '../ui'
 import { useToast } from '../../lib/toast'
 import {
@@ -66,13 +68,29 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Pr
   const [release, setRelease] = useState<ReleaseSettings | null>(initial.release)
   const [saving, setSaving] = useState(false)
   // A project switch drops the previous app's queue before paint. The first
-  // mount keeps `initial` so the card is present with the list.
+  // mount keeps `initial` so the card is present with the list. Later
+  // snapshots from the page replace that seed; useState would ignore them.
   const [seenProjectId, setSeenProjectId] = useState(projectId)
+  const appliedInitial = useRef(initial)
   if (seenProjectId !== projectId) {
     setSeenProjectId(projectId)
-    setRows([])
-    setTrains([])
-    setRelease(null)
+    appliedInitial.current = initial
+    if (initial.projectId === projectId) {
+      setRows(initial.rows)
+      setTrains(initial.trains)
+      setRelease(initial.release)
+    } else {
+      setRows([])
+      setTrains([])
+      setRelease(null)
+    }
+  } else if (appliedInitial.current !== initial) {
+    appliedInitial.current = initial
+    if (initial.projectId === projectId) {
+      setRows(initial.rows)
+      setTrains(initial.trains)
+      setRelease(initial.release)
+    }
   }
 
   const load = useCallback(async () => {
@@ -88,9 +106,18 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Pr
     })
   }, [projectId, onMerged])
 
+  // The page already read this project's queue. Refetching on mount duplicates
+  // that request. StrictMode replays this effect on the same instance, so the
+  // skip is "this refresh key, this project", not a one-shot flag. A new
+  // project or a queue action (`refreshKey`) still loads. A later page
+  // snapshot is applied above.
+  const mountedRefresh = useRef(refreshKey)
+  const initialProjectId = useRef(initial.projectId)
+  initialProjectId.current = initial.projectId
   useEffect(() => {
+    if (refreshKey === mountedRefresh.current && initialProjectId.current === projectId) return
     void load()
-  }, [load, refreshKey])
+  }, [load, refreshKey, projectId])
 
   const active = rows.filter(isActiveQueueRow)
   const movingTrain = trains.some((t) => t.state === 'building' || t.state === 'testing')

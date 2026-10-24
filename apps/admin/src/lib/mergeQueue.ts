@@ -129,13 +129,15 @@ export async function queueMerges(fixIds: string[]) {
 
 /** What `/v1/admin/merge-queue` returns, shaped for the fixes page. */
 export interface MergeQueueSnapshot {
+  /** App this read was for. The panel ignores a snapshot for another app. */
+  projectId: string | null
   rows: MergeQueueRow[]
   trains: ReleaseTrain[]
   release: ReleaseSettings | null
 }
 
 export function emptyMergeQueueSnapshot(): MergeQueueSnapshot {
-  return { rows: [], trains: [], release: null }
+  return { projectId: null, rows: [], trains: [], release: null }
 }
 
 /** Keeps a failed or empty read as an empty queue so the page can paint once. */
@@ -144,6 +146,7 @@ export function toMergeQueueSnapshot(
   projectId: string | null,
 ): MergeQueueSnapshot {
   return {
+    projectId,
     rows: data?.rows ?? [],
     trains: data?.trains ?? [],
     release: data?.release?.find((r) => r.projectId === projectId) ?? null,

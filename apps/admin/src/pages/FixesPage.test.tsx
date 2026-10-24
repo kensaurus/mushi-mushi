@@ -15,15 +15,40 @@
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
  *        The summary strip is reserved while loading, and the merge queue
- *        paints with the list rather than after it.
+ *        paints with the list rather than after it. A queue read that
+ *        rejects leaves the list up, and a later reload applies once.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FixAttempt } from '../components/fixes/types'
 import { EMPTY_FIXES_STATS } from '../components/fixes/FixesStatsTypes'
+
+function queuePayload(detail: string) {
+  return {
+    ok: true,
+    data: {
+      rows: [{
+        id: 'q1',
+        fix_attempt_id: 'f1',
+        project_id: 'p1',
+        repo: 'acme/app',
+        pr_number: 12,
+        state: 'queued',
+        detail,
+        head_sha: null,
+        queued_at: '2026-10-24T00:00:00Z',
+        updated_at: '2026-10-24T00:00:00Z',
+        merged_at: null,
+        conflict_agents: 0,
+      }],
+      trains: [],
+      release: [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 }],
+    },
+  }
+}
 
 function fix(over: Partial<FixAttempt>): FixAttempt {
   return {
@@ -41,7 +66,12 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  reloadFixes: null as (() => void) | null,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
@@ -54,7 +84,12 @@ vi.mock('../lib/usePageData', () => ({
     isValidating: false,
   }),
 }))
-vi.mock('../lib/realtime', () => ({ useRealtimeReload: () => ({ channelState: 'idle' }) }))
+vi.mock('../lib/realtime', () => ({
+  useRealtimeReload: (_tables: unknown, reload: () => void) => {
+    mocks.reloadFixes = reload
+    return { channelState: 'idle' }
+  },
+}))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => undefined }))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
@@ -99,6 +134,7 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.reloadFixes = null
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -124,7 +160,8 @@ async function flush() {
   for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve() })
 }
 
-async function render(url: string) {
+async function render(url: string, opts?: { strict?: boolean }) {
+  const page = createElement('div', null, createElement(LocationProbe), createElement(FixesPage))
   act(() => {
     root.render(
       createElement(
@@ -133,10 +170,9 @@ async function render(url: string) {
         createElement(
           ToastProvider,
           null,
-          createElement(Routes, null, createElement(Route, {
-            path: '/fixes',
-            element: createElement('div', null, createElement(LocationProbe), createElement(FixesPage)),
-          })),
+          opts?.strict
+            ? createElement(StrictMode, null, createElement(Routes, null, createElement(Route, { path: '/fixes', element: page })))
+            : createElement(Routes, null, createElement(Route, { path: '/fixes', element: page })),
         ),
       ),
     )
@@ -280,27 +316,7 @@ describe('FixesPage', () => {
   it('reserves the summary strip and paints the merge queue with the fix list', async () => {
     mocks.fixes = [fix({})]
     mocks.total = 1
-    const queuePayload = {
-      ok: true,
-      data: {
-        rows: [{
-          id: 'q1',
-          fix_attempt_id: 'f1',
-          project_id: 'p1',
-          repo: 'acme/app',
-          pr_number: 12,
-          state: 'queued',
-          detail: 'Waiting for CI',
-          head_sha: null,
-          queued_at: '2026-10-24T00:00:00Z',
-          updated_at: '2026-10-24T00:00:00Z',
-          merged_at: null,
-          conflict_agents: 0,
-        }],
-        trains: [],
-        release: [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 }],
-      },
-    }
+    const payload = queuePayload('Waiting for CI')
     let resolveFixes: (v: unknown) => void = () => {}
     let resolveQueue: (v: unknown) => void = () => {}
     let queueCalls = 0
@@ -311,8 +327,8 @@ describe('FixesPage', () => {
       }
       if (path.startsWith('/v1/admin/merge-queue')) {
         queueCalls += 1
-        if (queueCalls === 1) return new Promise((resolve) => { resolveQueue = () => resolve(queuePayload) })
-        return Promise.resolve(queuePayload)
+        if (queueCalls === 1) return new Promise((resolve) => { resolveQueue = () => resolve(payload) })
+        return Promise.resolve(payload)
       }
       return base(path, init)
     })
@@ -336,5 +352,63 @@ describe('FixesPage', () => {
     expect(table).not.toBeNull()
     expect(queue!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(document.body.textContent).toContain('Merge when ready')
+    expect(queueCalls).toBe(1)
+  })
+
+  it('does not refetch the queue on mount under StrictMode', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.startsWith('/v1/admin/merge-queue')) return Promise.resolve(queuePayload('Waiting for CI'))
+      return base(path, init)
+    })
+    await render('/fixes', { strict: true })
+    const queueCalls = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/merge-queue')).length
+    expect(queueCalls).toBe(1)
+    expect(document.body.textContent).toContain('Waiting for CI')
+  })
+
+  it('shows the fix list when the merge queue rejects', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    let queueCalls = 0
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.startsWith('/v1/admin/merge-queue')) {
+        queueCalls += 1
+        throw new Error('queue down')
+      }
+      return base(path, init)
+    })
+    await render('/fixes')
+    expect(document.body.textContent).toContain('Checkout button does nothing')
+    expect(document.body.textContent).not.toContain('Failed to load fix attempts.')
+    expect(queueCalls).toBe(1)
+  })
+
+  it('applies a later merge-queue snapshot from one reload', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    let queueCalls = 0
+    const details = ['Waiting for CI', 'Branch is behind']
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.startsWith('/v1/admin/merge-queue') && (init?.method ?? 'GET') === 'GET') {
+        const detail = details[Math.min(queueCalls, details.length - 1)]!
+        queueCalls += 1
+        return Promise.resolve(queuePayload(detail))
+      }
+      return base(path, init)
+    })
+    await render('/fixes')
+    expect(document.body.textContent).toContain('Waiting for CI')
+    expect(queueCalls).toBe(1)
+
+    await act(async () => { mocks.reloadFixes?.() })
+    await flush()
+    expect(document.body.textContent).toContain('Branch is behind')
+    expect(document.body.textContent).not.toContain('Waiting for CI')
+    expect(queueCalls).toBe(2)
   })
 })
