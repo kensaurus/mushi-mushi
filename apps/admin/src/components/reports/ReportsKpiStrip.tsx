@@ -4,6 +4,10 @@
  *          see the shape of incoming pain (1 critical · 12 high · …) before
  *          they scroll, and clicking any tile filters the table to that
  *          severity in one click.
+ *
+ *          The critical tile is always the hero size, and every tile keeps
+ *          an 18px trend row, so the sparkline and the hero treatment cannot
+ *          push the queue down when severity stats arrive.
  */
 
 import { useMemo } from 'react'
@@ -126,8 +130,6 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
     )
   }
 
-  const criticalCount = counts.critical
-
   return (
     <MetricStrip cols={4} panel ariaLabel="Reports severity breakdown" className="mb-3" stagger>
       {tiles.map((tile) => {
@@ -137,7 +139,6 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         // Lead with what is still open; how many came in is the sub-line.
         const openCount = data?.openBySeverity?.[tile.key]
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
-        const isHero = tile.key === 'critical' && (data?.openBySeverity?.critical ?? criticalCount) > 0
         return (
           <button
             key={tile.key}
@@ -155,6 +156,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
           >
             <KpiTile
               density="flat"
+              reserveTrend
               // The quick-filter chips count all time; these tiles count a
               // window, so the label says which.
               label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}

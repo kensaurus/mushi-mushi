@@ -88,6 +88,11 @@ export interface KpiTileProps {
   seriesYAxisCaption?: string
   /** Hero emphasis — larger value + subtle ring. Does not widen the grid cell. */
   variant?: 'default' | 'primary'
+  /**
+   * Keep an 18px trend row even before `series` can draw. Reports uses this
+   * so the sparkline does not push the queue down when stats arrive.
+   */
+  reserveTrend?: boolean
   /** `flat` = diet panel cell (no gradient card). */
   density?: 'default' | 'flat'
   /** When true, spans two columns at lg+ (opt-in — default keeps equal-width rows). */
@@ -123,6 +128,7 @@ export function KpiTile({
   seriesAriaLabel,
   seriesDays,
   variant = 'default',
+  reserveTrend = false,
   wide = false,
   density = 'default',
   className,
@@ -187,8 +193,8 @@ export function KpiTile({
           {sublabel}
         </InlineProof>
       )}
-      {showSpark && (
-        <div className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible">
+      {showSpark ? (
+        <div data-reports-kpi-trend="" className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible">
           <LineSparkline
             values={series!}
             timestamps={showSparkAxes ? seriesDays : undefined}
@@ -211,7 +217,9 @@ export function KpiTile({
             rows={summaryRows}
           />
         </div>
-      )}
+      ) : reserveTrend ? (
+        <div data-reports-kpi-trend="" className="mt-1.5 h-4.5" aria-hidden="true" />
+      ) : null}
     </div>
   )
   if (to) {

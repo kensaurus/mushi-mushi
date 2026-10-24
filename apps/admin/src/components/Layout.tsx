@@ -405,9 +405,12 @@ export function Layout({ children }: { children: ReactNode }) {
         className={`nav-link ${gated ? 'opacity-80' : ''}`}
       >
         <Icon className="nav-link-icon" />
-        <span>{label}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         {gated && requiresFeature && <UpgradePill flag={requiresFeature} className="ml-auto" />}
-        {renderNavBadge(path, navCounts, { criticalReports30d })}
+        {/* Slot stays in the row before counts load so the badge cannot wrap the label. */}
+        <span data-nav-badge-slot="" className="ml-auto inline-flex h-4 min-w-9 shrink-0 items-center justify-end">
+          {renderNavBadge(path, navCounts, { criticalReports30d })}
+        </span>
       </Link>
     )
   }

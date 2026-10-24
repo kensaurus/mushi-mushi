@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { reportDetailPath, reportPermalink } from '../lib/reportUrl'
 import { usePageData } from '../lib/usePageData'
@@ -34,6 +33,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
+import { ReportsInitialChrome, reportsInitialChromeReady } from '../components/reports/ReportsInitialChrome'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
@@ -154,6 +154,18 @@ export function ReportsPage() {
     isValidating: reportsStatsValidating,
   } = usePageData<ReportsStats>('/v1/admin/reports/stats')
   const reportsStats = reportsStatsData ?? EMPTY_REPORTS_STATS
+  // The queue must not paint until the status banner, fragile-area line, and
+  // triage banner know whether they exist. Inserting them above a painted
+  // queue is the layout shift (KPI growth is reserved on the strip itself).
+  const [narrativeSettled, setNarrativeSettled] = useState(false)
+  const markNarrativeSettled = useCallback(() => setNarrativeSettled(true), [])
+  const chromeReady = reportsInitialChromeReady({
+    listLoading: loading,
+    hasListData: data != null,
+    statsLoading: reportsStatsLoading,
+    hasStatsData: reportsStatsData != null,
+    narrativeSettled,
+  })
 
   const reloadAll = useCallback(() => {
     reload()
@@ -737,7 +749,10 @@ export function ReportsPage() {
   )
 
   return (
-    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-reports">
+    <ReportsInitialChrome
+      ready={chromeReady}
+      skeleton={<TableSkeleton rows={8} columns={6} showFilters showKpiStrip label="Loading reports" />}
+    >
       <PageHeaderBar
         title={copy?.title ?? 'Bugs'}
         icon={<IconReports />}
@@ -821,7 +836,7 @@ export function ReportsPage() {
         ]}
       />
 
-      <DogfoodNarrativeBanner />
+      <DogfoodNarrativeBanner onSettled={markNarrativeSettled} />
 
       {recommendation && (
         <RecommendedAction
@@ -1016,6 +1031,6 @@ export function ReportsPage() {
       />
 
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
-    </div>
+    </ReportsInitialChrome>
   )
 }

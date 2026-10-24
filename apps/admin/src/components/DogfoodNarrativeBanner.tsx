@@ -16,6 +16,7 @@
  *          table without preamble) and on first-load while data hydrates.
  */
 
+import { useLayoutEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -24,14 +25,25 @@ import { useAdminMode } from '../lib/mode'
 import type { DashboardData } from './dashboard/types'
 import { renderDogfoodNarrative } from '../lib/copy'
 import { CHIP_TONE } from '../lib/chipTone'
+import { dogfoodNarrativeSettled } from './reports/ReportsInitialChrome'
 
-export function DogfoodNarrativeBanner() {
+export function DogfoodNarrativeBanner({ onSettled }: { onSettled?: () => void }) {
   const { isAdvanced } = useAdminMode()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   // Reuses /v1/admin/dashboard which is already cached by /. and refreshes
   // every page load. No new BE work — just a second consumer.
   const dashboardQuery = usePageData<DashboardData>('/v1/admin/dashboard')
+  const settled = dogfoodNarrativeSettled({
+    isAdvanced,
+    setupLoading: setup.loading,
+    hasProject: setup.activeProject != null,
+    reportCount: setup.activeProject?.report_count ?? 0,
+    dashboardLoading: dashboardQuery.loading,
+  })
+  useLayoutEffect(() => {
+    if (settled) onSettled?.()
+  }, [settled, onSettled])
 
   if (isAdvanced) return null
   if (setup.loading || dashboardQuery.loading) return null

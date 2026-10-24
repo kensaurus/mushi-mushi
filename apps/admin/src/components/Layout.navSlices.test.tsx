@@ -148,6 +148,19 @@ describe('Layout nav-meta slices', () => {
     expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
+  it('reserves a badge slot on expanded nav links before counts are ready', () => {
+    localStorage.setItem('mushi:ui:sidebar-collapsed', JSON.stringify({ v: 1, value: false }))
+    try {
+      renderAt('/reports')
+      // Counts are not ready (`useNavCounts` returns ready: false). Every
+      // core row still keeps a slot so the number cannot wrap the label.
+      const slots = container!.querySelectorAll('a.nav-link > [data-nav-badge-slot]')
+      expect(slots.length).toBe(CORE_NAV_PATHS.length)
+    } finally {
+      localStorage.removeItem('mushi:ui:sidebar-collapsed')
+    }
+  })
+
   it('adds a Lab’s slice only when that Lab is in the sidebar', () => {
     state.enabledLabs = new Set(['releases'])
     renderAt('/billing')
