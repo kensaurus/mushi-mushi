@@ -264,6 +264,11 @@ For each report it:
    train as a cloud agent's. Without changes: records the agent's
    `Mushi verdict:` on the attempt.
 
+A report whose local run ended without a pull request in the last 7 days
+(a timeout, no change, or a verdict) is skipped; pass `--report ` to run
+it anyway. The agent has 30 minutes, so a report that names several pages is
+fixed one page at a time: split broad reports into one page or cause each.
+
 When Opus says "fix first" on one of these pull requests, run
 `mushi work --followups`. Mushi checks the round (the reviewed commit is still
 the PR's head, at most 2 rounds per PR), sends only the findings that pass its
