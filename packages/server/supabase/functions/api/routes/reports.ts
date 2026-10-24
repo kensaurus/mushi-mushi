@@ -238,6 +238,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         data: {
           window_days: days,
           bySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+          openBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
           total: 0,
         },
       });
@@ -245,12 +246,16 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     const { data: rows } = await db
       .from('reports')
-      .select('severity, created_at')
+      .select('severity, status, created_at')
       .in('project_id', projectIds)
       .gte('created_at', sinceIso)
       .neq('status', 'dismissed');
 
     const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
+    // Still open (not fixed, resolved or verified): "10 critical" read as 10
+    // unresolved when 7 of them were already closed (2026-10-24).
+    const openBySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
+    const closed = new Set(['fixed', 'resolved', 'verified', 'dismissed']);
     // Build a per-day, per-severity matrix so the Reports KPI strip can render
     // a 14d trend sparkline alongside each tile (Round 2 polish — KPI rows
     // need momentum, not just snapshots).
@@ -263,8 +268,9 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       const key = d.toISOString().slice(0, 10);
       dayBuckets.set(key, { critical: 0, high: 0, medium: 0, low: 0, total: 0 });
     }
-    for (const r of (rows ?? []) as Array<{ severity: string | null; created_at: string }>) {
+    for (const r of (rows ?? []) as Array<{ severity: string | null; status: string | null; created_at: string }>) {
       if (r.severity && r.severity in bySeverity) bySeverity[r.severity] += 1;
+      if (r.severity && r.severity in openBySeverity && !closed.has(r.status ?? '')) openBySeverity[r.severity] += 1;
       const dayKey = (r.created_at ?? '').slice(0, 10);
       const bucket = dayBuckets.get(dayKey);
       if (bucket) {
@@ -279,6 +285,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       data: {
         window_days: days,
         bySeverity,
+        openBySeverity,
         byDay,
         total: (rows ?? []).length,
       },
@@ -387,6 +394,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       else if (status === 'new') query = query.in('status', [...NEW_BUCKET_STATUSES]);
       // `active`: everything but dismissed — what the severity KPI tiles count.
       else if (status === 'active') query = query.neq('status', 'dismissed');
+      // `unresolved`: not fixed, resolved, verified or dismissed — the severity tiles' open count.
+      else if (status === 'unresolved') query = query.not('status', 'in', '(fixed,resolved,verified,dismissed)');
       else query = query.eq('status', status);
     }
     if (category) query = query.eq('category', category);

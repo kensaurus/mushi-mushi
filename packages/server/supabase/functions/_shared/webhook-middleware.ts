@@ -58,7 +58,7 @@
 import type { Context } from 'jsr:@hono/hono'
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import { log } from './logger.ts'
-import { logDbFailure } from './error-codes.ts'
+import { isTransientGatewayStatus, logDbFailure } from './error-codes.ts'
 
 type WebhookSource =
   | 'sentry' | 'sentry_seer' | 'github' | 'jira' | 'pagerduty'
@@ -236,6 +236,7 @@ export function createWebhookMiddleware(source: WebhookSource) {
     // belongs to. A missing Mushi project is not an insert failure.
     let data: { id: string } | null = null
     let error: { message?: string; code?: string | null } | null = null
+    let status = 0
     try {
       const inserted = await db
         .from('webhook_audit_log')
@@ -252,6 +253,7 @@ export function createWebhookMiddleware(source: WebhookSource) {
         .single()
       data = inserted.data
       error = inserted.error
+      status = inserted.status
     } catch (err) {
       // A thrown client/gateway error is the same class of failure as a
       // returned PostgREST error: the audit row is best-effort.
@@ -264,12 +266,18 @@ export function createWebhookMiddleware(source: WebhookSource) {
       // "Project not specified." is the Supabase API gateway (no project ref
       // on the host), classified transient in isTransientDbConnectionError so
       // it stays in logs instead of opening a Sentry issue.
-      logDbFailure(log, 'audit insert failed', error, {
+      // A gateway 5xx (Cloudflare 520-527, 502-504) or a failed fetch never
+      // reached Postgres: a warn, like a pooler reset. Its JSON body often has
+      // no `message`, so the status names the failure (MUSHI-MUSHI-SERVER-2R).
+      const meta = {
         scope: 'webhook-middleware',
         source,
         delivery_id: deliveryId ?? null,
-        err: error?.message ?? 'insert returned no row',
-      })
+        status,
+        err: error?.message || `HTTP ${status}, no row returned`,
+      }
+      if (isTransientGatewayStatus(status)) log.warn('audit insert failed', { ...meta, transient: true })
+      else logDbFailure(log, 'audit insert failed', error, meta)
       return {
         id: crypto.randomUUID(),
         resolve: async () => {},

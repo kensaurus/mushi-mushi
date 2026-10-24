@@ -380,12 +380,12 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
   const [settingsRes, reposRes, keysRes] = await Promise.all([
     db
       .from('project_settings')
-      .select('project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, cursor_api_key_ref')
+      .select('project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, autofix_max_concurrent, cursor_api_key_ref')
       .in('project_id', allIds),
     db.from('project_repos').select('project_id').in('project_id', allIds),
     db
       .from('byok_keys')
-      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status', columnReady))
+      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status, exhausted_until', columnReady))
       .eq('provider_slug', 'cursor')
       .or(filters.join(',')),
   ])

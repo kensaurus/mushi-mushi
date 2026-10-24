@@ -95,7 +95,7 @@ async function event(db: SupabaseClient, row: QueueRow, status: 'ok' | 'fail' | 
   if (error && (error as { code?: string }).code !== '23505') log.warn('merge-queue event not written', { rowId: row.id, err: error.message })
 }
 
-export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQueueDeps): Promise<string> {
+export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQueueDeps, opts: { trainMode?: boolean } = {}): Promise<string> {
   const now = deps.now ?? (() => new Date())
   const set = async (patch: Record<string, unknown>) => {
     await db.from('fix_merge_queue').update({ ...patch, updated_at: now().toISOString(), claimed_until: null }).eq('id', row.id)
@@ -154,6 +154,13 @@ export async function processRow(db: SupabaseClient, row: QueueRow, deps: MergeQ
     { state: pull.state, merged: pull.merged, draft: pull.draft, mergeable: pull.mergeable, mergeableState: pull.mergeableState, headSha: head },
     checks,
   )
+  // A train app's PR comes here only to have its conflict with main resolved
+  // (ADR 0044): anything else sends it back to the next train, so it never
+  // merges alone.
+  if (opts.trainMode && step.do !== 'resolve' && step.do !== 'done' && step.do !== 'drop') {
+    await set({ state: 'queued', detail: 'No longer conflicts with the base branch; it rides the next release train.', cursor_agent_id: null })
+    return 'to_train'
+  }
   switch (step.do) {
     case 'done':
       await set({ state: 'merged', detail: 'Merged.', merged_at: pull.mergedAt ?? now().toISOString() })
@@ -364,6 +371,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
   let rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
   const tally: Record<string, number> = {}
+  let trainResolving = new Set<string>()
 
   // Release trains (ADR 0044): apps in train mode batch their approved PRs;
   // only express fixes (security advisories, critical bugs) merge alone.
@@ -399,7 +407,10 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
       await db.from('fix_merge_queue').update({ claimed_until: null }).eq('id', lead.id)
       tally[`train_${outcome}`] = (tally[`train_${outcome}`] ?? 0) + 1
     }
-    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
+    // Train apps keep two things on the single-PR path: express fixes, and
+    // PRs a conflict agent is resolving (the train marked them `resolving`).
+    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id) || r.state === 'resolving')
+    trainResolving = new Set(rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id)).map((r) => r.id))
   }
   // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
@@ -427,7 +438,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     if (!claimed || (claimed as unknown[]).length === 0) continue
     let outcome: string
     try {
-      outcome = await processRow(db, row, deps)
+      outcome = await processRow(db, row, deps, { trainMode: trainResolving.has(row.id) })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log.warn('merge-queue row failed', { rowId: row.id, err: message })

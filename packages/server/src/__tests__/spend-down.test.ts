@@ -45,6 +45,8 @@ import {
   reportHasCheapEvidence,
   reportsWithNoRetryVerdict,
   reportsToRetryAfterKeyLimit,
+  reportsToRetryAfterHold,
+  isCursorKeyLimitError,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -265,6 +267,8 @@ describe('projectCapacity', () => {
   it('takes the tightest of the key, the 3-running bound and the auto-fix cap', () => {
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(2)
     expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 2, autofixMaxPerDay: 3 })).toBe(1)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 1, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(0)
+    expect(projectCapacity({ remainingForKey: 10, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: null, maxConcurrent: 1 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 1, openCloudAttempts: 0, autofixDispatchesToday: 0, autofixMaxPerDay: 30 })).toBe(1)
     expect(projectCapacity({ remainingForKey: 5, openCloudAttempts: 4, autofixDispatchesToday: 0, autofixMaxPerDay: null })).toBe(0)
   })
@@ -416,7 +420,7 @@ describe('runSpendDownForKey', () => {
       dispatch: async () => ({ ok: true }),
     })
     expect(busy.dispatched).toBe(0)
-    expect(busy.projects[0].stopped).toBe('Three fixes already running')
+    expect(busy.projects[0].stopped).toBe('3 running already (the app\'s limit)')
   })
 
   it('does nothing outside the window', async () => {
@@ -1060,6 +1064,17 @@ describe('spendDownStopLoss: a fix that regressed after a Mushi merge counts as 
   })
 })
 
+describe('isCursorKeyLimitError', () => {
+  it('matches Cursor refusing a dispatch for the account usage limit, nothing else', () => {
+    expect(isCursorKeyLimitError('Cursor API 400 usage_limit_exceeded: On-demand usage is required.')).toBe(true)
+    expect(isCursorKeyLimitError("Cursor API 400 validation_error: Failed to verify existence of branch 'main'")).toBe(false)
+    expect(isCursorKeyLimitError(null)).toBe(false)
+    expect(isCursorKeyLimitError("Cursor run ERROR: You've hit your usage limit for this plan.")).toBe(true)
+    expect(isCursorKeyLimitError('Usage limit reached. Upgrade to continue.')).toBe(true)
+    expect(isCursorKeyLimitError('Cursor API 429 rate_limited: Too many requests')).toBe(false)
+  })
+})
+
 describe('reportsToRetryAfterKeyLimit', () => {
   const now = new Date('2026-10-23T13:00:00Z')
   const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required. Enable on-demand usage at https://www.cursor.com/dashboard?tab=settings to continue using Background Agents.'
@@ -1083,3 +1098,55 @@ describe('reportsToRetryAfterKeyLimit', () => {
     expect([...out]).toEqual(['a'])
   })
 })
+
+describe('reportsToRetryAfterHold', () => {
+  it('retries a report whose newest PR was held 12 h ago, under three attempts', () => {
+    const now = new Date('2026-10-24T12:00:00Z')
+    const attempts = [
+      { id: 'a1', report_id: 'a', created_at: '2026-10-23T20:00:00Z' },
+      { id: 'b1', report_id: 'b', created_at: '2026-10-24T06:00:00Z' },
+      { id: 'c1', report_id: 'c', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'c2', report_id: 'c', created_at: '2026-10-23T00:00:00Z' },
+      { id: 'd1', report_id: 'd', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'd2', report_id: 'd', created_at: '2026-10-21T00:00:00Z' },
+      { id: 'd3', report_id: 'd', created_at: '2026-10-22T00:00:00Z' },
+      { id: 'e1', report_id: 'e', created_at: '2026-10-20T00:00:00Z' },
+      { id: 'e2', report_id: 'e', created_at: '2026-10-21T00:00:00Z' },
+    ]
+    const held = new Set(['a1', 'b1', 'c2', 'd3', 'e1'])
+    // a: held 16 h ago. b: held only 6 h ago. c: second attempt held. d: three attempts already.
+    // e: the held attempt is not the newest one (a later attempt is merge-approved or still open).
+    expect([...reportsToRetryAfterHold(attempts, held, now)].sort()).toEqual(['a', 'c'])
+  })
+})
+
+describe('a used-up Cursor key hands its apps to the next one (2026-10-24)', () => {
+  it('skips a key whose exhausted_until is in the future, and takes it back after', () => {
+    const project = { id: 'p1', organization_id: 'o1', has_legacy_key: false, org_owner_ids: [] }
+    const keys = [
+      { id: 'ayako', project_id: null, organization_id: 'o1', priority: 10, status: 'active', test_status: 'ok', exhausted_until: '2026-10-24T12:00:00Z' },
+      { id: 'suzu', project_id: null, organization_id: 'o1', priority: 50, status: 'active', test_status: 'ok', exhausted_until: null },
+    ]
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T08:00:00Z'))).toBe('suzu')
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T13:00:00Z'))).toBe('ayako')
+  })
+})
+
+describe('an app whose own keys are used up goes to its organization, then universal keys, not its legacy key', () => {
+  it('skips the legacy Integrations key when the app has pool keys of its own', () => {
+    const now = Date.parse('2026-10-24T08:00:00Z')
+    const used = { status: 'active', test_status: 'ok', exhausted_until: '2026-10-29T00:00:00Z' }
+    const glot = { id: 'glot', organization_id: 'kenji', has_legacy_key: true, org_owner_ids: ['owner'] }
+    const keys = [
+      { id: 'hirose', project_id: 'glot', organization_id: null, priority: 100, ...used },
+      { id: 'ayako', project_id: null, organization_id: 'kenji', priority: 10, status: 'active', test_status: 'ok' },
+      { id: 'suzu', project_id: null, organization_id: null, owner_user_id: 'owner', priority: 50, status: 'active', test_status: 'ok' },
+    ]
+    expect(firstCursorKeyFor(glot, keys, now)).toBe('ayako')
+    const mushi = { id: 'mushi', organization_id: 'mm', has_legacy_key: true, org_owner_ids: ['owner'] }
+    expect(firstCursorKeyFor(mushi, [{ id: 'hirose-shared', project_id: 'mushi', organization_id: null, priority: 100, ...used }, keys[2]], now)).toBe('suzu')
+    // No pool key of its own: the legacy key still comes first (ADR 0023).
+    expect(firstCursorKeyFor({ ...mushi, id: 'other' }, [keys[2]], now)).toBe('legacy')
+  })
+})
+

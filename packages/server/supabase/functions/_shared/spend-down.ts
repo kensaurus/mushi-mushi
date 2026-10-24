@@ -89,7 +89,15 @@ export function reportsWithNoRetryVerdict(
 }
 
 /** Cursor refused to start an agent because the account ran out (no agent ran, nothing was spent). */
-const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required/i
+// Cursor's create call answers `usage_limit_exceeded` / "On-demand usage is
+// required"; a run that hits the limit later fails with prose such as "You've
+// hit your usage limit". Match both, never a rate limit (429 backs off).
+const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required|\b(?:hit|reached|exceeded) (?:your|the) (?:usage|plan|monthly)[ -]?limit|\busage limit (?:reached|exceeded)\b/i
+
+/** A fix failure that is the Cursor account's usage limit (see KEY_LIMIT_RE). */
+export function isCursorKeyLimitError(message: string | null | undefined): boolean {
+  return KEY_LIMIT_RE.test(message ?? '')
+}
 const KEY_LIMIT_RETRY_AFTER_MS = 30 * 60_000
 const KEY_LIMIT_MAX_RETRIES = 2
 
@@ -112,10 +120,42 @@ export function reportsToRetryAfterKeyLimit(
     const sorted = [...list].sort((x, y) => (x.created_at < y.created_at ? 1 : -1))
     const latest = sorted[0]
     const limited = (a: { failure_category: string | null; error?: string | null }) =>
-      a.failure_category === 'cursor_api_error' && KEY_LIMIT_RE.test(a.error ?? '')
+      a.failure_category === 'cursor_api_error' && isCursorKeyLimitError(a.error)
     if (!limited(latest)) continue
     if (now.getTime() - Date.parse(latest.created_at) < KEY_LIMIT_RETRY_AFTER_MS) continue
     if (sorted.filter(limited).length > KEY_LIMIT_MAX_RETRIES) continue
+    out.add(id)
+  }
+  return out
+}
+
+/** A report whose PR Opus held may run again after this long (ADR 0028 amendment, 2026-10-24). */
+export const HELD_RETRY_AFTER_MS = 12 * 3_600_000
+/** Attempts per report, counting the held ones, after which spend-down stops retrying it. */
+export const HELD_MAX_ATTEMPTS = 3
+
+/**
+ * Reports whose newest attempt opened a PR that the Opus review held, at
+ * least 12 hours ago, with fewer than HELD_MAX_ATTEMPTS attempts: spend-down
+ * may run a new agent on them although the report is still `fixing` and
+ * inside the 7-day cooldown. The new agent's prompt carries what the held
+ * attempt did and why it was held (_shared/prior-attempts.ts), so it does not
+ * start from the same theory. On 2026-10-24, 126 reports sat held while the
+ * Cursor keys idled on "No open report to fix".
+ */
+export function reportsToRetryAfterHold(
+  attempts: Array<{ id: string; report_id: string; created_at: string }>,
+  heldAttemptIds: ReadonlySet<string>,
+  now: Date,
+): Set<string> {
+  const byReport = new Map<string, Array<{ id: string; created_at: string }>>()
+  for (const a of attempts) byReport.set(a.report_id, [...(byReport.get(a.report_id) ?? []), a])
+  const out = new Set<string>()
+  for (const [id, list] of byReport) {
+    if (list.length >= HELD_MAX_ATTEMPTS) continue
+    const latest = list.reduce((x, y) => (y.created_at > x.created_at ? y : x))
+    if (!heldAttemptIds.has(latest.id)) continue
+    if (now.getTime() - Date.parse(latest.created_at) < HELD_RETRY_AFTER_MS) continue
     out.add(id)
   }
   return out
@@ -163,10 +203,17 @@ export interface CursorPoolKey {
   priority: number | null
   status: string
   test_status: string | null
+  /** Cursor refused this key for its plan's usage limit until then: new agents go to the next key. */
+  exhausted_until?: string | null
 }
 
-/** Rows the resolver will use (byok.ts byokPoolCandidates); cooldowns are transient and ignored here. */
-function usableForResolver(k: CursorPoolKey): boolean {
+/**
+ * Rows the resolver will use for a NEW agent (byok.ts byokPoolCandidates plus
+ * agent-adapters cursorKeyForNewWork): cooldowns are transient and ignored
+ * here, but a used-up key hands its apps to the next one.
+ */
+function usableForResolver(k: CursorPoolKey, nowMs: number): boolean {
+  if (k.exhausted_until && Date.parse(k.exhausted_until) > nowMs) return false
   return (k.status === 'active' || k.status === 'quota_exhausted') && (k.test_status === 'ok' || k.test_status === 'error_quota')
 }
 
@@ -181,6 +228,7 @@ function usableForResolver(k: CursorPoolKey): boolean {
 export function firstCursorKeyFor(
   project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key' | 'org_owner_ids'>,
   keys: CursorPoolKey[],
+  nowMs: number = Date.now(),
 ): string | 'legacy' | 'tie' | null {
   const pick = (rows: CursorPoolKey[]): string | 'tie' | null => {
     if (rows.length === 0) return null
@@ -188,10 +236,15 @@ export function firstCursorKeyFor(
     if (sorted.length > 1 && (sorted[0].priority ?? 100) === (sorted[1].priority ?? 100)) return 'tie'
     return sorted[0].id
   }
-  const usable = keys.filter(usableForResolver)
+  const usable = keys.filter((k) => usableForResolver(k, nowMs))
   const own = usable.filter((k) => k.project_id === project.id)
   if (own.length > 0) return pick(own)
-  if (project.has_legacy_key) return 'legacy'
+  // Like the resolver, an app with pool keys of its own never falls back to
+  // its legacy Integrations key, also when those keys are used up: the next
+  // pick is its organization's, then a universal key (2026-10-24: hirose's
+  // keys used up on glot.it and mushi-mushi left both apps unserved).
+  const hasOwnPoolKeys = keys.some((k) => k.project_id === project.id)
+  if (project.has_legacy_key && !hasOwnPoolKeys) return 'legacy'
   if (!project.organization_id) return null
   const shared = usable.filter((k) => !k.project_id && k.organization_id === project.organization_id)
   if (shared.length > 0) return pick(shared)
@@ -369,8 +422,10 @@ export function projectCapacity(args: {
   openCloudAttempts: number
   autofixDispatchesToday: number
   autofixMaxPerDay: number | null
+  /** project_settings.autofix_max_concurrent: fewer agents at once where the app's CI is slow or shared. */
+  maxConcurrent?: number | null
 }): number {
-  const byConcurrency = SPEND_DOWN_MAX_OPEN_PER_PROJECT - args.openCloudAttempts
+  const byConcurrency = (args.maxConcurrent ?? SPEND_DOWN_MAX_OPEN_PER_PROJECT) - args.openCloudAttempts
   const byAutofixCap =
     args.autofixMaxPerDay == null ? Number.POSITIVE_INFINITY : args.autofixMaxPerDay - args.autofixDispatchesToday
   return Math.max(0, Math.min(args.remainingForKey, byConcurrency, byAutofixCap))

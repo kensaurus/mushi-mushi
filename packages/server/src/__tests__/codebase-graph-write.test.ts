@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type Row } from './__stubs__/fake-supabase.ts'
-import { pruneGraphToLivePaths, writeCodebaseGraph } from '../../supabase/functions/_shared/codebase-graph-write.ts'
+import { listIndexedFilePaths, pruneGraphToLivePaths, writeCodebaseGraph } from '../../supabase/functions/_shared/codebase-graph-write.ts'
 import type { KnowledgeGraph } from '../../supabase/functions/_shared/codebase-graph-build.ts'
 vi.mock('../../supabase/functions/_shared/wiki-ingest.ts', () => ({
   runWikiIngestForProject: vi.fn(async () => ({ processed: 0, ready: 0, failed: 0 })),
@@ -63,6 +63,30 @@ describe('pruneGraphToLivePaths', () => {
   it('keeps a non-empty graph when the path lookup came back empty', () => {
     const original = graph([{ id: 'a', type: 'file', name: 'a.ts', filePath: 'src/a.ts' }])
     expect(pruneGraphToLivePaths(original, new Set())).toBe(original)
+  })
+})
+
+describe('listIndexedFilePaths', () => {
+  it('pages by file_path after the last one, never by offset (MUSHI-MUSHI-SERVER-2Q)', async () => {
+    const rows: Row[] = []
+    // 2,600 chunk rows over 1,300 paths: pages end inside a path's chunks.
+    for (let i = 0; i < 1300; i++) {
+      const path = `src/f${String(i).padStart(4, '0')}.ts`
+      rows.push({ ...fileRow(path), id: `${path}#1` }, { ...fileRow(path), id: `${path}#2`, symbol_name: 'x' })
+    }
+    rows.push({ ...fileRow('src/gone.ts'), tombstoned_at: '2026-10-07T00:00:00Z' })
+    rows.push({ ...fileRow('src/other.ts'), project_id: 'another-project' })
+    const db = makeFakeDb({ project_codebase_files: rows })
+    const paths = await listIndexedFilePaths(db as never, P)
+    expect(paths.size).toBe(1300)
+    expect(paths.has('src/f0000.ts') && paths.has('src/f1299.ts')).toBe(true)
+    expect(paths.has('src/gone.ts') || paths.has('src/other.ts')).toBe(false)
+  })
+
+  it('reads with a file_path keyset in the source', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/codebase-graph-write.ts'), 'utf8')
+    expect(src).toMatch(/\.gt\('file_path', after\)/)
+    expect(src).not.toMatch(/\.range\(/)
   })
 })
 
