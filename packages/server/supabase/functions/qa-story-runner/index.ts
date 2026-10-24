@@ -45,6 +45,10 @@ import { isTransientDbConnectionError } from '../_shared/error-codes.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, QaStoryRunnerBodySchema, type QaStoryRunnerBody } from '../_shared/validate.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import {
+  sweepStalePendingManualRuns,
+  type QaPendingSweepDb,
+} from '../_shared/qa-pending-run-sweep.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
@@ -695,6 +699,20 @@ Deno.serve(
     rlog.info('qa-story-runner invoked', { jobName: 'qa-story-runner' })
 
     try {
+      // Manual runs are inserted pending, then the API fire-and-forgets this
+      // function. If that invoke never starts (503 BOOT_ERROR), the row stays
+      // pending and the console shows it as in flight. Expire those here;
+      // a failure must not skip the stories that are actually due.
+      try {
+        const swept = await sweepStalePendingManualRuns(db as unknown as QaPendingSweepDb, now)
+        if (swept.error) rlog.warn('pending manual run sweep failed', { err: swept.error })
+        else if (swept.expired > 0) {
+          rlog.info('expired pending manual runs', { expired: swept.expired })
+        }
+      } catch (sweepErr) {
+        rlog.warn('pending manual run sweep threw', { err: String(sweepErr) })
+      }
+
       // Fetch all enabled stories. The previous select embedded
       // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
       // which referenced a non-existent `projects → mushi_runtime_config`
