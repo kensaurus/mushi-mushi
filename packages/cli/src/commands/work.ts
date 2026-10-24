@@ -24,8 +24,7 @@ import type { WhoamiData } from '../cli-types.js'
 
 /** @internal Exported for tests only. The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
 export const WORK_AGENT_KIND = 'mcp'
-/** @internal Exported for tests only. */
-export const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
+const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
 const PROMPT_MAX_CHARS = 40_000
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
 
