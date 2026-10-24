@@ -10,6 +10,13 @@
     min-height: 100vh;
     background-color: var(--mushi-paper);
     color: var(--mushi-ink);
+    /* Brand dark theme leaves --mushi-paper-wash at #efe7da. Cream ink
+       (#f2ebdd) on that beige is ~1.03:1, so panel text (the leaderboard
+       empty state) disappears. Bounties is always dark, so a wash is an
+       opaque lift of the paper. srgb, not oklch, so the contrast test
+       measures the same mix the browser paints. Keep the ink share small:
+       muted text drops under 4.5:1 above ~10%. */
+    --mushi-paper-wash: color-mix(in srgb, var(--mushi-ink) 6%, var(--mushi-paper));
   }
 
   .testers-nav {
