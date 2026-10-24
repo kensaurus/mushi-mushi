@@ -88,5 +88,11 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       // The genuine-failure branch must still page via log.error.
       expect(src).toContain("log.error('Fix worker failed'");
     });
+
+    it('logs a Cursor account usage limit at warn, other Cursor errors at error (MUSHI-MUSHI-SERVER-28)', () => {
+      expect(src).toMatch(
+        /failureCategory === 'cursor_api_error' && isCursorKeyLimitError\(errMsg\)\)\s*\{[\s\S]{0,400}log\.warn\(/,
+      );
+    });
   });
 });

@@ -53,26 +53,37 @@ export function pruneGraphToLivePaths(
   }
 }
 
-/** Every non-tombstoned path, paged so PostgREST max_rows cannot truncate it. */
+/**
+ * Every non-tombstoned path, paged so PostgREST max_rows cannot truncate it.
+ *
+ * Keyset pages on file_path (`> last`), an index-only scan of
+ * idx_codebase_files_active. The OFFSET pages ordered by id re-read and
+ * re-sorted the project's rows for every page: page 26 of a 26k-chunk project
+ * took 1.8 s (84k buffers) warm, the whole walk about 25 s of database time,
+ * and cold it hit the 8 s statement timeout (MUSHI-MUSHI-SERVER-2Q). Keyset:
+ * 9 ms a page. A page that ends inside a path's chunks loses nothing: the
+ * path is already in the set.
+ */
 export async function listIndexedFilePaths(
   db: SupabaseClient,
   projectId: string,
 ): Promise<Set<string>> {
   const paths = new Set<string>()
+  let after: string | null = null
   for (let page = 0; page < MAX_PATH_PAGES; page++) {
-    const from = page * PATH_PAGE
-    const { data, error } = await db
+    let query = db
       .from('project_codebase_files')
       .select('file_path')
       .eq('project_id', projectId)
       .is('tombstoned_at', null)
-      .order('id', { ascending: true })
-      .range(from, from + PATH_PAGE - 1)
+    if (after !== null) query = query.gt('file_path', after)
+    const { data, error } = await query.order('file_path', { ascending: true }).limit(PATH_PAGE)
     if (error) throw new Error(`project_codebase_files path read failed: ${error.message}`)
     for (const row of data ?? []) {
       if (typeof row.file_path === 'string') paths.add(row.file_path)
     }
     if (!data || data.length < PATH_PAGE) return paths
+    after = (data[data.length - 1] as { file_path: string }).file_path
   }
   // The last page was full, so the set may be missing live files. An empty
   // set tells pruneGraphToLivePaths to keep the graph.
