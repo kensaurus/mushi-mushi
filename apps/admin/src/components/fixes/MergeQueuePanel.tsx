@@ -12,6 +12,11 @@
  *          Release trains (ADR 0044, the default): approved PRs ride one
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
+ *
+ *          A long owner/repo#N is unbreakable monospace. Refs use
+ *          wrap-anywhere, and the reason uses a content flex basis
+ *          (flex-auto, not flex-1). On a 390px row the reason wraps onto
+ *          its own line instead of collapsing to zero width beside the ref.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -181,11 +186,11 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             <li key={l.repo} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
               <Badge tone={l.moving ? 'accent' : 'neutral'}>{l.moving ? 'Train' : 'Next train'}</Badge>
               {l.moving?.pr_number ? (
-                <a href={prLink({ repo: l.repo, pr_number: l.moving.pr_number })} target="_blank" rel="noreferrer" className="font-mono text-fg-secondary hover:text-fg hover:underline">
+                <a href={prLink({ repo: l.repo, pr_number: l.moving.pr_number })} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
                   {l.repo}#{l.moving.pr_number}
                 </a>
               ) : (
-                <span className="font-mono text-fg-secondary">{l.repo}</span>
+                <span className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary">{l.repo}</span>
               )}
               <span>{l.text}</span>
             </li>
@@ -196,14 +201,15 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
         <ul className="divide-y divide-edge-subtle">
           {listed.map((r) => (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
-              <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]}>{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
-              <a href={prLink(r)} target="_blank" rel="noreferrer" className="text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
+              <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
+              <a href={prLink(r)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
                 {r.repo}#{r.pr_number}
               </a>
-              <span className="min-w-0 flex-1 text-2xs text-fg-muted" title={r.detail ?? undefined}>
+              {/* flex-auto (basis auto), not flex-1 (basis 0%): a 0% basis stays on the ref's line and collapses the reason. */}
+              <span className="min-w-0 flex-auto wrap-break-word text-2xs text-fg-muted" title={r.detail ?? undefined}>
                 {r.detail ?? 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
               </span>
-              <Btn variant="ghost" size="sm" loading={removing === r.id} onClick={() => void remove(r)}>
+              <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
                 Remove
               </Btn>
             </li>
@@ -219,7 +225,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             <ul className="mt-1 space-y-0.5">
               {merged.map((r) => (
                 <li key={r.id} className="text-2xs text-fg-muted">
-                  <a href={prLink(r)} target="_blank" rel="noreferrer" className="font-mono hover:text-fg hover:underline">
+                  <a href={prLink(r)} target="_blank" rel="noreferrer" className="wrap-anywhere font-mono hover:text-fg hover:underline">
                     {r.repo}#{r.pr_number}
                   </a>{' '}
                   merged {r.merged_at ? <RelativeTime value={r.merged_at} /> : null}
