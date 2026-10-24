@@ -624,7 +624,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ux-runs",
     markdown: "admin/ux-runs.md",
     keywords: ["admin", "ux-runs", "runs", "ux"],
-    headings: ["Run in the cloud", "What you see", "File as bug", "Where the changes are"],
+    headings: ["Run in the cloud", "What you see", "File as bug", "Audit signed-in screens", "Where the changes are"],
     excerpt: "Each screen your coding agent worked on in a mushi ux run, with its plan, every attempt, before and after screenshots, and what was kept.",
   },
   {
