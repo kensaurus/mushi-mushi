@@ -108,6 +108,17 @@ describe('KpiTile hero emphasis + stagger forwarding', () => {
     expect(html).not.toContain('lg:col-span-2')
   })
 
+  it('reserves the axis-free spark row until a series is drawn', () => {
+    const reserved = renderToStaticMarkup(<KpiTile label="Critical" value="…" reserveSpark />)
+    expect(reserved).toContain('data-testid="kpi-spark-reserve"')
+    expect(reserved).toContain('h-[18px]')
+    const drawn = renderToStaticMarkup(
+      <KpiTile label="Critical" value="3" reserveSpark series={[0, 1, 2]} />,
+    )
+    expect(drawn).not.toContain('kpi-spark-reserve')
+    expect(drawn).toContain('role="img"')
+  })
+
   // Bug 3: MetricStrip(stagger) injects className + style via cloneElement;
   // KpiTile must forward both to the card root or the entrance animation is a
   // complete no-op. Render the real composition the dashboard uses.

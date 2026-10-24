@@ -64,6 +64,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
               <FilterChip
                 label={b.label}
                 count={stats ? count : null}
+                reserveCount
                 active={status === b.value}
                 onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
                 tone={b.tone}
@@ -85,6 +86,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
           key={b.value}
           label={b.label}
           count={stats ? (bySeverity[b.value] ?? 0) : null}
+          reserveCount
           active={severity === b.value}
           onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
           tone={b.tone}

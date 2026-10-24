@@ -20,6 +20,8 @@ interface FilterChipProps {
   /** Live count shown next to the label — skipped when undefined so the
    *  chip can be used as a plain toggle (e.g. "Only mine"). */
   count?: number | null
+  /** Keep the count pill's width before `count` arrives (reports quick filters). */
+  reserveCount?: boolean
   active: boolean
   onClick: () => void
   tone?: FilterChipTone
@@ -64,6 +66,7 @@ const CHIP_IDLE: Record<FilterChipTone, string> = {
 export function FilterChip({
   label,
   count,
+  reserveCount = false,
   active,
   onClick,
   tone = 'default',
@@ -92,15 +95,22 @@ export function FilterChip({
     >
       {icon && <span aria-hidden className="inline-flex items-center">{icon}</span>}
       <span>{label}</span>
-      {typeof count === 'number' && (
+      {(typeof count === 'number' || reserveCount) && (
         <span
-          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
-            active ? 'bg-fg/10' : 'bg-surface-raised/70'
+          className={`inline-flex justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
+            reserveCount ? 'min-w-[2.5rem] tabular-nums' : 'min-w-[1rem]'
+          } ${
+            typeof count === 'number'
+              ? active
+                ? 'bg-fg/10'
+                : 'bg-surface-raised/70'
+              : 'invisible'
           }`}
-          role="img"
-          aria-label={`${count} results`}
+          {...(typeof count === 'number'
+            ? { role: 'img' as const, 'aria-label': `${count} results` }
+            : { 'aria-hidden': true as const })}
         >
-          {count > 999 ? '999+' : count}
+          {typeof count === 'number' ? (count > 999 ? '999+' : count) : '0'}
         </span>
       )}
     </button>

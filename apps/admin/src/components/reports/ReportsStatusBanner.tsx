@@ -1,6 +1,7 @@
 /**
  * FILE: apps/admin/src/components/reports/ReportsStatusBanner.tsx
  * PURPOSE: Triage queue posture — ingest, backlog, critical, clear.
+ *          `ReportsStatusBannerReserve` holds that box while stats load.
  */
 
 import { RelativeTime } from '../ui'
@@ -16,6 +17,48 @@ interface Props {
   onRefresh?: () => void
   refreshing?: boolean
   plainBanner?: boolean
+}
+
+/** Same box as StatusBannerShell (title, subtitle, sm button) before stats land. */
+export function ReportsStatusBannerReserve() {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="reports-status-reserve"
+      className="flex flex-col gap-3 rounded-md border border-transparent px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full" />
+        <div className="min-w-0 space-y-1">
+          <p className="invisible text-xs font-medium">12 reports waiting for review</p>
+          <p className="invisible text-2xs">
+            Critical bugs block user workflows — confirm severity and dispatch fixes first.
+          </p>
+        </div>
+      </div>
+      <span className="inline-flex min-h-6 w-36 shrink-0" />
+    </div>
+  )
+}
+
+/** Same box as RecommendedAction while the report list is still loading. */
+export function ReportsRecommendationReserve() {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="reports-recommendation-reserve"
+      className="mb-3 flex items-start gap-3 rounded-md border border-transparent p-3"
+    >
+      <span className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="invisible text-sm font-medium leading-tight">3 critical reports need triage</p>
+        <p className="invisible mt-1 text-xs leading-relaxed">
+          High-severity reports are still pending. Open them to confirm classification and dispatch a fix.
+        </p>
+      </div>
+      <span className="inline-flex min-h-6 w-40 shrink-0" />
+    </div>
+  )
 }
 
 export function ReportsStatusBanner({

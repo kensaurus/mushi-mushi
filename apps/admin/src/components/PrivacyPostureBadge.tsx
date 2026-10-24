@@ -51,7 +51,22 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
   const railDescId = useId();
 
   if (!activeProjectId || errorMessage === 'no_projects') return null;
-  if (loading) return null;
+  // Same hit area as the loaded chip so the footer does not jump.
+  if (loading) {
+    if (compact) {
+      return <span className="nav-rail-item" aria-hidden="true" data-testid="privacy-posture-reserve" />;
+    }
+    return (
+      <div
+        aria-hidden="true"
+        data-testid="privacy-posture-reserve"
+        className="flex w-full items-center gap-1.5 px-2 py-1"
+      >
+        <span className="inline-block h-1.5 w-1.5 shrink-0" />
+        <span className="invisible inline-flex rounded-sm px-1 py-px text-2xs">Platform key</span>
+      </div>
+    );
+  }
 
   const isByok = data?.byok_configured ?? false;
   const label = error ? 'Privacy unavailable' : isByok ? 'BYOK' : 'Platform key';

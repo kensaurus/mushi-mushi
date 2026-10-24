@@ -77,6 +77,9 @@ export interface KpiTileProps {
    *  polish: every KPI row now shows momentum, not just a snapshot.
    *  Series should be in chronological order (oldest → newest). */
   series?: number[]
+  /** Keep the axis-free sparkline row (18px) before `series` arrives so the
+   *  tile does not grow and push the page. Ignored once a spark is shown. */
+  reserveSpark?: boolean
   /** Optional accent class for the sparkline (Tailwind `text-*`). Defaults to
    *  matching the tile accent so the spark visually anchors to the number. */
   seriesAccent?: string
@@ -119,6 +122,7 @@ export function KpiTile({
   delta,
   meaning,
   series,
+  reserveSpark = false,
   seriesAccent,
   seriesAriaLabel,
   seriesDays,
@@ -187,7 +191,7 @@ export function KpiTile({
           {sublabel}
         </InlineProof>
       )}
-      {showSpark && (
+      {showSpark ? (
         <div className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible">
           <LineSparkline
             values={series!}
@@ -211,7 +215,10 @@ export function KpiTile({
             rows={summaryRows}
           />
         </div>
-      )}
+      ) : reserveSpark ? (
+        // Same mt + height as the axis-free LineSparkline above.
+        <div className="mt-1.5 h-[18px]" aria-hidden="true" data-testid="kpi-spark-reserve" />
+      ) : null}
     </div>
   )
   if (to) {

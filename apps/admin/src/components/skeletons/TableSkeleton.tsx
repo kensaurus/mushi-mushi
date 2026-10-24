@@ -15,6 +15,8 @@ interface TableSkeletonProps {
   columns?: number
   /** Show a leading filter-bar row above the table. */
   showFilters?: boolean
+  /** Show the fake page title. Off when the page already rendered its header. */
+  showHeader?: boolean
   /** Show a 4-tile KPI strip above the filters (e.g. Reports page). */
   showKpiStrip?: boolean
   /** Optional accessible label override. */
@@ -31,18 +33,21 @@ export function TableSkeleton({
   rows = 8,
   columns = 5,
   showFilters = true,
+  showHeader = true,
   showKpiStrip = false,
   label = 'Loading',
 }: TableSkeletonProps) {
   return (
     <div role="status" aria-busy="true" aria-label={label} className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-3 w-56" />
+      {showHeader && (
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-56" />
+          </div>
+          <Skeleton className="h-7 w-28" />
         </div>
-        <Skeleton className="h-7 w-28" />
-      </div>
+      )}
 
       {showKpiStrip && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

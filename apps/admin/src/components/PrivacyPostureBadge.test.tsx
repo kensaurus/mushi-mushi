@@ -69,6 +69,13 @@ describe('PrivacyPostureBadge', () => {
     expect(container.textContent).toBe('')
   })
 
+  it('holds the chip’s row while privacy status loads', () => {
+    state.projectId = '11111111-1111-4111-8111-111111111111'
+    state.page = { data: null, loading: true, error: null, errorMessage: null }
+    render()
+    expect(container.querySelector('[data-testid="privacy-posture-reserve"]')).not.toBeNull()
+  })
+
   it('still reports a real failure', () => {
     state.projectId = '11111111-1111-4111-8111-111111111111'
     state.page = { data: null, loading: false, error: 'Request failed (HTTP_500)', errorMessage: 'Request failed' }

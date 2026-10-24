@@ -405,9 +405,13 @@ export function Layout({ children }: { children: ReactNode }) {
         className={`nav-link ${gated ? 'opacity-80' : ''}`}
       >
         <Icon className="nav-link-icon" />
-        <span>{label}</span>
-        {gated && requiresFeature && <UpgradePill flag={requiresFeature} className="ml-auto" />}
-        {renderNavBadge(path, navCounts, { criticalReports30d })}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {gated && requiresFeature && <UpgradePill flag={requiresFeature} className="shrink-0" />}
+        {/* Width is reserved before nav-meta returns, so a count cannot
+            wrap the label onto a second line and shift the rail. */}
+        <span className="nav-badge-slot ml-auto inline-flex h-4 w-14 shrink-0 items-center justify-end">
+          {renderNavBadge(path, navCounts, { criticalReports30d })}
+        </span>
       </Link>
     )
   }
@@ -1168,16 +1172,18 @@ function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle
         </span>
       )}
       <span className="truncate flex-1 text-left">{section.title}</span>
-      {staleness && (
-        <span
-          role="img"
-          className={`inline-flex items-center justify-center min-w-4 px-1 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
-          aria-label={staleness.label}
-          title={staleness.label}
-        >
-          {staleness.count > 99 ? '99+' : staleness.count}
-        </span>
-      )}
+      <span className="inline-flex h-3.5 min-w-8 shrink-0 items-center justify-end">
+        {staleness && (
+          <span
+            role="img"
+            className={`inline-flex items-center justify-center min-w-4 px-1 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
+            aria-label={staleness.label}
+            title={staleness.label}
+          >
+            {staleness.count > 99 ? '99+' : staleness.count}
+          </span>
+        )}
+      </span>
       {showChevron && (
         <svg
           className={`h-2.5 w-2.5 text-fg-faint shrink-0 motion-safe:transition-transform ${isExpanded ? 'rotate-90' : ''}`}

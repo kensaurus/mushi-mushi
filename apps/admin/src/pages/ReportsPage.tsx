@@ -34,7 +34,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
-import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ReportsRecommendationReserve, ReportsStatusBanner, ReportsStatusBannerReserve } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
   EMPTY_REPORTS_STATS,
@@ -790,8 +790,12 @@ export function ReportsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats),
-            children: (
+            // Hold the banner's box while stats load. Dropping it in afterwards
+            // pushed the KPI strip and the queue down (CLS on /reports).
+            show: reportsStatsLoading || isReportsBannerVisible(reportsStats),
+            children: reportsStatsLoading ? (
+              <ReportsStatusBannerReserve />
+            ) : (
               <ReportsStatusBanner
                 stats={reportsStats}
                 onRefresh={reloadAll}
@@ -823,14 +827,16 @@ export function ReportsPage() {
 
       <DogfoodNarrativeBanner />
 
-      {recommendation && (
+      {loading ? (
+        <ReportsRecommendationReserve />
+      ) : recommendation ? (
         <RecommendedAction
           title={recommendation.title}
           description={recommendation.description}
           cta={recommendation.cta}
           tone={recommendation.tone}
         />
-      )}
+      ) : null}
 
       <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
 
@@ -909,7 +915,7 @@ export function ReportsPage() {
       />
 
       {loading ? (
-        <TableSkeleton rows={8} columns={6} showFilters={false} label="Loading reports" />
+        <TableSkeleton rows={8} columns={6} showFilters={false} showHeader={false} label="Loading reports" />
       ) : error ? (
         <PageLoadError error={error} resource="reports" onRetry={reload} />
       ) : reports.length === 0 && hasFilters ? (

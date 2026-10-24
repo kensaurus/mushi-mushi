@@ -3,7 +3,9 @@
  * PURPOSE: 4-tile severity strip on the Reports page header. Lets triagers
  *          see the shape of incoming pain (1 critical · 12 high · …) before
  *          they scroll, and clicking any tile filters the table to that
- *          severity in one click.
+ *          severity in one click. The critical tile stays primary and every
+ *          tile keeps an 18px spark row while stats load, so the strip does
+ *          not grow and push the queue.
  */
 
 import { useMemo } from 'react'
@@ -126,8 +128,6 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
     )
   }
 
-  const criticalCount = counts.critical
-
   return (
     <MetricStrip cols={4} panel ariaLabel="Reports severity breakdown" className="mb-3" stagger>
       {tiles.map((tile) => {
@@ -137,7 +137,6 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         // Lead with what is still open; how many came in is the sub-line.
         const openCount = data?.openBySeverity?.[tile.key]
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
-        const isHero = tile.key === 'critical' && (data?.openBySeverity?.critical ?? criticalCount) > 0
         return (
           <button
             key={tile.key}
@@ -171,9 +170,12 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               accent={tile.accent}
               meaning={tile.meaning}
               series={sparks[tile.key]}
+              reserveSpark
               delta={severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
-              variant={isHero ? 'primary' : 'default'}
+              // Critical is primary from the first paint. Switching it on
+              // after the count arrives made the whole row taller.
+              variant={tile.key === 'critical' ? 'primary' : 'default'}
             />
             {!loading && total > 0 && sharePct > 0 ? (
               <div

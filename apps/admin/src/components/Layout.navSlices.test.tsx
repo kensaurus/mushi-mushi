@@ -148,6 +148,16 @@ describe('Layout nav-meta slices', () => {
     expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
+  it('reserves an expanded-sidebar badge slot before counts load', () => {
+    window.localStorage.setItem('mushi:ui:sidebar-collapsed', JSON.stringify({ v: 1, value: false }))
+    renderAt('/reports')
+    const nav = container!.querySelector('nav[aria-label="Main navigation"]')
+    const links = nav!.querySelectorAll('a.nav-link')
+    const slots = nav!.querySelectorAll('.nav-badge-slot')
+    expect(links.length).toBeGreaterThan(0)
+    expect(slots.length).toBe(links.length)
+  })
+
   it('adds a Lab’s slice only when that Lab is in the sidebar', () => {
     state.enabledLabs = new Set(['releases'])
     renderAt('/billing')

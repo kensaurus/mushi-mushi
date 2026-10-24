@@ -15,7 +15,9 @@
  *          (not just the glot-it dogfood) inherit the same voice.
  *
  *          Hidden in advanced mode (power users get the dense /reports
- *          table without preamble) and on first-load while data hydrates.
+ *          table without preamble). While dashboard data is still loading
+ *          the row stays in the layout at its final height so the queue
+ *          does not jump when the sentence arrives.
  */
 
 import { Link } from 'react-router-dom'
@@ -27,6 +29,25 @@ import type { DashboardData } from './dashboard/types'
 import { renderDogfoodNarrative } from '../lib/copy'
 import { CHIP_TONE } from '../lib/chipTone'
 
+/** Same row as the loaded banner (icon, wrapping sentence, CTA). */
+const NARRATIVE_ROW = 'mb-3 flex items-center gap-3 rounded-md border px-3 py-2.5'
+
+function NarrativeReserve() {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="reports-narrative-reserve"
+      className={`${NARRATIVE_ROW} border-transparent`}
+    >
+      <span className="inline-flex h-7 w-7 shrink-0" />
+      <p className="min-w-0 flex-1 text-xs leading-snug invisible">
+        Checkout is your most fragile area — 12 reports in the last 14 days. 2 fixes already merged and 1 more drafted.
+      </p>
+      <span className="inline-flex h-7 w-[7.5rem] shrink-0" />
+    </div>
+  )
+}
+
 export function DogfoodNarrativeBanner() {
   const { isAdvanced } = useAdminMode()
   const activeProjectId = useActiveProjectId()
@@ -36,7 +57,12 @@ export function DogfoodNarrativeBanner() {
   const dashboardQuery = usePageData<DashboardData>('/v1/admin/dashboard')
 
   if (isAdvanced) return null
-  if (setup.loading || dashboardQuery.loading) return null
+  if (setup.loading || dashboardQuery.loading) {
+    // A project we already know has no bugs will not get this line.
+    if (!setup.loading && !setup.activeProject) return null
+    if (!setup.loading && (setup.activeProject?.report_count ?? 0) === 0) return null
+    return <NarrativeReserve />
+  }
   if (!setup.activeProject) return null
   // No bugs yet → the rest of the inbox UI is already empty-state, no
   // need to also surface a narrative banner.
@@ -63,7 +89,7 @@ export function DogfoodNarrativeBanner() {
     <aside
       role="complementary"
       aria-label="Project narrative"
-      className="mb-3 flex items-center gap-3 rounded-md border border-chrome-border bg-chrome px-3 py-2.5 motion-safe:animate-mushi-fade-in"
+      className={`${NARRATIVE_ROW} border-chrome-border bg-chrome motion-safe:animate-mushi-fade-in`}
     >
       <span
         aria-hidden="true"
