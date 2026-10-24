@@ -12,7 +12,9 @@
  * Result: Write an inventory_proposals row (source='live_crawl') so the
  *         existing ProposalReviewModal flow handles review + accept.
  *
- * Triggered via POST /v1/admin/inventory/:pid/map-from-live
+ * Triggered via POST /v1/admin/inventory/:pid/map-from-live.
+ * The kickoff marks the run and returns 202; the crawl and the draft run
+ * under EdgeRuntime.waitUntil so the gateway does not 504 at 150s.
  */
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -23,6 +25,7 @@ import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
+import { runInBackground } from '../_shared/background.ts'
 import { firecrawlMapOwnSite, firecrawlScrapeOwnSite } from '../_shared/firecrawl.ts'
 import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
@@ -185,9 +188,11 @@ Deno.serve(
       )
     }
 
-    // Mark run as running
+    // Mark run as running, then release the request. The crawl and the model
+    // call outlive the gateway's ~150s response timeout (2026-10-24).
     await db.from('story_map_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', run_id)
 
+    runInBackground((async () => {
     try {
       // === Step A: Crawl ===
       log.info('Starting live crawl', { run_id, base_url, provider, max_pages })
@@ -381,11 +386,6 @@ Deno.serve(
       }).eq('id', run_id)
 
       log.info('Story mapper completed', { run_id, proposalId, cursorPrUrl })
-
-      return new Response(
-        JSON.stringify({ ok: true, data: { proposalId, cursorPrUrl, pagesCrawled: pages.length } }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      )
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       // A wallet refusal is an account state, not a bug: keep it out of
@@ -401,31 +401,13 @@ Deno.serve(
         finished_at: new Date().toISOString(),
       }).eq('id', run_id)
       if (failErr) log.warn('failed to mark story_map_run failed', { run_id, error: failErr.message })
-
-      // An empty hosted-LLM wallet is the caller's to fix (top up or add a
-      // key), not a server failure: 402 with what the top-up prompt needs.
-      if (err instanceof WalletDeniedError) {
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            error: {
-              code: 'WALLET_INSUFFICIENT',
-              message: 'Not enough wallet balance for this AI call. Top up the wallet or add your own API key.',
-              reason: err.reason,
-              balanceMicro: err.balanceMicro,
-            },
-          }),
-          { status: 402, headers: { 'Content-Type': 'application/json' } },
-        )
-      }
-
-      // `message` is recorded server-side (log + story_map_runs.error_message)
-      // above; return a generic message so we don't leak internals to the
-      // client (CodeQL js/stack-trace-exposure).
-      return new Response(
-        JSON.stringify({ ok: false, error: { code: 'MAPPER_FAILED', message: 'Story mapping failed. Check the run logs for details.' } }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } },
-      )
+      // The kickoff already answered 202. The console polls this row.
     }
+    })(), 'story-mapper')
+
+    return new Response(
+      JSON.stringify({ ok: true, data: { run_id, status: 'accepted' } }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    )
   }),
 )

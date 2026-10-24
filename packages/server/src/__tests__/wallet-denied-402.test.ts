@@ -4,9 +4,10 @@
  *          `balanceMicro`, not a generic 500.
  *
  * story-mapper and inventory-propose rethrow WalletDeniedError out of their
- * retry loops so the caller can prompt a top-up, but both request handlers
- * caught it as a generic failure and answered 500 (MAPPER_FAILED /
- * PROPOSE_FAILED), and the /propose API hop turned every non-2xx into a 500.
+ * retry loops so the caller can prompt a top-up. inventory-propose answers
+ * 402. story-mapper's kickoff answers 202 (the crawl outlives the gateway)
+ * and records the refusal on the run row the console polls. The /propose
+ * API hop keeps a 402 instead of turning it into a 500.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -139,19 +140,60 @@ async function expectWallet402(res: Response) {
 }
 
 describe('a wallet refusal is a 402, not a 500', () => {
-  it('story-mapper answers 402 and records the refusal on the run', async () => {
+  it('story-mapper accepts the kickoff with 202 and records the refusal on the run', async () => {
+    const jobs: Promise<unknown>[] = []
+    ;(globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime = {
+      waitUntil: (p) => { jobs.push(p) },
+    }
     await import('../../supabase/functions/story-mapper/index.ts')
     expect(h.served).toBeTypeOf('function')
     const res = await h.served!(post({ run_id: 'run-1', project_id: 'p1', base_url: 'https://app.example.com' }))
-    await expectWallet402(res)
+    expect(res.status).toBe(202)
+    expect(await res.json()).toMatchObject({ ok: true, data: { run_id: 'run-1', status: 'accepted' } })
+    await Promise.all(jobs)
     const failed = h.updates.find((u) => u.table === 'story_map_runs' && u.row.status === 'failed')
     expect(failed?.row.error_message).toBe('wallet denied: insufficient')
+  })
+
+  it('returns 202 before the crawl finishes', async () => {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const jobs: Promise<unknown>[] = []
+    ;(globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime = {
+      waitUntil: (p) => { jobs.push(p) },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/scrape')) await gate
+      return String(url).endsWith('/map')
+        ? new Response(JSON.stringify({ links: [] }))
+        : new Response(JSON.stringify({ data: { markdown: '# Home', metadata: { title: 'Home' } } }))
+    }))
+    await import('../../supabase/functions/story-mapper/index.ts')
+    const pending = h.served!(post({ run_id: 'run-2', project_id: 'p1', base_url: 'https://app.example.com' }))
+    try {
+      const res = await Promise.race([
+        pending,
+        new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('kickoff waited on the crawl')), 500)),
+      ])
+      expect(res.status).toBe(202)
+      expect(jobs.length).toBeGreaterThan(0)
+    } finally {
+      release()
+      await Promise.all(jobs)
+    }
   })
 
   it('inventory-propose answers 402', async () => {
     await import('../../supabase/functions/inventory-propose/index.ts')
     expect(h.served).toBeTypeOf('function')
     await expectWallet402(await h.served!(post({ project_id: 'p1' })))
+  })
+
+  it('map-from-live acks 202 and keeps the story-mapper invoke alive', () => {
+    const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/inventory.ts'), 'utf8')
+    const kickoff = src.slice(src.indexOf("'/v1/admin/inventory/:projectId/map-from-live'"))
+    expect(kickoff).toContain('runInBackground(')
+    expect(kickoff).toContain("status: 'accepted' } }, 202)")
   })
 
   it('the /propose API hop keeps the 402 instead of turning it into a 500', () => {
