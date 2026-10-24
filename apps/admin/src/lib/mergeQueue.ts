@@ -127,26 +127,46 @@ export async function queueMerges(fixIds: string[]) {
   })
 }
 
-/** What `/v1/admin/merge-queue` returns, shaped for the fixes page. */
+/**
+ * What `/v1/admin/merge-queue` returns, shaped for the fixes page.
+ * `seq` is taken with `nextMergeQueueFetchSeq` when the read starts.
+ * The panel ignores a snapshot whose seq is older than its own last load.
+ */
 export interface MergeQueueSnapshot {
   /** App this read was for. The panel ignores a snapshot for another app. */
   projectId: string | null
+  /** Monotonic id from when this read started, not when it landed. */
+  seq: number
   rows: MergeQueueRow[]
   trains: ReleaseTrain[]
   release: ReleaseSettings | null
 }
 
-export function emptyMergeQueueSnapshot(): MergeQueueSnapshot {
-  return { projectId: null, rows: [], trains: [], release: null }
+let mergeQueueFetchSeq = 0
+
+/** Next id for a queue read. Call it when the fetch starts. */
+export function nextMergeQueueFetchSeq(): number {
+  mergeQueueFetchSeq += 1
+  return mergeQueueFetchSeq
 }
 
-/** Keeps a failed or empty read as an empty queue so the page can paint once. */
+export function emptyMergeQueueSnapshot(): MergeQueueSnapshot {
+  return { projectId: null, seq: 0, rows: [], trains: [], release: null }
+}
+
+/**
+ * Keeps a failed or empty read as an empty queue so the page can paint once.
+ * `seq` must be the id taken when the fetch started, so a slow read stays
+ * older than a load the panel started after it.
+ */
 export function toMergeQueueSnapshot(
   data: { rows?: MergeQueueRow[]; trains?: ReleaseTrain[]; release?: ReleaseSettings[] } | null | undefined,
   projectId: string | null,
+  seq: number,
 ): MergeQueueSnapshot {
   return {
     projectId,
+    seq,
     rows: data?.rows ?? [],
     trains: data?.trains ?? [],
     release: data?.release?.find((r) => r.projectId === projectId) ?? null,

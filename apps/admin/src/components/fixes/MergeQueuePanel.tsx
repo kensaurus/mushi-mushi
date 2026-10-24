@@ -16,7 +16,9 @@
  *          The fixes page passes the queue it already loaded, so this card
  *          is in the same paint as the attempt list. That snapshot is the
  *          card's data: the mount does not refetch it, and a later snapshot
- *          for this project replaces the rows in place. A refetch must not
+ *          for this project replaces the rows in place. A snapshot started
+ *          before this card's own load is ignored when it lands later, so a
+ *          slow page read cannot put stale rows back. A refetch must not
  *          blank the card first — that insert is a layout shift.
  */
 
@@ -31,6 +33,7 @@ import {
   isActiveQueueRow,
   loadMergeQueue,
   mergeQueueSummary,
+  nextMergeQueueFetchSeq,
   prLink,
   removeFromMergeQueue,
   saveReleaseSettings,
@@ -41,6 +44,7 @@ import {
   type ReleaseSettings,
   type ReleaseTrain,
 } from '../../lib/mergeQueue'
+import { FIXES_QUEUE_RESERVE } from './fixesReserve'
 
 const MODE_OPTIONS = [
   { id: 'train', label: 'Batch' },
@@ -72,21 +76,27 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Pr
   // snapshots from the page replace that seed; useState would ignore them.
   const [seenProjectId, setSeenProjectId] = useState(projectId)
   const appliedInitial = useRef(initial)
+  // Seq of the newest queue read this card has accepted. A page snapshot
+  // started earlier than that is stale and must not replace these rows.
+  const lastOwnLoad = useRef(0)
   if (seenProjectId !== projectId) {
     setSeenProjectId(projectId)
     appliedInitial.current = initial
     if (initial.projectId === projectId) {
+      lastOwnLoad.current = initial.seq
       setRows(initial.rows)
       setTrains(initial.trains)
       setRelease(initial.release)
     } else {
+      lastOwnLoad.current = 0
       setRows([])
       setTrains([])
       setRelease(null)
     }
   } else if (appliedInitial.current !== initial) {
     appliedInitial.current = initial
-    if (initial.projectId === projectId) {
+    if (initial.projectId === projectId && initial.seq >= lastOwnLoad.current) {
+      lastOwnLoad.current = initial.seq
       setRows(initial.rows)
       setTrains(initial.trains)
       setRelease(initial.release)
@@ -95,14 +105,18 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Pr
 
   const load = useCallback(async () => {
     if (!projectId) return
+    const seq = nextMergeQueueFetchSeq()
     const res = await loadMergeQueue(projectId)
     if (!res.ok || !res.data) return
-    setTrains(res.data.trains ?? [])
-    setRelease(res.data.release?.find((r) => r.projectId === projectId) ?? null)
+    if (seq < lastOwnLoad.current) return
+    lastOwnLoad.current = seq
+    const data = res.data
+    setTrains(data.trains ?? [])
+    setRelease(data.release?.find((r) => r.projectId === projectId) ?? null)
     setRows((prev) => {
       const mergedBefore = new Set(prev.filter((r) => r.state === 'merged').map((r) => r.id))
-      if (prev.length > 0 && res.data!.rows.some((r) => r.state === 'merged' && !mergedBefore.has(r.id))) onMerged?.()
-      return res.data!.rows
+      if (prev.length > 0 && data.rows.some((r) => r.state === 'merged' && !mergedBefore.has(r.id))) onMerged?.()
+      return data.rows
     })
   }, [projectId, onMerged])
 
@@ -175,7 +189,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged, initial }: Pr
 
   return (
     <section aria-label="Merge queue">
-    <Card className="p-3 space-y-2">
+    <Card className={`p-3 space-y-2 ${FIXES_QUEUE_RESERVE}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</h3>
         <p className="text-2xs text-fg-muted">{mergeQueueSummary(shown)}</p>

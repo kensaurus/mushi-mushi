@@ -17,6 +17,8 @@
  *        The summary strip is reserved while loading, and the merge queue
  *        paints with the list rather than after it. A queue read that
  *        rejects leaves the list up, and a later reload applies once.
+ *        Stats keep that summary box; they do not hide the list. A queue
+ *        snapshot started before the panel reloads itself does not win.
  */
 
 import { act, createElement, StrictMode } from 'react'
@@ -71,13 +73,16 @@ const mocks = vi.hoisted(() => ({
   fixes: [] as unknown[],
   total: 0,
   reloadFixes: null as (() => void) | null,
+  statsLoading: false,
+  statsData: null as Record<string, unknown> | null,
+  hideFixesSnapshot: true,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
   usePageData: () => ({
-    data: { ...EMPTY_FIXES_STATS, hasAnyProject: true },
-    loading: false,
+    data: mocks.statsData,
+    loading: mocks.statsLoading,
     error: null,
     reload: vi.fn(),
     lastFetchedAt: null,
@@ -106,7 +111,7 @@ vi.mock('../lib/fixesModeUx', () => ({
     hideTableChrome: false,
     hideFailureCategories: false,
     hideSnapshotLinks: false,
-    hideFixesSnapshot: true,
+    hideFixesSnapshot: mocks.hideFixesSnapshot,
   }),
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
@@ -115,6 +120,9 @@ vi.mock('../components/PageHeaderBar', () => ({
 }))
 
 import { FixesPage } from './FixesPage'
+import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
+import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
+import { FIXES_BANNER_RESERVE, FIXES_QUEUE_RESERVE, FIXES_SUMMARY_RESERVE } from '../components/fixes/fixesReserve'
 import { ToastProvider } from '../lib/toast'
 
 let host: HTMLDivElement
@@ -135,6 +143,9 @@ beforeEach(() => {
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
   mocks.reloadFixes = null
+  mocks.statsLoading = false
+  mocks.statsData = { ...EMPTY_FIXES_STATS, hasAnyProject: true }
+  mocks.hideFixesSnapshot = true
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -186,6 +197,11 @@ function buttons(label: string): HTMLButtonElement[] {
 function click(el: Element | undefined | null) {
   if (!el) throw new Error('element not found')
   act(() => el.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+}
+
+function expectReserve(el: Element | null | undefined, classes: string) {
+  expect(el).not.toBeNull()
+  for (const cls of classes.split(' ')) expect(el!.classList.contains(cls)).toBe(true)
 }
 
 describe('FixesPage', () => {
@@ -338,6 +354,9 @@ describe('FixesPage', () => {
     expect(summary).not.toBeNull()
     expect(document.querySelector('table')).toBeNull()
     expect(summary!.compareDocumentPosition(document.querySelector('[aria-label="Loading fixes"]')!) & Node.DOCUMENT_POSITION_CONTAINS).not.toBe(0)
+    expectReserve(summary, FIXES_SUMMARY_RESERVE)
+    expectReserve(document.querySelector('[data-testid="fixes-loading-banner"]'), FIXES_BANNER_RESERVE)
+    expectReserve(document.querySelector('[data-testid="fixes-loading-queue"]'), FIXES_QUEUE_RESERVE)
 
     await act(async () => {
       resolveFixes(null)
@@ -353,6 +372,7 @@ describe('FixesPage', () => {
     expect(queue!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(document.body.textContent).toContain('Merge when ready')
     expect(queueCalls).toBe(1)
+    expectReserve(queue!.firstElementChild, FIXES_QUEUE_RESERVE)
   })
 
   it('does not refetch the queue on mount under StrictMode', async () => {
@@ -410,5 +430,71 @@ describe('FixesPage', () => {
     expect(document.body.textContent).toContain('Branch is behind')
     expect(document.body.textContent).not.toContain('Waiting for CI')
     expect(queueCalls).toBe(2)
+  })
+
+  it('shows the fix list while stats are still loading, with the summary box held', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    mocks.statsLoading = true
+    mocks.statsData = null
+    mocks.hideFixesSnapshot = false
+    await render('/fixes')
+    expect(document.querySelector('[aria-label="Loading fixes"]')).toBeNull()
+    expect(document.querySelector('table')).not.toBeNull()
+    expect(document.body.textContent).toContain('Checkout button does nothing')
+    const summary = document.querySelector('[data-testid="fixes-summary-placeholder"]')
+    const table = document.querySelector('table')
+    expectReserve(summary, FIXES_SUMMARY_RESERVE)
+    expectReserve(document.querySelector('[data-testid="fixes-banner-placeholder"]'), FIXES_BANNER_RESERVE)
+    expect(summary!.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('ignores a merge-queue snapshot that started before the panel reloaded', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    let releaseStale: (v: unknown) => void = () => {}
+    let queueGets = 0
+    const base = mocks.apiFetch.getMockImplementation()!
+    mocks.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (path.startsWith('/v1/admin/merge-queue/') && method === 'DELETE') {
+        return Promise.resolve({ ok: true, data: { id: 'q1', state: 'removed' } })
+      }
+      if (path.startsWith('/v1/admin/merge-queue') && method === 'GET') {
+        queueGets += 1
+        if (queueGets === 1) return Promise.resolve(queuePayload('Waiting for CI'))
+        if (queueGets === 2) return new Promise((resolve) => { releaseStale = () => resolve(queuePayload('Waiting for CI')) })
+        return Promise.resolve(queuePayload('Branch updated'))
+      }
+      return base(path, init)
+    })
+    await render('/fixes')
+    expect(document.body.textContent).toContain('Waiting for CI')
+
+    await act(async () => { mocks.reloadFixes?.() })
+    click(buttons('Remove')[0])
+    await flush()
+    expect(queueGets).toBe(3)
+    expect(document.body.textContent).toContain('Branch updated')
+    expect(document.body.textContent).not.toContain('Waiting for CI')
+
+    await act(async () => { releaseStale(null) })
+    await flush()
+    expect(document.body.textContent).toContain('Branch updated')
+    expect(document.body.textContent).not.toContain('Waiting for CI')
+  })
+
+  it('uses the same summary and banner boxes the loaded blocks use', async () => {
+    const stats = { ...EMPTY_FIXES_STATS, hasAnyProject: true, topPriority: 'healthy' as const }
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null,
+        createElement('div', null,
+          createElement(FixesStatusBanner, { stats }),
+          createElement(FixesSnapshotStrip, { stats, statsFetchedAt: null }),
+        ),
+      ))
+    })
+    expectReserve(document.querySelector('[class~="min-h-40"]'), FIXES_BANNER_RESERVE)
+    expectReserve(document.querySelector('[class~="min-h-112"]'), FIXES_SUMMARY_RESERVE)
   })
 })

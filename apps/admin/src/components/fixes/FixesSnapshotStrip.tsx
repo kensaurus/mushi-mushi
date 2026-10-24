@@ -22,6 +22,7 @@ import {
 } from '../../lib/statTooltips/fixes'
 import { fixesLinks } from '../../lib/statCardLinks'
 import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
+import { FIXES_SUMMARY_RESERVE } from './fixesReserve'
 
 interface Props {
   stats: FixesStats
@@ -50,6 +51,7 @@ export function FixesSnapshotStrip({
 
   return (
     <Section
+      className={FIXES_SUMMARY_RESERVE}
       title={sectionTitle}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >

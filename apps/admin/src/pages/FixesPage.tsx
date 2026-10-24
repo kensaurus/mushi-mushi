@@ -6,10 +6,11 @@
  *          recommendation banner, in-flight list, per-fix card) can evolve
  *          and be reasoned about in isolation.
  *
- *          The loading skeleton reserves the summary strip, and the merge
- *          queue is loaded with the attempt list, so neither block inserts
- *          above the list after first paint (layout shift on /fixes).
- *          A failed queue read does not take the list down with it.
+ *          The loading skeleton reserves the banner, the summary strip, and
+ *          the merge queue at the same heights as the loaded blocks. The
+ *          attempt list paints when it is ready; stats fill that summary
+ *          box in place, so a slow stats read does not hide the list or
+ *          push it. A failed queue read does not take the list down either.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -20,7 +21,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { Btn, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner, Skeleton } from '../components/ui'
+import { Btn, Card, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner, Skeleton } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
@@ -39,7 +40,8 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
-import { emptyMergeQueueSnapshot, loadMergeQueue, queueMerges, toMergeQueueSnapshot, type MergeQueueSnapshot } from '../lib/mergeQueue'
+import { emptyMergeQueueSnapshot, loadMergeQueue, nextMergeQueueFetchSeq, queueMerges, toMergeQueueSnapshot, type MergeQueueSnapshot } from '../lib/mergeQueue'
+import { FIXES_BANNER_RESERVE, FIXES_QUEUE_RESERVE, FIXES_STAT_TILE_RESERVE, FIXES_SUMMARY_SKELETON } from '../components/fixes/fixesReserve'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
@@ -137,19 +139,31 @@ interface CodebaseStats {
   indexed_files: number
 }
 
-/** Banner + 6 summary tiles, the same stack the loaded page paints above the list. */
+/** Six summary tiles in the same box the loaded snapshot uses. */
+function FixesSummaryReserve({ testId }: { testId: string }) {
+  return (
+    <Card data-testid={testId} className={`${FIXES_SUMMARY_SKELETON} p-3`}>
+      <div className="mb-2 pb-2">
+        <Skeleton className="h-4 w-40" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-6">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className={FIXES_STAT_TILE_RESERVE} />
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/** Banner, summary, and merge queue, the same stack the loaded page paints above the list. */
 function FixesLoadingLead() {
   return (
     <div className="flex flex-col gap-4">
-      <Skeleton className="h-16 w-full rounded-md" />
-      <div data-testid="fixes-loading-summary" className="space-y-3 rounded-md border border-edge-subtle bg-surface-raised p-3">
-        <Skeleton className="h-4 w-40" />
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
+      <div data-testid="fixes-loading-banner" className={`relative ${FIXES_BANNER_RESERVE}`}>
+        <Skeleton className="absolute inset-0 rounded-md" />
       </div>
+      <FixesSummaryReserve testId="fixes-loading-summary" />
+      <div data-testid="fixes-loading-queue" className={FIXES_QUEUE_RESERVE} />
     </div>
   )
 }
@@ -242,6 +256,9 @@ export function FixesPage() {
     setError(false)
     setIsValidating(true)
     const projectId = activeProjectIdRef.current
+    // Taken when the read starts. The panel drops this snapshot if it
+    // reloaded itself after this number.
+    const queueSeq = nextMergeQueueFetchSeq()
     try {
       const [fixRes, dispRes, sumRes, queueRes] = await Promise.all([
         apiFetch<{ fixes: FixAttempt[]; total?: number }>(`/v1/admin/fixes?limit=${FIXES_PAGE_SIZE}`),
@@ -259,7 +276,7 @@ export function FixesPage() {
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
       if (projectId === activeProjectIdRef.current) {
-        setQueueSnapshot(toMergeQueueSnapshot(queueRes.ok ? queueRes.data : null, projectId))
+        setQueueSnapshot(toMergeQueueSnapshot(queueRes.ok ? queueRes.data : null, projectId, queueSeq))
       }
       if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
     } catch {
@@ -855,10 +872,15 @@ export function FixesPage() {
     void loadFixes()
   }, [reloadStats, loadFixes])
 
+  const statsPending = statsLoading && !statsData
+
+  // A retry clears `error` before it waits, and `loading` stays false after
+  // the first attempt, so this order does not keep the error page up during
+  // a retry. It does show the error when the list failed and stats are still
+  // in flight, instead of leaving the skeleton up.
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
-  // Stats and the queue share this first paint with the list. Revealing the
-  // list earlier lets the summary cards and "Merge when ready" push it down.
-  if (loading || (statsLoading && !statsData)) {
+  // Stats fill the summary box below. Waiting for them here hid the list.
+  if (loading) {
     return (
       <TableSkeleton
         rows={6}
@@ -905,6 +927,14 @@ export function FixesPage() {
         )}
       </PageHeaderBar>
 
+      {statsPending ? (
+        <div className="flex flex-col gap-4">
+          <div data-testid="fixes-banner-placeholder" className={`relative ${FIXES_BANNER_RESERVE}`}>
+            <Skeleton className="absolute inset-0 rounded-md" />
+          </div>
+          {!ux.hideFixesSnapshot && <FixesSummaryReserve testId="fixes-summary-placeholder" />}
+        </div>
+      ) : (
       <PagePosture
         slots={[
           {
@@ -949,6 +979,7 @@ export function FixesPage() {
           },
         ]}
       />
+      )}
 
       {codebaseStats &&
         (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
@@ -974,7 +1005,7 @@ export function FixesPage() {
       )}
 
       {/* The failed and in-flight banners already say what this would. */}
-      {fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
+      {!statsPending && fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 

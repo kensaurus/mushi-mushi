@@ -26,7 +26,7 @@ describe('merge queue copy', () => {
     expect(trainLine(null, { lastAt: null, intervalMinutes: 360, now, ready: 0 })).toBe('')
   })
   it('turns a queue payload into the card snapshot, empty when the read failed', () => {
-    expect(toMergeQueueSnapshot(null, 'p1')).toEqual({ projectId: 'p1', rows: [], trains: [], release: null })
+    expect(toMergeQueueSnapshot(null, 'p1', 4)).toEqual({ projectId: 'p1', seq: 4, rows: [], trains: [], release: null })
     expect(toMergeQueueSnapshot({
       rows: [],
       trains: [],
@@ -34,7 +34,7 @@ describe('merge queue copy', () => {
         { projectId: 'other', mode: 'each', intervalMinutes: 60, maxMembers: 15 },
         { projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 },
       ],
-    }, 'p1').release).toMatchObject({ projectId: 'p1', mode: 'train' })
+    }, 'p1', 5).release).toMatchObject({ projectId: 'p1', mode: 'train' })
   })
   it('names the interval in words', () => {
     expect([60, 180, 360, 1440, 2880, 45].map(intervalLabel)).toEqual(['every hour', 'every 3 hours', 'every 6 hours', 'once a day', 'every 2 days', 'every 45 min'])

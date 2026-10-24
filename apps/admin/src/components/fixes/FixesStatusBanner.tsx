@@ -8,6 +8,7 @@ import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
 import { fixesFailedAction, fixesFailedHint, fixesFailedTitle, scopedHref } from '../../lib/humanPageHints'
 import type { FixesStats } from './FixesStatsTypes'
+import { FIXES_BANNER_RESERVE } from './fixesReserve'
 
 interface Props {
   stats: FixesStats
@@ -18,7 +19,15 @@ interface Props {
   plainBanner?: boolean
 }
 
-export function FixesStatusBanner({
+export function FixesStatusBanner(props: Props) {
+  return (
+    <div className={FIXES_BANNER_RESERVE}>
+      <FixesStatusBannerContent {...props} />
+    </div>
+  )
+}
+
+function FixesStatusBannerContent({
   stats,
   causeSummary,
   onRefresh,
