@@ -1116,3 +1116,15 @@ describe('reportsToRetryAfterHold', () => {
     expect([...reportsToRetryAfterHold(attempts, held, now)].sort()).toEqual(['a', 'c'])
   })
 })
+
+describe('a used-up Cursor key hands its apps to the next one (2026-10-24)', () => {
+  it('skips a key whose exhausted_until is in the future, and takes it back after', () => {
+    const project = { id: 'p1', organization_id: 'o1', has_legacy_key: false, org_owner_ids: [] }
+    const keys = [
+      { id: 'ayako', project_id: null, organization_id: 'o1', priority: 10, status: 'active', test_status: 'ok', exhausted_until: '2026-10-24T12:00:00Z' },
+      { id: 'suzu', project_id: null, organization_id: 'o1', priority: 50, status: 'active', test_status: 'ok', exhausted_until: null },
+    ]
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T08:00:00Z'))).toBe('suzu')
+    expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T13:00:00Z'))).toBe('ayako')
+  })
+})

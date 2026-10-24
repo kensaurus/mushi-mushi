@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   notifyTeamFixEvent: vi.fn(async () => undefined),
   dispatchPluginEventDetached: vi.fn(async () => undefined),
   resolveLlmKey: vi.fn(async (): Promise<unknown> => null),
+  resolveLlmKeys: vi.fn(async (): Promise<unknown[]> => []),
   resolveProjectGithubToken: vi.fn(async (..._args: unknown[]): Promise<string | null> => null),
   fetchPullRequestFiles: vi.fn(async (..._args: unknown[]): Promise<unknown> => null),
 }))
@@ -29,6 +30,7 @@ vi.mock('../../supabase/functions/_shared/logger.ts', () => {
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => ({}) }))
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
   resolveLlmKey: (...args: unknown[]) => mocks.resolveLlmKey(...(args as [])),
+  resolveLlmKeys: (...args: unknown[]) => mocks.resolveLlmKeys(...(args as [])),
 }))
 vi.mock('../../supabase/functions/_shared/github.ts', () => ({
   parseGithubRepoUrl: (url: string | null | undefined) => {
@@ -61,6 +63,7 @@ import {
   isDispatchableCloudAgent,
   parseCloudAgentBranchRef,
   pollResultToOutcome,
+  cursorKeyForNewWork,
   resolveCursorApiKey,
   stopCursorAgentLatestRun,
   validateAgentOverride,
@@ -1013,3 +1016,18 @@ describe('anthropic_managed adapter (interface only)', () => {
     expect(() => getCloudAgentAdapter('nope')).toThrow(/Unknown cloud agent kind/)
   })
 })
+
+describe('cursorKeyForNewWork: a used-up key hands new agents to the next (2026-10-24)', () => {
+  it('keeps the first key while it is not used up, else takes the next one in pool order', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ source: 'byok', key: 'crsr_a', keyId: 'ayako', shared: false })
+    mocks.resolveLlmKeys.mockResolvedValue([
+      { source: 'byok', key: 'crsr_a', keyId: 'ayako' },
+      { source: 'byok', key: 'crsr_s', keyId: 'suzu' },
+    ])
+    const fresh = createFakeDb(() => ({ data: [] }))
+    expect(await cursorKeyForNewWork(fresh.db, PROJECT)).toMatchObject({ keyId: 'ayako' })
+    const used = createFakeDb((q) => (q.table === 'byok_keys' ? { data: [{ id: 'ayako' }] } : { data: null }))
+    expect(await cursorKeyForNewWork(used.db, PROJECT)).toMatchObject({ keyId: 'suzu', key: 'crsr_s' })
+  })
+})
+

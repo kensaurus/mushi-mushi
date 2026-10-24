@@ -237,4 +237,10 @@ every Cursor key idled on "No open report to fix": spend-down only picked
   fenced and screened like review follow-up findings
   (`_shared/prior-attempts.ts`), so it does not repeat the rejected theory.
 - Held retries count toward the stop-loss like any other spend-down run.
+- A key Cursor refuses for its plan's usage limit (`usage_limit_exceeded`)
+  is marked used up for 6 hours (`byok_keys.exhausted_until`): new agents
+  and the key-to-app assignment go to the next key in the pool, so an
+  account run to 100% hands over instead of idling the next one. Runs a key
+  already started are polled and cancelled with that key
+  (`external_agent_ref.key_id`).
 

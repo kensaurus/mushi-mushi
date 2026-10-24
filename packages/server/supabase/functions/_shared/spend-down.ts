@@ -200,10 +200,17 @@ export interface CursorPoolKey {
   priority: number | null
   status: string
   test_status: string | null
+  /** Cursor refused this key for its plan's usage limit until then: new agents go to the next key. */
+  exhausted_until?: string | null
 }
 
-/** Rows the resolver will use (byok.ts byokPoolCandidates); cooldowns are transient and ignored here. */
-function usableForResolver(k: CursorPoolKey): boolean {
+/**
+ * Rows the resolver will use for a NEW agent (byok.ts byokPoolCandidates plus
+ * agent-adapters cursorKeyForNewWork): cooldowns are transient and ignored
+ * here, but a used-up key hands its apps to the next one.
+ */
+function usableForResolver(k: CursorPoolKey, nowMs: number): boolean {
+  if (k.exhausted_until && Date.parse(k.exhausted_until) > nowMs) return false
   return (k.status === 'active' || k.status === 'quota_exhausted') && (k.test_status === 'ok' || k.test_status === 'error_quota')
 }
 
@@ -218,6 +225,7 @@ function usableForResolver(k: CursorPoolKey): boolean {
 export function firstCursorKeyFor(
   project: Pick<SpendDownProject, 'id' | 'organization_id' | 'has_legacy_key' | 'org_owner_ids'>,
   keys: CursorPoolKey[],
+  nowMs: number = Date.now(),
 ): string | 'legacy' | 'tie' | null {
   const pick = (rows: CursorPoolKey[]): string | 'tie' | null => {
     if (rows.length === 0) return null
@@ -225,7 +233,7 @@ export function firstCursorKeyFor(
     if (sorted.length > 1 && (sorted[0].priority ?? 100) === (sorted[1].priority ?? 100)) return 'tie'
     return sorted[0].id
   }
-  const usable = keys.filter(usableForResolver)
+  const usable = keys.filter((k) => usableForResolver(k, nowMs))
   const own = usable.filter((k) => k.project_id === project.id)
   if (own.length > 0) return pick(own)
   if (project.has_legacy_key) return 'legacy'

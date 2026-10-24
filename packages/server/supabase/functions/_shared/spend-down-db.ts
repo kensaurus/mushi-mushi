@@ -385,7 +385,7 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
     db.from('project_repos').select('project_id').in('project_id', allIds),
     db
       .from('byok_keys')
-      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status', columnReady))
+      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status, exhausted_until', columnReady))
       .eq('provider_slug', 'cursor')
       .or(filters.join(',')),
   ])
