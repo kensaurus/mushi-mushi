@@ -58,8 +58,9 @@ async function mustCount(
 }
 
 /**
- * /reports/stats when the caller did not pin a project (All apps).
- * Counts every project in `projectIds` — the same set as the list.
+ * /reports/stats?apps=all. Counts every project in `projectIds` — the same
+ * set as the list. A caller that merely omits the project pin does not
+ * land here; that still returns one app.
  */
 async function unpinnedReportStats(
   db: ReportsDb,
@@ -67,6 +68,7 @@ async function unpinnedReportStats(
   sinceIso: string,
   now: number,
 ) {
+  // Reached only from GET /reports/stats?apps=all.
   const hourAgoIso = new Date(now - 60 * 60 * 1000).toISOString();
   const inProjects = () =>
     db.from('reports').select('id', { count: 'exact', head: true }).in('project_id', projectIds);
@@ -228,10 +230,10 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
 
-    // No project pin (All apps): count every project the caller can open,
-    // matching the list. A pin still counts only that project
-    // (glot.it, 2026-10-07).
-    if (!resolvedProject.explicit && projectIds.length > 1) {
+    // All apps is opt-in (`?apps=all`). Omitting the project pin still counts
+    // the active project, which is what older clients got (glot.it, 2026-10-07).
+    // A pin wins over apps=all.
+    if (c.req.query('apps') === 'all' && !resolvedProject.explicit) {
       return c.json({ ok: true, data: await unpinnedReportStats(db, projectIds, sinceIso, now) });
     }
 
@@ -418,8 +420,11 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // PostgREST caps the row read at 1000. One app stays on that scan. All
     // apps (more than one id, because a pin narrows this list to one) replaces
     // the headline counts with exact counts so a busy team is not undercounted.
-    // The sparkline stays on the scan.
+    // The sparkline is that same scan. When it is shorter than the exact total,
+    // byDayCapped tells the console to hide it — another per-day count fan-out
+    // on top of these queries would not be worth the round trips.
     let total = (rows ?? []).length;
+    const scanned = total;
     if (projectIds.length > 1) {
       const severities = ['critical', 'high', 'medium', 'low'] as const;
       const windowQuery = () =>
@@ -443,6 +448,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       });
     }
     const byDay = Array.from(dayBuckets.entries()).map(([day, counts]) => ({ day, ...counts }));
+    const byDayCapped = projectIds.length > 1 && total > scanned;
     return c.json({
       ok: true,
       data: {
@@ -450,6 +456,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         bySeverity,
         openBySeverity,
         byDay,
+        byDayCapped,
         total,
       },
     });

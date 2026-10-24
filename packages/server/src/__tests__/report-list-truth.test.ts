@@ -162,7 +162,10 @@ describe('one report window (#231, #77)', () => {
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)
     const stats = REPORTS.slice(start, end)
-    expect(stats).toContain('!resolvedProject.explicit && projectIds.length > 1')
+    // Team-wide totals are opt-in. A missing pin still uses the active project.
+    expect(stats).toContain("c.req.query('apps') === 'all'")
+    expect(stats).toContain('!resolvedProject.explicit')
+    expect(stats).not.toContain('!resolvedProject.explicit && projectIds.length > 1')
     expect(stats).toContain('unpinnedReportStats')
     // The pinned path must not widen to every project.
     expect(stats).not.toContain(".in('project_id', projectIds)")
@@ -170,7 +173,7 @@ describe('one report window (#231, #77)', () => {
     expect(window.slice(0, 200)).toContain(".eq('project_id', activeProject.id)")
   })
 
-  it('with no project pin, /reports/stats counts every project the caller can open', () => {
+  it('?apps=all counts every project the caller can open', () => {
     const helper = routeBody(REPORTS, 'async function unpinnedReportStats', 4500)
     expect(helper).toContain(".in('project_id', projectIds)")
     expect(helper).toContain('apps=all')

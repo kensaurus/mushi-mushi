@@ -55,6 +55,7 @@ import { DismissReportDialog } from '../components/reports/DismissReportDialog'
 import { CloseReasonSelect } from '../components/reports/CloseReasonSelect'
 import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
 import { humanizeDispatchError } from '../lib/dispatchConfirm'
+import { OTHER_APP_BULK_REASON, otherAppDispatchNote, selectionCrossesPinnedApp } from '../components/reports/allAppsRowActions'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -149,7 +150,9 @@ export function ReportsPage() {
     // One app: wait for the pin so the first fetch doesn't briefly show
     // every app. All apps is the opposite — fetch with no pin.
     allApps || activeProjectId ? `/v1/admin/reports?${queryString}` : null,
-    { deps: [queryString, activeProjectId], scope: fetchScope },
+    // fetchScope: All apps keeps the last concrete id, so activeProjectId
+    // does not change when the switcher toggles. The list must refetch.
+    { deps: [queryString, activeProjectId, fetchScope], scope: fetchScope },
   )
 
   const {
@@ -157,7 +160,12 @@ export function ReportsPage() {
     loading: reportsStatsLoading,
     reload: reloadReportsStats,
     isValidating: reportsStatsValidating,
-  } = usePageData<ReportsStats>('/v1/admin/reports/stats', { scope: fetchScope })
+  } = usePageData<ReportsStats>(
+    // `?apps=all` is the only signal that asks the server for team-wide
+    // totals. Omitting the project pin alone still returns one app.
+    allApps ? '/v1/admin/reports/stats?apps=all' : '/v1/admin/reports/stats',
+    { deps: [fetchScope], scope: fetchScope },
+  )
   const reportsStats = reportsStatsData ?? EMPTY_REPORTS_STATS
 
   const reloadAll = useCallback(() => {
@@ -339,6 +347,10 @@ export function ReportsPage() {
   const runBulk = useCallback(
     async (action: 'set_status' | 'set_severity' | 'dismiss', value?: string, reason?: string) => {
       if (selected.size === 0) return
+      if (allApps && selectionCrossesPinnedApp(reports, selected, activeProjectId)) {
+        toast.error('Bulk actions stay on one app', OTHER_APP_BULK_REASON)
+        return
+      }
       setBulkBusy(true)
       const ids = [...selected]
       const res = await apiFetch<{ updated: number; mutation_id: string | null }>(
@@ -374,7 +386,7 @@ export function ReportsPage() {
       clearSelection()
       reload()
     },
-    [selected, toast, clearSelection, reload, undoable],
+    [selected, toast, clearSelection, reload, undoable, allApps, reports, activeProjectId],
   )
 
   const openCursor = useCallback(() => {
@@ -709,6 +721,10 @@ export function ReportsPage() {
       // to /fixes for the dispatch monitor. Subscribing to SSE per-row would
       // be wasteful when the user can already babysit one job at a time on
       // the Fixes page; here we just queue the work and confirm it landed.
+      if (allApps && r.project_id !== activeProjectId) {
+        toast.error('Open this bug to dispatch', otherAppDispatchNote(r.project_name))
+        return
+      }
       setDispatching(prev => new Set(prev).add(r.id))
       const res = await apiFetch<{ dispatchId: string }>(`/v1/admin/fixes/dispatch`, {
         method: 'POST',
@@ -738,7 +754,7 @@ export function ReportsPage() {
       })
       reload()
     },
-    [toast, reload, navigate],
+    [toast, reload, navigate, allApps, activeProjectId],
   )
 
   return (
@@ -874,6 +890,11 @@ export function ReportsPage() {
       <BulkBar
         count={selected.size}
         busy={bulkBusy}
+        disabledReason={
+          allApps && selectionCrossesPinnedApp(reports, selected, activeProjectId)
+            ? OTHER_APP_BULK_REASON
+            : null
+        }
         onClear={clearSelection}
         onSetStatus={(v) => requestBulk('set_status', v)}
         onSetSeverity={(v) => requestBulk('set_severity', v)}
@@ -1007,6 +1028,7 @@ export function ReportsPage() {
             onDismiss={handleDismiss}
             onDispatchFix={handleDispatchFix}
             preflight={preflight}
+            preflightProjectId={allApps ? activeProjectId ?? '' : null}
           />
         </div>
       )}

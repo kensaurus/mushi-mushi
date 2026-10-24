@@ -163,13 +163,17 @@ describe('ProjectSwitcher — All apps', () => {
     expect(chip().textContent).toContain('glot.it')
   })
 
-  it('shows All apps while the project list is still loading', async () => {
+  it('shows All apps while the project list is still loading, and a click retries', async () => {
+    const reload = vi.fn()
     setStoredProjectScopeMode('all')
-    setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
+    setup.value = { loading: true, error: null, data: null, reload }
     await render('/reports?apps=all')
     expect(chip().textContent).toContain('All apps')
     expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-busy')).toBeNull()
     expect(host.textContent).not.toContain('Loading project')
+    await click(chip())
+    expect(reload).toHaveBeenCalledOnce()
   })
 
   it('keeps the loading chip for one app until the list arrives', async () => {

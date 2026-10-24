@@ -51,8 +51,9 @@ type ProjectScopeMode = ProjectScope['mode']
  *   /ci — GET /v1/admin/ci/overview without project_id reads every project
  *         the caller can open (routes/ci.ts, callerProjectIds).
  *   /reports — the list, severity tiles, quick-filter counts and
- *         /reports/stats. The page omits the project pin; rows carry the
- *         app name. Report detail (/reports/:id) stays one report.
+ *         /reports/stats?apps=all. The page omits the project pin; rows carry
+ *         the app name. Report detail (/reports/:id) stays one report.
+ *         Stats aggregate only when that query is sent.
  *
  * Not opted in (their list APIs drop to "all projects" without a project id,
  * but the pages assume one app: rows carry no app name, and actions, filters

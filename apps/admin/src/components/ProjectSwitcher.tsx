@@ -314,12 +314,15 @@ export function ProjectSwitcher() {
     // /v1/admin/setup to label the chip left it greyed on "Loading project"
     // for as long as that list took (and for good, if the fetch never settled).
     if (scopeMode === 'all') {
+      // Clickable while the list is in flight: a fetch that never settles
+      // (the reported grey pill) must still offer a retry. aria-busy is left
+      // off so the control is not skipped as unavailable.
       return (
         <HeaderContextChip
           data-testid="project-switcher-chip"
           aria-label="Project: All apps — switch project"
-          aria-busy="true"
-          title="All apps. The app list is still loading."
+          title="All apps. The app list is still loading. Click to try again."
+          onClick={() => setup.reload()}
           label={
             <span className="inline-flex items-center gap-1.5 min-w-0">
               <AllAppsGlyph size={14} />
