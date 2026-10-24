@@ -218,3 +218,23 @@ test('the latest completed review decides who rides, not the first row found', a
   assertEquals((tables.release_trains[0].members as Row[]).map((m) => m.prNumber), [1])
 })
 
+test('a PR that conflicts with main goes to a conflict agent instead of waiting for a train forever', async () => {
+  const rows = [qrow('a', 1), qrow('b', 2)]
+  const { db, tables } = setup(rows)
+  const d = deps({ pull: (_t, _r, n) => Promise.resolve(n === 2 ? pull(2, { mergeable: false, mergeableState: 'dirty' }) : pull(n)) })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'started')
+  assertEquals(tables.fix_merge_queue.map((r) => [r.id, r.state]), [['a', 'waiting'], ['b', 'resolving']])
+  assertEquals((tables.release_trains[0].members as Row[]).map((m) => m.prNumber), [1])
+})
+
+test('past the conflict-agent cap a conflicting PR stays out of trains and is not sent again', async () => {
+  const rows = [qrow('b', 2, { state: 'blocked', conflict_agents: 2 })]
+  const { db, tables } = setup(rows)
+  const d = deps({ pull: () => Promise.resolve(pull(2, { mergeable: false, mergeableState: 'dirty' })) })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(tables.fix_merge_queue[0].state, 'blocked')
+  assertEquals(d.calls, [])
+  assertEquals(out === 'started', false)
+})
+

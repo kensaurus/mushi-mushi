@@ -16,7 +16,7 @@ import type { GithubRepoRef, PullRequestDetails } from '../_shared/github.ts'
 import type { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import type { gatedTrainMerge, TrainMember } from '../_shared/gated-merge.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import type { ChecksView } from '../_shared/merge-queue.ts'
+import { MAX_CONFLICT_AGENTS, type ChecksView } from '../_shared/merge-queue.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
   DEFAULT_TRAIN_INTERVAL_MINUTES,
@@ -62,6 +62,8 @@ export interface TrainQueueRow {
   queued_at: string
   queued_by: string | null
   train_id: string | null
+  /** Conflict agents already run on this PR (the single-PR path caps it). */
+  conflict_agents?: number
 }
 
 interface TrainRow {
@@ -354,6 +356,17 @@ export async function runTrainTick(
     }
     if (!c.prOpen) {
       await setRows(db, [r.id], { state: 'removed', detail: 'The pull request was closed without merging.' })
+      continue
+    }
+    // It conflicts with main itself, not with the other members: no train can
+    // take it until a conflict agent merges main into it (the single-PR path,
+    // at most MAX_CONFLICT_AGENTS runs per PR; past that it stays held).
+    if ((pull.mergeableState ?? '').toLowerCase() === 'dirty' || pull.mergeable === false) {
+      if ((r.conflict_agents ?? 0) < MAX_CONFLICT_AGENTS) {
+        await setRows(db, [r.id], { state: 'resolving', cursor_agent_id: null, detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
+      } else if (r.state !== 'blocked') {
+        await setRows(db, [r.id], { state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.` })
+      }
       continue
     }
     // An approved PR got a new commit: ask Opus to review the new head.
