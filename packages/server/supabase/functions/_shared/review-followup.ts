@@ -105,6 +105,7 @@ export const FOLLOWUP_REASONS = {
   autofix_cap: "The app's auto-fix limit is reached.",
   budget_unavailable: "The app's auto-fix limits could not be read.",
   no_cursor_key: 'No Cursor key is available for this app.',
+  key_used_up: "The chosen Cursor key's account reached its plan's usage limit; follow-ups wait until it is back or another key is chosen.",
   key_not_allowed: 'The chosen Cursor key is not one this organization can use.',
   models_unavailable: "Cursor's model list could not be read for this key.",
   model_not_listed: 'The follow-up model is not in this key\'s Cursor model list.',
