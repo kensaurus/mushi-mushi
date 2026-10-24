@@ -182,6 +182,66 @@ function sliceBadgeSpec(
   return { kind: 'count', count, label: badge.label }
 }
 
+/**
+ * Paths `resolveNavBadge` can fill. The expanded sidebar reserves a badge
+ * slot only for these, so a late count cannot wrap the label. Every other
+ * path keeps the full label width — a reserved slot would truncate it.
+ * Keep this set aligned with the switch in `resolveNavBadge`.
+ */
+const NAV_BADGE_PATHS: ReadonlySet<string> = new Set([
+  '/onboarding',
+  '/connect',
+  '/dashboard',
+  '/content',
+  '/projects',
+  '/organization/members',
+  '/feature-board',
+  '/rewards',
+  '/billing',
+  '/audit',
+  '/fullstack-audit',
+  '/code-health',
+  '/qa-coverage',
+  '/lessons',
+  '/drift',
+  '/releases',
+  '/intelligence',
+  '/explore',
+  '/experiments',
+  '/anomalies',
+  '/iterate',
+  '/research',
+  '/prompt-lab',
+  '/inventory',
+  '/graph',
+  '/fixes',
+  '/repo',
+  '/health',
+  '/skills',
+  '/integrations/config',
+  '/mcp',
+  '/marketplace',
+  '/settings',
+  '/cost',
+  '/sso',
+  '/compliance',
+  '/storage',
+  '/query',
+  '/users',
+  '/anti-gaming',
+  '/reports',
+  '/judge',
+  '/feedback',
+  '/inbox',
+  '/notifications',
+  '/queue',
+])
+
+export function navPathCanBadge(path: string): boolean {
+  const bare = path.split('?')[0] ?? path
+  return NAV_BADGE_PATHS.has(bare)
+}
+
 export function resolveNavBadge(
   path: string,
   navCounts: NavCounts,

@@ -5,9 +5,10 @@
  *          they scroll, and clicking any tile filters the table to that
  *          severity in one click.
  *
- *          The critical tile is always the hero size, and every tile keeps
- *          an 18px trend row, so the sparkline and the hero treatment cannot
- *          push the queue down when severity stats arrive.
+ *          The critical tile is always the hero size (`variant="primary"`),
+ *          and every tile keeps an 18px trend row plus
+ *          `REPORTS_KPI_TILE_MIN_HEIGHT`, so the sparkline and the hero
+ *          treatment cannot push the queue down when severity stats arrive.
  */
 
 import { useMemo } from 'react'
@@ -88,6 +89,13 @@ const TILES_ADVANCED: Array<{
     meaning: 'Low-severity reports — usually visual nits or confusion. Useful signal, low individual urgency.' },
 ]
 
+/**
+ * Shared floor for the loading and loaded tiles. The critical tile is always
+ * hero-sized and every tile keeps the trend row, so this class is on the
+ * button in both states.
+ */
+export const REPORTS_KPI_TILE_MIN_HEIGHT = 'min-h-[7.5rem]'
+
 const TILES_PLAIN: typeof TILES_ADVANCED = [
   { key: 'critical', label: 'Critical', accent: 'danger',
     meaning: 'Bugs that block user flow — review these first.' },
@@ -150,7 +158,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
                 ? `Clear ${tile.label} filter`
                 : `Filter to ${tile.label} severity reports`
             }
-            className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[transform,opacity] ${
+            className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[transform,opacity] ${REPORTS_KPI_TILE_MIN_HEIGHT} ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >
@@ -175,7 +183,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               series={sparks[tile.key]}
               delta={severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
-              variant={isHero ? 'primary' : 'default'}
+              variant={tile.key === 'critical' ? 'primary' : 'default'}
             />
             {!loading && total > 0 && sharePct > 0 ? (
               <div

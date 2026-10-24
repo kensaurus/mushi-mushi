@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { NavRailLink, railBadgeText, railDescriptionId } from './NavRailLink'
 import { NavRailFlyout } from './NavRailFlyout'
-import { navBadgeStatus, resolveNavBadge, type NavBadgeSpec } from '../../lib/navBadges'
+import { navBadgeStatus, navPathCanBadge, resolveNavBadge, type NavBadgeSpec } from '../../lib/navBadges'
 import { NAV_REGISTRY } from '../../lib/navRegistry'
 import { EMPTY_NAV_STAT_SLICES } from '../../lib/extendedNavMeta'
 import type { NavCounts } from '../../lib/useNavCounts'
@@ -336,5 +336,35 @@ describe('resolveNavBadge', () => {
 
   it('returns nothing for a route with no badge mapping', () => {
     expect(resolveNavBadge('/not-a-real-route', NAV_COUNTS_ZERO, NO_EXTRAS)).toBeNull()
+  })
+
+  it('marks only paths the switch can fill, including when a query is present', () => {
+    const fat = {
+      ...NAV_COUNTS_ZERO,
+      untriagedBacklog: 3,
+      fixesFailed: 2,
+      prsOpen: 2,
+      regressedActions: 2,
+      inboxOpenActions: 2,
+      notificationsUnread: 2,
+      queueFailed: 2,
+      healthIssues: 2,
+      flaggedDevices: 2,
+      feedbackWithReply: 2,
+      judgeDisagreements: 2,
+      projectCount: 2,
+      pendingInvites: 2,
+      superAdminSignups7d: 2,
+    }
+    for (const entry of NAV_REGISTRY) {
+      const spec = resolveNavBadge(entry.path, fat, { criticalReports30d: 2 })
+      if (spec) expect(navPathCanBadge(entry.path)).toBe(true)
+      if (!navPathCanBadge(entry.path)) expect(spec).toBeNull()
+    }
+    expect(navPathCanBadge('/portfolio')).toBe(false)
+    expect(navPathCanBadge('/checks')).toBe(false)
+    expect(navPathCanBadge('/team')).toBe(false)
+    expect(navPathCanBadge('/reports')).toBe(true)
+    expect(navPathCanBadge('/dashboard?view=apps')).toBe(true)
   })
 })

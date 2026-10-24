@@ -33,7 +33,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
-import { ReportsInitialChrome, reportsInitialChromeReady } from '../components/reports/ReportsInitialChrome'
+import { ReportsInitialChrome, reportsInitialChromeReady, useReportsChromeRevealed } from '../components/reports/ReportsInitialChrome'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
@@ -41,6 +41,7 @@ import {
   type ReportsStats,
 } from '../components/reports/ReportsStatsTypes'
 import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from '../lib/reportsExplainer'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, withLocallySeen, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -495,6 +496,11 @@ export function ReportsPage() {
     [reports.length],
   )
 
+  // The queue stays mounted behind the skeleton so the fragile-area banner
+  // can settle. `hidden` does not stop this document listener, so shortcuts
+  // stay off until that first ready paint (and stay on if a later fetch is
+  // not ready — the latch does not close).
+  const chromeRevealed = useReportsChromeRevealed(chromeReady)
   useHotkeys(
     [
       {
@@ -607,7 +613,7 @@ export function ReportsPage() {
         },
       },
     ],
-    { enabled: !loading, capture: true },
+    { enabled: chromeRevealed && !loading, capture: true },
   )
 
   const requestBulk = useCallback(
@@ -750,55 +756,57 @@ export function ReportsPage() {
 
   return (
     <ReportsInitialChrome
+      className={PAGE_CONTENT_STACK}
       ready={chromeReady}
-      skeleton={<TableSkeleton rows={8} columns={6} showFilters showKpiStrip label="Loading reports" />}
-    >
-      <PageHeaderBar
-        title={copy?.title ?? 'Bugs'}
-        icon={<IconReports />}
-        projectScope={projectName}
-        description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
-        helpTitle={copy?.help?.title ?? 'About bugs'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
-        helpUseCases={[
-          ...(copy?.help?.useCases ?? [
-            'Review incoming reports — sort by severity, filter by status',
-            'Bulk-dismiss noise or escalate a batch of regressions in one click',
-            'Drill into a single report for the original payload, screenshots, and timeline',
-          ]),
-          // The severity guide used to be its own panel under the banner.
-          ...TRIAGE_SEVERITY_DEFINITIONS.map((sev) => `${sev.label}: ${sev.plain} ${sev.triageHint}`),
-        ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
-      >
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <Btn
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => (sentryImportOpen ? closeSentryImport() : setSentryImportOpen(true))}
-          aria-expanded={sentryImportOpen}
-          data-testid="mushi-reports-sentry-import-toggle"
+      skeleton={<TableSkeleton rows={8} columns={6} showHeader={false} showFilters showKpiStrip label="Loading reports" />}
+      header={
+        <PageHeaderBar
+          title={copy?.title ?? 'Bugs'}
+          icon={<IconReports />}
+          projectScope={projectName}
+          description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
+          helpTitle={copy?.help?.title ?? 'About bugs'}
+          helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
+          helpUseCases={[
+            ...(copy?.help?.useCases ?? [
+              'Review incoming reports — sort by severity, filter by status',
+              'Bulk-dismiss noise or escalate a batch of regressions in one click',
+              'Drill into a single report for the original payload, screenshots, and timeline',
+            ]),
+            // The severity guide used to be its own panel under the banner.
+            ...TRIAGE_SEVERITY_DEFINITIONS.map((sev) => `${sev.label}: ${sev.plain} ${sev.triageHint}`),
+          ]}
+          helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
         >
-          Import from Sentry
-        </Btn>
-        <span className="text-xs text-fg-muted font-mono tabular-nums">
-          {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
-        </span>
-        <Tooltip content="Show keyboard shortcuts (?)">
+          <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
           <Btn
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setShowHelp((v) => !v)}
-            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5"
-            aria-label="Show keyboard shortcuts"
+            onClick={() => (sentryImportOpen ? closeSentryImport() : setSentryImportOpen(true))}
+            aria-expanded={sentryImportOpen}
+            data-testid="mushi-reports-sentry-import-toggle"
           >
-            <Kbd>?</Kbd>
+            Import from Sentry
           </Btn>
-        </Tooltip>
-      </PageHeaderBar>
-
+          <span className="text-xs text-fg-muted font-mono tabular-nums">
+            {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
+          </span>
+          <Tooltip content="Show keyboard shortcuts (?)">
+            <Btn
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHelp((v) => !v)}
+              className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5"
+              aria-label="Show keyboard shortcuts"
+            >
+              <Kbd>?</Kbd>
+            </Btn>
+          </Tooltip>
+        </PageHeaderBar>
+      }
+    >
       {sentryImportOpen && <ReportsSentryImport onClose={closeSentryImport} onImported={reloadAll} />}
 
       <PagePosture

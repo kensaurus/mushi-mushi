@@ -15,7 +15,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { navSlicesForPaths } from '../lib/navBadges'
+import { navPathCanBadge, navSlicesForPaths } from '../lib/navBadges'
 import { CORE_NAV_PATHS } from '../lib/navRegistry'
 
 const state = vi.hoisted(() => ({
@@ -59,6 +59,7 @@ vi.mock('./ProjectSwitcher', () => ({
   ProjectSwitcher: () => null,
   useActiveProjectId: () => 'p1',
 }))
+vi.mock('../lib/track', () => ({ trackSelf: vi.fn(), trackAdHoc: vi.fn() }))
 vi.mock('../lib/useDocumentTitle', () => ({ useDocumentTitle: () => {} }))
 vi.mock('../lib/favicon', () => ({ useFaviconBadge: () => {} }))
 vi.mock('../lib/useMediaQuery', () => ({ useMediaQuery: () => true }))
@@ -148,14 +149,49 @@ describe('Layout nav-meta slices', () => {
     expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
-  it('reserves a badge slot on expanded nav links before counts are ready', () => {
+  it('reserves a badge slot only on expanded links that can show a badge', () => {
     localStorage.setItem('mushi:ui:sidebar-collapsed', JSON.stringify({ v: 1, value: false }))
     try {
       renderAt('/reports')
-      // Counts are not ready (`useNavCounts` returns ready: false). Every
-      // core row still keeps a slot so the number cannot wrap the label.
-      const slots = container!.querySelectorAll('a.nav-link > [data-nav-badge-slot]')
-      expect(slots.length).toBe(CORE_NAV_PATHS.length)
+      const aside = container!.querySelector('aside[data-collapsed="false"]')
+      expect(aside).not.toBeNull()
+      // Counts are not ready. Only paths that can later show a badge keep a
+      // slot; the others keep their label width. The footer help link is
+      // outside this nav.
+      const badgePaths = ['/dashboard', '/reports', '/fixes', '/connect', '/integrations/config', '/settings']
+      const links = [...aside!.querySelectorAll('nav[aria-label="Main navigation"] a.nav-link')]
+      expect(links.map((link) => link.getAttribute('href'))).toEqual([...CORE_NAV_PATHS])
+      for (const link of links) {
+        const href = link.getAttribute('href') ?? ''
+        const slot = link.querySelector('[data-nav-badge-slot]')
+        const label = [...link.children].find(
+          (el) => el.tagName === 'SPAN' && !el.hasAttribute('data-nav-badge-slot'),
+        )
+        if (badgePaths.includes(href)) {
+          expect(navPathCanBadge(href)).toBe(true)
+          expect(slot).not.toBeNull()
+          expect(slot?.className).toContain('min-w-9')
+          expect(label?.className).toContain('truncate')
+        } else {
+          expect(navPathCanBadge(href)).toBe(false)
+          expect(slot).toBeNull()
+          expect(label?.className ?? '').not.toContain('truncate')
+        }
+      }
+    } finally {
+      localStorage.removeItem('mushi:ui:sidebar-collapsed')
+    }
+  })
+
+  it('does not reserve a badge slot on the collapsed rail', () => {
+    localStorage.setItem('mushi:ui:sidebar-collapsed', JSON.stringify({ v: 1, value: true }))
+    try {
+      renderAt('/reports')
+      const aside = container!.querySelector('aside[data-collapsed="true"]')
+      expect(aside).not.toBeNull()
+      expect(aside!.querySelectorAll('[data-nav-badge-slot]')).toHaveLength(0)
+      expect(aside!.querySelectorAll('a.nav-rail-item')).toHaveLength(CORE_NAV_PATHS.length)
+      expect(aside!.querySelectorAll('a.nav-rail-item .truncate')).toHaveLength(0)
     } finally {
       localStorage.removeItem('mushi:ui:sidebar-collapsed')
     }

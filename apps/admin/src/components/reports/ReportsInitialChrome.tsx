@@ -3,10 +3,18 @@
  * PURPOSE: Keep the reports queue from painting until the late chrome
  *          (status banner, fragile-area line, triage banner) has decided
  *          whether it exists, so that chrome cannot push the queue down.
+ *          The static page header stays outside that gate so the title
+ *          paints immediately.
  *
  * USAGE: ReportsPage passes `ready` once list stats, the report list, and
- *        DogfoodNarrativeBanner have settled. The first ready paint sticks:
- *        a later filter fetch must not swap the page back to the skeleton.
+ *        DogfoodNarrativeBanner have settled, and `header` for the title
+ *        bar. The first ready paint sticks: a later filter fetch must not
+ *        swap the page back to the skeleton.
+ *
+ *        Children stay mounted while hidden so the fragile-area banner can
+ *        call `onSettled` and open the gate. `hidden` does not stop a
+ *        document key listener — callers gate those with
+ *        `useReportsChromeRevealed(ready)`.
  */
 
 import { useLayoutEffect, useState, type ReactNode } from 'react'
@@ -52,23 +60,40 @@ export function dogfoodNarrativeSettled(input: DogfoodNarrativeSettledInput): bo
 
 interface Props {
   ready: boolean
+  /** Title bar. Renders above the gate so it is visible during the skeleton. */
+  header?: ReactNode
   skeleton: ReactNode
   children: ReactNode
+  /** Page body stack. Defaults to `PAGE_CONTENT_STACK`. */
+  className?: string
 }
 
-export function ReportsInitialChrome({ ready, skeleton, children }: Props) {
+/**
+ * True on the first paint where `ready` is true, and stays true after that.
+ * ReportsPage uses the same latch to keep document shortcuts off while the
+ * skeleton is the only thing the user can see.
+ */
+export function useReportsChromeRevealed(ready: boolean): boolean {
   const [revealed, setRevealed] = useState(false)
   useLayoutEffect(() => {
     if (ready) setRevealed(true)
   }, [ready])
+  return revealed
+}
+
+export function ReportsInitialChrome({ ready, header, skeleton, children, className }: Props) {
+  const revealed = useReportsChromeRevealed(ready)
 
   return (
     <div
-      className={revealed ? undefined : PAGE_CONTENT_STACK}
+      className={className ?? PAGE_CONTENT_STACK}
       data-testid="mushi-page-reports"
       aria-busy={revealed ? undefined : true}
     >
+      {header}
       {!revealed && skeleton}
+      {/* Mounted while hidden so settlement effects can open the gate.
+          Callers gate document key handlers with useReportsChromeRevealed. */}
       <div className={PAGE_CONTENT_STACK} hidden={!revealed}>
         {children}
       </div>

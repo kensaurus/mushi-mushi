@@ -6,6 +6,7 @@
  * FILE: apps/admin/src/components/reports/ReportsInitialChrome.test.tsx
  * PURPOSE: The reports queue stays out of layout until late chrome is
  *          settled, then stays put when a filter refetch clears `ready`.
+ *          A static header passed in stays visible during that wait.
  */
 
 import { act, createElement, useState } from 'react'
@@ -124,6 +125,38 @@ describe('ReportsInitialChrome', () => {
       container.querySelector('button')?.click()
     })
     expect(container.querySelector('[data-testid="queue"]')?.closest('[hidden]')).toBeNull()
+    expect(container.textContent).not.toContain('Loading reports')
+  })
+
+  it('keeps the static header visible while the queue is still gated', () => {
+    act(() => {
+      root.render(
+        createElement(ReportsInitialChrome, {
+          ready: false,
+          header: createElement('h2', null, 'Bugs'),
+          skeleton: createElement('p', null, 'Loading reports'),
+          children: createElement('input', { 'aria-label': 'Search reports' }),
+        }),
+      )
+    })
+    const heading = container.querySelector('h2')
+    expect(heading?.textContent).toBe('Bugs')
+    expect(heading?.closest('[hidden]')).toBeNull()
+    expect(container.querySelector('[aria-label="Search reports"]')?.closest('[hidden]')).not.toBeNull()
+    expect(container.textContent).toContain('Loading reports')
+
+    act(() => {
+      root.render(
+        createElement(ReportsInitialChrome, {
+          ready: true,
+          header: createElement('h2', null, 'Bugs'),
+          skeleton: createElement('p', null, 'Loading reports'),
+          children: createElement('input', { 'aria-label': 'Search reports' }),
+        }),
+      )
+    })
+    expect(container.querySelector('h2')?.closest('[hidden]')).toBeNull()
+    expect(container.querySelector('[hidden]')).toBeNull()
     expect(container.textContent).not.toContain('Loading reports')
   })
 })

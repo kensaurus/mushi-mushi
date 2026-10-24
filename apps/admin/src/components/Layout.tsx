@@ -13,7 +13,7 @@ import {
   IconSignOut, IconBell, IconEye, IconChevronRight,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
-import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
+import { navPathCanBadge, navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
@@ -396,6 +396,10 @@ export function Layout({ children }: { children: ReactNode }) {
     const { label, path, icon: Icon, requiresFeature } = item
     const active = isActive(pathname, path)
     const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
+    // Expanded sidebar only (`renderRailLink` is the collapsed rail, and it
+    // overlays the badge on the icon). A path that can never badge does not
+    // reserve a slot — the empty `min-w-9` was cutting off long labels.
+    const reserveBadge = navPathCanBadge(path)
     return (
       <Link
         key={path}
@@ -405,12 +409,14 @@ export function Layout({ children }: { children: ReactNode }) {
         className={`nav-link ${gated ? 'opacity-80' : ''}`}
       >
         <Icon className="nav-link-icon" />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={reserveBadge ? 'min-w-0 flex-1 truncate' : 'min-w-0 flex-1'}>{label}</span>
         {gated && requiresFeature && <UpgradePill flag={requiresFeature} className="ml-auto" />}
-        {/* Slot stays in the row before counts load so the badge cannot wrap the label. */}
-        <span data-nav-badge-slot="" className="ml-auto inline-flex h-4 min-w-9 shrink-0 items-center justify-end">
-          {renderNavBadge(path, navCounts, { criticalReports30d })}
-        </span>
+        {reserveBadge ? (
+          // Slot stays in the row before counts load so the badge cannot wrap the label.
+          <span data-nav-badge-slot="" className="ml-auto inline-flex h-4 min-w-9 shrink-0 items-center justify-end">
+            {renderNavBadge(path, navCounts, { criticalReports30d })}
+          </span>
+        ) : null}
       </Link>
     )
   }
