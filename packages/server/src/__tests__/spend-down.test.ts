@@ -1131,3 +1131,22 @@ describe('a used-up Cursor key hands its apps to the next one (2026-10-24)', () 
     expect(firstCursorKeyFor(project, keys, Date.parse('2026-10-24T13:00:00Z'))).toBe('ayako')
   })
 })
+
+describe('an app whose own keys are used up goes to its organization, then universal keys, not its legacy key', () => {
+  it('skips the legacy Integrations key when the app has pool keys of its own', () => {
+    const now = Date.parse('2026-10-24T08:00:00Z')
+    const used = { status: 'active', test_status: 'ok', exhausted_until: '2026-10-29T00:00:00Z' }
+    const glot = { id: 'glot', organization_id: 'kenji', has_legacy_key: true, org_owner_ids: ['owner'] }
+    const keys = [
+      { id: 'hirose', project_id: 'glot', organization_id: null, priority: 100, ...used },
+      { id: 'ayako', project_id: null, organization_id: 'kenji', priority: 10, status: 'active', test_status: 'ok' },
+      { id: 'suzu', project_id: null, organization_id: null, owner_user_id: 'owner', priority: 50, status: 'active', test_status: 'ok' },
+    ]
+    expect(firstCursorKeyFor(glot, keys, now)).toBe('ayako')
+    const mushi = { id: 'mushi', organization_id: 'mm', has_legacy_key: true, org_owner_ids: ['owner'] }
+    expect(firstCursorKeyFor(mushi, [{ id: 'hirose-shared', project_id: 'mushi', organization_id: null, priority: 100, ...used }, keys[2]], now)).toBe('suzu')
+    // No pool key of its own: the legacy key still comes first (ADR 0023).
+    expect(firstCursorKeyFor({ ...mushi, id: 'other' }, [keys[2]], now)).toBe('legacy')
+  })
+})
+

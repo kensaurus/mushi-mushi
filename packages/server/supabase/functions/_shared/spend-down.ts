@@ -239,7 +239,12 @@ export function firstCursorKeyFor(
   const usable = keys.filter((k) => usableForResolver(k, nowMs))
   const own = usable.filter((k) => k.project_id === project.id)
   if (own.length > 0) return pick(own)
-  if (project.has_legacy_key) return 'legacy'
+  // Like the resolver, an app with pool keys of its own never falls back to
+  // its legacy Integrations key, also when those keys are used up: the next
+  // pick is its organization's, then a universal key (2026-10-24: hirose's
+  // keys used up on glot.it and mushi-mushi left both apps unserved).
+  const hasOwnPoolKeys = keys.some((k) => k.project_id === project.id)
+  if (project.has_legacy_key && !hasOwnPoolKeys) return 'legacy'
   if (!project.organization_id) return null
   const shared = usable.filter((k) => !k.project_id && k.organization_id === project.organization_id)
   if (shared.length > 0) return pick(shared)
