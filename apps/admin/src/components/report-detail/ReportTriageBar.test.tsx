@@ -272,6 +272,45 @@ describe('ReportTriageBar Not a code bug', () => {
     await act(async () => buttonByText('Close report')!.click())
     expect(onTriage).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'working_as_intended' })
   })
+
+  async function openClosePicker(source: string, onTriage = vi.fn(async () => {})) {
+    await act(async () => {
+      root.render(
+        createElement(ReportTriageBar, {
+          report: { ...REPORT, source } as ReportDetail,
+          onTriage,
+          saving: false,
+          savedAt: null,
+          dispatchState: { status: 'idle' },
+          onRequestDispatch: vi.fn(),
+          dispatchBlock: { blocked: false, reason: null },
+          isDispatchBusy: false,
+          repoChoice: choice([FRONTEND], 'repo-front'),
+        }),
+      )
+    })
+    await act(async () => buttonByText('Not a code bug')!.click())
+    return Array.from(container.querySelectorAll('label'))
+      .find((l) => l.textContent?.startsWith('Why close it?'))
+      ?.querySelector('select') as HTMLSelectElement
+  }
+
+  it('does not offer a false alarm on a widget report', async () => {
+    const reason = await openClosePicker('widget')
+    expect(Array.from(reason.options).map((o) => o.value)).not.toContain('false_alarm')
+  })
+
+  it('offers a false alarm on a site audit and closes with it', async () => {
+    const onTriage = vi.fn(async () => {})
+    const reason = await openClosePicker('site_audit', onTriage)
+    expect(Array.from(reason.options).map((o) => o.value)).toContain('false_alarm')
+    await act(async () => {
+      reason.value = 'false_alarm'
+      reason.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => buttonByText('Close report')!.click())
+    expect(onTriage).toHaveBeenCalledWith({ status: 'dismissed', closed_reason: 'false_alarm' })
+  })
 })
 
 // BL-061: a report with no stack trace, file or failed request leads with
