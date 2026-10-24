@@ -347,6 +347,13 @@ describe('spend_down_idle', () => {
     expect(r.findings[0].message).toContain('no app uses this key')
     expect(r.findings[0].fix).toMatch(/auto-fix/i)
   })
+  it('names the org key that pays first when this one is only outranked', () => {
+    const idleNote = 'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed'
+    const r = evaluateSpendDownIdle([row({ idleNote })], NOW)
+    expect(r.findings[0].message).toContain(idleNote)
+    expect(r.findings[0].message).not.toContain('no app uses this key')
+    expect(r.findings[0].fix).toMatch(/runs out or is removed/)
+  })
   it('finds a key whose last tick settled every open report', () => {
     const r = evaluateSpendDownIdle([row({
       servedProjectIds: ['p1'],

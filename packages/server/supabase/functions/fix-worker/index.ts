@@ -144,11 +144,12 @@ import {
   cloudAgentBranchName,
   getCloudAgentAdapter,
   isDispatchableCloudAgent,
+  pinnedCursorKeyIdFromDispatch,
   recordCloudAgentDispatched,
 } from '../_shared/agent-adapters.ts';
 import { cursorModelForDispatch } from '../_shared/cursor-cloud.ts';
 import { confirmBaseRef } from '../_shared/github-branch.ts';
-import { isCursorKeyLimitError } from '../_shared/spend-down.ts';
+import { isCursorKeyLimitError, isSpendDownPinnedKeyUnavailable } from '../_shared/spend-down.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -1559,6 +1560,10 @@ ${
         // spend-down, not a server bug. 47 of the 59 "Fix worker failed"
         // events by 2026-10-23 (MUSHI-MUSHI-SERVER-28).
         log.warn('Fix worker stopped: Cursor account out of usage', logFields);
+      } else if (failureCategory === 'cursor_api_error' && isSpendDownPinnedKeyUnavailable(errMsg)) {
+        // The key spend-down pinned was already unusable. The next tick pins
+        // another key and sends this report again. Not a server bug.
+        log.warn('Fix worker stopped: spend-down key is not usable', logFields);
       } else {
         log.error('Fix worker failed', logFields);
       }
@@ -1651,6 +1656,9 @@ const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
  */
 function categorizeFailure(err: unknown, msg: string): string {
   const m = (msg || '').toLowerCase();
+  // Pinned spend-down key was already unusable. Same retry as a usage limit
+  // (reportsToRetryAfterKeyLimit), and not a Sentry error.
+  if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error';
   // AI-SDK structured-output failures — we throw `LLM call failed: …` and
   // the inner error name is in the message.
   if (m.includes('noobjectgeneratederror') || m.includes('no_object')) return 'llm_no_object';
@@ -2020,6 +2028,9 @@ async function dispatchToCloudAgent(
 
   const adapter = getCloudAgentAdapter(requestedAgent);
   const dispatchSpan = trace.span('cloud.dispatch');
+  // Spend-down stored the key it is billing. Pin it so the Cursor call does
+  // not resolve the pool again and land on a quota-held key.
+  const pinnedCursorKeyId = pinnedCursorKeyIdFromDispatch(dispatchMeta);
   const result = await adapter.dispatch({
     db,
     projectId: dispatch.project_id,
@@ -2032,6 +2043,7 @@ async function dispatchToCloudAgent(
     branchName,
     model,
     name: `Mushi fix ${dispatch.report_id.slice(0, 8)}`,
+    ...(pinnedCursorKeyId ? { pinnedCursorKeyId } : {}),
   });
   dispatchSpan.end({
     agent: requestedAgent,
