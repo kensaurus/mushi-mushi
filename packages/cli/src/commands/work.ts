@@ -217,7 +217,9 @@ export function stableKey(...parts: string[]): string {
 
 /** @internal Exported for tests only. */
 export function prTitle(summary: string | null, reportId: string): string {
-  const s = cap((summary ?? 'fix the reported bug').replace(/\[[^\]]*\]/g, ''), 72)
+  // A title is cut at a word with "…", never the prompt's "[cut]" marker (PR #646).
+  const clean = (summary ?? 'fix the reported bug').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim()
+  const s = clean.length <= 72 ? clean : `${clean.slice(0, 72).replace(/\s+\S*$/, '')}…`
   return `fix: ${s.charAt(0).toLowerCase()}${s.slice(1)} (MUSHI-${reportId.slice(0, 8)})`
 }
 

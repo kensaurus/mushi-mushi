@@ -100,6 +100,9 @@ describe('mushi work: branch, prompt and PR', () => {
 
   it('titles the PR as a conventional fix with the report id', () => {
     expect(prTitle('Fractional y-axis ticks on count charts [release:all]', R1)).toBe('fix: fractional y-axis ticks on count charts (MUSHI-11111111)')
+    const long = 'buildYTickValues applies 12% headroom and divides linearly (peak*1.12/3), yielding fractional ticks on count charts'
+    expect(prTitle(long, R1)).toBe('fix: buildYTickValues applies 12% headroom and divides linearly… (MUSHI-11111111)')
+    expect(prTitle(long, R1)).not.toContain('[cut]')
   })
 
   it('reads the agent verdict from its first lines', () => {
