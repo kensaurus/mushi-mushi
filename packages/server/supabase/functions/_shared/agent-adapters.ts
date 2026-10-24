@@ -21,7 +21,9 @@
  *                                which is a later pass (see the exec plan, C4).
  *
  *          The in-edge `fix-worker` LLM path stays the zero-config default
- *          and never goes through here.
+ *          and never goes through here. A spend-down dispatch names its
+ *          Cursor key (`pinnedCursorKeyIdFromDispatch`); the adapter uses
+ *          that key and does not resolve the pool again.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -166,6 +168,17 @@ export interface CloudDispatchInput {
    * after its cooldown, which would bill the key spend-down skipped.
    */
   pinnedCursorKeyId?: string
+}
+
+/**
+ * The `byok_keys` id spend-down stored on the dispatch (`spend_down_key_id`),
+ * or undefined when this dispatch did not name one. fix-worker passes the
+ * result as `pinnedCursorKeyId`. A blank or non-string value is not a pin.
+ */
+export function pinnedCursorKeyIdFromDispatch(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined
+  const id = (metadata as { spend_down_key_id?: unknown }).spend_down_key_id
+  return typeof id === 'string' && id.length > 0 ? id : undefined
 }
 
 export interface CloudDispatchResult {
@@ -479,9 +492,12 @@ const cursorAdapter: CloudAgentAdapter = {
     }
     // A key Cursor refuses for its usage limit is marked used up and the same
     // dispatch goes once more on the next key, so nothing waits for a retry.
-    // A pinned spend-down key does not: the next pick would be the pool's,
-    // which can be the quota-held key this run was started to avoid. The
-    // next spend-down tick sees exhausted_until and pins the following key.
+    // A pinned spend-down key does not swap here: the pool's next key can be
+    // the quota-held row this run was started to avoid. The throw fails this
+    // dispatch. The next spend-down tick sees exhausted_until, pins the
+    // following key, and picks the report up again
+    // (reportsToRetryAfterKeyLimit). A pin that is already unusable throws
+    // before Cursor; that message is the same retry.
     let key = picked
     for (let attempt = 0; ; attempt++) {
       try {

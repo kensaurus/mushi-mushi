@@ -62,12 +62,14 @@ import {
   inspectCloudAgentPr,
   isDispatchableCloudAgent,
   parseCloudAgentBranchRef,
+  pinnedCursorKeyIdFromDispatch,
   pollResultToOutcome,
   cursorKeyForNewWork,
   resolveCursorApiKey,
   stopCursorAgentLatestRun,
   validateAgentOverride,
 } from '../../supabase/functions/_shared/agent-adapters.ts'
+import { isSpendDownPinnedKeyUnavailable, spendDownDispatchMetadata } from '../../supabase/functions/_shared/spend-down.ts'
 import { deterministicCursorAgentId } from '../../supabase/functions/_shared/cursor-cloud.ts'
 
 const REPORT = '0f7f2b1a-1111-4222-8333-444455556666'
@@ -127,9 +129,6 @@ describe('validateAgentOverride (fix-dispatch allow-list)', () => {
     expect(src).toContain("'fix.requested'")
     expect(isDispatchableCloudAgent('cursor_cloud')).toBe(true)
     expect(isDispatchableCloudAgent('anthropic_managed')).toBe(false)
-    const cloud = src.slice(src.indexOf('async function dispatchToCloudAgent('))
-    expect(cloud).toContain('spend_down_key_id')
-    expect(cloud).toContain('pinnedCursorKeyId')
   })
 })
 
@@ -1072,6 +1071,18 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
     expect((mark.payload as { exhausted_until?: string }).exhausted_until).toBeTruthy()
   })
 
+  it('spend-down metadata names its key, and only a non-empty string pins the dispatch', () => {
+    const key = { id: 'suzu', spend_down_model: null as string | null }
+    const meta = spendDownDispatchMetadata(key)
+    expect(meta.spend_down_key_id).toBe(key.id)
+    expect(pinnedCursorKeyIdFromDispatch(meta)).toBe(key.id)
+    expect(pinnedCursorKeyIdFromDispatch({ ...meta, spend_down_model: 'grok' })).toBe('suzu')
+    expect(pinnedCursorKeyIdFromDispatch({})).toBeUndefined()
+    expect(pinnedCursorKeyIdFromDispatch({ spend_down_key_id: '' })).toBeUndefined()
+    expect(pinnedCursorKeyIdFromDispatch({ spend_down_key_id: 4 })).toBeUndefined()
+    expect(pinnedCursorKeyIdFromDispatch(null)).toBeUndefined()
+  })
+
   it('a spend-down dispatch uses the pinned key, not the pool\'s quota-held first key', async () => {
     mocks.resolveLlmKey.mockResolvedValue({ source: 'byok', key: 'crsr_ayako', keyId: 'ayako', shared: false })
     mocks.resolveLlmKeys.mockResolvedValue([
@@ -1094,9 +1105,10 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
       seen.push(init.headers.Authorization)
       return new Response(JSON.stringify({ agent: { id: 'bc-suzu', url: 'https://cursor.com/agents/bc-suzu' }, run: { id: 'run-suzu', status: 'CREATING' } }), { status: 201 })
     }))
+    const pinnedCursorKeyId = pinnedCursorKeyIdFromDispatch(spendDownDispatchMetadata({ id: 'suzu', spend_down_model: null }))
     const input = {
       db, projectId: PROJECT, reportId: REPORT, dispatchId: 'd-1', attemptId: 'fa-1',
-      repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it', pinnedCursorKeyId: 'suzu',
+      repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it', pinnedCursorKeyId,
     }
     const result = await getCloudAgentAdapter('cursor_cloud')!.dispatch(input)
     expect(seen).toEqual(['Bearer crsr_suzu'])
@@ -1112,7 +1124,14 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
       if (q.table === 'byok_keys' && q.op === 'select' && eqValue(q, 'id') === 'suzu') return { data: foreign }
       return { data: null }
     })
-    await expect(getCloudAgentAdapter('cursor_cloud')!.dispatch({ ...input, db: otherDb })).rejects.toThrow(/not usable/)
+    const refused = await getCloudAgentAdapter('cursor_cloud')!.dispatch({ ...input, db: otherDb }).then(
+      () => null,
+      (err: unknown) => err,
+    )
+    expect(refused).toBeInstanceOf(Error)
+    const refusedMessage = (refused as Error).message
+    expect(refusedMessage).toMatch(/not usable/)
+    expect(isSpendDownPinnedKeyUnavailable(refusedMessage)).toBe(true)
     expect(mocks.resolveLlmKey).not.toHaveBeenCalled()
   })
 
@@ -1143,6 +1162,34 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
     const mark = findQueries(queries, 'byok_keys', 'update')[0]
     expect(eqValue(mark, 'id')).toBe('suzu')
     expect((mark.payload as { exhausted_until?: string }).exhausted_until).toBeTruthy()
+  })
+
+  it('a pinned key that is already used up throws before Cursor, with the message the next tick retries', async () => {
+    const suzu = {
+      id: 'suzu', provider_slug: 'cursor', project_id: null, organization_id: 'org-1', status: 'active',
+      vault_secret_id: 'vault-suzu', exhausted_until: '2999-01-01T00:00:00Z',
+    }
+    const { db } = createFakeDb((q) => {
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_suzu' }
+      if (q.table === 'projects') return { data: { organization_id: 'org-1' } }
+      if (q.table === 'organization_members') return { data: [] }
+      if (q.table === 'byok_keys' && q.op === 'select' && eqValue(q, 'id') === 'suzu') return { data: suzu }
+      return { data: null }
+    })
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      seen.push(init.headers.Authorization)
+      return new Response(JSON.stringify({ agent: { id: 'bc' }, run: { id: 'run', status: 'CREATING' } }), { status: 201 })
+    }))
+    const err = await getCloudAgentAdapter('cursor_cloud')!.dispatch({
+      db, projectId: PROJECT, reportId: REPORT, dispatchId: 'd-1', attemptId: 'fa-1',
+      repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it',
+      pinnedCursorKeyId: pinnedCursorKeyIdFromDispatch(spendDownDispatchMetadata({ id: 'suzu', spend_down_model: null })),
+    }).then(() => null, (e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect(isSpendDownPinnedKeyUnavailable((err as Error).message)).toBe(true)
+    expect(seen).toEqual([])
+    expect(mocks.resolveLlmKey).not.toHaveBeenCalled()
   })
 
   it('a run that fails on the usage limit marks the key that started it', async () => {

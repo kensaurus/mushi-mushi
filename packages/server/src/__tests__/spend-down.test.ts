@@ -5,7 +5,8 @@
  *          for (ADR 0023), the window, the daily limit, the auto-fix caps,
  *          the 3-running bound, the 7-day re-dispatch cooldown, the 1.3
  *          boost for Sentry or stack evidence, and the dispatch metadata
- *          fix-worker reads (cursor_cloud, model, trigger); the stop-loss
+ *          fix-worker reads (cursor_cloud, model, trigger); a pinned-key
+ *          failure is eligible on the next tick; the stop-loss
  *          (Wilson-bound entry, 20-sample cold start, hysteresis, daily probe,
  *          probe recovery, 14-day aging, Resume, transition-only log lines,
  *          carry-forward) and the scoreboard rollup.
@@ -47,6 +48,7 @@ import {
   reportsToRetryAfterKeyLimit,
   reportsToRetryAfterHold,
   isCursorKeyLimitError,
+  isSpendDownPinnedKeyUnavailable,
   SPEND_DOWN_CANDIDATE_COLUMNS,
   spendDownCandidateFromReport,
   type CursorPoolKey,
@@ -163,6 +165,21 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
       expect(firstCursorKeyFor(project(P1), [row, suzu])).toBe('suzu')
       expect(spendDownProjectIds({ id: 'suzu' }, [project(P1)], [row, suzu])).toEqual([P1])
     }
+  })
+
+  it('a quota hold stays skipped after exhausted_until passes until a re-test sets status active', () => {
+    const now = Date.parse('2026-10-24T13:00:00Z')
+    const ayako = pool('ayako', {
+      priority: 10,
+      status: 'quota_exhausted',
+      test_status: 'error_quota',
+      exhausted_until: '2026-10-24T12:00:00Z',
+    })
+    const suzu = pool('suzu', { priority: 50 })
+    expect(firstCursorKeyFor(project(P1), [ayako, suzu], now)).toBe('suzu')
+    expect(spendDownWindow(key({ id: 'ayako', status: 'quota_exhausted' }), new Date(now)).state).toBe('key_unusable')
+    const restored = { ...ayako, status: 'active', test_status: 'ok' }
+    expect(firstCursorKeyFor(project(P1), [restored, suzu], now)).toBe('ayako')
   })
 
   it('an active key whose last test was error_quota still pays; exhausted_until still hands the apps over', () => {
@@ -399,6 +416,43 @@ describe('runSpendDownForKey', () => {
     expect(calls.map((c) => c.reportId)).toEqual(['stacked', 'sentry', 'newer'])
   })
 
+  it('picks a report again on the next tick when the pinned key could not run it', async () => {
+    const recent = new Date(NOW.getTime() - 5 * 60_000).toISOString()
+    const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required.'
+    const unusable = 'Spend-down Cursor key is not usable for this app.'
+    const row = (id: string, severity: string, createdAt: string) => ({
+      id, project_id: P1, status: 'classified', severity, judge_score: 0.8, component: `${id}.ts`, report_group_id: null, created_at: createdAt,
+    })
+    const db = seed({
+      reports: [
+        row('limited', 'high', '2026-10-19T00:00:00Z'),
+        row('unusable', 'medium', '2026-10-18T00:00:00Z'),
+        row('other', 'low', '2026-10-17T00:00:00Z'),
+      ],
+      fix_dispatch_jobs: [
+        { id: 'd-lim', project_id: P1, report_id: 'limited', status: 'failed', created_at: recent, dispatch_metadata: { spend_down_key_id: 'ayako' } },
+        { id: 'd-un', project_id: P1, report_id: 'unusable', status: 'failed', created_at: recent, dispatch_metadata: { spend_down_key_id: 'ayako' } },
+        { id: 'd-other', project_id: P1, report_id: 'other', status: 'failed', created_at: recent, dispatch_metadata: {} },
+      ],
+      fix_attempts: [
+        { id: 'a-lim', project_id: P1, report_id: 'limited', status: 'failed', failure_category: 'cursor_api_error', error: limit, created_at: recent },
+        { id: 'a-un', project_id: P1, report_id: 'unusable', status: 'failed', failure_category: 'cursor_api_error', error: unusable, created_at: recent },
+        { id: 'a-other', project_id: P1, report_id: 'other', status: 'failed', failure_category: 'unknown', error: 'boom', created_at: recent },
+      ],
+    })
+    const calls: Array<Record<string, unknown>> = []
+    await worker.runSpendDownForKey(db as never, key(), {
+      now: NOW,
+      checkBudget: allowAll,
+      dispatch: async (input) => {
+        calls.push(input as never)
+        return { ok: true }
+      },
+    })
+    expect(calls.map((c) => c.reportId)).toEqual(['limited', 'unusable'])
+    expect(calls[0].metadata).toMatchObject({ spend_down_key_id: 'k1' })
+  })
+
   it('never picks a report whose last run the agent settled as already fixed or wrong repo', async () => {
     const db = seed({
       fix_attempts: [{ id: 'fa', project_id: P1, report_id: 'r1', agent: 'cursor_cloud', status: 'failed', failure_category: 'already_fixed', created_at: '2026-10-01T00:00:00Z' }],
@@ -487,7 +541,9 @@ describe('runSpendDown', () => {
 
 describe('spendDownDispatchMetadata', () => {
   it('leaves the model to the app default when the key has none', () => {
-    expect(spendDownDispatchMetadata({ id: 'k', spend_down_model: null })).toEqual({
+    const key = { id: 'k', spend_down_model: null }
+    expect(spendDownDispatchMetadata(key).spend_down_key_id).toBe(key.id)
+    expect(spendDownDispatchMetadata(key)).toEqual({
       source: 'spend_down',
       agent_override: 'cursor_cloud',
       spend_down_key_id: 'k',
@@ -1102,24 +1158,31 @@ describe('isCursorKeyLimitError', () => {
 describe('reportsToRetryAfterKeyLimit', () => {
   const now = new Date('2026-10-23T13:00:00Z')
   const limit = 'Cursor API 400 usage_limit_exceeded: On-demand usage is required. Enable on-demand usage at https://www.cursor.com/dashboard?tab=settings to continue using Background Agents.'
-  it('lets a report Cursor refused for the usage limit go again after 30 minutes, at most twice', () => {
+  const unusable = 'Spend-down Cursor key is not usable for this app.'
+  it('lets a report the pinned key could not run go again on the next tick, at most twice', () => {
+    expect(isSpendDownPinnedKeyUnavailable(unusable)).toBe(true)
+    expect(isSpendDownPinnedKeyUnavailable(limit)).toBe(false)
     const out = reportsToRetryAfterKeyLimit(
       [
-        { report_id: 'a', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:08:00Z' },
-        { report_id: 'b', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:45:00Z' },
-        { report_id: 'c', failure_category: 'cursor_api_error', error: 'Cursor API 500 internal', created_at: '2026-10-23T11:00:00Z' },
+        // Five minutes ago: the next spend-down tick, not a 30-minute wait.
+        { report_id: 'a', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:55:00Z' },
+        { report_id: 'b', failure_category: 'cursor_api_error', error: unusable, created_at: '2026-10-23T12:50:00Z' },
+        { report_id: 'c', failure_category: 'cursor_api_error', error: 'Cursor API 500 internal', created_at: '2026-10-23T12:55:00Z' },
         { report_id: 'd', failure_category: 'needs_human', error: 'Agent says this needs a person', created_at: '2026-10-23T10:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T10:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T11:00:00Z' },
         { report_id: 'e', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T12:00:00Z' },
         { report_id: 'f', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T09:00:00Z' },
         { report_id: 'f', failure_category: null, error: null, created_at: '2026-10-23T12:00:00Z' },
+        { report_id: 'g', failure_category: 'unknown', error: unusable, created_at: '2026-10-23T12:50:00Z' },
+        { report_id: 'h', failure_category: 'cursor_api_error', error: limit, created_at: '2026-10-23T13:05:00Z' },
       ],
       now,
     )
-    // a: refused 52 min ago → retry. b: only 15 min ago. c: another API error. d: the agent's answer.
-    // e: refused three times already. f: a later attempt ran.
-    expect([...out]).toEqual(['a'])
+    // a: usage limit 5 min ago. b: pin already unusable 10 min ago.
+    // c: another API error. d: the agent's answer. e: refused three times already.
+    // f: a later attempt ran. g: the unusable message under another category. h: timestamp is in the future.
+    expect([...out].sort()).toEqual(['a', 'b'])
   })
 })
 
