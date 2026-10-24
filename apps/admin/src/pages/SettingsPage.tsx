@@ -142,6 +142,10 @@ function SettingsPageBody({
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
+  // The same read GeneralPanel makes (concurrent reads share one request):
+  // the cards below it wait for it, so its growth never pushes them.
+  const generalSettings = usePageData<unknown>(active === 'general' ? '/v1/admin/settings' : null);
+  const generalLoaded = !generalSettings.loading;
 
   const pool = useByokPool(byokEnabled);
   const keySummary: KeySummary | null = useMemo(() => {
@@ -315,11 +319,19 @@ function SettingsPageBody({
         {active === 'general' && (
           <>
             <GeneralPanel />
-            <SpendLimitsPanel />
-            <AgentPrReviewCard projectId={activeProjectId} />
-            <VerifiedMergeCard projectId={activeProjectId} />
-            <CiCostSettingsCard projectId={activeProjectId} />
-            <CiPolicyCard projectId={activeProjectId} />
+            {/* The General panel grows from a ~320px skeleton to ~3,600px when
+                its settings land; cards rendered below it were pushed off
+                screen (layout shift 0.53, measured 2026-10-24). They mount once
+                it has loaded, below the fold, where growth moves nothing. */}
+            {generalLoaded && (
+              <>
+                <SpendLimitsPanel />
+                <AgentPrReviewCard projectId={activeProjectId} />
+                <VerifiedMergeCard projectId={activeProjectId} />
+                <CiCostSettingsCard projectId={activeProjectId} />
+                <CiPolicyCard projectId={activeProjectId} />
+              </>
+            )}
           </>
         )}
         {active === 'byok' && <ByokPanel />}
