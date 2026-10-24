@@ -41,6 +41,7 @@ const gh = vi.hoisted(() => ({
   openPullRequestForBranch: vi.fn(async () => ({ url: 'https://github.com/acme/app/pull/9', number: 9 })),
   findOpenPrByHeadPrefix: vi.fn(async () => null),
   commitFilesToBranch: vi.fn(async () => 'refresh-sha'),
+  updateBranchWithSingleCommit: vi.fn(async () => 'lock-sha'),
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -149,6 +150,86 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     expect(body).toContain(LOCKFILE_HELPER_DOCS_URL)
     expect(body.split('\n').filter((l) => l.includes(LOCKFILE_HELPER_DOCS_URL))).toHaveLength(1)
     expect(lastUpdate(queries).status).toBe('completed')
+  })
+
+  it('helper absent with package-lock.json: one commit updates the @mushi-mushi lock entries', async () => {
+    const lock = {
+      name: 'host',
+      lockfileVersion: 3,
+      packages: {
+        '': { dependencies: { '@mushi-mushi/web': '^1.29.0' } },
+        'node_modules/@mushi-mushi/web': {
+          version: '1.29.0',
+          resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.29.0.tgz',
+          integrity: 'sha512-old',
+        },
+      },
+    }
+    state.ghRoutes = [
+      [`/git/trees/`, { tree: [
+        { path: 'package.json', type: 'blob' },
+        { path: 'package-lock.json', type: 'blob', sha: 'locksha' },
+      ] }],
+      [`/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/git/blobs/locksha`, { content: b64(JSON.stringify(lock)) }],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        'dist-tags': { latest: '1.31.0' },
+        versions: {
+          '1.31.0': {
+            version: '1.31.0',
+            dist: {
+              tarball: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz',
+              integrity: 'sha512-newweb',
+            },
+          },
+        },
+      }),
+    })))
+    try {
+      const { db, queries } = runnerDb()
+      state.db = db
+      const result = await runSdkUpgradeJob(JOB)
+      expect(result).toMatchObject({ ok: true, status: 'completed' })
+      expect(gh.createPrFromFiles).not.toHaveBeenCalled()
+      const commit = (gh.createBranchWithSingleCommit.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      const files = commit.files as Array<{ path: string; contents: string }>
+      expect(files.map((file) => file.path)).toEqual(['package.json', 'package-lock.json'])
+      expect(JSON.parse(files[1]!.contents).packages['node_modules/@mushi-mushi/web']).toMatchObject({
+        version: '1.31.0',
+        integrity: 'sha512-newweb',
+      })
+      const body = String((gh.openPullRequestForBranch.mock.calls[0] as unknown as [Record<string, unknown>])[0].body)
+      expect(body).toContain('`npm ci` should pass')
+      expect(lastUpdate(queries).error).toBeUndefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('pnpm lockfile: the PR names the install command and leaves the lockfile out of the commit', async () => {
+    state.ghRoutes = [
+      [`/git/trees/`, { tree: [
+        { path: 'package.json', type: 'blob' },
+        { path: 'pnpm-lock.yaml', type: 'blob' },
+      ] }],
+      [`/contents/package.json?ref=main`, { content: b64(JSON.stringify(PKG)) }],
+      [`/repos/${OWNER}/${REPO}`, { default_branch: 'main' }],
+    ]
+    const { db, queries } = runnerDb()
+    state.db = db
+    await runSdkUpgradeJob(JOB)
+    expect(gh.createBranchWithSingleCommit).not.toHaveBeenCalled()
+    const opts = (gh.createPrFromFiles.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(String(opts.body)).toContain('This PR needs `pnpm install --lockfile-only`.')
+    expect((opts.files as Array<{ path: string }>).map((file) => file.path)).toEqual(['package.json'])
+    expect(lastUpdate(queries).error).toBeUndefined()
+    expect(lastUpdate(queries).plan).toEqual([
+      expect.objectContaining({ lockfileNote: 'This PR needs `pnpm install --lockfile-only`.' }),
+    ])
   })
 })
 
