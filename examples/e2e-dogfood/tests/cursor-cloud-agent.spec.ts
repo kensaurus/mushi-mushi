@@ -3,7 +3,7 @@
  * PURPOSE: Dogfood test plan for Cursor Cloud Agent integration.
  *
  * Two tiers:
- *   - Mocked (default, runs on every push): MSW intercepts api.cursor.com
+ *   - Mocked (default, runs on every push): Playwright page.route intercepts api.cursor.com
  *   - Live (E2E_LIVE_CURSOR=1): dispatches a real Cursor agent against glot.it
  *
  * Run mocked:
@@ -78,7 +78,7 @@ async function authenticatePage(page: import('@playwright/test').Page, request: 
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MSW mock for Cursor REST API (mocked tier)
+// Playwright route interception for the Cursor REST API (mocked tier)
 // ──────────────────────────────────────────────────────────────────────────────
 
 async function installCursorMock(page: import('@playwright/test').Page) {
