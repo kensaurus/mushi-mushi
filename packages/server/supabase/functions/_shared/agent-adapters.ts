@@ -21,12 +21,15 @@
  *                                which is a later pass (see the exec plan, C4).
  *
  *          The in-edge `fix-worker` LLM path stays the zero-config default
- *          and never goes through here.
+ *          and never goes through here. A spend-down dispatch names its
+ *          Cursor key (`pinnedCursorKeyIdFromDispatch`); the adapter uses
+ *          that key and does not resolve the pool again.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { resolveLlmKey, resolveLlmKeys } from './byok.ts'
+import { keyScopeFor, ownerUserColumnReady, projectKeyOwner, withOwnerUserColumn } from './byok-scope.ts'
 import { isCursorKeyLimitError } from './spend-down.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, prNumberFromUrl, resolveProjectGithubToken } from './github.ts'
 import { canonicalPrUrl, classifyPrSubstance, parsePullRequestUrl, type PrChangedFile } from './pr-substance.ts'
@@ -159,6 +162,23 @@ export interface CloudDispatchInput {
   model?: string
   /** Short label for vendor dashboards. */
   name?: string
+  /**
+   * Spend-down already chose this `byok_keys` id. The Cursor adapter uses it
+   * instead of resolving the pool: the pool still returns a quota-held row
+   * after its cooldown, which would bill the key spend-down skipped.
+   */
+  pinnedCursorKeyId?: string
+}
+
+/**
+ * The `byok_keys` id spend-down stored on the dispatch (`spend_down_key_id`),
+ * or undefined when this dispatch did not name one. fix-worker passes the
+ * result as `pinnedCursorKeyId`. A blank or non-string value is not a pin.
+ */
+export function pinnedCursorKeyIdFromDispatch(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined
+  const id = (metadata as { spend_down_key_id?: unknown }).spend_down_key_id
+  return typeof id === 'string' && id.length > 0 ? id : undefined
 }
 
 export interface CloudDispatchResult {
@@ -276,6 +296,42 @@ async function exhaustedCursorKeyIds(db: SupabaseClient): Promise<Set<string>> {
   // Before the column exists every key counts as available.
   if (error) return new Set()
   return new Set(((data ?? []) as Array<{ id: string }>).map((r) => r.id))
+}
+
+/**
+ * The Cursor key spend-down named, when this project may use it. Null when
+ * the row is missing, not Cursor, not active, used up, out of scope, or has
+ * no secret — the caller must not fall back to the pool, which would bill
+ * the quota-held key spend-down skipped.
+ */
+async function cursorKeyPinned(
+  db: SupabaseClient,
+  projectId: string,
+  keyId: string,
+): Promise<{ key: string; keyId: string; source: 'pool' } | null> {
+  const ready = await ownerUserColumnReady(db)
+  const { data, error } = await db
+    .from('byok_keys')
+    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id, exhausted_until', ready))
+    .eq('id', keyId)
+    .maybeSingle()
+  const row = data as {
+    id: string
+    provider_slug: string
+    project_id: string | null
+    organization_id: string | null
+    owner_user_id?: string | null
+    status: string
+    vault_secret_id: string | null
+    exhausted_until?: string | null
+  } | null
+  if (error || !row || row.provider_slug !== 'cursor' || row.status !== 'active') return null
+  if (row.exhausted_until && Date.parse(row.exhausted_until) > Date.now()) return null
+  const owner = await projectKeyOwner(db, projectId)
+  if (!keyScopeFor(row, owner)) return null
+  const secret = await resolveVaultRef(db, row.vault_secret_id ? `vault://${row.vault_secret_id}` : null)
+  if (!secret) return null
+  return { key: secret, keyId: row.id, source: 'pool' }
 }
 
 /** The key for a new agent: the resolver's pick, or the next one when that one is used up. */
@@ -419,7 +475,16 @@ const cursorAdapter: CloudAgentAdapter = {
   kind: 'cursor_cloud',
 
   async dispatch(input) {
-    const picked = await cursorKeyForNewWork(input.db, input.projectId)
+    // A spend-down run names its key. Do not resolve the pool: that still
+    // returns a quota-held row, and the call would be billed to the key
+    // spend-down skipped.
+    const pinned = input.pinnedCursorKeyId
+      ? await cursorKeyPinned(input.db, input.projectId, input.pinnedCursorKeyId)
+      : null
+    if (input.pinnedCursorKeyId && !pinned) {
+      throw new Error('Spend-down Cursor key is not usable for this app.')
+    }
+    const picked = pinned ?? (await cursorKeyForNewWork(input.db, input.projectId))
     if (!picked?.key) {
       throw new Error(
         'Cursor API key not configured. Add a crsr_… key under Settings → Integrations → Cursor Cloud (or BYOK provider "cursor").',
@@ -427,6 +492,12 @@ const cursorAdapter: CloudAgentAdapter = {
     }
     // A key Cursor refuses for its usage limit is marked used up and the same
     // dispatch goes once more on the next key, so nothing waits for a retry.
+    // A pinned spend-down key does not swap here: the pool's next key can be
+    // the quota-held row this run was started to avoid. The throw fails this
+    // dispatch. The next spend-down tick sees exhausted_until, pins the
+    // following key, and picks the report up again
+    // (reportsToRetryAfterKeyLimit). A pin that is already unusable throws
+    // before Cursor; that message is the same retry.
     let key = picked
     for (let attempt = 0; ; attempt++) {
       try {
@@ -437,6 +508,7 @@ const cursorAdapter: CloudAgentAdapter = {
         const message = err instanceof Error ? err.message : String(err)
         if (!key.keyId || !isCursorKeyLimitError(message)) throw err
         await markCursorKeyExhausted(input.db, key.keyId, message)
+        if (input.pinnedCursorKeyId) throw err
         const next = attempt === 0 ? await cursorKeyForNewWork(input.db, input.projectId) : null
         if (!next?.key || next.keyId === key.keyId) throw err
         alog.info('Cursor key used up; dispatching on the next key', { usedUp: key.keyId, next: next.keyId })
