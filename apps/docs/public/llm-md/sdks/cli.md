@@ -231,6 +231,50 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
 
+### `mushi work`
+
+Fix reports with a coding agent on your own machine instead of a cloud agent.
+The agent (the Cursor CLI, `cursor-agent`, signed in to any Cursor account)
+only edits a worktree of your repo; `mushi work` commits, pushes and opens the
+draft pull request with **your** local credentials. So you can spend a Cursor
+account's allowance without that account's GitHub ever touching your repo.
+
+```bash
+# Show which reports it would take (worst first, none with a run or PR already live)
+mushi work --repo-dir ~/code/my-app --dry-run
+
+# Fix up to 3 reports, one at a time
+mushi work --repo-dir ~/code/my-app --max 3
+
+# One report, a chosen model
+mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
+```
+
+For each report it:
+
+1. Reads Mushi's fix packet and what earlier attempts did (their Opus review
+   findings), as data the agent must not take as instructions.
+2. Creates a worktree from `origin/` on
+   `bugfix/MUSHI--local-cursor` and runs `cursor-agent -p` in it
+   (30 minutes at most). The agent's environment has no credentials, and
+   version control inside it cannot reach the remote.
+3. With changes: commits, pushes, opens a draft PR with `Mushi report: `,
+   registers the fix attempt (like the MCP tool `submit_fix_result`) and
+   queues the Opus review, so the PR follows the same review and release
+   train as a cloud agent's. Without changes: records the agent's
+   `Mushi verdict:` on the attempt.
+
+| Flag | Description |
+| --- | --- |
+| `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
+| `--max ` | Reports per run (default 3, at most 10) |
+| `--report ` | Work on this report only |
+| `--model ` | Model for the agent (`cursor-agent --list-models`) |
+| `--keep` | Keep the worktree afterwards |
+| `--dry-run` | Show the plan; change nothing |
+
+Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
+
 ### `mushi verify`
 
 The `mushi-verify` workflow that proves an agent's fix with a test that fails

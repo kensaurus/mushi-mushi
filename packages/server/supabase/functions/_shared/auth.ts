@@ -453,7 +453,8 @@ async function authenticateApiKey(
     return authError(
       c,
       'INSUFFICIENT_SCOPE',
-      `API key is missing required scope ${wanted}. Mint a new key with the correct scope or upgrade this one in the admin console.`,
+      `This API key has ${scopes.length ? scopes.map((s) => `"${s}"`).join(', ') : 'no scopes'} but this needs ${wanted}. ` +
+        'From the CLI, run `mushi login --upgrade-scope` (add `--project-id <id>` for another app); in the console, create a key with that scope on Connect.',
       403,
     )
   }
