@@ -12,11 +12,24 @@
  * Prefer `<Link>` / `navigate()` for in-app moves. Use these helpers only when
  * a raw URL is unavoidable: a full reload (account switch), an error boundary
  * that renders outside the router, or a URL copied to the clipboard.
+ *
+ * `routerBasename` is the value passed to `<BrowserRouter>`. Vite's `BASE_URL`
+ * always ends in `/`, and React Router treats that slash as part of the
+ * basename: `/mushi-mushi/admin` does not start with `/mushi-mushi/admin/`,
+ * so the router returns null (blank page; the warning is dev-only).
  */
 
 /** `/mushi-mushi/admin/` → `/mushi-mushi/admin`; `/` → `` (no prefix). */
 function basePrefix(basePath: string | undefined): string {
   return (basePath ?? '/').replace(/\/+$/, '')
+}
+
+/**
+ * Basename for `<BrowserRouter>`. Leading slash, no trailing slash.
+ * `/` stays `/` — an empty basename is not the app root.
+ */
+export function routerBasename(baseUrl: string | undefined): string {
+  return basePrefix(baseUrl) || '/'
 }
 
 /**
