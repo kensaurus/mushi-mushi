@@ -142,6 +142,13 @@ export function cropTop(buf: Buffer, maxHeight: number): Buffer {
   return encodePng(out)
 }
 
+/** Share of pixels that differ visibly from the background colour: near 0 is a blank screen. */
+export function contentShare(buf: Buffer): number {
+  const png = decodePng(buf)
+  const total = png.width * png.height
+  return total > 0 ? contentPixels(png) / total : 0
+}
+
 /** Pixels that differ visibly from the image's top-left (background) colour. */
 function contentPixels(png: PNG): number {
   const [r0, g0, b0] = [png.data[0], png.data[1], png.data[2]]

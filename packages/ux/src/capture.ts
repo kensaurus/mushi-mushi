@@ -40,8 +40,14 @@ export interface BrowserSession {
 }
 
 export interface SessionOptions {
-  /** Persistent profile directory from `mushi-ux login`; omit for a clean browser. */
+  /** Persistent profile directory from `mushi-ux login`, or `--profile-dir` (a cached, signed-in profile); omit for a clean browser. */
   profileDir?: string
+  /**
+   * Browser build to open it with. 'chrome' opens a profile Google Chrome
+   * created (playwright-cli's cached profiles) with the installed Chrome; the
+   * bundled Chromium is older and may refuse or rewrite such a profile.
+   */
+  channel?: 'chrome' | 'chromium'
   headless?: boolean
   allow?: readonly AllowRule[]
   /** Extra selectors to ignore on top of DEFAULT_IGNORE. */
@@ -66,16 +72,17 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
   // Playwright's docs say requests a Service Worker handles can bypass
   // context.route. Chromium on 1.61 routed them in a probe (Plan 021 §5), but
   // the guard must not depend on that: block Service Workers outright.
+  const channel = opts.channel === 'chrome' ? { channel: 'chrome' as const } : {}
   if (opts.profileDir) {
-    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block' })
+    context = await chromium.launchPersistentContext(opts.profileDir, { headless, serviceWorkers: 'block', ...channel })
     // A persistent profile cannot spawn contexts: captures run in a second browser seeded from it.
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     closeBrowser = async () => {
       await context.close()
       await browser.close()
     }
   } else {
-    browser = await chromium.launch({ headless })
+    browser = await chromium.launch({ headless, ...channel })
     context = await browser.newContext({ serviceWorkers: 'block' })
     closeBrowser = () => browser.close()
   }

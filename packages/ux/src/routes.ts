@@ -142,6 +142,13 @@ export async function sitemapPaths(baseUrl: string): Promise<string[]> {
 const COMPONENT_DIRS = ['_components', 'components']
 const MAX_SCREEN_FILES = 12
 
+/** A loop, not `/\/+$/`: that regex is quadratic on a long run of '/' that does not end the string. */
+export function trimTrailingSlashes(s: string): string {
+  let end = s.length
+  while (end > 0 && s.charCodeAt(end - 1) === 47) end--
+  return s.slice(0, end)
+}
+
 /**
  * The source files that render one URL path, so the agent starts editing
  * instead of searching: the Next.js page file, the layout beside it, and
@@ -150,7 +157,7 @@ const MAX_SCREEN_FILES = 12
  * whole 15 minutes searching for /practice's files (2026-10-06).
  */
 export function screenFiles(root: string, urlPath: string): string[] {
-  const want = urlPath.split(/[?#]/)[0]!.replace(/\/+$/, '') || '/'
+  const want = trimTrailingSlashes(urlPath.split(/[?#]/)[0]!) || '/'
   let page: string | null = null
   let files = 0
   const walk = (dir: string, depth: number) => {
