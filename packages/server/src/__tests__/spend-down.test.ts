@@ -54,6 +54,7 @@ import {
   SPEND_DOWN_STOP_NO_REPORT,
   spendDownDispatchMetadata,
   spendDownIdleReasons,
+  spendDownOutrankNote,
   spendDownProjectIds,
   spendDownWindow,
   type SpendDownKey,
@@ -149,6 +150,20 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
     expect(firstCursorKeyFor(project(P1), [a, b])).toBe('a')
     expect(firstCursorKeyFor(project(P1), [{ ...a, test_status: 'auth_failed' }, b])).toBe('b')
     expect(firstCursorKeyFor(project(P1), [{ ...a, status: 'disabled' }, pool('k1')])).toBe('k1')
+  })
+
+  it('a quota hold is not a first pick, so the next org key pays', () => {
+    const ayako = pool('ayako', { priority: 10 })
+    const suzu = pool('suzu', { priority: 50 })
+    const held = [
+      { ...ayako, status: 'quota_exhausted', test_status: 'error_quota' },
+      { ...ayako, status: 'quota_exhausted', test_status: 'ok' },
+      { ...ayako, status: 'active', test_status: 'error_quota' },
+    ]
+    for (const row of held) {
+      expect(firstCursorKeyFor(project(P1), [row, suzu])).toBe('suzu')
+      expect(spendDownProjectIds({ id: 'suzu' }, [project(P1)], [row, suzu])).toEqual([P1])
+    }
   })
 })
 
@@ -1117,6 +1132,34 @@ describe('reportsToRetryAfterHold', () => {
     // a: held 16 h ago. b: held only 6 h ago. c: second attempt held. d: three attempts already.
     // e: the held attempt is not the newest one (a later attempt is merge-approved or still open).
     expect([...reportsToRetryAfterHold(attempts, held, now)].sort()).toEqual(['a', 'c'])
+  })
+})
+
+describe('spendDownOutrankNote', () => {
+  const project = {
+    id: P1, organization_id: ORG, autofix_enabled: true, has_repo: true, has_legacy_key: false,
+  }
+  const orgKey = (id: string, priority: number, label: string): CursorPoolKey & { label: string } => ({
+    id, label, project_id: null, organization_id: ORG, priority, status: 'active', test_status: 'ok',
+  })
+
+  it('names the org key that pays first', () => {
+    const keys = [orgKey('ayako', 10, 'ayako'), orgKey('suzu', 50, 'suzu.haruka')]
+    expect(spendDownOutrankNote('suzu', [project], keys)).toBe(
+      'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
+    )
+    expect(spendDownOutrankNote('ayako', [project], keys)).toBeNull()
+  })
+
+  it('stays quiet when an app key, a missing repo, or auto-fix off explains the idle key', () => {
+    const keys = [
+      orgKey('ayako', 10, 'ayako'),
+      orgKey('suzu', 50, 'suzu.haruka'),
+      { id: 'own', label: 'hirose', project_id: P1, organization_id: null, priority: 10, status: 'active', test_status: 'ok' },
+    ]
+    expect(spendDownOutrankNote('suzu', [project], keys)).toBeNull()
+    expect(spendDownOutrankNote('suzu', [{ ...project, has_repo: false }], keys.slice(0, 2))).toBeNull()
+    expect(spendDownOutrankNote('suzu', [{ ...project, autofix_enabled: false }], keys.slice(0, 2))).toBeNull()
   })
 })
 

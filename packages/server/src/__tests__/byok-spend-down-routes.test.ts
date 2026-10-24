@@ -272,6 +272,69 @@ describe('GET spend-down', () => {
   })
 })
 
+describe('GET spend-down: two organization Cursor keys', () => {
+  const SUZU = '2000000e-0000-4000-8000-000000000000'
+  const OUTRANKED = 'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed'
+
+  function twoOrgKeys(ayako: { status: string; test_status: string }) {
+    const { db, app } = setup()
+    db.table('byok_keys').splice(db.table('byok_keys').findIndex((k) => k.id === OWN), 1)
+    const expiry = new Date(Date.now() + 3 * 86_400_000).toISOString()
+    Object.assign(db.table('byok_keys').find((k) => k.id === SHARED)!, {
+      label: 'ayako',
+      priority: 10,
+      status: ayako.status,
+      test_status: ayako.test_status,
+      spend_down_enabled: true,
+      credits_expire_at: expiry,
+    })
+    db.table('byok_keys').push({
+      id: SUZU,
+      provider_slug: 'cursor',
+      project_id: null,
+      organization_id: ORG,
+      status: 'active',
+      test_status: 'ok',
+      priority: 50,
+      label: 'suzu.haruka',
+      credits_expire_at: expiry,
+      spend_down_enabled: true,
+      spend_down_model: null,
+      spend_down_daily_limit: 10,
+      spend_down_window_days: 14,
+    })
+    return { db, app }
+  }
+
+  it('says which org key pays first when this one is only outranked', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'owner' }
+    const { app } = twoOrgKeys({ status: 'active', test_status: 'ok' })
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    expect(res.status).toBe(200)
+    const keys = res.body.data?.keys as Array<Record<string, unknown>>
+    const ayako = keys.find((k) => k.id === SHARED)!
+    const suzu = keys.find((k) => k.id === SUZU)!
+    expect(ayako.projects).toMatchObject([{ id: P1 }])
+    expect(ayako.idleNote).toBeNull()
+    expect(suzu.projects).toEqual([])
+    expect(suzu.idleNote).toBe(OUTRANKED)
+  })
+
+  it('a quota-exhausted higher-priority key hands the apps to the next one', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'owner' }
+    const { app } = twoOrgKeys({ status: 'quota_exhausted', test_status: 'error_quota' })
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const keys = res.body.data?.keys as Array<Record<string, unknown>>
+    const ayako = keys.find((k) => k.id === SHARED)!
+    const suzu = keys.find((k) => k.id === SUZU)!
+    expect(ayako).toMatchObject({ state: 'key_unusable', projects: [], idleNote: null })
+    expect(suzu.projects).toMatchObject([{ id: P1 }])
+    expect(suzu.idleNote).toBeNull()
+  })
+})
+
 describe('GET spend-down: who sees what (a shared key pays for apps the caller cannot open)', () => {
   function sharedSetup() {
     const { db, app } = setup()

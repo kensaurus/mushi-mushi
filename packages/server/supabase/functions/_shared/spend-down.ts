@@ -12,11 +12,12 @@
  *          the console status line reports, for the radar rule
  *          `spend_down_idle`.
  *
- *          "Already serves" follows the resolver order exactly (ADR 0023,
- *          extended by ADR 0031): an app's own key is that app's; a shared key
- *          serves the organization's apps that have no Cursor key of their
- *          own; a universal key serves the apps of the organizations its owner
- *          owns that have neither.
+ *          "Already serves" follows the resolver order (ADR 0023, ADR 0031):
+ *          an app's own key is that app's; a shared key serves the
+ *          organization's apps that have no Cursor key of their own; a
+ *          universal key serves the apps of the organizations its owner owns
+ *          that have neither. A quota hold is the exception: spend-down will
+ *          not run that key, so it must not stay the first pick.
  *
  *          Cursor has no API for remaining credit, so the limit is a count of
  *          dispatches, not dollars. Open reports rank by severity, the judge
@@ -208,13 +209,19 @@ export interface CursorPoolKey {
 }
 
 /**
- * Rows the resolver will use for a NEW agent (byok.ts byokPoolCandidates plus
- * agent-adapters cursorKeyForNewWork): cooldowns are transient and ignored
- * here, but a used-up key hands its apps to the next one.
+ * Rows a new spend-down dispatch can bill to this key. Matches the resolver
+ * for a new agent (byok pool plus cursorKeyForNewWork), with one exception:
+ * a quota hold (`status` quota_exhausted, or `test_status` error_quota) is
+ * not a first pick. The LLM pool keeps those rows so a 429 can re-enter after
+ * its cooldown, but spend-down will not run the key (`spendDownWindow` is
+ * `key_unusable` unless status is active). Leaving it first orphans the apps:
+ * this key does not dispatch, and the next one never becomes first. A key
+ * Cursor refused for its plan limit (`exhausted_until`) hands its apps over
+ * the same way, until that time passes.
  */
 function usableForResolver(k: CursorPoolKey, nowMs: number): boolean {
   if (k.exhausted_until && Date.parse(k.exhausted_until) > nowMs) return false
-  return (k.status === 'active' || k.status === 'quota_exhausted') && (k.test_status === 'ok' || k.test_status === 'error_quota')
+  return k.status === 'active' && k.test_status === 'ok'
 }
 
 /**
@@ -267,6 +274,40 @@ export function spendDownProjectIds(
     .filter((p) => p.autofix_enabled && p.has_repo)
     .filter((p) => firstCursorKeyFor(p, keys) === key.id)
     .map((p) => p.id)
+}
+
+/**
+ * Why this key pays for no app: another key of the same scope (organization,
+ * or universal) is the resolver's first pick for every app that could be
+ * served. Null when the idle reason is an app's own key, a legacy key, a
+ * tie, auto-fix off, or no repo — those stay the generic "no app uses this
+ * key" line. The name is the winner's label.
+ */
+export function spendDownOutrankNote(
+  keyId: string,
+  projects: SpendDownProject[],
+  keys: Array<CursorPoolKey & { label?: string | null }>,
+  nowMs: number = Date.now(),
+): string | null {
+  const mine = keys.find((k) => k.id === keyId)
+  if (!mine || mine.project_id) return null
+  const eligible = projects.filter((p) => p.autofix_enabled && p.has_repo)
+  if (eligible.length === 0) return null
+  let winnerId: string | null = null
+  for (const project of eligible) {
+    const winner = firstCursorKeyFor(project, keys, nowMs)
+    if (winner === keyId || typeof winner !== 'string') return null
+    if (winnerId == null) winnerId = winner
+    else if (winnerId !== winner) return null
+  }
+  if (!winnerId) return null
+  const winner = keys.find((k) => k.id === winnerId)
+  if (!winner || winner.project_id) return null
+  if ((winner.organization_id ?? null) !== (mine.organization_id ?? null)) return null
+  if ((winner.priority ?? 100) >= (mine.priority ?? 100)) return null
+  const name = (typeof winner.label === 'string' ? winner.label.trim() : '') || 'Another key'
+  const priority = winner.priority ?? 100
+  return `${name} pays for these apps first (priority ${priority}); this key takes over when ${name} runs out or is removed`
 }
 
 /**
