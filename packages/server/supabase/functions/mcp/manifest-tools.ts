@@ -281,12 +281,13 @@ export function buildManifestTools(deps: {
 
         if (spec.transform === 'qa_run_pick') {
           if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required');
+          // apiCall unwraps { ok, data }, so the runs list is the body. Name
+          // the project on the header too: an account key has none of its own.
+          const named = typeof args.projectId === 'string' && args.projectId ? args.projectId : undefined;
           const data = (await apiCall(interpolatePath(spec.path, args, ctx), {
-            headers: ctx.authHeaders,
-          })) as {
-            data?: { runs?: Array<{ id: string }> };
-          };
-          const run = data?.data?.runs?.find((r) => r.id === args.runId) ?? null;
+            headers: named ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': named } : ctx.authHeaders,
+          })) as { runs?: Array<{ id: string }>; data?: { runs?: Array<{ id: string }> } };
+          const run = (data?.runs ?? data?.data?.runs)?.find((r) => r.id === args.runId) ?? null;
           if (!run) throw new McpError(ERR_INVALID_PARAMS, 'Run not found in recent runs');
           return run;
         }

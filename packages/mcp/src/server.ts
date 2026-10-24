@@ -4642,6 +4642,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('list_qa_story_runs', TDD_TOOL_CATALOG),
       inputSchema: z.object({
         storyId: z.string().describe('QA story id (uuid)'),
+        projectId: z
+          .string()
+          .optional()
+          .describe(
+            'Project UUID — defaults to the server-configured project. ' +
+              'Pass the story\'s project on an account connection.',
+          ),
         limit: z
           .number()
           .int()
@@ -4652,9 +4659,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe('Max runs to return (default 10)'),
       }),
     },
-    async ({ storyId, limit }) => {
+    async ({ storyId, projectId: requested, limit }) => {
+      const pid = await resolveProjectId(requested);
+      const headers: Record<string, string> =
+        pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {};
       const data = await apiCall<unknown>(
-        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=${limit ?? 10}`,
+        `/v1/admin/projects/${pid}/qa-stories/${storyId}/runs?limit=${limit ?? 10}`,
+        { headers },
       );
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     },
@@ -4669,17 +4680,30 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: z.object({
         storyId: z.string().describe('QA story id (uuid)'),
         runId: z.string().describe('Run id (uuid) to fetch detail for'),
+        projectId: z
+          .string()
+          .optional()
+          .describe(
+            'Project UUID — defaults to the server-configured project. ' +
+              'Pass the story\'s project on an account connection.',
+          ),
       }),
     },
-    async ({ storyId, runId }) => {
+    async ({ storyId, runId, projectId: requested }) => {
       // There is no single-run detail route that accepts an API key (the
       // evidence route is JWT-only), so fetch the recent runs list and select
       // the requested run — the list rows already include summary, assertion
-      // failures, error message, and the provider session URL.
-      const data = await apiCall<{ data?: { runs?: Array<{ id: string }> } }>(
-        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=50`,
+      // failures, error message, and the provider session URL. apiCall unwraps
+      // the { ok, data } envelope, so runs sit on the body (data.runs is the
+      // older nested shape).
+      const pid = await resolveProjectId(requested);
+      const headers: Record<string, string> =
+        pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {};
+      const data = await apiCall<{ runs?: Array<{ id: string }>; data?: { runs?: Array<{ id: string }> } }>(
+        `/v1/admin/projects/${pid}/qa-stories/${storyId}/runs?limit=50`,
+        { headers },
       );
-      const run = data?.data?.runs?.find((r) => r.id === runId) ?? null;
+      const run = (data?.runs ?? data?.data?.runs)?.find((r) => r.id === runId) ?? null;
       if (!run) {
         throw new MushiApiError(
           404,

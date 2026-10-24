@@ -248,7 +248,7 @@ leaves the others in that repo behind; the queue does the clicks for you:
    merge does.
 
 The **Merge when ready** panel on `/fixes` shows each queued PR, what it is
-waiting for, and why one needs you. **Remove** takes a PR out. You can leave
+waiting for, and why one is held (red CI, an Opus "fix first" or "hold", no review). **Remove** takes a PR out. You can leave
 the page; the queue runs every 5 minutes.
 
 **Merge now** (in the same dialog) tries each PR once. The PRs that did not

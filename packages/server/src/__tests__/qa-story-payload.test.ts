@@ -15,8 +15,7 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
-  apiKeyAuth: async (_c: unknown, next: () => Promise<void>) => next(),
-  requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 
 type Mod = typeof import('../../supabase/functions/api/routes/qa-coverage.ts')
@@ -25,6 +24,26 @@ let mod: Mod
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
   mod = await import('../../supabase/functions/api/routes/qa-coverage.ts')
+})
+
+describe('qaApiKeyScope', () => {
+  const other = '2000000b-0000-4000-8000-000000000000'
+  const own = '1000000a-0000-4000-8000-000000000000'
+
+  it('lets an account key name another project and keeps the owner id', () => {
+    expect(mod.qaApiKeyScope({ isOrgScoped: true, keyProjectId: null, routeProjectId: other })).toEqual({
+      ok: true,
+      blankUserId: false,
+    })
+  })
+
+  it('pins a project key to its project', () => {
+    expect(mod.qaApiKeyScope({ isOrgScoped: false, keyProjectId: own, routeProjectId: own })).toEqual({
+      ok: true,
+      blankUserId: true,
+    })
+    expect(mod.qaApiKeyScope({ isOrgScoped: false, keyProjectId: own, routeProjectId: other })).toEqual({ ok: false })
+  })
 })
 
 describe('buildQaStoryInsert', () => {

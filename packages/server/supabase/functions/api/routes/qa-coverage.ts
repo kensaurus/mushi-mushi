@@ -25,7 +25,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Context, Next } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { z } from 'npm:zod@3';
-import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
+import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
@@ -107,44 +107,54 @@ function assertUuid(c: Context, value: string, name: string) {
   return null;
 }
 
-// Dual-auth middleware for CLI + browser: accepts either a Supabase JWT (browser)
-// or a project API key (X-Mushi-Api-Key). The API key must belong to the same project.
-async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
-  const apiKey = c.req.header('X-Mushi-Api-Key');
-  if (apiKey) {
-    // Delegate to apiKeyAuth to validate and set projectId
-    let called = false;
-    const rejected = await apiKeyAuth(c as never, async () => { called = true; });
-    if (!called) return rejected; // apiKeyAuth rejected
-    // A project key alone is not enough: the public SDK key (report:write)
-    // ships in every customer's browser bundle. Reads need mcp:read and
-    // anything that starts or changes a run needs mcp:write, like the other
-    // CLI/MCP admin routes.
-    let scoped = false;
-    const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
-    const denied = await requireApiKeyScope(needed)(c as never, async () => { scoped = true; });
-    if (!scoped) return denied;
-    // Verify the route's :pid matches the key's project
-    const keyProjectId = c.get('projectId' as keyof Variables) as string | undefined;
-    const routePid = c.req.param('pid');
-    if (keyProjectId && routePid && keyProjectId !== routePid) {
-      return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
-    }
-    // Set userId to empty string so downstream handlers don't crash
-    c.set('userId' as keyof Variables, '' as never);
-    await next();
-    return;
+/**
+ * A project-bound key may only name its own project, and keeps a blank userId
+ * so membership checks stay on the key (qaViewerDenied skips it). An account
+ * key (no bound project) keeps its owner's id: resolveProject then allows any
+ * app that owner can reach, including one that is not the connection default.
+ */
+export function qaApiKeyScope(opts: {
+  isOrgScoped: boolean;
+  keyProjectId: string | null | undefined;
+  routeProjectId: string | undefined;
+}): { ok: true; blankUserId: boolean } | { ok: false } {
+  if (!opts.isOrgScoped && opts.keyProjectId && opts.routeProjectId && opts.keyProjectId !== opts.routeProjectId) {
+    return { ok: false };
   }
-  // Fall back to Supabase JWT auth
-  await jwtAuth(c as never, next);
+  return { ok: true, blankUserId: !opts.isOrgScoped };
+}
+
+// Dual-auth middleware for CLI + browser: a Supabase JWT, a project API key,
+// or an account key. Reads need mcp:read; starting a run needs mcp:write.
+// apiKeyAuth is the SDK ingest gate and refuses account keys, so this uses
+// adminOrApiKey — the same gate as the other MCP admin routes.
+async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
+  const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
+  const gate = adminOrApiKey({ scope: needed });
+  return gate(c, async () => {
+    if (c.get('authMethod') === 'apiKey') {
+      const decision = qaApiKeyScope({
+        isOrgScoped: Boolean(c.get('isOrgScopedKey')),
+        keyProjectId: c.get('projectId') as string | null | undefined,
+        routeProjectId: c.req.param('pid'),
+      });
+      if (!decision.ok) {
+        return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+      }
+      // Project keys stay blank so resolveProject trusts the key's project
+      // and qaViewerDenied does not re-check the owner's role.
+      if (decision.blankUserId) c.set('userId' as keyof Variables, '' as never);
+    }
+    await next();
+  });
 }
 
 export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
-  // When authenticated via API key, userId is '' and projectId is already validated
-  // by the middleware above. When authenticated via JWT, userId is a real UUID and
-  // we check project ownership the normal way.
+  // A project API key has userId '' and a project the middleware already
+  // checked. An account key or a JWT has the caller's userId, and the project
+  // in the URL must be one they can reach.
   async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, contextProjectId?: string) {
     // API key path: middleware already validated project ownership
     if (!userId && contextProjectId === projectId) return projectId;
