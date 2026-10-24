@@ -161,6 +161,16 @@ export function keyStatusView(
     // Cooldown over: the runtime is trying it again, like every working key.
   }
 
+  const exhaustedUntil = 'exhausted_until' in key ? key.exhausted_until : null
+  if (exhaustedUntil && Date.parse(exhaustedUntil) > now) {
+    return {
+      state: 'attention',
+      label: 'Used up',
+      detail: `The account reached its plan's usage limit. New agents use your next key until ${formatClock(exhaustedUntil)}; agents it already started keep running.`,
+      action: 'add_backup',
+    }
+  }
+
   if (key.test_status === 'error_network') {
     return {
       state: 'attention',

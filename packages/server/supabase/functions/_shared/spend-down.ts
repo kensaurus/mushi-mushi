@@ -89,7 +89,10 @@ export function reportsWithNoRetryVerdict(
 }
 
 /** Cursor refused to start an agent because the account ran out (no agent ran, nothing was spent). */
-const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required/i
+// Cursor's create call answers `usage_limit_exceeded` / "On-demand usage is
+// required"; a run that hits the limit later fails with prose such as "You've
+// hit your usage limit". Match both, never a rate limit (429 backs off).
+const KEY_LIMIT_RE = /usage_limit_exceeded|on-demand usage is required|\b(?:hit|reached|exceeded) (?:your|the) (?:usage|plan|monthly)[ -]?limit|\busage limit (?:reached|exceeded)\b/i
 
 /** A fix failure that is the Cursor account's usage limit (see KEY_LIMIT_RE). */
 export function isCursorKeyLimitError(message: string | null | undefined): boolean {

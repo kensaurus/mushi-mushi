@@ -1069,6 +1069,9 @@ describe('isCursorKeyLimitError', () => {
     expect(isCursorKeyLimitError('Cursor API 400 usage_limit_exceeded: On-demand usage is required.')).toBe(true)
     expect(isCursorKeyLimitError("Cursor API 400 validation_error: Failed to verify existence of branch 'main'")).toBe(false)
     expect(isCursorKeyLimitError(null)).toBe(false)
+    expect(isCursorKeyLimitError("Cursor run ERROR: You've hit your usage limit for this plan.")).toBe(true)
+    expect(isCursorKeyLimitError('Usage limit reached. Upgrade to continue.')).toBe(true)
+    expect(isCursorKeyLimitError('Cursor API 429 rate_limited: Too many requests')).toBe(false)
   })
 })
 

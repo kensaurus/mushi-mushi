@@ -301,6 +301,14 @@ export async function markCursorKeyExhausted(db: SupabaseClient, keyId: string, 
   if (error) alog.warn('Cursor key not marked used up', { keyId, err: error.message })
 }
 
+/** The key that started this attempt's run (recorded on it), else the app's current first key. */
+async function markRunKeyExhausted(db: SupabaseClient, target: CloudAgentOutcomeTarget, reason: string): Promise<void> {
+  const { data } = await db.from('fix_attempts').select('external_agent_ref').eq('id', target.attemptId).maybeSingle()
+  const recorded = ((data as { external_agent_ref?: { key_id?: unknown } } | null)?.external_agent_ref?.key_id)
+  const keyId = typeof recorded === 'string' && recorded ? recorded : (await resolveCursorApiKeyWithSource(db, target.projectId))?.keyId
+  if (keyId) await markCursorKeyExhausted(db, keyId, reason)
+}
+
 /** The key a run was started with (recorded on the attempt), else the resolver's pick. */
 async function cursorKeyForRun(db: SupabaseClient, projectId: string, ref: unknown): Promise<string | null> {
   const keyId = (ref as { key_id?: unknown } | null)?.key_id
@@ -417,14 +425,23 @@ const cursorAdapter: CloudAgentAdapter = {
         'Cursor API key not configured. Add a crsr_… key under Settings → Integrations → Cursor Cloud (or BYOK provider "cursor").',
       )
     }
-    try {
-      const result = await cursorDispatchWithKey(input, { apiKey: picked.key })
-      // The run is polled and cancelled with the key that started it.
-      return picked.keyId ? { ...result, ref: { ...(result.ref ?? {}), key_id: picked.keyId } } : result
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (picked.keyId && isCursorKeyLimitError(message)) await markCursorKeyExhausted(input.db, picked.keyId, message)
-      throw err
+    // A key Cursor refuses for its usage limit is marked used up and the same
+    // dispatch goes once more on the next key, so nothing waits for a retry.
+    let key = picked
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const result = await cursorDispatchWithKey(input, { apiKey: key.key })
+        // The run is polled and cancelled with the key that started it.
+        return key.keyId ? { ...result, ref: { ...(result.ref ?? {}), key_id: key.keyId } } : result
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (!key.keyId || !isCursorKeyLimitError(message)) throw err
+        await markCursorKeyExhausted(input.db, key.keyId, message)
+        const next = attempt === 0 ? await cursorKeyForNewWork(input.db, input.projectId) : null
+        if (!next?.key || next.keyId === key.keyId) throw err
+        alog.info('Cursor key used up; dispatching on the next key', { usedUp: key.keyId, next: next.keyId })
+        key = next
+      }
     }
   },
 
@@ -902,6 +919,11 @@ export async function applyCloudAgentOutcome(
   // main", "the code is in the backend repo"); keep that verdict instead of
   // filing an API error the console would offer to retry.
   const isFailure = outcome.kind === 'failed'
+  // A run that failed on the account's usage limit: mark the key that started
+  // it, so new agents go to the next key (cursorKeyForNewWork).
+  if (isFailure && target.agent === 'cursor_cloud' && isCursorKeyLimitError(outcome.error)) {
+    await markRunKeyExhausted(db, target, outcome.error)
+  }
   const noPr = isFailure ? null : classifyNoPrSummary(outcome.summary)
   const errorText = isFailure ? outcome.error.slice(0, 1000) : noPrErrorText(noPr!).slice(0, 1000)
   const failureCategory = isFailure

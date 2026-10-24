@@ -598,6 +598,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       test_status: string | null;
       status: string;
       cooldown_until: string | null;
+      exhausted_until?: string | null;
       expires_at?: string | null;
     }>;
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
@@ -605,6 +606,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       status: k.status,
       test_status: k.test_status,
       cooldown_until: k.cooldown_until,
+      exhausted_until: k.exhausted_until ?? null,
       expires_at: k.expires_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
@@ -3367,7 +3369,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .select(
           withOwnerUserColumn(
-            'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
+            'id, provider_slug, label, priority, status, cooldown_until, exhausted_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
             await ownerUserColumnReady(db),
           ),
         )

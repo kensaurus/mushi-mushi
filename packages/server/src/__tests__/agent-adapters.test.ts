@@ -1031,3 +1031,53 @@ describe('cursorKeyForNewWork: a used-up key hands new agents to the next (2026-
   })
 })
 
+describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('a dispatch refused for the usage limit marks the key and goes out on the next key at once', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ source: 'byok', key: 'crsr_a', keyId: 'ayako', shared: false })
+    mocks.resolveLlmKeys.mockResolvedValue([
+      { source: 'byok', key: 'crsr_a', keyId: 'ayako' },
+      { source: 'byok', key: 'crsr_s', keyId: 'suzu' },
+    ])
+    const used = new Set<string>()
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'byok_keys' && q.op === 'update') {
+        used.add(String(eqValue(q, 'id')))
+        return { data: null }
+      }
+      if (q.table === 'byok_keys' && q.op === 'select') return { data: [...used].map((id) => ({ id })) }
+      return { data: null }
+    })
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      const auth = init.headers.Authorization
+      seen.push(auth)
+      if (auth === 'Bearer crsr_a') {
+        return new Response(JSON.stringify({ error: { code: 'usage_limit_exceeded', message: 'On-demand usage is required.' } }), { status: 400 })
+      }
+      return new Response(JSON.stringify({ agent: { id: 'bc-1', url: 'https://cursor.com/agents/bc-1' }, run: { id: 'run-1', status: 'CREATING' } }), { status: 201 })
+    }))
+    const result = await getCloudAgentAdapter('cursor_cloud')!.dispatch({
+      db, projectId: PROJECT, reportId: REPORT, dispatchId: 'd-1', attemptId: 'fa-1', repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it',
+    })
+    expect(seen).toEqual(['Bearer crsr_a', 'Bearer crsr_s'])
+    expect(result.externalAgentId).toBe('bc-1')
+    expect(result.ref).toMatchObject({ key_id: 'suzu' })
+    const mark = findQueries(queries, 'byok_keys', 'update')[0]
+    expect(eqValue(mark, 'id')).toBe('ayako')
+    expect((mark.payload as { exhausted_until?: string }).exhausted_until).toBeTruthy()
+  })
+
+  it('a run that fails on the usage limit marks the key that started it', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'select') return { data: { external_agent_ref: { key_id: 'hirose' } } }
+      if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
+      return { data: null }
+    })
+    await applyCloudAgentOutcome(db, TARGET, { kind: 'failed', error: "Cursor run ERROR: You've hit your usage limit for this plan." })
+    const mark = findQueries(queries, 'byok_keys', 'update')[0]
+    expect(eqValue(mark, 'id')).toBe('hirose')
+  })
+})
+
