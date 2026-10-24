@@ -3,6 +3,9 @@
 //   GET /v1/admin/projects/:id/privacy-status   (MCP path — project ID in URL)
 //   GET /v1/admin/privacy-status                (dashboard path — project from header/query)
 //     → PrivacyStatus: byok_configured, storage_provider, region, retention_days, last_audit_at
+//     byok_configured follows resolveLlmKey for the app (not the caller's key
+//     pool): own key, legacy ref, organization key, then the org owners'
+//     universal keys. The platform env key is not BYOK.
 //     Used by PrivacyPostureBadge in the sidebar and the MCP privacy://status resource.
 //
 //   GET /v1/admin/projects/:id/evolution-history
@@ -15,6 +18,7 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { adminOrApiKey } from '../../_shared/auth.ts'
+import { resolveLlmKeySource, type LlmProvider } from '../../_shared/byok.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import type { Variables } from '../types.ts'
@@ -25,16 +29,28 @@ function db() {
   return getServiceClient()
 }
 
+// Providers the chip already treated as "a key is configured". The boolean
+// follows resolveLlmKey for each one (project → legacy → organization →
+// the org owners' universal keys → platform env). An admin's own universal
+// key does not count (ADR 0031). The caller is never an input.
+const PRIVACY_KEY_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'firecrawl', 'browserbase']
+
+async function projectByokConfigured(pid: string): Promise<boolean> {
+  const client = db()
+  for (const provider of PRIVACY_KEY_PROVIDERS) {
+    const source = await resolveLlmKeySource(client, pid, provider)
+    if (source && source !== 'env') return true
+  }
+  return false
+}
+
 // ---------------------------------------------------------------------------
 // Shared: build the privacy-status JSON response for a resolved project ID.
 // ---------------------------------------------------------------------------
 async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: string) {
   const { data: settings, error } = await db()
     .from('project_settings')
-    .select(
-      'byok_anthropic_key_ref, byok_openai_key_ref, byok_firecrawl_key_ref, ' +
-        'byok_browserbase_key_ref, byok_status_checked_at',
-    )
+    .select('byok_status_checked_at')
     .eq('project_id', pid)
     .maybeSingle()
 
@@ -43,14 +59,7 @@ async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: str
   }
 
   const row = settings as Record<string, unknown> | null
-  const byokConfigured = row
-    ? Boolean(
-        row.byok_anthropic_key_ref ||
-          row.byok_openai_key_ref ||
-          row.byok_firecrawl_key_ref ||
-          row.byok_browserbase_key_ref,
-      )
-    : false
+  const byokConfigured = await projectByokConfigured(pid)
 
   return c.json({
     ok: true,

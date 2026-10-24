@@ -10,6 +10,8 @@
  *   4. universal byok_keys rows of its organization's owners, by priority
  *   5. process.env.<PROVIDER>_API_KEY (platform fallback)
  *   Every candidate is returned in that order for withLlmFailover() to iterate.
+ *   `resolveLlmKeySource` reports which step would win for one app. It does
+ *   not read the secret, write key status, or depend on the caller.
  *
  * SECURITY:
  *   - Logs the source ('byok' | 'env') and last-used timestamp; NEVER logs the
@@ -73,6 +75,14 @@ export interface ResolvedKey {
   /** Which pool the key came from; absent for the legacy and platform keys. */
   scope?: KeyScope;
 }
+
+/**
+ * Which step `resolveLlmKey` would use for this app. `project` is the app's
+ * own pool key or its legacy credential. `owner_universal` is a universal key
+ * of an organization owner (ADR 0031), never an admin's. `env` is the platform
+ * key. Null when nothing is configured, including the platform env var.
+ */
+export type LlmKeySource = 'project' | 'organization' | 'owner_universal' | 'env';
 
 const ENV_VAR: Record<LlmProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
@@ -227,6 +237,30 @@ export function orderCandidates(c: {
   return out.length > 0 ? out : c.env();
 }
 
+/**
+ * The source `resolveLlmKeys` would pick first, without reading Vault,
+ * reactivating a cooled-down key, enforcing the LLM budget, or logging that
+ * the platform key is in use. Keyed only on the app (ADR 0023 / 0031).
+ */
+export async function resolveLlmKeySource(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+  opts: { openAiOnly?: boolean } = {},
+): Promise<LlmKeySource | null> {
+  const owner = await projectKeyOwner(db, projectId);
+  let flags = await poolSourceFlags(db, owner, provider);
+  if (provider === 'openai' && !opts.openAiOnly) {
+    flags = mergeSourceFlags(flags, await poolSourceFlags(db, owner, 'openrouter'));
+  }
+  if (flags.project) return 'project';
+  if (await legacySourceAvailable(db, projectId, provider)) return 'project';
+  if (flags.organization) return 'organization';
+  if (flags.universal) return 'owner_universal';
+  if (Deno.env.get(ENV_VAR[provider])) return 'env';
+  return null;
+}
+
 /** One byok_keys row as the resolver reads it. */
 interface PoolRow extends ByokPoolLifecycleState {
   id: string;
@@ -237,6 +271,86 @@ interface PoolRow extends ByokPoolLifecycleState {
   label: string | null;
   priority: number | null;
   base_url: string | null;
+}
+
+interface PoolSourceFlags {
+  project: boolean;
+  organization: boolean;
+  universal: boolean;
+}
+
+/**
+ * byok_keys rows this app may use, app → organization → universal.
+ * Includes `quota_exhausted` so a key that hit a 429 can re-enter once its
+ * cooldown elapses. `auth_failed` and `disabled` stay out. Does not read
+ * secrets or write status. A database without `owner_user_id` yet (functions
+ * deployed before migration 20261021051628) is retried with no universal keys.
+ */
+async function readPoolRows(
+  db: SupabaseClient,
+  owner: KeyOwner,
+  provider: LlmProvider,
+): Promise<PoolRow[]> {
+  const readPool = (o: KeyOwner, withUniversal: boolean) =>
+    db
+      .from('byok_keys')
+      .select(
+        `id, project_id, organization_id${withUniversal ? ', owner_user_id' : ''}, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url`,
+      )
+      .or(keyOwnerFilter(o))
+      .eq('provider_slug', provider)
+      .in('status', ['active', 'quota_exhausted'])
+      .in('test_status', ['ok', 'error_quota'])
+      .order('priority', { ascending: true });
+  let { data: rawRows, error: poolError } = await readPool(owner, await ownerUserColumnReady(db));
+  if (poolError && isMissingOwnerUserColumn(poolError)) {
+    ({ data: rawRows, error: poolError } = await readPool({ ...owner, universalUserIds: [] }, false));
+  }
+  if (poolError) {
+    log.warn('byok_keys read failed', { projectId: owner.projectId, provider, error: poolError.message });
+    return [];
+  }
+  return rawRows ? ownKeysFirst(rawRows as unknown as PoolRow[]) : [];
+}
+
+/** A pool row the resolver would keep, before the secret is read. */
+function sourceScopeForRow(
+  row: PoolRow,
+  owner: KeyOwner,
+  provider: LlmProvider,
+  nowMs: number,
+): KeyScope | null {
+  if (!isRunnableByokPoolState(row, nowMs)) return null;
+  if (!row.vault_secret_id) return null;
+  const scope = keyScopeFor(row, owner);
+  if (!scope) return null;
+  if (provider === 'openai' && row.base_url) {
+    const validation = validateOpenAiBaseUrl(row.base_url, openAiCompatibleHostAllowlist());
+    if (!validation.ok) return null;
+  }
+  return scope;
+}
+
+async function poolSourceFlags(
+  db: SupabaseClient,
+  owner: KeyOwner,
+  provider: LlmProvider,
+): Promise<PoolSourceFlags> {
+  const flags: PoolSourceFlags = { project: false, organization: false, universal: false };
+  const nowMs = Date.now();
+  for (const row of await readPoolRows(db, owner, provider)) {
+    const scope = sourceScopeForRow(row, owner, provider, nowMs);
+    if (scope) flags[scope] = true;
+  }
+  return flags;
+}
+
+function mergeSourceFlags(a: PoolSourceFlags, b: PoolSourceFlags): PoolSourceFlags {
+  return {
+    project: a.project || b.project,
+    organization: a.organization || b.organization,
+    universal: a.universal || b.universal,
+  };
 }
 
 /**
@@ -251,31 +365,7 @@ async function byokPoolCandidates(
 ): Promise<{ own: ResolvedKey[]; shared: ResolvedKey[]; universal: ResolvedKey[] }> {
   const nowMs = Date.now();
   const projectId = owner.projectId;
-
-  // Step 1: byok_keys table — ordered candidates, skip cooled-down entries.
-  // Include 'quota_exhausted' so a key that hit a 429 can re-enter the pool
-  // once its `cooldown_until` window elapses (the per-row guard below skips
-  // keys that are still cooling). Without this, a single 429 would drop the
-  // key permanently until a human re-enabled it. 'auth_failed' and 'disabled'
-  // stay excluded — those require explicit operator action to recover.
-  const readPool = (o: KeyOwner, withUniversal: boolean) =>
-    db
-      .from('byok_keys')
-      .select(
-        `id, project_id, organization_id${withUniversal ? ', owner_user_id' : ''}, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url`,
-      )
-      .or(keyOwnerFilter(o))
-      .eq('provider_slug', provider)
-      .in('status', ['active', 'quota_exhausted'])
-      .in('test_status', ['ok', 'error_quota'])
-      .order('priority', { ascending: true });
-  let { data: rawRows, error: poolError } = await readPool(owner, await ownerUserColumnReady(db));
-  if (poolError && isMissingOwnerUserColumn(poolError)) {
-    // Functions deployed before migration 20261021051628: no universal keys yet.
-    ({ data: rawRows, error: poolError } = await readPool({ ...owner, universalUserIds: [] }, false));
-  }
-  if (poolError) log.warn('byok_keys read failed', { projectId, provider, error: poolError.message });
-  const keyRows = rawRows ? ownKeysFirst(rawRows as unknown as PoolRow[]) : null;
+  const keyRows = await readPoolRows(db, owner, provider);
 
   const own: ResolvedKey[] = [];
   const shared: ResolvedKey[] = [];
@@ -406,6 +496,39 @@ async function legacyCandidates(
     }
   }
   return [];
+}
+
+/**
+ * True when the legacy credential would be a candidate: a stored ref that
+ * passed validation, and a safe OpenAI base URL when one is set. Does not
+ * read the secret. A failed Vault read still falls through inside
+ * `legacyCandidates`; this check only mirrors the row predicate.
+ */
+async function legacySourceAvailable(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+): Promise<boolean> {
+  const refCol = isLegacyByokProvider(provider) ? LEGACY_REF_COL[provider] : undefined;
+  if (!refCol) return false;
+  const testStatusCol = LEGACY_TEST_STATUS_COL[provider];
+  const selectCols = [refCol, testStatusCol, provider === 'openai' ? 'byok_openai_base_url' : null]
+    .filter(Boolean)
+    .join(', ');
+  const { data: settings, error } = await db
+    .from('project_settings')
+    .select(selectCols)
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error || !settings) return false;
+  const row = settings as Record<string, string | null>;
+  const ref = row[refCol];
+  const testStatus = testStatusCol ? row[testStatusCol] : null;
+  if (!ref || testStatus !== 'ok') return false;
+  if (provider === 'openai' && row.byok_openai_base_url) {
+    return validateOpenAiBaseUrl(row.byok_openai_base_url, openAiCompatibleHostAllowlist()).ok;
+  }
+  return true;
 }
 
 /** Step 3: the platform env-var key, when the project has no key of its own or shared. */
