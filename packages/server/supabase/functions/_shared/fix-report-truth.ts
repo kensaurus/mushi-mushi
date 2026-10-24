@@ -240,6 +240,34 @@ export interface FixTruthSummary {
   failureBreakdown: Array<{ category: string; count: number }>
 }
 
+/**
+ * Drafted and merged fixes for one product area (a report's `component`).
+ *
+ * Drafted is a report in that area whose current state is an open or draft
+ * PR. Merged is a report in that area with a merged PR. Failed and in-flight
+ * attempts are not drafted: counting every project attempt made the reports
+ * banner say "N more drafted" for the inbox's report total.
+ */
+export function countFixesForArea(
+  component: string,
+  rows: ReadonlyArray<{
+    component?: string | null
+    state: ReportFixState
+    mergedPrNumber: number | null
+  }>,
+): { drafted: number; merged: number } {
+  const want = component.trim()
+  let drafted = 0
+  let merged = 0
+  if (!want) return { drafted, merged }
+  for (const row of rows) {
+    if ((row.component ?? '').trim() !== want) continue
+    if (row.mergedPrNumber != null) merged += 1
+    else if (row.state === 'pr_open') drafted += 1
+  }
+  return { drafted, merged }
+}
+
 export function summarizeFixTruths(truths: Iterable<ReportFixTruth>): FixTruthSummary {
   const s: FixTruthSummary = {
     reports: 0,

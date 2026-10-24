@@ -100,7 +100,8 @@ export interface DashboardData {
   reportsByDay?: ReportDay[]
   llmByDay?: LlmDay[]
   fixSummary?: FixSummary
-  topComponents?: Array<{ component: string; count: number }>
+  /** `draftedFixes` / `mergedFixes` are open and merged PRs in that component. */
+  topComponents?: Array<{ component: string; count: number; draftedFixes?: number; mergedFixes?: number }>
   triageQueue?: TriageItem[]
   activity?: ActivityItem[]
   integrations?: IntegrationStatus[]
