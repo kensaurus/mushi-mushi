@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-24 · **744** routes.
+> Generated: 2026-10-24 · **747** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 192 |
+| `adminOrApiKey` | 195 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 384 |
 | `jwtOrApiKey` | 3 |
@@ -151,6 +151,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/fixes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | PATCH | `/v1/admin/fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/ci/rerun` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| POST | `/v1/admin/fixes/:id/local-followup` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
+| POST | `/v1/admin/fixes/:id/local-followup/done` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
 | POST | `/v1/admin/fixes/:id/merge` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/refresh-ci` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/fixes/:id/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
@@ -373,6 +375,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/keys` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | DELETE | `/v1/admin/projects/:id/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
+| GET | `/v1/admin/projects/:id/local-followups` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | GET | `/v1/admin/projects/:id/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
