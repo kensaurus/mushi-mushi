@@ -145,7 +145,11 @@ export function KpiTile({
   const sparkAria = seriesAriaLabel ?? `${label} trend`
   const summaryRows = showSpark ? sparklineSummaryRows(seriesDays, series!) : []
   const inner = (
-    <div className={`px-3 ${isPrimary ? 'py-3.5' : 'py-2.5'}`}>
+    <div className="px-3 py-2.5">
+      {/* Primary marks emphasis with the ring and a larger numeral only: the box
+          (padding, numeral line, sparkline) is the default's, so a tile that
+          turns primary when its data lands does not move the page (the Bugs
+          Critical tile, layout shift 2026-10-24). */}
       <div className={`pb-1.5 ${PANEL_HEADER_SEPARATOR}`}>
         <div className="flex items-center gap-1 truncate">
           <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
@@ -168,7 +172,7 @@ export function KpiTile({
             "∅ / null" at KPI size. Mono + slashed zero is for small IDs. */}
         <div
           className={`flex-1 min-w-0 font-semibold font-sans tabular-nums truncate ${
-            isPrimary ? 'text-2xl sm:text-3xl' : 'text-lg'
+            isPrimary ? 'text-2xl sm:text-3xl leading-7' : 'text-lg'
           } ${accent ? TONE_TEXT[accent] : 'text-fg'}`}
         >
           {value}
@@ -200,7 +204,7 @@ export function KpiTile({
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
             maxXTicks={2}
-            height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
+            height={showSparkAxes ? 44 : 18}
           />
           <ChartAccessibleSummary
             caption={sparkAria}
