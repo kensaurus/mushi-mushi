@@ -11,7 +11,7 @@ import {
   OPEN_REPORT_STATUSES,
   TRIAGE_BACKLOG_STATUSES,
 } from '../shared.ts';
-import { summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
+import { countFixesForArea, summarizeFixTruths } from '../../_shared/fix-report-truth.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
 import { reportWindowStartIso } from '../../_shared/report-list-filters.ts';
@@ -1112,8 +1112,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     // True only when the fallback row read hit its cap; the KPI counts stay exact.
     const chartsSampled = loaded.charts.sampled;
 
-    // Top components by report count
-    const topComponents = loaded.charts.topComponents;
+    // Top components by report count. Drafted / merged are that area's open
+    // PRs and merged PRs — not the project's attempt total, which the reports
+    // banner used to print as "N more drafted" next to the inbox total.
+    const areaFixRows = [...dashTruths.truths.entries()].map(([id, truth]) => ({
+      component: dashTruths.reports.get(id)?.component,
+      state: truth.state,
+      mergedPrNumber: truth.mergedPrNumber,
+    }));
+    const topComponents = loaded.charts.topComponents.map((c) => {
+      const area = countFixesForArea(c.component, areaFixRows);
+      return { ...c, draftedFixes: area.drafted, mergedFixes: area.merged };
+    });
 
     // `total` is the number of reports with an attempt in the shared 30-day window.
     const dashTruth = summarizeFixTruths(dashTruths.truths.values());
