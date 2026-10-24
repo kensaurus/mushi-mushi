@@ -94,6 +94,24 @@ function cap(text: string | null | undefined, max: number): string {
   return t.length > max ? `${t.slice(0, max)} [cut]` : t
 }
 
+/**
+ * @internal Exported for tests only. The END of a failed command's output: a
+ * hook prints its passing checks first and the failure last (a pre-commit
+ * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
+ */
+export function failureTail(r: { stdout: string; stderr: string }, max = 600): string {
+  const t = [r.stdout, r.stderr].map((x) => x.trim()).filter(Boolean).join('\n').replace(/[ \t]+/g, ' ')
+  const lines = t.split('\n').map((l) => l.trim()).filter(Boolean)
+  const kept: string[] = []
+  let size = 0
+  for (let i = lines.length - 1; i >= 0 && size + lines[i]!.length <= max; i--) {
+    kept.unshift(lines[i]!)
+    size += lines[i]!.length + 1
+  }
+  if (!kept.length && lines.length) return `[…] ${lines[lines.length - 1]!.slice(-max)}`
+  return kept.length < lines.length ? `[…] ${kept.join(' / ')}` : kept.join(' / ')
+}
+
 /** Untrusted text must not close or open one of the prompt's data blocks. */
 function fence(text: string): string {
   return text.replace(/<\s*(\/?)\s*(earlier_attempt|bug_report)/gi, (_m, slash: string, tag: string) => `<${slash}${tag}_text`)
@@ -283,7 +301,7 @@ function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const r = await runProc('git', args, { cwd })
-  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${cap(r.stderr || r.stdout, 300)}`)
+  if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
   return r.stdout.trim()
 }
 
@@ -397,6 +415,8 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
   const wt = join(root, detail.id.slice(0, 8))
   if (existsSync(wt)) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   await git(o.repoDir, ['worktree', 'add', '-B', branch, wt, `origin/${base}`])
+  let keep = o.keep ?? false
+  let fixId: string | null = null
   try {
     const prompt = buildLocalPrompt({
       reportId: detail.id,
@@ -425,6 +445,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
       headers: { 'Idempotency-Key': stableKey(detail.id, branch, run.stdout.slice(0, 200)) },
       body: JSON.stringify({ reportId: detail.id, agent: WORK_AGENT_KIND }),
     })
+    fixId = created.fixId
 
     if (!status) {
       const noPr = run.code === 0 ? parseVerdict(run.stdout) : { verdict: null, reason: cap(run.stderr || run.stdout, 300) || `cursor-agent exited ${run.code}` }
@@ -448,7 +469,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
     const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local Cursor agent; Mushi's Opus review decides whether it merges.`
     const pr = await runProc('gh', ['pr', 'create', '--draft', '--base', base, '--head', branch, '--title', prTitle(detail.summary, detail.id), '--body', body], { cwd: wt })
     const prUrl = pr.stdout.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null
-    if (!prUrl) throw new MushiCliError('E_INTERNAL', `gh pr create failed: ${cap(pr.stderr || pr.stdout, 300)}`)
+    if (!prUrl) throw new MushiCliError('E_INTERNAL', `gh pr create failed: ${failureTail(pr)}`)
     await api(`/v1/admin/fixes/${created.fixId}`, {
       method: 'PATCH',
       body: JSON.stringify(submitPayload({ branch, prUrl, commitSha: sha, filesChanged: files, linesChanged: lines, summary: last || prTitle(detail.summary, detail.id) })),
@@ -458,8 +479,19 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
       o.log(`  review: not queued (${err instanceof Error ? err.message : String(err)})`),
     )
     return { reportId: detail.id, outcome: 'pull request opened', prUrl, fixId: created.fixId }
+  } catch (err) {
+    // The agent's change is in the worktree: keep it, and close the fix row
+    // with the reason instead of leaving it running.
+    const reason = err instanceof Error ? err.message : String(err)
+    keep = true
+    if (fixId) {
+      await api(`/v1/admin/fixes/${fixId}`, { method: 'PATCH', body: JSON.stringify({ status: 'failed', branch, error: `mushi work: ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }) }).catch(
+        (patchErr: unknown) => o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
+      )
+    }
+    return { reportId: detail.id, outcome: `failed: ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }
   } finally {
-    if (!o.keep) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
+    if (!keep) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   }
 }
 
@@ -527,10 +559,16 @@ export function registerWorkCommands(program: Command): void {
       const results = []
       for (const d of picked) {
         log(`report ${d.id}: ${cap(d.summary, 80)}`)
-        const r = await workOne(api, d, { repoDir: opts.repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log })
+        // One report's failure (a fetch, a worktree) does not stop the batch.
+        const r = await workOne(api, d, { repoDir: opts.repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log }).catch((err: unknown) => ({
+          reportId: d.id,
+          outcome: `failed: ${err instanceof Error ? err.message : String(err)}`,
+          prUrl: undefined as string | undefined,
+        }))
         log(`  → ${r.outcome}${r.prUrl ? ` ${r.prUrl}` : ''}`)
         results.push(r)
       }
+      if (results.some((r) => r.outcome.startsWith('failed:'))) process.exitCode = 1
       if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
       else if (!picked.length) log('Nothing to work on.')
     })

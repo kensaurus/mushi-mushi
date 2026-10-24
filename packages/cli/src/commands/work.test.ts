@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  failureTail,
   agentEnv,
   branchNameFor,
   buildLocalPrompt,
@@ -158,3 +159,19 @@ describe('mushi work checks the key can write before an agent runs', () => {
   })
 })
 
+
+describe('failureTail', () => {
+  it('keeps the end of a hook run, where the failure is', () => {
+    const stdout = ['✓ check-no-secrets: scanned 2 file(s), no secrets found.', ...Array.from({ length: 40 }, (_, i) => `[ok] check ${i} passed`)].join('\n')
+    const out = failureTail({ stdout, stderr: '✗ check-dead-buttons: 1 violation in apps/admin/src/pages/X.tsx:12' }, 200)
+    expect(out.startsWith('[…] ')).toBe(true)
+    expect(out).toContain('check-dead-buttons: 1 violation in apps/admin/src/pages/X.tsx:12')
+    expect(out).not.toContain('check-no-secrets')
+    expect(out.length).toBeLessThanOrEqual(210)
+  })
+
+  it('returns short output whole and an over-long last line cut from its start', () => {
+    expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
+    expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
+  })
+})
