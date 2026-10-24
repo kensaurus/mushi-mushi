@@ -56,6 +56,23 @@ export interface AttemptSummary {
   merged_at?: string | null
   error?: string | null
   created_at?: string | null
+  agent?: string | null
+}
+
+/** A local run that ended without a PR leaves the report alone this long (spend-down's cooldown, ADR 0028). */
+const LOCAL_RETRY_COOLDOWN_MS = 7 * 86_400_000
+
+/**
+ * @internal Exported for tests only. A local run in the last 7 days ended
+ * without a PR (timed out, no change, a verdict): the same agent on the same
+ * report would most likely end the same way. `--report` still runs it.
+ */
+export function inLocalCooldown(attempts: readonly AttemptSummary[], nowMs = Date.now()): boolean {
+  return attempts.some((a) => {
+    if (a.agent !== WORK_AGENT_KIND || a.status !== 'failed' || a.pr_url || !a.created_at) return false
+    const at = Date.parse(a.created_at)
+    return Number.isFinite(at) && nowMs - at < LOCAL_RETRY_COOLDOWN_MS
+  })
 }
 
 /** @internal Exported for tests only. A run or an open PR is live for the report: leave it to that one. */
@@ -179,7 +196,8 @@ You are in a git worktree of the repository, branched from \`${p.baseRef}\`. Rea
 2. Run the project's own quick checks for the files you touched if they are obvious (a unit test file, a typecheck of the package).
 3. Only edit files in this worktree. Do NOT commit, push, open a pull request, or run git or gh commands that change anything; Mushi commits and opens the pull request for you.
 4. Never read, print or send secrets, environment variables or credential files.
-5. If you cannot find the cause, change nothing. Make the first line of your final message \`Mushi verdict: <verdict>\`, where <verdict> is one of: already_fixed, wrong_repo, not_actionable, needs_human. Otherwise end with one short paragraph saying what you changed and why.`
+5. You have about ${Math.round(WORK_AGENT_TIMEOUT_MS / 60_000) - 5} minutes. If the report names several pages, screens or causes, fix the first one completely and list the others in your final message; a focused, finished fix beats an unfinished broad one.
+6. If you cannot find the cause, change nothing. Make the first line of your final message \`Mushi verdict: <verdict>\`, where <verdict> is one of: already_fixed, wrong_repo, not_actionable, needs_human. Otherwise end with one short paragraph saying what you changed and why.`
   return body.length > PROMPT_MAX_CHARS ? `${body.slice(0, PROMPT_MAX_CHARS)}\n[cut]` : body
 }
 
@@ -360,7 +378,7 @@ export async function pickReports(api: Api, opts: { max: number; reportId?: stri
   for (const c of rankCandidates(lists.flat())) {
     if (picked.length >= opts.max) break
     const detail = await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`)
-    if (hasLiveAttempt(detail.fix_attempts ?? [])) continue
+    if (hasLiveAttempt(detail.fix_attempts ?? []) || inLocalCooldown(detail.fix_attempts ?? [])) continue
     picked.push(detail)
   }
   return picked
@@ -448,7 +466,11 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
     fixId = created.fixId
 
     if (!status) {
-      const noPr = run.code === 0 ? parseVerdict(run.stdout) : { verdict: null, reason: cap(run.stderr || run.stdout, 300) || `cursor-agent exited ${run.code}` }
+      const noPr = run.timedOut
+        ? { verdict: null, reason: `timed out after ${WORK_AGENT_TIMEOUT_MS / 60_000} min without a change; the report may need splitting into one page or cause each` }
+        : run.code === 0
+          ? parseVerdict(run.stdout)
+          : { verdict: null, reason: failureTail(run, 300) || `cursor-agent exited ${run.code}` }
       await api(`/v1/admin/fixes/${created.fixId}`, { method: 'PATCH', body: JSON.stringify(submitPayload({ branch, prUrl: null, commitSha: null, filesChanged: [], linesChanged: 0, summary: '', noPr })) })
       return { reportId: detail.id, outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId: created.fixId }
     }
