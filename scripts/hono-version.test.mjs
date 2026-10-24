@@ -62,8 +62,10 @@ test('deno.lock pins hono at or above 4.13.11', () => {
 })
 
 test('the installed hono package is the fixed release', () => {
-  const require = createRequire(path.join(ROOT, 'packages/server/package.json'))
-  let dir = path.dirname(require.resolve('hono'))
+  // Resolved through packages/server, which depends on hono. Knip treats a
+  // binding named `require` as a root dependency, so this local has another name.
+  const requireFromServer = createRequire(path.join(ROOT, 'packages/server/package.json'))
+  let dir = path.dirname(requireFromServer.resolve('hono'))
   let version
   for (let i = 0; i < 6; i++) {
     const manifest = path.join(dir, 'package.json')
