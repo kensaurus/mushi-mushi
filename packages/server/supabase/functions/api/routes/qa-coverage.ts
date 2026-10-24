@@ -58,7 +58,12 @@ export const qaStoryPatchSchema = qaStoryCreateSchema.partial().extend({
   enabled: z.boolean().optional(),
 });
 
-/** Row written by POST …/qa-stories. `target_url` is what the runner navigates to. */
+/**
+ * Row written by POST …/qa-stories. `target_url` is what the runner navigates to.
+ * A console story is created already on, so it is `approved` here. The schedule
+ * runs only that status; leaving it off the insert would depend on the column
+ * default, and a story that is on but not approved would never be picked.
+ */
 export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaStoryCreateSchema>) {
   return {
     project_id: projectId,
@@ -71,6 +76,7 @@ export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaSto
     schedule_cron: body.schedule_cron ?? '0 * * * *',
     byok_provider: body.byok_provider ?? null,
     enabled: true,
+    approval_status: 'approved',
   };
 }
 

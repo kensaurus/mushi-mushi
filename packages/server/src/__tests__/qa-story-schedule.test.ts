@@ -4,14 +4,105 @@
  *          pending_review must not be picked — those runs spend
  *          Firecrawl/Browserbase credits and notify on failure.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_STORY_CRON,
-  SCHEDULED_APPROVAL_STATUS,
   selectStoriesForScheduledTick,
 } from '../../supabase/functions/qa-story-runner/schedule.ts'
+
+/**
+ * Chainable stand-in for the Supabase query builder. Filter calls are recorded
+ * so a test can see `.eq('approval_status', 'approved')` on the real runner
+ * query, not on a copy of its source.
+ */
+const { eqCalls, resetEqCalls, MANUAL_STORY, query } = vi.hoisted(() => {
+  const eqCalls: Array<{ table: string; column: string; value: unknown }> = []
+  const MANUAL_STORY = {
+    id: '11111111-1111-4111-8111-111111111111',
+    project_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    name: 'Pending but asked for by hand',
+    prompt: null,
+    script: null,
+    script_lang: 'playwright-js',
+    browser_provider: 'local',
+    schedule_cron: '* * * * *',
+    enabled: true,
+    capture_video: false,
+    byok_provider: null,
+    target_url: 'https://example.com',
+    approval_status: 'pending_review',
+    last_run_status: null,
+    consecutive_failures: 0,
+    slack_failure_ts: null,
+    last_notified_at: null,
+  }
+  function query(table: string) {
+    const builder: Record<string, unknown> = {}
+    const chain = () => builder
+    for (const method of ['select', 'insert', 'update', 'order', 'limit']) builder[method] = chain
+    builder.eq = (column: string, value: unknown) => {
+      eqCalls.push({ table, column, value })
+      return builder
+    }
+    builder.single = () =>
+      Promise.resolve({
+        data: table === 'qa_stories' ? MANUAL_STORY : { id: 'cron-1' },
+        error: null,
+      })
+    builder.maybeSingle = () =>
+      Promise.resolve({
+        data: table === 'qa_stories' ? { consecutive_failures: 0 } : null,
+        error: null,
+      })
+    builder.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+      Promise.resolve({ data: [], error: null }).then(resolve, reject)
+    return builder
+  }
+  return {
+    eqCalls,
+    resetEqCalls: () => {
+      eqCalls.length = 0
+    },
+    MANUAL_STORY,
+    query,
+  }
+})
+
+vi.mock('../../supabase/functions/_shared/logger.ts', () => {
+  const noop = { info() {}, warn() {}, error() {}, debug() {}, child: () => noop }
+  return { log: noop }
+})
+vi.mock('../../supabase/functions/_shared/db.ts', () => ({
+  getServiceClient: () => ({ from: (table: string) => query(table) }),
+}))
+vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
+  requireServiceRoleAuth: () => null,
+}))
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({
+  withSentry: (_name: string, handler: (req: Request) => Promise<Response>) => handler,
+  reportError: vi.fn(),
+  reportMessage: vi.fn(),
+}))
+vi.mock('../../supabase/functions/_shared/telemetry.ts', () => ({
+  startCronRun: async () => ({ finish: async () => {}, fail: async () => {} }),
+}))
+vi.mock('../../supabase/functions/_shared/byok.ts', () => ({
+  resolveLlmKey: async () => null,
+}))
+vi.mock('../../supabase/functions/_shared/slack.ts', () => ({
+  sendBotMessage: async () => ({ ok: true }),
+  sendSlackText: async () => {},
+  buildQaStoryRunBlocks: () => [],
+  sendDiscordNotification: async () => {},
+}))
+vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({
+  dispatchPluginEventDetached: () => Promise.resolve(),
+}))
+vi.mock('../../supabase/functions/_shared/inventory-guards.ts', () => ({
+  safeFetch: async () => {
+    throw new Error('scheduled test must not fetch')
+  },
+}))
 
 const now = new Date('2026-10-24T00:00:00Z')
 const due = () => true
@@ -62,29 +153,58 @@ describe('selectStoriesForScheduledTick', () => {
   })
 })
 
-describe('qa-story-runner wiring', () => {
-  const src = readFileSync(
-    resolve(__dirname, '../../supabase/functions/qa-story-runner/index.ts'),
-    'utf8',
-  )
+describe('qa-story-runner query', () => {
+  let handler: ((req: Request) => Promise<Response>) | undefined
 
-  it('the scheduled fetch requires approved, and the tick uses the selector', () => {
-    const cron = src.indexOf("startCronRun(db, 'qa-story-runner'")
-    expect(cron).toBeGreaterThan(0)
-    const fetch = src.indexOf(".from('qa_stories')", cron)
-    const block = src.slice(fetch, src.indexOf('if (storiesErr)', fetch))
-    expect(block).toContain(".eq('enabled', true)")
-    expect(block).toContain(".eq('approval_status', SCHEDULED_APPROVAL_STATUS)")
-    expect(SCHEDULED_APPROVAL_STATUS).toBe('approved')
-    expect(src.slice(cron)).toContain('selectStoriesForScheduledTick(')
+  beforeAll(async () => {
+    vi.stubGlobal('Deno', {
+      serve: (fn: (req: Request) => Promise<Response>) => {
+        handler = fn
+      },
+      env: { get: () => undefined },
+    })
+    await import('../../supabase/functions/qa-story-runner/index.ts')
   })
 
-  it('manual runs do not apply the scheduled approval gate', () => {
-    const start = src.indexOf('async function executeManualRun')
-    const end = src.indexOf('// ── Main handler')
-    const manual = src.slice(start, end)
-    expect(manual).not.toContain('selectStoriesForScheduledTick')
-    expect(manual).not.toContain('SCHEDULED_APPROVAL_STATUS')
-    expect(manual).not.toContain("eq('approval_status'")
+  afterAll(() => {
+    vi.unstubAllGlobals()
+  })
+
+  beforeEach(() => resetEqCalls())
+
+  function storyFilters() {
+    return eqCalls
+      .filter((call) => call.table === 'qa_stories')
+      .map((call) => [call.column, call.value])
+  }
+
+  async function run(req: Request) {
+    if (!handler) throw new Error('qa-story-runner did not register a handler')
+    return handler(req)
+  }
+
+  it('asks the database for enabled stories whose approval_status is approved', async () => {
+    const res = await run(new Request('https://mushi.test/qa-story-runner', { method: 'POST' }))
+    expect(res.status).toBe(200)
+    expect(storyFilters()).toContainEqual(['enabled', true])
+    expect(storyFilters()).toContainEqual(['approval_status', 'approved'])
+  })
+
+  it('runs a manual story even when it is still pending_review', async () => {
+    const res = await run(
+      new Request('https://mushi.test/qa-story-runner', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          trigger: 'manual',
+          story_id: MANUAL_STORY.id,
+          run_id: '22222222-2222-4222-8222-222222222222',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, status: 'skipped' })
+    expect(storyFilters().map(([column]) => column)).not.toContain('approval_status')
+    expect(storyFilters()).toContainEqual(['id', MANUAL_STORY.id])
   })
 })

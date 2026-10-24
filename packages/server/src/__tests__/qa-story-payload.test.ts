@@ -3,9 +3,9 @@
  *
  * Regression: POST …/qa-stories accepted `target_url` but never wrote it, and
  * PATCH could not set it, so every console-created story ran with no target
- * and ended `no_target_url`. Enabling a story from the console must also
- * approve it, because the scheduled runner only executes
- * approval_status = 'approved'.
+ * and ended `no_target_url`. A console-created story is inserted already
+ * approved, and turning one on approves it too, because the scheduled runner
+ * only executes approval_status = 'approved'.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -39,6 +39,12 @@ describe('buildQaStoryInsert', () => {
     expect(row.target_url).toBe('https://example.com/pricing')
     expect(row.project_id).toBe('p1')
     expect(row.enabled).toBe(true)
+  })
+
+  it('inserts a console story already approved, so the schedule can run it', () => {
+    const row = mod.buildQaStoryInsert('p1', { name: 'Checkout' })
+    expect(row.enabled).toBe(true)
+    expect(row.approval_status).toBe('approved')
   })
 
   it('stores null when no target is given (local stories)', () => {
