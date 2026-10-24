@@ -60,7 +60,7 @@
     "@modelcontextprotocol/core": "^2.3.1",
     "@modelcontextprotocol/server": "^2.3.1",
     "@mushi-mushi/core": "workspace:^",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
     "@sentry/node": "^10.57.0"
