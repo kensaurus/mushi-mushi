@@ -61,6 +61,8 @@ export interface ScopeContext {
   get(key: 'userId'): string | undefined
   get(key: 'projectId'): string | undefined
   get(key: 'authMethod'): string | undefined
+  /** Set by adminOrApiKey for an account key (is_org_scoped, no bound project). */
+  get(key: 'isOrgScopedKey'): boolean | undefined
   json(body: unknown, status?: number): Response
 }
 
@@ -70,13 +72,20 @@ export type ProjectScopeDenied = { ok: false; response: Response }
 /**
  * Assert the authenticated caller is allowed to act on `:projectId`.
  *
- * Two paths to "allowed":
+ * Three paths to "allowed":
  *
- *  - **API-key**: the key carries its own `projectId` (the project it was
- *    minted for). We require an exact match against the route param. This
- *    is the only safe shape for API-key auth — the previous
- *    `accessibleProjectIds(owner)` fallback let any key access every
- *    project the human owner happened to be in (audit C1, 2026-05-04).
+ *  - **Project-bound API key**: the key carries its own `projectId`. We
+ *    require an exact match against the route param. This is the only safe
+ *    shape for a project key — the previous `accessibleProjectIds(owner)`
+ *    fallback let any key access every project the human owner happened to
+ *    be in (audit C1, 2026-05-04).
+ *
+ *  - **Account key** (`isOrgScopedKey`): no bound project. It may act on
+ *    every project its owner can reach, and a limited key only on its
+ *    `allowed_project_ids` (ADR 0026, applied inside `accessibleProjectIds`).
+ *    `requireFeature` writes a resolved project id onto the context before
+ *    this check; that pin is the plan's project, not a key binding, so it
+ *    must not 403 `PROJECT_MISMATCH` for the account's other apps.
  *
  *  - **JWT**: the user is a member of the project (owner / org member /
  *    project_members row). Resolved via `accessibleProjectIds`.
@@ -105,14 +114,14 @@ export async function assertProjectScope(
   }
   const apiKeyProjectId = c.get('projectId')
   const authMethod = (c.get('authMethod') ?? 'jwt') as 'apiKey' | 'jwt'
-
-  // Only enforce project-ID pinning when the caller authenticated with an
-  // API key: the key is scoped to a specific project, so any mismatch is a
-  // hard error. JWT callers may access any project they belong to — the
-  // requireFeature middleware also sets projectId (to the user's resolved
-  // default project) as a side-effect, but that must not over-constrain
-  // which project a JWT caller can query via URL parameter.
-  if (apiKeyProjectId && authMethod === 'apiKey') {
+  // Only a project-bound API key is pinned to c.get('projectId').
+  // requireFeature writes a resolved project id there for everyone else
+  // (the plan's project, often the first app). That must not over-constrain
+  // a JWT caller or an account key: both may name any project they can
+  // reach in the URL. An account key has no bound project; its limit
+  // (allowed_project_ids) is applied inside accessibleProjectIds.
+  const accountKey = authMethod === 'apiKey' && c.get('isOrgScopedKey') === true
+  if (apiKeyProjectId && authMethod === 'apiKey' && !accountKey) {
     if (apiKeyProjectId !== projectId) {
       return {
         ok: false,
