@@ -137,6 +137,7 @@ parked work is visible in one place.
 | BL-117 | unfinished-feature | Site audit cadence and page limit are API-only (`PUT /v1/admin/projects/:id/site-audit` takes `cadenceDays`, `pageLimit`); /credits shows the switch and Run now only | relevant | low | ADR 0040 | — |
 | BL-118 | unfinished-feature | `mushi work` picks reports itself (classified / reopened, worst first) instead of asking the server for spend-down's exact order; held-PR retries (ADR 0028 amendment) and per-app concurrency are not applied locally, and a no-PR verdict cannot set `fix_attempts.failure_category` through the PATCH route | relevant | low | `packages/cli/src/commands/work.ts` | — |
 | BL-119 | unfinished-feature | `mushi work` on a schedule (a systemd user timer or the console starting it) and local agents other than the Cursor CLI (`claude`, `codex`) | relevant | low | `packages/cli/src/commands/work.ts` | — |
+| BL-120 | unfinished-feature | Scheduled UX audits per app from the console: today `mushi-ux audit` runs where a cached signed-in profile lives (a machine timer); the console should schedule it per app (a CI workflow template with a stored session, or the local agent) and show its runs | relevant | medium | ADR 0045 | — |
 
 ---
 

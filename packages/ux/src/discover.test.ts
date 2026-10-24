@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
-import { normalizeLink, surfaceKey, tidyLabels, triggerSelector } from './discover.js'
+import { inScope, normalizeLink, surfaceKey, tidyLabels, triggerSelector } from './discover.js'
 
 const BASE = 'http://localhost:5173/app'
 
@@ -60,5 +60,16 @@ describe('tidyLabels', () => {
     expect(tidyLabels(plain)).toEqual(plain)
     const clash = tidyLabels([page('/a', 'Reports | Acme'), page('/b', 'Reports'), page('/c', 'Usage | Acme')])
     expect(clash.map((s) => s.label)).toEqual(['Reports | Acme', 'Reports', 'Usage'])
+  })
+})
+
+describe('inScope', () => {
+  it('keeps a console mapping inside its path, not the docs or landing pages on the same origin', () => {
+    expect(inScope('/mushi-mushi/admin', '/mushi-mushi/admin')).toBe(true)
+    expect(inScope('/mushi-mushi/admin/reports', '/mushi-mushi/admin/')).toBe(true)
+    expect(inScope('/mushi-mushi/docs', '/mushi-mushi/admin')).toBe(false)
+    expect(inScope('/mushi-mushi/administer', '/mushi-mushi/admin')).toBe(false)
+    expect(inScope('/anything', undefined)).toBe(true)
+    expect(inScope('/anything', '/')).toBe(true)
   })
 })

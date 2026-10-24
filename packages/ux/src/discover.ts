@@ -25,6 +25,12 @@ export interface DiscoverOptions {
   /** Paths never visited (globs on pathname), on top of sign-out routes. */
   excludePaths?: string[]
   /**
+   * Only pathnames equal to or under this prefix are visited, e.g.
+   * `/mushi-mushi/admin` for a console that shares its origin with docs and
+   * a landing site. Omit for the whole origin.
+   */
+  scopePath?: string
+  /**
    * Visit only startPaths (and the tabs, dialogs and menus they open): no
    * routes from the source or sitemap, no following links. Set when the
    * person named the pages.
@@ -43,6 +49,14 @@ const MAX_REDIRECT_FOLLOWS = 3
 const LOADS_PER_PAGE = 5
 const SIGN_IN_PATH_RE = /\/(log-?in|sign-?in|auth)\b/i
 const SIGN_OUT_PATH_RE =/\/(log-?out|sign-?out|logoff)\b/i
+
+/** Pure: `pathname` is `scope` or under it (`/a/admin` covers `/a/admin/x`, not `/a/administer`). */
+export function inScope(pathname: string, scope: string | undefined): boolean {
+  if (!scope) return true
+  const s = scope.replace(/\/+$/, '') || '/'
+  if (s === '/') return true
+  return pathname === s || pathname.startsWith(`${s}/`)
+}
 
 /** Pure: same-origin, normalized path (no hash), or null to skip. */
 export function normalizeLink(href: string, baseUrl: string): string | null {
@@ -184,7 +198,9 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
     ...(only ? [] : (opts.sourceDir ? routesFromSource(opts.sourceDir) : []).filter(isWorthVisiting)),
     ...(only ? [] : (await sitemapPaths(opts.baseUrl)).filter(isWorthVisiting)),
   ]
-  const queue = [...new Set(seeded)]
+  // Out-of-scope paths never enter the queue: they would spend page loads (a site sitemap lists docs and landing pages).
+  const scoped = (p: string) => inScope(new URL(p, opts.baseUrl).pathname, opts.scopePath)
+  const queue = [...new Set(seeded)].filter(scoped)
   progress(only ? `${queue.length} page(s) you named` : `${queue.length} start path(s) from the source, sitemap and options`)
   const visited = new Set<string>()
   const seenShapes = new Set<string>()
@@ -304,7 +320,7 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
       for (const { href, label } of links) {
         if (isDestructiveLabel(label)) continue
         const next = normalizeLink(href, page.url())
-        if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
+        if (!only && next && scoped(next) && !visited.has(next) && !queue.includes(next)) queue.push(next)
       }
 
       // Same rule for its tabs and dialogs: a failed read skips that state only.
@@ -322,7 +338,7 @@ export async function discover(session: BrowserSession, opts: DiscoverOptions): 
         if (after.pathname + after.search !== here) {
           // The "tab" was a link in disguise; crawl it as a page.
           const next = normalizeLink(page.url(), opts.baseUrl)
-          if (!only && next && !visited.has(next) && !queue.includes(next)) queue.push(next)
+          if (!only && next && scoped(next) && !visited.has(next) && !queue.includes(next)) queue.push(next)
           continue
         }
         let kind: SurfaceKind | null
