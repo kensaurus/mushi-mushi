@@ -5,13 +5,23 @@
  * OVERVIEW:
  * - Day/X sparse labels and Y-axis tick builders for dashboard sparklines
  * - Count / USD formatters used by ChartFrame tick labels
- * - buildYTickValues uses a nice-step scale so discrete count axes stay
- *   on integers (peak 33 → 40/30/20/10/0) instead of 12.3/24.6/37.0
+ * - Count charts (integer:true) use a nice-step scale so discrete axes stay
+ *   on whole numbers (peak 33 → 40/30/20/10/0); non-count keeps the linear
+ *   12% headroom path from master
+ *
+ * DEPENDENCIES:
+ * - None (pure helpers)
  *
  * USAGE:
- * - LineSparkline / BarSparkline / Histogram pass integer:true for count
- * - Callers use resolvePlotChartMax(values, yTickValues[0], scaleToData) so
- *   the plot domain top matches the top Y tick on every scaleToData path
+ * - LineSparkline / BarSparkline / Histogram pass { integer: true } only when
+ *   valueFormat === 'count'
+ * - resolvePlotChartMax(values, yTickTop, scaleToData): when scaleToData is
+ *   true, plot domain top is the nice tick top; when false, base
+ *   resolveChartMax(values, false) so the prop stays meaningful
+ *
+ * NOTES:
+ * - Non-count buildYTickValues must match master bit-for-bit (no nice-step)
+ * - Count peaks that already land on a nice step still gain one step of headroom
  */
 
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
@@ -95,13 +105,11 @@ export type BuildYTickOptions = {
   integer?: boolean
 }
 
-/** Nice step near `rawStep` from {1,2,2.5,5,10}×10^n (drop 2.5 when integer). */
-function niceStep(rawStep: number, integer: boolean): number {
+/** Nice step near `rawStep` from {1,2,5,10}×10^n (count axes only). */
+function niceIntegerStep(rawStep: number): number {
   if (!(rawStep > 0) || !Number.isFinite(rawStep)) return 1
   const magnitude = 10 ** Math.floor(Math.log10(rawStep))
-  const fracs = integer ? [1, 2, 5, 10] : [1, 2, 2.5, 5, 10]
-  const candidates = fracs.map((f) => f * magnitude)
-  // Prefer the nearest nice value; ties go upward so the domain still covers.
+  const candidates = [1, 2, 5, 10].map((f) => f * magnitude)
   let best = candidates[0]!
   let bestDist = Math.abs(best - rawStep)
   for (const c of candidates) {
@@ -111,8 +119,64 @@ function niceStep(rawStep: number, integer: boolean): number {
       bestDist = dist
     }
   }
-  if (integer) return Math.max(1, best)
-  return best
+  return Math.max(1, best)
+}
+
+/** Linear master-path ticks (USD / non-count). Unchanged from origin/master. */
+function buildLinearYTickValues(
+  max: number,
+  min: number,
+  tickCount: number,
+  headroomRatio: number,
+): number[] {
+  const rawPeak = Math.max(max, min)
+  const floor = Math.min(min, max)
+  const peak = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
+  if (tickCount <= 1) return [peak]
+  if (peak === floor) return [peak, floor]
+  const steps = tickCount - 1
+  const out: number[] = []
+  for (let i = 0; i <= steps; i++) {
+    // The last tick is the floor exactly: `peak - (peak - floor)` can land a
+    // hair below 0 and print "-0.0".
+    out.push(i === steps ? floor : peak - ((peak - floor) * i) / steps)
+  }
+  return out
+}
+
+/** Integer nice-step ticks for count charts. */
+function buildIntegerYTickValues(
+  max: number,
+  min: number,
+  tickCount: number,
+  headroomRatio: number,
+): number[] {
+  const rawPeak = Math.max(max, min)
+  const floor = Math.min(min, max)
+  const peakTarget = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
+  if (tickCount <= 1) return [Math.ceil(peakTarget)]
+  if (peakTarget === floor) return [peakTarget, floor]
+
+  const steps = tickCount - 1
+  // Headroom guides step size; top snaps to a nice multiple of the data max
+  // so e.g. max 57 → step 20 → [60,40,20,0] (not 63.8 linear fractions).
+  const rawStep = (peakTarget - floor) / steps
+  const step = niceIntegerStep(rawStep)
+  let top = Math.ceil(rawPeak / step) * step
+  // Peak already on a nice step still gets one step of headroom (40 → 50).
+  if (top <= rawPeak) top += step
+  top = Math.round(top)
+  if (top <= floor) {
+    return [Math.max(1, Math.ceil(rawPeak) || 1), floor]
+  }
+
+  const out: number[] = []
+  for (let v = top; v > floor + step * 0.5; v -= step) {
+    const tick = Math.round(v)
+    if (out.length === 0 || out[out.length - 1] !== tick) out.push(tick)
+  }
+  out.push(floor)
+  return out
 }
 
 /** Y-axis tick values from top (max) to bottom (min). */
@@ -123,35 +187,12 @@ export function buildYTickValues(
   headroomRatio = 0.12,
   opts?: BuildYTickOptions,
 ): number[] {
-  const integer = opts?.integer === true
-  const rawPeak = Math.max(max, min)
-  const floor = Math.min(min, max)
-  const peakTarget = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
-  if (tickCount <= 1) return [integer ? Math.ceil(peakTarget) : peakTarget]
-  if (peakTarget === floor) return [peakTarget, floor]
-
-  const steps = tickCount - 1
-  // Headroom guides step size; top snaps to a nice multiple of the data max
-  // so e.g. max 57 → step 20 → [60,40,20,0] (not 63.8 linear fractions).
-  const rawStep = (peakTarget - floor) / steps
-  const step = niceStep(rawStep, integer)
-  let top = Math.ceil(rawPeak / step) * step
-  if (integer) top = Math.round(top)
-  if (top <= floor) {
-    return integer ? [Math.max(1, Math.ceil(rawPeak) || 1), floor] : [peakTarget, floor]
+  if (opts?.integer === true) {
+    return buildIntegerYTickValues(max, min, tickCount, headroomRatio)
   }
-
-  const out: number[] = []
-  // Walk down by nice step; last tick is the floor exactly (avoids "-0.0").
-  for (let v = top; v > floor + step * 0.5; v -= step) {
-    const tick = integer ? Math.round(v) : v
-    if (out.length === 0 || out[out.length - 1] !== tick) out.push(tick)
-  }
-  out.push(floor)
-  return out
+  return buildLinearYTickValues(max, min, tickCount, headroomRatio)
 }
 
-/** @internal Exported for tests only; charts use resolvePlotChartMax. */
 export function resolveChartMax(
   values: number[],
   scaleToData: boolean,
@@ -164,17 +205,17 @@ export function resolveChartMax(
 }
 
 /**
- * Plot domain top for BarSparkline / LineSparkline.
- * Prefer the nice-step tick top so bar/line heights match Y labels whether
- * or not scaleToData is set; fall back to resolveChartMax for empty/zero series.
+ * Plot domain top for count charts.
+ * scaleToData true  → nice tick top (labels and bars/lines share a domain).
+ * scaleToData false → base resolveChartMax(values, false); callers still build
+ * integer ticks whose top is that max rounded up to the step.
  */
 export function resolvePlotChartMax(
   values: number[],
   yTickTop: number | undefined,
   scaleToData: boolean,
 ): number {
-  const peak = values.length ? Math.max(...values, 0) : 0
-  if (peak <= 0) return resolveChartMax(values, scaleToData)
+  if (!scaleToData) return resolveChartMax(values, false)
   if (yTickTop != null && yTickTop > 0) return yTickTop
-  return resolveChartMax(values, scaleToData)
+  return resolveChartMax(values, true)
 }

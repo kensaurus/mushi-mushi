@@ -6,8 +6,9 @@
  * Count charts (2026-10-24): linear 12% headroom produced fractional ticks
  * (12.3/24.6/37.0); nice integer steps keep REPORTS / FIXES labels whole.
  *
- * Plot max (2026-10-24): scaleToData=false used resolveChartMax (raw peak)
- * while ticks used the nice-step top — bar/line heights drifted from labels.
+ * scaleToData (2026-10-24): true → plot max is the nice tick top; false →
+ * base resolveChartMax(values, false). Non-count ticks stay on the master
+ * linear path.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -32,30 +33,53 @@ describe('buildYTickValues / formatChartCount', () => {
     expect(formatChartCount(-0.04)).toBe('0')
   })
 
-  it('uses integer nice steps for count peaks (no 12.3-style fractions)', () => {
-    expect(buildYTickValues(33, 0, 4, 0.12, { integer: true })).toEqual([
-      40, 30, 20, 10, 0,
-    ])
-    expect(buildYTickValues(57, 0, 4, 0.12, { integer: true })).toEqual([
-      60, 40, 20, 0,
-    ])
-    for (const peak of [33, 57]) {
-      const ticks = buildYTickValues(peak, 0, 4, 0.12, { integer: true })
-      for (const t of ticks) {
-        expect(Number.isInteger(t)).toBe(true)
-        expect(formatChartCount(t)).not.toMatch(/\.\d/)
-      }
-    }
-  })
-
-  it('aligns plot max with nice tick top when scaleToData is false', () => {
+  it('uses integer nice steps for count peak 33 (scaleToData true and false)', () => {
     const values = [33, 10, 5]
     const ticks = buildYTickValues(33, 0, 4, 0.12, { integer: true })
-    // Legacy path: raw peak as chartMax while labels use nice top (40).
-    expect(resolveChartMax(values, false)).toBe(33)
-    expect(ticks[0]).toBe(40)
-    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(40)
+    expect(ticks).toEqual([40, 30, 20, 10, 0])
+    for (const t of ticks) {
+      expect(Number.isInteger(t)).toBe(true)
+      expect(formatChartCount(t)).not.toMatch(/\.\d/)
+    }
     expect(resolvePlotChartMax(values, ticks[0], true)).toBe(40)
+    expect(resolveChartMax(values, false)).toBe(33)
+    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(33)
+  })
+
+  it('uses integer nice steps for count peak 57 (scaleToData true and false)', () => {
+    const values = [57, 12, 3]
+    const ticks = buildYTickValues(57, 0, 4, 0.12, { integer: true })
+    expect(ticks).toEqual([60, 40, 20, 0])
+    for (const t of ticks) {
+      expect(Number.isInteger(t)).toBe(true)
+      expect(formatChartCount(t)).not.toMatch(/\.\d/)
+    }
+    expect(resolvePlotChartMax(values, ticks[0], true)).toBe(60)
+    expect(resolveChartMax(values, false)).toBe(57)
+    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(57)
+  })
+
+  it('adds headroom when the count peak is already a nice number', () => {
+    const ticks = buildYTickValues(40, 0, 4, 0.12, { integer: true })
+    expect(ticks[0]).toBe(50)
+    expect(ticks[ticks.length - 1]).toBe(0)
+    for (const t of ticks) expect(Number.isInteger(t)).toBe(true)
+  })
+
+  it('keeps non-count (USD) ticks on the master linear path', () => {
+    // Exact origin/master buildYTickValues(33) — no nice-step.
+    expect(buildYTickValues(33, 0, 4)).toEqual([36.96, 24.64, 12.32, 0])
+    expect(buildYTickValues(57, 0, 4)).toEqual([63.84, 42.56, 21.28, 0])
+    const usdValues = [1.23, 0.4, 0.1]
+    expect(resolveChartMax(usdValues, true)).toBeCloseTo(1.23 * 1.12)
+    expect(resolveChartMax(usdValues, false)).toBe(1.23)
+    // Non-count callers use resolveChartMax, not the count-only plot helper.
+    expect(buildYTickValues(1.23, 0, 4)).toEqual([
+      1.3776000000000002,
+      0.9184000000000001,
+      0.45920000000000005,
+      0,
+    ])
   })
 })
 

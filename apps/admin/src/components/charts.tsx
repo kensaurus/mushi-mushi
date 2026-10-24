@@ -32,6 +32,7 @@ import {
   formatChartCount,
   formatChartDayLabel,
   formatChartUsd,
+  resolveChartMax,
   resolvePlotChartMax,
 } from './charts/chartAxis'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
@@ -342,11 +343,14 @@ export function LineSparkline({
   const rawPeak = Math.max(...values, 0)
   // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
   // grid-line labels stay aligned with actual data-point positions on the SVG.
+  const countAxis = valueFormat === 'count'
   const yTickValues = buildYTickValues(rawPeak, min, 4, 0.12, {
-    integer: valueFormat === 'count',
+    integer: countAxis,
   })
-  // Nice top tick is the plot max so grid labels line up with data.
-  const chartMax = resolvePlotChartMax(values, yTickValues[0], scaleToData)
+  // Count + scaleToData: plot top = nice tick. Non-count: master resolveChartMax.
+  const chartMax = countAxis
+    ? resolvePlotChartMax(values, yTickValues[0], scaleToData)
+    : resolveChartMax(values, scaleToData)
   const plotHeight = showAxes ? Math.max(height, 56) : height
   const xAt = (i: number) => seriesXPercent(i, values.length, showAxes ? 0 : 2)
   const yAt = (v: number) => seriesYPercent(v, min, chartMax, showAxes ? 2 : 2)
@@ -568,10 +572,16 @@ export function BarSparkline({
   const peak = Math.max(...values)
   const peakIdx = values.indexOf(peak)
   const rawPeak = Math.max(peak, 0)
-  const yTickValues = buildYTickValues(rawPeak, 0, 4, 0.12, {
-    integer: valueFormat === 'count',
-  })
-  const chartMax = resolvePlotChartMax(values, yTickValues[0], scaleToData)
+  const countAxis = valueFormat === 'count'
+  // Non-count: master path — plot max first, then ticks from chartMax/1.12 so
+  // the top label equals the domain. Count: nice integer ticks + resolvePlotChartMax.
+  const chartMaxBase = resolveChartMax(values, scaleToData)
+  const yTickValues = countAxis
+    ? buildYTickValues(rawPeak, 0, 4, 0.12, { integer: true })
+    : buildYTickValues(chartMaxBase / 1.12, 0, 4)
+  const chartMax = countAxis
+    ? resolvePlotChartMax(values, yTickValues[0], scaleToData)
+    : chartMaxBase
   const plotHeight = showAxes ? Math.max(height, 80) : height
   const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const activeCount = values.filter((v) => v > 0).length
@@ -771,10 +781,12 @@ export function Histogram({
 }) {
   if (buckets.length === 0) return null
   const peak = Math.max(1, ...buckets)
+  const countAxis = valueFormat === 'count'
   const yTickValues = buildYTickValues(peak, 0, 4, 0.12, {
-    integer: valueFormat === 'count',
+    integer: countAxis,
   })
-  const chartMax = yTickValues[0] ?? peak * 1.12
+  // Count: align domain to nice tick top. Non-count: master peak*1.12 domain.
+  const chartMax = countAxis ? (yTickValues[0] ?? peak * 1.12) : peak * 1.12
   const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const xLabs = labels ?? buckets.map((_, i) => String(i))
 
