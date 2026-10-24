@@ -11,7 +11,10 @@
  *   5. process.env.<PROVIDER>_API_KEY (platform fallback)
  *   Every candidate is returned in that order for withLlmFailover() to iterate.
  *   `resolveLlmKeySource` reports which step would win for one app. It does
- *   not read the secret, write key status, or depend on the caller.
+ *   not read the secret, write key status, or depend on the caller. A failed
+ *   read throws, so a status chip can say the answer is unknown instead of
+ *   inventing "no key". `resolveLlmKeySources` answers several providers from
+ *   one owner read and one byok_keys read.
  *
  * SECURITY:
  *   - Logs the source ('byok' | 'env') and last-used timestamp; NEVER logs the
@@ -241,6 +244,8 @@ export function orderCandidates(c: {
  * The source `resolveLlmKeys` would pick first, without reading Vault,
  * reactivating a cooled-down key, enforcing the LLM budget, or logging that
  * the platform key is in use. Keyed only on the app (ADR 0023 / 0031).
+ * Throws when a read fails. Null means nothing is configured, not that the
+ * database could not be read.
  */
 export async function resolveLlmKeySource(
   db: SupabaseClient,
@@ -248,22 +253,71 @@ export async function resolveLlmKeySource(
   provider: LlmProvider,
   opts: { openAiOnly?: boolean } = {},
 ): Promise<LlmKeySource | null> {
-  const owner = await projectKeyOwner(db, projectId);
-  let flags = await poolSourceFlags(db, owner, provider);
-  if (provider === 'openai' && !opts.openAiOnly) {
-    flags = mergeSourceFlags(flags, await poolSourceFlags(db, owner, 'openrouter'));
+  const [source] = await resolveLlmKeySources(db, projectId, [provider], opts);
+  return source ?? null;
+}
+
+const EMPTY_SOURCE_FLAGS: PoolSourceFlags = {
+  project: false,
+  organization: false,
+  universal: false,
+};
+
+/**
+ * `resolveLlmKeySource` for several providers. One project-owner read and
+ * one byok_keys read cover every provider (OpenRouter rides with OpenAI).
+ * Legacy credentials share one project_settings read. Throws on a failed
+ * read, same as `resolveLlmKeySource`.
+ */
+export async function resolveLlmKeySources(
+  db: SupabaseClient,
+  projectId: string,
+  providers: readonly LlmProvider[],
+  opts: { openAiOnly?: boolean } = {},
+): Promise<Array<LlmKeySource | null>> {
+  const owner = await projectKeyOwner(db, projectId, { strict: true });
+  const readProviders = new Set<LlmProvider>(providers);
+  if (readProviders.has('openai') && !opts.openAiOnly) readProviders.add('openrouter');
+  const rows = readProviders.size > 0
+    ? await readPoolRows(db, owner, [...readProviders], { strict: true })
+    : [];
+  const nowMs = Date.now();
+  const flags = new Map<LlmProvider, PoolSourceFlags>();
+  for (const provider of readProviders) flags.set(provider, { ...EMPTY_SOURCE_FLAGS });
+  for (const row of rows) {
+    const provider = row.provider_slug;
+    const bucket = provider ? flags.get(provider) : undefined;
+    if (!provider || !bucket) continue;
+    const scope = sourceScopeForRow(row, owner, provider, nowMs);
+    if (scope) bucket[scope] = true;
   }
-  if (flags.project) return 'project';
-  if (await legacySourceAvailable(db, projectId, provider)) return 'project';
-  if (flags.organization) return 'organization';
-  if (flags.universal) return 'owner_universal';
-  if (Deno.env.get(ENV_VAR[provider])) return 'env';
-  return null;
+  const merged = (provider: LlmProvider): PoolSourceFlags => {
+    const own = flags.get(provider) ?? { ...EMPTY_SOURCE_FLAGS };
+    if (provider === 'openai' && !opts.openAiOnly) {
+      return mergeSourceFlags(own, flags.get('openrouter') ?? EMPTY_SOURCE_FLAGS);
+    }
+    return own;
+  };
+  const legacy = await legacySourcesAvailable(
+    db,
+    projectId,
+    providers.filter((provider) => !merged(provider).project),
+  );
+  return providers.map((provider) => {
+    const sourceFlags = merged(provider);
+    if (sourceFlags.project) return 'project';
+    if (legacy.get(provider)) return 'project';
+    if (sourceFlags.organization) return 'organization';
+    if (sourceFlags.universal) return 'owner_universal';
+    if (Deno.env.get(ENV_VAR[provider])) return 'env';
+    return null;
+  });
 }
 
 /** One byok_keys row as the resolver reads it. */
 interface PoolRow extends ByokPoolLifecycleState {
   id: string;
+  provider_slug?: LlmProvider;
   project_id: string | null;
   organization_id?: string | null;
   owner_user_id?: string | null;
@@ -289,16 +343,18 @@ interface PoolSourceFlags {
 async function readPoolRows(
   db: SupabaseClient,
   owner: KeyOwner,
-  provider: LlmProvider,
+  provider: LlmProvider | readonly LlmProvider[],
+  opts: { strict?: boolean } = {},
 ): Promise<PoolRow[]> {
+  const providers = typeof provider === 'string' ? [provider] : [...provider];
   const readPool = (o: KeyOwner, withUniversal: boolean) =>
     db
       .from('byok_keys')
       .select(
-        `id, project_id, organization_id${withUniversal ? ', owner_user_id' : ''}, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url`,
+        `id, provider_slug, project_id, organization_id${withUniversal ? ', owner_user_id' : ''}, vault_secret_id, label, priority, status, cooldown_until, test_status, base_url`,
       )
       .or(keyOwnerFilter(o))
-      .eq('provider_slug', provider)
+      .in('provider_slug', providers)
       .in('status', ['active', 'quota_exhausted'])
       .in('test_status', ['ok', 'error_quota'])
       .order('priority', { ascending: true });
@@ -307,7 +363,14 @@ async function readPoolRows(
     ({ data: rawRows, error: poolError } = await readPool({ ...owner, universalUserIds: [] }, false));
   }
   if (poolError) {
-    log.warn('byok_keys read failed', { projectId: owner.projectId, provider, error: poolError.message });
+    log.warn('byok_keys read failed', {
+      projectId: owner.projectId,
+      provider: providers.join(','),
+      error: poolError.message,
+    });
+    // The key resolver keeps going (the platform key may still serve the
+    // call). The source probe must not report that failure as "no key".
+    if (opts.strict) throw new Error(poolError.message);
     return [];
   }
   return rawRows ? ownKeysFirst(rawRows as unknown as PoolRow[]) : [];
@@ -354,20 +417,6 @@ function sourceScopeForRow(
   if (!scope) return null;
   if (provider === 'openai' && row.base_url && !openAiRowBaseUrl(row, owner.projectId, warnUnsafeUrl)) return null;
   return scope;
-}
-
-async function poolSourceFlags(
-  db: SupabaseClient,
-  owner: KeyOwner,
-  provider: LlmProvider,
-): Promise<PoolSourceFlags> {
-  const flags: PoolSourceFlags = { project: false, organization: false, universal: false };
-  const nowMs = Date.now();
-  for (const row of await readPoolRows(db, owner, provider)) {
-    const scope = sourceScopeForRow(row, owner, provider, nowMs);
-    if (scope) flags[scope] = true;
-  }
-  return flags;
 }
 
 function mergeSourceFlags(a: PoolSourceFlags, b: PoolSourceFlags): PoolSourceFlags {
@@ -508,30 +557,32 @@ async function legacyCandidates(
   return [];
 }
 
+/** Columns the legacy predicate reads for these providers. */
+function legacySelectCols(providers: readonly LlmProvider[]): string[] {
+  const cols: string[] = [];
+  for (const provider of providers) {
+    if (!isLegacyByokProvider(provider)) continue;
+    cols.push(LEGACY_REF_COL[provider]);
+    const status = LEGACY_TEST_STATUS_COL[provider];
+    if (status) cols.push(status);
+    if (provider === 'openai') cols.push('byok_openai_base_url');
+  }
+  return [...new Set(cols)];
+}
+
 /**
  * True when the legacy credential would be a candidate: a stored ref that
  * passed validation, and a safe OpenAI base URL when one is set. Does not
  * read the secret. A failed Vault read still falls through inside
  * `legacyCandidates`; this check only mirrors the row predicate.
  */
-async function legacySourceAvailable(
-  db: SupabaseClient,
-  projectId: string,
+function legacyRowAvailable(
   provider: LlmProvider,
-): Promise<boolean> {
+  row: Record<string, string | null> | null,
+): boolean {
   const refCol = isLegacyByokProvider(provider) ? LEGACY_REF_COL[provider] : undefined;
-  if (!refCol) return false;
+  if (!refCol || !row) return false;
   const testStatusCol = LEGACY_TEST_STATUS_COL[provider];
-  const selectCols = [refCol, testStatusCol, provider === 'openai' ? 'byok_openai_base_url' : null]
-    .filter(Boolean)
-    .join(', ');
-  const { data: settings, error } = await db
-    .from('project_settings')
-    .select(selectCols)
-    .eq('project_id', projectId)
-    .maybeSingle();
-  if (error || !settings) return false;
-  const row = settings as Record<string, string | null>;
   const ref = row[refCol];
   const testStatus = testStatusCol ? row[testStatusCol] : null;
   if (!ref || testStatus !== 'ok') return false;
@@ -539,6 +590,30 @@ async function legacySourceAvailable(
     return validateOpenAiBaseUrl(row.byok_openai_base_url, openAiCompatibleHostAllowlist()).ok;
   }
   return true;
+}
+
+/**
+ * One project_settings read for every provider that still needs its legacy
+ * credential. A failed read throws: absence of a row is "no legacy key",
+ * a database error is not.
+ */
+async function legacySourcesAvailable(
+  db: SupabaseClient,
+  projectId: string,
+  providers: readonly LlmProvider[],
+): Promise<Map<LlmProvider, boolean>> {
+  const out = new Map<LlmProvider, boolean>();
+  const cols = legacySelectCols(providers);
+  if (cols.length === 0) return out;
+  const { data: settings, error } = await db
+    .from('project_settings')
+    .select(cols.join(', '))
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = (settings as Record<string, string | null> | null) ?? null;
+  for (const provider of providers) out.set(provider, legacyRowAvailable(provider, row));
+  return out;
 }
 
 /** Step 3: the platform env-var key, when the project has no key of its own or shared. */

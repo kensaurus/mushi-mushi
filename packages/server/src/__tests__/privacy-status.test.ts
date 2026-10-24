@@ -4,8 +4,10 @@
  *          byok_configured follows the app's LLM key resolution (anthropic and
  *          openai, own → legacy → organization → the organization's owners'
  *          universal keys → platform). Web-tool keys do not count. An owner
- *          and an admin see the same chip for the same app. A failed key read
- *          degrades the chip instead of failing the request.
+ *          and an admin see the same chip for the same app, including when
+ *          each request's header names a different app and the query names
+ *          the one on screen. A failed key read is `unknown`, not the
+ *          platform key. Both providers are read together, once.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -60,9 +62,14 @@ afterAll(() => {
   ;(globalThis as { Deno?: unknown }).Deno = previousDeno
 })
 
-function seed(keys: Array<Record<string, unknown>>, settings: Record<string, unknown> = {}) {
+function seed(
+  keys: Array<Record<string, unknown>>,
+  settings: Record<string, unknown> = {},
+  options?: Parameters<typeof makeFakeDb>[1],
+  projects: Array<Record<string, unknown>> = [{ id: P, organization_id: ORG }],
+) {
   db = makeFakeDb({
-    projects: [{ id: P, organization_id: ORG }],
+    projects,
     organization_members: [
       { organization_id: ORG, user_id: OWNER, role: 'owner' },
       { organization_id: ORG, user_id: ADMIN, role: 'admin' },
@@ -70,7 +77,7 @@ function seed(keys: Array<Record<string, unknown>>, settings: Record<string, unk
     project_members: [],
     byok_keys: keys,
     project_settings: [{ project_id: P, byok_status_checked_at: '2026-10-01T00:00:00.000Z', ...settings }],
-  })
+  }, options)
 }
 
 function key(
@@ -101,7 +108,7 @@ async function privacy(userId: string, path = '/v1/admin/privacy-status') {
   const body = await res.text()
   let json: {
     ok: boolean
-    data?: { byok_configured: boolean; llm_provider: string; last_audit_at: string | null }
+    data?: { byok_configured: boolean | null; llm_provider: string; last_audit_at: string | null }
   } = { ok: false }
   try {
     json = JSON.parse(body) as typeof json

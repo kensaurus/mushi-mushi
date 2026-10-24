@@ -7,6 +7,10 @@
 //     (anthropic, openai; OpenRouter counts as openai), not the caller's key
 //     pool and not web-tool keys: own key, legacy ref, organization key, then
 //     the org owners' universal keys. The platform env key is not BYOK.
+//     A failed key read sets byok_configured null and llm_provider 'unknown'
+//     instead of claiming the platform key. The dashboard badge names the
+//     app with ?project_id=, which wins over the header, so two sessions
+//     looking at one app get that app even when their headers differ.
 //     Used by PrivacyPostureBadge in the sidebar and the MCP privacy://status resource.
 //
 //   GET /v1/admin/projects/:id/evolution-history
@@ -19,7 +23,7 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { adminOrApiKey } from '../../_shared/auth.ts'
-import { resolveLlmKeySource, type LlmProvider } from '../../_shared/byok.ts'
+import { resolveLlmKeySources, type LlmProvider } from '../../_shared/byok.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
@@ -40,20 +44,21 @@ function db() {
 // 0031). The caller is never an input.
 const PRIVACY_KEY_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai']
 
-async function projectByokConfigured(pid: string): Promise<boolean> {
+/** True when the app has its own LLM key. Null when the lookup failed. */
+async function projectByokConfigured(pid: string): Promise<boolean | null> {
   try {
-    const client = db()
-    const sources = await Promise.all(
-      PRIVACY_KEY_PROVIDERS.map((provider) => resolveLlmKeySource(client, pid, provider)),
-    )
-    return sources.some((source) => Boolean(source) && source !== 'env')
+    // One owner read and one pool read for both providers. A thrown read
+    // is an unknown chip, not "platform key".
+    const sources = await resolveLlmKeySources(db(), pid, PRIVACY_KEY_PROVIDERS)
+    return sources.some((source) => source != null && source !== 'env')
   } catch (err) {
-    // A failed read degrades the chip. It must not 500 the sidebar.
+    // A failed read must not 500 the sidebar, and must not look like the
+    // platform key to someone who does have BYOK.
     log.warn('privacy-status key lookup failed', {
       projectId: pid,
       error: err instanceof Error ? err.message : 'lookup failed',
     })
-    return false
+    return null
   }
 }
 
@@ -73,12 +78,13 @@ async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: str
 
   const row = settings as Record<string, unknown> | null
   const byokConfigured = await projectByokConfigured(pid)
+  const llmProvider = byokConfigured === null ? 'unknown' : byokConfigured ? 'byok' : 'platform'
 
   return c.json({
     ok: true,
     data: {
       byok_configured: byokConfigured,
-      llm_provider: byokConfigured ? 'byok' : 'platform',
+      llm_provider: llmProvider,
       storage_provider: 'supabase',
       region: 'ap-southeast-1',
       retention_days: 90,
