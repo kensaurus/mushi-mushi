@@ -8,10 +8,73 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appUrl, hardNavigate, withBasePath } from './appPath'
+import { appUrl, hardNavigate, routerBasename, withBasePath } from './appPath'
 
 const BASE = '/mushi-mushi/admin/'
+
+describe('routerBasename', () => {
+  it('strips the trailing slash Vite adds so /mushi-mushi/admin matches the basename', () => {
+    expect(routerBasename('/mushi-mushi/admin/')).toBe('/mushi-mushi/admin')
+    expect(routerBasename('/admin/')).toBe('/admin')
+  })
+
+  it('keeps the dev root basename as /', () => {
+    expect(routerBasename('/')).toBe('/')
+    expect(routerBasename(undefined)).toBe('/')
+  })
+
+  it('leaves an already slashless basename alone', () => {
+    expect(routerBasename('/mushi-mushi/admin')).toBe('/mushi-mushi/admin')
+  })
+
+  it('lets BrowserRouter render the slashless admin URL and the slash form', () => {
+    expect(renderAt('/mushi-mushi/admin', routerBasename('/mushi-mushi/admin/')).textContent).toBe('console')
+    expect(renderAt('/mushi-mushi/admin/', routerBasename('/mushi-mushi/admin/')).textContent).toBe('console')
+    expect(renderAt('/mushi-mushi/admin/reports', routerBasename('/mushi-mushi/admin/')).textContent).toBe('reports')
+  })
+
+  it('raw Vite base renders nothing at /mushi-mushi/admin', () => {
+    expect(renderAt('/mushi-mushi/admin', '/mushi-mushi/admin/').textContent).toBe('')
+  })
+})
+
+let routeHost: HTMLDivElement | undefined
+let routeRoot: Root | undefined
+
+function renderAt(url: string, basename: string): HTMLDivElement {
+  window.history.pushState({}, '', url)
+  if (routeRoot) act(() => routeRoot!.unmount())
+  routeHost?.remove()
+  routeHost = document.createElement('div')
+  document.body.appendChild(routeHost)
+  routeRoot = createRoot(routeHost)
+  act(() => {
+    routeRoot!.render(
+      createElement(
+        BrowserRouter,
+        { basename },
+        createElement(
+          Routes,
+          null,
+          createElement(Route, { path: '/', element: createElement('h1', null, 'console') }),
+          createElement(Route, { path: '/reports', element: createElement('h1', null, 'reports') }),
+        ),
+      ),
+    )
+  })
+  return routeHost
+}
+
+afterEach(() => {
+  if (routeRoot) act(() => routeRoot!.unmount())
+  routeRoot = undefined
+  routeHost?.remove()
+  routeHost = undefined
+})
 
 describe('withBasePath', () => {
   it('prefixes a root-relative in-app path', () => {
