@@ -19,6 +19,8 @@ type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 interface SeverityStats {
   window_days: number
   bySeverity: Record<SeverityKey, number>
+  /** Of those, still open (not fixed, resolved or verified). Absent from an older API. */
+  openBySeverity?: Record<SeverityKey, number>
   byDay?: Array<{ day: string } & Record<SeverityKey | 'total', number>>
   total: number
 }
@@ -73,7 +75,7 @@ const TILES_ADVANCED: Array<{
   meaning: string
 }> = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Reports flagged Critical by the classifier in the window. These usually block user flow — triage first.' },
+    meaning: 'Critical reports from the window that are not fixed yet (the line below counts all that came in). These usually block user flow: triage first.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -132,8 +134,10 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         const isActive = activeSeverity === tile.key
         const total = data?.total ?? 0
         const count = counts[tile.key]
+        // Lead with what is still open; how many came in is the sub-line.
+        const openCount = data?.openBySeverity?.[tile.key]
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
-        const isHero = tile.key === 'critical' && criticalCount > 0
+        const isHero = tile.key === 'critical' && (data?.openBySeverity?.critical ?? criticalCount) > 0
         return (
           <button
             key={tile.key}
@@ -153,14 +157,16 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               density="flat"
               // The quick-filter chips count all time; these tiles count a
               // window, so the label says which.
-              label={`${tile.label} · ${windowDays}d`}
-              value={loading ? '…' : count}
+              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
                   ? `last ${windowDays} days`
-                  : total > 0
-                    ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
-                    : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
+                  : openCount != null
+                    ? `${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                    : total > 0
+                      ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
+                      : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
               }
               accent={tile.accent}
               meaning={tile.meaning}
