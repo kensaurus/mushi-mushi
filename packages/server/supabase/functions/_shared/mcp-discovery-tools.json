@@ -702,23 +702,15 @@
             "description": "Always new: triage starts right away"
           },
           "severity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "component": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -787,15 +779,11 @@
             "description": "UUID of the inserted qa_stories row"
           },
           "prUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "GitHub PR URL when openPr=true and GitHub is connected"
+            "description": "GitHub PR URL when openPr=true and GitHub is connected",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "approvalStatus": {
             "type": "string",
@@ -811,13 +799,9 @@
           },
           "firecrawlActionsYaml": {
             "description": "Firecrawl actions YAML for the story, when the generator produced one",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -855,13 +839,9 @@
             "type": "number"
           },
           "active_project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "toolCount": {
@@ -1037,13 +1017,9 @@
             "type": "string"
           },
           "sourceNote": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "rates": {
@@ -1137,24 +1113,16 @@
                   "type": "string"
                 },
                 "detail": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "evidence": {},
                 "fix": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -1207,13 +1175,9 @@
             "type": "string"
           },
           "refreshedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "window": {},
@@ -1281,24 +1245,16 @@
                   "type": "string"
                 },
                 "detail": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "evidence": {},
                 "fix": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -1549,110 +1505,70 @@
                 "description": "Report UUID"
               },
               "project_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "title": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "summary": {
                 "description": "One-line summary written by the classifier",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "description": {
                 "description": "What the reporter wrote (untrusted text)",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "status": {
                 "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "category": {
                 "description": "bug | slow | visual | confusing | other",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "severity": {
                 "description": "critical | high | medium | low",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "component": {
                 "description": "Component or page the bug was attributed to",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "created_at": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "screenshot_url": {
                 "description": "Signed screenshot URL",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "environment": {
@@ -1682,13 +1598,9 @@
                       "type": "string"
                     },
                     "status": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -1723,15 +1635,11 @@
             "description": "Reproduction steps recorded on the report ([] if none)"
           },
           "component": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Component or page the bug was attributed to"
+            "description": "Component or page the bug was attributed to",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "rootCause": {
             "description": "Stage-2 root cause, or null before Stage 2 runs"
@@ -1762,13 +1670,9 @@
               },
               "set": {
                 "description": "The token set the excerpt was taken from",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "tokens": {
@@ -1783,13 +1687,9 @@
               },
               "score": {
                 "description": "Design deviance score 0–100, lower is better; null = not scored",
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "truncated": {
@@ -2406,63 +2306,39 @@
                   "type": "string"
                 },
                 "status": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "category": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "severity": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "summary": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "component": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "created_at": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -2712,110 +2588,70 @@
                 "description": "Report UUID"
               },
               "project_id": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "title": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "summary": {
                 "description": "One-line summary written by the classifier",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "description": {
                 "description": "What the reporter wrote (untrusted text)",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "status": {
                 "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "category": {
                 "description": "bug | slow | visual | confusing | other",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "severity": {
                 "description": "critical | high | medium | low",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "component": {
                 "description": "Component or page the bug was attributed to",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "created_at": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "screenshot_url": {
                 "description": "Signed screenshot URL",
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               },
               "environment": {
@@ -2845,13 +2681,9 @@
                       "type": "string"
                     },
                     "status": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -3124,13 +2956,9 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "planId": {
@@ -3146,23 +2974,15 @@
           },
           "diagnosesLimit": {
             "description": "Diagnoses included in the plan (null = unlimited)",
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "number",
+              "null"
             ]
           },
           "diagnosesUsagePct": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "number",
+              "null"
             ]
           },
           "overDiagnosisQuota": {
@@ -3172,24 +2992,16 @@
             "type": "boolean"
           },
           "monthlySpendCapUsd": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "number",
+              "null"
             ]
           },
           "periodEnd": {
             "description": "ISO timestamp the billing period ends",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "freeLimitDiagnoses": {
@@ -3340,23 +3152,15 @@
                   "type": "string"
                 },
                 "issueId": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "shortId": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "outcome": {
@@ -3364,13 +3168,9 @@
                   "description": "created | linked | deduped | ignored | error"
                 },
                 "reportId": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "error": {
@@ -3391,13 +3191,9 @@
           "created": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "type": [
+                "string",
+                "null"
               ]
             },
             "description": "Report ids created by this import"
@@ -3405,13 +3201,9 @@
           "linked": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "type": [
+                "string",
+                "null"
               ]
             },
             "description": "Report ids that already existed for these issues"
@@ -3439,13 +3231,9 @@
           },
           "sentryProject": {
             "description": "The Sentry project a search ran in (null for issueIds)",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "sentryProjects": {
@@ -3457,13 +3245,9 @@
           },
           "nextCursor": {
             "description": "Pass back as cursor to import the next page; null when the backlog is done",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           }
         },
@@ -4028,13 +3812,9 @@
           },
           "sha": {
             "description": "Merge commit SHA, when GitHub reported one",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "reportId": {
@@ -4414,37 +4194,25 @@
         "type": "object",
         "properties": {
           "check_run_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "GitHub check run status after refresh"
+            "description": "GitHub check run status after refresh",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "check_run_conclusion": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "success | failure | neutral | null while pending"
+            "description": "success | failure | neutral | null while pending",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "check_run_updated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ISO timestamp when CI status was last persisted"
+            "description": "ISO timestamp when CI status was last persisted",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -5027,7 +4795,7 @@
                 "type": "string",
                 "maxLength": 254,
                 "format": "email",
-                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
               },
               {
                 "type": "null"
@@ -5035,13 +4803,9 @@
             ]
           },
           "twoFactorDeclared": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "boolean",
+              "null"
             ]
           },
           "recoveryContact": {
@@ -5062,13 +4826,9 @@
             "maximum": 100
           },
           "autoRenew": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "boolean",
+              "null"
             ]
           }
         }
@@ -5378,15 +5138,11 @@
             "description": "Domain id (the id of a domain in get_accounts_register)"
           },
           "autoRenew": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "true, false, or null for not known"
+            "description": "true, false, or null for not known",
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -5828,37 +5584,25 @@
             "description": "The triaged report UUID"
           },
           "severity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "critical | high | medium | low, or unknown when the report could not be read"
+            "description": "critical | high | medium | low, or unknown when the report could not be read",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "bug | slow | visual | confusing | other, or unknown"
+            "description": "bug | slow | visual | confusing | other, or unknown",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Workflow status, or unknown"
+            "description": "Workflow status, or unknown",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "partial_errors": {
             "type": "array",
@@ -5884,110 +5628,70 @@
                     "description": "Report UUID"
                   },
                   "project_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "title": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "summary": {
                     "description": "One-line summary written by the classifier",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "description": {
                     "description": "What the reporter wrote (untrusted text)",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "status": {
                     "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "category": {
                     "description": "bug | slow | visual | confusing | other",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "severity": {
                     "description": "critical | high | medium | low",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "component": {
                     "description": "Component or page the bug was attributed to",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "created_at": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "screenshot_url": {
                     "description": "Signed screenshot URL",
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "environment": {
@@ -6017,13 +5721,9 @@
                           "type": "string"
                         },
                         "status": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "type": [
+                            "string",
+                            "null"
                           ]
                         }
                       },
@@ -6101,43 +5801,27 @@
                       "type": "number"
                     },
                     "description": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "category": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "createdAt": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "reportGroupId": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     }
                   },
@@ -6166,15 +5850,11 @@
                     "description": "Reproduction steps recorded on the report ([] if none)"
                   },
                   "component": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Component or page the bug was attributed to"
+                    "description": "Component or page the bug was attributed to",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "rootCause": {
                     "description": "Stage-2 root cause, or null before Stage 2 runs"
