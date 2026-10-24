@@ -168,5 +168,10 @@ describe('SdkNativeConnectivityCard', () => {
     expect(pre?.getAttribute('role')).toBe('region')
     expect(pre?.getAttribute('aria-label')).toBe('CI env block')
     expect(pre?.textContent).toContain('NEXT_PUBLIC_MUSHI_API_ENDPOINT')
+    const classes = pre?.className.split(/\s+/) ?? []
+    expect(classes).toContain('focus-visible:ring-2')
+    expect(classes).toContain('focus-visible:ring-brand')
+    expect(classes).not.toContain('focus-visible:ring-1')
+    expect(classes).not.toContain('focus-visible:ring-brand/40')
   })
 })

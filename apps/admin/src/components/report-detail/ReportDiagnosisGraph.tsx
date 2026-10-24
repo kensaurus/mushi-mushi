@@ -152,6 +152,39 @@ function NodeButton({
   )
 }
 
+/** Same overflow check as CodePanel: a box that can scroll, not one merely styled overflow:auto. */
+function contentOverflows(el: HTMLElement): boolean {
+  return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+}
+
+function WhyMushiBelieves({ why }: { why: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setOverflows(contentOverflows(el))
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [why])
+
+  return (
+    <div
+      ref={ref}
+      tabIndex={overflows ? 0 : undefined}
+      role={overflows ? 'region' : undefined}
+      aria-label={overflows ? 'Why Mushi believes this' : undefined}
+      className="max-h-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
+      <p className="whitespace-pre-line text-xs leading-relaxed text-fg-secondary">{why}</p>
+    </div>
+  )
+}
+
 function NodePanel({
   node,
   graph,
@@ -193,16 +226,9 @@ function NodePanel({
         <StateChip node={node} />
         <span className="font-mono">{node.detail}</span>
       </div>
-      {/* Pre-formatted reasoning scrolls inside max-h-64 and has no controls
-          of its own (axe scrollable-region-focusable). */}
-      <p
-        tabIndex={0}
-        role="region"
-        aria-label="Why Mushi believes this"
-        className="max-h-64 overflow-y-auto whitespace-pre-line rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 text-xs leading-relaxed text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
-      >
-        {node.why}
-      </p>
+      {/* The paragraph stays a paragraph. The box around it is a tab stop
+          only while the reasoning actually overflows max-h-64. */}
+      <WhyMushiBelieves why={node.why} />
       {linkList('Based on', from)}
       {linkList('Leads to', to)}
       <div className="flex flex-wrap items-center gap-3 text-2xs">

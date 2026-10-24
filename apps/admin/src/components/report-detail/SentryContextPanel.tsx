@@ -10,10 +10,12 @@
  *          regardless of which SDK captured each crumb. We colour-code
  *          by source (Mushi = brand, Sentry = sentry-purple) so the
  *          eye still reads the trail as one fabric while showing
- *          provenance.
+ *          provenance. A crumb's JSON block is a keyboard scroll region
+ *          only while it overflows, and each one is named with its
+ *          place in the timeline so the landmarks are not identical.
  */
 
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Section, Badge, CodeValue } from '../ui'
 import { formatRelative as formatAgo } from '../ui/metrics'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -109,6 +111,69 @@ function unifyTimelines(
     })
   }
   return out.sort((a, b) => a.ts - b.ts)
+}
+
+function safeStringify(o: unknown): string {
+  try {
+    return JSON.stringify(o, null, 2)
+  } catch {
+    return String(o)
+  }
+}
+
+/** Same overflow check as CodePanel: a box that can scroll, not one merely styled overflow:auto. */
+function contentOverflows(el: HTMLElement): boolean {
+  return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+}
+
+function breadcrumbDataLabel(index: number, message?: string): string {
+  const base = `Breadcrumb ${index + 1} data`
+  const trimmed = message?.trim()
+  return trimmed ? `${base}: ${trimmed}` : base
+}
+
+function BreadcrumbDataPre({
+  data,
+  index,
+  message,
+}: {
+  data: Record<string, unknown>
+  index: number
+  message?: string
+}) {
+  const text = safeStringify(data)
+  const ref = useRef<HTMLPreElement>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setOverflows(contentOverflows(el))
+    measure()
+    const details = el.closest('details')
+    details?.addEventListener('toggle', measure)
+    if (typeof ResizeObserver === 'undefined') {
+      return () => details?.removeEventListener('toggle', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => {
+      details?.removeEventListener('toggle', measure)
+      observer.disconnect()
+    }
+  }, [text])
+
+  return (
+    <pre
+      ref={ref}
+      tabIndex={overflows ? 0 : undefined}
+      role={overflows ? 'region' : undefined}
+      aria-label={overflows ? breadcrumbDataLabel(index, message) : undefined}
+      className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+    >
+      {text}
+    </pre>
+  )
 }
 
 function formatRelative(ms: number, anchor: number): string {
@@ -339,14 +404,7 @@ export function SentryContextPanel({
                       <span className="opacity-60 group-open:opacity-100">›</span>
                       data
                     </summary>
-                    <pre
-                      tabIndex={0}
-                      role="region"
-                      aria-label="Breadcrumb data"
-                      className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
-                    >
-                      {safeStringify(c.data)}
-                    </pre>
+                    <BreadcrumbDataPre data={c.data} index={i} message={c.message} />
                   </details>
                 )}
               </li>
@@ -393,12 +451,4 @@ function IdRow({
       />
     </div>
   )
-}
-
-function safeStringify(o: unknown): string {
-  try {
-    return JSON.stringify(o, null, 2)
-  } catch {
-    return String(o)
-  }
 }

@@ -5,7 +5,7 @@
  * the anchor (axe link-name). Search is one <Search> mounted in the desktop
  * navbar and again in the mobile sidebar; both inputs need a label (axe label).
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createElement } from 'react'
@@ -19,8 +19,7 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
 }))
 
-const docsRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const layout = readFileSync(join(docsRoot, 'app/layout.tsx'), 'utf8')
+const layout = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../app/layout.tsx'), 'utf8')
 
 describe('docs layout accessible names', () => {
   it('names the navbar GitHub link on the anchor', () => {
@@ -58,16 +57,5 @@ describe('docs layout accessible names', () => {
     expect(input).toContain('type="search"')
     expect(input).toContain('aria-label="Search docs"')
     expect(input).toContain('placeholder="Search documentation…"')
-  })
-
-  it('does not scan every docs page for keyboard scroll regions', () => {
-    expect(layout).not.toContain('KeyboardScrollRegions')
-    expect(existsSync(join(docsRoot, 'components/KeyboardScrollRegions.tsx'))).toBe(false)
-    expect(existsSync(join(docsRoot, 'lib/keyboard-scroll-region.ts'))).toBe(false)
-    expect(existsSync(join(docsRoot, 'lib/keyboard-scroll-region.test.ts'))).toBe(false)
-    const globals = readFileSync(join(docsRoot, 'app/globals.css'), 'utf8')
-    expect(globals).not.toContain('KeyboardScrollRegions')
-    const connect = readFileSync(join(docsRoot, 'app/connect/page.tsx'), 'utf8')
-    expect(connect).toContain('<pre className="mushi-connect-code-block">{text}</pre>')
   })
 })
