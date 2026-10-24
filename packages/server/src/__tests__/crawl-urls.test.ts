@@ -72,6 +72,31 @@ describe('pickCrawlUrls', () => {
     ])
   })
 
+  it('drops .md and .txt mirrors after canonicalizing them onto the page', () => {
+    const base = 'https://lets-talk.example'
+    const picked = pickCrawlUrls([
+      `${base}/guide`,
+      `${base}/guide.md`,
+      `${base}/guide.txt`,
+      `${base}/only.md`,
+      `${base}/notes.txt`,
+    ], base, 20)
+    expect(picked).toEqual([`${base}/`, `${base}/guide`])
+  })
+
+  it('spreads the page budget across sections instead of filling it from /docs', () => {
+    const base = 'https://solo-boss.example'
+    const docs = Array.from({ length: 19 }, (_, i) => `${base}/docs/page-${i}`)
+    const picked = pickCrawlUrls([...docs, `${base}/pricing`, `${base}/blog/hello`], base, 5)
+    expect(picked).toEqual([
+      `${base}/`,
+      `${base}/docs/page-0`,
+      `${base}/pricing`,
+      `${base}/blog/hello`,
+      `${base}/docs/page-1`,
+    ])
+  })
+
   it('caps at maxPages and always includes the start page', () => {
     const many = Array.from({ length: 30 }, (_, i) => `https://a.example/p${i}`)
     const picked = pickCrawlUrls(many, 'https://a.example', 5)
