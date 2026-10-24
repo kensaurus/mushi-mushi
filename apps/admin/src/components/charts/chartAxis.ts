@@ -151,6 +151,7 @@ export function buildYTickValues(
   return out
 }
 
+/** @internal Exported for tests only; charts use resolvePlotChartMax. */
 export function resolveChartMax(
   values: number[],
   scaleToData: boolean,
