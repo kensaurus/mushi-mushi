@@ -89,6 +89,17 @@ describe('MergeQueuePanel', () => {
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('1')
   })
 
+  it('lets a long ref break and gives the reason its own line on a phone', async () => {
+    await render()
+    await answer([row({ repo: 'kensaurus/solo-boss-cloud-documentation', pr_number: 789 })])
+    const link = host.querySelector('ul.max-h-40 a')!
+    expect(link.className).toContain('wrap-anywhere')
+    expect(link.textContent).toBe('kensaurus/solo-boss-cloud-documentation#789')
+    const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
+    expect(reason.className).toContain('flex-auto')
+    expect(reason.className).not.toContain('flex-1')
+  })
+
   it('renders nothing without an active app', async () => {
     await render(null)
     expect(host.innerHTML).toBe('')
