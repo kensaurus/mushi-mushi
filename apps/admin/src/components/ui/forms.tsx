@@ -212,8 +212,11 @@ const BTN_VARIANTS = {
     'bg-accent bg-(image:--gradient-accent) text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
+  // Hover border colour rides on the recipe's single border. A resting
+  // `border-danger/40` would stack on CHIP_TONE; these only recolour it
+  // while the pointer is over the button (cancel has no glow of its own).
   cancel:
-    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
+    `${CHIP_TONE.danger} hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
     `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:

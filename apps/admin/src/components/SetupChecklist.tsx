@@ -125,10 +125,10 @@ function BannerChecklist({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
+        className={`mb-4 inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
-            ? `border-ok/30 ${CHIP_TONE.okSubtle}`
-            : `border-warn/30 ${CHIP_TONE.warnSubtle}`
+            ? CHIP_TONE.okSubtle
+            : CHIP_TONE.warnSubtle
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
@@ -312,9 +312,9 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? `border-warn/30 ${CHIP_TONE.warnSubtle}`
+      ? CHIP_TONE.warnSubtle
       : tone === 'ok'
-        ? `border-ok/30 ${CHIP_TONE.okSubtle}`
+        ? CHIP_TONE.okSubtle
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
   const label = tone === 'warn' ? 'Backend mismatch' : tone === 'ok' ? 'SDK heartbeat' : 'Heartbeat'
   return (
