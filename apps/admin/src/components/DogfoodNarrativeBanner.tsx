@@ -36,7 +36,13 @@ export function DogfoodNarrativeBanner() {
   const dashboardQuery = usePageData<DashboardData>('/v1/admin/dashboard')
 
   if (isAdvanced) return null
-  if (setup.loading || dashboardQuery.loading) return null
+  // Keep the banner's box while its data loads: inserting it after first
+  // paint pushed the filters and the list down (the largest layout shift on
+  // /reports, mushi-ux audit 2026-10-24). It still collapses in the rare
+  // case it turns out empty (no reports, no top component).
+  if (setup.loading || dashboardQuery.loading) {
+    return <div aria-hidden="true" data-testid="narrative-placeholder" className="mb-3 h-12.5 rounded-md border border-chrome-border bg-chrome/50 motion-safe:animate-pulse" />
+  }
   if (!setup.activeProject) return null
   // No bugs yet → the rest of the inbox UI is already empty-state, no
   // need to also surface a narrative banner.
