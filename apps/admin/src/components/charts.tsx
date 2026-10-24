@@ -339,7 +339,18 @@ export function LineSparkline({
   if (values.length === 0) return null
 
   const min = Math.min(0, ...values)
-  const chartMax = resolveChartMax(values, scaleToData)
+  const rawPeak = Math.max(...values, 0)
+  // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
+  // grid-line labels stay aligned with actual data-point positions on the SVG.
+  const yTickValues = buildYTickValues(rawPeak, min, 4, 0.12, {
+    integer: valueFormat === 'count',
+  })
+  // Nice top tick is the plot max so grid labels line up with data.
+  const chartMax = scaleToData
+    ? rawPeak <= 0
+      ? resolveChartMax(values, true)
+      : (yTickValues[0] ?? resolveChartMax(values, true))
+    : resolveChartMax(values, false)
   const plotHeight = showAxes ? Math.max(height, 56) : height
   const xAt = (i: number) => seriesXPercent(i, values.length, showAxes ? 0 : 2)
   const yAt = (v: number) => seriesYPercent(v, min, chartMax, showAxes ? 2 : 2)
@@ -347,10 +358,7 @@ export function LineSparkline({
     .map((v, i) => `${xAt(i).toFixed(2)},${yAt(v).toFixed(2)}`)
     .join(' ')
 
-  const rawPeak = Math.max(...values, 0)
-  // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
-  // grid-line labels stay aligned with actual data-point positions on the SVG.
-  const yTicks = buildYTickValues(rawPeak, min, 4).map((v) => formatChartValue(v, valueFormat))
+  const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const axisXIso =
     timestamps?.map((t) => t.slice(0, 10)) ?? (xLabels ?? [])
   const useRangeSummary = showRangeSummary || showPeakLabel
@@ -563,11 +571,17 @@ export function BarSparkline({
 
   const peak = Math.max(...values)
   const peakIdx = values.indexOf(peak)
-  const chartMax = resolveChartMax(values, scaleToData)
+  const rawPeak = Math.max(peak, 0)
+  const yTickValues = buildYTickValues(rawPeak, 0, 4, 0.12, {
+    integer: valueFormat === 'count',
+  })
+  const chartMax = scaleToData
+    ? rawPeak <= 0
+      ? resolveChartMax(values, true)
+      : (yTickValues[0] ?? resolveChartMax(values, true))
+    : resolveChartMax(values, false)
   const plotHeight = showAxes ? Math.max(height, 80) : height
-  const yTicks = buildYTickValues(chartMax / 1.12, 0, 4).map((v) =>
-    formatChartValue(v, valueFormat),
-  )
+  const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const activeCount = values.filter((v) => v > 0).length
   const showIdleBaseline = showAxes && activeCount < values.length
   const axisXIso =
@@ -765,8 +779,11 @@ export function Histogram({
 }) {
   if (buckets.length === 0) return null
   const peak = Math.max(1, ...buckets)
-  const chartMax = peak * 1.12
-  const yTicks = buildYTickValues(peak, 0, 4).map((v) => formatChartValue(v, valueFormat))
+  const yTickValues = buildYTickValues(peak, 0, 4, 0.12, {
+    integer: valueFormat === 'count',
+  })
+  const chartMax = yTickValues[0] ?? peak * 1.12
+  const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const xLabs = labels ?? buckets.map((_, i) => String(i))
 
   const bars = (
