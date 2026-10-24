@@ -941,6 +941,23 @@ describe('review fixes (PR #540 review)', () => {
     expect(await cursorKeyById(db as never, 'k-owner', ORG, { projectId: P1 })).toEqual({ ok: false, reason: 'key_not_allowed' })
   })
 
+  it('a used-up key (exhausted_until) starts no new follow-up, but its running agents can still be polled (2026-10-24)', async () => {
+    const db = makeFakeDb(
+      {
+        projects: [{ id: P1, organization_id: ORG }],
+        organization_members: [],
+        byok_keys: [
+          { id: 'k-used', provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', vault_secret_id: 'v1', exhausted_until: '2999-01-01T00:00:00Z' },
+          { id: 'k-back', provider_slug: 'cursor', project_id: null, organization_id: ORG, status: 'active', vault_secret_id: 'v2', exhausted_until: '2000-01-01T00:00:00Z' },
+        ],
+      },
+      { rpc: (fn, args) => (fn === 'vault_get_secret' ? `secret-${String(args.secret_id)}` : null) },
+    )
+    expect(await cursorKeyById(db as never, 'k-used', ORG, { projectId: P1 })).toEqual({ ok: false, reason: 'key_used_up' })
+    expect(await cursorKeyById(db as never, 'k-used', ORG, { requireActive: false, projectId: P1 })).toMatchObject({ ok: true, keyId: 'k-used' })
+    expect(await cursorKeyById(db as never, 'k-back', ORG, { projectId: P1 })).toMatchObject({ ok: true, keyId: 'k-back' })
+  })
+
   it('W4: discovery reaches 3 days before follow-ups were turned on, not further', async () => {
     const enabledAt = NOW.toISOString()
     const inWindow = seed({ org: { review_followup_enabled_at: enabledAt }, review: { reviewed_at: new Date(NOW.getTime() - 2 * 86_400_000).toISOString() } })

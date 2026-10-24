@@ -151,7 +151,7 @@ export type FollowupKey =
       /** 'pool': a byok_keys row (key_id set); 'legacy': the app's Integrations key. Stored as key_kind. */
       source: 'pool' | 'legacy'
     }
-  | { ok: false; reason: Extract<FollowupReason, 'no_cursor_key' | 'key_not_allowed' | 'platform_key' | 'key_removed'> }
+  | { ok: false; reason: Extract<FollowupReason, 'no_cursor_key' | 'key_not_allowed' | 'platform_key' | 'key_removed' | 'key_used_up'> }
 
 async function vaultSecret(db: SupabaseClient, secretId: string | null | undefined): Promise<string | null> {
   if (!secretId) return null
@@ -187,7 +187,7 @@ export async function cursorKeyById(
   const ownerColumn = await ownerUserColumnReady(db)
   const { data, error } = await db
     .from('byok_keys')
-    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id', ownerColumn))
+    .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, status, vault_secret_id, exhausted_until', ownerColumn))
     .eq('id', keyId)
     .maybeSingle()
   const key = data as
@@ -199,6 +199,7 @@ export async function cursorKeyById(
         owner_user_id?: string | null
         status: string
         vault_secret_id: string | null
+        exhausted_until?: string | null
       }
     | null
   if (error || !key || key.provider_slug !== 'cursor') return { ok: false, reason: 'key_not_allowed' }
@@ -215,6 +216,10 @@ export async function cursorKeyById(
   }
   if (!allowed && !opts.skipScopeCheck) return { ok: false, reason: 'key_not_allowed' }
   if (opts.requireActive !== false && key.status !== 'active') return { ok: false, reason: 'no_cursor_key' }
+  // A used-up key (byok_keys.exhausted_until) starts no new agent; polling a run it started still works.
+  if (opts.requireActive !== false && key.exhausted_until && Date.parse(key.exhausted_until) > Date.now()) {
+    return { ok: false, reason: 'key_used_up' }
+  }
   const apiKey = await vaultSecret(db, key.vault_secret_id)
   if (!apiKey) return { ok: false, reason: 'no_cursor_key' }
   return { ok: true, apiKey, keyId: key.id, cacheKey: `key:${key.id}`, source: 'pool' }
