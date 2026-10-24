@@ -219,10 +219,74 @@ describe('/v1/admin/dashboard', () => {
     expect(day(body.data.reportsByDay)).toMatchObject({ total: 3, critical: 1, medium: 2 })
     expect(day(body.data.llmByDay)).toMatchObject({ calls: 1716, tokens: 9000, latencyMs: 120, failures: 4 })
     expect(body.data.counts.llmTokens14d).toBe(9000)
-    expect(body.data.topComponents).toEqual([{ component: 'checkout', count: 3 }])
+    expect(body.data.topComponents).toEqual([{ component: 'checkout', count: 3, draftedFixes: 0, mergedFixes: 0 }])
     expect(body.data.chartsSampled).toBe(false)
     const plan = body.data.pdcaStages.find((s: { id: string }) => s.id === 'plan')
     expect(plan.series[6]).toBe(3)
+  })
+
+  it('counts drafted fixes for the top area, not the inbox report total', async () => {
+    const reports = [
+      ...Array.from({ length: 95 }, (_, i) => report(i, { component: 'Checkout' })),
+      report(200, { component: 'Checkout' }),
+      report(201, { component: 'Checkout', status: 'fixed' }),
+      report(202, { component: 'Billing' }),
+    ]
+    const failed = Array.from({ length: 95 }, (_, i) => ({
+      id: `fa-${i}`,
+      project_id: P,
+      report_id: `r-${i}`,
+      status: 'failed',
+      created_at: iso(DAY),
+    }))
+    seed(reports, [], {
+      fix_attempts: [
+        ...failed,
+        {
+          id: 'fa-draft',
+          project_id: P,
+          report_id: 'r-200',
+          status: 'completed',
+          pr_url: 'https://github.com/acme/app/pull/7',
+          pr_number: 7,
+          pr_state: 'draft',
+          merged_at: null,
+          created_at: iso(DAY),
+        },
+        {
+          id: 'fa-merged',
+          project_id: P,
+          report_id: 'r-201',
+          status: 'completed',
+          pr_url: 'https://github.com/acme/app/pull/8',
+          pr_number: 8,
+          pr_state: 'merged',
+          merged_at: iso(60_000),
+          created_at: iso(DAY),
+        },
+        {
+          id: 'fa-other',
+          project_id: P,
+          report_id: 'r-202',
+          status: 'completed',
+          pr_url: 'https://github.com/acme/app/pull/9',
+          pr_number: 9,
+          pr_state: 'open',
+          merged_at: null,
+          created_at: iso(DAY),
+        },
+      ],
+    })
+    const realRpc = db.rpc.bind(db)
+    ;(db as unknown as { rpc: unknown }).rpc = async (fn: string, args: Record<string, unknown>) =>
+      fn === 'dashboard_chart_rollup'
+        ? { data: { report_days: [], llm_days: [], components: [{ component: 'Checkout', count: 95 }] }, error: null }
+        : realRpc(fn, args)
+    const { body } = await get('/v1/admin/dashboard')
+    expect(body.ok).toBe(true)
+    expect(body.data.topComponents).toEqual([
+      { component: 'Checkout', count: 95, draftedFixes: 1, mergedFixes: 1 },
+    ])
   })
 
   it('says the charts are a sample when the rollup is missing and the row read hits the cap', async () => {
