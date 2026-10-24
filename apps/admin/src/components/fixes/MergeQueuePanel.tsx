@@ -13,10 +13,12 @@
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
  *
- *          A long owner/repo#N is unbreakable monospace. Refs use
- *          wrap-anywhere, and the reason uses a content flex basis
- *          (flex-auto, not flex-1). On a 390px row the reason wraps onto
- *          its own line instead of collapsing to zero width beside the ref.
+ *          A long owner/repo#N is unbreakable monospace. Visible refs are
+ *          #N (the repo name without the owner when a train has no PR yet);
+ *          the full owner/repo#N is the link title, so line 1 at 390px is
+ *          the badge and #PR. Refs still use wrap-anywhere, and the reason
+ *          uses a content flex basis (flex-auto, not flex-1) so it wraps
+ *          onto its own line instead of collapsing to zero width.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -46,6 +48,17 @@ const MODE_OPTIONS = [
 ] as const
 
 const POLL_MS = 30_000
+
+/** Visible pull-request ref. The full owner/repo#N stays on the title. */
+function shortPrRef(repo: string, prNumber: number): { label: string; title: string } {
+  return { label: `#${prNumber}`, title: `${repo}#${prNumber}` }
+}
+
+/** Repo label when a train has no pull request number yet. */
+function shortRepoName(repo: string): string {
+  const slash = repo.lastIndexOf('/')
+  return slash === -1 ? repo : repo.slice(slash + 1)
+}
 
 interface Props {
   projectId: string | null
@@ -182,28 +195,34 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       )}
       {trainLines.length > 0 && (
         <ul className="space-y-0.5">
-          {trainLines.map((l) => (
+          {trainLines.map((l) => {
+            const prNumber = l.moving?.pr_number
+            const ref = typeof prNumber === 'number' ? shortPrRef(l.repo, prNumber) : null
+            return (
             <li key={l.repo} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
               <Badge tone={l.moving ? 'accent' : 'neutral'}>{l.moving ? 'Train' : 'Next train'}</Badge>
-              {l.moving?.pr_number ? (
-                <a href={prLink({ repo: l.repo, pr_number: l.moving.pr_number })} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
-                  {l.repo}#{l.moving.pr_number}
+              {ref && typeof prNumber === 'number' ? (
+                <a href={prLink({ repo: l.repo, pr_number: prNumber })} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
+                  {ref.label}
                 </a>
               ) : (
-                <span className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary">{l.repo}</span>
+                <span title={l.repo} className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary">{shortRepoName(l.repo)}</span>
               )}
               <span>{l.text}</span>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
       {listed.length > 0 && (
         <ul className="divide-y divide-edge-subtle">
-          {listed.map((r) => (
+          {listed.map((r) => {
+            const ref = shortPrRef(r.repo, r.pr_number)
+            return (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
               <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
-              <a href={prLink(r)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
-                {r.repo}#{r.pr_number}
+              <a href={prLink(r)} title={ref.title} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
+                {ref.label}
               </a>
               {/* flex-auto (basis auto), not flex-1 (basis 0%): a 0% basis stays on the ref's line and collapses the reason. */}
               <span className="min-w-0 flex-auto wrap-break-word text-2xs text-fg-muted" title={r.detail ?? undefined}>
@@ -213,7 +232,8 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
                 Remove
               </Btn>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
       {merged.length > 0 && (
@@ -223,14 +243,17 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           </button>
           {showMerged && (
             <ul className="mt-1 space-y-0.5">
-              {merged.map((r) => (
+              {merged.map((r) => {
+                const ref = shortPrRef(r.repo, r.pr_number)
+                return (
                 <li key={r.id} className="text-2xs text-fg-muted">
-                  <a href={prLink(r)} target="_blank" rel="noreferrer" className="wrap-anywhere font-mono hover:text-fg hover:underline">
-                    {r.repo}#{r.pr_number}
+                  <a href={prLink(r)} title={ref.title} target="_blank" rel="noreferrer" className="wrap-anywhere font-mono hover:text-fg hover:underline">
+                    {ref.label}
                   </a>{' '}
                   merged {r.merged_at ? <RelativeTime value={r.merged_at} /> : null}
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </div>

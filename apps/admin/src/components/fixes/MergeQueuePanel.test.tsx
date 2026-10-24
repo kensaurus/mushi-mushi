@@ -1,9 +1,12 @@
 /**
  * @vitest-environment jsdom
  *
- * Merge when ready rows (ADR 0041): a long owner/repo ref must wrap, and the
- * reason must keep a content-sized flex basis. flex-1 (basis 0%) stays on the
- * ref's line and collapses the reason on a 390px row.
+ * Merge when ready rows (ADR 0041): the visible ref is #N (or the repo name
+ * without the owner when a train has no PR). The full owner/repo#N is the
+ * title. jsdom cannot measure 390px overflow; that check is the Playwright
+ * spec examples/e2e-dogfood/tests/merge-queue-panel-overflow.spec.ts.
+ * The reason keeps a content-sized flex basis. flex-1 (basis 0%) stays on
+ * the ref's line and collapses the reason.
  */
 
 import { act, createElement } from 'react'
@@ -17,6 +20,7 @@ vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 import { MergeQueuePanel } from './MergeQueuePanel'
 
 const REPO = 'kensaurus/solo-boss-cloud-documentation'
+const BARE_REPO = 'acme/widget-docs'
 const PR = 789
 const TRAIN_PR = 790
 const MERGED_PR = 791
@@ -51,6 +55,15 @@ const TRAIN: ReleaseTrain = {
   merged_at: null,
 }
 
+/** A moving train with no PR number yet: the row shows the repo, not #N. */
+const BARE_TRAIN: ReleaseTrain = {
+  ...TRAIN,
+  id: 'train-bare',
+  repo: BARE_REPO,
+  pr_number: null,
+  members: [1],
+}
+
 function refHref(pr: number) {
   return `https://github.com/${REPO}/pull/${pr}`
 }
@@ -68,7 +81,7 @@ describe('MergeQueuePanel narrow rows', () => {
           row({ id: 'held', state: 'blocked', pr_number: PR }),
           row({ id: 'done', state: 'merged', pr_number: MERGED_PR, detail: null }),
         ],
-        trains: [TRAIN],
+        trains: [TRAIN, BARE_TRAIN],
       },
     })
     container = document.createElement('div')
@@ -87,28 +100,38 @@ describe('MergeQueuePanel narrow rows', () => {
     })
 
     const link = document.querySelector<HTMLAnchorElement>(`a[href="${refHref(PR)}"]`)
-    expect(link?.textContent).toBe(`${REPO}#${PR}`)
+    expect(link?.textContent).toBe(`#${PR}`)
+    expect(link?.getAttribute('title')).toBe(`${REPO}#${PR}`)
+    expect(link?.textContent).not.toContain(REPO)
     expect(link?.className).toContain('wrap-anywhere')
     expect(link?.className).toContain('min-w-0')
     expect(link?.className).toContain('max-w-full')
 
     const queueRow = link?.closest('li')
     expect(queueRow?.className).toContain('flex-wrap')
+    // Badge and Remove forward className (shrink-0 is not on those primitives).
+    expect(queueRow?.firstElementChild?.className).toContain('shrink-0')
+    expect(queueRow?.querySelector('button')?.className).toContain('shrink-0')
     const reason = queueRow?.querySelector('span.flex-auto')
     expect(reason?.textContent).toContain(REASON)
     expect(reason?.className).toContain('wrap-break-word')
     expect(reason?.className.split(/\s+/)).not.toContain('flex-1')
 
     const train = document.querySelector<HTMLAnchorElement>(`a[href="${refHref(TRAIN_PR)}"]`)
-    expect(train?.textContent).toBe(`${REPO}#${TRAIN_PR}`)
+    expect(train?.textContent).toBe(`#${TRAIN_PR}`)
+    expect(train?.getAttribute('title')).toBe(`${REPO}#${TRAIN_PR}`)
     expect(train?.className).toContain('wrap-anywhere')
     expect(train?.className).toContain('min-w-0')
+
+    const bare = Array.from(document.querySelectorAll('span')).find((el) => el.textContent === 'widget-docs')
+    expect(bare?.getAttribute('title')).toBe(BARE_REPO)
 
     const showMerged = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('merged today'))
     expect(showMerged).toBeTruthy()
     await act(async () => showMerged!.click())
     const merged = document.querySelector<HTMLAnchorElement>(`a[href="${refHref(MERGED_PR)}"]`)
-    expect(merged?.textContent).toBe(`${REPO}#${MERGED_PR}`)
+    expect(merged?.textContent).toBe(`#${MERGED_PR}`)
+    expect(merged?.getAttribute('title')).toBe(`${REPO}#${MERGED_PR}`)
     expect(merged?.className).toContain('wrap-anywhere')
   })
 })
