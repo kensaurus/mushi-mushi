@@ -31,6 +31,8 @@ export interface BumpEntry {
   from: string
   to: string
   migrateToWeb?: boolean
+  /** Set on the first bump when the lockfile still needs a package-manager command. */
+  lockfileNote?: string
 }
 
 export interface SdkUpgradeState {

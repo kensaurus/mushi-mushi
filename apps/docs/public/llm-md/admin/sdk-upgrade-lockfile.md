@@ -9,10 +9,11 @@ description: Add one workflow to your repo so Mushi's SDK upgrade PRs arrive wit
 
 # SDK upgrade lockfile helper
 
-**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files. It
-does not touch your lockfile, so without help the PR fails a frozen install
-(`npm ci`, `pnpm install --frozen-lockfile`) until someone runs the package
-manager by hand.
+**Create Upgrade PR** bumps `@mushi-mushi/*` in your `package.json` files.
+With no workflow and an npm `package-lock.json` (lockfileVersion 2 or 3), the
+same commit updates the `@mushi-mushi/*` lock entries from the npm registry, so
+`npm ci` can pass. pnpm and yarn lockfiles are not edited; the PR says which
+install command is still required.
 
 Add the workflow below once, and every upgrade PR arrives with the lockfile
 already refreshed by your own package manager.
@@ -30,8 +31,9 @@ already refreshed by your own package manager.
 5. If no lockfile commit arrives within 30 minutes, the PR opens anyway with a
    **Lockfile not refreshed** note. Check the workflow run on that branch.
 
-Without the workflow, nothing changes: the PR opens at once and its body links
-here.
+Without the workflow, an npm lockfile is updated in the bump commit. A pnpm or
+yarn repo still gets the PR at once, and the body names `pnpm install --lockfile-only`
+or `yarn install`.
 
 ## Add the workflow
 
@@ -114,11 +116,13 @@ token to `.npmrc`.
 `@master` follows the latest action. To pin, replace `master` with a commit
 SHA from this repository; the action has no release tags of its own.
 
-## Why Mushi does not write the lockfile or the workflow
+## Why the workflow still exists
 
-- **The lockfile:** only the package manager can write it correctly. A
-  hand-edited pnpm v9 lockfile breaks on peer-suffixed keys, and npm cannot run
-  inside Mushi's edge runtime.
+- **pnpm and yarn lockfiles:** only the package manager can write them. A
+  hand-edited pnpm v9 lockfile breaks on peer-suffixed keys. An npm
+  `package-lock.json` v2 or v3 entry for one exact version is the registry
+  tarball URL and integrity, which the upgrade worker copies when this
+  workflow is absent. npm still does not run inside Mushi's edge runtime.
 - **The workflow:** writing files under `.github/workflows` needs the GitHub
   App's `workflows` permission, which Mushi does not request (least privilege,
   ADR 0016). You add the file once; Mushi only reads it.

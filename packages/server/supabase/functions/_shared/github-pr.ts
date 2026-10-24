@@ -576,6 +576,50 @@ export async function createBranchWithSingleCommit(
   return commit.sha
 }
 
+/**
+ * Add one commit to an existing branch. The new commit's parent is the
+ * branch tip, and the ref moves only when that update is a fast-forward.
+ */
+export async function updateBranchWithSingleCommit(opts: {
+  token: string
+  owner: string
+  repo: string
+  branch: string
+  message: string
+  files: FileChange[]
+}): Promise<string> {
+  const { token, owner, repo, branch, message, files } = opts
+  const headers = ghHeaders(token)
+  const api = `https://api.github.com/repos/${owner}/${repo}`
+  const ref = (await ghFetch(`${api}/git/ref/heads/${branch}`, { headers })) as {
+    object?: { sha?: string }
+  }
+  const parent = ref.object?.sha
+  if (!parent) throw new Error(`Branch ${branch} has no commit SHA`)
+  const parentCommit = (await ghFetch(`${api}/git/commits/${parent}`, { headers })) as {
+    tree: { sha: string }
+  }
+  const tree = (await ghFetch(`${api}/git/trees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      base_tree: parentCommit.tree.sha,
+      tree: files.map((file) => ({ path: file.path, mode: '100644', type: 'blob', content: file.contents })),
+    }),
+  })) as { sha: string }
+  const commit = (await ghFetch(`${api}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, tree: tree.sha, parents: [parent] }),
+  })) as { sha: string }
+  await ghFetch(`${api}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ sha: commit.sha, force: false }),
+  })
+  return commit.sha
+}
+
 export interface OpenPrRef {
   number: number
   url: string

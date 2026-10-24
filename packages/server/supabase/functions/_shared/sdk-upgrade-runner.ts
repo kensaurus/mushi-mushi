@@ -10,9 +10,11 @@ import { resolveProjectGithubToken, parseGithubRepoUrl } from './github.ts'
 import {
   createPrFromFiles,
   createBranchWithSingleCommit,
+  updateBranchWithSingleCommit,
   ghFetchOptional,
   findOpenPrByHeadPrefix,
   commitFilesToBranch,
+  openPullRequestForBranch,
   resolveBaseBranch,
   type FileChange,
 } from './github-pr.ts'
@@ -21,7 +23,12 @@ import {
   SDK_UPGRADE_PR_TITLE,
   buildUpgradePrBody,
   hasLockfileHelper,
+  lockfileNeedsSentence,
+  planWithLockfileNote,
+  type LockfileOutcome,
 } from './sdk-upgrade-pr.ts'
+import { collectLockfileChanges } from './sdk-upgrade-lock-collect.ts'
+import { decodeGithubBase64, exactPins } from './sdk-upgrade-lock-edit.ts'
 import {
   archivedDirsFrom,
   computeBumpPlan,
@@ -55,9 +62,19 @@ const MAX_PKG_FILES = 25
 const PKG_PATH_IGNORE_RE =
   /(^|\/)(node_modules|dist|build|out|\.next|\.turbo|\.output|coverage|vendor|\.git)\//
 
+interface RepoBlob {
+  path: string
+  sha?: string
+}
+
 interface ScanResult {
   allBumps: BumpEntry[]
   filesToCommit: FileChange[]
+  manifests: Array<{ path: string; contents: string }>
+  /** Bumps to apply to the lock, including packages already at latest on a reused PR. */
+  lockBumps: Array<{ package: string; to: string }>
+  blobs: RepoBlob[]
+  treeComplete: boolean
 }
 
 export type SdkUpgradeRunResult =
@@ -194,23 +211,25 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     // never remove it.
     const discoverPackageJsonPaths = async (
       ref: string,
-    ): Promise<{ paths: string[]; archived: Set<string> }> => {
-      const none = { paths: [] as string[], archived: new Set<string>() }
+    ): Promise<{ paths: string[]; archived: Set<string>; blobs: RepoBlob[]; treeComplete: boolean }> => {
+      const none = { paths: [] as string[], archived: new Set<string>(), blobs: [] as RepoBlob[], treeComplete: false }
       const treeRes = await ghFetchOptional(
         `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
         { headers: baseHeaders },
       )
       if (!treeRes || typeof treeRes !== 'object') return none
-      const tree = (treeRes as { tree?: Array<{ path?: string; type?: string }> }).tree
+      const body = treeRes as { truncated?: boolean; tree?: Array<{ path?: string; type?: string; sha?: string }> }
+      const tree = body.tree
       if (!Array.isArray(tree)) return none
       const blobs = tree
         .filter((e) => e?.type === 'blob' && typeof e.path === 'string')
-        .map((e) => e.path as string)
-      const archived = archivedDirsFrom(blobs)
+        .map((e) => ({ path: e.path as string, ...(typeof e.sha === 'string' ? { sha: e.sha } : {}) }))
+      const archived = archivedDirsFrom(blobs.map((blob) => blob.path))
       const paths = blobs
+        .map((blob) => blob.path)
         .filter((p) => /(^|\/)package\.json$/.test(p) && !PKG_PATH_IGNORE_RE.test(p))
         .filter((p) => !isUnderArchivedDir(p, archived))
-      return { paths, archived }
+      return { paths, archived, blobs, treeComplete: body.truncated !== true }
     }
 
     // Scan every candidate package.json on a given ref and compute the bumps
@@ -221,6 +240,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     const scanForBumps = async (ref: string): Promise<ScanResult> => {
       const allBumps: BumpEntry[] = []
       const filesToCommit: FileChange[] = []
+      const manifests: Array<{ path: string; contents: string }> = []
       const discovered = await discoverPackageJsonPaths(ref)
       const pkgPaths = Array.from(
         new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered.paths]),
@@ -256,19 +276,32 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
         }
 
         const { bumps, updatedPkg } = computeBumpPlan(pkg, latestVersions)
-        if (bumps.length === 0) continue
+        if (bumps.length === 0) {
+          if (pkgText.includes('@mushi-mushi/')) manifests.push({ path: pkgPath, contents: pkgText })
+          continue
+        }
 
+        const contents = JSON.stringify(updatedPkg, null, 2) + '\n'
+        manifests.push({ path: pkgPath, contents })
         filesToCommit.push({
           path: pkgPath,
-          contents: JSON.stringify(updatedPkg, null, 2) + '\n',
+          contents,
           reason: `bump ${bumps.map((b) => `${b.package} ${b.from} → ${b.to}`).join(', ')}`,
         })
         allBumps.push(...bumps.map((b) => ({ ...b, path: pkgPath })))
       }
-      return { allBumps, filesToCommit }
+      return {
+        allBumps,
+        filesToCommit,
+        manifests,
+        lockBumps: allBumps.length > 0 ? allBumps : exactPins(manifests, latestVersions),
+        blobs: discovered.blobs,
+        treeComplete: discovered.treeComplete,
+      }
     }
 
-    const { allBumps, filesToCommit } = await scanForBumps(defaultBranch)
+    const scanned = await scanForBumps(defaultBranch)
+    const { allBumps, filesToCommit } = scanned
 
     if (filesToCommit.length === 0 || allBumps.length === 0) {
       log.info('sdk-upgrade-runner: all packages already up to date', { projectId: job.project_id })
@@ -279,31 +312,79 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       return { ok: true, status: 'completed_no_pr' }
     }
 
+    const ghLog = {
+      info: (msg: string, ctx?: unknown) => log.info(msg, ctx as Record<string, unknown>),
+      warn: (msg: string, ctx?: unknown) => log.warn(msg, ctx as Record<string, unknown>),
+    }
+    const readRepoText = async (ref: string, path: string) => decodeGithubBase64(await ghFetchOptional(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+      { headers: baseHeaders },
+    ))
+    const readBlob = async (sha: string) => decodeGithubBase64(await ghFetchOptional(
+      `https://api.github.com/repos/${owner}/${repo}/git/blobs/${sha}`,
+      { headers: baseHeaders },
+    ))
+    // ADR 0019: the workflow is read on the default branch. When it is there,
+    // the package manager refreshes the lockfile and this run does not edit it.
+    const helperPresent = await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)
+    const withLockfiles = async (scan: ScanResult, ref: string) => {
+      if (helperPresent) {
+        return { files: scan.filesToCommit, outcome: 'helper_missing' as LockfileOutcome, commands: [] as string[] }
+      }
+      const edited = await collectLockfileChanges({
+        blobs: scan.blobs,
+        treeComplete: scan.treeComplete,
+        manifests: scan.manifests,
+        bumps: scan.lockBumps,
+        readBlob,
+        readContents: (path) => readRepoText(ref, path),
+      })
+      if (edited.reasons.length) log.warn('sdk-upgrade-runner: lockfile edit', { reasons: edited.reasons })
+      const outcome: LockfileOutcome = edited.outcome === 'npm_updated'
+        ? 'npm_updated'
+        : edited.outcome === 'manual'
+          ? 'manual'
+          : 'helper_missing'
+      return { files: [...scan.filesToCommit, ...edited.files], outcome, commands: edited.commands }
+    }
+    const bumpMessage = (files: FileChange[]) => [
+      'chore(deps): bump @mushi-mushi/* SDK packages',
+      '',
+      ...files.map((file) => `- ${file.path}: ${file.reason}`),
+    ].join('\n')
+    const includesLock = (files: FileChange[]) =>
+      files.some((file) => file.path.endsWith('package-lock.json') || file.path.endsWith('npm-shrinkwrap.json'))
+
     // Dedup guard: if an upgrade PR is already open, reuse it instead of
-    // stacking a duplicate. Refresh its branch only if newer versions have
-    // shipped since it was opened; otherwise reuse it as-is.
+    // stacking a duplicate. Refresh its branch when newer versions have
+    // shipped, or when its npm lock still names the old @mushi-mushi versions.
     const existingPr = await findOpenPrByHeadPrefix(token, owner, repo, UPGRADE_BRANCH_PREFIX)
     if (existingPr) {
       const onBranch = await scanForBumps(existingPr.headRef)
-      if (onBranch.filesToCommit.length > 0) {
-        const commitSha = await commitFilesToBranch(
-          token,
-          owner,
-          repo,
-          existingPr.headRef,
-          onBranch.filesToCommit,
-          { info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>), warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>) },
-        )
+      const refreshed = await withLockfiles(onBranch, existingPr.headRef)
+      if (refreshed.files.length > 0) {
+        const commitSha = includesLock(refreshed.files)
+          ? await updateBranchWithSingleCommit({
+              token,
+              owner,
+              repo,
+              branch: existingPr.headRef,
+              message: bumpMessage(refreshed.files),
+              files: refreshed.files,
+            })
+          : await commitFilesToBranch(token, owner, repo, existingPr.headRef, refreshed.files, ghLog)
         log.info('sdk-upgrade-runner: refreshed existing upgrade PR', {
           projectId: job.project_id,
           prNumber: existingPr.number,
+          lockfile: refreshed.outcome,
         })
+        const note = refreshed.commands.length ? lockfileNeedsSentence(refreshed.commands) : null
         await finalize('completed', {
           pr_url: existingPr.url,
           pr_number: existingPr.number,
           branch: existingPr.headRef,
           commit_sha: commitSha,
-          plan: allBumps,
+          plan: planWithLockfileNote(allBumps, note),
         })
       } else {
         log.info('sdk-upgrade-runner: reusing already-current upgrade PR', {
@@ -321,15 +402,11 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     }
 
     const branch = `${UPGRADE_BRANCH_PREFIX}-${Date.now().toString(36)}`
-    const ghLog = {
-      info: (msg: string, ctx?: unknown) => log.info(msg, ctx as Record<string, unknown>),
-      warn: (msg: string, ctx?: unknown) => log.warn(msg, ctx as Record<string, unknown>),
-    }
 
     // ADR 0019: when the host has the lockfile helper workflow, push the bump
     // as one commit and let that workflow refresh the lockfile. The PR opens
     // later (sdk-release-sync) so its CI runs on the refreshed lockfile.
-    if (await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)) {
+    if (helperPresent) {
       const base = await resolveBaseBranch(token, owner, repo, defaultBranch, ghLog)
       const commitSha = await createBranchWithSingleCommit({
         token,
@@ -337,11 +414,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
         repo,
         branch,
         baseSha: base.sha,
-        message: [
-          'chore(deps): bump @mushi-mushi/* SDK packages',
-          '',
-          ...filesToCommit.map((f) => `- ${f.path}: ${f.reason}`),
-        ].join('\n'),
+        message: bumpMessage(filesToCommit),
         files: filesToCommit,
       })
       // Not finalize(): the job is not finished, and finished_at stays empty
@@ -357,35 +430,65 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       return { ok: true, status: 'awaiting_lockfile', branch }
     }
 
-    const prBody = buildUpgradePrBody(allBumps, filesToCommit.map((f) => f.path), 'helper_missing')
+    const edited = await withLockfiles(scanned, defaultBranch)
+    const note = edited.commands.length ? lockfileNeedsSentence(edited.commands) : null
+    const prBody = buildUpgradePrBody(allBumps, edited.files.map((file) => file.path), edited.outcome, edited.commands)
 
     log.info('sdk-upgrade-runner: opening upgrade PR', {
       projectId: job.project_id,
       bumps: allBumps.length,
-      files: filesToCommit.length,
+      files: edited.files.length,
+      lockfile: edited.outcome,
     })
 
-    const prResult = await createPrFromFiles(
-      {
-        token,
-        owner,
-        repo,
-        defaultBranch,
-        branch,
-        title: SDK_UPGRADE_PR_TITLE,
-        body: prBody,
-        files: filesToCommit,
-        labels: SDK_UPGRADE_PR_LABELS,
-      },
-      ghLog,
-    )
+    // A rewritten npm lockfile has to land with the package.json bump. Separate
+    // commits would push the manifest first and fail `npm ci` before the lockfile.
+    const prResult = includesLock(edited.files)
+      ? await (async () => {
+          const base = await resolveBaseBranch(token, owner, repo, defaultBranch, ghLog)
+          const commitSha = await createBranchWithSingleCommit({
+            token,
+            owner,
+            repo,
+            branch,
+            baseSha: base.sha,
+            message: bumpMessage(edited.files),
+            files: edited.files,
+          })
+          const pr = await openPullRequestForBranch({
+            token,
+            owner,
+            repo,
+            base: base.branch,
+            branch,
+            headSha: commitSha,
+            title: SDK_UPGRADE_PR_TITLE,
+            body: prBody,
+            labels: SDK_UPGRADE_PR_LABELS,
+          }, ghLog)
+          return { url: pr.url, number: pr.number, branch, commitSha }
+        })()
+      : await createPrFromFiles(
+          {
+            token,
+            owner,
+            repo,
+            defaultBranch,
+            branch,
+            title: SDK_UPGRADE_PR_TITLE,
+            body: prBody,
+            files: edited.files,
+            labels: SDK_UPGRADE_PR_LABELS,
+          },
+          ghLog,
+        )
 
     await finalize('completed', {
       pr_url: prResult.url,
       pr_number: prResult.number,
       branch: prResult.branch,
       commit_sha: prResult.commitSha,
-      plan: allBumps,
+      plan: planWithLockfileNote(allBumps, note),
     })
 
     log.info('sdk-upgrade-runner: PR opened', { prUrl: prResult.url, jobId })
