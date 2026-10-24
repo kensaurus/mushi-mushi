@@ -13,10 +13,13 @@
  *          uses for PR status (Open → Review → Merged).
  *
  *          The bar row is one `role="img"` named with the current step
- *          (`Status: Fixing, step 3 of 4`). Segments are `aria-hidden` so a
- *          screen reader hears that name once. A bare span is generic, and
- *          axe `aria-prohibited-attr` rejects `aria-label` on that role
- *          (reports table Status column). Tooltips still show each step.
+ *          (`Status: Fixing, step 3 of 4`). Segments are `aria-hidden`, and
+ *          so are the sighted captions (compact label, table "n/4", full
+ *          step names): they repeat that name. A screen reader hears it
+ *          once. A bare span is generic, and axe `aria-prohibited-attr`
+ *          rejects `aria-label` on that role (reports table Status column).
+ *          Tooltips still show each step. Their triggers are plain spans,
+ *          not focusable controls, inside the image.
  */
 
 import { Tooltip } from '../ui'
@@ -138,7 +141,7 @@ export function StatusStepper({
       className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
     >
       {size === 'compact' && (
-        <span className="text-2xs text-fg-muted leading-none font-medium">
+        <span aria-hidden="true" className="text-2xs text-fg-muted leading-none font-medium">
           {activeLabel}
           <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
@@ -152,6 +155,7 @@ export function StatusStepper({
       )}
       {isTable && (
         <span
+          aria-hidden="true"
           className="shrink-0 text-2xs text-fg-muted tabular-nums leading-none font-medium"
           title={tableSummary}
         >
@@ -159,7 +163,7 @@ export function StatusStepper({
         </span>
       )}
       {size === 'full' && (
-        <div className="flex items-center justify-between text-2xs text-fg-faint w-full">
+        <div aria-hidden="true" className="flex items-center justify-between text-2xs text-fg-faint w-full">
           {STATUS_STEPS.map((step, i) => (
             <span
               key={step}

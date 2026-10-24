@@ -11,8 +11,9 @@
  * segment — is the flex item, so it needs the flex sizing.
  *
  * The bar row is one image. Its accessible name is the current step and
- * "n of 4". Segments are aria-hidden. Full-size dismissed uses the visible
- * "Dismissed" caption and hides the bar.
+ * "n of 4", and that list is the only name exposed. Sighted captions are
+ * aria-hidden so they are not announced again. Segments are aria-hidden.
+ * Full-size dismissed uses the visible "Dismissed" caption and hides the bar.
  */
 
 import { act, createElement } from 'react'
@@ -79,16 +80,34 @@ describe('StatusStepper', () => {
     ['full', 'fixed', 'Fixed', 4],
   ] as const)('names %s progress once (%s)', (size, status, label, step) => {
     act(() => root.render(createElement(StatusStepper, { status, severity: 'medium', size })))
-    const matching = accessibleNames(host).filter(
-      (name) => name.includes(label) && name.includes(`${step} of 4`),
-    )
-    expect(matching).toEqual([`Status: ${label}, step ${step} of 4`])
+    // The whole list. A filter for "label" plus "n of 4" would miss a
+    // caption such as "Fixing" or "3/4" announced beside the image.
+    expect(accessibleNames(host)).toEqual([`Status: ${label}, step ${step} of 4`])
     expect(host.querySelectorAll('[role="img"]')).toHaveLength(1)
     const segments = host.querySelectorAll('[role="img"] [aria-hidden="true"]')
     expect(segments).toHaveLength(4)
     for (const seg of segments) {
       expect(seg.getAttribute('role')).toBeNull()
       expect(seg.hasAttribute('aria-label')).toBe(false)
+    }
+    if (size === 'compact') {
+      const caption = [...host.querySelectorAll('span')].find(
+        (el) => el.textContent?.includes(label) && el.textContent?.includes(`${step}/4`),
+      )
+      expect(caption?.getAttribute('aria-hidden')).toBe('true')
+      expect(caption?.closest('[role="img"]')).toBeNull()
+    }
+    if (size === 'table') {
+      const fraction = [...host.querySelectorAll('span')].find((el) => el.textContent === `${step}/4`)
+      expect(fraction?.getAttribute('aria-hidden')).toBe('true')
+      expect(fraction?.closest('[role="img"]')).toBeNull()
+    }
+    if (size === 'full') {
+      for (const stepLabel of ['Received', 'Classified', 'Fixing', 'Fixed']) {
+        const node = [...host.querySelectorAll('span')].find((el) => el.textContent === stepLabel)
+        expect(node?.closest('[aria-hidden="true"]')).not.toBeNull()
+        expect(node?.closest('[role="img"]')).toBeNull()
+      }
     }
   })
 
