@@ -123,6 +123,7 @@ export function SdkInstallSnippetColumn({
             </p>
             <pre
               tabIndex={0}
+              role="region"
               aria-label="Power-user API example"
               className="mushi-code-block mushi-code-body px-2.5 py-2 rounded-sm border border-code-surface-border overflow-x-auto whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
             >{`// Identity — sticky across every subsequent report

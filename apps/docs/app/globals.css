@@ -238,8 +238,7 @@ main table {
 /* Below 768px a wide table scrolls inside its own box instead of widening
  * the page. `display: table` above overrides Nextra's own overflow-x
  * styling, which let /pricing (966px) and /security (600px) scroll the
- * whole page sideways at a 390px viewport. KeyboardScrollRegions then puts
- * that box in the tab order when it actually overflows. */
+ * whole page sideways at a 390px viewport. */
 @media (max-width: 767px) {
   main table {
     display: block !important;

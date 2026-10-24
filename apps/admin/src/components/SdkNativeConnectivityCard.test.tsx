@@ -165,6 +165,7 @@ describe('SdkNativeConnectivityCard', () => {
     act(() => button(/Show manual setup commands/)!.click())
     const pre = document.querySelector('pre')
     expect(pre?.getAttribute('tabindex')).toBe('0')
+    expect(pre?.getAttribute('role')).toBe('region')
     expect(pre?.getAttribute('aria-label')).toBe('CI env block')
     expect(pre?.textContent).toContain('NEXT_PUBLIC_MUSHI_API_ENDPOINT')
   })

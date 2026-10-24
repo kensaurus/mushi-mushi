@@ -7,7 +7,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CodePanel } from './CodePanel'
 
 let container: HTMLDivElement
@@ -39,9 +39,61 @@ describe('CodePanel', () => {
     })
     const pre = container.querySelector('pre')
     expect(pre?.getAttribute('tabindex')).toBe('0')
+    expect(pre?.getAttribute('role')).toBe('region')
     expect(pre?.getAttribute('aria-label')).toBe('Install snippet')
     expect(pre?.className).toContain('overflow-x-auto')
     expect(pre?.className).toContain('max-h-72')
     expect(pre?.className).toContain('overflow-y-auto')
+  })
+
+  it('does not tab to a short snippet that does not scroll', () => {
+    act(() => {
+      root.render(createElement(CodePanel, {
+        label: 'Install snippet',
+        language: 'bash',
+        code: 'npm i',
+        onCopy: () => {},
+        copied: false,
+      }))
+    })
+    const pre = container.querySelector('pre')
+    expect(pre?.hasAttribute('tabindex')).toBe(false)
+    expect(pre?.hasAttribute('role')).toBe(false)
+    expect(pre?.hasAttribute('aria-label')).toBe(false)
+  })
+
+  it('tabs to a snippet only while its content overflows', () => {
+    const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+    const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+    scrollWidth.mockReturnValue(480)
+    clientWidth.mockReturnValue(120)
+    const props = {
+      label: 'Install snippet',
+      language: 'bash',
+      onCopy: () => {},
+      copied: false,
+    }
+    try {
+      act(() => {
+        root.render(createElement(CodePanel, { ...props, code: 'npm install @mushi-mushi/web' }))
+      })
+      const overflowing = container.querySelector('pre')
+      expect(overflowing?.getAttribute('tabindex')).toBe('0')
+      expect(overflowing?.getAttribute('role')).toBe('region')
+      expect(overflowing?.getAttribute('aria-label')).toBe('Install snippet')
+
+      scrollWidth.mockReturnValue(120)
+      clientWidth.mockReturnValue(120)
+      act(() => {
+        root.render(createElement(CodePanel, { ...props, code: 'npm i' }))
+      })
+      const fitted = container.querySelector('pre')
+      expect(fitted?.hasAttribute('tabindex')).toBe(false)
+      expect(fitted?.hasAttribute('role')).toBe(false)
+      expect(fitted?.hasAttribute('aria-label')).toBe(false)
+    } finally {
+      scrollWidth.mockRestore()
+      clientWidth.mockRestore()
+    }
   })
 })

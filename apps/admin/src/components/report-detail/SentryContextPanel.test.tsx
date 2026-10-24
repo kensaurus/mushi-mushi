@@ -33,4 +33,20 @@ describe('SentryContextPanel for an imported Sentry issue', () => {
   it('still renders nothing for a report with no Sentry data at all', () => {
     expect(html({})).toBe('')
   })
+
+  it('names the breadcrumb data block as a region', () => {
+    const out = html({
+      mushiBreadcrumbs: [{
+        timestamp: 1_700_000_000_000,
+        category: 'custom',
+        level: 'info',
+        message: 'paid',
+        data: { intentId: 'pi_1' },
+      }],
+    })
+    const pre = out.match(/<pre\b[^>]*>/)?.[0] ?? ''
+    expect(pre).toContain('tabindex="0"')
+    expect(pre).toContain('role="region"')
+    expect(pre).toContain('aria-label="Breadcrumb data"')
+  })
 })
