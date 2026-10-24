@@ -49,6 +49,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
+import { qaContentFailures } from '../_shared/qa-story-assertions.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -213,29 +214,10 @@ function isDirectFetchMode(story: QaStory): boolean {
 // Activated by `directFetch: true` in the story's script JSON.
 //
 // Uses Deno's built-in fetch() with a 20-second timeout via AbortController.
-// Checks assertContains (or prompt-quoted strings) against the raw HTML body.
+// Checks the same text assertions as Firecrawl against the raw HTML body.
 // No Firecrawl API key needed.
 async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
-  const assertionFailures: RunResult['assertion_failures'] = []
-
-  // Parse assertContains from script
-  let assertContains: string[] = []
-  if (story.script && !story.script.startsWith('http')) {
-    try {
-      const parsed = JSON.parse(story.script) as unknown
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const spec = parsed as { assertContains?: string[] }
-        if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
-      }
-    } catch { /* use defaults */ }
-  }
-
-  const termsToCheck: string[] = assertContains.length > 0
-    ? assertContains
-    : story.prompt
-        ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
-        : []
 
   try {
     // The target comes from a tenant-authored story (target_url or a URL in
@@ -262,13 +244,7 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
     }
 
     const html = await res.text()
-
-    // Check terms against raw HTML (case-insensitive)
-    for (const term of termsToCheck) {
-      if (!html.toLowerCase().includes(term.toLowerCase())) {
-        assertionFailures.push({ step: 'content', expected: term, actual: '(not found in HTML)' })
-      }
-    }
+    const assertionFailures = qaContentFailures(story, html, '(not found in HTML)')
 
     // directFetch returns no screenshot evidence — the run status + assertion
     // failures are the signal. Storing raw HTML inline would exceed column limits.
@@ -302,22 +278,23 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
 //
 // script column supports two formats:
 //   1. Array  — raw Firecrawl actions (legacy): [...actions]
-//   2. Object — structured spec: { actions?: [...], assertContains?: string[], waitFor?: number, htmlOnly?: boolean, directFetch?: boolean }
+//   2. Object — structured spec: { actions?: [...], assertContains?: string[],
+//      mustNotContain?: string[], waitFor?: number, htmlOnly?: boolean, directFetch?: boolean }
 //
-// assertContains is the preferred way to define pass criteria — each string is
-// checked as a case-insensitive substring in the scraped markdown. The old NL
-// prompt regex (30-60 char prose phrases) produced too many false failures on
-// SPA-rendered pages and is replaced by quoted-string extraction when no
-// assertContains is present.
+// Text pass/fail lives in qaContentFailures: assertContains (or quoted strings
+// in the prompt) must show up, mustNotContain must not. An empty scrape fails
+// when the story has either kind of assertion. The old NL prompt regex
+// (30-60 char prose phrases) produced too many false failures on SPA-rendered
+// pages and is replaced by quoted-string extraction when no assertContains
+// is present.
 async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
-  const assertionFailures: RunResult['assertion_failures'] = []
   const evidence: RunResult['evidence'] = []
 
   try {
     // Parse script — supports array (legacy) or structured object:
     //
-    //   { actions?, assertContains?, waitFor?, htmlOnly? }
+    //   { actions?, assertContains?, mustNotContain?, waitFor?, htmlOnly? }
     //
     // htmlOnly=true  → rawHtml format, no headless browser (fast, for SSR/SSG pages)
     // htmlOnly=false → full browser mode with actions + screenshot
@@ -329,7 +306,6 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
       { type: 'wait', milliseconds: 3000 },
       { type: 'screenshot' },
     ]
-    let assertContains: string[] = []
     let waitFor = 5000
     // htmlOnly skips the headless browser entirely — ideal for SSR/SSG pages
     // that have all content in the initial HTML. Avoids SCRAPE_TIMEOUT on
@@ -346,12 +322,10 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
           // Structured spec object
           const spec = parsed as {
             actions?: Array<Record<string, unknown>>
-            assertContains?: string[]
             waitFor?: number
             htmlOnly?: boolean
           }
           if (Array.isArray(spec.actions)) actions = spec.actions
-          if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
           if (typeof spec.waitFor === 'number') waitFor = spec.waitFor
           if (typeof spec.htmlOnly === 'boolean') htmlOnly = spec.htmlOnly
         }
@@ -414,22 +388,8 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
       ?? data?.data?.actions?.screenshots?.[0]
       ?? ''
 
-    // Assertions — prefer explicit assertContains; fall back to quoted strings
-    // in the prompt (single or double quoted terms, ≤ 50 chars). The old broad
-    // regex extracted full NL sentences and caused false failures on SPAs.
-    const termsToCheck: string[] = assertContains.length > 0
-      ? assertContains
-      : story.prompt
-          ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
-          : []
-
-    if (markdown && termsToCheck.length > 0) {
-      for (const term of termsToCheck) {
-        if (!markdown.toLowerCase().includes(term.toLowerCase())) {
-          assertionFailures.push({ step: 'content', expected: term, actual: '(not found)' })
-        }
-      }
-    }
+    // Empty markdown used to skip this and the run was stored as passed.
+    const assertionFailures = qaContentFailures(story, markdown)
 
     if (screenshot) {
       const b64 = screenshot.replace(/^data:image\/\w+;base64,/, '')
