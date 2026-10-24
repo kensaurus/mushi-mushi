@@ -1,9 +1,11 @@
 /**
  * FILE: privacy-status.test.ts
  * PURPOSE: The sidebar privacy chip reads GET /v1/admin/privacy-status.
- *          byok_configured follows the app's key resolution (own → legacy →
- *          organization → the organization's owners' universal keys → platform),
- *          so an owner and an admin see the same chip for the same app.
+ *          byok_configured follows the app's LLM key resolution (anthropic and
+ *          openai, own → legacy → organization → the organization's owners'
+ *          universal keys → platform). Web-tool keys do not count. An owner
+ *          and an admin see the same chip for the same app. A failed key read
+ *          degrades the chip instead of failing the request.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -40,7 +42,7 @@ let app: Hono
 let resolveLlmKeySource: (
   client: unknown,
   projectId: string,
-  provider: 'anthropic' | 'openai' | 'firecrawl' | 'browserbase',
+  provider: 'anthropic' | 'openai',
 ) => Promise<string | null>
 
 beforeAll(async () => {
@@ -96,22 +98,58 @@ async function privacy(userId: string, path = '/v1/admin/privacy-status') {
   const res = await app.request(path, {
     headers: { 'X-Mushi-Project-Id': P, 'x-test-user': userId },
   })
-  return {
-    status: res.status,
-    json: (await res.json()) as {
-      ok: boolean
-      data?: { byok_configured: boolean; llm_provider: string; last_audit_at: string | null }
-    },
+  const body = await res.text()
+  let json: {
+    ok: boolean
+    data?: { byok_configured: boolean; llm_provider: string; last_audit_at: string | null }
+  } = { ok: false }
+  try {
+    json = JSON.parse(body) as typeof json
+  } catch {
+    // A 500 text body still reports its status to the caller.
   }
+  return { status: res.status, json }
 }
 
-/** The chip is BYOK when any privacy provider resolves to a non-platform key. */
+/** The chip is BYOK when anthropic or openai resolves to a non-platform key. */
 async function expectedByok(): Promise<boolean> {
-  for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
+  for (const provider of ['anthropic', 'openai'] as const) {
     const source = await resolveLlmKeySource(db, P, provider)
     if (source && source !== 'env') return true
   }
   return false
+}
+
+/** Counts overlapping `projects` reads. Provider lookups that run together overlap. */
+function trackProjectReads(): { max: () => number } {
+  let inflight = 0
+  let max = 0
+  const realFrom = db.from.bind(db)
+  db.from = (name: string) => {
+    const query = realFrom(name)
+    if (name !== 'projects') return query
+    const origThen = query.then.bind(query)
+    query.then = ((
+      onFulfilled?: ((value: unknown) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) => {
+      inflight += 1
+      if (inflight > max) max = inflight
+      return origThen(
+        (value: unknown) => {
+          inflight -= 1
+          return onFulfilled ? onFulfilled(value) : value
+        },
+        (reason: unknown) => {
+          inflight -= 1
+          if (onRejected) return onRejected(reason)
+          throw reason
+        },
+      )
+    }) as typeof query.then
+    return query
+  }
+  return { max: () => max }
 }
 
 describe('GET /v1/admin/privacy-status', () => {
@@ -139,7 +177,10 @@ describe('GET /v1/admin/privacy-status', () => {
         settings: { byok_anthropic_key_ref: 'vault://legacy', byok_anthropic_test_status: 'error_auth' },
         byok: false,
       },
-      { name: 'firecrawl pool key', keys: [key('fc', { project_id: P }, 'firecrawl')], byok: true },
+      { name: 'openai pool key', keys: [key('oa', { project_id: P }, 'openai')], byok: true },
+      { name: 'openrouter pool key', keys: [key('router', { project_id: P }, 'openrouter')], byok: true },
+      { name: 'firecrawl pool key', keys: [key('fc', { project_id: P }, 'firecrawl')], byok: false },
+      { name: 'browserbase pool key', keys: [key('bb', { project_id: P }, 'browserbase')], byok: false },
       { name: 'platform key', keys: [], env: 'sk-ant-platform-0000', byok: false },
     ]
 
@@ -156,6 +197,35 @@ describe('GET /v1/admin/privacy-status', () => {
       expect(owner.json.data?.llm_provider, c.name).toBe(c.byok ? 'byok' : 'platform')
       expect(owner.json.data?.last_audit_at, c.name).toBe('2026-10-01T00:00:00.000Z')
     }
+  })
+
+  it('reads the LLM providers together', async () => {
+    delete envStore.ANTHROPIC_API_KEY
+    delete envStore.OPENAI_API_KEY
+    seed([key('own', { project_id: P })])
+    const reads = trackProjectReads()
+    const res = await privacy(OWNER)
+    expect(res.status).toBe(200)
+    expect(res.json.data?.byok_configured).toBe(true)
+    // One projects read per provider. Sequential lookups never overlap, so the
+    // peak stays at 1 (the access check finishes before either lookup starts).
+    expect(reads.max()).toBeGreaterThanOrEqual(2)
+  })
+
+  it('degrades to the platform chip when key resolution throws', async () => {
+    delete envStore.ANTHROPIC_API_KEY
+    seed([key('own', { project_id: P })])
+    const realFrom = db.from.bind(db)
+    db.from = (name: string) => {
+      if (name === 'byok_keys') throw new Error('byok_keys unavailable')
+      return realFrom(name)
+    }
+    const res = await privacy(OWNER)
+    expect(res.status).toBe(200)
+    expect(res.json.ok).toBe(true)
+    expect(res.json.data?.byok_configured).toBe(false)
+    expect(res.json.data?.llm_provider).toBe('platform')
+    expect(res.json.data?.last_audit_at).toBe('2026-10-01T00:00:00.000Z')
   })
 
   it('rejects a caller who cannot open the app', async () => {

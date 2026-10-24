@@ -313,21 +313,46 @@ async function readPoolRows(
   return rawRows ? ownKeysFirst(rawRows as unknown as PoolRow[]) : [];
 }
 
-/** A pool row the resolver would keep, before the secret is read. */
+/**
+ * Normalized OpenAI-compatible base URL for a row that set one.
+ * Null when the URL is unsafe (the row must not be used). An empty
+ * `base_url` is not a custom URL; the caller uses the platform default.
+ */
+function openAiRowBaseUrl(row: PoolRow, projectId: string, warn = false): string | null {
+  if (!row.base_url) return null;
+  const validation = validateOpenAiBaseUrl(row.base_url, openAiCompatibleHostAllowlist());
+  if (!validation.ok) {
+    if (warn) {
+      log.warn('Skipping BYOK key with unsafe OpenAI-compatible base URL', {
+        projectId,
+        keyId: row.id,
+      });
+    }
+    return null;
+  }
+  return validation.value;
+}
+
+/**
+ * A pool row the resolver would keep, before the secret is read.
+ * The one pre-secret filter for both the source probe and
+ * `byokPoolCandidates`: runnable state, a vault id, a scope this app may
+ * use, and a safe OpenAI base URL. Cooldown is compared as epoch
+ * milliseconds — Supabase timestamps vary in offset and precision, so a
+ * lexical compare is unreliable. A malformed cooldown is non-runnable.
+ */
 function sourceScopeForRow(
   row: PoolRow,
   owner: KeyOwner,
   provider: LlmProvider,
   nowMs: number,
+  warnUnsafeUrl = false,
 ): KeyScope | null {
   if (!isRunnableByokPoolState(row, nowMs)) return null;
   if (!row.vault_secret_id) return null;
   const scope = keyScopeFor(row, owner);
   if (!scope) return null;
-  if (provider === 'openai' && row.base_url) {
-    const validation = validateOpenAiBaseUrl(row.base_url, openAiCompatibleHostAllowlist());
-    if (!validation.ok) return null;
-  }
+  if (provider === 'openai' && row.base_url && !openAiRowBaseUrl(row, owner.projectId, warnUnsafeUrl)) return null;
   return scope;
 }
 
@@ -373,16 +398,10 @@ async function byokPoolCandidates(
 
   if (keyRows && keyRows.length > 0) {
     for (const row of keyRows) {
-      // Skip keys still inside their cooldown window. Compare as epoch
-      // milliseconds — Supabase can return timestamps with varying offset /
-      // millisecond precision, so lexical string comparison is unreliable.
-      // A malformed cooldown is contained by treating the row as non-runnable.
-      if (!isRunnableByokPoolState(row, nowMs)) continue;
-      if (!row.vault_secret_id) continue;
-      // Cross-tenant guard: a row this project may not use is dropped even if
-      // the query returned it (a universal key whose owner does not own this
-      // project's organization never serves it).
-      const scope = keyScopeFor(row, owner);
+      // Cross-tenant guard included: sourceScopeForRow drops a row this
+      // project may not use even if the query returned it (a universal key
+      // whose owner does not own this project's organization never serves it).
+      const scope = sourceScopeForRow(row, owner, provider, nowMs, true);
       if (!scope) continue;
 
       const ref = `vault://${row.vault_secret_id}`;
@@ -396,19 +415,10 @@ async function byokPoolCandidates(
         }
         let baseUrl: string | undefined;
         if (provider === 'openai') {
-          if (row.base_url) {
-            const validation = validateOpenAiBaseUrl(row.base_url, openAiCompatibleHostAllowlist());
-            if (!validation.ok) {
-              log.warn('Skipping BYOK key with unsafe OpenAI-compatible base URL', {
-                projectId,
-                keyId: row.id,
-              });
-              continue;
-            }
-            baseUrl = validation.value;
-          } else {
-            baseUrl = validatedPlatformOpenAiBaseUrl(projectId);
-          }
+          // The filter above already dropped an unsafe custom URL.
+          baseUrl = row.base_url
+            ? (openAiRowBaseUrl(row, projectId) ?? undefined)
+            : validatedPlatformOpenAiBaseUrl(projectId);
         } else if (provider === 'openrouter') {
           baseUrl = OPENROUTER_BASE_URL;
         }

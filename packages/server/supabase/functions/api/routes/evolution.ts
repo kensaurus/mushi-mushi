@@ -3,9 +3,10 @@
 //   GET /v1/admin/projects/:id/privacy-status   (MCP path — project ID in URL)
 //   GET /v1/admin/privacy-status                (dashboard path — project from header/query)
 //     → PrivacyStatus: byok_configured, storage_provider, region, retention_days, last_audit_at
-//     byok_configured follows resolveLlmKey for the app (not the caller's key
-//     pool): own key, legacy ref, organization key, then the org owners'
-//     universal keys. The platform env key is not BYOK.
+//     byok_configured follows resolveLlmKey for the app's LLM providers
+//     (anthropic, openai; OpenRouter counts as openai), not the caller's key
+//     pool and not web-tool keys: own key, legacy ref, organization key, then
+//     the org owners' universal keys. The platform env key is not BYOK.
 //     Used by PrivacyPostureBadge in the sidebar and the MCP privacy://status resource.
 //
 //   GET /v1/admin/projects/:id/evolution-history
@@ -20,6 +21,7 @@ import type { Context } from 'npm:hono@4'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { resolveLlmKeySource, type LlmProvider } from '../../_shared/byok.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { log } from '../../_shared/logger.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import type { Variables } from '../types.ts'
 
@@ -29,19 +31,30 @@ function db() {
   return getServiceClient()
 }
 
-// Providers the chip already treated as "a key is configured". The boolean
-// follows resolveLlmKey for each one (project → legacy → organization →
-// the org owners' universal keys → platform env). An admin's own universal
-// key does not count (ADR 0031). The caller is never an input.
-const PRIVACY_KEY_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'firecrawl', 'browserbase']
+// LLM providers only. The chip is BYOK when either anthropic or openai
+// resolves to the app's own key, a legacy credential, an organization key,
+// or an org owner's universal key (project → legacy → organization →
+// universal → platform env). OpenRouter counts inside the openai lookup.
+// Firecrawl and Browserbase are web tools and do not count. The platform
+// env key is not BYOK. An admin's own universal key does not count (ADR
+// 0031). The caller is never an input.
+const PRIVACY_KEY_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai']
 
 async function projectByokConfigured(pid: string): Promise<boolean> {
-  const client = db()
-  for (const provider of PRIVACY_KEY_PROVIDERS) {
-    const source = await resolveLlmKeySource(client, pid, provider)
-    if (source && source !== 'env') return true
+  try {
+    const client = db()
+    const sources = await Promise.all(
+      PRIVACY_KEY_PROVIDERS.map((provider) => resolveLlmKeySource(client, pid, provider)),
+    )
+    return sources.some((source) => Boolean(source) && source !== 'env')
+  } catch (err) {
+    // A failed read degrades the chip. It must not 500 the sidebar.
+    log.warn('privacy-status key lookup failed', {
+      projectId: pid,
+      error: err instanceof Error ? err.message : 'lookup failed',
+    })
+    return false
   }
-  return false
 }
 
 // ---------------------------------------------------------------------------

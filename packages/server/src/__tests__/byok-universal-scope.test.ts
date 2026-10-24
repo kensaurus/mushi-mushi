@@ -206,30 +206,39 @@ describe('resolveLlmKeySource matches the key resolveLlmKeys would use', () => {
   }
 
   /** Names the source before any secret read, then checks the resolver agrees. */
-  async function agrees(database: ReturnType<typeof db>) {
+  async function agrees(
+    database: ReturnType<typeof db>,
+    provider: 'anthropic' | 'openai' | 'openrouter' = 'anthropic',
+    opts: { openAiOnly?: boolean } = {},
+  ) {
     const typed = database as unknown as { rpcCalls: Array<{ fn: string }> }
-    const source = await byok.resolveLlmKeySource(database, P_MUSHI, 'anthropic')
-    expect(typed.rpcCalls.filter((c) => c.fn === 'vault_get_secret')).toEqual([])
-    expect(source).toBe(named(await byok.resolveLlmKeys(database, P_MUSHI, 'anthropic')))
-    return source
+    const vaultReads = () => typed.rpcCalls.filter((c) => c.fn === 'vault_get_secret').length
+    const before = vaultReads()
+    const source = await byok.resolveLlmKeySource(database, P_MUSHI, provider, opts)
+    expect(vaultReads()).toBe(before)
+    const keys = await byok.resolveLlmKeys(database, P_MUSHI, provider, opts)
+    expect(source).toBe(named(keys))
+    return { source, keys }
   }
 
   it('reports project, organization, an owner universal key, legacy, then the platform key', async () => {
-    expect(await agrees(db([key('own', { project_id: P_MUSHI })]))).toBe('project')
-    expect(await agrees(db([key('org', { organization_id: ORG_MUSHI })]))).toBe('organization')
-    expect(await agrees(db([key('universal', { owner_user_id: OWNER })]))).toBe('owner_universal')
+    expect((await agrees(db([key('own', { project_id: P_MUSHI })]))).source).toBe('project')
+    expect((await agrees(db([key('org', { organization_id: ORG_MUSHI })]))).source).toBe('organization')
+    expect((await agrees(db([key('universal', { owner_user_id: OWNER })]))).source).toBe('owner_universal')
     expect(
-      await agrees(
-        db(
-          [key('org', { organization_id: ORG_MUSHI })],
-          [{ project_id: P_MUSHI, byok_anthropic_key_ref: 'vault://legacy', byok_anthropic_test_status: 'ok' }],
-        ),
-      ),
+      (
+        await agrees(
+          db(
+            [key('org', { organization_id: ORG_MUSHI })],
+            [{ project_id: P_MUSHI, byok_anthropic_key_ref: 'vault://legacy', byok_anthropic_test_status: 'ok' }],
+          ),
+        )
+      ).source,
     ).toBe('project')
     const previous = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
     try {
-      expect(await agrees(db([]))).toBe('env')
+      expect((await agrees(db([]))).source).toBe('env')
     } finally {
       if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = previous
@@ -256,6 +265,62 @@ describe('resolveLlmKeySource matches the key resolveLlmKeys would use', () => {
     } finally {
       if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = previous
+    }
+  })
+
+  it('agrees for an OpenAI base URL and for an OpenRouter key serving OpenAI', async () => {
+    const previous = process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    try {
+      const together = await agrees(
+        db([
+          {
+            ...key('together', { project_id: P_MUSHI }, 100, 'openai'),
+            base_url: 'https://api.together.xyz/v1',
+          },
+        ]),
+        'openai',
+      )
+      expect(together.source).toBe('project')
+      expect(together.keys[0]?.baseUrl).toBe('https://api.together.xyz/v1')
+
+      const routerDb = db([key('router', { project_id: P_MUSHI }, 100, 'openrouter')])
+      const router = await agrees(routerDb, 'openai')
+      expect(router.source).toBe('project')
+      expect(router.keys[0]?.keyId).toBe('router')
+      expect(router.keys[0]?.baseUrl).toBe(byok.OPENROUTER_BASE_URL)
+      expect((await agrees(routerDb, 'openai', { openAiOnly: true })).source).toBeNull()
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previous
+    }
+  })
+
+  it('drops an unsafe OpenAI base URL before reading the secret or reactivating the key', async () => {
+    const previous = process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    try {
+      const database = db([
+        {
+          ...key('bad', { project_id: P_MUSHI }, 100, 'openai'),
+          base_url: 'https://evil.example/v1',
+          status: 'quota_exhausted',
+          test_status: 'error_quota',
+          cooldown_until: new Date(Date.now() - 60_000).toISOString(),
+        },
+      ])
+      const typed = database as unknown as {
+        rpcCalls: Array<{ fn: string }>
+        table: (name: string) => Array<Record<string, unknown>>
+      }
+      expect(await byok.resolveLlmKeySource(database, P_MUSHI, 'openai')).toBeNull()
+      expect(await byok.resolveLlmKeys(database, P_MUSHI, 'openai')).toEqual([])
+      expect(typed.rpcCalls.filter((c) => c.fn === 'vault_get_secret')).toEqual([])
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(typed.table('byok_keys')[0]?.status).toBe('quota_exhausted')
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previous
     }
   })
 
