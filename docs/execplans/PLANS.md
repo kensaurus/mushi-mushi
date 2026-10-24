@@ -76,12 +76,12 @@ pass/fail results on a dashboard tile and dedicated page.
 
 #### 3c — qa-story-runner Edge Function
 - [x] `packages/server/supabase/functions/qa-story-runner/index.ts`
-  - Cron-match gate (skips stories whose schedule doesn't align with current minute)
-  - Rate-limit: 3 concurrent runs per project (`MAX_CONCURRENT_PER_PROJECT = 3`)
+  - Due from the latest cron slot until a non-skipped run starts (`_shared/qa-schedule.ts`)
+  - Cap: 3 stories per project per tick (`QA_SCHEDULE_CAP`); the rest stay due, no skipped row
   - BYOK key resolution via `_shared/byok.ts`
   - Inline execution for `firecrawl_actions`
   - Browserbase REST delegation for `browserbase`
-  - `status='skipped'` for `local` (operator CLI handles these)
+  - `browser_provider = local` is not selected (operator runs them with `mushi qa run`)
   - Writes `qa_story_runs` + `qa_story_evidence`
   - ~~A2A push notification on failure~~ — **superseded**: QA failure notification
     routes through Slack Block Kit + `dispatchPluginEvent` (see `AGENTS.md`).

@@ -4,6 +4,9 @@
 
 type QaProviderId = 'firecrawl_actions' | 'browserbase' | 'local'
 
+/** Shown wherever a local story could be mistaken for a cloud schedule. */
+export const LOCAL_QA_RUN_LABEL = 'Runs only via `mushi qa run`'
+
 export interface QaProviderDefinition {
   id: QaProviderId
   label: string
@@ -35,8 +38,8 @@ export const QA_PROVIDER_DEFINITIONS: QaProviderDefinition[] = [
     label: 'Local Playwright',
     tagline: 'Full Playwright on your machine',
     bestFor: 'TDD-generated tests, debugging failures locally, and flows that need filesystem or native APIs.',
-    requires: 'Run via CLI (`mushi qa run`) — not schedulable from the cloud runner.',
-    tradeoffs: 'Does not run on the hourly cron unless you wire your own CI to trigger runs.',
+    requires: LOCAL_QA_RUN_LABEL,
+    tradeoffs: 'Full Playwright on your machine. The cloud schedule leaves these stories alone.',
   },
 ]
 

@@ -63,6 +63,7 @@ import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSna
 import { useQaCoverageUx } from '../lib/qaCoverageModeUx'
 import { useEntitlements } from '../lib/useEntitlements'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { LOCAL_QA_RUN_LABEL } from '../lib/qaProviderGuide'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,9 @@ function StoryCard({
           >
             {PROVIDER_LABEL[coverage.browser_provider] ?? coverage.browser_provider}
           </span>
+          {coverage.browser_provider === 'local' && (
+            <p className="text-3xs text-fg-muted">{LOCAL_QA_RUN_LABEL}</p>
+          )}
         </div>
 
         {onRunNow ? (
@@ -223,7 +227,7 @@ function StoryCard({
           disabled={disabled}
           onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRunNow(coverage.story_id) }}
           aria-label={isQueued ? 'Run queued…' : `Run ${coverage.name} now`}
-          title={isQueued ? 'A run is already queued or in progress' : coverage.enabled ? 'Trigger manual run' : 'Story is disabled'}
+          title={isQueued ? 'A run is already queued or in progress' : coverage.browser_provider === 'local' ? LOCAL_QA_RUN_LABEL : coverage.enabled ? 'Trigger manual run' : 'Story is disabled'}
         >
           {!isQueued && <IconPlay className="h-3 w-3" />}
         </Btn>
@@ -572,12 +576,14 @@ function StoryDrawer({
           >
             {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
           </span>
-          {story.schedule_cron && (
+          {story.browser_provider === 'local' ? (
+            <span className="text-3xs text-fg-muted">{LOCAL_QA_RUN_LABEL}</span>
+          ) : story.schedule_cron ? (
             <span className="inline-flex items-center gap-1 text-3xs font-mono text-fg-faint">
               <IconClock className="h-2.5 w-2.5" />
               {story.schedule_cron}
             </span>
-          )}
+          ) : null}
           {!story.enabled && (
             <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-sm">
               disabled
@@ -637,7 +643,7 @@ function StoryDrawer({
       loading={isQueued}
       disabled={isQueued || !story.enabled}
       onClick={() => onRunNow(storyId)}
-      title={isQueued ? 'Run already queued' : story.enabled ? 'Trigger manual run' : 'Turn the story on first'}
+      title={isQueued ? 'Run already queued' : story.browser_provider === 'local' ? LOCAL_QA_RUN_LABEL : story.enabled ? 'Trigger manual run' : 'Turn the story on first'}
     >
       {!isQueued && <IconPlay className="h-3 w-3 mr-1" />}
       {isQueued ? 'Queued…' : 'Run now'}

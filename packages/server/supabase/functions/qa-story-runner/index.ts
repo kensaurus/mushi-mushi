@@ -17,9 +17,9 @@
 //      API to create a session and delegate to a pre-deployed script
 //      stored in the story's `script` column (Browserbase executes it
 //      on their cloud Chromium via the Stagehand / Playwright bridge).
-//   3. For `local` provider stories: marks status='skipped' with a
-//      reason that the local provider requires the CLI runner. The
-//      operator's local mushi-dev server picks these up via long-polling.
+//   3. For `local` provider stories: the scheduled tick ignores them.
+//      They run on the operator's machine via `mushi qa run`. A manual
+//      edge trigger still records one skipped row.
 //
 // Cron
 // ────
@@ -31,10 +31,9 @@
 //
 // Rate limits
 // ───────────
-// Per-project concurrency is capped at MAX_CONCURRENT_PER_PROJECT
-// to prevent a user with 100 stories from monopolising edge function
-// compute. Stories are queued as FIFO; skipped ones get a 'skipped'
-// run row with the reason.
+// Each tick starts at most QA_SCHEDULE_CAP due stories per project, oldest
+// last run first. Stories past the cap stay due (no skipped row, schedule
+// unchanged) and the next tick picks them up.
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -49,6 +48,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
+import { indexLastRuns, QA_SCHEDULE_CAP, selectScheduledStories } from '../_shared/qa-schedule.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -56,7 +56,6 @@ declare const Deno: {
 }
 
 const rlog = log.child('qa-story-runner')
-const MAX_CONCURRENT_PER_PROJECT = 3
 
 interface QaStory {
   id: string
@@ -87,32 +86,6 @@ interface RunResult {
   provider_session_url: string | null
   error_message: string | null
   evidence: Array<{ kind: string; data: string; mime: string; step_label?: string }>
-}
-
-// ── Cron matching ─────────────────────────────────────────────────────────
-function cronMatches(expression: string, now: Date): boolean {
-  // Minimal 5-field cron matcher (min, hour, dom, month, dow).
-  // We only need minute-level precision for story scheduling.
-  const fields = expression.trim().split(/\s+/)
-  if (fields.length < 5) return true // invalid → always run
-
-  function matchField(field: string, val: number): boolean {
-    if (field === '*') return true
-    if (field.startsWith('*/')) {
-      const step = parseInt(field.slice(2), 10)
-      return step > 0 && val % step === 0
-    }
-    return field.split(',').some((v) => parseInt(v, 10) === val)
-  }
-
-  const [min, hour, dom, mon, dow] = fields
-  return (
-    matchField(min, now.getUTCMinutes()) &&
-    matchField(hour, now.getUTCHours()) &&
-    matchField(dom, now.getUTCDate()) &&
-    matchField(mon, now.getUTCMonth() + 1) &&
-    matchField(dow, now.getUTCDay())
-  )
 }
 
 // ── Target URL resolution ─────────────────────────────────────────────────
@@ -708,6 +681,7 @@ Deno.serve(
         .from('qa_stories')
         .select('*')
         .eq('enabled', true)
+        .neq('browser_provider', 'local')
 
       if (storiesErr) {
         // Truncate the message before logging and persisting — a transient Supabase
@@ -741,30 +715,44 @@ Deno.serve(
         return new Response('Internal error', { status: 500 })
       }
 
-      const dueStories = (stories ?? []).filter((s: QaStory) =>
-        cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
-      )
-
-      rlog.info('stories due', { total: stories?.length ?? 0, due: dueStories.length })
-
-      // Rate-limit by project
-      const projectCounts: Record<string, number> = {}
-
-      for (const story of dueStories) {
-        const pid = story.project_id
-        projectCounts[pid] = (projectCounts[pid] ?? 0) + 1
-        if (projectCounts[pid] > MAX_CONCURRENT_PER_PROJECT) {
-          // Write a skipped run
-          await db.from('qa_story_runs').insert({
-            story_id: story.id,
-            project_id: pid,
-            status: 'skipped',
-            latency_ms: 0,
-            summary: `Rate limited: max ${MAX_CONCURRENT_PER_PROJECT} concurrent stories per project.`,
-            error_message: 'rate_limited',
+      const cloudStories = (stories ?? []) as QaStory[]
+      const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const lastRuns = new Map<string, string>()
+      // Small chunks so each story's latest non-skipped start fits in one page.
+      for (let i = 0; i < cloudStories.length; i += 20) {
+        const ids = cloudStories.slice(i, i + 20).map((s) => s.id)
+        const { data: recent, error: runsErr } = await db
+          .from('qa_story_runs')
+          .select('story_id, started_at')
+          .in('story_id', ids)
+          .gte('started_at', since)
+          .neq('status', 'skipped')
+          .order('started_at', { ascending: false })
+          .limit(1000)
+        if (runsErr) {
+          rlog.warn('failed to read recent qa_story_runs; stories look unrun', {
+            err: (runsErr.message ?? String(runsErr)).slice(0, 300),
           })
           continue
         }
+        for (const [storyId, at] of indexLastRuns(recent ?? [])) lastRuns.set(storyId, at)
+      }
+
+      const { run: toRun, deferred } = selectScheduledStories(
+        cloudStories.map((s) => ({ ...s, last_run_at: lastRuns.get(s.id) ?? null })),
+        now,
+        QA_SCHEDULE_CAP,
+      )
+
+      rlog.info('stories due', {
+        total: stories?.length ?? 0,
+        due: toRun.length + deferred.length,
+        starting: toRun.length,
+        deferred: deferred.length,
+      })
+
+      for (const story of toRun) {
+        const pid = story.project_id
 
         // Insert a 'running' row so the UI shows live status
         const { data: runRow, error: runInsertErr } = await db
@@ -1045,10 +1033,10 @@ Deno.serve(
       }
 
       await cronRun.finish({
-        rowsAffected: dueStories.length,
-        metadata: { total: stories?.length ?? 0, due: dueStories.length },
+        rowsAffected: toRun.length,
+        metadata: { total: stories?.length ?? 0, due: toRun.length, deferred: deferred.length },
       })
-      return new Response(JSON.stringify({ ok: true, due: dueStories.length }), {
+      return new Response(JSON.stringify({ ok: true, due: toRun.length, deferred: deferred.length }), {
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err) {
