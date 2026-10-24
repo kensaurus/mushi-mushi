@@ -12,9 +12,11 @@
  *          mirroring the affordance Linear uses for workflow state and GitHub
  *          uses for PR status (Open → Review → Merged).
  *
- *          Each bar is `role="img"` so its `aria-label` is allowed. A bare
- *          span is generic, and axe `aria-prohibited-attr` rejects
- *          `aria-label` on that role (reports table Status column).
+ *          The bar row is one `role="img"` named with the current step
+ *          (`Status: Fixing, step 3 of 4`). Segments are `aria-hidden` so a
+ *          screen reader hears that name once. A bare span is generic, and
+ *          axe `aria-prohibited-attr` rejects `aria-label` on that role
+ *          (reports table Status column). Tooltips still show each step.
  */
 
 import { Tooltip } from '../ui'
@@ -70,10 +72,17 @@ export function StatusStepper({
   size = 'compact',
 }: StatusStepperProps) {
   if (status === 'dismissed') {
+    // Full size already prints the word, so the bar stays decorative.
+    const showCaption = size === 'full'
     return (
       <div className={`flex items-center gap-1 ${className}`}>
-        <span role="img" className="h-1 w-full rounded-full bg-surface-overlay" aria-label="Dismissed" />
-        {size === 'full' && (
+        <span
+          role={showCaption ? undefined : 'img'}
+          aria-hidden={showCaption ? true : undefined}
+          aria-label={showCaption ? undefined : 'Dismissed'}
+          className="h-1 w-full rounded-full bg-surface-overlay"
+        />
+        {showCaption && (
           <span className="text-2xs text-fg-faint ml-1">Dismissed</span>
         )}
       </div>
@@ -91,7 +100,11 @@ export function StatusStepper({
   const tableSummary = `${activeLabel} · stage ${activeIdx + 1} of 4`
 
   const barRow = (
-    <div className="flex w-full max-w-full min-w-0 items-center gap-px">
+    <div
+      className="flex w-full max-w-full min-w-0 items-center gap-px"
+      role="img"
+      aria-label={`Status: ${activeLabel}, step ${activeIdx + 1} of 4`}
+    >
       {STATUS_STEPS.map((step, i) => {
         const completed = i < activeIdx
         const active = i === activeIdx
@@ -111,8 +124,7 @@ export function StatusStepper({
         return (
           <Tooltip key={step} portal content={tooltip} className="flex-1 min-w-0">
             <span
-              role="img"
-              aria-label={tooltipBase}
+              aria-hidden="true"
               className={`${barHeight} w-full rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
             />
           </Tooltip>
@@ -124,8 +136,6 @@ export function StatusStepper({
   return (
     <div
       className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
-      role="group"
-      aria-label={`Report progress: ${activeLabel} (${activeIdx + 1} of 4)`}
     >
       {size === 'compact' && (
         <span className="text-2xs text-fg-muted leading-none font-medium">
