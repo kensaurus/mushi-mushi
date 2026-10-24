@@ -9,6 +9,7 @@ import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { cronExpression, url } from '../../lib/validators'
+import { LOCAL_QA_RUN_LABEL } from '../../lib/qaProviderGuide'
 
 const SCHEDULE_PRESETS = [
   { label: 'Every hour', value: '0 * * * *' },
@@ -22,7 +23,7 @@ const SCHEDULE_PRESETS = [
 const PROVIDER_EXPLAINERS: Record<string, string> = {
   firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl API key under Settings → API Keys.',
   browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase API key under Settings → API Keys.',
-  local: 'Runs on your machine via the Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
+  local: `${LOCAL_QA_RUN_LABEL}.`,
 }
 
 export interface CreateStoryModalProps {
@@ -59,7 +60,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
         return
       }
     }
-    if (schedulePreset === 'custom') {
+    if (provider !== 'local' && schedulePreset === 'custom') {
       const cronErr = cronExpression({ optional: false })(customCron.trim())
       if (cronErr) {
         toastError(cronErr.message)
@@ -157,6 +158,9 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
           )}
         </div>
 
+        {provider === 'local' ? (
+          <p className="text-2xs text-fg-muted">{LOCAL_QA_RUN_LABEL}.</p>
+        ) : (
         <div>
           <SelectField
             label="Run schedule"
@@ -181,6 +185,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
             />
           )}
         </div>
+        )}
       </div>
     </Modal>
   )

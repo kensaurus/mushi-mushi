@@ -40,6 +40,7 @@ import {
   type Inventory,
 } from '../../_shared/inventory.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import { dbError } from '../shared.ts'
 import { GATE_IDS } from '../../_shared/gate-ids.ts'
 import { loadLatestGateRuns } from './recipe-compose.ts'
@@ -1685,26 +1686,30 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
 
       const runId = run.id
 
-      // Invoke story-mapper edge function fire-and-forget
+      // The crawl itself returns 202 and keeps working. This hop must too:
+      // a bare fetch held the response until the gateway 504'd at ~150s.
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      fetch(`${supabaseUrl}/functions/v1/story-mapper`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-        body: JSON.stringify({
-          run_id: runId,
-          project_id: projectId,
-          base_url: body.base_url,
-          max_pages: requestedPages,
-          provider: body.provider ?? 'firecrawl',
-          cursor_cloud_refine: body.cursor_cloud_refine ?? false,
-          triggered_by: userId,
+      runInBackground(
+        fetch(`${supabaseUrl}/functions/v1/story-mapper`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({
+            run_id: runId,
+            project_id: projectId,
+            base_url: body.base_url,
+            max_pages: requestedPages,
+            provider: body.provider ?? 'firecrawl',
+            cursor_cloud_refine: body.cursor_cloud_refine ?? false,
+            triggered_by: userId,
+          }),
+        }).then((res) => {
+          if (!res.ok) log.warn('story-mapper invoke returned non-2xx', { runId, status: res.status })
         }),
-      }).catch((err) => {
-        log.warn('story-mapper invoke failed (fire-and-forget)', { runId, error: String(err) })
-      })
+        'story-mapper-kickoff',
+      )
 
-      return c.json({ ok: true, data: { runId, status: 'pending' } })
+      return c.json({ ok: true, data: { runId, status: 'accepted' } }, 202)
     },
   )
 
