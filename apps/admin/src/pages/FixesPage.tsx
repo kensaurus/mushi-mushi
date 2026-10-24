@@ -1005,7 +1005,7 @@ export function FixesPage() {
       )}
 
       {/* The failed and in-flight banners already say what this would. */}
-      {!statsPending && fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
+      {fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && (
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
