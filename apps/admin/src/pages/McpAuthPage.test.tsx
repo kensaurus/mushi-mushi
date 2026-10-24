@@ -12,6 +12,8 @@ vi.mock('../lib/supabase', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a
 
 import { McpAuthPage } from './McpAuthPage'
 
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const TXN = '2000000a-0000-4000-8000-000000000000'
 const PROJECTS = [
   { id: 'p1', name: 'glot.it', can_manage: true, organization_role: 'owner' },
@@ -53,6 +55,11 @@ async function render() {
 const approveBody = () => JSON.parse(apiFetch.mock.calls.find(([p]) => p === '/v1/mcp-oauth/approve')![1].body as string)
 const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!
 const radio = (value: string) => host.querySelector<HTMLInputElement>(`input[type=radio][value="${value}"]`)!
+const occurrences = (needle: string) => (host.textContent ?? '').split(needle).length - 1
+
+function pendingTxn() {
+  return { ok: true, data: { status: 'pending', client_name: 'Claude Code', granted_key_scopes: ['mcp:read'], redirect_host: 'localhost:4567' } }
+}
 
 describe('McpAuthPage — a request that is no longer pending', () => {
   async function renderWith(txn: Record<string, unknown>) {
@@ -68,17 +75,27 @@ describe('McpAuthPage — a request that is no longer pending', () => {
     await renderWith({ status: 'approved', token_delivered: false })
     expect(host.textContent).toContain('has not picked it up')
     expect(host.textContent).not.toContain('already handled')
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('Your client has not picked this up')
+    expect(posture?.textContent).toContain('localhost')
   })
 
-  it('approved and collected: says the connection is complete', async () => {
+  it('approved and collected: says the connection is complete once, not again in a heading', async () => {
     await renderWith({ status: 'approved', token_delivered: true })
-    expect(host.textContent).toContain('Connection complete')
+    expect(occurrences('Connection complete')).toBe(1)
+    expect(host.querySelector('h1')).toBeNull()
+    expect(host.querySelector('[data-page-posture]')?.textContent).toContain('Return to your MCP client')
+    expect(host.textContent).toContain('close this tab')
+    expect(host.textContent).not.toContain('Approval did not go through')
   })
 })
 
 describe('McpAuthPage', () => {
   it('offers all, picked and one-project access, defaulting to all projects', async () => {
     await render()
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('Approve access')
+    expect(posture?.textContent).toContain('Choose which projects this client can reach')
     expect(host.textContent).toContain('All my projects')
     expect(host.textContent).toContain('Only the projects I pick')
     expect(host.textContent).toContain('One project')
@@ -98,6 +115,67 @@ describe('McpAuthPage', () => {
     await act(async () => { button('Approve connection').click() })
     expect(approveBody()).toEqual({ txn: TXN, access: 'account' })
     expect(assign).toHaveBeenCalled()
+    expect(host.querySelector('[data-page-posture]')?.textContent).toContain('Return to your MCP client')
+  })
+
+  it('a missing transaction says to restart from the MCP client', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/mcp-auth'] }, createElement(McpAuthPage)))
+    })
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    const posture = host.querySelector('[data-page-posture]')
+    expect(posture?.textContent).toContain('No authorization request')
+    expect(posture?.textContent).toContain('Restart the connection from your MCP client')
+    expect(host.querySelector('h1')).toBeNull()
+    expect(host.textContent).not.toContain("Can't complete this connection")
+    expect(host.textContent).not.toContain('Connection failed')
+  })
+
+  it('denying does not repeat the status banner in a heading', async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/mcp-oauth/request')) return pendingTxn()
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: PROJECTS } }
+      if (path === '/v1/mcp-oauth/deny') return { ok: false }
+      return { ok: false }
+    })
+    await render()
+    await act(async () => { button('Deny').click() })
+    expect(occurrences('Access denied')).toBe(1)
+    expect(host.querySelector('h1')).toBeNull()
+    expect(host.querySelector('[data-page-posture]')?.textContent).toContain('retry the login')
+    expect(host.textContent).toContain('The MCP client was not connected')
+  })
+
+  it('a failed approve says the approval did not go through', async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/mcp-oauth/request')) return pendingTxn()
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: PROJECTS } }
+      if (path === '/v1/mcp-oauth/approve') return { ok: false, error: { code: 'INTERNAL', message: 'Server exploded' } }
+      return { ok: false }
+    })
+    await render()
+    await act(async () => { button('Approve connection').click() })
+    expect(host.querySelector('[data-page-posture]')?.textContent).toContain('Approval did not go through')
+    expect(host.textContent).toContain('Server exploded')
+    expect(host.textContent).toContain("Couldn't approve connection")
+    expect(host.querySelector('h1')?.textContent).toBe('Connect an MCP client')
+  })
+
+  it('a blocked return link is not shown as a failed approval', async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/v1/mcp-oauth/request')) return pendingTxn()
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: PROJECTS } }
+      if (path === '/v1/mcp-oauth/approve') return { ok: true, data: { redirect_to: 'javascript:alert(1)' } }
+      return { ok: false }
+    })
+    await render()
+    await act(async () => { button('Approve connection').click() })
+    expect(assign).not.toHaveBeenCalled()
+    const posture = host.querySelector('[data-page-posture]')?.textContent ?? ''
+    expect(posture).toContain('Could not open the return link')
+    expect(posture).not.toContain('Approval did not go through')
+    expect(host.textContent).not.toContain("Couldn't approve connection")
+    expect(host.querySelector('h1')).toBeNull()
   })
 
   it('picked projects need at least one tick and post their ids', async () => {
