@@ -7,8 +7,15 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **49** | `--max-issues 50` |
-| default | `pnpm exec knip --reporter json` | **35** | `--max-issues 35 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **45** | `--max-issues 45` |
+| default | `pnpm exec knip --reporter json` | **31** | `--max-issues 31 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-10-23: 45 production / 31 default** (44 and 30 fail).
+> `apps/admin` production exports fell 6 → 3. `bottleneckChipLabel` had no caller
+> after the header chips left and was deleted with its test. `groupTitle` and
+> `fixPrompt` still run inside `KnownHolesCard` and stay exported for tests,
+> tagged `@internal`. The other admin files and exports stay on the 2026-10-16
+> keep list. Ceilings lowered 50 → 45 and 35 → 31.
 
 > **Re-measured 2026-10-20 on `152b4428`: 49 production / 35 default** (default ceiling 35; 34 fails).
 > The production ceiling stays at 50 here. Master was already at 36 default before this change.
@@ -143,7 +150,7 @@ Never raise them.
 | workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | . | 1 |  | 1 |  |  |  |  | 2 |
-| apps/admin | 11 |  |  |  | 4 | 1 | 4 | 20 |
+| apps/admin | 11 |  |  |  | 3 | 1 |  | 15 |
 | apps/docs |  |  |  |  |  |  | 1 | 1 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  |  | 1 |
@@ -156,7 +163,7 @@ Never raise them.
 | packages/react-native | 1 |  |  |  |  |  |  | 1 |
 | packages/server | 3 | 1 |  |  |  |  |  | 4 |
 | packages/verify | 1 |  |  |  |  |  |  | 1 |
-| **total** | **34** | **3** | **1** | **1** | **5** | **1** | **5** | **50** |
+| **total** | **34** | **3** | **1** | **1** | **4** | **1** | **1** | **45** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -165,7 +172,7 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| apps/admin | 7 |  |  |  |  | 5 | 1 | 4 | 17 |
+| apps/admin | 7 |  |  |  |  | 5 | 1 |  | 13 |
 | apps/docs |  |  | 1 |  |  |  |  | 1 | 2 |
 | examples/e2e-dogfood |  |  | 2 |  |  |  |  |  | 2 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
@@ -178,7 +185,7 @@ react-native 4, wasm-classifier 1).
 | packages/server |  |  | 1 |  |  |  |  |  | 1 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/web |  |  |  | 1 |  |  |  |  | 1 |
-| **total** | **13** | **2** | **6** | **2** |  | **6** | **1** | **5** | **35** |
+| **total** | **13** | **2** | **6** | **2** |  | **6** | **1** | **1** | **31** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
