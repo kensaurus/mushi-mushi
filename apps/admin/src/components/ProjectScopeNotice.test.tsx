@@ -75,7 +75,7 @@ describe('ProjectScopeNotice', () => {
 
   it('renders at first paint while setup loads, so the page below does not move', async () => {
     setupState.loaded = false
-    await render(`/reports?project=${PROJECT_B}&apps=all`)
+    await render(`/fixes?project=${PROJECT_B}&apps=all`)
     expect(notice()!.textContent).toContain('This page shows one app at a time:')
     expect(notice()!.textContent).not.toContain('yen-yen')
   })
