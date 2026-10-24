@@ -14,6 +14,8 @@ export interface ReportRow {
   /** Where the report came from: widget, sentry, library_modernizer, store_review, … */
   source?: string | null
   project_id: string
+  /** Present on the All apps list so the row can name its app. */
+  project_name?: string | null
   description: string
   category: string
   severity: string | null
