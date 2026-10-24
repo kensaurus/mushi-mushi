@@ -211,15 +211,31 @@ describe('GET /v1/admin/privacy-status', () => {
     delete envStore.OPENAI_API_KEY
     seed([key('own', { project_id: P })])
     const reads = trackProjectReads()
+    // The pool queries: each byok_keys `.in('provider_slug', …)` filter.
+    const poolQueries: unknown[][] = []
+    const tracked = db.from
+    db.from = (name: string) => {
+      const query = tracked(name)
+      if (name !== 'byok_keys') return query
+      const realIn = query.in.bind(query)
+      query.in = ((column: string, values: unknown[]) => {
+        if (column === 'provider_slug') poolQueries.push([...values])
+        return realIn(column, values)
+      }) as typeof query.in
+      return query
+    }
     const res = await privacy(OWNER)
     expect(res.status).toBe(200)
     expect(res.json.data?.byok_configured).toBe(true)
-    // One projects read per provider. Sequential lookups never overlap, so the
-    // peak stays at 1 (the access check finishes before either lookup starts).
-    expect(reads.max()).toBeGreaterThanOrEqual(2)
+    // resolveLlmKeySources answers both providers from one key-owner read and
+    // one pool query for both slugs (plus a cached column probe), so no two
+    // projects reads overlap.
+    expect(reads.max()).toBe(1)
+    expect(poolQueries).toHaveLength(1)
+    expect([...poolQueries[0]!].sort()).toEqual(['anthropic', 'openai', 'openrouter'])
   })
 
-  it('degrades to the platform chip when key resolution throws', async () => {
+  it('reports unknown, not the platform key, when key resolution throws', async () => {
     delete envStore.ANTHROPIC_API_KEY
     seed([key('own', { project_id: P })])
     const realFrom = db.from.bind(db)
@@ -230,8 +246,9 @@ describe('GET /v1/admin/privacy-status', () => {
     const res = await privacy(OWNER)
     expect(res.status).toBe(200)
     expect(res.json.ok).toBe(true)
-    expect(res.json.data?.byok_configured).toBe(false)
-    expect(res.json.data?.llm_provider).toBe('platform')
+    // Claiming "platform" would be a guess about where the data goes.
+    expect(res.json.data?.byok_configured).toBeNull()
+    expect(res.json.data?.llm_provider).toBe('unknown')
     expect(res.json.data?.last_audit_at).toBe('2026-10-01T00:00:00.000Z')
   })
 
