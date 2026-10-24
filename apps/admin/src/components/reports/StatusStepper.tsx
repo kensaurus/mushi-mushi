@@ -100,7 +100,7 @@ export function StatusStepper({
   const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
   const isTable = size === 'table'
   const barHeight = size === 'full' ? 'h-2.5' : isTable ? 'h-2' : 'h-1.5'
-  const tableSummary = `${activeLabel} · stage ${activeIdx + 1} of 4`
+  const tableSummary = `${activeLabel} · step ${activeIdx + 1} of 4`
 
   const barRow = (
     <div
