@@ -193,7 +193,14 @@ function NodePanel({
         <StateChip node={node} />
         <span className="font-mono">{node.detail}</span>
       </div>
-      <p className="max-h-64 overflow-y-auto whitespace-pre-line rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 text-xs leading-relaxed text-fg-secondary">
+      {/* Pre-formatted reasoning scrolls inside max-h-64 and has no controls
+          of its own (axe scrollable-region-focusable). */}
+      <p
+        tabIndex={0}
+        role="region"
+        aria-label="Why Mushi believes this"
+        className="max-h-64 overflow-y-auto whitespace-pre-line rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 text-xs leading-relaxed text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      >
         {node.why}
       </p>
       {linkList('Based on', from)}

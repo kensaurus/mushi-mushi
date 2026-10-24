@@ -97,7 +97,7 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="mushi-connect-code-block">{text}</pre>
+      <pre tabIndex={0} aria-label={label ? `${label} command` : 'Command'} className="mushi-connect-code-block">{text}</pre>
     </div>
   )
 }

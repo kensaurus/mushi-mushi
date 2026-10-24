@@ -96,6 +96,15 @@ describe('ReportDiagnosisGraph', () => {
     expect(container.querySelector('aside')?.textContent).toContain('from stage2_analysis.rootCause')
   })
 
+  it('puts the pre-formatted reasoning in the tab order', () => {
+    render()
+    const why = container.querySelector('[aria-label="Why Mushi believes this"]')
+    expect(why?.tagName).toBe('P')
+    expect(why?.getAttribute('tabindex')).toBe('0')
+    expect(why?.className).toContain('overflow-y-auto')
+    expect(why?.className).toContain('whitespace-pre-line')
+  })
+
   it('a path step, a node and a "Based on" link each move the panel', () => {
     render()
     const steps = Array.from(container.querySelectorAll('ol[aria-label="Path to the diagnosis"] button'))

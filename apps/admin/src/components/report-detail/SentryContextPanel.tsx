@@ -339,7 +339,11 @@ export function SentryContextPanel({
                       <span className="opacity-60 group-open:opacity-100">›</span>
                       data
                     </summary>
-                    <pre className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words">
+                    <pre
+                      tabIndex={0}
+                      aria-label="Breadcrumb data"
+                      className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+                    >
                       {safeStringify(c.data)}
                     </pre>
                   </details>

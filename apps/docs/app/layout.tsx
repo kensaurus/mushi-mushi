@@ -4,6 +4,7 @@ import { GitHubIcon } from 'nextra/icons'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
+import { KeyboardScrollRegions } from '../components/KeyboardScrollRegions'
 import { MushiSiteAnalytics } from '../components/MushiSiteAnalytics'
 import { SiteFooter } from '../components/SiteFooter'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
@@ -152,6 +153,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         </Layout>
         {/* Mushi measuring its own funnel with its own SDK — client-only,
             consent-gated, no-op unless NEXT_PUBLIC_MUSHI_SELF_* are set. */}
+        <KeyboardScrollRegions />
         <MushiSiteAnalytics />
       </body>
     </html>

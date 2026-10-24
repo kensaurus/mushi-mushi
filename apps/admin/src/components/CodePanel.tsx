@@ -40,8 +40,12 @@ export function CodePanel({ label, language, code, onCopy, copied, maxHeight }: 
           className="shrink-0 text-code-surface-fg-muted hover:text-code-surface-fg hover:bg-white/10 focus-visible:ring-code-surface-fg-muted/40"
         />
       </div>
+      {/* Horizontal (and, with maxHeight, vertical) scroll with no controls
+          inside the pre — keyboard users need this tab stop. */}
       <pre
-        className={`mushi-code-body px-3 py-2.5 font-mono overflow-x-auto whitespace-pre-wrap ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
+        tabIndex={0}
+        aria-label={label}
+        className={`mushi-code-body px-3 py-2.5 font-mono overflow-x-auto whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
       >
         <code>
           {tokens.map((token, index) => (
