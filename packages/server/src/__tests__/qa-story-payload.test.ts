@@ -15,8 +15,7 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({
 }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
-  apiKeyAuth: async (_c: unknown, next: () => Promise<void>) => next(),
-  requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }))
 
 type Mod = typeof import('../../supabase/functions/api/routes/qa-coverage.ts')
