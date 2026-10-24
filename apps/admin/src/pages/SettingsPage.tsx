@@ -77,6 +77,7 @@ import {
   sdkDetail,
   sdkTooltip,
 } from '../lib/statTooltips/settings';
+import { slackStatLabel } from '../components/settings/slackAlertStatus';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
@@ -314,7 +315,7 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel />
+            <GeneralPanel slackCanPost={stats.slackCanPost} />
             <SpendLimitsPanel />
             <AgentPrReviewCard projectId={activeProjectId} />
             <VerifiedMergeCard projectId={activeProjectId} />
@@ -373,9 +374,7 @@ function SettingsPageBody({
               <StatCard
                 label={copy?.statLabels?.routing ?? 'Alerts'}
                 value={
-                  [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
-                    .filter(Boolean)
-                    .join(' · ') || 'None'
+                  [slackStatLabel(stats), stats.sentryConfigured && 'Sentry'].filter(Boolean).join(' · ') || 'None'
                 }
                 tooltip={routingTooltip(stats)}
                 detail={routingDetail()}
