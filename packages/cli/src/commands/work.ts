@@ -433,6 +433,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
   const wt = join(root, detail.id.slice(0, 8))
   if (existsSync(wt)) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   await git(o.repoDir, ['worktree', 'add', '-B', branch, wt, `origin/${base}`])
+  await installDeps(wt, o.log)
   let keep = o.keep ?? false
   let fixId: string | null = null
   try {
@@ -560,6 +561,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       await done(null, `the branch moved to ${head.slice(0, 7)} before the agent started`)
       return { fixId: f.fixId, outcome: `skipped: ${claim.branch} is at ${head.slice(0, 7)}, not the reviewed ${claim.headSha.slice(0, 7)}` }
     }
+    await installDeps(wt, o.log)
     const empty = join(tmpdir(), `mushi-work-${process.pid}`)
     mkdirSync(empty, { recursive: true })
     o.log(`  agent: cursor-agent on ${claim.branch}, round ${claim.round}, ${claim.findingsSent} finding(s)${claim.findingsDropped ? ` (${claim.findingsDropped} left out by the safety screen)` : ''}`)
@@ -590,6 +592,29 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
   } finally {
     if (!keep) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   }
+}
+
+/**
+ * @internal Exported for tests only. The install command for the worktree's
+ * lockfile, or null when it has none. Without dependencies the agent cannot
+ * run the project's tests, and commit hooks that import a package fail
+ * (`check-config-docs.mjs` needs `jiti`: a commit failed with
+ * ERR_MODULE_NOT_FOUND on 2026-10-24).
+ */
+export function installCommand(has: (file: string) => boolean): [string, string[]] | null {
+  if (has('pnpm-lock.yaml')) return ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+  if (has('package-lock.json')) return ['npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']]
+  if (has('yarn.lock')) return ['yarn', ['install', '--frozen-lockfile']]
+  return null
+}
+
+/** Install the worktree's dependencies before the agent runs; a failed install is logged and the run goes on. */
+async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
+  const cmd = installCommand((f) => existsSync(join(wt, f)))
+  if (!cmd) return
+  log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
+  const r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) log(`  deps: install failed, the agent works without them (${failureTail(r, 300)})`)
 }
 
 async function preflight(repoDir: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   inLocalCooldown,
+  installCommand,
   failureTail,
   agentEnv,
   branchNameFor,
@@ -189,5 +190,14 @@ describe('inLocalCooldown', () => {
     expect(inLocalCooldown([{ ...failed, created_at: '2026-10-16T08:00:00Z' }], now)).toBe(false)
     expect(inLocalCooldown([{ ...failed, agent: 'cursor_cloud' }], now)).toBe(false)
     expect(inLocalCooldown([{ ...failed, pr_url: 'https://github.com/o/r/pull/1' }], now)).toBe(false)
+  })
+})
+
+describe('installCommand', () => {
+  it('picks the lockfile the repo has, pnpm first', () => {
+    expect(installCommand((f) => f === 'pnpm-lock.yaml' || f === 'package-lock.json')).toEqual(['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']])
+    expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
+    expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
+    expect(installCommand(() => false)).toBeNull()
   })
 })
