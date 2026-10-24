@@ -6925,11 +6925,27 @@ For each report it:
    train as a cloud agent's. Without changes: records the agent's
    `Mushi verdict:` on the attempt.
 
+When Opus says "fix first" on one of these pull requests, run
+`mushi work --followups`. Mushi checks the round (the reviewed commit is still
+the PR's head, at most 2 rounds per PR), sends only the findings that pass its
+safety screen, and the agent fixes them in a worktree of the PR's branch.
+`mushi work` commits and pushes to that branch, and Opus reviews the new
+commit. Cloud-agent pull requests get the same follow-up from Mushi itself.
+
+```bash
+# Which pull requests are waiting for a follow-up
+mushi work --repo-dir ~/code/my-app --followups --dry-run
+
+# Run them
+mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
+```
+
 | Flag | Description |
 | --- | --- |
 | `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
 | `--max ` | Reports per run (default 3, at most 10) |
 | `--report ` | Work on this report only |
+| `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
 | `--model ` | Model for the agent (`cursor-agent --list-models`) |
 | `--keep` | Keep the worktree afterwards |
 | `--dry-run` | Show the plan; change nothing |
