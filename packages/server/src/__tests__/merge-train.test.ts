@@ -79,7 +79,7 @@ describe('the train PR', () => {
       skipped: 2,
       now: new Date('2026-10-24T01:30:00Z'),
     })
-    expect(pr.title).toBe('release: 2 fixes (2026-10-24)')
+    expect(pr.title).toBe('fix: release train, 2 fixes (2026-10-24)')
     expect(pr.body).toContain('- #5 fix: null cart')
     expect(pr.body).not.toMatch(/\[release|\[skip/)
     expect(pr.body).toContain('2 more approved pull requests wait for the next train')

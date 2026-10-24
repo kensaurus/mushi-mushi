@@ -105,7 +105,7 @@ test('a due train merges every approved PR into one branch and opens one PR; a c
   const d = deps({ mergeInto: (_t, _r, _b, head) => (d.calls.push(`merge ${head}`), Promise.resolve(head === 'h2' ? { outcome: 'conflict' } : { outcome: 'merged', sha: `t-${head}` })) })
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'started')
-  assertEquals(d.calls, ['branch mushi/train/20261024-0600', 'merge h1', 'merge h2', 'merge h3', 'open release: 2 fixes (2026-10-24)'])
+  assertEquals(d.calls, ['branch mushi/train/20261024-0600', 'merge h1', 'merge h2', 'merge h3', 'open fix: release train, 2 fixes (2026-10-24)'])
   const q = tables.fix_merge_queue
   assertEquals(q.map((r) => [r.id, r.state, r.train_id != null]), [['a', 'waiting', true], ['b', 'queued', false], ['c', 'waiting', true]])
   assertEquals(tables.release_trains.length, 1)
@@ -152,7 +152,7 @@ test('a red train is bisected: its first half rides again, the rest waits', asyn
   const { db, tables } = setup(rows, { release_trains: [activeTrain([1, 2, 3])] })
   const d = deps({
     pull: (_t, _r, n) => Promise.resolve(n === 900 ? pull(900, { headSha: 'th' }) : pull(n)),
-    checks: () => Promise.resolve({ pending: 0, failed: ['gate'] }),
+    checks: (_t, _r, sha) => Promise.resolve({ pending: 0, failed: sha === 'th' ? ['gate'] : [] }),
   })
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'started')
@@ -169,7 +169,7 @@ test('a member that fails alone is held with the failing check named', async () 
   const { db, tables } = setup(rows, { release_trains: [activeTrain([1])] })
   const d = deps({
     pull: (_t, _r, n) => Promise.resolve(n === 900 ? pull(900, { headSha: 'th' }) : pull(n)),
-    checks: () => Promise.resolve({ pending: 0, failed: ['Lint & Build'] }),
+    checks: (_t, _r, sha) => Promise.resolve({ pending: 0, failed: sha === 'th' ? ['Lint & Build'] : [] }),
   })
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'held')
@@ -236,5 +236,19 @@ test('past the conflict-agent cap a conflicting PR stays out of trains and is no
   assertEquals(tables.fix_merge_queue[0].state, 'blocked')
   assertEquals(d.calls, [])
   assertEquals(out === 'started', false)
+})
+
+test('a train whose failing checks also fail on main is not bisected: nobody is held', async () => {
+  const rows = [1, 2].map((n) => qrow(String.fromCharCode(96 + n), n, { state: 'waiting', train_id: 'tr1' }))
+  const { db, tables } = setup(rows, { release_trains: [activeTrain([1, 2])] })
+  const d = deps({
+    pull: (_t, _r, n) => Promise.resolve(n === 900 ? pull(900, { headSha: 'th' }) : pull(n)),
+    branchSha: () => Promise.resolve('mainhead'),
+    checks: (_t, _r, sha) => Promise.resolve({ pending: 0, failed: sha === 'mainhead' ? ['Compare SDK to npm latest'] : ['Compare SDK to npm latest'] }),
+  })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'base_red')
+  assertEquals(tables.fix_merge_queue.map((r) => r.state), ['queued', 'queued'])
+  assertEquals(tables.release_trains.length, 1)
 })
 
