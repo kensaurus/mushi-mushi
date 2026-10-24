@@ -6917,7 +6917,9 @@ For each report it:
    findings), as data the agent must not take as instructions.
 2. Creates a worktree from `origin/` on
    `bugfix/MUSHI--local-cursor` and runs `cursor-agent -p` in it
-   (30 minutes at most). The agent's environment has no credentials, and
+   (30 minutes at most), after installing the worktree's dependencies from
+   its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
+   commit hooks work. The agent's environment has no credentials, and
    version control inside it cannot reach the remote.
 3. With changes: commits, pushes, opens a draft PR with `Mushi report: `,
    registers the fix attempt (like the MCP tool `submit_fix_result`) and

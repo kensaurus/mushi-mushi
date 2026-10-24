@@ -204,7 +204,8 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
   if (attemptsErr) throw new Error(`spend-down: fix attempts read failed: ${attemptsErr.message}`)
   const attemptRows = (attempts ?? []) as Array<{ id: string; report_id: string; failure_category: string | null; error: string | null; created_at: string }>
   const settled = reportsWithNoRetryVerdict(attemptRows)
-  // A dispatch Cursor refused for the account's usage limit ran no agent: it does not start the cooldown.
+  // A dispatch the pinned key could not run (usage limit, or the key was
+  // already unusable) started no agent: the next tick may send it again.
   const keyLimited = reportsToRetryAfterKeyLimit(attemptRows, now)
   // A report still `fixing` is picked only when its PR was held (with what the
   // held attempt did in the new prompt); an open PR that waits to merge is not.

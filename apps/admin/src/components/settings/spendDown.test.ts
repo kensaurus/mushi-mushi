@@ -41,6 +41,12 @@ describe('spendDownLine', () => {
 
   it('warns when the key is on but no app uses it', () => {
     expect(spendDownLine({ ...base, projects: [] }).tone).toBe('warn')
+    expect(spendDownLine({ ...base, projects: [] }).text).toContain('no app uses this key')
+  })
+
+  it('names the org key that pays first instead of the generic idle line', () => {
+    const idleNote = 'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed'
+    expect(spendDownLine({ ...base, projects: [], dispatchedToday: 0, idleNote })).toEqual({ text: idleNote, tone: 'warn' })
   })
 
   it('counts the apps of a shared key you cannot open, without naming them', () => {

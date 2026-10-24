@@ -18,12 +18,21 @@ export function ProjectScopeNotice() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   if (mode !== 'all' || allAppsSupportFor(pathname) !== 'single') return null
-  const name = setup.activeProject?.project_name
-  if (!name) return null
+  // Whether the line shows is known from the URL and the path, so it renders
+  // at first paint; the app's name fills in when setup loads. Returning null
+  // until then inserted the line late and pushed the page down 28px
+  // (layout shift on /reports and /fixes, mushi-ux audit 2026-10-24).
+  const name = setup.activeProject?.project_name ?? null
   return (
     <p className="mb-3 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted" role="status" data-testid="project-scope-notice">
       <span>
-        This page shows one app at a time: <span className="font-medium text-fg-secondary">{name}</span>.
+        This page shows one app at a time:{' '}
+        {name ? (
+          <span className="font-medium text-fg-secondary">{name}</span>
+        ) : (
+          <span aria-hidden="true" className="inline-block h-3 w-20 rounded-xs bg-surface-overlay/60 align-middle motion-safe:animate-pulse" />
+        )}
+        .
       </span>
       <button
         type="button"

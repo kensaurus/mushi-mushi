@@ -11,7 +11,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReportDetail } from './types'
 import { ReportDiagnosisGraph } from './ReportDiagnosisGraph'
 
@@ -94,6 +94,56 @@ describe('ReportDiagnosisGraph', () => {
     expect(panelTitle()).toContain('Root cause: The coupon reducer returns undefined')
     expect(container.querySelector('[data-node-id="cause"]')?.getAttribute('aria-pressed')).toBe('true')
     expect(container.querySelector('aside')?.textContent).toContain('from stage2_analysis.rootCause')
+  })
+
+  it('keeps short reasoning a paragraph and out of the tab order', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(40)
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(40)
+    const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(80)
+    const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(80)
+    try {
+      render()
+      const why = container.querySelector('aside p.whitespace-pre-line')
+      expect(why?.tagName).toBe('P')
+      expect(why?.hasAttribute('tabindex')).toBe(false)
+      expect(why?.hasAttribute('role')).toBe(false)
+      expect(why?.textContent).toContain('coupon reducer')
+      const box = why?.parentElement
+      expect(box?.tagName).toBe('DIV')
+      expect(box?.hasAttribute('tabindex')).toBe(false)
+      expect(box?.hasAttribute('role')).toBe(false)
+      expect(box?.className).toContain('max-h-64')
+      expect(box?.className).toContain('overflow-y-auto')
+    } finally {
+      scrollHeight.mockRestore()
+      clientHeight.mockRestore()
+      scrollWidth.mockRestore()
+      clientWidth.mockRestore()
+    }
+  })
+
+  it('tabs to the reasoning box only when the text overflows', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(800)
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100)
+    const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(80)
+    const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(80)
+    try {
+      render()
+      const why = container.querySelector('aside p.whitespace-pre-line')
+      expect(why?.tagName).toBe('P')
+      expect(why?.hasAttribute('tabindex')).toBe(false)
+      expect(why?.hasAttribute('role')).toBe(false)
+      const box = why?.parentElement
+      expect(box?.tagName).toBe('DIV')
+      expect(box?.getAttribute('tabindex')).toBe('0')
+      expect(box?.getAttribute('role')).toBe('region')
+      expect(box?.getAttribute('aria-label')).toBe('Why Mushi believes this')
+    } finally {
+      scrollHeight.mockRestore()
+      clientHeight.mockRestore()
+      scrollWidth.mockRestore()
+      clientWidth.mockRestore()
+    }
   })
 
   it('a path step, a node and a "Based on" link each move the panel', () => {

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  countFixesForArea,
   credentialFailureProvider,
   deriveReportFixTruth,
   deriveReportFixTruths,
@@ -189,6 +190,25 @@ describe('reportTitle', () => {
     expect(reportTitle({ summary: '  Audio breaks ', description: 'x' })).toBe('Audio breaks')
     expect(reportTitle({ summary: null, description: 'a'.repeat(90) })).toBe(`${'a'.repeat(80)}…`)
     expect(reportTitle(null)).toBeNull()
+  })
+})
+
+describe('countFixesForArea', () => {
+  it('counts open and merged PRs in that area, not failed attempts or other areas', () => {
+    const failed = Array.from({ length: 95 }, (_, i) => ({
+      component: 'Checkout',
+      state: 'failed' as const,
+      mergedPrNumber: null,
+      id: i,
+    }))
+    const counts = countFixesForArea('Checkout', [
+      ...failed,
+      { component: ' Checkout ', state: 'pr_open', mergedPrNumber: null },
+      { component: 'Checkout', state: 'resolved', mergedPrNumber: 8 },
+      { component: 'Billing', state: 'pr_open', mergedPrNumber: null },
+      { component: 'Checkout', state: 'in_flight', mergedPrNumber: null },
+    ])
+    expect(counts).toEqual({ drafted: 1, merged: 1 })
   })
 })
 

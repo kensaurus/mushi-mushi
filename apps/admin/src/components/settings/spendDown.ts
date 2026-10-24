@@ -61,6 +61,12 @@ export interface SpendDownKeyStatus {
   projectsNote?: string | null
   /** Apps this key pays for that you cannot open (a shared key). */
   otherApps?: number
+  /**
+   * Why this key pays for no app: another key of the same scope is the
+   * resolver's first pick. Absent when the idle reason is an own key,
+   * auto-fix off, or no repo.
+   */
+  idleNote?: string | null
   stopLossNote?: string | null
   scoreboard?: { days: number; totals: SpendDownCounts } | null
   scoreboardNote?: string | null
@@ -103,6 +109,7 @@ export function spendDownLine(k: SpendDownKeyStatus): { text: string; tone: 'mut
     case 'active': {
       const others = k.otherApps ?? 0
       if (k.projects.length === 0 && others === 0) {
+        if (k.idleNote) return { text: k.idleNote, tone: 'warn' }
         return {
           text: 'On, but no app uses this key: each app has its own Cursor key, auto-fix is off, or no repo is linked.',
           tone: 'warn',
