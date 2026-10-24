@@ -66,6 +66,17 @@ describe('cloud-agent PRs reach the merge and CI paths', () => {
     expect(ciSync).toContain('const sha = headSha ?? attempt.commit_sha')
     expect(ciSync).toContain('fetchLatestCheckRun(token, ref, sha)')
   })
+
+  it('upgrade CI sync reads the pull request head before the check runs', () => {
+    const sync = readFileSync(resolve(FUNCTIONS, 'sdk-release-sync/index.ts'), 'utf8')
+    const route = readFileSync(resolve(FUNCTIONS, 'api/routes/sdk-upgrade.ts'), 'utf8')
+    for (const src of [sync, route]) {
+      const head = src.indexOf('pr?.headSha')
+      const checks = src.indexOf('fetchLatestCheckRun(')
+      expect(head).toBeGreaterThan(-1)
+      expect(checks).toBeGreaterThan(head)
+    }
+  })
 })
 
 describe('installationIdForAttempt', () => {
