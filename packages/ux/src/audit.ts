@@ -26,11 +26,13 @@ import { discover } from './discover.js'
 import type { AllowRule } from './guard.js'
 import { contentShare, cropTop } from './image.js'
 import { CLS_GOOD, isFrameworkNoise } from './probes.js'
+import { trimTrailingSlashes } from './routes.js'
 import type { SyncConfig } from './sync.js'
 import { VIEWPORTS, type ProbeResult, type Surface, type Viewport } from './types.js'
 
+/** @internal Exported for tests only. */
 export type FindingKind = 'axe' | 'overflow' | 'console' | 'cls' | 'visual'
-export type FindingSeverity = 'high' | 'medium' | 'low'
+type FindingSeverity = 'high' | 'medium' | 'low'
 export type ReviewVia = 'claude-code' | 'anthropic-api' | 'none'
 
 export interface AuditFinding {
@@ -58,15 +60,16 @@ const MAX_EVIDENCE = 6
 /** Screenshot height sent to a model review: past it, a full page is mostly the same rows. */
 const REVIEW_MAX_HEIGHT = 2400
 export const AUDIT_FILE_CAP = 15
-export const AUDIT_DEDUPE_DAYS = 14
+const AUDIT_DEDUPE_DAYS = 14
 
-/** Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
+/** @internal Exported for tests only. Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
 export function pagePath(path: string): string {
   const q = path.search(/[?#]/)
   return q < 0 ? path : path.slice(0, q)
 }
 
 /**
+ * @internal Exported for tests only.
  * Pure: a screen's name without the live counts a page title carries
  * ("Bugs · solo-boss-cloud · 95 reports" → "Bugs"), keeping the clicks that
  * reached it ("Bugs › Fix →"), so a report title stays the same across runs.
@@ -78,6 +81,7 @@ export function screenName(label: string): string {
 }
 
 /**
+ * @internal Exported for tests only.
  * Pure: the stable id of one finding on one page. The same rule on the same
  * page is one finding, whichever tab or dialog it was seen in and whatever
  * the query string was.
@@ -97,6 +101,7 @@ function finding(screen: ScreenRef, viewport: Viewport['name'], f: Omit<AuditFin
 }
 
 /**
+ * @internal Exported for tests only.
  * Pure: the measured findings of one screen at one viewport. Only what a
  * person would notice: serious or critical axe rules (not "moderate"), a page
  * that scrolls sideways, errors in the console, and layout shift past the
@@ -167,6 +172,7 @@ export function findingsFromProbes(screen: ScreenRef, viewport: Viewport, probes
 const BLANK_SHARE = 0.002
 
 /**
+ * @internal Exported for tests only.
  * Pure: a screen that settled with (almost) nothing drawn. On 2026-10-24 the
  * console rendered blank at /mushi-mushi/admin (no trailing slash: its router
  * basename did not match), with no error a probe could see.
@@ -186,7 +192,7 @@ export function blankScreenFinding(screen: ScreenRef, viewport: Viewport, share:
   ]
 }
 
-/** Pure: one finding per fingerprint, its viewports and evidence combined, the worst severity kept. */
+/** @internal Exported for tests only. Pure: one finding per fingerprint, its viewports and evidence combined, the worst severity kept. */
 export function mergeFindings(list: readonly AuditFinding[]): AuditFinding[] {
   const by = new Map<string, AuditFinding>()
   for (const f of list) {
@@ -211,6 +217,7 @@ function firstSelector(f: AuditFinding): string | null {
 }
 
 /**
+ * @internal Exported for tests only.
  * Pure: the same axe rule failing on the same element on several pages is one
  * cause (a shared token or component), so it becomes one finding naming every
  * page instead of one report a page. On 2026-10-24 `.text-danger` failed
@@ -251,7 +258,7 @@ export function groupSharedCauses(list: readonly AuditFinding[]): AuditFinding[]
   return out.sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || a.path.localeCompare(b.path))
 }
 
-/** The marker a filed report carries, found later by the reports search. */
+/** @internal Exported for tests only. The marker a filed report carries, found later by the reports search. */
 export function auditMarker(fingerprint: string): string {
   return `mushi-ux-audit:${fingerprint}`
 }
@@ -263,7 +270,7 @@ export interface AuditReportBody {
   component: string
 }
 
-/** Pure: the report a finding files (POST /v1/admin/projects/:id/reports, the same body as `mushi reports file`). */
+/** @internal Exported for tests only. Pure: the report a finding files (POST /v1/admin/projects/:id/reports, the same body as `mushi reports file`). */
 export function reportBodyFor(f: AuditFinding, baseUrl: string): AuditReportBody {
   const url = new URL(f.path, baseUrl).toString()
   const title = `${f.screen}: ${f.summary}`.slice(0, 200)
@@ -284,6 +291,7 @@ export function reportBodyFor(f: AuditFinding, baseUrl: string): AuditReportBody
   return { title, description: description.slice(0, 10_000), severity: f.severity, component: new URL(url).pathname.slice(0, 200) }
 }
 
+/** @internal Exported for tests only. */
 export type FiledLedger = Record<string, string>
 
 /** Where `--file` remembers what it filed: per machine, never in a repo. */
@@ -291,7 +299,7 @@ export function auditHome(): string {
   return join(process.env.LOCALAPPDATA ?? join(homedir(), '.cache'), 'mushi', 'ux-audits')
 }
 
-export function loadLedger(path: string): FiledLedger {
+function loadLedger(path: string): FiledLedger {
   try {
     const j = JSON.parse(readFileSync(path, 'utf8')) as unknown
     return j && typeof j === 'object' ? (j as FiledLedger) : {}
@@ -300,7 +308,7 @@ export function loadLedger(path: string): FiledLedger {
   }
 }
 
-/** Pure: whether a fingerprint was filed in the last `days`. */
+/** @internal Exported for tests only. Pure: whether a fingerprint was filed in the last `days`. */
 export function filedRecently(ledger: FiledLedger, fingerprint: string, now: Date, days = AUDIT_DEDUPE_DAYS): boolean {
   const at = ledger[fingerprint]
   return !!at && now.getTime() - Date.parse(at) < days * 86_400_000
@@ -318,7 +326,7 @@ Report only defects a user would notice and a developer can fix: elements overla
 Do not report taste, copy preferences, "could be better", or anything you are unsure of. Content cut at the edge of a row or table that scrolls sideways is not a defect. Name the element and where it is.
 Answer with ONLY this JSON: {"defects":[{"kind":"${VISUAL_KINDS.join('|')}","viewport":"desktop|mobile|both","element":"...","where":"...","problem":"...","severity":"high|medium|low","done_when":"..."}]} with at most 3 defects, or {"defects":[]}.`
 
-/** Pure: the visual findings in a review answer; incomplete, unknown or taste entries are dropped. */
+/** @internal Exported for tests only. Pure: the visual findings in a review answer; incomplete, unknown or taste entries are dropped. */
 export function visualFindingsFrom(answer: string | null, screen: ScreenRef): AuditFinding[] {
   if (!answer) return []
   const start = answer.indexOf('{')
@@ -418,9 +426,10 @@ export interface AuditResult {
   reviewErrors: string[]
 }
 
-export const DEFAULT_MAX_SCREENS = 30
+const DEFAULT_MAX_SCREENS = 30
 
 /**
+ * @internal Exported for tests only.
  * Requests an audit lets through on top of `--allow`: a cached session
  * renewing itself writes no app data, and without it a signed-in app boots
  * blank (Supabase refreshes its access token with this POST; 25 were blocked
@@ -431,13 +440,13 @@ export const AUDIT_DEFAULT_ALLOW = ['POST /auth/v1/token?grant_type=refresh_toke
 /** A network failure the write guard caused: the request it aborted. */
 const GUARD_FETCH_ERROR_RE = /\b(failed to fetch|networkerror|load failed|net::err_failed|err_blocked_by_client)\b/i
 
-/** Pure: drop the console errors the guard caused when it blocked a request during this capture. */
+/** @internal Exported for tests only. Pure: drop the console errors the guard caused when it blocked a request during this capture. */
 export function dropGuardErrors(probes: ProbeResult, guardBlocked: boolean): ProbeResult {
   if (!guardBlocked) return probes
   return { ...probes, consoleErrors: probes.consoleErrors.filter((m) => !GUARD_FETCH_ERROR_RE.test(m)) }
 }
 
-/** Pure: at most `max` screens, every page before any tab, dialog or menu, in discovery order. */
+/** @internal Exported for tests only. Pure: at most `max` screens, every page before any tab, dialog or menu, in discovery order. */
 export function pickScreens<T extends Pick<Surface, 'kind'>>(surfaces: readonly T[], max: number): T[] {
   const pages = surfaces.filter((s) => s.kind === 'page')
   const rest = surfaces.filter((s) => s.kind !== 'page')
@@ -454,7 +463,7 @@ export async function runAudit(opts: AuditOptions): Promise<AuditResult> {
   const dir = opts.outDir ?? join(auditHome(), runId)
   mkdirSync(join(dir, 'shots'), { recursive: true })
   const base = new URL(opts.url)
-  const scopePath = base.pathname.replace(/\/+$/, '') || '/'
+  const scopePath = trimTrailingSlashes(base.pathname) || '/'
   const viewports = VIEWPORTS.filter((v) => (opts.viewports ?? ['desktop', 'mobile']).includes(v.name))
   const session = await openSession({
     profileDir: opts.profileDir,
@@ -524,7 +533,7 @@ export async function runAudit(opts: AuditOptions): Promise<AuditResult> {
 }
 
 /** Pure: the run's summary as Markdown. */
-export function summaryMarkdown(url: string, screens: number, findings: readonly AuditFinding[], blocked: ReadonlyArray<{ request: string; count: number }>): string {
+function summaryMarkdown(url: string, screens: number, findings: readonly AuditFinding[], blocked: ReadonlyArray<{ request: string; count: number }>): string {
   const total = blocked.reduce((n, b) => n + b.count, 0)
   const lines = [`# UX audit of ${url}`, '', `${screens} screen(s), ${findings.length} finding(s), ${total} write request(s) blocked.`, '']
   if (blocked.length) {
@@ -536,7 +545,7 @@ export function summaryMarkdown(url: string, screens: number, findings: readonly
   return lines.join('\n')
 }
 
-/** Pure: blocked requests as "METHOD /path" with counts, query strings dropped, most frequent first. */
+/** @internal Exported for tests only. Pure: blocked requests as "METHOD /path" with counts, query strings dropped, most frequent first. */
 export function blockedSummary(blocked: ReadonlyArray<{ method: string; url: string }>): Array<{ request: string; count: number }> {
   const counts = new Map<string, number>()
   for (const b of blocked) {

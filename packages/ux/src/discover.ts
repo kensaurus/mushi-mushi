@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import type { Page } from 'playwright'
 import { gotoPatiently, replay, settle, surfaceUrl, type BrowserSession } from './capture.js'
 import { isDestructiveLabel } from './guard.js'
-import { isWorthVisiting, routesFromSource, sitemapPaths } from './routes.js'
+import { isWorthVisiting, routesFromSource, sitemapPaths, trimTrailingSlashes } from './routes.js'
 import type { ReplayStep, Surface, SurfaceKind } from './types.js'
 
 export interface DiscoverOptions {
@@ -58,23 +58,23 @@ const LOADS_PER_PAGE = 5
 const SIGN_IN_PATH_RE = /\/(log-?in|sign-?in|auth)\b/i
 const SIGN_OUT_PATH_RE =/\/(log-?out|sign-?out|logoff)\b/i
 
-/** Pure: `pathname` is `scope` or under it (`/a/admin` covers `/a/admin/x`, not `/a/administer`). */
+/** @internal Exported for tests only. Pure: `pathname` is `scope` or under it (`/a/admin` covers `/a/admin/x`, not `/a/administer`). */
 export function inScope(pathname: string, scope: string | undefined): boolean {
   if (!scope) return true
-  const s = scope.replace(/\/+$/, '') || '/'
+  const s = trimTrailingSlashes(scope) || '/'
   if (s === '/') return true
   return pathname === s || pathname.startsWith(`${s}/`)
 }
 
-/** Pure: a route key: the pathname with ids (numbers, uuids, long hex) collapsed, the query dropped. */
+/** @internal Exported for tests only. Pure: a route key: the pathname with ids (numbers, uuids, long hex) collapsed, the query dropped. */
 export function routeKey(path: string): string {
   const q = path.search(/[?#]/)
   const pathname = q < 0 ? path : path.slice(0, q)
-  return pathname
+  const collapsed = pathname
     .split('/')
     .map((seg) => (/^(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(seg) ? ':id' : seg))
     .join('/')
-    .replace(/\/+$/, '') || '/'
+  return trimTrailingSlashes(collapsed) || '/'
 }
 
 /** Pure: same-origin, normalized path (no hash), or null to skip. */
