@@ -1,5 +1,12 @@
 # @mushi-mushi/mcp
 
+## 0.29.1
+
+### Patch Changes
+
+- af68d85: `list_gate_findings` and `mushi audit findings --gate` accept `portfolio_radar_vulns`: known holes in your dependencies and runtime, matched by exact version against OSV.dev (ADR 0038). `get_radar` and `mushi radar show` list the two new rules, `known_vulnerable_dependency` and `runtime_end_of_life`.
+- 6b485ac: Require zod 4.6.7 or later, which fixes GHSA-mrhx-c7xc-m3w5: validating an oversized constrained collection could exhaust memory.
+
 ## 0.29.0
 
 ### Minor Changes
