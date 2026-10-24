@@ -3,14 +3,18 @@
  * a Deno test, but deno-check.yml skips _shared/*.test.ts and vitest only
  * collects src/**, so they never ran in CI.
  */
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  DB_TRANSIENT_VOLUME_THRESHOLD,
+  DB_TRANSIENT_VOLUME_WINDOW_MS,
   dbDiagnosticMessage,
   dbErrorFingerprint,
   dbFailureMessage,
+  emitDbTransientVolumeAlert,
   isTransientDbConnectionError,
   isTransientGatewayStatus,
   logDbFailure,
+  resetDbTransientVolume,
 } from '../../supabase/functions/_shared/error-codes.ts'
 
 describe('isTransientGatewayStatus (MUSHI-MUSHI-SERVER-2R)', () => {
@@ -40,6 +44,28 @@ describe('isTransientDbConnectionError', () => {
       code: null,
     }
     assertEquals(isTransientDbConnectionError(err), true)
+  })
+
+  it('gateway "upstream request timeout" (no SQLSTATE) is transient (MUSHI-cd3477a9)', () => {
+    // Kong/Envoy plain-text or JSON body when PostgREST does not answer in
+    // time. The project_members read on GET /v1/admin/onboarding/stats threw
+    // this and Sentry filed it because only "upstream connect error" matched.
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: null }), true)
+    assertEquals(isTransientDbConnectionError({ message: 'upstream request timeout', code: '' }), true)
+    // A real SQLSTATE still wins, including a statement timeout.
+    assertEquals(
+      isTransientDbConnectionError({ message: 'upstream request timeout', code: '57014' }),
+      false,
+    )
+    assertEquals(
+      isTransientDbConnectionError({ message: 'upstream request timeout', code: 'P0001' }),
+      false,
+    )
+    // A nearby sentence is not the gateway body.
+    assertEquals(
+      isTransientDbConnectionError({ message: 'request timeout while calling the provider', code: null }),
+      false,
+    )
   })
 
   it('SERVER-1M: Cloudflare 522 origin-timeout HTML page is transient', () => {
@@ -302,5 +328,90 @@ describe('logDbFailure', () => {
     expect(logDbFailure(logger, 'c', null)).toBe(false)
     expect(logger.calls.map((c) => c.level)).toEqual(['error', 'error', 'error'])
     expect(logger.calls[0].meta).toEqual({ k: 1 })
+  })
+})
+
+describe('db_transient_error volume alert', () => {
+  beforeEach(() => resetDbTransientVolume())
+
+  function record(path: string, now: number) {
+    const reports: Array<{ msg: string; ctx: { tags: Record<string, string>; fingerprint: string[] } }> = []
+    const warned: Array<Record<string, unknown>> = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((line?: unknown) => {
+      warned.push(JSON.parse(String(line)) as Record<string, unknown>)
+    })
+    let alerted = false
+    try {
+      alerted = emitDbTransientVolumeAlert(
+        path,
+        (msg, ctx) => reports.push({ msg, ctx }),
+        { scope: 'mushi:test', method: 'GET', requestId: 'r1' },
+        now,
+      )
+    } finally {
+      spy.mockRestore()
+    }
+    return { alerted, reports, warned }
+  }
+
+  it('stays quiet below the threshold and alerts once when one route keeps timing out', () => {
+    const path = '/api/v1/admin/onboarding/stats'
+    const t = 1_700_000_000_000
+    for (let i = 0; i < DB_TRANSIENT_VOLUME_THRESHOLD - 1; i++) {
+      const hit = record(path, t + i)
+      expect(hit.alerted).toBe(false)
+      expect(hit.reports).toEqual([])
+      expect(hit.warned).toEqual([])
+    }
+    const hot = record(path, t + DB_TRANSIENT_VOLUME_THRESHOLD)
+    expect(hot.alerted).toBe(true)
+    expect(hot.reports).toHaveLength(1)
+    expect(hot.reports[0]!.msg).toContain(path)
+    expect(hot.reports[0]!.msg).toContain(String(DB_TRANSIENT_VOLUME_THRESHOLD))
+    expect(hot.reports[0]!.ctx).toMatchObject({
+      tags: { path, method: 'GET', event: 'db_transient_error_volume' },
+      extra: { count: DB_TRANSIENT_VOLUME_THRESHOLD, window_ms: DB_TRANSIENT_VOLUME_WINDOW_MS },
+      fingerprint: ['db-transient-volume', path],
+    })
+    expect(hot.warned).toHaveLength(1)
+    expect(hot.warned[0]).toMatchObject({
+      event: 'db_transient_error_volume',
+      level: 'warn',
+      scope: 'mushi:test',
+      path,
+      method: 'GET',
+      requestId: 'r1',
+      count: DB_TRANSIENT_VOLUME_THRESHOLD,
+      window_ms: DB_TRANSIENT_VOLUME_WINDOW_MS,
+    })
+    expect(record(path, t + DB_TRANSIENT_VOLUME_THRESHOLD + 1).alerted).toBe(false)
+  })
+
+  it('folds project ids into one route and does not share that count with another route', () => {
+    const t = 1_700_000_000_000
+    const a = '/v1/admin/projects/1000000a-0000-4000-8000-000000000000/members'
+    const b = '/v1/admin/projects/2000000b-0000-4000-8000-000000000000/members'
+    for (let i = 0; i < DB_TRANSIENT_VOLUME_THRESHOLD - 1; i++) {
+      expect(record(a, t + i).alerted).toBe(false)
+    }
+    const hot = record(b, t + 50)
+    expect(hot.alerted).toBe(true)
+    expect(hot.reports[0]!.ctx.tags.path).toBe('/v1/admin/projects/:id/members')
+    expect(hot.reports[0]!.ctx.fingerprint).toEqual([
+      'db-transient-volume',
+      '/v1/admin/projects/:id/members',
+    ])
+    expect(record('/v1/admin/onboarding/stats', t + 51).alerted).toBe(false)
+  })
+
+  it('alerts again after the window slides past the earlier timeouts', () => {
+    const path = '/v1/admin/reports'
+    const t = 1_700_000_000_000
+    for (let i = 0; i < DB_TRANSIENT_VOLUME_THRESHOLD; i++) record(path, t + i)
+    const later = t + DB_TRANSIENT_VOLUME_WINDOW_MS + 5
+    for (let i = 0; i < DB_TRANSIENT_VOLUME_THRESHOLD - 1; i++) {
+      expect(record(path, later + i).alerted).toBe(false)
+    }
+    expect(record(path, later + DB_TRANSIENT_VOLUME_THRESHOLD).alerted).toBe(true)
   })
 })

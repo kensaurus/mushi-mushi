@@ -9,8 +9,13 @@
  * - dbError's transient-DB log line carries the requestId the 500 body has.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { SAFE_INTERNAL_MESSAGE } from '../../supabase/functions/_shared/error-codes.ts'
-import { reportError } from '../../supabase/functions/_shared/sentry.ts'
+import {
+  DB_TRANSIENT_VOLUME_THRESHOLD,
+  DB_TRANSIENT_VOLUME_WINDOW_MS,
+  resetDbTransientVolume,
+  SAFE_INTERNAL_MESSAGE,
+} from '../../supabase/functions/_shared/error-codes.ts'
+import { reportError, reportMessage } from '../../supabase/functions/_shared/sentry.ts'
 import { makeFakeDb } from './__stubs__/fake-supabase.ts'
 
 vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => { throw new Error('no real db') } }))
@@ -251,5 +256,55 @@ describe('dbError transient log line', () => {
       db_code: '57014',
       err_message: 'canceling statement due to statement timeout',
     })
+  })
+
+  it('reports a steady stream of gateway timeouts on one route once', () => {
+    resetDbTransientVolume()
+    vi.mocked(reportMessage).mockClear()
+    vi.mocked(reportError).mockClear()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const path = '/v1/admin/projects/1000000a-0000-4000-8000-000000000000/reports'
+    const route = '/v1/admin/projects/:id/reports'
+    const c = {
+      get: (k: string) => (k === 'requestId' ? 'req-burst' : undefined),
+      req: { path, method: 'GET' },
+      json: (body: unknown, status?: number) => ({ body, status }),
+    }
+    const err = { message: 'upstream request timeout', code: '' }
+    for (let i = 0; i < DB_TRANSIENT_VOLUME_THRESHOLD - 1; i++) {
+      shared.dbError(c as never, err)
+    }
+    expect(reportMessage).not.toHaveBeenCalled()
+    expect(reportError).not.toHaveBeenCalled()
+
+    shared.dbError(c as never, err)
+    expect(reportMessage).toHaveBeenCalledTimes(1)
+    const [msg, level, sent] = vi.mocked(reportMessage).mock.calls[0]!
+    expect(level).toBe('warning')
+    expect(msg).toContain(route)
+    expect(msg).toContain(String(DB_TRANSIENT_VOLUME_THRESHOLD))
+    expect(sent).toMatchObject({
+      tags: { path: route, method: 'GET', event: 'db_transient_error_volume' },
+      extra: { count: DB_TRANSIENT_VOLUME_THRESHOLD, window_ms: DB_TRANSIENT_VOLUME_WINDOW_MS },
+      fingerprint: ['db-transient-volume', route],
+    })
+    const lines = warn.mock.calls.map((call) => JSON.parse(String(call[0])) as { event: string })
+    expect(lines.filter((line) => line.event === 'db_transient_error')).toHaveLength(DB_TRANSIENT_VOLUME_THRESHOLD)
+    expect(lines.filter((line) => line.event === 'db_transient_error_volume')).toHaveLength(1)
+    const volumeLine = lines.find((line) => line.event === 'db_transient_error_volume') as {
+      requestId?: string
+      path?: string
+    }
+    expect(volumeLine.requestId).toBe('req-burst')
+    expect(volumeLine.path).toBe(route)
+
+    shared.dbError(c as never, err)
+    expect(reportMessage).toHaveBeenCalledTimes(1)
+    expect(reportError).not.toHaveBeenCalled()
+    // The per-error log line is the fleet-wide signal, so it never stops.
+    const transientLines = warn.mock.calls
+      .map((call) => JSON.parse(String(call[0])) as { event: string })
+      .filter((line) => line.event === 'db_transient_error')
+    expect(transientLines).toHaveLength(DB_TRANSIENT_VOLUME_THRESHOLD + 1)
   })
 })

@@ -6,7 +6,7 @@ import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status';
 // stays out of the module graph until a caller actually needs the
 // live client.
 import type { getServiceClient } from '../_shared/db.ts';
-import { reportError } from '../_shared/sentry.ts';
+import { reportError, reportMessage } from '../_shared/sentry.ts';
 import {
   accessibleProjectIds as _accessibleProjectIds,
   accessibleProjectIdsInOrganization as _accessibleProjectIdsInOrganization,
@@ -27,6 +27,7 @@ import {
   isHtmlGatewayDbMessage,
   dbErrorFingerprint,
   dbFailureMessage,
+  emitDbTransientVolumeAlert,
   isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
@@ -43,13 +44,18 @@ import {
  * single out e.g. `42703` (undefined column) vs `42501` (permission).
  *
  * TRANSIENT CONNECTIVITY ERRORS: pooler resets (`delayed connect error: 111`,
- * `upstream connect error`), HTML gateway pages (`<!DOCTYPE html>`, 502/503/
- * 504/520-524), and TCP-level connection failures are NOT reported to
+ * `upstream connect error`), the gateway body `upstream request timeout`,
+ * HTML gateway pages (`<!DOCTYPE html>`, 502/503/504/520-524), and TCP-level
+ * connection failures are NOT reported to
  * Sentry — they are external infra noise that self-resolves and would
  * regress repeatedly (same pattern as the client-abort fix in
  * sentryHonoErrorHandler). They are emitted as a structured console.warn to
  * Supabase Logs instead, queryable via:
  *   metadata.parsed.event = "db_transient_error"
+ * A steady stream on one route sends one Sentry warning
+ * (`db_transient_error_volume`) so a read that times out every time still
+ * surfaces. One timeout does not. That count is per isolate, so the log
+ * line above stays the fleet-wide signal.
  * An HTML gateway page answers 503 with SAFE_INTERNAL_MESSAGE. The raw page
  * is never the client message, the log line, or the Sentry exception text.
  *
@@ -85,6 +91,11 @@ export function dbError(
         // Gateway HTML collapses to a title. Other messages cap at 500 chars.
         err_message: dbDiagnosticMessage(err?.message),
       }),
+    );
+    emitDbTransientVolumeAlert(
+      c.req.path,
+      (msg, ctx) => reportMessage(msg, 'warning', ctx),
+      { scope: 'mushi:api:db', method: c.req.method, requestId },
     );
     return jsonError(c, 'DB_ERROR', gateway ? SAFE_INTERNAL_MESSAGE : SAFE_DB_MESSAGE, gateway ? 503 : 500);
   }
