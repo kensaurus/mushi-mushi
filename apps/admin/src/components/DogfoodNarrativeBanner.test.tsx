@@ -39,7 +39,7 @@ beforeEach(() => {
 describe('DogfoodNarrativeBanner', () => {
   it('renders a placeholder of the banner height while its data loads', () => {
     expect(html()).toContain('data-testid="narrative-placeholder"')
-    expect(html()).toContain('h-12.5')
+    expect(html()).toContain('sm:h-12.5')
   })
 
   it('renders the sentence once loaded', () => {
