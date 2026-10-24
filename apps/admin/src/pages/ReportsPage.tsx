@@ -13,6 +13,7 @@ import { useUndoableBulk } from '../lib/useUndoableBulk'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { combinedFetchScope, useProjectScopeMode } from '../lib/projectScope'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
   EmptyState,
@@ -61,6 +62,10 @@ export function ReportsPage() {
   const toast = useToast()
   const undoable = useUndoableBulk()
   const activeProjectId = useActiveProjectId()
+  const allApps = useProjectScopeMode() === 'all'
+  // enumeration omits X-Mushi-Project-Id so the list and the tiles count
+  // every app, not the last concrete one kept under All apps.
+  const fetchScope = combinedFetchScope(allApps ? 'all' : 'project')
   const setup = useSetupStatus(activeProjectId)
   // One preflight fetch per page — shared by every row's dispatch popover so
   // the missing-prereq checklist appears the moment the user opens it instead
@@ -141,10 +146,10 @@ export function ReportsPage() {
   }, [status, category, userCategory, severity, platform, sdkPackage, origin, component, reporter, endUser, session, area, days, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
-    // Wait for ProjectSwitcher to hydrate active project so the first fetch
-    // carries X-Mushi-Project-Id and doesn't briefly show all-org reports.
-    activeProjectId ? `/v1/admin/reports?${queryString}` : null,
-    { deps: [queryString, activeProjectId] },
+    // One app: wait for the pin so the first fetch doesn't briefly show
+    // every app. All apps is the opposite — fetch with no pin.
+    allApps || activeProjectId ? `/v1/admin/reports?${queryString}` : null,
+    { deps: [queryString, activeProjectId], scope: fetchScope },
   )
 
   const {
@@ -152,7 +157,7 @@ export function ReportsPage() {
     loading: reportsStatsLoading,
     reload: reloadReportsStats,
     isValidating: reportsStatsValidating,
-  } = usePageData<ReportsStats>('/v1/admin/reports/stats')
+  } = usePageData<ReportsStats>('/v1/admin/reports/stats', { scope: fetchScope })
   const reportsStats = reportsStatsData ?? EMPTY_REPORTS_STATS
 
   const reloadAll = useCallback(() => {
@@ -405,7 +410,7 @@ export function ReportsPage() {
 
   usePublishPageContext({
     route: '/reports',
-    title: projectName ? `Bugs · ${projectName}` : 'Bugs',
+    title: allApps ? 'Bugs · All apps' : projectName ? `Bugs · ${projectName}` : 'Bugs',
     summary: loading
       ? 'Loading reports…'
       : total === 0
@@ -741,7 +746,7 @@ export function ReportsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Bugs'}
         icon={<IconReports />}
-        projectScope={projectName}
+        projectScope={allApps ? 'All apps' : projectName}
         description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
         helpTitle={copy?.help?.title ?? 'About bugs'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
@@ -803,6 +808,7 @@ export function ReportsPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <ReportsKpiStrip
+                scope={fetchScope}
                 activeSeverity={severity}
                 onFilter={(sev, windowDays) => {
                   // The tile counts non-dismissed reports of that severity
@@ -832,7 +838,7 @@ export function ReportsPage() {
         />
       )}
 
-      <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
+      <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
 
       <ReportsFilterBar
         searchInput={searchInput}

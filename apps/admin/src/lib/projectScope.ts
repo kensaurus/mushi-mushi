@@ -50,12 +50,17 @@ type ProjectScopeMode = ProjectScope['mode']
  *
  *   /ci — GET /v1/admin/ci/overview without project_id reads every project
  *         the caller can open (routes/ci.ts, callerProjectIds).
+ *   /reports — the list, severity tiles, quick-filter counts and
+ *         /reports/stats. The page omits the project pin; rows carry the
+ *         app name. Report detail (/reports/:id) stays one report.
  *
  * Not opted in (their list APIs drop to "all projects" without a project id,
  * but the pages assume one app: rows carry no app name, and actions, filters
- * and counts are per app): /reports, /fixes, /releases, /lessons.
+ * and counts are per app): /fixes, /releases, /lessons.
  */
 const ALL_APPS_ROUTES: readonly string[] = ['/ci']
+/** Exact paths only — a prefix would also opt in /reports/:id. */
+const ALL_APPS_EXACT: readonly string[] = ['/reports']
 
 /**
  * Pages that never show one app's data, so the one-app notice would be wrong
@@ -74,6 +79,7 @@ function matchesRoute(pathname: string, route: string): boolean {
 export function allAppsSupportFor(pathname: string): AllAppsSupport {
   // `/projects/:pid/qa-coverage/:storyId` is one app's story (a redirect).
   if (/^\/projects\/[^/]+\//.test(pathname)) return 'single'
+  if (ALL_APPS_EXACT.includes(pathname)) return 'combined'
   if (ALL_APPS_ROUTES.some((r) => matchesRoute(pathname, r))) return 'combined'
   if (ACCOUNT_WIDE_ROUTE_PREFIXES.some((r) => matchesRoute(pathname, r))) return 'account'
   return 'single'
@@ -141,6 +147,15 @@ export function useProjectScopeMode(): ProjectScopeMode {
   const [searchParams] = useSearchParams()
   const stored = useStoredProjectScopeMode()
   return resolveProjectScopeMode(searchParams.get(PROJECT_SCOPE_QUERY_PARAM), stored)
+}
+
+/**
+ * Header scope for a combined page's API calls. `enumeration` omits
+ * `X-Mushi-Project-Id`, so list endpoints count every app the caller can
+ * open. One-app pages must not use this — they keep the pin on purpose.
+ */
+export function combinedFetchScope(mode: ProjectScopeMode): 'enumeration' | 'project' {
+  return mode === 'all' ? 'enumeration' : 'project'
 }
 
 /**

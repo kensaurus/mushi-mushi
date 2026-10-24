@@ -51,6 +51,8 @@ function severityDelta(values: number[]): KpiDelta | null {
 }
 
 interface Props {
+  /** `enumeration` counts every app (All apps). Default is the pinned app. */
+  scope?: 'enumeration' | 'project'
   /** Currently active severity filter (so we can highlight the matching tile). */
   activeSeverity?: string
   /** Click handler — the page applies the severity plus this tile's window
@@ -95,12 +97,12 @@ const TILES_PLAIN: typeof TILES_ADVANCED = [
     meaning: 'Visual nits or confusion — low urgency individually.' },
 ]
 
-export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: Props) {
+export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, windowDays = 14 }: Props) {
   const { isAdvanced } = useAdminMode()
   const tiles = isAdvanced ? TILES_ADVANCED : TILES_PLAIN
   const { data, loading, error, reload } = usePageData<SeverityStats>(
     `/v1/admin/reports/severity-stats?days=${windowDays}`,
-    { deps: [windowDays] },
+    { deps: [windowDays], scope },
   )
 
   const counts = data?.bySeverity ?? { critical: 0, high: 0, medium: 0, low: 0 }

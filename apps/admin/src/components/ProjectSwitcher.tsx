@@ -297,22 +297,39 @@ export function ProjectSwitcher() {
     }
   }, [creating])
 
-  if (setup.loading) {
-    return <HeaderContextChipSkeleton label="Loading project" />
-  }
   if (!setup.data) {
     // The fetch failed and nothing is cached: say so and offer a retry
     // instead of a skeleton that never resolves (B1, 2026-10-20).
-    return setup.error ? (
-      <HeaderContextChip
-        label="Projects unavailable"
-        trailing={<span className="text-fg-faint">Retry</span>}
-        onClick={() => setup.reload()}
-        title={`Could not load your projects: ${setup.error}. Click to retry.`}
-      />
-    ) : (
-      <HeaderContextChipSkeleton label="Loading project" />
-    )
+    if (setup.error) {
+      return (
+        <HeaderContextChip
+          label="Projects unavailable"
+          trailing={<span className="text-fg-faint">Retry</span>}
+          onClick={() => setup.reload()}
+          title={`Could not load your projects: ${setup.error}. Click to retry.`}
+        />
+      )
+    }
+    // All apps is already known from the URL or storage. Waiting on
+    // /v1/admin/setup to label the chip left it greyed on "Loading project"
+    // for as long as that list took (and for good, if the fetch never settled).
+    if (scopeMode === 'all') {
+      return (
+        <HeaderContextChip
+          data-testid="project-switcher-chip"
+          aria-label="Project: All apps — switch project"
+          aria-busy="true"
+          title="All apps. The app list is still loading."
+          label={
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <AllAppsGlyph size={14} />
+              <span className="truncate">All apps</span>
+            </span>
+          }
+        />
+      )
+    }
+    return <HeaderContextChipSkeleton label="Loading project" />
   }
   if (setup.data.projects.length === 0) {
     return (

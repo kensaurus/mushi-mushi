@@ -163,6 +163,22 @@ describe('ProjectSwitcher — All apps', () => {
     expect(chip().textContent).toContain('glot.it')
   })
 
+  it('shows All apps while the project list is still loading', async () => {
+    setStoredProjectScopeMode('all')
+    setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
+    await render('/reports?apps=all')
+    expect(chip().textContent).toContain('All apps')
+    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(host.textContent).not.toContain('Loading project')
+  })
+
+  it('keeps the loading chip for one app until the list arrives', async () => {
+    setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
+    await render(`/reports?project=${PROJECT_A}`)
+    expect(host.querySelector('[aria-label="Loading project"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="project-switcher-chip"]')).toBeNull()
+  })
+
   it('opens when the one-app notice asks it to', async () => {
     await render(`/reports?project=${PROJECT_A}&apps=all`)
     expect(allRow()).toBeNull()

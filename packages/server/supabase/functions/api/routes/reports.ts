@@ -47,6 +47,135 @@ const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'wo
 /** "Search again" web searches per app per hour (each costs a few Firecrawl credits). */
 const KNOWN_ISSUE_SEARCHES_PER_HOUR = 30;
 
+type ReportsDb = ReturnType<typeof getServiceClient>;
+
+async function mustCount(
+  query: PromiseLike<{ count: number | null; error: { message?: string } | null }>,
+): Promise<number> {
+  const { count, error } = await query;
+  if (error) throw new Error(`reports stats: ${error.message ?? 'count failed'}`);
+  return count ?? 0;
+}
+
+/**
+ * /reports/stats when the caller did not pin a project (All apps).
+ * Counts every project in `projectIds` — the same set as the list.
+ */
+async function unpinnedReportStats(
+  db: ReportsDb,
+  projectIds: string[],
+  sinceIso: string,
+  now: number,
+) {
+  const hourAgoIso = new Date(now - 60 * 60 * 1000).toISOString();
+  const inProjects = () =>
+    db.from('reports').select('id', { count: 'exact', head: true }).in('project_id', projectIds);
+
+  const [
+    totalAllTime,
+    total14d,
+    critical14d,
+    high14d,
+    dismissed14d,
+    criticalUntriaged14d,
+    newUntriaged,
+    openBacklog,
+    latest,
+    keysRes,
+    heartbeatRes,
+  ] = await Promise.all([
+    mustCount(inProjects()),
+    mustCount(inProjects().gte('created_at', sinceIso)),
+    mustCount(inProjects().gte('created_at', sinceIso).eq('severity', 'critical')),
+    mustCount(inProjects().gte('created_at', sinceIso).eq('severity', 'high')),
+    mustCount(inProjects().gte('created_at', sinceIso).eq('status', 'dismissed')),
+    mustCount(
+      inProjects()
+        .gte('created_at', sinceIso)
+        .eq('severity', 'critical')
+        .in('status', [...NEW_BUCKET_STATUSES]),
+    ),
+    mustCount(inProjects().gte('created_at', sinceIso).in('status', ['new', 'queued'])),
+    mustCount(
+      inProjects()
+        .gte('created_at', sinceIso)
+        .in('status', ['new', 'queued'])
+        .lt('created_at', hourAgoIso),
+    ),
+    db
+      .from('reports')
+      .select('created_at')
+      .in('project_id', projectIds)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from('project_api_keys').select('id').in('project_id', projectIds).eq('is_active', true).limit(1),
+    db
+      .from('project_api_keys')
+      .select('last_seen_at')
+      .in('project_id', projectIds)
+      .eq('is_active', true)
+      .not('last_seen_at', 'is', null)
+      .order('last_seen_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const hasIngest = totalAllTime > 0;
+  const hasKey = (keysRes.data ?? []).length > 0;
+  const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+  const setupDone = hasKey && hasSdk && hasIngest;
+  const lastReportAt = (latest.data?.created_at as string | null | undefined) ?? null;
+  const scoped = (path: string) => `${path}${path.includes('?') ? '&' : '?'}apps=all`;
+
+  let topPriority: 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest' = 'waiting_ingest';
+  let topPriorityLabel: string | null = null;
+  let topPriorityTo: string | null = null;
+  if (!hasIngest) {
+    topPriority = 'waiting_ingest';
+    topPriorityLabel = 'No bugs received yet — send a test report from Setup to confirm the widget works.';
+    topPriorityTo = scoped('/onboarding?tab=verify');
+  } else if (criticalUntriaged14d > 0) {
+    topPriority = 'critical';
+    topPriorityLabel = `${criticalUntriaged14d} critical bug${criticalUntriaged14d === 1 ? '' : 's'} still untriaged — users may be blocked right now.`;
+    topPriorityTo = scoped('/reports?status=new&severity=critical&days=14');
+  } else if (openBacklog > 0) {
+    topPriority = 'backlog';
+    topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting over an hour — confirm severity before auto-fix runs.`;
+    topPriorityTo = scoped('/reports?status=new&sort=created_at&dir=asc');
+  } else if (newUntriaged > 0) {
+    topPriority = 'untriaged';
+    topPriorityLabel = `${newUntriaged} new report${newUntriaged === 1 ? '' : 's'} — classifier scored severity; you confirm or dismiss.`;
+    topPriorityTo = scoped('/reports?status=new');
+  } else {
+    topPriority = 'clear';
+    topPriorityLabel = `Queue is current — ${total14d} report${total14d === 1 ? '' : 's'} in the last 14 days.`;
+    topPriorityTo = scoped('/reports');
+  }
+
+  return {
+    hasAnyProject: true,
+    projectId: null,
+    projectName: 'All apps',
+    projectCount: projectIds.length,
+    setupDone,
+    hasIngest,
+    totalAllTime,
+    total14d,
+    critical14d,
+    criticalUntriaged14d,
+    high14d,
+    newUntriaged,
+    openBacklog,
+    dismissed14d,
+    lastReportAt,
+    topPriority,
+    topPriorityLabel,
+    topPriorityTo,
+  };
+}
+
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // ADMIN ROUTES (JWT auth)
@@ -98,6 +227,13 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     const sinceIso = reportWindowStartIso(14);
     const now = Date.now();
+
+    // No project pin (All apps): count every project the caller can open,
+    // matching the list. A pin still counts only that project
+    // (glot.it, 2026-10-07).
+    if (!resolvedProject.explicit && projectIds.length > 1) {
+      return c.json({ ok: true, data: await unpinnedReportStats(db, projectIds, sinceIso, now) });
+    }
 
     // Every count is for the active project, like the list under the tiles.
     // `projectIds` (every project the caller can reach) once mixed other
@@ -279,6 +415,33 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
           bucket[r.severity as 'critical' | 'high' | 'medium' | 'low'] += 1;
       }
     }
+    // PostgREST caps the row read at 1000. One app stays on that scan. All
+    // apps (more than one id, because a pin narrows this list to one) replaces
+    // the headline counts with exact counts so a busy team is not undercounted.
+    // The sparkline stays on the scan.
+    let total = (rows ?? []).length;
+    if (projectIds.length > 1) {
+      const severities = ['critical', 'high', 'medium', 'low'] as const;
+      const windowQuery = () =>
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .in('project_id', projectIds)
+          .gte('created_at', sinceIso)
+          .neq('status', 'dismissed');
+      const [exactTotal, ...parts] = await Promise.all([
+        mustCount(windowQuery()),
+        ...severities.flatMap((sev) => [
+          mustCount(windowQuery().eq('severity', sev)),
+          mustCount(windowQuery().eq('severity', sev).not('status', 'in', '(fixed,resolved,verified,dismissed)')),
+        ]),
+      ]);
+      total = exactTotal;
+      severities.forEach((sev, i) => {
+        bySeverity[sev] = parts[i * 2] ?? 0;
+        openBySeverity[sev] = parts[i * 2 + 1] ?? 0;
+      });
+    }
     const byDay = Array.from(dayBuckets.entries()).map(([day, counts]) => ({ day, ...counts }));
     return c.json({
       ok: true,
@@ -287,7 +450,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         bySeverity,
         openBySeverity,
         byDay,
-        total: (rows ?? []).length,
+        total,
       },
     });
   });
@@ -450,6 +613,15 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const { data: reports, count, error } = await query;
     if (error) return dbError(c, error);
 
+    // All apps: name each row's app. One app already has its name in the header.
+    const projectNames = new Map<string, string>();
+    if (projectIds.length > 1) {
+      const { data: projectRows } = await db.from('projects').select('id, name').in('id', projectIds);
+      for (const p of projectRows ?? []) {
+        if (p.id && p.name) projectNames.set(p.id as string, p.name as string);
+      }
+    }
+
     // Enrich each report with the real blast radius for its dedup group:
     //   dedup_count      = total reports filed against the same fingerprint
     //   unique_users     = COUNT(DISTINCT reporter_token_hash) — how many distinct
@@ -520,6 +692,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       });
       return {
         ...r,
+        project_name: projectNames.get((r as { project_id: string }).project_id) ?? null,
         dispatch_block,
         dedup_count: stats?.reports ?? 1,
         unique_users: stats?.users ?? 0,
