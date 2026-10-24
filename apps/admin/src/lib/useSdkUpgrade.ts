@@ -82,6 +82,65 @@ const POLL_MAX_MS = 10 * 60_000
 /** awaiting_lockfile resolves on the 5-minute sdk-release-sync tick (30 min at most). */
 const AWAITING_POLL_INTERVAL_MS = 30_000
 const TERMINAL_TTL_MS = 2 * 60 * 60_000
+/** Re-read an open upgrade PR's checks from GitHub at most this often. */
+export const UPGRADE_CI_REFRESH_MS = 60_000
+
+/** True when the last GitHub re-read is missing or older than a minute. */
+export function upgradeCiRefreshDue(lastAt: number | null, now: number, minMs = UPGRADE_CI_REFRESH_MS): boolean {
+  if (lastAt == null || !Number.isFinite(lastAt)) return true
+  return now - lastAt >= minMs
+}
+
+/** An upgrade PR the Update center is still showing (open, or not yet synced). */
+export function isOpenUpgradePr(state: {
+  status?: string
+  prUrl?: string
+  prState?: string
+  mergedAt?: string
+}): boolean {
+  return state.status === 'completed'
+    && Boolean(state.prUrl)
+    && state.prState !== 'merged'
+    && state.prState !== 'closed'
+    && !state.mergedAt
+}
+
+function ciRefreshKey(projectId: string, jobId: string) {
+  return `mushi_sdk_upgrade_ci_at:${projectId}:${jobId}`
+}
+
+function readCiRefreshAt(projectId: string, jobId: string): number | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const n = Number(sessionStorage.getItem(ciRefreshKey(projectId, jobId)))
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+
+/** Stamp a refresh and return that stamp, or null when one already ran this minute. */
+function takeCiRefresh(projectId: string, jobId: string, now = Date.now()): number | null {
+  if (!upgradeCiRefreshDue(readCiRefreshAt(projectId, jobId), now)) return null
+  try {
+    sessionStorage.setItem(ciRefreshKey(projectId, jobId), String(now))
+  } catch { /* private mode still refreshes */ }
+  return now
+}
+
+function releaseCiRefresh(projectId: string, jobId: string, token: number) {
+  if (typeof window === 'undefined') return
+  try {
+    if (readCiRefreshAt(projectId, jobId) === token) sessionStorage.removeItem(ciRefreshKey(projectId, jobId))
+  } catch { /* ignore */ }
+}
+
+function markCiRefresh(projectId: string, jobId: string, now = Date.now()) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(ciRefreshKey(projectId, jobId), String(now))
+  } catch { /* ignore */ }
+}
 
 function terminalStorageKey(projectId: string) {
   return `mushi_sdk_upgrade_terminal:${projectId}`
@@ -130,6 +189,10 @@ export function useSdkUpgrade(projectId: string) {
   const reachedTerminal = useRef(false)
   const creatingRef = useRef(false)
   const mergeSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stateRef = useRef(state)
+  const projectRef = useRef(projectId)
+  stateRef.current = state
+  projectRef.current = projectId
 
   useEffect(
     () => () => {
@@ -412,7 +475,8 @@ export function useSdkUpgrade(projectId: string) {
     await enqueueUpgrade({ refresh: true })
   }, [enqueueUpgrade])
 
-  const syncStatus = useCallback(async (jobId: string) => {
+  const syncStatus = useCallback(async (jobId: string): Promise<boolean> => {
+    const forProject = projectId
     const res = await apiFetch<{
       releaseStatus: string
       prState: string
@@ -424,34 +488,60 @@ export function useSdkUpgrade(projectId: string) {
       deployStatus: string | null
       deployUrl: string | null
       deployEnvironment: string | null
-    }>(`/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`, { method: 'POST' })
+    }>(`/v1/admin/projects/${forProject}/sdk-upgrade/${jobId}/sync`, { method: 'POST' })
+    if (projectRef.current !== forProject) return false
     if (!res.ok || !res.data) {
       // Used to return silently, so "Check CI status" / "Refresh all" looked
       // like nothing happened (QA bug 260).
-      const message = describeActionError(res.error, 'Could not check CI status on GitHub. Try again in a moment.')
-      setState((s) => ({ ...s, syncError: message }))
-      return
+      if (!cancelled.current) {
+        const message = describeActionError(res.error, 'Could not check CI status on GitHub. Try again in a moment.')
+        setState((s) => ({ ...s, syncError: message }))
+      }
+      return false
     }
     const d = res.data
-    setState((s) => {
-      const updated: SdkUpgradeState = {
-        ...s,
-        syncError: undefined,
-        releaseStatus: d.releaseStatus,
-        prState: d.prState,
-        checkRunStatus: d.checkRunStatus ?? undefined,
-        checkRunConclusion: d.checkRunConclusion ?? undefined,
-        deployStatus: d.deployStatus ?? undefined,
-        deployUrl: d.deployUrl ?? undefined,
-        workflowUrl: d.workflowUrl ?? undefined,
-      }
-      // Persist cockpit fields so a hot-reload restores the freshest sync result
-      if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
-        persistTerminal(projectId, updated)
+    const fields: Partial<SdkUpgradeState> = {
+      syncError: undefined,
+      releaseStatus: d.releaseStatus,
+      prState: d.prState,
+      checkRunStatus: d.checkRunStatus ?? undefined,
+      checkRunConclusion: d.checkRunConclusion ?? undefined,
+      deployStatus: d.deployStatus ?? undefined,
+      deployUrl: d.deployUrl ?? undefined,
+      workflowUrl: d.workflowUrl ?? undefined,
+    }
+    markCiRefresh(forProject, jobId)
+    const apply = (s: SdkUpgradeState): SdkUpgradeState => {
+      // A newer job may have replaced this one while GitHub was answering.
+      if (s.jobId !== jobId) return s
+      const updated: SdkUpgradeState = { ...s, ...fields }
+      // Persist cockpit fields so a reload restores the freshest sync result,
+      // including when the operator left the page before this request landed.
+      if (updated.jobId === jobId && (updated.status === 'completed' || updated.status === 'completed_no_pr')) {
+        persistTerminal(forProject, updated)
       }
       return updated
-    })
+    }
+    if (cancelled.current) {
+      apply(stateRef.current)
+      return true
+    }
+    setState(apply)
+    return true
   }, [projectId])
+
+  // The stored check is up to 5 minutes old (sdk-release-sync) and a reload
+  // used to paint that copy and stop. Re-read GitHub when an open PR is shown,
+  // at most once a minute, so a green gate replaces a stale "CI failing".
+  const { status: upgradeStatus, jobId: upgradeJobId, prUrl: upgradePrUrl, prState: upgradePrState, mergedAt: upgradeMergedAt } = state
+  useEffect(() => {
+    if (!isOpenUpgradePr({ status: upgradeStatus, prUrl: upgradePrUrl, prState: upgradePrState, mergedAt: upgradeMergedAt }) || !upgradeJobId) return
+    const token = takeCiRefresh(projectId, upgradeJobId)
+    if (token == null) return
+    void syncStatus(upgradeJobId).then((ok) => {
+      if (!ok) releaseCiRefresh(projectId, upgradeJobId, token)
+    })
+  }, [projectId, upgradeStatus, upgradeJobId, upgradePrUrl, upgradePrState, upgradeMergedAt, syncStatus])
 
   const mergePr = useCallback(async (jobId: string, method: 'squash' | 'merge' | 'rebase' = 'squash') => {
     setState((s) => ({ ...s, releaseStatus: 'merging' }))
@@ -467,7 +557,17 @@ export function useSdkUpgrade(projectId: string) {
       }))
       return
     }
-    setState((s) => ({ ...s, releaseStatus: 'merged', prState: 'merged' }))
+    setState((s) => {
+      const updated: SdkUpgradeState = {
+        ...s,
+        releaseStatus: 'merged',
+        prState: 'merged',
+        mergedAt: new Date().toISOString(),
+        error: undefined,
+      }
+      persistTerminal(projectId, updated)
+      return updated
+    })
     // Auto-sync after merge to pick up CI / deploy status. Tracked + guarded so
     // an unmount inside the 5s window doesn't fire a setState on a dead component.
     if (mergeSyncTimer.current) clearTimeout(mergeSyncTimer.current)
