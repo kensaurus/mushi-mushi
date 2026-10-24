@@ -275,6 +275,19 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
 /** A red train: bisect, or hold the member that failed alone. */
 async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref: GithubRepoRef, failed: string[], settings: TrainSettings, deps: TrainDeps): Promise<string> {
   const now = new Date().toISOString()
+  // Checks that fail on the base branch too are not the members' fault:
+  // bisecting would split a healthy train and hold an innocent fix.
+  const baseSha = await deps.branchSha(token, ref, train.base_ref)
+  const baseFailed = new Set(baseSha ? (await deps.checks(token, ref, baseSha)).failed : [])
+  if (failed.every((name) => baseFailed.has(name))) {
+    const why = `${train.base_ref} is red too (${failed.slice(0, 4).join(', ')}); the train waits for it to pass.`
+    await deps.closePr(token, ref, train.pr_number!, `${why} No pull request in it is blamed; they ride the next train.`)
+    await deps.deleteBranch(token, ref, train.branch)
+    await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: why }).eq('id', train.id)
+    await setRows(db, train.members.map((m) => m.rowId), { state: 'queued', train_id: null, detail: why })
+    await trainEvent(db, memberRows(train), 'pending', 'Release train waits for the base branch', why, `train-base-red:${train.id}`)
+    return 'base_red'
+  }
   const why = `CI failed: ${failed.slice(0, 4).join(', ')}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)
