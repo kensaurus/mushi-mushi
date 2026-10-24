@@ -195,6 +195,150 @@ describe('resolveLlmKeys: the five steps in order', () => {
   })
 })
 
+describe('resolveLlmKeySource matches the key resolveLlmKeys would use', () => {
+  function named(keys: Array<{ source: string; scope?: string }>): string | null {
+    const first = keys[0]
+    if (!first) return null
+    if (first.source === 'env') return 'env'
+    if (first.scope === 'organization') return 'organization'
+    if (first.scope === 'universal') return 'owner_universal'
+    return 'project'
+  }
+
+  /** Names the source before any secret read, then checks the resolver agrees. */
+  async function agrees(
+    database: ReturnType<typeof db>,
+    provider: 'anthropic' | 'openai' | 'openrouter' = 'anthropic',
+    opts: { openAiOnly?: boolean } = {},
+  ) {
+    const typed = database as unknown as { rpcCalls: Array<{ fn: string }> }
+    const vaultReads = () => typed.rpcCalls.filter((c) => c.fn === 'vault_get_secret').length
+    const before = vaultReads()
+    const source = await byok.resolveLlmKeySource(database, P_MUSHI, provider, opts)
+    expect(vaultReads()).toBe(before)
+    const keys = await byok.resolveLlmKeys(database, P_MUSHI, provider, opts)
+    expect(source).toBe(named(keys))
+    return { source, keys }
+  }
+
+  it('reports project, organization, an owner universal key, legacy, then the platform key', async () => {
+    expect((await agrees(db([key('own', { project_id: P_MUSHI })]))).source).toBe('project')
+    expect((await agrees(db([key('org', { organization_id: ORG_MUSHI })]))).source).toBe('organization')
+    expect((await agrees(db([key('universal', { owner_user_id: OWNER })]))).source).toBe('owner_universal')
+    expect(
+      (
+        await agrees(
+          db(
+            [key('org', { organization_id: ORG_MUSHI })],
+            [{ project_id: P_MUSHI, byok_anthropic_key_ref: 'vault://legacy', byok_anthropic_test_status: 'ok' }],
+          ),
+        )
+      ).source,
+    ).toBe('project')
+    const previous = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
+    try {
+      expect((await agrees(db([]))).source).toBe('env')
+    } finally {
+      if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = previous
+    }
+  })
+
+  it("does not count an admin's universal key", async () => {
+    const ADMIN = 'cccccccc-0000-4000-8000-00000000000c'
+    const previous = process.env.ANTHROPIC_API_KEY
+    delete process.env.ANTHROPIC_API_KEY
+    try {
+      const database = makeFakeDb(
+        {
+          projects,
+          organization_members: [...members, { organization_id: ORG_MUSHI, user_id: ADMIN, role: 'admin' }],
+          byok_keys: [key('admin-key', { owner_user_id: ADMIN })],
+          project_settings: [],
+          byok_audit_log: [],
+        },
+        { rpc: (fn, args) => (fn === 'vault_get_secret' ? `secret-${String(args.secret_id)}` : null) },
+      ) as never
+      expect(await byok.resolveLlmKeySource(database, P_MUSHI, 'anthropic')).toBeNull()
+      expect(await byok.resolveLlmKeys(database, P_MUSHI, 'anthropic')).toEqual([])
+    } finally {
+      if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = previous
+    }
+  })
+
+  it('agrees for an OpenAI base URL and for an OpenRouter key serving OpenAI', async () => {
+    const previous = process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    try {
+      const together = await agrees(
+        db([
+          {
+            ...key('together', { project_id: P_MUSHI }, 100, 'openai'),
+            base_url: 'https://api.together.xyz/v1',
+          },
+        ]),
+        'openai',
+      )
+      expect(together.source).toBe('project')
+      expect(together.keys[0]?.baseUrl).toBe('https://api.together.xyz/v1')
+
+      const routerDb = db([key('router', { project_id: P_MUSHI }, 100, 'openrouter')])
+      const router = await agrees(routerDb, 'openai')
+      expect(router.source).toBe('project')
+      expect(router.keys[0]?.keyId).toBe('router')
+      expect(router.keys[0]?.baseUrl).toBe(byok.OPENROUTER_BASE_URL)
+      expect((await agrees(routerDb, 'openai', { openAiOnly: true })).source).toBeNull()
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previous
+    }
+  })
+
+  it('drops an unsafe OpenAI base URL before reading the secret or reactivating the key', async () => {
+    const previous = process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    try {
+      const database = db([
+        {
+          ...key('bad', { project_id: P_MUSHI }, 100, 'openai'),
+          base_url: 'https://evil.example/v1',
+          status: 'quota_exhausted',
+          test_status: 'error_quota',
+          cooldown_until: new Date(Date.now() - 60_000).toISOString(),
+        },
+      ])
+      const typed = database as unknown as {
+        rpcCalls: Array<{ fn: string }>
+        table: (name: string) => Array<Record<string, unknown>>
+      }
+      expect(await byok.resolveLlmKeySource(database, P_MUSHI, 'openai')).toBeNull()
+      expect(await byok.resolveLlmKeys(database, P_MUSHI, 'openai')).toEqual([])
+      expect(typed.rpcCalls.filter((c) => c.fn === 'vault_get_secret')).toEqual([])
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(typed.table('byok_keys')[0]?.status).toBe('quota_exhausted')
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previous
+    }
+  })
+
+  it('does not reactivate a key just to name its source', async () => {
+    const database = db([
+      {
+        ...key('cooled', { project_id: P_MUSHI }),
+        status: 'quota_exhausted',
+        test_status: 'error_quota',
+        cooldown_until: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ])
+    const rows = database as unknown as { table: (name: string) => Array<Record<string, unknown>> }
+    expect(await byok.resolveLlmKeySource(database, P_MUSHI, 'anthropic')).toBe('project')
+    expect(rows.table('byok_keys')[0]?.status).toBe('quota_exhausted')
+  })
+})
+
 describe('cross-tenant guard: a universal key never serves another owner\'s organization', () => {
   it("the owner's key does not reach an organization they only administer", async () => {
     process.env.ANTHROPIC_API_KEY = ''
