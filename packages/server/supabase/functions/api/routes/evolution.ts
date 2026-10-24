@@ -3,6 +3,14 @@
 //   GET /v1/admin/projects/:id/privacy-status   (MCP path — project ID in URL)
 //   GET /v1/admin/privacy-status                (dashboard path — project from header/query)
 //     → PrivacyStatus: byok_configured, storage_provider, region, retention_days, last_audit_at
+//     byok_configured follows resolveLlmKey for the app's LLM providers
+//     (anthropic, openai; OpenRouter counts as openai), not the caller's key
+//     pool and not web-tool keys: own key, legacy ref, organization key, then
+//     the org owners' universal keys. The platform env key is not BYOK.
+//     A failed key read sets byok_configured null and llm_provider 'unknown'
+//     instead of claiming the platform key. The dashboard badge names the
+//     app with ?project_id=, which wins over the header, so two sessions
+//     looking at one app get that app even when their headers differ.
 //     Used by PrivacyPostureBadge in the sidebar and the MCP privacy://status resource.
 //
 //   GET /v1/admin/projects/:id/evolution-history
@@ -15,7 +23,9 @@
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
 import { adminOrApiKey } from '../../_shared/auth.ts'
+import { resolveLlmKeySources, type LlmProvider } from '../../_shared/byok.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { log } from '../../_shared/logger.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import type { Variables } from '../types.ts'
 
@@ -25,16 +35,40 @@ function db() {
   return getServiceClient()
 }
 
+// LLM providers only. The chip is BYOK when either anthropic or openai
+// resolves to the app's own key, a legacy credential, an organization key,
+// or an org owner's universal key (project → legacy → organization →
+// universal → platform env). OpenRouter counts inside the openai lookup.
+// Firecrawl and Browserbase are web tools and do not count. The platform
+// env key is not BYOK. An admin's own universal key does not count (ADR
+// 0031). The caller is never an input.
+const PRIVACY_KEY_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai']
+
+/** True when the app has its own LLM key. Null when the lookup failed. */
+async function projectByokConfigured(pid: string): Promise<boolean | null> {
+  try {
+    // One owner read and one pool read for both providers. A thrown read
+    // is an unknown chip, not "platform key".
+    const sources = await resolveLlmKeySources(db(), pid, PRIVACY_KEY_PROVIDERS)
+    return sources.some((source) => source != null && source !== 'env')
+  } catch (err) {
+    // A failed read must not 500 the sidebar, and must not look like the
+    // platform key to someone who does have BYOK.
+    log.warn('privacy-status key lookup failed', {
+      projectId: pid,
+      error: err instanceof Error ? err.message : 'lookup failed',
+    })
+    return null
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Shared: build the privacy-status JSON response for a resolved project ID.
 // ---------------------------------------------------------------------------
 async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: string) {
   const { data: settings, error } = await db()
     .from('project_settings')
-    .select(
-      'byok_anthropic_key_ref, byok_openai_key_ref, byok_firecrawl_key_ref, ' +
-        'byok_browserbase_key_ref, byok_status_checked_at',
-    )
+    .select('byok_status_checked_at')
     .eq('project_id', pid)
     .maybeSingle()
 
@@ -43,20 +77,14 @@ async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: str
   }
 
   const row = settings as Record<string, unknown> | null
-  const byokConfigured = row
-    ? Boolean(
-        row.byok_anthropic_key_ref ||
-          row.byok_openai_key_ref ||
-          row.byok_firecrawl_key_ref ||
-          row.byok_browserbase_key_ref,
-      )
-    : false
+  const byokConfigured = await projectByokConfigured(pid)
+  const llmProvider = byokConfigured === null ? 'unknown' : byokConfigured ? 'byok' : 'platform'
 
   return c.json({
     ok: true,
     data: {
       byok_configured: byokConfigured,
-      llm_provider: byokConfigured ? 'byok' : 'platform',
+      llm_provider: llmProvider,
       storage_provider: 'supabase',
       region: 'ap-southeast-1',
       retention_days: 90,
