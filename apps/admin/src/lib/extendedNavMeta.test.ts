@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   anomaliesNavBadge,
+  integrationsNavBadge,
+  settingsNavBadge,
   billingNavBadge,
   checkSectionAttention,
   codeHealthNavBadge,
@@ -248,6 +250,60 @@ describe('doSectionAttention', () => {
     })
     expect(result?.count).toBe(2)
     expect(result?.tone).toBe('danger')
+  })
+})
+
+describe('settingsNavBadge', () => {
+  it('does not show a healthy key count as a badge', () => {
+    expect(
+      settingsNavBadge({
+        byokKeysFailing: 0,
+        byokKeysUntested: 0,
+        byokKeysConfigured: 5,
+        byokKeysExpiring: 0,
+        slackConfigured: true,
+        githubRepoConfigured: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('counts expiring keys ahead of a saved-key inventory', () => {
+    expect(
+      settingsNavBadge({
+        byokKeysFailing: 0,
+        byokKeysUntested: 0,
+        byokKeysConfigured: 5,
+        byokKeysExpiring: 1,
+        slackConfigured: true,
+        githubRepoConfigured: true,
+      }),
+    ).toMatchObject({ mode: 'attention', count: 1 })
+  })
+})
+
+describe('integrationsNavBadge', () => {
+  it('matches the page when connections need attention', () => {
+    expect(
+      integrationsNavBadge({
+        platformDown: 0,
+        platformConnected: 3,
+        platformTotal: 3,
+        routingPaused: 0,
+        platformAttention: 2,
+      }),
+    ).toMatchObject({ mode: 'attention', count: 2, label: '2 connections need attention' })
+  })
+
+  it('counts missing credentials before unconfirmed connections', () => {
+    expect(
+      integrationsNavBadge({
+        platformDown: 0,
+        platformConnected: 2,
+        platformTotal: 3,
+        routingPaused: 0,
+        platformAttention: 2,
+      })?.count,
+    ).toBe(1)
   })
 })
 

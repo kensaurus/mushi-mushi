@@ -122,6 +122,68 @@ export function connectionFromProbe(input: {
   }
 }
 
+/** Slack is only verified by a test send, so a check stays good for 30 days. */
+export const SLACK_VERIFIED_FRESH_MS = 30 * 24 * 60 * 60 * 1000
+
+export interface SlackConnectionCopy {
+  notConnected: string
+  needChannel: string
+  cannotPost: string
+  unchecked: string
+}
+
+/** Copy for the Integrations Slack card. Settings passes its own sentences. */
+const SLACK_CARD_COPY: SlackConnectionCopy = {
+  notConnected: 'Add Mushi to a Slack workspace to get alerts.',
+  needChannel: 'Pick a channel below so Mushi knows where to post.',
+  cannotPost: 'No Slack bot can post to this channel yet.',
+  unchecked: 'Connected, but no test message sent yet.',
+}
+
+/**
+ * One Slack verdict for Settings → General and the Integrations Slack card.
+ * Saved credentials are not "working" until a fresh test or probe says so.
+ */
+export function slackConnection(input: {
+  configured: boolean
+  canPost: boolean
+  channelId?: string | null
+  probe?: ProbeLike
+  now?: number
+  copy?: Partial<SlackConnectionCopy>
+}): ConnectionView {
+  const copy = { ...SLACK_CARD_COPY, ...input.copy }
+  if (!input.configured) return { state: 'not_connected', detail: copy.notConnected }
+  if (!input.canPost && !input.channelId) return { state: 'attention', detail: copy.needChannel }
+  if (!input.canPost) return { state: 'attention', detail: copy.cannotPost }
+  const probed = connectionFromProbe({
+    configured: true,
+    probe: input.probe,
+    now: input.now,
+    staleAfterMs: SLACK_VERIFIED_FRESH_MS,
+  })
+  if (probed.state === 'checking') return { state: 'checking', detail: copy.unchecked }
+  return probed
+}
+
+/**
+ * Sentry on Settings → General: a DSN alone cannot receive events.
+ * "Working" still waits for an inbound delivery, which this row does not see,
+ * so a complete save stays "not checked yet" rather than "working".
+ */
+export function sentrySettingsState(input: {
+  dsnSaved: boolean
+  webhookSecretSaved: boolean
+}): ConnectionView {
+  if (!input.dsnSaved) {
+    return { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
+  }
+  if (!input.webhookSecretSaved) {
+    return { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
+  }
+  return { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+}
+
 /**
  * Sentry has two halves: the API token (probed) and inbound alerts (webhook
  * deliveries). "Healthy" next to "No inbound deliveries yet" was finding B25.

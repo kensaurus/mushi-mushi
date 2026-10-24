@@ -556,7 +556,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('project_settings')
         .select(
           'updated_at, slack_webhook_url, slack_channel_id, slack_bot_token_ref, slack_team_name, ' +
-            'discord_webhook_url, teams_webhook_url, notification_prefs, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
+            'discord_webhook_url, teams_webhook_url, notification_prefs, sentry_dsn, sentry_webhook_secret, reporter_notifications_enabled, stage2_model, ' +
             'sdk_config_enabled, sdk_config_updated_at, ' +
             'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
             'byok_openai_key_ref, byok_openai_test_status, ' +
@@ -654,6 +654,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         teamsConfigured: Boolean(row.teams_webhook_url),
         notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
         sentryConfigured: Boolean(row.sentry_dsn),
+        // Boolean only — the secret itself never leaves this handler.
+        sentryWebhookSecretSet: Boolean(row.sentry_webhook_secret),
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
         stage2Model: (row.stage2_model as string | null) ?? null,
         sdkConfigEnabled: Boolean(row.sdk_config_enabled),

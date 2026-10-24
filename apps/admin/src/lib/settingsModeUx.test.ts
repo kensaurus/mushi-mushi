@@ -43,6 +43,12 @@ describe('resolveQuickSettingsTab', () => {
     expect(resolveQuickSettingsTab(ready, summary({}), true, true)).toBe('sdk');
   });
 
+  it('opens General when Integrations says connections need attention', () => {
+    expect(
+      resolveQuickSettingsTab(ready, summary({}), true, true, { integrations: { down: 0, attention: 2 } }),
+    ).toBe('general');
+  });
+
   it('opens General for the optional alerts step', () => {
     expect(resolveQuickSettingsTab({ ...ready, slackConfigured: false }, summary({}), true, true)).toBe('general');
   });

@@ -49,4 +49,28 @@ describe('settingsBannerPriority', () => {
       settingsBannerPriority(stats({ slackConfigured: false, sentryConfigured: false }), summary(), true),
     ).toBe('routing_optional')
   })
+
+  it('does not say everything is working while Slack, Sentry or Integrations disagree', () => {
+    expect(
+      settingsBannerPriority(stats(), summary(), true, {
+        integrations: { down: 0, attention: 2 },
+      }),
+    ).toBe('integrations_attention')
+    expect(
+      settingsBannerPriority(stats(), summary(), true, {
+        channels: { slack: 'attention', slackDetail: 'No Slack bot can post to this channel yet.' },
+      }),
+    ).toBe('slack_attention')
+    expect(
+      settingsBannerPriority(stats(), summary(), true, {
+        channels: { sentry: 'checking' },
+      }),
+    ).toBe('alerts_unverified')
+    expect(
+      settingsBannerPriority(stats(), summary(), true, {
+        channels: { slack: 'working', sentry: 'not_connected' },
+        integrations: { down: 0, attention: 0 },
+      }),
+    ).toBe('healthy')
+  })
 })

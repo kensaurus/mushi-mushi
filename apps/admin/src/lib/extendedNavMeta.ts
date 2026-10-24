@@ -851,6 +851,14 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysFailing} BYOK key${stats.byokKeysFailing === 1 ? '' : 's'} failing probe`,
     )
   }
+  const expiring = stats.byokKeysExpiring ?? 0
+  if (expiring > 0) {
+    return attentionBadge(
+      expiring,
+      'warn',
+      `${expiring} AI key${expiring === 1 ? ' expires' : 's expire'} within a week`,
+    )
+  }
   if (stats.byokKeysUntested > 0) {
     return attentionBadge(
       stats.byokKeysUntested,
@@ -858,12 +866,8 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysUntested} BYOK key${stats.byokKeysUntested === 1 ? '' : 's'} untested`,
     )
   }
-  if (stats.byokKeysConfigured > 0) {
-    return inventoryBadge(
-      stats.byokKeysConfigured,
-      `${stats.byokKeysConfigured} BYOK key${stats.byokKeysConfigured === 1 ? '' : 's'} configured`,
-    )
-  }
+  // A saved-key count is not an open problem. Showing it ("Settings 5") beside
+  // a banner that says everything is working reads as five things to fix.
   return null
 }
 
@@ -1010,6 +1014,21 @@ export function integrationsNavBadge(
       disconnected,
       'warn',
       `${disconnected} platform integration${disconnected === 1 ? '' : 's'} not configured`,
+    )
+  }
+  if (disconnected > 0) {
+    return attentionBadge(
+      disconnected,
+      'warn',
+      `${disconnected} integration${disconnected === 1 ? '' : 's'} missing credentials`,
+    )
+  }
+  const attention = stats.platformAttention ?? 0
+  if (attention > 0) {
+    return attentionBadge(
+      attention,
+      'warn',
+      `${attention} connection${attention === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} attention`,
     )
   }
   if (stats.routingPaused > 0) {

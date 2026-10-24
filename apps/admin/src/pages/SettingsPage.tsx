@@ -10,18 +10,19 @@
  *          lib/settingsTabs.ts: the URL is rewritten to the new tab, with the
  *          section it pointed at as the #hash, and the page scrolls there.
  *
- *          The banner and the AI keys tab badge are worked out from the same
- *          saved-keys list the key rows use (ByokPoolProvider + keyStatus.ts),
- *          so the banner can never say "all good" while a row says otherwise.
+ *          The banner, the AI keys tab badge and the General Slack/Sentry rows
+ *          share one verdict (key list, slackConnection, sentrySettingsState,
+ *          Integrations stats). The banner cannot say everything is working
+ *          while a row or the Integrations page says otherwise.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout';
 import { PageScopeHint, SegmentedControl, StatCard, ErrorAlert } from '../components/ui';
 import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
-import { GeneralPanel } from '../components/settings/GeneralPanel';
+import { GeneralPanel, SETTINGS_SLACK_COPY } from '../components/settings/GeneralPanel';
 import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
 import { AgentPrReviewCard } from '../components/settings/AgentPrReviewCard';
 import { VerifiedMergeCard } from '../components/settings/VerifiedMergeCard';
@@ -37,7 +38,8 @@ import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { LabsPanel } from '../components/settings/LabsPanel';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
-import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
+import { SettingsStatusBanner, settingsBannerPriority, type SettingsBannerContext } from '../components/settings/SettingsStatusBanner';
+import { newestProbe, sentrySettingsState, slackConnection, type ProbeLike } from '../lib/integrationConnection';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
 import { ByokPoolProvider, useByokPool } from '../components/settings/ByokPoolContext';
 import { hasWorkingPoolKey, summarizeKeys, type KeySummary } from '../components/settings/keyStatus';
@@ -142,6 +144,13 @@ function SettingsPageBody({
     isValidating,
   } = usePageData<SettingsStats>(statsPath);
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData };
+  const [slackSessionProbe, setSlackSessionProbe] = useState<ProbeLike | undefined>(undefined);
+  const historyQuery = usePageData<{
+    history: Array<{ kind: string; status: string; message: string | null; checked_at: string }>;
+  }>(activeProjectId ? '/v1/admin/health/history' : null);
+  const integrationQuery = usePageData<{ platformDown?: number; platformAttention?: number }>(
+    activeProjectId ? '/v1/admin/integrations/stats' : null,
+  );
 
   const pool = useByokPool(byokEnabled);
   const keySummary: KeySummary | null = useMemo(() => {
@@ -156,9 +165,68 @@ function SettingsPageBody({
     );
   }, [pool.data, stats.byokAnthropicConfigured]);
 
-  const reloadAll = useCallback(() => {
+  const serverSlackProbe = useMemo((): ProbeLike | undefined => {
+    const row = historyQuery.data?.history.find((h) => h.kind === 'slack');
+    if (!row) return undefined;
+    const status = row.status;
+    if (status !== 'ok' && status !== 'degraded' && status !== 'down' && status !== 'unknown') return undefined;
+    return { status: status as ProbeLike['status'], message: row.message, checked_at: row.checked_at };
+  }, [historyQuery.data]);
+  const slackProbe = newestProbe(serverSlackProbe, slackSessionProbe);
+  const historySettled = historyQuery.data !== null || Boolean(historyQuery.error);
+
+  const bannerContext = useMemo((): SettingsBannerContext => {
+    const channels: NonNullable<SettingsBannerContext['channels']> = {};
+    if (stats.slackConfigured && stats.slackCanPost !== true) {
+      const view = slackConnection({
+        configured: true,
+        canPost: false,
+        channelId: stats.slackChannelId ?? null,
+        copy: SETTINGS_SLACK_COPY,
+      });
+      channels.slack = view.state;
+      channels.slackDetail = view.detail;
+    } else if (stats.slackConfigured && stats.slackCanPost === true && (historySettled || slackSessionProbe)) {
+      const view = slackConnection({
+        configured: true,
+        canPost: true,
+        channelId: stats.slackChannelId ?? null,
+        probe: slackProbe,
+        copy: SETTINGS_SLACK_COPY,
+      });
+      channels.slack = view.state;
+      channels.slackDetail = view.detail;
+    } else if (!stats.slackConfigured) {
+      channels.slack = 'not_connected';
+    }
+    if (stats.sentryWebhookSecretSet !== undefined) {
+      const view = sentrySettingsState({
+        dsnSaved: stats.sentryConfigured,
+        webhookSecretSaved: stats.sentryWebhookSecretSet,
+      });
+      channels.sentry = view.state;
+      channels.sentryDetail = view.detail;
+    }
+    return {
+      channels,
+      // A failed read stays null so we do not invent "0 need attention".
+      integrations: integrationQuery.data
+        ? { down: integrationQuery.data.platformDown ?? 0, attention: integrationQuery.data.platformAttention ?? 0 }
+        : null,
+    };
+  }, [stats, historySettled, integrationQuery.data, slackProbe, slackSessionProbe]);
+
+  const reloadHistory = historyQuery.reload;
+  const reloadIntegrationStats = integrationQuery.reload;
+  const reloadAlerts = useCallback(() => {
     reloadStats();
-  }, [reloadStats]);
+    reloadHistory();
+    reloadIntegrationStats();
+  }, [reloadStats, reloadHistory, reloadIntegrationStats]);
+
+  const reloadAll = useCallback(() => {
+    reloadAlerts();
+  }, [reloadAlerts]);
 
   useRealtimeReload(['project_settings'], reloadAll);
 
@@ -182,11 +250,17 @@ function SettingsPageBody({
   // hold those ids can render: the AI keys rows wait for the saved-keys list.
   useScrollToHash(Boolean(statsData) && !entitlementsLoading && !poolPending);
   const quickPicked = useRef(false);
+  const signalsPending =
+    Boolean(stats.slackConfigured && stats.slackCanPost === true && !historySettled && !slackSessionProbe) ||
+    Boolean(activeProjectId && integrationQuery.loading && !integrationQuery.data && !integrationQuery.error);
+  const bannerPriority = settingsBannerPriority(stats, keySummary, hasAnthropicKey, bannerContext);
+  const holdAllClear =
+    signalsPending && (bannerPriority === 'healthy' || bannerPriority === 'routing_optional');
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || quickPicked.current) return;
+    if (!ux.isQuickstart || !activeProjectId || statsLoading || poolPending || signalsPending || quickPicked.current) return;
     quickPicked.current = true;
     if (!shouldResolveQuickSettingsTab(param) || rememberedTab !== null) return;
-    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled);
+    const quickTab = resolveQuickSettingsTab(stats, keySummary, hasAnthropicKey, byokEnabled, bannerContext);
     if (active !== quickTab) setActive(quickTab);
   }, [
     ux.isQuickstart,
@@ -197,6 +271,8 @@ function SettingsPageBody({
     keySummary,
     hasAnthropicKey,
     byokEnabled,
+    bannerContext,
+    signalsPending,
     active,
     param,
     rememberedTab,
@@ -208,7 +284,11 @@ function SettingsPageBody({
     (keySummary ? keySummary.attention + keySummary.expiring : stats.byokKeysFailing) +
     (!hasAnthropicKey ? 1 : 0) +
     (!stats.sdkConfigEnabled ? 1 : 0) +
-    (keySummary ? keySummary.checking : stats.byokKeysUntested);
+    (keySummary ? keySummary.checking : stats.byokKeysUntested) +
+    (bannerContext.channels?.slack === 'attention' ? 1 : 0) +
+    (bannerContext.channels?.sentry === 'attention' ? 1 : 0) +
+    (bannerContext.integrations?.down ?? 0) +
+    (bannerContext.integrations?.attention ?? 0);
 
   usePublishPageContext({
     route: '/settings',
@@ -283,11 +363,12 @@ function SettingsPageBody({
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            children: (
+            children: holdAllClear ? null : (
               <SettingsStatusBanner
                 stats={stats}
                 keySummary={keySummary}
                 hasAnthropicKey={hasAnthropicKey}
+                context={bannerContext}
                 onTab={setActive}
                 plainBanner={ux.plainBanner}
               />
@@ -314,7 +395,16 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel />
+            <GeneralPanel
+              alerts={{
+                slackConfigured: stats.slackConfigured,
+                slackCanPost: stats.slackCanPost === true,
+                slackChannelId: stats.slackChannelId ?? null,
+                probe: slackProbe,
+              }}
+              onSlackTested={setSlackSessionProbe}
+              onAlertsChanged={reloadAlerts}
+            />
             <SpendLimitsPanel />
             <AgentPrReviewCard projectId={activeProjectId} />
             <VerifiedMergeCard projectId={activeProjectId} />

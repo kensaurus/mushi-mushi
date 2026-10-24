@@ -44,6 +44,14 @@ import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
 import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import {
+  newestProbe,
+  probeFromTestSend,
+  sentrySettingsState,
+  slackConnection,
+  type ProbeLike,
+  type SlackConnectionCopy,
+} from '../../lib/integrationConnection'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -90,6 +98,22 @@ interface ProjectSettings {
   widget_brand_footer?: boolean | null
   /** Linked Supabase project (20-char ref). The token is a key under AI keys. */
   supabase_project_ref?: string | null
+  slack_bot_token_ref_set?: boolean
+}
+
+/** Same sentences the Settings banner uses, so the row and the banner match. */
+export const SETTINGS_SLACK_COPY: SlackConnectionCopy = {
+  notConnected: 'Add a channel ID below to get bug alerts in Slack.',
+  needChannel: 'Add a channel ID below so Mushi knows where to post.',
+  cannotPost: 'No Slack bot can post to this channel yet. Add Mushi to Slack, or save a webhook below.',
+  unchecked: 'Saved. Send a test message to check it.',
+}
+
+export interface GeneralAlertInputs {
+  slackConfigured: boolean
+  slackCanPost: boolean
+  slackChannelId: string | null
+  probe?: ProbeLike
 }
 
 /** Where a scoped Supabase access token is created. */
@@ -98,7 +122,16 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
-export function GeneralPanel() {
+export function GeneralPanel({
+  alerts,
+  onSlackTested,
+  onAlertsChanged,
+}: {
+  /** Stats + the latest Slack probe. Omitted, the row uses only this form. */
+  alerts?: GeneralAlertInputs | null
+  onSlackTested?: (probe: ProbeLike) => void
+  onAlertsChanged?: () => void
+} = {}) {
   const toast = useToast()
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
@@ -120,12 +153,17 @@ export function GeneralPanel() {
   const dirty = draft != null
   const [testingSlack, setTestingSlack] = useState(false)
   const [slackTest, setSlackTest] = useState<{ ok: boolean; at: string } | null>(null)
+  const [slackSessionProbe, setSlackSessionProbe] = useState<ProbeLike | undefined>(undefined)
 
   async function testSlack() {
     setTestingSlack(true)
     const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
     setTestingSlack(false)
-    setSlackTest({ ok: res.ok, at: new Date().toISOString() })
+    const probe = probeFromTestSend(res.ok, res.ok ? 'Test message delivered' : (res.error?.message ?? null))
+    setSlackSessionProbe(probe)
+    setSlackTest({ ok: res.ok, at: probe.checked_at })
+    onSlackTested?.(probe)
+    onAlertsChanged?.()
   }
 
   const changeCount = dirty
@@ -161,6 +199,7 @@ export function GeneralPanel() {
       toast.success('Settings saved')
       setDraft(null)
       reload()
+      onAlertsChanged?.()
     } else {
       toast.error('Your settings were not saved', res.error?.message)
     }
@@ -169,22 +208,25 @@ export function GeneralPanel() {
   if (loading) return <PanelSkeleton rows={4} label="Loading settings" inCard={false} />
   if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
 
-  // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
-  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
-  const slackStatus: RowStatusValue = !slackSaved
-    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
-    : slackTest?.ok
-      ? { state: 'working', detail: 'Test message sent just now.' }
-      : slackTest
-        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
-        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
+  // ── Statuses: the same rules as the page banner and the Integrations card ──
+  const channelId = saved.slack_channel_id || alerts?.slackChannelId || ''
+  const webhookSet = saved.slack_webhook_url_set === true
+  const botSet = saved.slack_bot_token_ref_set === true
+  const slackCanPost = (alerts?.slackCanPost ?? false) || webhookSet || (Boolean(channelId) && botSet)
+  const slackView = slackConnection({
+    configured: (alerts?.slackConfigured ?? false) || Boolean(channelId) || webhookSet || botSet,
+    canPost: slackCanPost,
+    channelId: channelId || null,
+    probe: newestProbe(alerts?.probe, slackSessionProbe),
+    copy: SETTINGS_SLACK_COPY,
+  })
+  const slackStatus: RowStatusValue = { state: slackView.state, detail: slackView.detail }
 
-  const sentryDsnSaved = Boolean(saved.sentry_dsn)
-  const sentryStatus: RowStatusValue = !sentryDsnSaved
-    ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
-    : saved.sentry_webhook_secret_set !== true
-      ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
-      : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+  const sentryView = sentrySettingsState({
+    dsnSaved: Boolean(saved.sentry_dsn),
+    webhookSecretSaved: saved.sentry_webhook_secret_set === true,
+  })
+  const sentryStatus: RowStatusValue = { state: sentryView.state, detail: sentryView.detail }
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
@@ -212,7 +254,7 @@ export function GeneralPanel() {
           purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
           status={slackStatus}
           action={
-            slackSaved ? (
+            slackCanPost ? (
               <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
                 Send test message
               </Btn>

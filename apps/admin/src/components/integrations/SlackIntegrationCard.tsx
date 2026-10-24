@@ -19,10 +19,7 @@ import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
-import { connectionFromProbe, newestProbe, probeFromTestSend, type ProbeLike } from '../../lib/integrationConnection'
-
-/** Slack is only verified by a test send, so a check stays good for 30 days. */
-const SLACK_VERIFIED_FRESH_MS = 30 * 24 * 60 * 60 * 1000
+import { newestProbe, probeFromTestSend, slackConnection, type ProbeLike } from '../../lib/integrationConnection'
 
 interface Props {
   projectId: string | null
@@ -245,20 +242,12 @@ export function SlackIntegrationCard({
     }
   }
 
-  const probed = connectionFromProbe({
-    configured: true,
+  const connection = slackConnection({
+    configured: slackConfigured,
+    canPost,
+    channelId,
     probe: newestProbe(latestProbe, localProbe),
-    staleAfterMs: SLACK_VERIFIED_FRESH_MS,
   })
-  const connection = !slackConfigured
-    ? { state: 'not_connected' as const, detail: 'Add Mushi to a Slack workspace to get alerts.' }
-    : !canPost && !channelId
-      ? { state: 'attention' as const, detail: 'Pick a channel below so Mushi knows where to post.' }
-      : !canPost
-        ? { state: 'attention' as const, detail: 'No Slack bot can post to this channel yet.' }
-        : probed.state === 'checking'
-          ? { state: 'checking' as const, detail: 'Connected, but no test message sent yet.' }
-          : probed
   const connectionAction =
     connection.state === 'not_connected' || (connection.state === 'attention' && channelId && !canPost)
       ? { label: 'Add to Slack', onClick: () => void handleAddToSlack() }
@@ -333,7 +322,7 @@ export function SlackIntegrationCard({
         </div>
       </div>
 
-      <div title={probed.raw && probed.raw !== connection.detail ? probed.raw : undefined}>
+      <div title={connection.raw && connection.raw !== connection.detail ? connection.raw : undefined}>
         <ConnectionStatus
           state={testingSlack ? 'checking' : connection.state}
           label={testingSlack ? 'Sending a test…' : undefined}

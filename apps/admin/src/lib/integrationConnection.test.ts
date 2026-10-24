@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectionFromProbe, humanizeProbeMessage, sentryConnection, isMissingSentrySecret } from './integrationConnection'
+import { connectionFromProbe, humanizeProbeMessage, sentryConnection, sentrySettingsState, slackConnection, isMissingSentrySecret } from './integrationConnection'
 
 const NOW = Date.parse('2026-10-04T01:00:00Z')
 const RECENT = '2026-10-04T00:49:06Z'
@@ -117,6 +117,38 @@ describe('sentryConnection (finding B25)', () => {
         now: NOW,
       }).detail,
     ).toBe('The credentials were rejected.')
+  })
+})
+
+describe('slackConnection', () => {
+  it('a saved channel that cannot post needs attention, never "working"', () => {
+    expect(slackConnection({ configured: true, canPost: false, channelId: 'C1', now: NOW }).state).toBe('attention')
+  })
+
+  it('a channel that can post but was never tested is not checked yet', () => {
+    expect(slackConnection({ configured: true, canPost: true, channelId: 'C1', now: NOW }).state).toBe('checking')
+  })
+
+  it('a fresh passing test is working', () => {
+    expect(
+      slackConnection({
+        configured: true,
+        canPost: true,
+        channelId: 'C1',
+        probe: ok,
+        now: NOW,
+      }).state,
+    ).toBe('working')
+  })
+})
+
+describe('sentrySettingsState', () => {
+  it('a DSN without the webhook secret needs attention', () => {
+    expect(sentrySettingsState({ dsnSaved: true, webhookSecretSaved: false }).state).toBe('attention')
+  })
+
+  it('a complete save is still not called working', () => {
+    expect(sentrySettingsState({ dsnSaved: true, webhookSecretSaved: true }).state).toBe('checking')
   })
 })
 

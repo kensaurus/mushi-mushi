@@ -6,7 +6,7 @@
 import { useAdminMode } from './mode';
 import type { SettingsStats, SettingsTabId } from '../components/settings/types';
 import type { KeySummary } from '../components/settings/keyStatus';
-import { settingsBannerPriority } from '../components/settings/SettingsStatusBanner';
+import { settingsBannerPriority, type SettingsBannerContext } from '../components/settings/SettingsStatusBanner';
 
 export interface SettingsUxFlags {
   isQuickstart: boolean;
@@ -43,9 +43,12 @@ export function resolveQuickSettingsTab(
   keySummary: KeySummary | null,
   hasAnthropicKey: boolean,
   byokEnabled: boolean,
+  context?: SettingsBannerContext | null,
 ): SettingsTabId {
-  let priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey);
-  if (priority === 'no_anthropic' && !byokEnabled) priority = settingsBannerPriority(stats, keySummary, true);
+  let priority = settingsBannerPriority(stats, keySummary, hasAnthropicKey, context);
+  if (priority === 'no_anthropic' && !byokEnabled) {
+    priority = settingsBannerPriority(stats, keySummary, true, context);
+  }
   switch (priority) {
     case 'keys_attention':
     case 'keys_expiring':

@@ -22,7 +22,12 @@ export interface SettingsStats {
   projectName: string | null
   updatedAt: string | null
   slackConfigured: boolean
+  /** Webhook, or a channel plus a bot: something can actually post. */
+  slackCanPost?: boolean
+  slackChannelId?: string | null
   sentryConfigured: boolean
+  /** True when the Sentry webhook secret is stored. Absent on older payloads. */
+  sentryWebhookSecretSet?: boolean
   reporterNotificationsEnabled: boolean
   stage2Model: string | null
   sdkConfigEnabled: boolean

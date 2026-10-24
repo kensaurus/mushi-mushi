@@ -23,6 +23,8 @@ export interface SettingsNavSlice {
   byokKeysFailing: number
   byokKeysUntested: number
   byokKeysConfigured: number
+  /** Keys that stop working within 7 days. Absent on older nav payloads. */
+  byokKeysExpiring?: number
   slackConfigured: boolean
   githubRepoConfigured: boolean
 }
@@ -68,6 +70,8 @@ export interface IntegrationsNavSlice {
   platformConnected: number
   platformTotal: number
   routingPaused: number
+  /** Connected, but not confirmed. Absent on older nav payloads. */
+  platformAttention?: number
 }
 
 export interface FeatureBoardNavSlice {
