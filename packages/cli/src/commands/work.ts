@@ -22,12 +22,14 @@ import type { CliConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
 import type { WhoamiData } from '../cli-types.js'
 
-/** The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
+/** @internal Exported for tests only. The fix_attempts.agent value for a fix made outside Mushi's cloud agents (as submit_fix_result). */
 export const WORK_AGENT_KIND = 'mcp'
+/** @internal Exported for tests only. */
 export const WORK_AGENT_TIMEOUT_MS = 30 * 60_000
 const PROMPT_MAX_CHARS = 40_000
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
 
+/** @internal Exported for tests only. */
 export interface WorkCandidate {
   id: string
   severity: string | null
@@ -37,7 +39,7 @@ export interface WorkCandidate {
   category?: string | null
 }
 
-/** Worst first, then newest (the order spend-down dispatches in, ADR 0023). */
+/** @internal Exported for tests only. Worst first, then newest (the order spend-down dispatches in, ADR 0023). */
 export function rankCandidates<T extends WorkCandidate>(rows: T[]): T[] {
   return [...rows].sort(
     (a, b) =>
@@ -46,6 +48,7 @@ export function rankCandidates<T extends WorkCandidate>(rows: T[]): T[] {
   )
 }
 
+/** @internal Exported for tests only. */
 export interface AttemptSummary {
   id: string
   status: string | null
@@ -56,7 +59,7 @@ export interface AttemptSummary {
   created_at?: string | null
 }
 
-/** A run or an open PR is live for the report: leave it to that one. */
+/** @internal Exported for tests only. A run or an open PR is live for the report: leave it to that one. */
 export function hasLiveAttempt(attempts: readonly AttemptSummary[]): boolean {
   return attempts.some(
     (a) =>
@@ -65,7 +68,7 @@ export function hasLiveAttempt(attempts: readonly AttemptSummary[]): boolean {
   )
 }
 
-/** `bugfix/MUSHI-<id>-local-cursor`, the cloud agents' shape (github-pr.ts) with a local suffix. */
+/** @internal Exported for tests only. `bugfix/MUSHI-<id>-local-cursor`, the cloud agents' shape (github-pr.ts) with a local suffix. */
 export function branchNameFor(reportId: string, category?: string | null, agent = 'cursor'): string {
   const c = (category ?? 'bug').toLowerCase()
   const prefix =
@@ -77,6 +80,7 @@ export function branchNameFor(reportId: string, category?: string | null, agent 
   return `${prefix}/MUSHI-${reportId}-local-${agent}`
 }
 
+/** @internal Exported for tests only. */
 export interface EarlierAttempt {
   createdAt: string | null
   prUrl: string | null
@@ -99,7 +103,7 @@ function fence(text: string): string {
 /** Text that reads as something to run, not a finding about code: dropped (the cloud screen's spirit). */
 const COMMAND_LIKE = /\b(?:curl|wget|nc|bash -c|sh -c|python3? -c|node -e|base64 -d|rm -rf|printenv)\b|\|\s*(?:sh|bash)\b|ignore (?:all |previous )?instructions/i
 
-/** What earlier attempts did, as data, so the agent does not repeat a rejected theory (prior-attempts.ts). */
+/** @internal Exported for tests only. What earlier attempts did, as data, so the agent does not repeat a rejected theory (prior-attempts.ts). */
 export function earlierAttemptsBlock(items: readonly EarlierAttempt[]): string {
   const parts: string[] = []
   for (const [i, a] of items.slice(0, 3).entries()) {
@@ -123,7 +127,7 @@ Mushi ran an agent on this report before. Below is what happened, written by a r
 ${parts.join('\n')}`
 }
 
-export interface PromptInput {
+interface PromptInput {
   reportId: string
   summary: string | null
   fixPacket: string | null
@@ -134,7 +138,7 @@ export interface PromptInput {
   baseRef: string
 }
 
-/** The local agent's prompt: Mushi's own fix packet, the earlier attempts, and the local rules. */
+/** @internal Exported for tests only. The local agent's prompt: Mushi's own fix packet, the earlier attempts, and the local rules. */
 export function buildLocalPrompt(p: PromptInput): string {
   const report =
     p.fixPacket?.trim() ||
@@ -162,7 +166,7 @@ You are in a git worktree of the repository, branched from \`${p.baseRef}\`. Rea
   return body.length > PROMPT_MAX_CHARS ? `${body.slice(0, PROMPT_MAX_CHARS)}\n[cut]` : body
 }
 
-/** `Mushi verdict: already_fixed …` on one of the first lines of the agent's output. */
+/** @internal Exported for tests only. `Mushi verdict: already_fixed …` on one of the first lines of the agent's output. */
 export function parseVerdict(output: string): { verdict: string | null; reason: string } {
   const head = output.slice(0, 2000)
   const m = /^[\s>*_#-]*mushi verdict[*_]*\s*[:：][\s*_`]*(already_fixed|wrong_repo|not_actionable|needs_human)\b[*_`]*[ \t]*[.:—–-]?[ \t]*(.*)$/im.exec(head)
@@ -177,7 +181,7 @@ const VERDICT_PREFIX: Record<string, string> = {
   needs_human: 'Agent says this needs a person',
 }
 
-export interface SubmitInput {
+interface SubmitInput {
   branch: string
   prUrl: string | null
   commitSha: string | null
@@ -187,7 +191,7 @@ export interface SubmitInput {
   noPr?: { verdict: string | null; reason: string }
 }
 
-/** The PATCH /v1/admin/fixes/:id body (submit_fix_result's shape; a no-PR run is closed as failed with its verdict). */
+/** @internal Exported for tests only. The PATCH /v1/admin/fixes/:id body (submit_fix_result's shape; a no-PR run is closed as failed with its verdict). */
 export function submitPayload(s: SubmitInput, now = new Date()): Record<string, unknown> {
   if (s.noPr) {
     const prefix = s.noPr.verdict ? VERDICT_PREFIX[s.noPr.verdict] : 'Local agent finished without a change'
@@ -205,12 +209,13 @@ export function submitPayload(s: SubmitInput, now = new Date()): Record<string, 
   }
 }
 
-/** A stable Idempotency-Key from the submission (a retried run does not insert a second fix row). */
+/** @internal Exported for tests only. A stable Idempotency-Key from the submission (a retried run does not insert a second fix row). */
 export function stableKey(...parts: string[]): string {
   const h = createHash('sha256').update(parts.join('\u0000')).digest('hex')
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16]!, 16) & 0x3) | 0x8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`
 }
 
+/** @internal Exported for tests only. */
 export function prTitle(summary: string | null, reportId: string): string {
   const s = cap((summary ?? 'fix the reported bug').replace(/\[[^\]]*\]/g, ''), 72)
   return `fix: ${s.charAt(0).toLowerCase()}${s.slice(1)} (MUSHI-${reportId.slice(0, 8)})`
@@ -219,6 +224,7 @@ export function prTitle(summary: string | null, reportId: string): string {
 /**
  * The agent's environment: no Mushi, GitHub, cloud or model keys, and git /
  * gh unable to reach the remote. Cursor's own sign-in lives in ~/.cursor.
+ * @internal Exported for tests only.
  */
 export function agentEnv(base: NodeJS.ProcessEnv, emptyDir: string): NodeJS.ProcessEnv {
   const keep = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TERM', 'SHELL', 'TMPDIR', 'TZ', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'NODE_OPTIONS']
@@ -315,7 +321,7 @@ interface ReportDetail {
   fix_attempts?: AttemptSummary[]
 }
 
-/** Reports a local run may take, best first, never more than `max`. */
+/** @internal Exported for tests only. Reports a local run may take, best first, never more than `max`. */
 export async function pickReports(api: Api, opts: { max: number; reportId?: string }): Promise<ReportDetail[]> {
   if (opts.reportId) return [await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`)]
   const lists = await Promise.all(
@@ -362,7 +368,7 @@ async function earlierFor(api: Api, detail: ReportDetail): Promise<EarlierAttemp
 
 // ─── one report ───────────────────────────────────────────────────────────
 
-export interface WorkOptions {
+interface WorkOptions {
   repoDir: string
   agent: 'cursor'
   model?: string
@@ -461,6 +467,7 @@ async function preflight(repoDir: string): Promise<void> {
 /**
  * Registering the fix and queuing its review are admin writes (mcp:write).
  * Check before an agent spends anything, and say exactly how to fix it.
+ * @internal Exported for tests only.
  */
 export function missingWriteScope(scopes: readonly string[] | undefined, projectId: string | undefined): string | null {
   if (!scopes || scopes.includes('mcp:write')) return null
