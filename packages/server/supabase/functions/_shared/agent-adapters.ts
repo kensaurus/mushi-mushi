@@ -894,6 +894,8 @@ export async function applyCloudAgentOutcome(
     payload: { agent: target.agent, ...(noPr?.category ? { verdict: noPr.category } : {}) },
   })
 
+  if (noPr?.category === 'already_fixed') await resolveAlreadyFixed(db, target, now)
+
   dispatchPluginEventDetached(db, target.projectId, 'fix.failed', {
     report: { id: target.reportId },
     fix: { id: target.attemptId, agent: target.agent, error: errorText.slice(0, 500) },
@@ -905,6 +907,49 @@ export async function applyCloudAgentOutcome(
   }).catch((e) => alog.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }))
 
   return { applied: true }
+}
+
+/** Statuses a report can leave for `resolved` when an agent finds the bug already gone. */
+const RESOLVABLE_REPORT_STATUSES = ['new', 'queued', 'pending', 'submitted', 'classified', 'triaged', 'grouped', 'fixing', 'in_progress', 'reopened']
+
+/**
+ * The agent found the bug already gone (no PR): mark the report `resolved`
+ * (not `fixed`: nothing merged) so it stops counting as open, unless another
+ * attempt or an open PR is still live for it. On 2026-10-24 nine critical
+ * site-watch reports stayed open for days after this verdict. The reporter is
+ * not told: no fix shipped. A recurrence files or reopens a report as usual.
+ */
+async function resolveAlreadyFixed(db: SupabaseClient, target: CloudAgentOutcomeTarget, now: string): Promise<void> {
+  try {
+    const { count } = await db
+      .from('fix_attempts')
+      .select('id', { count: 'exact', head: true })
+      .eq('report_id', target.reportId)
+      .neq('id', target.attemptId)
+      .is('merged_at', null)
+      .or('status.in.(queued,running),pr_state.in.(open,draft),and(pr_url.not.is.null,pr_state.is.null)')
+    if ((count ?? 0) > 0) return
+    const { data: changed } = await db
+      .from('reports')
+      .update({ status: 'resolved', updated_at: now })
+      .eq('id', target.reportId)
+      .eq('project_id', target.projectId)
+      .in('status', RESOLVABLE_REPORT_STATUSES)
+      .select('id')
+    if (!changed || (changed as unknown[]).length === 0) return
+    await insertFixEvent(db, {
+      fix_attempt_id: target.attemptId,
+      project_id: target.projectId,
+      kind: 'completed',
+      status: 'ok',
+      label: 'Resolved: the agent found it already fixed',
+      detail: 'No pull request was needed. The report reopens if the bug comes back.',
+      dedupe_key: `already-fixed-resolved:${target.attemptId}`,
+      payload: { agent: target.agent, verdict: 'already_fixed' },
+    })
+  } catch (err) {
+    alog.warn('already-fixed report not resolved', { reportId: target.reportId, err: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 /**

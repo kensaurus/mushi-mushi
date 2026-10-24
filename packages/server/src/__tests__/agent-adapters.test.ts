@@ -327,6 +327,29 @@ describe('applyCloudAgentOutcome', () => {
     expect(mocks.notifyTeamFixEvent).toHaveBeenCalledWith(db, PROJECT, REPORT, 'fix_failed', expect.objectContaining({ failureCategory: 'already_fixed' }))
   })
 
+  it('an "already fixed" verdict resolves the report when nothing else is live for it (2026-10-24)', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
+      if (q.table === 'reports' && q.op === 'update' && (q.payload as { status?: string })?.status === 'resolved') return { data: [{ id: REPORT }] }
+      return { data: null, count: 0 }
+    })
+    await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary: 'Mushi verdict: already_fixed. The page renders on the live site.' })
+    const resolved = findQueries(queries, 'reports', 'update').find((q) => (q.payload as { status?: string }).status === 'resolved')
+    expect(resolved).toBeTruthy()
+    expect(hasFilter(resolved!, 'in', 'status')).toBe(true)
+    expect(findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label: string }).label)).toContain('Resolved: the agent found it already fixed')
+  })
+
+  it('an "already fixed" verdict leaves the report open while another attempt or PR is live', async () => {
+    const { db, queries } = createFakeDb((q) => {
+      if (q.table === 'fix_attempts' && q.op === 'update') return { data: [{ id: 'fa-1' }] }
+      if (q.table === 'fix_attempts' && q.op === 'select') return { data: null, count: 1 }
+      return { data: null }
+    })
+    await applyCloudAgentOutcome(db, TARGET, { kind: 'completed_no_pr', summary: 'Mushi verdict: already_fixed. Nothing to change.' })
+    expect(findQueries(queries, 'reports', 'update').some((q) => (q.payload as { status?: string }).status === 'resolved')).toBe(false)
+  })
+
   it('completed_no_pr with notes but no verdict is unknown, not cursor_api_error (2026-10-21)', async () => {
     const { db, queries } = createFakeDb((q) => (q.table === 'fix_attempts' && q.op === 'update' ? { data: [{ id: 'fa-1' }] } : { data: null }))
     await applyCloudAgentOutcome(db, TARGET, {
