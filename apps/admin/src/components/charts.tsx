@@ -344,10 +344,11 @@ export function LineSparkline({
   // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
   // grid-line labels stay aligned with actual data-point positions on the SVG.
   const countAxis = valueFormat === 'count'
-  const yTickValues = buildYTickValues(rawPeak, min, 4, 0.12, {
+  // Count axes: whole-number ticks, headroom only when scaleToData, and the
+  // plot top is the top tick either way so labels and points agree.
+  const yTickValues = buildYTickValues(rawPeak, min, 4, countAxis && !scaleToData ? 0 : 0.12, {
     integer: countAxis,
   })
-  // Count + scaleToData: plot top = nice tick. Non-count: master resolveChartMax.
   const chartMax = countAxis
     ? resolvePlotChartMax(values, yTickValues[0], scaleToData)
     : resolveChartMax(values, scaleToData)
@@ -577,7 +578,7 @@ export function BarSparkline({
   // the top label equals the domain. Count: nice integer ticks + resolvePlotChartMax.
   const chartMaxBase = resolveChartMax(values, scaleToData)
   const yTickValues = countAxis
-    ? buildYTickValues(rawPeak, 0, 4, 0.12, { integer: true })
+    ? buildYTickValues(rawPeak, 0, 4, scaleToData ? 0.12 : 0, { integer: true })
     : buildYTickValues(chartMaxBase / 1.12, 0, 4)
   const chartMax = countAxis
     ? resolvePlotChartMax(values, yTickValues[0], scaleToData)

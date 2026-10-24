@@ -33,7 +33,7 @@ describe('buildYTickValues / formatChartCount', () => {
     expect(formatChartCount(-0.04)).toBe('0')
   })
 
-  it('uses integer nice steps for count peak 33 (scaleToData true and false)', () => {
+  it('uses integer nice steps for count peak 33; the plot top is the top tick in both modes', () => {
     const values = [33, 10, 5]
     const ticks = buildYTickValues(33, 0, 4, 0.12, { integer: true })
     expect(ticks).toEqual([40, 30, 20, 10, 0])
@@ -42,8 +42,11 @@ describe('buildYTickValues / formatChartCount', () => {
       expect(formatChartCount(t)).not.toMatch(/\.\d/)
     }
     expect(resolvePlotChartMax(values, ticks[0], true)).toBe(40)
-    expect(resolveChartMax(values, false)).toBe(33)
-    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(33)
+    // scaleToData false: no headroom, still whole numbers, and the plot top is the top tick.
+    const flat = buildYTickValues(33, 0, 4, 0, { integer: true })
+    expect(flat[0]).toBeGreaterThanOrEqual(33)
+    expect(flat.every((t) => Number.isInteger(t))).toBe(true)
+    expect(resolvePlotChartMax(values, flat[0], false)).toBe(flat[0])
   })
 
   it('uses integer nice steps for count peak 57 (scaleToData true and false)', () => {
@@ -55,8 +58,9 @@ describe('buildYTickValues / formatChartCount', () => {
       expect(formatChartCount(t)).not.toMatch(/\.\d/)
     }
     expect(resolvePlotChartMax(values, ticks[0], true)).toBe(60)
-    expect(resolveChartMax(values, false)).toBe(57)
-    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(57)
+    const flat = buildYTickValues(57, 0, 4, 0, { integer: true })
+    expect(flat[0]).toBeGreaterThanOrEqual(57)
+    expect(resolvePlotChartMax(values, flat[0], false)).toBe(flat[0])
   })
 
   it('adds headroom when the count peak is already a nice number', () => {

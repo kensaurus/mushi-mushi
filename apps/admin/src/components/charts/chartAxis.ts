@@ -205,17 +205,16 @@ export function resolveChartMax(
 }
 
 /**
- * Plot domain top for count charts.
- * scaleToData true  → nice tick top (labels and bars/lines share a domain).
- * scaleToData false → base resolveChartMax(values, false); callers still build
- * integer ticks whose top is that max rounded up to the step.
+ * Plot domain top for count charts: the top tick, in both modes, so bars and
+ * lines share the labels' domain. scaleToData decides the headroom the
+ * caller builds the ticks with (12% when true, none when false), so it still
+ * changes the chart. An all-zero series falls back to resolveChartMax.
  */
 export function resolvePlotChartMax(
   values: number[],
   yTickTop: number | undefined,
   scaleToData: boolean,
 ): number {
-  if (!scaleToData) return resolveChartMax(values, false)
   if (yTickTop != null && yTickTop > 0) return yTickTop
-  return resolveChartMax(values, true)
+  return resolveChartMax(values, scaleToData)
 }
