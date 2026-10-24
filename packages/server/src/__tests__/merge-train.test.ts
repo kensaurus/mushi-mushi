@@ -84,5 +84,8 @@ describe('the train PR', () => {
     expect(pr.body).not.toMatch(/\[release|\[skip/)
     expect(pr.body).toContain('2 more approved pull requests wait for the next train')
     expect(trainBranchName(new Date('2026-10-24T01:30:00Z'))).toBe('mushi/train/20261024-0130')
+    expect(pr.body).toContain('Do not squash it.')
+    const squash = trainPullRequest({ members: [{ prNumber: 5, title: 't', reportId: null }], attempt: 1, skipped: 0, now: new Date('2026-10-24T01:30:00Z'), method: 'squash' })
+    expect(squash.body).toContain('Mushi squash-merges this PR, then closes each PR above as shipped')
   })
 })

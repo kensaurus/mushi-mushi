@@ -4,7 +4,9 @@
  * merge-queue release trains (ADR 0044): one tick for one repo in `train`
  * mode. Batches the repo's approved fix PRs into one branch and one pull
  * request, waits for its CI, merges it through the review gate with a merge
- * commit (GitHub then marks every member PR merged), and bisects a red train.
+ * commit (GitHub then marks every member PR merged) or, where the repo keeps
+ * a linear history, a squash (Mushi then closes each member as shipped), and
+ * bisects a red train.
  * Kept apart from worker.ts (single-PR merges) and from index.ts (live I/O)
  * so tests drive it with fake GitHub calls.
  */
@@ -26,6 +28,7 @@ import {
   trainDue,
   trainPullRequest,
   type TrainCandidate,
+  type TrainMergeMethod,
 } from '../_shared/merge-train.ts'
 
 const log = rootLog.child('merge-train')
@@ -42,6 +45,8 @@ export interface TrainDeps {
   openPr: (token: string, ref: GithubRepoRef, pr: { head: string; base: string; title: string; body: string }) => Promise<{ number: number } | null>
   closePr: (token: string, ref: GithubRepoRef, n: number, comment: string) => Promise<void>
   deleteBranch: (token: string, ref: GithubRepoRef, branch: string) => Promise<void>
+  /** 'squash' when the base branch must stay linear or merge commits are off; else 'merge'. */
+  mergeMethod: (token: string, ref: GithubRepoRef, base: string) => Promise<TrainMergeMethod>
   trainMerge: typeof gatedTrainMerge
   finalize: typeof finalizeFixMerge
   requeueReview: typeof requeueReviewForNewHead
@@ -148,7 +153,8 @@ async function buildTrain(
   const lines = await Promise.all(
     merged.map(async (m) => ({ prNumber: m.prNumber, title: (await deps.pull(args.token, args.ref, m.prNumber))?.title ?? null, reportId: null })),
   )
-  const pr = trainPullRequest({ members: lines, attempt: args.attempt, skipped: args.skippedBefore + conflicted.length, now })
+  const method = await deps.mergeMethod(args.token, args.ref, args.baseRef)
+  const pr = trainPullRequest({ members: lines, attempt: args.attempt, skipped: args.skippedBefore + conflicted.length, now, method })
   const opened = await deps.openPr(args.token, args.ref, { head: branch, base: args.baseRef, title: pr.title, body: pr.body })
   if (!opened) {
     await deps.deleteBranch(args.token, args.ref, branch)
@@ -170,7 +176,7 @@ async function buildTrain(
   return 'started'
 }
 
-async function finishMerged(db: SupabaseClient, train: TrainRow, mergeSha: string | null, deps: TrainDeps) {
+async function finishMerged(db: SupabaseClient, train: TrainRow, mergeSha: string | null, deps: TrainDeps, squash?: { token: string; ref: GithubRepoRef }) {
   const now = new Date().toISOString()
   await db.from('release_trains').update({ state: 'merged', merged_at: now, merge_sha: mergeSha, updated_at: now, detail: `Merged ${train.members.length} fixes.` }).eq('id', train.id)
   await setRows(db, train.members.map((m) => m.rowId), { state: 'merged', merged_at: now, detail: `Merged in release train #${train.pr_number}.` })
@@ -183,6 +189,13 @@ async function finishMerged(db: SupabaseClient, train: TrainRow, mergeSha: strin
       await deps.finalize(db as never, a as never, { prUrl: String(a.pr_url ?? ''), prNumber: a.pr_number as number, repository: train.repo, source: 'merge_queue' } as never)
     } catch (err) {
       log.warn('finalize after a train merge failed', { trainId: train.id, err: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  // A squash leaves the member PRs open: close each as shipped, after finalize
+  // marked it merged (the closed-unmerged bookkeeping skips merged attempts).
+  if (squash) {
+    for (const m of train.members) {
+      await deps.closePr(squash.token, squash.ref, m.prNumber, `Shipped in release train #${train.pr_number}${mergeSha ? ` (${mergeSha.slice(0, 7)})` : ''}: its commits are on the base branch.`)
     }
   }
   await trainEvent(db, memberRows(train), 'ok', 'Merged in a release train', `Release train #${train.pr_number} merged ${train.members.length} fixes as one release.`, `train-merged:${train.id}`)
@@ -229,7 +242,9 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
     return 'testing'
   }
   if (checks.failed.length) return redTrain(db, train, token, ref, checks.failed, settings, deps)
+  const method = await deps.mergeMethod(token, ref, train.base_ref)
   const outcome = await deps.trainMerge(db, {
+    mergeMethod: method,
     projectId: train.project_id,
     token,
     ref,
@@ -251,7 +266,7 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
     await db.from('release_trains').update({ updated_at: now, detail: outcome.result.message ?? 'GitHub did not merge the train yet; trying again.' }).eq('id', train.id)
     return 'testing'
   }
-  await finishMerged(db, train, outcome.result.sha ?? null, deps)
+  await finishMerged(db, train, outcome.result.sha ?? null, deps, method === 'squash' ? { token, ref } : undefined)
   return 'merged'
 }
 

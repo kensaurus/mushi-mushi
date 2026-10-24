@@ -18482,8 +18482,9 @@ In the **Merge when ready** panel, **Release** switches between **Batch**
 (trains) and **Each PR**, and the menu sets how often a train leaves. Each
 repo shows its train on the way, or when the next one leaves.
 
-If your repo allows only squash merges, a train cannot merge; set the app to
-**Each PR**.
+If your repo requires a linear history (or has merge commits turned off),
+Mushi squash-merges the train instead, then closes each PR in it as shipped
+and marks its report Fixed.
 
 **Merge now** (in the same dialog) tries each PR once. The PRs that did not
 merge stay listed above the table with GitHub's reason and a

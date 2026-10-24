@@ -112,7 +112,9 @@ export interface TrainMemberLine {
  * output): no links or markup is added from them, and no `[release…]` /
  * `[skip …]` marker can slip into the merge commit from a member title.
  */
-export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: number; skipped: number; now: Date }): { title: string; body: string } {
+export type TrainMergeMethod = 'merge' | 'squash'
+
+export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: number; skipped: number; now: Date; method?: TrainMergeMethod }): { title: string; body: string } {
   const n = args.members.length
   const date = args.now.toISOString().slice(0, 10)
   const clean = (t: string | null) => (t ?? '').replace(/\[[^\]]*\]/g, '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120)
@@ -125,7 +127,9 @@ export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: nu
       ...lines,
       '',
       args.skipped ? `${args.skipped} more approved pull request${args.skipped === 1 ? '' : 's'} wait for the next train (conflict, or the batch was full).` : '',
-      'Merging this PR with a merge commit marks every PR above as merged. Do not squash it.',
+      args.method === 'squash'
+        ? 'This repo keeps a linear history, so Mushi squash-merges this PR, then closes each PR above as shipped and marks its report fixed.'
+        : 'Merging this PR with a merge commit marks every PR above as merged. Do not squash it.',
     ]
       .filter((l, i, a) => l !== '' || a[i - 1] !== '')
       .join('\n'),

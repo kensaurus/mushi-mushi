@@ -215,7 +215,7 @@ export type GatedTrainOutcome =
  */
 export async function gatedTrainMerge(
   db: SupabaseClient,
-  input: { projectId: string; token: string; ref: GithubRepoRef; trainPr: number; trainHeadSha: string; members: TrainMember[]; commitTitle?: string },
+  input: { projectId: string; token: string; ref: GithubRepoRef; trainPr: number; trainHeadSha: string; members: TrainMember[]; commitTitle?: string; mergeMethod?: 'merge' | 'squash' },
 ): Promise<GatedTrainOutcome> {
   const own = await connectedRepoRefs(db, input.projectId)
   if (!own.some((r) => sameRepo(r, input.ref))) {
@@ -245,7 +245,8 @@ export async function gatedTrainMerge(
     return { ok: false, code: 'MEMBER_REFUSED', message: `${refused.length} pull request${refused.length === 1 ? '' : 's'} in the train no longer pass the review gate.`, refused }
   }
   const result = await mergeGithubPullRequest(input.token, input.ref, input.trainPr, {
-    mergeMethod: 'merge',
+    // A merge commit lets GitHub mark every member merged; a linear-history repo takes a squash (the caller closes the members).
+    mergeMethod: input.mergeMethod ?? 'merge',
     sha: input.trainHeadSha,
     ...(input.commitTitle ? { commitTitle: input.commitTitle } : {}),
   })

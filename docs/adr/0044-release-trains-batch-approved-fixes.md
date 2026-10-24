@@ -60,8 +60,9 @@ the apps live in personal repos (ADR 0041).
 - **A daily fixed release window** (for example 10:00 JST). An interval
   from the last train adapts to how busy an app is, and a full batch leaves
   at once.
-- **Squash-merging the train.** It would leave the member PRs open and lose
-  which commit fixed which report.
+- **Squash-merging every train.** It leaves the member PRs open and folds
+  the members into one commit; it is used only where the repo requires a
+  linear history.
 - **One train across repos.** Each repo has its own CI and deploy; a red
   repo would hold back the others.
 - **Merging members one by one after a green train.** Each merge is a push,
@@ -72,6 +73,8 @@ the apps live in personal repos (ADR 0041).
 - A fix waits up to the interval before it ships, unless it is urgent.
 - An app's CI runs once per train instead of once per PR plus once per
   branch update; a red train costs a few extra runs while it is bisected.
-- Host repos that squash-only merge (merge commits disabled) cannot take a
-  train; the train stays open with GitHub's reason, and the app can be set
-  to `each`.
+- A repo that keeps a linear history (a `required_linear_history` ruleset or
+  branch protection rule, or merge commits turned off; mushi-mushi and yen-yen
+  on 2026-10-24) gets a squash merge of the train instead. GitHub then leaves
+  the member PRs open, so Mushi finalizes each member (report Fixed, reporter
+  told, regression watch) and then closes its PR as shipped in the train.

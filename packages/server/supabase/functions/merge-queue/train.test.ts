@@ -89,6 +89,7 @@ function deps(over: Partial<TrainDeps> = {}): TrainDeps & { calls: string[] } {
     openPr: (_t, _r, pr) => (calls.push(`open ${pr.title}`), Promise.resolve({ number: 900 })),
     closePr: (_t, _r, n) => (calls.push(`close ${n}`), Promise.resolve()),
     deleteBranch: (_t, _r, b) => (calls.push(`delete ${b}`), Promise.resolve()),
+    mergeMethod: () => Promise.resolve('merge'),
     trainMerge: (() => (calls.push('trainMerge'), Promise.resolve({ ok: true, result: { merged: true, alreadyMerged: false, sha: 'msha' } }))) as never,
     finalize: (() => (calls.push('finalize'), Promise.resolve({ justMerged: true, reportStatus: 'fixed' }))) as never,
     requeueReview: (() => Promise.resolve('requeued')) as never,
@@ -186,3 +187,20 @@ test('a member taken out of the queue never rides: the train is rebuilt without 
   assertEquals(tables.release_trains[0].state, 'abandoned')
   assertEquals(tables.fix_merge_queue.map((r) => [r.id, r.state, r.train_id]), [['a', 'queued', null], ['b', 'removed', 'tr1']])
 })
+
+test('a linear-history repo gets a squash; each member PR is then closed as shipped', async () => {
+  const rows = [qrow('a', 1, { state: 'waiting', train_id: 'tr1' }), qrow('b', 2, { state: 'waiting', train_id: 'tr1' })]
+  const { db, tables } = setup(rows, { release_trains: [activeTrain([1, 2])] })
+  let method: unknown = null
+  const d = deps({
+    pull: (_t, _r, n) => Promise.resolve(n === 900 ? pull(900, { headSha: 'th' }) : pull(n)),
+    mergeMethod: () => Promise.resolve('squash'),
+    trainMerge: ((_db: unknown, input: { mergeMethod?: string }) => ((method = input.mergeMethod), d.calls.push('trainMerge'), Promise.resolve({ ok: true, result: { merged: true, alreadyMerged: false, sha: 'msha123456' } }))) as never,
+  })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'merged')
+  assertEquals(method, 'squash')
+  assertEquals(d.calls, ['trainMerge', 'finalize', 'finalize', 'close 1', 'close 2'])
+  assertEquals(tables.fix_merge_queue.map((r) => r.state), ['merged', 'merged'])
+})
+

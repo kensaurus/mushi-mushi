@@ -150,6 +150,18 @@ const trainDeps: NonNullable<MergeQueueDeps['train']> = {
     if (!branch.startsWith('mushi/train/')) return
     await gh(token, 'DELETE', `/repos/${ref.owner}/${ref.repo}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`)
   },
+  mergeMethod: async (token, ref, base) => {
+    // Merge commits need allow_merge_commit and no linear-history rule (ruleset or classic protection).
+    const repo = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}`)
+    const allowMerge = repo.ok ? ((await repo.json()) as { allow_merge_commit?: boolean }).allow_merge_commit !== false : true
+    if (!allowMerge) return 'squash'
+    const enc = base.split('/').map(encodeURIComponent).join('/')
+    const rules = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/rules/branches/${enc}`)
+    if (rules.ok && ((await rules.json()) as Array<{ type?: string }>).some((r) => r.type === 'required_linear_history')) return 'squash'
+    const prot = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/branches/${enc}/protection`)
+    if (prot.ok && ((await prot.json()) as { required_linear_history?: { enabled?: boolean } }).required_linear_history?.enabled) return 'squash'
+    return 'merge'
+  },
   trainMerge: gatedTrainMerge,
 }
 
