@@ -2020,6 +2020,10 @@ async function dispatchToCloudAgent(
 
   const adapter = getCloudAgentAdapter(requestedAgent);
   const dispatchSpan = trace.span('cloud.dispatch');
+  // Spend-down stored the key it is billing. Pin it so the Cursor call does
+  // not resolve the pool again and land on a quota-held key.
+  const spendDownKeyId = dispatchMeta.spend_down_key_id;
+  const pinnedCursorKeyId = typeof spendDownKeyId === 'string' && spendDownKeyId ? spendDownKeyId : undefined;
   const result = await adapter.dispatch({
     db,
     projectId: dispatch.project_id,
@@ -2032,6 +2036,7 @@ async function dispatchToCloudAgent(
     branchName,
     model,
     name: `Mushi fix ${dispatch.report_id.slice(0, 8)}`,
+    ...(pinnedCursorKeyId ? { pinnedCursorKeyId } : {}),
   });
   dispatchSpan.end({
     agent: requestedAgent,

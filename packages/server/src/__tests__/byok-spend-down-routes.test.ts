@@ -321,6 +321,19 @@ describe('GET spend-down: two organization Cursor keys', () => {
     expect(suzu.idleNote).toBe(OUTRANKED)
   })
 
+  it('an active key whose last test was error_quota still pays for the apps', async () => {
+    state.authMethod = 'jwt'
+    state.access = { [P1]: 'owner' }
+    const { app } = twoOrgKeys({ status: 'active', test_status: 'error_quota' })
+    const res = await app.call('GET', '/v1/admin/byok/spend-down', {})
+    const keys = res.body.data?.keys as Array<Record<string, unknown>>
+    const ayako = keys.find((k) => k.id === SHARED)!
+    const suzu = keys.find((k) => k.id === SUZU)!
+    expect(ayako.projects).toMatchObject([{ id: P1 }])
+    expect(suzu.projects).toEqual([])
+    expect(suzu.idleNote).toBe(OUTRANKED)
+  })
+
   it('a quota-exhausted higher-priority key hands the apps to the next one', async () => {
     state.authMethod = 'jwt'
     state.access = { [P1]: 'owner' }

@@ -127,6 +127,9 @@ describe('validateAgentOverride (fix-dispatch allow-list)', () => {
     expect(src).toContain("'fix.requested'")
     expect(isDispatchableCloudAgent('cursor_cloud')).toBe(true)
     expect(isDispatchableCloudAgent('anthropic_managed')).toBe(false)
+    const cloud = src.slice(src.indexOf('async function dispatchToCloudAgent('))
+    expect(cloud).toContain('spend_down_key_id')
+    expect(cloud).toContain('pinnedCursorKeyId')
   })
 })
 
@@ -1066,6 +1069,79 @@ describe('Cursor usage limit: detect it and swap keys (2026-10-24)', () => {
     expect(result.ref).toMatchObject({ key_id: 'suzu' })
     const mark = findQueries(queries, 'byok_keys', 'update')[0]
     expect(eqValue(mark, 'id')).toBe('ayako')
+    expect((mark.payload as { exhausted_until?: string }).exhausted_until).toBeTruthy()
+  })
+
+  it('a spend-down dispatch uses the pinned key, not the pool\'s quota-held first key', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ source: 'byok', key: 'crsr_ayako', keyId: 'ayako', shared: false })
+    mocks.resolveLlmKeys.mockResolvedValue([
+      { source: 'byok', key: 'crsr_ayako', keyId: 'ayako' },
+      { source: 'byok', key: 'crsr_suzu', keyId: 'suzu' },
+    ])
+    const suzu = {
+      id: 'suzu', provider_slug: 'cursor', project_id: null, organization_id: 'org-1', status: 'active',
+      vault_secret_id: 'vault-suzu', exhausted_until: null,
+    }
+    const { db, queries } = createFakeDb((q) => {
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_suzu' }
+      if (q.table === 'projects') return { data: { organization_id: 'org-1' } }
+      if (q.table === 'organization_members') return { data: [] }
+      if (q.table === 'byok_keys' && q.op === 'select' && eqValue(q, 'id') === 'suzu') return { data: suzu }
+      return { data: null }
+    })
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      seen.push(init.headers.Authorization)
+      return new Response(JSON.stringify({ agent: { id: 'bc-suzu', url: 'https://cursor.com/agents/bc-suzu' }, run: { id: 'run-suzu', status: 'CREATING' } }), { status: 201 })
+    }))
+    const input = {
+      db, projectId: PROJECT, reportId: REPORT, dispatchId: 'd-1', attemptId: 'fa-1',
+      repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it', pinnedCursorKeyId: 'suzu',
+    }
+    const result = await getCloudAgentAdapter('cursor_cloud')!.dispatch(input)
+    expect(seen).toEqual(['Bearer crsr_suzu'])
+    expect(result.ref).toMatchObject({ key_id: 'suzu' })
+    expect(mocks.resolveLlmKey).not.toHaveBeenCalled()
+    expect(findQueries(queries, 'byok_keys', 'select').some((q) => eqValue(q, 'id') === 'suzu')).toBe(true)
+
+    const foreign = { ...suzu, organization_id: 'org-other' }
+    const { db: otherDb } = createFakeDb((q) => {
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_suzu' }
+      if (q.table === 'projects') return { data: { organization_id: 'org-1' } }
+      if (q.table === 'organization_members') return { data: [] }
+      if (q.table === 'byok_keys' && q.op === 'select' && eqValue(q, 'id') === 'suzu') return { data: foreign }
+      return { data: null }
+    })
+    await expect(getCloudAgentAdapter('cursor_cloud')!.dispatch({ ...input, db: otherDb })).rejects.toThrow(/not usable/)
+    expect(mocks.resolveLlmKey).not.toHaveBeenCalled()
+  })
+
+  it('a pinned spend-down key that hits the usage limit is marked used up and not swapped for the pool\'s first key', async () => {
+    mocks.resolveLlmKey.mockResolvedValue({ source: 'byok', key: 'crsr_ayako', keyId: 'ayako', shared: false })
+    const suzu = {
+      id: 'suzu', provider_slug: 'cursor', project_id: null, organization_id: 'org-1', status: 'active',
+      vault_secret_id: 'vault-suzu', exhausted_until: null,
+    }
+    const { db, queries } = createFakeDb((q) => {
+      if (q.op === 'rpc' && q.table === 'vault_get_secret') return { data: 'crsr_suzu' }
+      if (q.table === 'projects') return { data: { organization_id: 'org-1' } }
+      if (q.table === 'organization_members') return { data: [] }
+      if (q.table === 'byok_keys' && q.op === 'select' && eqValue(q, 'id') === 'suzu') return { data: suzu }
+      return { data: null }
+    })
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      seen.push(init.headers.Authorization)
+      return new Response(JSON.stringify({ error: { code: 'usage_limit_exceeded', message: 'On-demand usage is required.' } }), { status: 400 })
+    }))
+    await expect(getCloudAgentAdapter('cursor_cloud')!.dispatch({
+      db, projectId: PROJECT, reportId: REPORT, dispatchId: 'd-1', attemptId: 'fa-1',
+      repoUrl: 'https://github.com/o/r', baseRef: 'main', prompt: 'fix it', pinnedCursorKeyId: 'suzu',
+    })).rejects.toThrow(/usage_limit_exceeded/)
+    expect(seen).toEqual(['Bearer crsr_suzu'])
+    expect(mocks.resolveLlmKey).not.toHaveBeenCalled()
+    const mark = findQueries(queries, 'byok_keys', 'update')[0]
+    expect(eqValue(mark, 'id')).toBe('suzu')
     expect((mark.payload as { exhausted_until?: string }).exhausted_until).toBeTruthy()
   })
 

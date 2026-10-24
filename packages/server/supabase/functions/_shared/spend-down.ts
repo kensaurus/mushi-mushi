@@ -211,17 +211,25 @@ export interface CursorPoolKey {
 /**
  * Rows a new spend-down dispatch can bill to this key. Matches the resolver
  * for a new agent (byok pool plus cursorKeyForNewWork), with one exception:
- * a quota hold (`status` quota_exhausted, or `test_status` error_quota) is
- * not a first pick. The LLM pool keeps those rows so a 429 can re-enter after
- * its cooldown, but spend-down will not run the key (`spendDownWindow` is
- * `key_unusable` unless status is active). Leaving it first orphans the apps:
- * this key does not dispatch, and the next one never becomes first. A key
- * Cursor refused for its plan limit (`exhausted_until`) hands its apps over
- * the same way, until that time passes.
+ * `status` quota_exhausted is not a first pick. The LLM pool keeps that row
+ * so a 429 can re-enter after its cooldown, but spend-down will not run the
+ * key (`spendDownWindow` is `key_unusable` unless status is active). Leaving
+ * it first orphans the apps: this key does not dispatch, and the next one
+ * never becomes first. A key Cursor refused for its plan limit
+ * (`exhausted_until`) hands its apps over the same way, until that time
+ * passes.
+ *
+ * An active key whose last probe was `error_quota` stays. That code is any
+ * HTTP 429 ("rate-limited or out of quota"), not only the plan limit, and
+ * the probe that means the plan limit also sets `status` to quota_exhausted.
+ * Dropping `active` + `error_quota` here would idle the key until someone
+ * re-tested it. The cooldown and `exhausted_until` already cover a transient
+ * 429.
  */
 function usableForResolver(k: CursorPoolKey, nowMs: number): boolean {
   if (k.exhausted_until && Date.parse(k.exhausted_until) > nowMs) return false
-  return k.status === 'active' && k.test_status === 'ok'
+  if (k.status !== 'active') return false
+  return k.test_status === 'ok' || k.test_status === 'error_quota'
 }
 
 /**
@@ -277,11 +285,14 @@ export function spendDownProjectIds(
 }
 
 /**
- * Why this key pays for no app: another key of the same scope (organization,
- * or universal) is the resolver's first pick for every app that could be
- * served. Null when the idle reason is an app's own key, a legacy key, a
- * tie, auto-fix off, or no repo — those stay the generic "no app uses this
- * key" line. The name is the winner's label.
+ * Why this key pays for no app: another key of the same scope is the
+ * resolver's first pick for every app that could be served. Same scope is
+ * the same organization, or — for universal keys, which all have a null
+ * organization — the same owner. A winner with no owner, or another owner's
+ * universal key, is not named: that label would show up on this user's card.
+ * Null when the idle reason is an app's own key, a legacy key, a tie,
+ * auto-fix off, or no repo — those stay the generic "no app uses this key"
+ * line. The name is the winner's label.
  */
 export function spendDownOutrankNote(
   keyId: string,
@@ -304,6 +315,12 @@ export function spendDownOutrankNote(
   const winner = keys.find((k) => k.id === winnerId)
   if (!winner || winner.project_id) return null
   if ((winner.organization_id ?? null) !== (mine.organization_id ?? null)) return null
+  // Universal keys share a null organization_id, so that check alone would
+  // name another owner's key on this card. Same owner only; a missing owner
+  // is not a match.
+  if (!winner.organization_id && !mine.organization_id) {
+    if (!winner.owner_user_id || winner.owner_user_id !== mine.owner_user_id) return null
+  }
   if ((winner.priority ?? 100) >= (mine.priority ?? 100)) return null
   const name = (typeof winner.label === 'string' ? winner.label.trim() : '') || 'Another key'
   const priority = winner.priority ?? 100
@@ -472,7 +489,12 @@ export function projectCapacity(args: {
   return Math.max(0, Math.min(args.remainingForKey, byConcurrency, byAutofixCap))
 }
 
-/** dispatch_metadata for a spend-down dispatch; `trigger: 'automatic'` keeps the auto-fix caps on. */
+/**
+ * dispatch_metadata for a spend-down dispatch; `trigger: 'automatic'` keeps
+ * the auto-fix caps on. `spend_down_key_id` is the key this run is billed to:
+ * fix-worker passes it to the Cursor adapter, which uses that key instead of
+ * resolving the pool again (the pool still returns a quota-held row).
+ */
 export function spendDownDispatchMetadata(
   key: Pick<SpendDownKey, 'id' | 'spend_down_model'>,
   opts: { probe?: boolean } = {},

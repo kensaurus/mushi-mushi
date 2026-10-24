@@ -158,12 +158,21 @@ describe('spendDownProjectIds: the apps where this key is the resolver\'s first 
     const held = [
       { ...ayako, status: 'quota_exhausted', test_status: 'error_quota' },
       { ...ayako, status: 'quota_exhausted', test_status: 'ok' },
-      { ...ayako, status: 'active', test_status: 'error_quota' },
     ]
     for (const row of held) {
       expect(firstCursorKeyFor(project(P1), [row, suzu])).toBe('suzu')
       expect(spendDownProjectIds({ id: 'suzu' }, [project(P1)], [row, suzu])).toEqual([P1])
     }
+  })
+
+  it('an active key whose last test was error_quota still pays; exhausted_until still hands the apps over', () => {
+    const ayako = pool('ayako', { priority: 10, test_status: 'error_quota' })
+    const suzu = pool('suzu', { priority: 50 })
+    const now = Date.parse('2026-10-24T00:00:00Z')
+    expect(firstCursorKeyFor(project(P1), [ayako, suzu], now)).toBe('ayako')
+    expect(spendDownProjectIds({ id: 'ayako' }, [project(P1)], [ayako, suzu])).toEqual([P1])
+    const usedUp = { ...ayako, exhausted_until: '2099-01-01T00:00:00Z' }
+    expect(firstCursorKeyFor(project(P1), [usedUp, suzu], now)).toBe('suzu')
   })
 })
 
@@ -1149,6 +1158,25 @@ describe('spendDownOutrankNote', () => {
       'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
     )
     expect(spendDownOutrankNote('ayako', [project], keys)).toBeNull()
+  })
+
+  it('names a universal key of the same owner, and not another owner\'s', () => {
+    const project = {
+      id: P1, organization_id: ORG, autofix_enabled: true, has_repo: true, has_legacy_key: false,
+      org_owner_ids: ['kenji', 'other'],
+    }
+    const universal = (id: string, priority: number, owner: string | null, label: string) => ({
+      id, label, project_id: null, organization_id: null, owner_user_id: owner, priority, status: 'active', test_status: 'ok',
+    })
+    const same = [universal('ayako', 10, 'kenji', 'ayako'), universal('suzu', 50, 'kenji', 'suzu.haruka')]
+    expect(spendDownOutrankNote('suzu', [project], same)).toBe(
+      'ayako pays for these apps first (priority 10); this key takes over when ayako runs out or is removed',
+    )
+    const otherOwner = [universal('ayako', 10, 'other', 'ayako'), universal('suzu', 50, 'kenji', 'suzu.haruka')]
+    expect(spendDownOutrankNote('suzu', [project], otherOwner)).toBeNull()
+    // The winner is selectable, but this key has no owner id: do not borrow the winner's label.
+    const noOwnerOnMine = [universal('ayako', 10, 'kenji', 'ayako'), universal('suzu', 50, null, 'suzu.haruka')]
+    expect(spendDownOutrankNote('suzu', [project], noOwnerOnMine)).toBeNull()
   })
 
   it('stays quiet when an app key, a missing repo, or auto-fix off explains the idle key', () => {
