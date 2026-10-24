@@ -23,6 +23,7 @@ import {
   reviewRefusal,
   type ChecksView,
 } from '../_shared/merge-queue.ts'
+import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 
 const log = rootLog.child('merge-queue')
 const LEASE_MS = 4 * 60_000
@@ -59,7 +60,9 @@ export interface MergeQueueDeps {
   ready: (token: string, ref: GithubRepoRef, n: number) => Promise<{ ok: boolean; message?: string }>
   merge: typeof gatedMergePullRequest
   finalize: typeof finalizeFixMerge
-  cursorKey: (db: SupabaseClient, projectId: string) => Promise<{ ok: true; apiKey: string; model: string | null } | { ok: false; reason: string }>
+  cursorKey: (db: SupabaseClient, projectId: string) => Promise<{ ok: true; apiKey: string; model: string | null; keyId?: string | null } | { ok: false; reason: string }>
+  /** Marks a Cursor key whose account reached its usage limit (byok_keys.exhausted_until). */
+  markKeyUsedUp?: (db: SupabaseClient, keyId: string, reason: string) => Promise<void>
   createAgent: (apiKey: string, input: CreateCursorAgentV1Input) => Promise<{ agentId: string }>
   agentDone: (apiKey: string, agentId: string) => Promise<{ done: boolean; result: string | null }>
   requeueReview: typeof requeueReviewForNewHead
@@ -314,6 +317,12 @@ async function resolve(
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    if (isCursorKeyLimitError(message)) {
+      // The key's account is used up: mark it so the next tick takes another key; the row waits.
+      if (key.keyId) await deps.markKeyUsedUp?.(db, key.keyId, message)
+      await set({ detail: 'Merge conflict: the Cursor key reached its usage limit; it waits for another key.', head_sha: head })
+      return 'key_used_up'
+    }
     if (!/agent_id_conflict|already exists/i.test(message)) {
       await set({ state: 'blocked', detail: `Merge conflict; Cursor did not start an agent: ${message.slice(0, 200)}`, head_sha: head })
       return 'blocked'

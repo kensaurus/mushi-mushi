@@ -37,7 +37,7 @@ import {
 import { gatedMergePullRequest, gatedTrainMerge } from '../_shared/gated-merge.ts'
 import { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import { resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { cursorKeyForNewWork, markCursorKeyExhausted } from '../_shared/agent-adapters.ts'
 import { cursorKeyById, cursorModelsCached, loadFollowupSettings } from '../_shared/review-followup-db.ts'
 import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
@@ -83,16 +83,20 @@ async function followupCursorKey(db: SupabaseClient, projectId: string) {
   }
   let apiKey: string
   let cacheKey: string
+  let keyId: string | null = null
   if (settings.keyId) {
     const k = await cursorKeyById(db, settings.keyId, org, { projectId })
     if (!k.ok) return { ok: false as const, reason: `The follow-up Cursor key cannot be used here (${k.reason}).` }
     apiKey = k.apiKey
     cacheKey = k.cacheKey
+    keyId = k.keyId
   } else {
-    const r = await resolveCursorApiKeyWithSource(db, projectId)
+    // Skips a key whose account is used up (byok_keys.exhausted_until), like every new agent.
+    const r = await cursorKeyForNewWork(db, projectId)
     if (!r || r.source === 'env') return { ok: false as const, reason: 'No Cursor key of yours serves this app.' }
     apiKey = r.key
     cacheKey = r.keyId ? `key:${r.keyId}` : `${r.source}:${projectId}`
+    keyId = r.keyId
   }
   let model: string | null = null
   if (settings.model) {
@@ -100,7 +104,7 @@ async function followupCursorKey(db: SupabaseClient, projectId: string) {
     if (!check.ok) return { ok: false as const, reason: `The follow-up model cannot run (${check.detail ?? check.reason}).` }
     model = check.model
   }
-  return { ok: true as const, apiKey, model }
+  return { ok: true as const, apiKey, model, keyId }
 }
 
 async function githubBehindBy(token: string, ref: GithubRepoRef, base: string, head: string): Promise<number> {
@@ -175,6 +179,7 @@ const liveDeps: MergeQueueDeps = {
   merge: gatedMergePullRequest,
   finalize: finalizeFixMerge,
   requeueReview: requeueReviewForNewHead,
+  markKeyUsedUp: markCursorKeyExhausted,
   train: trainDeps,
   cursorKey: followupCursorKey,
   createAgent: async (apiKey, input) => ({ agentId: (await createCursorAgentV1({ apiKey }, input)).agent.id }),
