@@ -123,15 +123,11 @@ export interface FixSummary {
   inProgress: number;
   prsOpen: number;
   /**
-   * Count of fix attempts whose GitHub check-run reported `success`. Despite
-   * the historic name `prsMerged`, this is **CI-passing**, not "merged" —
-   * GitHub's `check_run.conclusion` enum has no `merged` value. New code
-   * should read `prsCiPassing`; `prsMerged` is kept as a temporary alias so
-   * the FE survives a deploy that lands before the renamed API.
+   * Count of fix attempts whose GitHub check-run reported `success`.
+   * This is CI-passing — GitHub's `check_run.conclusion` enum has no
+   * `merged` value.
    */
   prsCiPassing: number;
-  /** @deprecated Read `prsCiPassing` instead. Kept for one release cycle. */
-  prsMerged?: number;
   /**
    * Number of fix_attempts in the trailing 30d whose
    * `validateAgainstSpec()` gate raised at least one soft warning. The
