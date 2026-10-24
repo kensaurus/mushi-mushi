@@ -32,7 +32,7 @@ import {
   formatChartCount,
   formatChartDayLabel,
   formatChartUsd,
-  resolveChartMax,
+  resolvePlotChartMax,
 } from './charts/chartAxis'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
@@ -346,11 +346,7 @@ export function LineSparkline({
     integer: valueFormat === 'count',
   })
   // Nice top tick is the plot max so grid labels line up with data.
-  const chartMax = scaleToData
-    ? rawPeak <= 0
-      ? resolveChartMax(values, true)
-      : (yTickValues[0] ?? resolveChartMax(values, true))
-    : resolveChartMax(values, false)
+  const chartMax = resolvePlotChartMax(values, yTickValues[0], scaleToData)
   const plotHeight = showAxes ? Math.max(height, 56) : height
   const xAt = (i: number) => seriesXPercent(i, values.length, showAxes ? 0 : 2)
   const yAt = (v: number) => seriesYPercent(v, min, chartMax, showAxes ? 2 : 2)
@@ -575,11 +571,7 @@ export function BarSparkline({
   const yTickValues = buildYTickValues(rawPeak, 0, 4, 0.12, {
     integer: valueFormat === 'count',
   })
-  const chartMax = scaleToData
-    ? rawPeak <= 0
-      ? resolveChartMax(values, true)
-      : (yTickValues[0] ?? resolveChartMax(values, true))
-    : resolveChartMax(values, false)
+  const chartMax = resolvePlotChartMax(values, yTickValues[0], scaleToData)
   const plotHeight = showAxes ? Math.max(height, 80) : height
   const yTicks = yTickValues.map((v) => formatChartValue(v, valueFormat))
   const activeCount = values.filter((v) => v > 0).length

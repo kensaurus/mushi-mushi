@@ -5,9 +5,18 @@
  *
  * Count charts (2026-10-24): linear 12% headroom produced fractional ticks
  * (12.3/24.6/37.0); nice integer steps keep REPORTS / FIXES labels whole.
+ *
+ * Plot max (2026-10-24): scaleToData=false used resolveChartMax (raw peak)
+ * while ticks used the nice-step top — bar/line heights drifted from labels.
  */
 import { describe, expect, it } from 'vitest'
-import { buildYTickValues, formatChartCount, sparseXLabels } from './chartAxis'
+import {
+  buildYTickValues,
+  formatChartCount,
+  resolveChartMax,
+  resolvePlotChartMax,
+  sparseXLabels,
+} from './chartAxis'
 
 describe('buildYTickValues / formatChartCount', () => {
   it('ends exactly on the floor, so the bottom label is "0"', () => {
@@ -37,6 +46,16 @@ describe('buildYTickValues / formatChartCount', () => {
         expect(formatChartCount(t)).not.toMatch(/\.\d/)
       }
     }
+  })
+
+  it('aligns plot max with nice tick top when scaleToData is false', () => {
+    const values = [33, 10, 5]
+    const ticks = buildYTickValues(33, 0, 4, 0.12, { integer: true })
+    // Legacy path: raw peak as chartMax while labels use nice top (40).
+    expect(resolveChartMax(values, false)).toBe(33)
+    expect(ticks[0]).toBe(40)
+    expect(resolvePlotChartMax(values, ticks[0], false)).toBe(40)
+    expect(resolvePlotChartMax(values, ticks[0], true)).toBe(40)
   })
 })
 

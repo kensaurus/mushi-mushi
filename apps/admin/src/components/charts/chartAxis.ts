@@ -10,7 +10,8 @@
  *
  * USAGE:
  * - LineSparkline / BarSparkline / Histogram pass integer:true for count
- * - Callers should use the top tick as chartMax so labels align with the plot
+ * - Callers use resolvePlotChartMax(values, yTickValues[0], scaleToData) so
+ *   the plot domain top matches the top Y tick on every scaleToData path
  */
 
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
@@ -159,4 +160,20 @@ export function resolveChartMax(
   if (!scaleToData) return Math.max(1, peak)
   if (peak <= 0) return 0.001
   return peak * (1 + headroomRatio)
+}
+
+/**
+ * Plot domain top for BarSparkline / LineSparkline.
+ * Prefer the nice-step tick top so bar/line heights match Y labels whether
+ * or not scaleToData is set; fall back to resolveChartMax for empty/zero series.
+ */
+export function resolvePlotChartMax(
+  values: number[],
+  yTickTop: number | undefined,
+  scaleToData: boolean,
+): number {
+  const peak = values.length ? Math.max(...values, 0) : 0
+  if (peak <= 0) return resolveChartMax(values, scaleToData)
+  if (yTickTop != null && yTickTop > 0) return yTickTop
+  return resolveChartMax(values, scaleToData)
 }
