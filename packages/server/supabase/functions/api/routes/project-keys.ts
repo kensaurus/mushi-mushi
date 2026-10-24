@@ -210,8 +210,18 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
     if (access.role !== 'owner' && access.role !== 'admin') {
+      // Say who approved, what they are, where, and who can fix it: "Owner or
+      // admin access required" alone left the owner guessing (2026-10-24).
+      const details = await keyMintRefusalDetails(db, projectId, c.get('userEmail') as string | undefined, access.role ?? null);
       return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: keyMintRefusalMessage(details),
+            details,
+          },
+        },
         403,
       );
     }
@@ -484,3 +494,52 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   });
 
 }
+
+export interface KeyMintRefusal {
+  signedInAs: string | null
+  role: string | null
+  organization: string | null
+  /** Owners and admins who can promote the caller (at most 3). */
+  canPromote: string[]
+  teamUrl: string
+}
+
+async function keyMintRefusalDetails(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  email: string | undefined,
+  role: string | null,
+): Promise<KeyMintRefusal> {
+  const consoleBase = (Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://kensaur.us/mushi-mushi/admin').replace(/\/$/, '');
+  const out: KeyMintRefusal = { signedInAs: email ?? null, role, organization: null, canPromote: [], teamUrl: `${consoleBase}/team` };
+  try {
+    const { data: project } = await db.from('projects').select('organization_id, organizations(name)').eq('id', projectId).maybeSingle();
+    const p = project as { organization_id?: string | null; organizations?: { name?: string | null } | null } | null;
+    out.organization = p?.organizations?.name ?? null;
+    if (p?.organization_id) {
+      const { data: members } = await db
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', p.organization_id)
+        .in('role', ['owner', 'admin'])
+        .limit(3);
+      for (const m of (members ?? []) as Array<{ user_id: string }>) {
+        const { data } = await db.auth.admin.getUserById(m.user_id);
+        if (data?.user?.email) out.canPromote.push(data.user.email);
+      }
+    }
+  } catch {
+    // The refusal stands; only the extra detail is missing.
+  }
+  return out;
+}
+
+/** One plain message a person can act on without reading code. */
+export function keyMintRefusalMessage(d: KeyMintRefusal): string {
+  const who = d.signedInAs ? `You approved as ${d.signedInAs}` : 'The account that approved';
+  const what = d.role ? `, a ${d.role}` : '';
+  const where = d.organization ? ` of ${d.organization}` : '';
+  const ask = d.canPromote.length ? ` Owners and admins here: ${d.canPromote.join(', ')}.` : '';
+  return `${who}${what}${where}. Creating a CLI or MCP key needs an owner or admin.${ask} Ask one of them to make you an admin on Team (${d.teamUrl}), or approve with an owner or admin account, then run the same command again.`;
+}
+
