@@ -44,7 +44,10 @@ uncached session (`~/.claude/rules/visual-qa-signed-in-browser.md`).
   `--dry-run` files nothing. The reports then go through triage and the fix
   loop like any other.
 - Runs are bounded: `--max-pages` (15) and `--max-screens` (30, pages first);
-  only pages go to the model.
+  only pages go to the model. Mapping keeps one screen per route (ids
+  folded): the loop's DOM-shape dedupe folds an app shell's pages into one.
+  Dialogs and tabs are opt-in (`--states`, 0 by default), since opening them
+  on every page multiplies the run time.
 
 ## Rejected
 

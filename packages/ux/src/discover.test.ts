@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from 'vitest'
-import { inScope, normalizeLink, surfaceKey, tidyLabels, triggerSelector } from './discover.js'
+import { inScope, normalizeLink, routeKey, surfaceKey, tidyLabels, triggerSelector } from './discover.js'
 
 const BASE = 'http://localhost:5173/app'
 
@@ -60,6 +60,15 @@ describe('tidyLabels', () => {
     expect(tidyLabels(plain)).toEqual(plain)
     const clash = tidyLabels([page('/a', 'Reports | Acme'), page('/b', 'Reports'), page('/c', 'Usage | Acme')])
     expect(clash.map((s) => s.label)).toEqual(['Reports | Acme', 'Reports', 'Usage'])
+  })
+})
+
+describe('routeKey', () => {
+  it('folds ids and the query so an app shell maps each route once', () => {
+    expect(routeKey('/a/admin/reports?apps=all&project=1')).toBe('/a/admin/reports')
+    expect(routeKey('/a/admin/reports/3fa85f64-5717-4562-b3fc-2c963f66afa6')).toBe('/a/admin/reports/:id')
+    expect(routeKey('/a/admin/fixes/42/')).toBe('/a/admin/fixes/:id')
+    expect(routeKey('/a/admin/settings')).not.toBe(routeKey('/a/admin/team'))
   })
 })
 

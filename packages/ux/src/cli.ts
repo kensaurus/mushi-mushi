@@ -315,6 +315,7 @@ program
   .option('--path <path>', 'Also start from this path (repeatable)', collect, [])
   .option('--max-pages <n>', 'Stop mapping after this many pages', '15')
   .option('--max-screens <n>', 'Screens captured in one run: pages first, then their tabs and dialogs', '30')
+  .option('--states <n>', 'Tabs, dialogs and menus to open on each page (each costs a few seconds); 0 maps pages only', '0')
   .option('--viewports <names>', 'desktop, phone or both, comma-separated', 'desktop,phone')
   .addOption(new Option('--review <how>', 'Model review of the screenshots: claude-code (your Claude sign-in), anthropic-api (ANTHROPIC_API_KEY) or none').choices(['claude-code', 'anthropic-api', 'none']).default('none'))
   .option('--review-model <id>', 'Model for the review', DEFAULT_JUDGE_MODEL)
@@ -330,6 +331,7 @@ program
       path: string[]
       maxPages: string
       maxScreens: string
+      states: string
       viewports: string
       review: ReviewVia
       reviewModel: string
@@ -350,6 +352,7 @@ program
         paths: o.path,
         maxPages: Number(o.maxPages),
         maxScreens: Number(o.maxScreens),
+        statesPerPage: Number(o.states),
         viewports,
         review: o.review,
         reviewModel: o.reviewModel,

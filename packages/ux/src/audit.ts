@@ -347,6 +347,8 @@ export interface AuditOptions {
   maxPages?: number
   /** Screens (pages, then their tabs and dialogs) captured in one run. */
   maxScreens?: number
+  /** Tabs, dialogs and menus opened on each page (0: pages only). */
+  statesPerPage?: number
   viewports?: Viewport['name'][]
   review?: ReviewVia
   reviewModel: string
@@ -430,6 +432,12 @@ export async function runAudit(opts: AuditOptions): Promise<AuditResult> {
       startPaths: [base.pathname, ...(opts.paths ?? [])],
       scopePath,
       maxPages: opts.maxPages ?? 15,
+      // Clicking open each tab and dialog costs a settle per click (minutes a
+      // page on a heavy console, 2026-10-24); an audit maps pages unless asked.
+      maxStatesPerPage: opts.statesPerPage ?? 0,
+      // Every route is its own page to an audit; the loop's shape dedupe
+      // folds an app shell's pages into one.
+      dedupe: 'route',
       onProgress: (m) => progress(m),
     })
     const surfaces = pickScreens(found, opts.maxScreens ?? DEFAULT_MAX_SCREENS)

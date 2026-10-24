@@ -92,7 +92,7 @@ mushi-ux audit --url https://example.com/admin \
   --review claude-code --file --dry-run
 ```
 
-- Maps the screens under the URL's path behind the write guard, and captures each on desktop (1440×900) and phone (390×844).
+- Maps the screens under the URL's path behind the write guard, one per route (`--max-pages`, default 15; `--states N` also opens up to N dialogs or tabs a page), and captures each on desktop (1440×900) and phone (390×844).
 - Files measured problems first: serious accessibility rules, a page that scrolls sideways, console errors, content that jumps while loading. `--review` adds concrete visual defects a model finds on whole pages (overlap, clipping, unreadable text, contradicting numbers), each with a "Done when".
 - `--file` files at most 15 reports a run, one per screen and problem, and skips one filed in the last 14 days or still open. It needs `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`; without them it writes `to-file.json` next to the summary. `--dry-run` files nothing.
 - `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand.
