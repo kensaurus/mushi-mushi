@@ -1,6 +1,17 @@
 /**
  * FILE: apps/admin/src/components/charts/chartAxis.ts
  * PURPOSE: Shared axis tick math and label formatters for admin charts.
+ *
+ * OVERVIEW:
+ * - Day/X sparse labels and Y-axis tick builders for dashboard sparklines
+ * - Count / USD formatters used by ChartFrame tick labels
+ * - buildYTickValues uses a nice-step scale so discrete count axes stay
+ *   on integers (peak 33 → 40/30/20/10/0) instead of 12.3/24.6/37.0
+ *
+ * USAGE:
+ * - LineSparkline / BarSparkline / Histogram pass integer:true for count
+ * - Callers use resolvePlotChartMax(values, yTickValues[0], scaleToData) so
+ *   the plot domain top matches the top Y tick on every scaleToData path
  */
 
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
@@ -79,25 +90,64 @@ export function formatChartUsd(n: number): string {
   return `$${n.toFixed(6)}`
 }
 
+export type BuildYTickOptions = {
+  /** Force step ≥ 1 and integer multiples (no 2.5). Use for count charts. */
+  integer?: boolean
+}
+
+/** Nice step near `rawStep` from {1,2,2.5,5,10}×10^n (drop 2.5 when integer). */
+function niceStep(rawStep: number, integer: boolean): number {
+  if (!(rawStep > 0) || !Number.isFinite(rawStep)) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const fracs = integer ? [1, 2, 5, 10] : [1, 2, 2.5, 5, 10]
+  const candidates = fracs.map((f) => f * magnitude)
+  // Prefer the nearest nice value; ties go upward so the domain still covers.
+  let best = candidates[0]!
+  let bestDist = Math.abs(best - rawStep)
+  for (const c of candidates) {
+    const dist = Math.abs(c - rawStep)
+    if (dist < bestDist || (dist === bestDist && c > best)) {
+      best = c
+      bestDist = dist
+    }
+  }
+  if (integer) return Math.max(1, best)
+  return best
+}
+
 /** Y-axis tick values from top (max) to bottom (min). */
 export function buildYTickValues(
   max: number,
   min = 0,
   tickCount = 4,
   headroomRatio = 0.12,
+  opts?: BuildYTickOptions,
 ): number[] {
+  const integer = opts?.integer === true
   const rawPeak = Math.max(max, min)
   const floor = Math.min(min, max)
-  const peak = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
-  if (tickCount <= 1) return [peak]
-  if (peak === floor) return [peak, floor]
+  const peakTarget = rawPeak > 0 ? rawPeak * (1 + headroomRatio) : rawPeak
+  if (tickCount <= 1) return [integer ? Math.ceil(peakTarget) : peakTarget]
+  if (peakTarget === floor) return [peakTarget, floor]
+
   const steps = tickCount - 1
-  const out: number[] = []
-  for (let i = 0; i <= steps; i++) {
-    // The last tick is the floor exactly: `peak - (peak - floor)` can land a
-    // hair below 0 and print "-0.0".
-    out.push(i === steps ? floor : peak - ((peak - floor) * i) / steps)
+  // Headroom guides step size; top snaps to a nice multiple of the data max
+  // so e.g. max 57 → step 20 → [60,40,20,0] (not 63.8 linear fractions).
+  const rawStep = (peakTarget - floor) / steps
+  const step = niceStep(rawStep, integer)
+  let top = Math.ceil(rawPeak / step) * step
+  if (integer) top = Math.round(top)
+  if (top <= floor) {
+    return integer ? [Math.max(1, Math.ceil(rawPeak) || 1), floor] : [peakTarget, floor]
   }
+
+  const out: number[] = []
+  // Walk down by nice step; last tick is the floor exactly (avoids "-0.0").
+  for (let v = top; v > floor + step * 0.5; v -= step) {
+    const tick = integer ? Math.round(v) : v
+    if (out.length === 0 || out[out.length - 1] !== tick) out.push(tick)
+  }
+  out.push(floor)
   return out
 }
 
@@ -110,4 +160,20 @@ export function resolveChartMax(
   if (!scaleToData) return Math.max(1, peak)
   if (peak <= 0) return 0.001
   return peak * (1 + headroomRatio)
+}
+
+/**
+ * Plot domain top for BarSparkline / LineSparkline.
+ * Prefer the nice-step tick top so bar/line heights match Y labels whether
+ * or not scaleToData is set; fall back to resolveChartMax for empty/zero series.
+ */
+export function resolvePlotChartMax(
+  values: number[],
+  yTickTop: number | undefined,
+  scaleToData: boolean,
+): number {
+  const peak = values.length ? Math.max(...values, 0) : 0
+  if (peak <= 0) return resolveChartMax(values, scaleToData)
+  if (yTickTop != null && yTickTop > 0) return yTickTop
+  return resolveChartMax(values, scaleToData)
 }
