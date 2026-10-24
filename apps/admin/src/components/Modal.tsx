@@ -25,6 +25,7 @@ import type { ReactNode, MouseEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { overlayTween } from '../lib/motion-tokens'
 import { useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
+import { toBody } from '../lib/bodyPortal'
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
@@ -139,7 +140,7 @@ export function Modal({
     if (e.target === e.currentTarget) onClose()
   }
 
-  return (
+  return toBody(
     <AnimatePresence>
       {open ? (
         <motion.div
