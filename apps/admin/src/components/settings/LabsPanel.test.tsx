@@ -64,12 +64,11 @@ describe('LabsPanel', () => {
     expect(container.querySelectorAll('button[role="switch"]')).toHaveLength(LAB_FEATURES.length)
   })
 
-  it('keeps the Open link disabled until the Lab is on, then links to its page', () => {
+  it('links Open to the page whether or not the Lab is on (the switch only pins it to the sidebar)', () => {
     render()
     const open = () => container.querySelector<HTMLElement>('[data-testid="lab-open-bug-clusters"]')!
-    expect(open().tagName).toBe('BUTTON')
-    expect((open() as HTMLButtonElement).disabled).toBe(true)
-    expect(container.querySelector('a[href="/graph"]')).toBeNull()
+    expect(open().tagName).toBe('A')
+    expect(open().getAttribute('href')).toBe('/graph')
 
     act(() => switchFor('Bug clusters').click())
 
@@ -81,7 +80,7 @@ describe('LabsPanel', () => {
 
     act(() => switchFor('Bug clusters').click())
     expect(storedLabs()).not.toContain('bug-clusters')
-    expect(open().tagName).toBe('BUTTON')
+    expect(open().getAttribute('href')).toBe('/graph')
   })
 
   it('shows a Lab already on from a previous visit as on', async () => {

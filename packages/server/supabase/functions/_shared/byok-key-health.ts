@@ -27,6 +27,8 @@ export interface ByokKeyHealthInput {
   status: string
   test_status: string | null
   cooldown_until?: string | null
+  /** Cursor refused it for the plan's usage limit; new agents use the next key until then. */
+  exhausted_until?: string | null
   expires_at?: string | null
   /** A key in the old one-key-per-provider project_settings columns. */
   legacy?: boolean
@@ -64,6 +66,7 @@ export function byokKeyHealth(
     if (cooling || key.legacy || !isRuntimeEligible(key, now)) return 'attention'
   }
 
+  if (key.exhausted_until && Date.parse(key.exhausted_until) > now) return 'attention'
   if (key.test_status === 'error_network') return 'attention'
   if (key.test_status !== 'ok' && key.test_status !== 'error_quota') return 'checking'
   if (Number.isFinite(expires) && expires - now <= BYOK_EXPIRY_WARN_DAYS * DAY_MS) return 'expiring'

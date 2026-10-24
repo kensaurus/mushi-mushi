@@ -150,6 +150,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const isDesktopHeader = useMediaQuery('(min-width: 48rem)', true)
   const [railSignOutOpen, setRailSignOutOpen] = useState(false)
   const labs = useLabs()
+  const [morePagesOpen, setMorePagesOpen] = useState(false)
   // One mode for everyone (lib/mode.ts); the brand row keeps only the Admin / Tester portal switch.
   const { mode, setMode } = useAdminMode()
   const palette = useCommandPalette()
@@ -510,14 +511,33 @@ export function Layout({ children }: { children: ReactNode }) {
                 >
                   {section.items.map((item) => renderNavLink(item, compact))}
                   {section.id === 'core' && !compact ? (
-                    <Link
-                      to="/settings?tab=labs"
-                      className="nav-link w-full justify-start text-fg-muted hover:text-fg-secondary"
-                      title="Switch on more pages (Labs)"
-                    >
-                      <IconChevronRight className="nav-link-icon opacity-70" />
-                      <span>More pages…</span>
-                    </Link>
+                    <>
+                      {/* Opens in place: every page not in the sidebar, one
+                          click away, and where to pin them (2026-10-24: the
+                          old link went to a page of switches all set to Off). */}
+                      <button
+                        type="button"
+                        className="nav-link w-full justify-start text-fg-muted hover:text-fg-secondary"
+                        aria-expanded={morePagesOpen}
+                        aria-controls="nav-more-pages"
+                        onClick={() => setMorePagesOpen((v) => !v)}
+                      >
+                        <IconChevronRight className={`nav-link-icon opacity-70 motion-safe:transition-transform ${morePagesOpen ? 'rotate-90' : ''}`} />
+                        <span>More pages</span>
+                      </button>
+                      {morePagesOpen ? (
+                        <div id="nav-more-pages" className="ml-3 space-y-0.5 border-l border-edge/40 pl-2">
+                          {LAB_FEATURES.filter((f) => !labs.isEnabled(f.id)).map((f) => (
+                            <Link key={f.id} to={f.paths[0]} className="nav-link w-full justify-start text-fg-secondary hover:text-fg" title={f.description}>
+                              <span className="truncate">{f.label}</span>
+                            </Link>
+                          ))}
+                          <Link to="/settings?tab=labs" className="nav-link w-full justify-start text-2xs text-fg-muted hover:text-fg-secondary">
+                            Keep pages in the sidebar…
+                          </Link>
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </NavSectionStagger>
               </AnimatedDisclosure>

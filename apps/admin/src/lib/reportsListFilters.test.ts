@@ -59,11 +59,12 @@ describe('Platform and SDK selects (#16)', () => {
 })
 
 describe('severity KPI tiles (item 231)', () => {
-  it('open the list the tile counted: severity, window and not dismissed', () => {
-    expect(kpiTileFilter('high', 14)).toEqual({ severity: 'high', days: '14', status: 'active' })
+  it('open the list the tile counted: severity, window and still unresolved', () => {
+    expect(kpiTileFilter('high', 14)).toEqual({ severity: 'high', days: '14', status: 'unresolved' })
   })
 
   it('clearing the tile removes only what the tile set', () => {
+    expect(kpiTileFilter(null, 14, { status: 'unresolved', days: '14' })).toEqual({ severity: '', days: '', status: '' })
     expect(kpiTileFilter(null, 14, { status: 'active', days: '14' })).toEqual({ severity: '', days: '', status: '' })
     expect(kpiTileFilter(null, 14, { status: 'fixed', days: '30' })).toEqual({ severity: '', days: '30', status: 'fixed' })
   })

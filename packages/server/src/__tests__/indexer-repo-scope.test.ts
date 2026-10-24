@@ -95,6 +95,28 @@ describe('projectIdsForRepo', () => {
     expect(isTransientDbConnectionError((err as RepoLookupError).dbError)).toBe(true)
   })
 
+  it('retries a lookup once on a statement timeout, then reports a second one (MUSHI-MUSHI-SERVER-2X)', async () => {
+    const timeout = { message: 'canceling statement due to statement timeout', code: '57014' }
+    let repoCalls = 0
+    const { db } = createFakeDb((q) => {
+      if (q.table !== 'project_repos') return { data: [] }
+      repoCalls++
+      return repoCalls === 1 ? { data: null, error: timeout } : { data: [{ project_id: 'p-repos', repo_url: 'https://github.com/acme/app' }] }
+    })
+    expect(await projectIdsForRepo(db, 'acme/app')).toEqual(['p-repos'])
+    expect(repoCalls).toBe(2)
+
+    const stalled = createFakeDb((q) => (q.table === 'project_repos' ? { data: null, error: timeout } : { data: [] }))
+    await expect(projectIdsForRepo(stalled.db, 'acme/app')).rejects.toThrow(/project_repos\.repo_url lookup failed: canceling statement/)
+    expect(findQueries(stalled.queries, 'project_repos')).toHaveLength(2)
+  })
+
+  it('does not retry other read errors', async () => {
+    const { db, queries } = createFakeDb(() => ({ data: null, error: { message: 'boom', code: '42703' } }))
+    await expect(projectIdsForRepo(db, 'acme/app')).rejects.toThrow(/boom/)
+    expect(findQueries(queries, 'project_repos')).toHaveLength(1)
+  })
+
   it('keeps the PostgREST error on the throw, so the route can classify it (MUSHI-MUSHI-SERVER-2S)', async () => {
     const pooler = { message: 'upstream connect error ... delayed connect error: 111', code: null }
     const { db } = createFakeDb(() => ({ data: null, error: pooler }))

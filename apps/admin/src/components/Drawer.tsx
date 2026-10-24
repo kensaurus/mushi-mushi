@@ -15,6 +15,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { drawerBelowAppChromeClass } from '../lib/appChrome'
 import { overlayTween } from '../lib/motion-tokens'
 import { useDrawerVariants, useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
+import { toBody } from '../lib/bodyPortal'
 
 type DrawerWidth = 'sm' | 'md' | 'lg'
 
@@ -144,7 +145,7 @@ export function Drawer({
     if (e.target === e.currentTarget) onClose()
   }
 
-  return (
+  return toBody(
     <AnimatePresence>
       {open ? (
         <motion.div
