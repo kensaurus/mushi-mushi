@@ -15,9 +15,9 @@
  * USAGE:
  * - LineSparkline / BarSparkline / Histogram pass { integer: true } only when
  *   valueFormat === 'count'
- * - resolvePlotChartMax(values, yTickTop, scaleToData): when scaleToData is
- *   true, plot domain top is the nice tick top; when false, base
- *   resolveChartMax(values, false) so the prop stays meaningful
+ * - resolvePlotChartMax(values, yTickTop, scaleToData): the plot top is
+ *   always the top tick. scaleToData only controls the headroom used to
+ *   pick the step.
  *
  * NOTES:
  * - Non-count buildYTickValues must match master bit-for-bit (no nice-step)
@@ -162,20 +162,25 @@ function buildIntegerYTickValues(
   // so e.g. max 57 → step 20 → [60,40,20,0] (not 63.8 linear fractions).
   const rawStep = (peakTarget - floor) / steps
   const step = niceIntegerStep(rawStep)
+  // LineSparkline's floor is Math.min(0, ...values). Stepping down from the
+  // top and then appending that raw floor leaves an irregular last gap
+  // (10, 0, -5). Snap down onto the step so every gap is one step. Callers
+  // use this same value (the bottom tick) as the plot minimum.
+  const axisFloor = Math.floor(floor / step) * step
   let top = Math.ceil(rawPeak / step) * step
   // Peak already on a nice step still gets one step of headroom (40 → 50).
   if (top <= rawPeak) top += step
   top = Math.round(top)
-  if (top <= floor) {
-    return [Math.max(1, Math.ceil(rawPeak) || 1), floor]
+  if (top <= axisFloor) {
+    return [Math.max(1, Math.ceil(rawPeak) || 1), axisFloor]
   }
 
   const out: number[] = []
-  for (let v = top; v > floor + step * 0.5; v -= step) {
+  for (let v = top; v > axisFloor + step * 0.5; v -= step) {
     const tick = Math.round(v)
     if (out.length === 0 || out[out.length - 1] !== tick) out.push(tick)
   }
-  out.push(floor)
+  out.push(axisFloor)
   return out
 }
 

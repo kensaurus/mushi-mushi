@@ -6,9 +6,9 @@
  * Count charts (2026-10-24): linear 12% headroom produced fractional ticks
  * (12.3/24.6/37.0); nice integer steps keep REPORTS / FIXES labels whole.
  *
- * scaleToData (2026-10-24): true → plot max is the nice tick top; false →
- * base resolveChartMax(values, false). Non-count ticks stay on the master
- * linear path.
+ * scaleToData (2026-10-24): the plot top is always the top tick.
+ * scaleToData only controls the headroom used to pick the step.
+ * Non-count ticks stay on the master linear path.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -61,6 +61,19 @@ describe('buildYTickValues / formatChartCount', () => {
     const flat = buildYTickValues(57, 0, 4, 0, { integer: true })
     expect(flat[0]).toBeGreaterThanOrEqual(57)
     expect(resolvePlotChartMax(values, flat[0], false)).toBe(flat[0])
+  })
+
+  it('snaps a negative integer floor down to a multiple of the step', () => {
+    // LineSparkline passes min = Math.min(0, ...values). Without the snap the
+    // last gap is shorter than the step (10, 5, 0, -4).
+    const floor = -4
+    const ticks = buildYTickValues(8, floor, 4, 0, { integer: true })
+    expect(ticks).toEqual([10, 5, 0, -5])
+    const step = ticks[0]! - ticks[1]!
+    expect(ticks[ticks.length - 1]).toBe(Math.floor(floor / step) * step)
+    for (let i = 1; i < ticks.length; i++) {
+      expect(ticks[i - 1]! - ticks[i]!).toBe(step)
+    }
   })
 
   it('adds headroom when the count peak is already a nice number', () => {

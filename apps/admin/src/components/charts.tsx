@@ -339,19 +339,20 @@ export function LineSparkline({
 
   if (values.length === 0) return null
 
-  const min = Math.min(0, ...values)
+  const dataFloor = Math.min(0, ...values)
   const rawPeak = Math.max(...values, 0)
-  // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
-  // grid-line labels stay aligned with actual data-point positions on the SVG.
   const countAxis = valueFormat === 'count'
-  // Count axes: whole-number ticks, headroom only when scaleToData, and the
-  // plot top is the top tick either way so labels and points agree.
-  const yTickValues = buildYTickValues(rawPeak, min, 4, countAxis && !scaleToData ? 0 : 0.12, {
+  // Count axes: whole-number ticks. scaleToData only sets the headroom used
+  // to pick the step; the plot top is always the top tick.
+  const yTickValues = buildYTickValues(rawPeak, dataFloor, 4, countAxis && !scaleToData ? 0 : 0.12, {
     integer: countAxis,
   })
   const chartMax = countAxis
     ? resolvePlotChartMax(values, yTickValues[0], scaleToData)
     : resolveChartMax(values, scaleToData)
+  // Integer mode snaps a negative floor onto the step. The plot minimum is
+  // that same floor (the bottom tick) so grid lines match point positions.
+  const min = countAxis ? (yTickValues[yTickValues.length - 1] ?? dataFloor) : dataFloor
   const plotHeight = showAxes ? Math.max(height, 56) : height
   const xAt = (i: number) => seriesXPercent(i, values.length, showAxes ? 0 : 2)
   const yAt = (v: number) => seriesYPercent(v, min, chartMax, showAxes ? 2 : 2)
