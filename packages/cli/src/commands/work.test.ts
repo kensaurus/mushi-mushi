@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  inLocalCooldown,
   failureTail,
   agentEnv,
   branchNameFor,
@@ -173,5 +174,20 @@ describe('failureTail', () => {
   it('returns short output whole and an over-long last line cut from its start', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
+  })
+})
+
+describe('inLocalCooldown', () => {
+  const now = Date.parse('2026-10-24T12:00:00Z')
+  const failed = { id: 'a', status: 'failed', pr_url: null, agent: 'mcp', created_at: '2026-10-24T08:00:00Z' }
+
+  it('skips a report whose local run ended without a PR this week', () => {
+    expect(inLocalCooldown([failed], now)).toBe(true)
+  })
+
+  it('retries after 7 days, after a cloud failure, or when the run opened a PR', () => {
+    expect(inLocalCooldown([{ ...failed, created_at: '2026-10-16T08:00:00Z' }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, agent: 'cursor_cloud' }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, pr_url: 'https://github.com/o/r/pull/1' }], now)).toBe(false)
   })
 })
