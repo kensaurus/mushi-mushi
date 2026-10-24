@@ -59,6 +59,25 @@ export interface UpdateCenterView {
   /** The app reports a version older than the PR moved it to (not shipped yet). */
   appBehindPr: boolean
   ci: 'passing' | 'failing' | 'running' | 'not_checked'
+  /** Set when the open upgrade PR still needs a package-manager command for its lockfile. */
+  lockfileNote: string | null
+}
+
+/**
+ * Sentence prefix the upgrade worker stores on the first bump (`plan[0].lockfileNote`).
+ * Keep equal to `LOCKFILE_NOTE_PREFIX` in `_shared/sdk-upgrade-pr.ts`.
+ */
+const LOCKFILE_NOTE_PREFIX = 'This PR needs '
+
+export function lockfileNoteFromPlan(
+  plan: ReadonlyArray<{ lockfileNote?: string | null }> | null | undefined,
+): string | null {
+  for (const row of plan ?? []) {
+    if (typeof row.lockfileNote === 'string' && row.lockfileNote.startsWith(LOCKFILE_NOTE_PREFIX)) {
+      return row.lockfileNote
+    }
+  }
+  return null
 }
 
 /**
@@ -111,7 +130,14 @@ export function deriveUpdateCenterView(
   const appBehindPr = Boolean(prTargetVersion && installed && cmpSemver(installed, prTargetVersion) < 0)
   const upgradeTo = latest ? `Upgrade to ${latest}` : 'Upgrade SDK'
 
-  const base = { packages, prTargetVersion, newerThanPr, appBehindPr, ci: ciFrom(state) }
+  const base = {
+    packages,
+    prTargetVersion,
+    newerThanPr,
+    appBehindPr,
+    ci: ciFrom(state),
+    lockfileNote: lockfileNoteFromPlan(state.plan),
+  }
 
   if (state.status === 'queueing' || state.status === 'queued' || state.status === 'running') {
     return { ...base, mode: 'working', upgradeLabel: null }
