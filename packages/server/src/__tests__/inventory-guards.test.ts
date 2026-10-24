@@ -16,11 +16,13 @@
  *     across origins (CVE-2025-21620 mitigation).
  *   - RateLimiter: fixed token-bucket math; validates that successive
  *     drops report a coherent retry-after.
- *   - assertProjectScope: API-key project mismatch returns 403; JWT
- *     non-member returns 403; same-project / member case returns ok.
+ *   - assertProjectScope: a project-bound API key mismatches with 403; an
+ *     account key may act on every project its owner can reach and 403s
+ *     outside that set; JWT non-members return 403.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { runWithKeyProjectScope } from '../../supabase/functions/_shared/key-project-scope.ts'
 import {
   RateLimiter,
   assertProjectScope,
@@ -490,7 +492,7 @@ describe('RateLimiter', () => {
 // ---------------------------------------------------------------------------
 
 describe('assertProjectScope', () => {
-  function fakeContext(values: Record<string, string | undefined>): {
+  function fakeContext(values: Record<string, unknown>): {
     ctx: ScopeContext
     json: ReturnType<typeof vi.fn>
   } {
@@ -503,6 +505,16 @@ describe('assertProjectScope', () => {
       json,
     } as ScopeContext
     return { ctx, json }
+  }
+
+  /** Membership rows `accessibleProjectIds` reads. Owned ids are reachable. */
+  function projectsDb(ownedIds: string[]) {
+    return {
+      from(table: string) {
+        const data = table === 'projects' ? ownedIds.map((id) => ({ id })) : []
+        return { select: () => ({ eq: () => ({ data, error: null }) }) }
+      },
+    }
   }
 
   it('rejects with 401 when no userId is on context', async () => {
@@ -535,6 +547,76 @@ describe('assertProjectScope', () => {
     })
     const r = await assertProjectScope(ctx, 'pA', {} as never)
     expect(r).toEqual({ ok: true, userId: 'u', authMethod: 'apiKey' })
+  })
+
+  // requireFeature writes a project id onto the context before inventory
+  // routes (map_user_stories, generate_tdd_from_story, approve_qa_story)
+  // call this. That pin is the plan's project, not the account key's binding.
+  it('lets an account key act on another project its owner can reach', async () => {
+    const { ctx } = fakeContext({
+      userId: 'owner',
+      projectId: 'pA',
+      authMethod: 'apiKey',
+      isOrgScopedKey: true,
+    })
+    const r = await assertProjectScope(ctx, 'pB', projectsDb(['pA', 'pB']) as never)
+    expect(r).toEqual({ ok: true, userId: 'owner', authMethod: 'apiKey' })
+  })
+
+  it('refuses an account key for a project outside the account', async () => {
+    const { ctx, json } = fakeContext({
+      userId: 'owner',
+      projectId: 'pA',
+      authMethod: 'apiKey',
+      isOrgScopedKey: true,
+    })
+    const r = await assertProjectScope(ctx, 'pOut', projectsDb(['pA', 'pB']) as never)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.response.status).toBe(403)
+      const body = json.mock.calls[0]![0] as { error: { code: string } }
+      expect(body.error.code).toBe('FORBIDDEN')
+    }
+  })
+
+  it('keeps a limited account key inside allowed_project_ids', async () => {
+    const { ctx, json } = fakeContext({
+      userId: 'owner',
+      projectId: 'pA',
+      authMethod: 'apiKey',
+      isOrgScopedKey: true,
+    })
+    const db = projectsDb(['pA', 'pB'])
+    const allowed = await runWithKeyProjectScope('owner', ['pB'], () =>
+      assertProjectScope(ctx, 'pB', db as never),
+    )
+    expect(allowed).toEqual({ ok: true, userId: 'owner', authMethod: 'apiKey' })
+
+    const denied = await runWithKeyProjectScope('owner', ['pA'], () =>
+      assertProjectScope(ctx, 'pB', db as never),
+    )
+    expect(denied.ok).toBe(false)
+    if (!denied.ok) {
+      expect(denied.response.status).toBe(403)
+      const body = json.mock.calls.at(-1)![0] as { error: { code: string } }
+      expect(body.error.code).toBe('FORBIDDEN')
+    }
+  })
+
+  it('keeps a project-bound key pinned even when its owner can reach the other project', async () => {
+    const { ctx, json } = fakeContext({
+      userId: 'owner',
+      projectId: 'pA',
+      authMethod: 'apiKey',
+      isOrgScopedKey: false,
+    })
+    const r = await assertProjectScope(ctx, 'pB', projectsDb(['pA', 'pB']) as never)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.response.status).toBe(403)
+      const body = json.mock.calls[0]![0] as { error: { code: string } }
+      expect(body.error.code).toBe('PROJECT_MISMATCH')
+    }
   })
 
   it('falls back to accessibleProjectIds for JWT callers', async () => {
