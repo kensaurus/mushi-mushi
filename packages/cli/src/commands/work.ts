@@ -355,6 +355,7 @@ function apiFor(cfg: CliConfig): Api {
 
 interface ReportDetail {
   id: string
+  project_id?: string | null
   summary: string | null
   description?: string | null
   category?: string | null
@@ -367,8 +368,25 @@ interface ReportDetail {
 }
 
 /** @internal Exported for tests only. Reports a local run may take, best first, never more than `max`. */
-export async function pickReports(api: Api, opts: { max: number; reportId?: string }): Promise<ReportDetail[]> {
-  if (opts.reportId) return [await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`)]
+/**
+ * @internal Exported for tests only. A report from another app than the one
+ * `mushi work` was pointed at: an API key bound to one app answers with that
+ * app's reports whatever --project says, and the agent would then "fix" them
+ * in the wrong repo (found 2026-10-25). Null when it matches.
+ */
+export function wrongAppReason(detail: { id: string; project_id?: string | null }, projectId: string | undefined): string | null {
+  if (!projectId || !detail.project_id || detail.project_id === projectId) return null
+  return `Report ${detail.id} belongs to app ${detail.project_id}, not ${projectId}: this CLI key is bound to another app. Sign in for this app: mushi login --project-id ${projectId}`
+}
+
+/** @internal Exported for tests only. */
+export async function pickReports(api: Api, opts: { max: number; reportId?: string; projectId?: string }): Promise<ReportDetail[]> {
+  const check = (detail: ReportDetail): ReportDetail => {
+    const wrong = wrongAppReason(detail, opts.projectId)
+    if (wrong) throw new MushiCliError('E_INVALID_INPUT', wrong, `mushi login --project-id ${opts.projectId}`)
+    return detail
+  }
+  if (opts.reportId) return [check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`))]
   const lists = await Promise.all(
     ['classified', 'reopened'].map((status) =>
       api<{ reports: WorkCandidate[] }>(`/v1/admin/reports?status=${status}&limit=50`).then((d) => d.reports ?? []),
@@ -377,7 +395,7 @@ export async function pickReports(api: Api, opts: { max: number; reportId?: stri
   const picked: ReportDetail[] = []
   for (const c of rankCandidates(lists.flat())) {
     if (picked.length >= opts.max) break
-    const detail = await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`)
+    const detail = check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`))
     if (hasLiveAttempt(detail.fix_attempts ?? []) || inLocalCooldown(detail.fix_attempts ?? [])) continue
     picked.push(detail)
   }
@@ -478,7 +496,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
 
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
-    await git(wt, ['commit', '--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
@@ -578,7 +596,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
     await git(wt, ['add', '-A'])
-    await git(wt, ['commit', '--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
@@ -608,13 +626,35 @@ export function installCommand(has: (file: string) => boolean): [string, string[
   return null
 }
 
-/** Install the worktree's dependencies before the agent runs; a failed install is logged and the run goes on. */
+/**
+ * Install the worktree's dependencies before the agent runs, trying twice (a
+ * second worktree installing at the same moment can lose a store lock). A
+ * failed install is logged and the run goes on.
+ */
 async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
-  if (r.code !== 0) log(`  deps: install failed, the agent works without them (${failureTail(r, 300)})`)
+  let r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
+}
+
+/** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
+export function isMissingModuleFailure(message: string): boolean {
+  return /ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(message)
+}
+
+/** Commit; when a hook failed only because dependencies are missing, install them and commit once more. */
+async function commitWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+  try {
+    await git(wt, ['commit', ...args])
+  } catch (err) {
+    if (!(err instanceof Error) || !isMissingModuleFailure(err.message)) throw err
+    log('  commit: a hook could not find a package; installing dependencies and committing again')
+    await installDeps(wt, log)
+    await git(wt, ['commit', ...args])
+  }
 }
 
 async function preflight(repoDir: string): Promise<void> {
@@ -694,7 +734,7 @@ export function registerWorkCommands(program: Command): void {
         if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
         return
       }
-      const picked = await pickReports(api, { max, reportId })
+      const picked = await pickReports(api, { max, reportId, projectId: cfg.projectId })
       if (opts.dryRun) {
         const plan = picked.map((d) => ({ reportId: d.id, severity: d.severity ?? null, summary: d.summary, branch: branchNameFor(d.id, d.category) }))
         if (opts.json) process.stdout.write(`${JSON.stringify({ dryRun: true, plan }, null, 2)}\n`)

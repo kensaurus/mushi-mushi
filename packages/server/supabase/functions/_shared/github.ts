@@ -210,6 +210,8 @@ export interface PullRequestSnapshot {
   mergedAt?: string | null
   /** Current head commit; CI runs against this, not the first fix commit. */
   headSha?: string | null
+  /** GitHub's `mergeable_state` (`clean`, `behind`, `blocked`, `dirty`, …); null while GitHub computes it. */
+  mergeableState?: string | null
   /**
    * The base repository as GitHub names it now (`base.repo`). A renamed repo
    * still answers under its old URL, so the id and current full name are the
@@ -286,6 +288,7 @@ export async function fetchPullRequest(
     merged_at?: string | null
     head?: { sha?: string }
     base?: BaseRepoBody
+    mergeable_state?: string | null
   }
   return {
     number: body.number ?? pullNumber,
@@ -296,8 +299,31 @@ export async function fetchPullRequest(
     closedAt: body.closed_at ?? null,
     mergedAt: body.merged_at ?? null,
     headSha: body.head?.sha ?? null,
+    mergeableState: body.mergeable_state ?? null,
     ...baseRepoOf(body.base),
   }
+}
+
+/**
+ * GitHub's "Update branch": merges the base into the PR branch. True when
+ * GitHub accepted it (202); false on a conflict or any other refusal. Pinned
+ * to the head the caller saw, so a newer push is never merged over.
+ */
+export async function updatePullRequestBranch(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+  expectedHeadSha: string | null,
+): Promise<boolean> {
+  const res = await fetchWithTimeout(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}/update-branch`,
+    {
+      method: 'PUT',
+      headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(expectedHeadSha ? { expected_head_sha: expectedHeadSha } : {}),
+    },
+  ).catch(() => null)
+  return res?.status === 202
 }
 
 export async function fetchPullRequestDetails(

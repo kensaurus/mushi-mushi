@@ -528,6 +528,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       projectName: null as string | null,
       updatedAt: null as string | null,
       slackConfigured: false,
+      slackCanPost: false,
       sentryConfigured: false,
       reporterNotificationsEnabled: false,
       stage2Model: null as string | null,
