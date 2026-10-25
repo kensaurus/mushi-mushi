@@ -4,7 +4,7 @@
  *          opened (`mushi work`, ADR 0032 amendment 2026-10-24).
  */
 import { describe, expect, it } from 'vitest'
-import { localFollowupGate, type LocalFollowupInput } from '../../supabase/functions/_shared/local-followup.ts'
+import { localFollowupDedupe, localFollowupGate, localFollowupSkipDedupe, type LocalFollowupInput } from '../../supabase/functions/_shared/local-followup.ts'
 
 const HEAD = 'a'.repeat(40)
 
@@ -56,5 +56,14 @@ describe('localFollowupGate', () => {
     expect(localFollowupGate(input({ roundHeads: [HEAD] }))).toMatchObject({ ok: false, code: 'ALREADY_FOLLOWED_UP' })
     expect(localFollowupGate(input({ roundHeads: ['c'.repeat(40)] }))).toMatchObject({ ok: true, round: 2 })
     expect(localFollowupGate(input({ roundHeads: ['c'.repeat(40), 'd'.repeat(40)] }))).toMatchObject({ ok: false, code: 'ROUNDS_USED' })
+  })
+})
+
+describe('localFollowupSkipDedupe', () => {
+  it('is per fix and head, and never matches the round keys (local-followup:%)', () => {
+    const skip = localFollowupSkipDedupe('f1', HEAD)
+    expect(skip).toBe(`local-followup-skip:f1:${HEAD}`)
+    expect(skip.startsWith('local-followup:')).toBe(false)
+    expect(localFollowupDedupe('f1', HEAD).startsWith('local-followup:')).toBe(true)
   })
 })
