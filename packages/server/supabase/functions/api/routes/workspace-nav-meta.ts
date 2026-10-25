@@ -459,7 +459,6 @@ export function registerWorkspaceNavMetaRoutes(
         'userFlagOpenCount',
         'failedRegenCount',
         'needsAttentionCount',
-        'latestAt',
         'topPriority',
       ]),
       codeHealth: pick(byPath['/v1/admin/code-health/stats'], [
@@ -489,7 +488,6 @@ export function registerWorkspaceNavMetaRoutes(
         'activeLessons',
         'readyToPromote',
         'criticalLessons',
-        'lastLessonReinforcedAt',
         'topPriority',
       ]),
       drift: pick(byPath['/v1/admin/drift/stats'], [

@@ -68,13 +68,11 @@ export interface CheckCardsInput {
     openCount?: number
     failedRegenCount?: number
     needsAttentionCount?: number
-    latestAt?: string | null
     topPriority?: string
   } | null
   lessons: {
     criticalLessons?: number
     readyToPromote?: number
-    lastLessonReinforcedAt?: string | null
     topPriority?: string
   } | null
   prompts: {
@@ -88,8 +86,12 @@ export interface CheckCardsInput {
     totalEvaluations?: number
     topPriority?: string
   } | null
-  /** loading: recipe/design/CI cards stay blank. error: those three read Status unavailable. */
-  recipePhase: 'loading' | 'error' | 'ready'
+  /**
+   * loading: recipe/design/CI cards stay blank.
+   * error: those three read Status unavailable.
+   * no_project: no app is selected, so they read Not set up.
+   */
+  recipePhase: 'loading' | 'error' | 'ready' | 'no_project'
   recipeElements: ObservedElement[]
   design: ObservedElement | null
   ci: ObservedElement | null
@@ -187,13 +189,17 @@ function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
 
 function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardView {
   if (!health) return UNAVAILABLE
-  const at = health.lastCronAt ?? health.lastLlmCallAt ?? null
+  // cron_runs has no project_id. lastCronAt is the newest platform job
+  // (judge-batch, intelligence-report, data-retention), not this app's check.
+  const at = health.lastLlmCallAt ?? null
   if (health.topPriority === 'no_project') return NOT_CHECKED
   if ((health.cronErrorCount ?? 0) > 0 || health.topPriority === 'cron_error') return failed(at, now)
   if ((health.redCount ?? 0) > 0 || health.topPriority === 'llm_errors') {
-    return findings(health.redCount || 1, health.lastLlmCallAt ?? at, now)
+    return findings(health.redCount || 1, at, now)
   }
-  if ((health.amberCount ?? 0) > 0 || health.topPriority === 'cron_warn' || health.topPriority === 'cron_stale' || health.topPriority === 'llm_fallbacks') {
+  // A job that has not run recently is not a finding on this app.
+  if (health.topPriority === 'cron_stale') return withTime(NOT_CHECKED, at, now)
+  if ((health.amberCount ?? 0) > 0 || health.topPriority === 'cron_warn' || health.topPriority === 'llm_fallbacks') {
     return findings(health.amberCount || 1, at, now)
   }
   if (health.topPriority === 'healthy' && at) return pass(at, now)
@@ -205,8 +211,8 @@ function fromAudit(audit: CheckCardsInput['audit'], now: number): CheckCardView 
   if (audit.topPriority === 'unknown') return UNAVAILABLE
   if (audit.topPriority === 'no_project') return NOT_CHECKED
   if ((audit.failedGateCount ?? 0) > 0) return failed(audit.lastRunAt, now)
-  if ((audit.errorCount ?? 0) > 0) return findings(audit.errorCount ?? 0, audit.lastRunAt, now)
-  if ((audit.warnCount ?? 0) > 0) return findings(audit.warnCount ?? 0, audit.lastRunAt, now)
+  const auditFindings = (audit.errorCount ?? 0) + (audit.warnCount ?? 0)
+  if (auditFindings > 0) return findings(auditFindings, audit.lastRunAt, now)
   if (audit.topPriority === 'healthy' && audit.lastRunAt) return pass(audit.lastRunAt, now)
   return withTime(NOT_CHECKED, audit.lastRunAt, now)
 }
@@ -222,8 +228,8 @@ function fromInventory(inv: CheckCardsInput['inventory'], now: number): CheckCar
 
 function fromContent(content: CheckCardsInput['content']): CheckCardView {
   if (!content) return UNAVAILABLE
-  // latestAt is the newest issue edit, not a scan. Open issues and a failed
-  // regen are still real; neither time is a check run, so no Pass or Last run.
+  // Open issues and a failed regen are real. This card has no check-run
+  // time, so it never says Pass or Last run.
   if ((content.failedRegenCount ?? 0) > 0) return FAILED
   const open = content.needsAttentionCount ?? content.openCount ?? 0
   if (open > 0) return findings(open, null, 0)
@@ -235,7 +241,7 @@ function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
   if (lessons.topPriority === 'no_data') return notSetUp('/lessons')
   const n = (lessons.criticalLessons ?? 0) + (lessons.readyToPromote ?? 0)
   if (n > 0) return findings(n, null, 0)
-  // lastLessonReinforcedAt is when a lesson was reinforced, not a check run.
+  // Reinforcing a lesson is not a check run, so a quiet catalog is not a pass.
   return NOT_CHECKED
 }
 
@@ -302,17 +308,18 @@ export function statusFromElements(elements: ObservedElement[], fallbackSetup: s
 /** One view per checks-page path. Null while that card's read has not finished. */
 export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): Record<string, CheckCardView | null> {
   const pending = input.recipePhase === 'loading'
+  const noProject = input.recipePhase === 'no_project'
   const recipeUnread = input.recipePhase === 'error'
   const slice = <T>(value: T | null, map: (value: T | null) => CheckCardView): CheckCardView | null =>
     input.navReady ? map(value) : null
   return {
     '/qa-coverage': slice(input.qa, (qa) => fromQa(qa, now)),
     '/health': slice(input.health, (health) => fromHealth(health, now)),
-    '/ci': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.ci ? [input.ci] : [], '/ci', now),
+    '/ci': pending ? null : noProject ? notSetUp('/projects') : recipeUnread ? UNAVAILABLE : statusFromElements(input.ci ? [input.ci] : [], '/ci', now),
     '/fullstack-audit': slice(input.audit, (audit) => fromAudit(audit, now)),
     '/inventory': slice(input.inventory, (inv) => fromInventory(inv, now)),
-    '/recipe': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.recipeElements, '/recipe', now),
-    '/design': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.design ? [input.design] : [], '/design', now),
+    '/recipe': pending ? null : noProject ? notSetUp('/projects') : recipeUnread ? UNAVAILABLE : statusFromElements(input.recipeElements, '/recipe', now),
+    '/design': pending ? null : noProject ? notSetUp('/projects') : recipeUnread ? UNAVAILABLE : statusFromElements(input.design ? [input.design] : [], '/design', now),
     '/content': slice(input.content, (content) => fromContent(content)),
     '/judge': slice(input.judge, (judge) => fromJudge(judge, now)),
     '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),

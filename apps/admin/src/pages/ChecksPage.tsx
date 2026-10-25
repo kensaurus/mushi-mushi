@@ -58,13 +58,16 @@ export function ChecksPage() {
   const recipe = usePageData<RecipeResponse>(
     projectId ? `/v1/admin/projects/${projectId}/recipe` : null,
   )
-  const recipePhase = !projectId || (recipe.loading && !recipe.data)
-    ? 'loading'
-    : recipe.error && !recipe.data
-      ? 'error'
-      : recipe.data
-        ? 'ready'
-        : 'loading'
+  // No selected app: the recipe read never starts, so these cards must not stay blank.
+  const recipePhase = !projectId
+    ? 'no_project'
+    : recipe.loading && !recipe.data
+      ? 'loading'
+      : recipe.error && !recipe.data
+        ? 'error'
+        : recipe.data
+          ? 'ready'
+          : 'loading'
   const elements = recipe.data ? Object.values(recipe.data.elements) : []
   const views = buildCheckCardViews({
     navReady: navCounts.ready,

@@ -146,7 +146,7 @@ describe('ChecksPage', () => {
         judge: { totalEvaluations: 4, disagreementCount: 0, lastEvalAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(), topPriority: 'healthy' },
         contentQuality: {
           openCount: 2, inReviewCount: 0, regeneratingCount: 0, userFlagOpenCount: 0,
-          failedRegenCount: 0, needsAttentionCount: 2, latestAt: new Date().toISOString(), topPriority: 'open_issues',
+          failedRegenCount: 0, needsAttentionCount: 2, topPriority: 'open_issues',
         },
       },
     })
@@ -183,5 +183,16 @@ describe('ChecksPage', () => {
   it('puts top margin on the About Checks bar only', () => {
     expect(routeHelpClass('/checks')).toBe('mt-4')
     expect(routeHelpClass('/health')).toBe('')
+  })
+
+  it('with no active project, CI, design and the blueprint say Not set up', () => {
+    state.projectId = null
+    state.recipe = { data: null, loading: true, error: null }
+    render()
+    for (const id of ['ci', 'design', 'recipe']) {
+      const card = container.querySelector(`[data-testid="checks-card-${id}"]`)
+      expect(card?.textContent, id).toContain('Not set up')
+      expect(card?.querySelector('a[href="/projects"]')?.textContent).toContain('Set up')
+    }
   })
 })

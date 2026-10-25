@@ -176,7 +176,6 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           userFlagOpenCount: contentQualityStats.userFlagOpenCount,
           failedRegenCount: contentQualityStats.failedRegenCount,
           needsAttentionCount: contentQualityStats.needsAttentionCount,
-          latestAt: contentQualityStats.latestAt ?? null,
           topPriority: contentQualityStats.topPriority,
         }
       : null,
@@ -212,7 +211,6 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           activeLessons: lessonsStats.activeLessons,
           readyToPromote: lessonsStats.readyToPromote,
           criticalLessons: lessonsStats.criticalLessons,
-          lastLessonReinforcedAt: lessonsStats.lastLessonReinforcedAt,
           topPriority: lessonsStats.topPriority,
         }
       : null,

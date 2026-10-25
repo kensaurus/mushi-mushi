@@ -70,8 +70,6 @@ export interface ContentQualityStats {
   userFlagOpenCount: number;
   failedRegenCount: number;
   needsAttentionCount: number;
-  /** Newest issue write. Null when this project has no content-check rows. */
-  latestAt: string | null;
   topPriority:
     | 'no_project'
     | 'regen_failed'
@@ -440,7 +438,6 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
       userFlagOpenCount: 0,
       failedRegenCount: 0,
       needsAttentionCount: 0,
-      latestAt: null,
       topPriority: 'no_project',
     };
 
@@ -458,7 +455,6 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
       regenStatusRes,
       userFlagRes,
       failedRegenRes,
-      latestRes,
     ] = await Promise.all([
       db
         .from('content_quality_issues')
@@ -487,13 +483,6 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
         .eq('project_id', projectId)
         .eq('regen_status', 'failed')
         .in('status', ['open', 'in_review', 'regenerating']),
-      db
-        .from('content_quality_issues')
-        .select('updated_at')
-        .eq('project_id', projectId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
     ]);
 
     const openCount = openRes.count ?? 0;
@@ -501,7 +490,6 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     const regeneratingCount = regenStatusRes.count ?? 0;
     const userFlagOpenCount = userFlagRes.count ?? 0;
     const failedRegenCount = failedRegenRes.count ?? 0;
-    const latestAt = (latestRes.data?.updated_at as string | null | undefined) ?? null;
 
     const needsAttentionCount = openCount + inReviewCount;
     let topPriority: ContentQualityStats['topPriority'] = 'healthy';
@@ -520,7 +508,6 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
       userFlagOpenCount,
       failedRegenCount,
       needsAttentionCount,
-      latestAt,
       topPriority,
     };
 

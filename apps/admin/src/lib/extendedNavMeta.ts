@@ -59,7 +59,7 @@ export interface NavStatSlices {
     | 'failedRegenCount'
     | 'needsAttentionCount'
     | 'topPriority'
-  > & Partial<Pick<ContentQualityStats, 'latestAt'>> | null
+  > | null
   codeHealth: Pick<
     CodeHealthStats,
     'errorCount' | 'warnCount' | 'godFileCount' | 'hasRun' | 'topPriority'
@@ -75,7 +75,7 @@ export interface NavStatSlices {
   lessons: Pick<
     LessonsStats,
     'activeLessons' | 'readyToPromote' | 'criticalLessons' | 'topPriority'
-  > & Partial<Pick<LessonsStats, 'lastLessonReinforcedAt'>> | null
+  > | null
   drift: Pick<DriftStats, 'openFindings' | 'criticalOpen' | 'topPriority'> | null
   anomalies: Pick<
     AnomaliesStats,

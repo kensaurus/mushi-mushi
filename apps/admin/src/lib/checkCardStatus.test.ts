@@ -40,7 +40,7 @@ describe('buildCheckCardViews', () => {
       qa: { totalStories: 0, failingStories: 0, topPriority: 'no_stories' },
       health: { topPriority: 'idle' },
       audit: { topPriority: 'healthy', errorCount: 0, warnCount: 0, failedGateCount: 0, lastRunAt: RECENT },
-      content: { topPriority: 'healthy', needsAttentionCount: 4, latestAt: RECENT },
+      content: { topPriority: 'healthy', needsAttentionCount: 4 },
     }), NOW)
 
     expect(views['/qa-coverage']).toMatchObject({ state: 'not_set_up', chip: 'Not set up', setupTo: '/qa-coverage' })
@@ -83,12 +83,12 @@ describe('buildCheckCardViews', () => {
     expect(gate).toMatchObject({ state: 'failed', chip: 'Failed', detail: 'Last run 12h ago' })
 
     const cron = buildCheckCardViews(input({
-      health: { topPriority: 'cron_error', cronErrorCount: 1, lastCronAt: RECENT },
+      health: { topPriority: 'cron_error', cronErrorCount: 1, lastCronAt: RECENT, lastLlmCallAt: STALE },
     }), NOW)['/health']
-    expect(cron).toMatchObject({ state: 'failed', chip: 'Failed', detail: 'Last run 12h ago' })
+    expect(cron).toMatchObject({ state: 'failed', chip: 'Failed', detail: 'Last run 6d ago' })
 
     const regen = buildCheckCardViews(input({
-      content: { topPriority: 'regen_failed', failedRegenCount: 1, latestAt: RECENT },
+      content: { topPriority: 'regen_failed', failedRegenCount: 1 },
     }), NOW)['/content']
     expect(regen).toMatchObject({ state: 'failed', chip: 'Failed', detail: null })
   })
@@ -191,27 +191,65 @@ describe('buildCheckCardViews', () => {
 
   it('content and lessons do not treat an edit or a reinforcement as a check run', () => {
     const quietContent = buildCheckCardViews(input({
-      content: { topPriority: 'healthy', needsAttentionCount: 0, openCount: 0, failedRegenCount: 0, latestAt: RECENT },
+      content: { topPriority: 'healthy', needsAttentionCount: 0, openCount: 0, failedRegenCount: 0 },
     }), NOW)['/content']
     expect(quietContent).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
     expect(quietContent?.chip).not.toBe('Pass')
 
     const openContent = buildCheckCardViews(input({
-      content: { topPriority: 'open_issues', needsAttentionCount: 4, latestAt: RECENT },
+      content: { topPriority: 'open_issues', needsAttentionCount: 4 },
     }), NOW)['/content']
     expect(openContent).toMatchObject({ state: 'findings', chip: '4 findings', detail: null })
     expect(openContent?.detail ?? '').not.toMatch(/Last run/)
 
     const quietLessons = buildCheckCardViews(input({
-      lessons: { topPriority: 'healthy', criticalLessons: 0, readyToPromote: 0, lastLessonReinforcedAt: RECENT },
+      lessons: { topPriority: 'healthy', criticalLessons: 0, readyToPromote: 0 },
     }), NOW)['/lessons']
     expect(quietLessons).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
     expect(quietLessons?.chip).not.toBe('Pass')
 
     const criticalLessons = buildCheckCardViews(input({
-      lessons: { topPriority: 'critical_lessons', criticalLessons: 2, readyToPromote: 1, lastLessonReinforcedAt: RECENT },
+      lessons: { topPriority: 'critical_lessons', criticalLessons: 2, readyToPromote: 1 },
     }), NOW)['/lessons']
     expect(criticalLessons).toMatchObject({ state: 'findings', chip: '3 findings', detail: null })
     expect(criticalLessons?.detail ?? '').not.toMatch(/Last run/)
+  })
+
+  it('an audit counts errors and warnings together, and a failed gate still wins', () => {
+    const both = buildCheckCardViews(input({
+      audit: { errorCount: 2, warnCount: 3, failedGateCount: 0, lastRunAt: RECENT, topPriority: 'warnings' },
+    }), NOW)['/fullstack-audit']
+    expect(both).toMatchObject({ state: 'findings', chip: '5 findings', detail: 'Last run 12h ago' })
+
+    const failed = buildCheckCardViews(input({
+      audit: { errorCount: 2, warnCount: 3, failedGateCount: 1, lastRunAt: RECENT, topPriority: 'failures' },
+    }), NOW)['/fullstack-audit']
+    expect(failed).toMatchObject({ state: 'failed', chip: 'Failed' })
+  })
+
+  it('a stale platform cron is Not run yet, and its start time is not this app\'s last run', () => {
+    const stale = buildCheckCardViews(input({
+      health: { topPriority: 'cron_stale', amberCount: 2, lastCronAt: RECENT, lastLlmCallAt: STALE },
+    }), NOW)['/health']
+    expect(stale).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: 'Last run 6d ago' })
+    expect(stale?.chip).not.toMatch(/finding/)
+
+    const platformOnly = buildCheckCardViews(input({
+      health: { topPriority: 'healthy', lastCronAt: RECENT, lastLlmCallAt: null, amberCount: 0 },
+    }), NOW)['/health']
+    expect(platformOnly).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(platformOnly?.chip).not.toBe('Pass')
+
+    const projectCall = buildCheckCardViews(input({
+      health: { topPriority: 'healthy', lastCronAt: STALE, lastLlmCallAt: RECENT },
+    }), NOW)['/health']
+    expect(projectCall).toMatchObject({ state: 'pass', chip: 'Pass', detail: 'Last run 12h ago' })
+  })
+
+  it('no selected app leaves CI, design and the blueprint as Not set up', () => {
+    const views = buildCheckCardViews(input({ recipePhase: 'no_project' }), NOW)
+    for (const path of ['/ci', '/design', '/recipe']) {
+      expect(views[path], path).toMatchObject({ state: 'not_set_up', chip: 'Not set up', setupTo: '/projects' })
+    }
   })
 })
