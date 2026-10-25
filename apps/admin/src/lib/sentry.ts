@@ -5,7 +5,9 @@
  *          self-hosted forks that don't want to send telemetry to our org).
  *
  * PRIVACY:
- *   - sendDefaultPii: false — never auto-attach IPs, cookies, or request bodies
+ *   - dataCollection keeps the v10 `sendDefaultPii: false` baseline. SDK 11
+ *     removed that flag and, with `dataCollection` unset, collects user info,
+ *     cookies, and HTTP bodies.
  *   - replays disabled — org free-tier quota (errors-only capture retained)
  *   - beforeSend strips token-like query params from URLs before transport
  *
@@ -41,6 +43,25 @@ type SendArg = Parameters<Transport['send']>[0]
 type SendResult = Awaited<ReturnType<Transport['send']>>
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
+
+/**
+ * SDK 11's stand-in for `sendDefaultPii: false`. An unset `dataCollection`
+ * collects every category. This is the restrictive v10 baseline from
+ * https://docs.sentry.io/platforms/javascript/migration/v10-to-v11/
+ */
+export const sentryDataCollection = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: {
+    request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+    response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  },
+  httpBodies: [],
+  urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  graphQL: { document: false, variables: false },
+}
 
 // ─── Self-disabling transport ───────────────────────────────────────────────
 //
@@ -98,7 +119,7 @@ export function initSentry(): void {
     dsn,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_RELEASE,
-    sendDefaultPii: false,
+    dataCollection: sentryDataCollection,
     tracesSampleRate: 0.05,
     transport: makeCircuitBreakingTransport,
     integrations: [
