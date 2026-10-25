@@ -17,7 +17,50 @@ import {
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
+import { reportHeading } from '../../lib/clipText'
 import type { ReportDetail } from './types'
+
+function flat(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Stage-1 extraction (symptom — actual), or the Stage-2 root cause when
+ * Stage 1 left nothing. Hidden when that text is the summary or the heading:
+ * fast-filter stores `symptom — actual` as `summary`, and the heading falls
+ * back to the same field, so the old "LLM summary" callout repeated it.
+ */
+export function classificationNarrative(report: {
+  title?: string | null
+  summary?: string | null
+  description?: string | null
+  stage1_classification?: Record<string, unknown> | null
+  stage2_analysis?: Record<string, unknown> | null
+}): { label: string; text: string } | null {
+  const summary = (report.summary ?? '').trim()
+  const heading = reportHeading(report)
+  const repeats = (value: string) => {
+    const text = value.trim()
+    if (!text) return true
+    const flatText = flat(text)
+    if (summary && flatText === flat(summary)) return true
+    if (flatText === flat(heading.text) || flatText === flat(heading.full)) return true
+    return false
+  }
+
+  const stage1 = report.stage1_classification
+  const symptom = textOf(stage1?.symptom)
+  const actual = textOf(stage1?.actual)
+  const extraction = [symptom, actual && flat(actual) !== flat(symptom) ? actual : ''].filter(Boolean).join(' — ')
+  const rootCause = textOf(report.stage2_analysis?.rootCause)
+  const candidate = extraction || rootCause
+  if (!candidate || repeats(candidate)) return null
+  return { label: extraction ? 'What happened' : 'Root cause', text: candidate }
+}
 
 export function ClassificationFields({ report }: { report: ReportDetail }) {
   const reproductionHint = (report.stage1_classification as { reproductionHint?: string } | null)?.reproductionHint
@@ -25,6 +68,7 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
   const severityText = report.severity ? severityLabel(report.severity) : 'Unset'
   const conf = report.confidence
   const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
+  const narrative = classificationNarrative(report)
 
   return (
     <>
@@ -83,9 +127,9 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
         ]}
       />
 
-      {report.summary && (
-        <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
-          <ProseBlock value={report.summary} mode="auto" />
+      {narrative && (
+        <Callout tone="info" label={narrative.label} icon={<IconIntelligence className="text-info" />}>
+          <ProseBlock value={narrative.text} mode="auto" />
         </Callout>
       )}
 

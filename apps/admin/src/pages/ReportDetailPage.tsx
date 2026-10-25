@@ -3,7 +3,7 @@ import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { reportDetailPath } from '../lib/reportUrl'
+import { reportDetailFetchPath, reportDetailPath } from '../lib/reportUrl'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -106,9 +106,12 @@ export function ReportDetailPage() {
   // can never resolve, and the API answers it with a 400 that used to render
   // as "console / API version mismatch". Treat it as the not-found it is.
   const idIsValid = !!id && REPORT_ID_RE.test(id)
-  const path = idIsValid ? `/v1/admin/reports/${id}` : null
+  const path = idIsValid ? reportDetailFetchPath(id) : null
   const { data: serverReport, loading, error, reload } = usePageData<ReportDetail>(path)
   const [report, setReport] = useState<ReportDetail | null>(null)
+  // Code-index quotes from `/fix-context`. Kept off the first response so
+  // the embedding retries do not hold the skeleton.
+  const [codeIndexPacket, setCodeIndexPacket] = useState<{ id: string; packet: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
@@ -135,6 +138,22 @@ export function ReportDetailPage() {
   useEffect(() => {
     if (serverReport) setReport(serverReport)
   }, [serverReport])
+
+  useEffect(() => {
+    if (!idIsValid || !id) return
+    let cancelled = false
+    void apiFetch<{ fix_prompt?: string | null }>(`/v1/admin/reports/${id}/fix-context`)
+      .then((res) => {
+        if (cancelled || !res.ok) return
+        const packet = res.data?.fix_prompt
+        if (typeof packet !== 'string' || !packet) return
+        setCodeIndexPacket({ id, packet })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [id, idIsValid])
 
   // Funnel: `report_opened` is one of the HABIT_EVENTS (diagnosis consumed).
   // Keyed on the report id so refetches / triage saves don't re-fire.
@@ -269,7 +288,10 @@ export function ReportDetailPage() {
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
-  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
+  const viewReport =
+    codeIndexPacket?.id === report.id ? { ...report, fix_packet: codeIndexPacket.packet } : report
+
+  return <ReportDetailView report={viewReport} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
 }
 
 /** The editorial 404 for a report id that does not resolve (missing, swept or malformed). */

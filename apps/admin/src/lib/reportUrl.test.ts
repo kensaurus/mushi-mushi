@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { currentAdminViewUrl, reportDetailPath, reportPermalink } from './reportUrl'
+import { currentAdminViewUrl, reportDetailFetchPath, reportDetailPath, reportPermalink } from './reportUrl'
 
 const originalHref = typeof window !== 'undefined' ? window.location.href : null
 
@@ -21,6 +21,11 @@ describe('reportUrl helpers', () => {
   it('builds report permalinks with encoded id and no doubled basename', () => {
     expect(reportPermalink('abc-123')).toMatch(/\/reports\/abc-123$/)
     expect(reportPermalink('abc-123')).not.toMatch(/admin\/mushi-mushi/)
+  })
+
+  it('asks for the report without the code-index embedding', () => {
+    expect(reportDetailFetchPath('abc-123')).toBe('/v1/admin/reports/abc-123?rag=0')
+    expect(reportDetailFetchPath('a/b')).toBe('/v1/admin/reports/a%2Fb?rag=0')
   })
 
   it('adds project query param to detail paths when scoped', () => {

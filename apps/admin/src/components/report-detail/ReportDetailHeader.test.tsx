@@ -17,6 +17,7 @@ import type { ReportDeployLive, ReportDetail } from './types'
 
 vi.mock('../../lib/reportPresence', () => ({ useReportPresence: () => ({ others: [] }) }))
 
+import { PAGE_TITLE_CLASS } from '../PageHeaderBar'
 import { ReportDetailHeader } from './ReportDetailHeader'
 import { deployLiveLabel } from './deployLive'
 
@@ -98,6 +99,34 @@ describe('ReportDetailHeader deploy chip', () => {
   it('renders no chip when no fix merged', () => {
     expect(render(report({ deploy_live: null, status: 'classified' }))).toBeNull()
     expect(render(report({ status: 'classified' }))).toBeNull()
+  })
+})
+
+describe('report heading and breadcrumb', () => {
+  it('uses the shared page title and a mobile-only Bugs trail', () => {
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(ReportDetailHeader, {
+            report: report({ title: 'Checkout is stuck', summary: 'Checkout button does nothing' }),
+            reporterShort: 'abc123',
+          }),
+        ),
+      ),
+    )
+    const heading = container.querySelector('h2')
+    expect(heading?.textContent).toBe('Checkout is stuck')
+    expect(heading?.className).toContain(PAGE_TITLE_CLASS)
+    expect(heading?.parentElement?.className ?? '').not.toContain('bg-info')
+    const trail = container.querySelector('nav[aria-label="Breadcrumb"]')
+    expect(trail?.parentElement?.className).toContain('xl:hidden')
+    expect(trail?.textContent).toContain('Bugs')
+    expect(trail?.textContent).toContain('Report')
+    expect(trail?.textContent).not.toContain('Checkout')
+    const bugs = Array.from(trail?.querySelectorAll('a') ?? []).find((a) => a.textContent === 'Bugs')
+    expect(bugs?.getAttribute('href')).toBe('/reports')
   })
 })
 

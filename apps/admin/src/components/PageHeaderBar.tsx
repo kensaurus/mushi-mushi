@@ -106,6 +106,12 @@ export interface PageHeaderBarProps {
 }
 
 /**
+ * Shared page-title type. The report card heading uses the same classes
+ * so it does not invent a second, tinted title style.
+ */
+export const PAGE_TITLE_CLASS = 'min-w-0 text-sm font-semibold leading-snug text-fg text-balance'
+
+/**
  * Compact page header for all admin data pages. Replaces the PageHeader +
  * PageHelp combo with a single focused component.
  */
@@ -189,7 +195,7 @@ export function PageHeaderBar({
 
           {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
           <h2
-            className="min-w-0 text-sm font-semibold leading-snug text-fg text-balance"
+            className={PAGE_TITLE_CLASS}
             {...(showProjectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
           >
             {title}

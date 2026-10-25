@@ -76,4 +76,13 @@ describe('agent context routes', () => {
     expect(reports).toContain('buildReportFixPacket(')
     expect(reports).not.toContain('composeFixPacket(')
   })
+
+  it('the console can skip the embedding on report detail (?rag=0)', () => {
+    const reports = readFileSync(join(routesDir, 'reports.ts'), 'utf-8')
+    const builder = readFileSync(join(routesDir, 'report-agent-context.ts'), 'utf-8')
+    expect(reports).toContain("c.req.query('rag') !== '0'")
+    expect(reports).toContain('includeRag')
+    expect(builder).toContain('options?.includeRag !== false')
+    expect(builder).toContain('getRelevantCode(')
+  })
 })

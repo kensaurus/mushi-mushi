@@ -970,8 +970,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Compose a first-class, paste-ready fix packet so every surface
     // (report-detail UI, MCP get_fix_context, GET …/fix-context, CLI mushi fix)
     // shares one generator instead of each reshaping the row. Best-effort: RAG
-    // hints and blast radius enrich the packet when available but never block
-    // the response.
+    // hints and blast radius enrich the packet when available.
+    //
+    // The console asks with `?rag=0`. The embedding lookup retries for up to
+    // ~15s and used to sit on this response, so the report page stayed on its
+    // skeleton until it finished. MCP and CLI omit the flag and still get the
+    // code-index quotes in this payload; the console loads them from
+    // `/fix-context` after the header is on screen.
+    const includeRag = c.req.query('rag') !== '0';
     // Merged fix → is it live? Places each deploy target's newest commit
     // before or after the merge (deploy_drift run heads, earlier
     // deploy_observations). null unless the report reads as fixed, a fix
@@ -983,6 +989,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         db,
         data as Record<string, unknown>,
         inventoryAnchorOf(inventoryAnchorRes.data),
+        { includeRag },
       ),
       loadReportDeployLive(
         db,

@@ -26,6 +26,15 @@ import { isValidProjectId } from './activeProject'
 import { scopedHref } from './humanPageHints'
 import { appUrl } from './appPath'
 
+/**
+ * Admin API path for opening one report. `rag=0` keeps the code-index
+ * embedding off this response; the page asks `/fix-context` for those
+ * quotes after the header is on screen.
+ */
+export function reportDetailFetchPath(reportId: string): string {
+  return `/v1/admin/reports/${encodeURIComponent(reportId)}?rag=0`
+}
+
 /** In-app router path for a report detail view, preserving project scope. */
 export function reportDetailPath(reportId: string, projectId?: string | null): string {
   const base = `/reports/${encodeURIComponent(reportId)}`
