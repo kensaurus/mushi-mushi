@@ -2,14 +2,18 @@
  * FILE: apps/admin/src/components/credits/SkillRunsCard.tsx
  * PURPOSE: /credits, skill runs (ADR 0042): pick an app, a skill from the
  *          catalog and the part of the app to work on, and Mushi runs it
- *          round after round on that app's own Cursor key. Each round is a
- *          pull request that Opus reviews; with "merge each round when ready"
- *          an approved round goes to the merge queue, and the next round
- *          builds on it. Below, every run of the team with where it is.
+ *          round after round on that app's own Cursor key. The app picker
+ *          starts on the open app (?project= or the stored app) and still
+ *          lists every app, so a run is not filed on whichever app is first.
+ *          Each round is a pull request that Opus reviews; with "merge each
+ *          round when ready" an approved round goes to the merge queue, and
+ *          the next round builds on it. Below, every run of the team with
+ *          where it is.
  */
 
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ACTIVE_PROJECT_QUERY_PARAM, getActiveProjectIdSnapshot, isValidProjectId } from '../../lib/activeProject'
 import { Badge, Btn, Input, SelectField, Toggle } from '../ui'
 import { useToast } from '../../lib/toast'
 import { loadSkillRuns, skillRunLine, startSkillRun, stopSkillRun, type SkillRun, type SkillRunSkill } from '../../lib/skillRuns'
@@ -25,7 +29,19 @@ export function SkillRunsCard({ projects }: Props) {
   const toast = useToast()
   const [runs, setRuns] = useState<SkillRun[] | null>(null)
   const [skills, setSkills] = useState<SkillRunSkill[]>([])
-  const [projectId, setProjectId] = useState('')
+  // Same read as useActiveProjectId: ?project= wins, then the stored app.
+  // Inlined so this card does not import the header switcher.
+  const [searchParams] = useSearchParams()
+  const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
+  const activeProjectId = isValidProjectId(fromUrl) ? fromUrl : getActiveProjectIdSnapshot()
+  // A manual pick wins. Until then, follow the open app (the one the page
+  // notice names) instead of the first row in the project list.
+  const [chosenId, setChosenId] = useState<string | null>(null)
+  const projectId =
+    (chosenId && projects?.some((p) => p.id === chosenId) ? chosenId : null) ??
+    (activeProjectId && projects?.some((p) => p.id === activeProjectId) ? activeProjectId : null) ??
+    projects?.[0]?.id ??
+    ''
   const [skillSlug, setSkillSlug] = useState('audit-accessibility')
   const [scope, setScope] = useState('')
   const [rounds, setRounds] = useState(3)
@@ -49,10 +65,6 @@ export function SkillRunsCard({ projects }: Props) {
     const t = window.setInterval(() => void load(), POLL_MS)
     return () => window.clearInterval(t)
   }, [active, load])
-  useEffect(() => {
-    if (!projectId && projects?.length) setProjectId(projects[0].id)
-  }, [projects, projectId])
-
   const names = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p.name])), [projects])
   const skill = skills.find((s) => s.slug === skillSlug)
 
@@ -83,7 +95,7 @@ export function SkillRunsCard({ projects }: Props) {
         Opus reviews it. The next round builds on the last; the run ends when the agent finds nothing left.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <SelectField label="App" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={!projects?.length}>
+        <SelectField label="App" value={projectId} onChange={(e) => setChosenId(e.target.value)} disabled={!projects?.length}>
           {(projects ?? []).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
