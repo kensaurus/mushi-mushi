@@ -14,7 +14,7 @@ const pageData = vi.hoisted(() => ({
 vi.mock('./usePageData', () => ({ usePageData: () => pageData.state }))
 vi.mock('./supabase', () => ({ invalidateApiCache: vi.fn() }))
 
-import { useSetupStatus, type UseSetupStatusResult } from './useSetupStatus'
+import { SETUP_LOAD_DEADLINE_MS, useSetupStatus, type UseSetupStatusResult } from './useSetupStatus'
 import { forgetHasAnyProject, rememberHasAnyProject } from './projectPresence'
 
 let root: Root | null = null
@@ -64,6 +64,21 @@ describe('useSetupStatus project presence', () => {
     render()
     expect(latest?.resolved).toBe(false)
     expect(latest?.hasAnyProject).toBe(false)
+  })
+
+  it('an unfinished load settles so the header can offer a retry', () => {
+    vi.useFakeTimers()
+    try {
+      pageData.state = { data: null, loading: true, error: null, reload: () => {} }
+      render()
+      expect(latest?.error).toBeNull()
+      act(() => {
+        vi.advanceTimersByTime(SETUP_LOAD_DEADLINE_MS)
+      })
+      expect(latest?.error).toMatch(/too long/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a resolved response is the truth and is remembered for next time', () => {
