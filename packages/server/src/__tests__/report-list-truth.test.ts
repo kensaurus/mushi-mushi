@@ -167,7 +167,7 @@ describe('one report window (#231, #77)', () => {
     expect(window.slice(0, 200)).toContain(".eq('project_id', activeProject.id)")
   })
 
-  it('the list understands status=active (what the KPI tiles count)', () => {
+  it('the list understands status=active, and severity stats skip dismissed rows', () => {
     const list = routeBody(REPORTS, "app.get('/v1/admin/reports', adminOrApiKey()", 9000)
     expect(list).toContain("status === 'active'")
     expect(list).toContain(".neq('status', 'dismissed')")
@@ -198,6 +198,16 @@ describe('critical counts only count open work (#77)', () => {
     const count = dash.slice(dash.indexOf("'open critical 14d'"), dash.indexOf("'open critical 14d'") + 400)
     expect(count).toContain(".in('status', [...OPEN_REPORT_STATUSES])")
     expect(dash).toMatch(/openBacklog,\s+openCritical14d,/)
+  })
+
+  it('Bugs severity tiles count awaiting-decision rows, the same set as Home and status=open', () => {
+    const kpi = routeBody(REPORTS, "app.get('/v1/admin/reports/severity-stats'", 8000)
+    const end = kpi.indexOf("app.get('/v1/admin/reports',")
+    expect(end).toBeGreaterThan(0)
+    const body = kpi.slice(0, end)
+    expect(body).toContain('OPEN_REPORT_STATUSES')
+    expect(body).toContain('awaitingDecision.has(r.status ?? \'\')')
+    expect(body).not.toContain("new Set(['fixed', 'resolved', 'verified', 'dismissed'])")
   })
 })
 

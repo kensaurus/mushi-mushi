@@ -811,8 +811,8 @@ export function ReportsPage() {
               <ReportsKpiStrip
                 activeSeverity={severity}
                 onFilter={(sev, windowDays) => {
-                  // The tile counts non-dismissed reports of that severity
-                  // from the window; open exactly that list.
+                  // The tile counts reports of that severity from the window
+                  // that still need a decision; open exactly that list.
                   const next = new URLSearchParams(searchParams)
                   for (const [k, v] of Object.entries(kpiTileFilter(sev || null, windowDays, { status, days }))) {
                     if (v) next.set(k, v)

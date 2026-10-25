@@ -3,7 +3,8 @@
  * PURPOSE: The /reports filter vocabulary in one place: what each chip,
  *          select and KPI tile sends, what it is called, and how its count is
  *          read, so a count always equals the list it opens (2026-10-04
- *          console audit, group B). Server twin:
+ *          console audit, group B). Home's critical card uses the same
+ *          status=open + 14-day list. Server twin:
  *          packages/server/supabase/functions/_shared/report-list-filters.ts.
  */
 
@@ -141,24 +142,54 @@ export function optionLabel(options: ReadonlyArray<{ value: string; label: strin
 }
 
 /**
- * URL params a severity KPI tile sets: the tile counts non-dismissed reports
- * of that severity created in the last `windowDays` (severity-stats route),
- * so the list it opens applies exactly those three filters. `null` clears.
+ * URL params a severity KPI tile sets. The tile counts reports of that
+ * severity from the last `windowDays` that still need a decision — the same
+ * `status=open` set as Home's critical card — so the list it opens is that
+ * count. `null` clears.
  */
 export function kpiTileFilter(
   severity: string | null,
   windowDays: number,
   current: { status: string; days: string } = { status: '', days: '' },
 ): Record<'severity' | 'days' | 'status', string> {
-  // The tile counts what is still open, so it opens that list.
-  if (severity) return { severity, days: String(windowDays), status: 'unresolved' }
-  // Clearing the tile removes only what the tile set; a status or window
-  // the user picked afterwards stays.
+  if (severity) return { severity, days: String(windowDays), status: 'open' }
+  // Clearing the tile removes only what the tile set. `unresolved` and
+  // `active` are what older tiles wrote into the URL.
   return {
     severity: '',
-    status: current.status === 'unresolved' || current.status === 'active' ? '' : current.status,
+    status: current.status === 'open' || current.status === 'unresolved' || current.status === 'active' ? '' : current.status,
     days: current.days === String(windowDays) ? '' : current.days,
   }
+}
+
+/** Home "Critical · 14d" and the Bugs critical tile open one list. */
+export function openSeverityListHref(severity: string, windowDays = 14): string {
+  const filter = kpiTileFilter(severity, windowDays)
+  return `/reports?status=${filter.status}&severity=${filter.severity}&days=${filter.days}`
+}
+
+export function criticalDecideTile(): { label: string; sublabel: string; to: string } {
+  return {
+    label: 'Critical · 14d',
+    sublabel: 'awaiting a decision',
+    to: openSeverityListHref('critical', 14),
+  }
+}
+
+/**
+ * Line under a Bugs severity tile. The headline is reports still awaiting a
+ * decision; this line is the rest of the same window, not a second metric.
+ */
+export function severityTileSublabel(
+  filed: number,
+  awaitingDecision: number,
+  windowDays: number,
+  filtering: boolean,
+): string {
+  const suffix = filtering ? ' · filtering' : ''
+  if (filed <= 0) return `none in ${windowDays}d${suffix}`
+  const rest = Math.max(0, filed - awaitingDecision)
+  return `${filed} filed in ${windowDays}d · ${rest} in a fix or closed${suffix}`
 }
 
 /** Default direction on a column's first click. Severity: worst first. */

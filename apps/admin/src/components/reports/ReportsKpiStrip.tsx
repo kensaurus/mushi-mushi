@@ -12,6 +12,7 @@ import { KpiTile, type KpiDelta } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 import { useAdminMode } from '../../lib/mode'
+import { severityTileSublabel } from '../../lib/reportsListFilters'
 import { PageLoadError } from '../PageLoadError'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
@@ -75,7 +76,7 @@ const TILES_ADVANCED: Array<{
   meaning: string
 }> = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Critical reports from the window that are not fixed yet (the line below counts all that came in). These usually block user flow: triage first.' },
+    meaning: 'Critical reports from this window that still need a decision — the same count as Home. The line under the number is how many were filed, and how many are already in a fix or closed.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -86,7 +87,7 @@ const TILES_ADVANCED: Array<{
 
 const TILES_PLAIN: typeof TILES_ADVANCED = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Bugs that block user flow — review these first.' },
+    meaning: 'Bugs from this window that still need a decision — the same count as Home. Review these first.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'Broken functionality with a workaround — fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -156,14 +157,15 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
             <KpiTile
               density="flat"
               // The quick-filter chips count all time; these tiles count a
-              // window, so the label says which.
-              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              // window, so the label says which. The number is reports still
+              // awaiting a decision, the same set as Home.
+              label={`${tile.label} · ${windowDays}d`}
               value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
                   ? `last ${windowDays} days`
                   : openCount != null
-                    ? `${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                    ? severityTileSublabel(count, openCount, windowDays, isActive)
                     : total > 0
                       ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
                       : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`

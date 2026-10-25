@@ -1,11 +1,12 @@
 /**
  * FILE: apps/admin/src/components/dashboard/KpiRow.tsx
  * PURPOSE: Top-of-dashboard 4-tile KPI strip with the 7d-vs-prior-7d intake
- *          delta. Direction is pure math; tone reflects whether more reports
- *          is good (it isn't, hence warn).
+ *          delta. The critical tile is the 14-day awaiting-decision count,
+ *          the same list as the Bugs severity tile — not the triage backlog.
  */
 
 import { useMemo } from 'react'
+import { criticalDecideTile } from '../../lib/reportsListFilters'
 import { KpiTile, type KpiTileProps } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { DashboardCounts, FixSummary, LlmDay, PdcaStage, ReportDay } from './types'
@@ -76,17 +77,18 @@ export function KpiRow({ counts, fixSummary, reportsByDay, pdcaStages = [] }: Pr
   }, [stage7d.fixes])
 
   const heroIsBacklog = counts.openBacklog > 0
+  const critical = criticalDecideTile()
 
   return (
     <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger panel>
       <KpiTile
         density="flat"
-        label="Critical to decide"
+        label={critical.label}
         value={counts.openCritical14d ?? 0}
-        sublabel={`${counts.openBacklog} new, not yet triaged`}
-        to="/reports?status=open&severity=critical&days=14"
-        accent={(counts.openCritical14d ?? 0) > 0 ? 'danger' : counts.openBacklog > 0 ? 'warn' : 'ok'}
-        meaning="Open critical reports from the last 14 days that still need your decision: the same list the To-do page and the banner above count. The small number is reports no one has triaged yet."
+        sublabel={critical.sublabel}
+        to={critical.to}
+        accent={(counts.openCritical14d ?? 0) > 0 ? 'danger' : 'ok'}
+        meaning="Critical reports from the last 14 days that still need a decision — the same count as the Critical tile on Bugs. Reports already in a fix, fixed, or dismissed are not included."
         variant={heroIsBacklog ? 'primary' : 'default'}
       />
       <KpiTile

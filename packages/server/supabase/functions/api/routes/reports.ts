@@ -228,7 +228,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
     const days = parseWindowDays(c.req.query('days')) ?? 14;
     // Same calendar window as the list's `days` filter, so a KPI tile and the
-    // list it opens (severity=X&days=N&status=active) count the same rows.
+    // list it opens (severity=X&days=N&status=open) count the same rows.
     const sinceIso = reportWindowStartIso(days);
 
     const projectIds = await scopedOwnedProjectIds(c, db, userId);
@@ -252,10 +252,11 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       .neq('status', 'dismissed');
 
     const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
-    // Still open (not fixed, resolved or verified): "10 critical" read as 10
-    // unresolved when 7 of them were already closed (2026-10-24).
+    // Awaiting a decision — the same statuses as `status=open` and Home's
+    // critical tile. `fixing` / `in_progress` already have a fix in flight;
+    // counting them here made Bugs read 10 while Home read 4.
     const openBySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>;
-    const closed = new Set(['fixed', 'resolved', 'verified', 'dismissed']);
+    const awaitingDecision = new Set<string>(OPEN_REPORT_STATUSES);
     // Build a per-day, per-severity matrix so the Reports KPI strip can render
     // a 14d trend sparkline alongside each tile (Round 2 polish — KPI rows
     // need momentum, not just snapshots).
@@ -270,7 +271,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     }
     for (const r of (rows ?? []) as Array<{ severity: string | null; status: string | null; created_at: string }>) {
       if (r.severity && r.severity in bySeverity) bySeverity[r.severity] += 1;
-      if (r.severity && r.severity in openBySeverity && !closed.has(r.status ?? '')) openBySeverity[r.severity] += 1;
+      if (r.severity && r.severity in openBySeverity && awaitingDecision.has(r.status ?? '')) openBySeverity[r.severity] += 1;
       const dayKey = (r.created_at ?? '').slice(0, 10);
       const bucket = dayBuckets.get(dayKey);
       if (bucket) {
@@ -392,7 +393,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       else if (status === 'classified') query = query.in('status', [...legacyClassified]);
       else if (status === 'fixed') query = query.in('status', [...legacyFixed]);
       else if (status === 'new') query = query.in('status', [...NEW_BUCKET_STATUSES]);
-      // `active`: everything but dismissed — what the severity KPI tiles count.
+      // `active`: everything but dismissed. Severity tiles use `open` instead.
       else if (status === 'active') query = query.neq('status', 'dismissed');
       // `unresolved`: not fixed, resolved, verified or dismissed — the severity tiles' open count.
       else if (status === 'unresolved') query = query.not('status', 'in', '(fixed,resolved,verified,dismissed)');

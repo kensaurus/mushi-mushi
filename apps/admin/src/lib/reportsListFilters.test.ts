@@ -13,8 +13,10 @@ import {
   STATUS_CHIPS,
   bulkConfirmCopy,
   defaultSortDir,
+  criticalDecideTile,
   kpiTileFilter,
   reporterReportsHref,
+  severityTileSublabel,
   sanitizeListFilters,
   statusChipCount,
   statusFilterLabel,
@@ -59,14 +61,36 @@ describe('Platform and SDK selects (#16)', () => {
 })
 
 describe('severity KPI tiles (item 231)', () => {
-  it('open the list the tile counted: severity, window and still unresolved', () => {
-    expect(kpiTileFilter('high', 14)).toEqual({ severity: 'high', days: '14', status: 'unresolved' })
+  it('opens the list the tile counted: severity, window, and still awaiting a decision', () => {
+    expect(kpiTileFilter('high', 14)).toEqual({ severity: 'high', days: '14', status: 'open' })
   })
 
   it('clearing the tile removes only what the tile set', () => {
+    expect(kpiTileFilter(null, 14, { status: 'open', days: '14' })).toEqual({ severity: '', days: '', status: '' })
     expect(kpiTileFilter(null, 14, { status: 'unresolved', days: '14' })).toEqual({ severity: '', days: '', status: '' })
     expect(kpiTileFilter(null, 14, { status: 'active', days: '14' })).toEqual({ severity: '', days: '', status: '' })
     expect(kpiTileFilter(null, 14, { status: 'fixed', days: '30' })).toEqual({ severity: '', days: '30', status: 'fixed' })
+  })
+
+  it('Home critical tile and the Bugs critical tile are one list, and the subtitle is not the triage backlog', () => {
+    const tile = criticalDecideTile()
+    expect(tile).toEqual({
+      label: 'Critical · 14d',
+      sublabel: 'awaiting a decision',
+      to: '/reports?status=open&severity=critical&days=14',
+    })
+    const q = new URLSearchParams(tile.to.split('?')[1])
+    const filter = kpiTileFilter('critical', 14)
+    expect(q.get('status')).toBe(filter.status)
+    expect(q.get('severity')).toBe(filter.severity)
+    expect(q.get('days')).toBe(filter.days)
+    // "0 new, not yet triaged" was a different count under the headline.
+    expect(tile.sublabel).not.toMatch(/triag/i)
+  })
+
+  it('the line under the headline is the rest of that window', () => {
+    expect(severityTileSublabel(10, 4, 14, false)).toBe('10 filed in 14d · 6 in a fix or closed')
+    expect(severityTileSublabel(0, 0, 14, true)).toBe('none in 14d · filtering')
   })
 })
 
