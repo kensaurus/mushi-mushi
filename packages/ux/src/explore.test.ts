@@ -5,7 +5,7 @@
  * confirmed signal becomes a finding a reader can repeat.
  */
 import { describe, expect, it } from 'vitest'
-import { describeAction, exploreFinding, explorePrompt, normalizeMessage, parseAction, rolesToTry, signalKey } from './explore.js'
+import { describeAction, exploreFinding, explorePrompt, normalizeMessage, onSite, parseAction, rolesToTry, signalKey } from './explore.js'
 
 describe('parseAction', () => {
   it('accepts a click on a known role', () => {
@@ -68,5 +68,14 @@ describe('rolesToTry', () => {
     expect(rolesToTry('textbox')[0]).toBe('textbox')
     expect(rolesToTry('textbox')).toContain('searchbox')
     expect(rolesToTry('slider')).toEqual(['slider'])
+  })
+})
+
+describe('onSite', () => {
+  it('treats about:blank and other origins as leaving the app', () => {
+    const base = new URL('https://x.test/admin/reports')
+    expect(onSite('https://x.test/admin/fixes?tab=open', base)).toBe(true)
+    expect(onSite('about:blank', base)).toBe(false)
+    expect(onSite('https://github.com/x/y', base)).toBe(false)
   })
 })

@@ -261,6 +261,15 @@ function watch(page: Page, origin: string, apiHosts: readonly string[]): { take(
   }
 }
 
+/** @internal Exported for tests only. Pure: is the page still on the app's own origin (not about:blank, not another site)? */
+export function onSite(url: string, base: URL): boolean {
+  try {
+    return new URL(url).origin === base.origin
+  } catch {
+    return false
+  }
+}
+
 async function blank(page: Page): Promise<Signal | null> {
   const text = (await page.locator('body').innerText({ timeout: 3000 }).catch(() => '')).trim()
   return text.length < 20 ? { kind: 'blank-screen', message: 'The page went blank', url: page.url() } : null
@@ -373,6 +382,15 @@ export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
               if (refused.startsWith('refused')) result.refused.push(refused)
               continue
             }
+            if (!onSite(page.url(), base)) {
+              // Back past the first page lands on about:blank, a link may leave the app: neither is the app's bug.
+              progress(`  step ${step}: ${describeAction(action)} left the app (${page.url().slice(0, 60)}); back to the start`)
+              await page.goto(start, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {})
+              await waitForContent(page).catch(() => {})
+              watcher.take()
+              continue
+            }
+            progress(`  step ${step}: ${describeAction(action)}`)
             done.push(action)
             const gone = await blank(page)
             for (const s of [...watcher.take(), ...(gone ? [gone] : [])]) {
