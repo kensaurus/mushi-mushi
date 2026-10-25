@@ -79,7 +79,7 @@ export function FixesSnapshotStrip({
           />
         ) : null}
         <StatCard
-          label={statLabels?.failed ?? 'Failed'}
+          label={statLabels?.failed ?? 'Stopped'}
           value={stats.failed}
           accent={stats.failed > 0 ? 'text-danger' : 'text-ok'}
           tooltip={failedTooltip(stats, plainOpts)}

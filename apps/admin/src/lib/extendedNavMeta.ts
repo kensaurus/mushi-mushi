@@ -744,10 +744,12 @@ export function healthStatsNavBadge(stats: NavStatSlices['health']): WorkspaceNa
 export function fixesStatsNavBadge(stats: NavStatSlices['fixes']): WorkspaceNavBadge | null {
   if (!stats) return null
   if (stats.failed > 0) {
+    // Per REPORT, not per attempt, and not every one of them failed: the
+    // bucket also holds the agent's own verdicts. Same words as the banner.
     return attentionBadge(
       stats.failed,
       'danger',
-      `${stats.failed} failed fix attempt${stats.failed === 1 ? '' : 's'}`,
+      `Auto-fix stopped on ${stats.failed} report${stats.failed === 1 ? '' : 's'}`,
     )
   }
   if (stats.inProgress > 0) {

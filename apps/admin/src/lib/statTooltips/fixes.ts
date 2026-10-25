@@ -77,22 +77,32 @@ export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltip
         : 'No unfixed report is waiting on a stopped fix — the pipeline is clean or has not run yet.'
 
   return metricTip(
-    'Reports still unfixed whose latest fix attempt failed, was skipped, or whose PR went red on CI or was closed unmerged.',
+    'Reports still unfixed because their latest fix attempt stopped — it failed, was skipped, its PR went red on CI or closed unmerged, or the agent stopped with a verdict of its own (needs your decision, nothing to change, code is elsewhere).',
     'Counts each report once, by its latest attempt. A report fixed by a later merged PR, or dismissed, is never counted, however many earlier attempts failed.',
     takeaway,
     stats.failed > 0
       ? {
           tone: 'warn',
-          text: stats.topFailureCategory
-            ? `${stats.failed} unfixed — most common cause: ${fixCauseLabel(stats.topFailureCategory)}.`
-            : `${stats.failed} unfixed report${stats.failed === 1 ? '' : 's'} need attention.`,
+          text:
+            stats.topFailureCategory && stats.topFailureCount > 0
+              ? `${stats.failed} stopped — most common cause: ${fixCauseLabel(stats.topFailureCategory)} (${stats.topFailureCount}).`
+              : `${stats.failed} stopped report${stats.failed === 1 ? '' : 's'} need attention.`,
         }
       : undefined,
   )
 }
 
+/**
+ * The card's caption. The number above it is one bucket of mixed causes (red
+ * CI, "needs your decision", "agent found nothing to change"), so naming only
+ * the top cause read as "all 51 failed CI". Say its share whenever the top
+ * cause is not the whole bucket, the same breakdown the banner prints.
+ */
 export function failedDetail(stats: FixesStats): string {
-  return stats.topFailureCategory ? fixCauseLabel(stats.topFailureCategory) : 'needs attention'
+  if (!stats.topFailureCategory || stats.topFailureCount <= 0) return 'needs attention'
+  const label = fixCauseLabel(stats.topFailureCategory)
+  if (stats.topFailureCount >= stats.failed) return label
+  return `${stats.topFailureCount} of ${stats.failed} ${label}`
 }
 
 export function inProgressTooltip(stats: FixesStats): MetricTooltipData {
