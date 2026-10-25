@@ -85,7 +85,10 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel ?? label}
-      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
+      // w-max: the scroll strip's track sizes to its segments, so the border
+      // and background wrap every tab instead of being clipped to the
+      // viewport while the tabs overflow it.
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -100,7 +103,11 @@ export function SegmentedControl<T extends string>({
             // action colour. A filled tab competed with the page's one
             // primary button (Connect: "Studio" tab vs "Add to Cursor").
             // Inset ring instead of a border so the segment doesn't grow.
-            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
+            // whitespace-nowrap keeps a two-word label (and its count) on one
+            // line; shrink-0 stops the scroll strip's flex items from being
+            // squeezed to the viewport width instead of scrolling (Settings
+            // tabs at 390px, 2026-10-25).
+            className={`${SEGMENT_SIZE[size]} ${scrollable ? 'shrink-0 ' : ''}whitespace-nowrap rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
                 ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
