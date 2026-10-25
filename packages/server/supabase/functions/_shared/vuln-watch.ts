@@ -48,6 +48,12 @@ export interface VulnMatch {
   importedIn: string | null
   disputed: boolean
   mitigations: string[]
+  /**
+   * An in-force `[[IgnoredVulns]]` entry in the repo's own `osv-scanner.toml`
+   * covers this advisory (vuln-exceptions.ts): still matched, stored and
+   * shown on the radar, never filed as a report.
+   */
+  ignored?: boolean
 }
 
 const ORDER: VulnSeverity[] = ['info', 'low', 'medium', 'high', 'critical']
@@ -91,9 +97,13 @@ export function severityFor(m: Pick<VulnMatch, 'dev' | 'kev' | 'epss' | 'cvssSco
   return { severity: s, reasons }
 }
 
-/** ADR 0038 decision 4: production, a fix exists, not disputed, not info. */
+/**
+ * ADR 0038 decision 4: production, a fix exists, not disputed, not info — and
+ * not already excepted by the repo's own `osv-scanner.toml` (that entry is a
+ * person's decision with an expiry date, so refiling it is noise).
+ */
 export function isFileable(m: VulnMatch, severity: VulnSeverity): boolean {
-  return !m.dev && m.fixedVersion != null && !m.disputed && severity !== 'info'
+  return !m.dev && !m.ignored && m.fixedVersion != null && !m.disputed && severity !== 'info'
 }
 
 export function radarSeverity(s: VulnSeverity): RadarSeverity {
@@ -114,6 +124,8 @@ export interface VulnGroup {
   sources: string[]
   direct: boolean
   dev: boolean
+  /** Every advisory in the group is excepted in the repo's `osv-scanner.toml`. */
+  ignored: boolean
   runtime: Runtime | null
   lockfileKind: LockfileKind | null
   severity: VulnSeverity
@@ -150,7 +162,7 @@ export function groupMatches(matches: readonly VulnMatch[]): VulnGroup[] {
     let g = groups.get(key)
     if (!g) {
       g = {
-        key, kind: m.kind, ecosystem: groupEcosystem(m), name: m.name, target, installed: [], sources: [], direct: false, dev: true,
+        key, kind: m.kind, ecosystem: groupEcosystem(m), name: m.name, target, installed: [], sources: [], direct: false, dev: true, ignored: true,
         runtime: m.runtime, lockfileKind: m.lockfileKind, severity: 'info', reasons: [], kev: false, fileable: false, importedIn: null, matches: [],
       }
       groups.set(key, g)
@@ -159,6 +171,7 @@ export function groupMatches(matches: readonly VulnMatch[]): VulnGroup[] {
     if (!g.sources.includes(m.sourcePath)) g.sources.push(m.sourcePath)
     g.direct ||= m.direct
     g.dev &&= m.dev
+    g.ignored &&= m.ignored === true
     g.kev ||= m.kev
     g.importedIn ??= m.importedIn
     if (severityRank(severity) > severityRank(g.severity)) {
@@ -249,7 +262,7 @@ export interface VulnReport {
 
 /** The plain-English report for one fileable group (no model call, ADR 0038 decision 6). */
 export function reportForGroup(g: VulnGroup, repo: { repoUrl: string; commitSha: string }): VulnReport {
-  const fileable = g.matches.filter((m) => m.fixedVersion != null && !m.dev && !m.disputed)
+  const fileable = g.matches.filter((m) => m.fixedVersion != null && !m.dev && !m.ignored && !m.disputed)
   const label = g.kind === 'runtime' ? RUNTIME_LABEL[g.runtime ?? 'php'] ?? g.name : g.name
   const installed = g.installed.join(', ')
   const n = fileable.length
@@ -351,8 +364,8 @@ export function radarResults(o: ScanOutcome): DetectorResult[] {
     const n = g.matches.length
     const what = `${label} ${g.installed.join(', ')} has ${plural(n, 'known security hole')}`
     const fix = g.target
-      ? `${g.kind === 'runtime' ? 'Upgrade' : g.direct ? 'Upgrade' : 'Upgrade (through its parent or an override)'} ${label} to ${g.target}.${g.dev ? ' Dev-only, so it does not ship to users.' : ''}`
-      : 'No fixed version is published yet. Watch the advisory, or remove the dependency.'
+      ? `${g.kind === 'runtime' ? 'Upgrade' : g.direct ? 'Upgrade' : 'Upgrade (through its parent or an override)'} ${label} to ${g.target}.${g.dev ? ' Dev-only, so it does not ship to users.' : ''}${g.ignored ? ' Your osv-scanner.toml excepts it, so no report was filed.' : ''}`
+      : `No fixed version is published yet. Watch the advisory, or remove the dependency.${g.ignored ? ' Your osv-scanner.toml excepts it, so no report was filed.' : ''}`
     return {
       ruleId: KVD,
       severity: radarSeverity(g.severity),

@@ -11,6 +11,11 @@
 # reasoning still holds (move the date, say why in the commit).
 
 [[IgnoredVulns]]
+id = "GHSA-mrhx-c7xc-m3w5"
+ignoreUntil = 2026-12-31
+reason = "zod memory exhaustion on an oversized array, fixed only in 4.6.6; 3.25.76 is the last 3.x and no patched 3.x exists. Every zod 4 copy is overridden to >=4.6.6. Two zod 3 copies are left: apps__docs > @react-three/fiber > expo > @expo/cli (docs build only, no untrusted input), and packages/server, whose edge functions import npm:zod@3 because ai@4 / @ai-sdk/* peer-require zod ^3. The fix for the second is the ai@5 migration, same as GHSA-866g-f22w-33x8."
+
+[[IgnoredVulns]]
 id = "GHSA-qwww-vcr4-c8h2"
 ignoreUntil = 2026-12-31
 reason = "react-router RSC CSRF, fixed only in react-router >= 8.3.0; react-router-dom has no 8.x release yet. The admin console uses BrowserRouter, not React Server Components, so the vulnerable path is not reachable."

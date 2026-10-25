@@ -6,6 +6,11 @@
  *          EPSS, store `dependency_vulns`, file grouped reports under the
  *          daily cap, and record a `portfolio_radar_vulns` gate run.
  *
+ * An advisory the repo already excepted in its own `osv-scanner.toml`
+ * (`[[IgnoredVulns]]`, the file OSV-Scanner and OpenSSF Scorecard read) is
+ * still matched, stored and shown on the radar, but no report is filed until
+ * the entry's `ignoreUntil` passes — see `vuln-exceptions.ts`.
+ *
  * Never green by default: a repo that could not be read, a feed that did not
  * answer or a lockfile that did not load leaves its rule `unknown` / `error`,
  * and a row is only closed when the file it came from was read this run.
@@ -22,6 +27,7 @@ import { fetchEpss, fetchKev, fetchReleaseLines, type ReleaseLine } from './vuln
 import { detectRuntimes, FLOOR_PINS, isRuntimeFile, type Runtime, type RuntimePin } from './runtime-detect.ts'
 import { matchRuntimeAdvisory, mergeRuntimeAdvisories, RUNTIME_OSV_PACKAGE, runtimeAdvisoryFromRow, type RuntimeAdvisory } from './runtime-advisories.ts'
 import { endOfLifePins, groupMatches, radarResults, reportForGroup, severityFor, type ScanOutcome, type VulnGroup, type VulnMatch } from './vuln-watch.ts'
+import { ignoreFor, parseVulnIgnores } from './vuln-exceptions.ts'
 import { RADAR_VULN_GATE, recordRun, type RadarRunSummary } from './radar/run.ts'
 
 type Db = ReturnType<typeof getServiceClient>
@@ -44,6 +50,10 @@ export const DEFAULT_DAILY_LIMIT = 10
 const OPEN_REPORT_STATUSES = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'fixing', 'triaged', 'in_progress', 'reopened']
 /** Fixtures and examples carry lockfiles nobody ships. */
 const SKIP_DIR_RE = /(?:^|\/)(?:node_modules|vendor|\.git|fixtures|__fixtures__|testdata|__mocks__|examples?)\//
+/** OSV-Scanner's config, which carries the repo's `[[IgnoredVulns]]` entries. */
+const OSV_CONFIG_RE = /(?:^|\/)osv-scanner\.toml$/
+/** One config per workspace is plenty; the rest are ignored. */
+const MAX_OSV_CONFIGS = 20
 
 export interface VulnWatchDeps {
   resolveRepo: (db: Db, projectId: string) => Promise<RecipeRepoResolution>
@@ -125,6 +135,8 @@ interface RepoRead {
   lockfiles: Array<{ path: string; kind: LockfileKind; text: string }>
   manifests: Record<string, string>
   runtimeFiles: Record<string, string>
+  /** Every `osv-scanner.toml` read, by repo path (vuln-exceptions.ts). */
+  osvConfigs: Record<string, string>
   /** Lockfiles that were listed but could not be read (too large, binary, error). */
   unread: string[]
   warnings: string[]
@@ -153,9 +165,12 @@ async function readRepo(repo: RecipeRepo, sha: string, entries: TreeEntry[], dep
       .forEach((e) => manifestPaths.add(e.path))
   }
   const runtimePaths = usable.filter((e) => isRuntimeFile(e.path) && e.size <= MAX_RUNTIME_FILE_BYTES).sort((a, b) => depth(a.path) - depth(b.path) || a.path.localeCompare(b.path)).slice(0, MAX_RUNTIME_FILES).map((e) => e.path)
+  // OSV-Scanner requires its config beside the lockfile it covers, so there
+  // can be one per workspace; they are small and read like a runtime file.
+  const osvConfigPaths = usable.filter((e) => OSV_CONFIG_RE.test(e.path) && e.size <= MAX_RUNTIME_FILE_BYTES).sort((a, b) => depth(a.path) - depth(b.path) || a.path.localeCompare(b.path)).slice(0, MAX_OSV_CONFIGS).map((e) => e.path)
 
   const unread: string[] = []
-  const small = [...new Set([...locks.filter((l) => l.size <= MAX_LOCKFILE_BYTES).map((l) => l.path), ...manifestPaths, ...runtimePaths])]
+  const small = [...new Set([...locks.filter((l) => l.size <= MAX_LOCKFILE_BYTES).map((l) => l.path), ...manifestPaths, ...runtimePaths, ...osvConfigPaths])]
   for (const l of locks) if (l.size > MAX_LOCKFILE_BYTES) unread.push(l.path)
   const texts = small.length ? await deps.readBlobs(repo, sha, small) : new Map<string, string | null>()
   // GraphQL truncates big blobs; read those through the blobs API.
@@ -164,7 +179,7 @@ async function readRepo(repo: RecipeRepo, sha: string, entries: TreeEntry[], dep
     const e = byPath.get(path)
     if (e) texts.set(path, await deps.readBlobText(repo, e.sha, e.size, MAX_LOCKFILE_BYTES))
   }
-  const out: RepoRead = { lockfiles: [], manifests: {}, runtimeFiles: {}, unread, warnings }
+  const out: RepoRead = { lockfiles: [], manifests: {}, runtimeFiles: {}, osvConfigs: {}, unread, warnings }
   for (const l of locks) {
     const text = texts.get(l.path)
     if (typeof text === 'string') out.lockfiles.push({ path: l.path, kind: lockfileKindFor(l.path)!, text })
@@ -177,6 +192,10 @@ async function readRepo(repo: RecipeRepo, sha: string, entries: TreeEntry[], dep
   for (const r of runtimePaths) {
     const t = texts.get(r)
     if (typeof t === 'string') out.runtimeFiles[r] = t
+  }
+  for (const p of osvConfigPaths) {
+    const t = texts.get(p)
+    if (typeof t === 'string') out.osvConfigs[p] = t
   }
   if (unread.length) warnings.push(`Could not read ${unread.slice(0, 3).join(', ')}${unread.length > 3 ? ` and ${unread.length - 3} more` : ''} (too large or not text).`)
   return out
@@ -538,6 +557,25 @@ async function checkProject(db: Db, projectId: string, deps: VulnWatchDeps, trig
       })
     }
     matches.push(...osvMatches)
+  }
+
+  // Exceptions the repo already wrote down. An `[[IgnoredVulns]]` entry in an
+  // osv-scanner.toml is a person's decision with an expiry date, and it is the
+  // same file OSV-Scanner and OpenSSF Scorecard read, so Mushi honours it
+  // instead of refiling the advisory every day. The match is still stored and
+  // still shows on the radar; only the report is withheld.
+  const ignoreRules = Object.entries(read.osvConfigs).flatMap(([path, text]) => parseVulnIgnores(path, text))
+  if (ignoreRules.length > 0) {
+    const excepted = new Set<string>()
+    for (const m of matches) {
+      const rule = ignoreFor(ignoreRules, m, now)
+      if (!rule) continue
+      m.ignored = true
+      excepted.add(rule.id)
+    }
+    if (excepted.size > 0) {
+      warnings.push(`${excepted.size} ${excepted.size === 1 ? 'advisory is' : 'advisories are'} excepted in osv-scanner.toml, so no report was filed: ${[...excepted].slice(0, 5).join(', ')}.`)
+    }
   }
 
   // Enrichment.

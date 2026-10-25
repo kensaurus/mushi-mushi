@@ -109,12 +109,19 @@ patchedDependencies:
 auditConfig:
   ignoreGhsas:
     # zod <4.6.6 (GHSA-mrhx-c7xc-m3w5, high): memory exhaustion validating an
-    # oversized constrained collection. Every zod 4 copy is overridden to
-    # >=4.6.6 and the admin app moved to zod 4. The one left is zod 3.25.76 at
-    # apps__docs > @react-three/fiber > expo > @expo/cli > zod: there is no
-    # patched 3.x, @expo/cli needs the zod 3 API, and it only runs in the docs
-    # build (the image-size path below); it never validates untrusted input.
-    # Remove when apps/docs drops @react-three/fiber or @expo/cli moves to zod 4.
+    # oversized constrained collection. The fix landed only in 4.6.6; 3.25.76
+    # is the last 3.x published, so there is no patched 3.x to move to. Every
+    # zod 4 copy is overridden to >=4.6.6 and the admin app moved to zod 4.
+    # Two zod 3.25.76 copies are left:
+    #  - apps__docs > @react-three/fiber > expo > @expo/cli > zod: @expo/cli
+    #    needs the zod 3 API and only runs in the docs build (the image-size
+    #    path below); it never validates untrusted input.
+    #  - packages/server: the edge functions import `npm:zod@3` (75 files) and
+    #    hand those schemas to ai@4 / @ai-sdk/*, which peer-require zod ^3.
+    #    Moving to zod 4 is the ai@5 migration, the same work GHSA-866g-f22w-33x8
+    #    in osv-scanner.toml waits on.
+    # Remove when apps/docs drops @react-three/fiber or @expo/cli moves to
+    # zod 4, and packages/server is on ai@5.
     - 'GHSA-mrhx-c7xc-m3w5'
     - 'GHSA-qwww-vcr4-c8h2'
     # image-size: two infinite-loop DoS advisories in the ICNS

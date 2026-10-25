@@ -4,7 +4,8 @@
  *          the OSV client and advisory parsing, CVSS v3.1 scores, version
  *          order and fixed versions, the KEV / EPSS / endoflife.date parsers,
  *          runtime pins and the curated runtime table, severity, grouping,
- *          the plain-English report, the radar results, and the ADR 0035
+ *          the plain-English report, the radar results, the osv-scanner.toml
+ *          exceptions, and the ADR 0035
  *          lockfile carve-out. Fixtures under fixtures/vulns are real API
  *          responses (read 2026-10-22), trimmed.
  */
@@ -26,6 +27,7 @@ import { parseEndOfLife, parseEpss, parseKev, fetchEpss } from '../../supabase/f
 import { cycleOf, detectRuntimes, rangeFloor } from '../../supabase/functions/_shared/runtime-detect.ts'
 import { CURATED_RUNTIME_ADVISORIES, matchRuntimeAdvisory, mergeRuntimeAdvisories, runtimeAdvisoryFromRow } from '../../supabase/functions/_shared/runtime-advisories.ts'
 import { endOfLifePins, groupMatches, radarResults, reportForGroup, severityFor, type ScanOutcome, type VulnMatch } from '../../supabase/functions/_shared/vuln-watch.ts'
+import { ignoreFor, parseVulnIgnores, type VulnIgnoreRule } from '../../supabase/functions/_shared/vuln-exceptions.ts'
 import { lockfileAllowance, type PrFile } from '../../supabase/functions/_shared/fix-verify.ts'
 
 const FIX = resolve(__dirname, 'fixtures/vulns')
@@ -299,10 +301,18 @@ describe('groupMatches', () => {
     expect(groups[0].sources).toEqual(['package-lock.json', 'web/package-lock.json'])
   })
 
-  it('does not file dev-only, disputed or unfixed holes', () => {
+  it('does not file dev-only, disputed, unfixed or excepted holes', () => {
     expect(groupMatches([match({ dev: true })])[0].fileable).toBe(false)
     expect(groupMatches([match({ disputed: true })])[0].fileable).toBe(false)
     expect(groupMatches([match({ fixedVersion: null })])[0]).toMatchObject({ fileable: false, target: null, key: 'package|npm|lodash|nofix' })
+    expect(groupMatches([match({ ignored: true })])[0]).toMatchObject({ fileable: false, ignored: true })
+    // One match still open keeps the group fileable, and the report only
+    // lists the advisories that are not excepted.
+    const mixed = groupMatches([match({ ignored: true }), match({ advisoryId: 'GHSA-29mw-wpgm-hmr9', aliases: [], cveIds: ['CVE-2020-28500'], url: 'https://osv.dev/vulnerability/GHSA-29mw-wpgm-hmr9' })])[0]
+    expect(mixed).toMatchObject({ fileable: true, ignored: false })
+    const body = reportForGroup(mixed, { repoUrl: 'https://github.com/o/r', commitSha: 'abcdef1234567' }).description
+    expect(body).toContain('GHSA-29mw-wpgm-hmr9')
+    expect(body).not.toContain('GHSA-35jh-r3h4-6jhm')
   })
 })
 
@@ -418,5 +428,71 @@ describe('lockfileAllowance', () => {
 
   it('has nothing to say when no lockfile changed', () => {
     expect(lockfileAllowance([file('src/a.ts')], null)).toEqual({ allowed: true, reason: null })
+  })
+})
+
+// ── osv-scanner.toml exceptions ──────────────────────────────────────────────
+
+describe('parseVulnIgnores', () => {
+  const toml = `
+# The repo's own exceptions.
+[[IgnoredVulns]]
+id = "GHSA-mrhx-c7xc-m3w5"
+ignoreUntil = 2026-12-31
+reason = "No patched 3.x exists; the only copy is a build-time dependency."
+
+[[IgnoredVulns]]
+id = "CVE-2021-23337"
+
+[[IgnoredVulns]]
+reason = "no id, so nothing to ignore"
+
+[[PackageOverrides]]
+name = "lodash"
+`
+
+  it('reads the ids, the expiry and the folder the config covers', () => {
+    const rules = parseVulnIgnores('osv-scanner.toml', toml)
+    expect(rules).toEqual([
+      { id: 'GHSA-MRHX-C7XC-M3W5', ignoreUntil: '2026-12-31', reason: 'No patched 3.x exists; the only copy is a build-time dependency.', configPath: 'osv-scanner.toml', dir: '' },
+      { id: 'CVE-2021-23337', ignoreUntil: null, reason: null, configPath: 'osv-scanner.toml', dir: '' },
+    ])
+    expect(parseVulnIgnores('apps/web/osv-scanner.toml', toml)[0].dir).toBe('apps/web/')
+  })
+
+  it('ignores a file it cannot parse rather than failing the run', () => {
+    expect(parseVulnIgnores('osv-scanner.toml', '[[IgnoredVulns]\nid = ')).toEqual([])
+  })
+})
+
+describe('ignoreFor', () => {
+  const rule = (over: Partial<VulnIgnoreRule> = {}): VulnIgnoreRule =>
+    ({ id: 'GHSA-35JH-R3H4-6JHM', ignoreUntil: '2026-12-31', reason: null, configPath: 'osv-scanner.toml', dir: '', ...over })
+  const now = new Date('2026-10-25T00:00:00Z')
+
+  it('matches the advisory id, an alias or a CVE id, whatever case the file uses', () => {
+    expect(ignoreFor([rule()], match(), now)?.id).toBe('GHSA-35JH-R3H4-6JHM')
+    expect(ignoreFor([rule({ id: 'CVE-2021-23337' })], match(), now)).not.toBeNull()
+    expect(ignoreFor([rule({ id: 'GHSA-0000-0000-0000' })], match(), now)).toBeNull()
+  })
+
+  it('expires on the date in the file, and fails closed on a date it cannot read', () => {
+    expect(ignoreFor([rule({ ignoreUntil: '2026-10-25' })], match(), now)).toBeNull()
+    expect(ignoreFor([rule({ ignoreUntil: '2026-10-26' })], match(), now)).not.toBeNull()
+    expect(ignoreFor([rule({ ignoreUntil: null })], match(), now)).not.toBeNull()
+    expect(ignoreFor([rule({ ignoreUntil: 'next year' })], match(), now)).toBeNull()
+  })
+
+  it('only covers the files under the folder the config sits in', () => {
+    const scoped = [rule({ configPath: 'apps/web/osv-scanner.toml', dir: 'apps/web/' })]
+    expect(ignoreFor(scoped, match({ sourcePath: 'apps/web/package-lock.json' }), now)).not.toBeNull()
+    expect(ignoreFor(scoped, match({ sourcePath: 'package-lock.json' }), now)).toBeNull()
+  })
+
+  it('says so on the radar instead of hiding the hole', () => {
+    const groups = groupMatches([match({ ignored: true })])
+    const kvd = radarResults(outcome({ groups }))[0]
+    expect(kvd.state).toBe('finding')
+    expect(kvd.findings[0].fix).toContain('osv-scanner.toml excepts it, so no report was filed')
   })
 })
