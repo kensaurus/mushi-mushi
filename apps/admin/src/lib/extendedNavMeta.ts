@@ -866,12 +866,9 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysUntested} BYOK key${stats.byokKeysUntested === 1 ? '' : 's'} untested`,
     )
   }
-  if (stats.byokKeysConfigured > 0) {
-    return inventoryBadge(
-      stats.byokKeysConfigured,
-      `${stats.byokKeysConfigured} BYOK key${stats.byokKeysConfigured === 1 ? '' : 's'} configured`,
-    )
-  }
+  // No inventory count here. A number next to Settings reads as "N things to
+  // fix", which contradicted the page's own "everything is working" banner
+  // when every saved key was healthy. Settings badges only real attention.
   return null
 }
 
