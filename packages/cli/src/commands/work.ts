@@ -84,6 +84,12 @@ export function hasLiveAttempt(attempts: readonly AttemptSummary[]): boolean {
   )
 }
 
+/** @internal Exported for tests only. Pure: the first of base, base-2, base-3… that is not already on origin. */
+export function freeBranchName(base: string, onOrigin: ReadonlySet<string>): string {
+  if (!onOrigin.has(base)) return base
+  for (let n = 2; ; n++) if (!onOrigin.has(`${base}-${n}`)) return `${base}-${n}`
+}
+
 /** @internal Exported for tests only. `bugfix/MUSHI-<id>-local-cursor`, the cloud agents' shape (github-pr.ts) with a local suffix. */
 export function branchNameFor(reportId: string, category?: string | null, agent = 'cursor'): string {
   const c = (category ?? 'bug').toLowerCase()
@@ -449,9 +455,22 @@ interface WorkOptions {
 async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<{ reportId: string; outcome: string; prUrl?: string; fixId?: string }> {
   const base = await defaultBranch(o.repoDir)
   await git(o.repoDir, ['fetch', '--quiet', 'origin', base])
-  const branch = branchNameFor(detail.id, detail.category, o.agent)
-  const existing = await runProc('git', ['ls-remote', '--heads', 'origin', branch], { cwd: o.repoDir })
-  if (existing.stdout.trim()) return { reportId: detail.id, outcome: `skipped: ${branch} already exists on origin` }
+  const firstBranch = branchNameFor(detail.id, detail.category, o.agent)
+  const listed = await runProc('git', ['ls-remote', '--heads', 'origin', firstBranch, `${firstBranch}-*`], { cwd: o.repoDir })
+  const onOrigin = new Set(listed.stdout.split('\n').map((l) => l.split('refs/heads/')[1]?.trim()).filter((b): b is string => !!b))
+  let branch = firstBranch
+  if (onOrigin.size > 0) {
+    // A branch left by a closed, unmerged PR is a redo (an Opus hold, a person
+    // closing it): work on the next free name. An open or merged PR is not.
+    for (const b of onOrigin) {
+      const prs = await runProc('gh', ['pr', 'list', '--head', b, '--state', 'all', '--json', 'state', '--limit', '5'], { cwd: o.repoDir })
+      const states = prs.code === 0 ? ((JSON.parse(prs.stdout || '[]') as Array<{ state: string }>).map((p) => p.state)) : ['UNKNOWN']
+      const blocking = states.find((st) => st !== 'CLOSED')
+      if (blocking) return { reportId: detail.id, outcome: `skipped: ${b} already exists on origin (${blocking === 'UNKNOWN' ? 'its pull request could not be read' : `its pull request is ${blocking.toLowerCase()}`})` }
+    }
+    branch = freeBranchName(firstBranch, onOrigin)
+    o.log(`  branch: ${firstBranch} belongs to a closed pull request; this attempt uses ${branch}`)
+  }
 
   const root = join(homedir(), '.cache', 'mushi', 'work', basename(o.repoDir))
   mkdirSync(root, { recursive: true })
