@@ -21,6 +21,8 @@
  * - TanStack Table v9: sorting is opt-in via `dataTableFeatures`
  *   (`useTable` + `tableFeatures`). Callers still write
  *   `ColumnDef<Row, unknown>`; the features generic stays inside this file.
+ * - The sort registry is the v8 built-in set. A `sortFn` name resolves only
+ *   when it is registered. Numeric columns use `basic`.
  * - Rows use `getAllCells()`. `getVisibleCells()` exists only when the
  *   column-visibility feature is registered, which this table does not use.
  */
@@ -35,8 +37,11 @@ import {
   flexRender,
   rowSortingFeature,
   sortFn_alphanumeric,
+  sortFn_alphanumericCaseSensitive,
+  sortFn_basic,
   sortFn_datetime,
   sortFn_text,
+  sortFn_textCaseSensitive,
   tableFeatures,
   useTable,
 } from '@tanstack/react-table'
@@ -48,8 +53,11 @@ const dataTableFeatures = tableFeatures({
   sortedRowModel: createSortedRowModel(),
   sortFns: {
     alphanumeric: sortFn_alphanumeric,
-    text: sortFn_text,
+    alphanumericCaseSensitive: sortFn_alphanumericCaseSensitive,
+    basic: sortFn_basic,
     datetime: sortFn_datetime,
+    text: sortFn_text,
+    textCaseSensitive: sortFn_textCaseSensitive,
   },
 })
 

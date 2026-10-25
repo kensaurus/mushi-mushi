@@ -1,22 +1,3 @@
-/**
- * FILE: apps/admin/src/components/inventory/InventoryTree.tsx
- * PURPOSE: Renders the inventory action list as a table of pages, elements, and coverage.
- *
- * OVERVIEW:
- * - One row per inventory action, with backend and test chips.
- * - Clicking a row is optional and owned by the parent page.
- *
- * DEPENDENCIES:
- * - @tanstack/react-table v9 (`useTable`, core row model only)
- * - InventoryStatusPill, Badge, chip tones
- *
- * USAGE:
- * - Inventory page passes `rows` and an optional `onRowClick`.
- *
- * NOTES:
- * - No sorting or filtering feature is registered; this table only lists rows.
- */
-
 import { useMemo } from 'react'
 import {
   createColumnHelper,
