@@ -66,7 +66,7 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
       const pid = path.split('/')[4]
       return { ok: true, data: state.audits[pid] ?? { audit: null, findings: [] } }
     }
-    if (method === 'GET' && path === '/v1/admin/skill-runs') {
+    if (method === 'GET' && (path === '/v1/admin/skill-runs' || path.startsWith('/v1/admin/skill-runs?'))) {
       return { ok: true, data: state.skillRuns }
     }
     if (method === 'POST' && path.endsWith('/skill-runs')) {
@@ -232,6 +232,48 @@ describe('skill runs on /credits', () => {
     const start = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Start skill run')!
     await act(async () => start.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/skill-runs', method: 'POST', body: { skillSlug: 'audit-responsive', scope: 'the chat screens', rounds: 3, autoMerge: true } })
+  })
+
+  it('follows ?project= instead of the first app, and hides other apps\' runs', async () => {
+    const glot = '542b34e0-019e-41fe-b900-7b637717bb86'
+    const yen = '11111111-1111-4111-8111-111111111111'
+    const saved = state.skillRuns
+    state.skillRuns = {
+      skills: (saved as { skills: unknown }).skills,
+      runs: [
+        { id: 'run-glot', project_id: glot, skill_slug: 'audit-accessibility', scope: 'the dictionary', rounds_max: 3, round: 1, auto_merge: true, status: 'active', stop_reason: null, current_report_id: null, history: [], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
+        { id: 'run-yen', project_id: yen, skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: null, history: [], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
+      ],
+    }
+    try {
+      const { SkillRunsCard } = await import('../components/credits/SkillRunsCard')
+      await act(async () => {
+        root.render(createElement(MemoryRouter, { initialEntries: [`/credits?project=${glot}&apps=all`] }, createElement(SkillRunsCard, {
+          projects: [{ id: yen, name: 'yen-yen' }, { id: glot, name: 'glot.it' }],
+        })))
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(host.textContent).toContain('glot.it · Accessibility (WCAG 2.2 AA) · the dictionary')
+      expect(host.textContent).not.toContain('yen-yen')
+      expect(host.textContent).not.toContain('the booking flow')
+      const appSelect = Array.from(host.querySelectorAll('select')).find((s) => Array.from(s.options).some((o) => o.value === glot))!
+      expect(appSelect.disabled).toBe(true)
+      expect(Array.from(appSelect.options).map((o) => o.value)).toEqual([glot])
+      expect(state.calls).toContainEqual({ path: `/v1/admin/skill-runs?projectId=${encodeURIComponent(glot)}`, method: 'GET', body: null })
+      const setValue = (el: HTMLInputElement, value: string) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      const scope = host.querySelector('input[placeholder^="e.g. the /settings pages"]') as HTMLInputElement
+      await act(async () => setValue(scope, 'the dictionary pages'))
+      const start = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Start skill run')!
+      await act(async () => start.click())
+      expect(state.calls).toContainEqual({ path: `/v1/admin/projects/${glot}/skill-runs`, method: 'POST', body: { skillSlug: 'audit-accessibility', scope: 'the dictionary pages', rounds: 3, autoMerge: true } })
+    } finally {
+      state.skillRuns = saved
+    }
   })
 })
 

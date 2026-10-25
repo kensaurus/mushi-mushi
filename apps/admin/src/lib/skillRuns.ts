@@ -43,8 +43,10 @@ export function skillRunLine(run: Pick<SkillRun, 'status' | 'round' | 'rounds_ma
   return `${run.status === 'done' ? 'Done' : 'Stopped'}: ${reason}${tail}`
 }
 
-export async function loadSkillRuns() {
-  return apiFetch<{ runs: SkillRun[]; skills: SkillRunSkill[] }>('/v1/admin/skill-runs', { cache: 'no-store', scope: 'enumeration' })
+/** Runs the caller can see. `projectId` limits them to the open app (GET ?projectId=). */
+export async function loadSkillRuns(projectId?: string | null) {
+  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiFetch<{ runs: SkillRun[]; skills: SkillRunSkill[] }>(`/v1/admin/skill-runs${query}`, { cache: 'no-store', scope: 'enumeration' })
 }
 
 export async function startSkillRun(projectId: string, input: { skillSlug: string; scope: string; rounds: number; autoMerge: boolean }) {
