@@ -29,7 +29,7 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
-import { makeFetchTransport, createTransport } from '@sentry/react'
+import { makeFetchTransport, createTransport, type BrowserOptions } from '@sentry/react'
 
 // Sentry's transport-related types (Transport, Envelope, BrowserTransportOptions,
 // TransportMakeRequestResponse) live inside @sentry/core and are NOT re-exported
@@ -48,6 +48,8 @@ const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)
  * SDK 11's stand-in for `sendDefaultPii: false`. An unset `dataCollection`
  * collects every category. This is the restrictive v10 baseline from
  * https://docs.sentry.io/platforms/javascript/migration/v10-to-v11/
+ * Same object literal as `packages/mcp/src/optional-sentry.ts` (`sentryDataCollection`).
+ * Keep the two copies identical.
  */
 export const sentryDataCollection = {
   userInfo: false,
@@ -61,7 +63,7 @@ export const sentryDataCollection = {
   genAI: { inputs: false, outputs: false },
   databaseQueryData: false,
   graphQL: { document: false, variables: false },
-}
+} satisfies NonNullable<BrowserOptions['dataCollection']>
 
 // ─── Self-disabling transport ───────────────────────────────────────────────
 //
