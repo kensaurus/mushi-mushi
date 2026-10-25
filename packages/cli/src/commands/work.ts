@@ -253,10 +253,17 @@ export function stableKey(...parts: string[]): string {
 /** @internal Exported for tests only. */
 export function prTitle(summary: string | null, reportId: string): string {
   // A title is cut at a word with "…", never the prompt's "[cut]" marker (PR #646).
+  // It is also the commit header: the subject (everything after "fix: ", the
+  // MUSHI suffix included) stays within 72 characters, which commitlint
+  // setups enforce (yen-yen: subject-max-length 72, header-max-length 100).
+  const suffix = ` (MUSHI-${reportId.slice(0, 8)})`
+  const room = SUBJECT_MAX - suffix.length
   const clean = (summary ?? 'fix the reported bug').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim()
-  const s = clean.length <= 72 ? clean : `${clean.slice(0, 72).replace(/\s+\S*$/, '')}…`
-  return `fix: ${s.charAt(0).toLowerCase()}${s.slice(1)} (MUSHI-${reportId.slice(0, 8)})`
+  const s = clean.length <= room ? clean : `${clean.slice(0, room - 1).replace(/\s+\S*$/, '')}…`
+  return `fix: ${s.charAt(0).toLowerCase()}${s.slice(1)}${suffix}`
 }
+
+const SUBJECT_MAX = 72
 
 /**
  * The agent's environment: no Mushi, GitHub, cloud or model keys, and git /
