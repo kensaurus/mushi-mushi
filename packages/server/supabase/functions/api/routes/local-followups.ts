@@ -164,13 +164,16 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       if (a.commit_sha && a.commit_sha !== r.head_sha) continue;
       const done = heads.get(a.id) ?? [];
       if (done.includes(r.head_sha) || done.length >= 2) continue;
+      // A "fix first" with no findings gives the agent nothing to do; the claim refuses it (NO_FINDINGS).
+      const findings = asFindings(r.findings).length;
+      if (findings === 0) continue;
       fixes.push({
         fixId: a.id,
         reportId: a.report_id,
         prUrl: a.pr_url,
         prNumber: a.pr_number,
         headSha: r.head_sha,
-        findings: asFindings(r.findings).length,
+        findings,
         round: done.length + 1,
       });
     }
