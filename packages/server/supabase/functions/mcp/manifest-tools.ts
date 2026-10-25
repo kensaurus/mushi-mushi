@@ -67,6 +67,15 @@ export interface ToolDef {
   handler: ToolHandler;
 }
 
+/** Project named on the call: `projectId`, or `project_id` when that alias was left in place. */
+function explicitProjectId(args: Record<string, unknown>): string | undefined {
+  const camel = args.projectId;
+  const snake = args.project_id;
+  if (typeof camel === 'string' && camel) return camel;
+  if (typeof snake === 'string' && snake) return snake;
+  return undefined;
+}
+
 function resolveToken(
   token: string,
   args: Record<string, unknown>,
@@ -247,7 +256,8 @@ export function buildManifestTools(deps: {
             throw new McpError(ERR_INVALID_PARAMS, `${req} is required`);
           }
         }
-        const pid = (args.projectId ?? ctx.projectIdHint) as string | undefined;
+        const namedProject = explicitProjectId(args);
+        const pid = (namedProject ?? ctx.projectIdHint) as string | undefined;
 
         if (spec.transform === 'fix_suggest') {
           const report = (await apiCall(interpolatePath(spec.path, args, ctx), {
@@ -283,9 +293,8 @@ export function buildManifestTools(deps: {
           if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required');
           // apiCall unwraps { ok, data }, so the runs list is the body. Name
           // the project on the header too: an account key has none of its own.
-          const named = typeof args.projectId === 'string' && args.projectId ? args.projectId : undefined;
           const data = (await apiCall(interpolatePath(spec.path, args, ctx), {
-            headers: named ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': named } : ctx.authHeaders,
+            headers: namedProject ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': namedProject } : ctx.authHeaders,
           })) as { runs?: Array<{ id: string }>; data?: { runs?: Array<{ id: string }> } };
           const run = (data?.runs ?? data?.data?.runs)?.find((r) => r.id === args.runId) ?? null;
           if (!run) throw new McpError(ERR_INVALID_PARAMS, 'Run not found in recent runs');
@@ -413,9 +422,8 @@ export function buildManifestTools(deps: {
         // X-Mushi-Project-Id; without it an account-level key gets 400
         // PROJECT_REQUIRED even though the caller named one (2026-10-23:
         // get_spend_down_status, list_byok_keys).
-        const named = typeof args.projectId === 'string' && args.projectId ? args.projectId : undefined;
         const init: RequestInit & { headers: Record<string, string> } = {
-          headers: named ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': named } : ctx.authHeaders,
+          headers: namedProject ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': namedProject } : ctx.authHeaders,
         };
         if (spec.method !== 'GET') init.method = spec.method;
         const body = buildBody(spec, args, ctx);

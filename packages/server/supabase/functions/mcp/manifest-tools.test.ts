@@ -318,6 +318,36 @@ Deno.test('QA story run tools use the named project on an account connection', a
   assertEquals(run, { id: 'run-9', status: 'failed', error_message: 'assert text' });
 });
 
+Deno.test('QA story run tools name the project from project_id', async () => {
+  const OTHER = '67a6453c-375d-41d7-833a-b33471159442';
+  const HINT = '11111111-1111-4111-8111-111111111111';
+  const calls: Array<{ path: string; init: RequestInit & { headers: Record<string, string> } }> = [];
+  const tools = buildManifestTools({
+    apiCall: (path, init) => {
+      calls.push({ path, init: init as RequestInit & { headers: Record<string, string> } });
+      return Promise.resolve({
+        runs: [{ id: 'run-9', status: 'failed', error_message: 'assert text' }],
+      });
+    },
+    requireString: (value, name) => {
+      if (typeof value !== 'string' || !value) throw new TestMcpError(-32602, `${name} is required`);
+    },
+    McpError: TestMcpError,
+    ERR_INVALID_PARAMS: -32602,
+  });
+  const context = { authHeaders: { Authorization: 'Bearer redacted' }, projectIdHint: HINT };
+  await tools.list_qa_story_runs.handler({ project_id: OTHER, storyId: 'story-other', limit: 4 }, context);
+  assertEquals(calls[0].path, `/v1/admin/projects/${OTHER}/qa-stories/story-other/runs?limit=4`);
+  assertEquals(calls[0].init.headers['X-Mushi-Project-Id'], OTHER);
+  const run = await tools.get_qa_story_run.handler(
+    { project_id: OTHER, storyId: 'story-other', runId: 'run-9' },
+    context,
+  );
+  assertEquals(calls[1].path, `/v1/admin/projects/${OTHER}/qa-stories/story-other/runs?limit=50`);
+  assertEquals(calls[1].init.headers['X-Mushi-Project-Id'], OTHER);
+  assertEquals(run, { id: 'run-9', status: 'failed', error_message: 'assert text' });
+});
+
 Deno.test('a manifest tool scopes to the projectId the caller named (account-level key)', async () => {
   const calls: Array<{ path: string; init: RequestInit & { headers: Record<string, string> } }> = [];
   const tools = buildManifestTools({

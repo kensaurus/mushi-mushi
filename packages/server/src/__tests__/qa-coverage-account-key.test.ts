@@ -7,6 +7,10 @@
  * scope, the owner's membership (`resolveProject` / `ownedProjectIds`), and a
  * selected-projects limit (`allowed_project_ids`). Project keys still blank
  * `userId`; account keys keep the owner so a viewer cannot start a run.
+ *
+ * CLI callers send `X-Mushi-Api-Key` (and a Bearer copy of the same key).
+ * The console sends a Supabase JWT. This file covers those headers along
+ * with `Authorization: Bearer mushi_…`.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -34,6 +38,9 @@ const SID_FOREIGN = '3000000a-0000-4000-8000-000000000003'
 const RUN_MINE = '4000000a-0000-4000-8000-000000000001'
 const RUN_TEAM = '4000000a-0000-4000-8000-000000000002'
 const RUN_FOREIGN = '4000000a-0000-4000-8000-000000000003'
+
+const JWT_OWNER = 'jwt-owner'
+const JWT_VIEWER = 'jwt-viewer'
 
 const ACCOUNT_READ = 'mushi_acctread00000000000000000001'
 const ACCOUNT_WRITE = 'mushi_acctwrite0000000000000000001'
@@ -148,6 +155,18 @@ beforeAll(async () => {
     },
     { autoId: true },
   )
+  Object.assign(state.db!, {
+    auth: {
+      getClaims: async (jwt: string) => {
+        const sub = jwt === JWT_OWNER ? OWNER : jwt === JWT_VIEWER ? VIEWER : ''
+        if (!sub) return { data: null, error: { message: 'invalid' } }
+        return {
+          data: { claims: { sub, role: 'authenticated', email: `${sub}@example.test` } },
+          error: null,
+        }
+      },
+    },
+  })
   const { registerQaCoverageRoutes } = await import('../../supabase/functions/api/routes/qa-coverage.ts')
   app = new Hono()
   registerQaCoverageRoutes(app as never)
@@ -165,10 +184,12 @@ function runPath(projectId: string, storyId: string): string {
   return `/v1/admin/projects/${projectId}/qa-stories/${storyId}/run`
 }
 
-async function call(method: string, path: string, rawKey: string) {
+async function call(method: string, path: string, rawKeyOrHeaders: string | Record<string, string>) {
+  const headers =
+    typeof rawKeyOrHeaders === 'string' ? { Authorization: `Bearer ${rawKeyOrHeaders}` } : rawKeyOrHeaders
   const res = await app.request(path, {
     method,
-    headers: { Authorization: `Bearer ${rawKey}` },
+    headers,
   })
   const text = await res.text()
   let body: unknown = text
@@ -228,6 +249,45 @@ describe('QA run writes keep the mcp:write scope', () => {
     const res = await call('POST', runPath(P_TEAM, SID_TEAM), ACCOUNT_LIMITED)
     expect(res.status).toBe(404)
     expect(res.body).toEqual({ error: 'Not found' })
+  })
+})
+
+describe('CLI key header and console JWT still reach the handlers', () => {
+  it('accepts X-Mushi-Api-Key when Authorization is not a Mushi key', async () => {
+    const res = await call('GET', runsPath(P_TEAM, SID_TEAM), {
+      'X-Mushi-Api-Key': ACCOUNT_READ,
+      Authorization: 'Bearer not-a-session',
+    })
+    expect(res.status).toBe(200)
+    expectRuns(res.body, RUN_TEAM)
+  })
+
+  it('accepts X-Mushi-Api-Key with no Authorization header', async () => {
+    const res = await call('GET', runsPath(P_MINE, SID_MINE), { 'X-Mushi-Api-Key': PROJECT_KEY })
+    expect(res.status).toBe(200)
+    expectRuns(res.body, RUN_MINE)
+  })
+
+  it('accepts a console JWT through the real gate', async () => {
+    const res = await call('GET', runsPath(P_TEAM, SID_TEAM), { Authorization: `Bearer ${JWT_OWNER}` })
+    expect(res.status).toBe(200)
+    expectRuns(res.body, RUN_TEAM)
+  })
+
+  it('keeps the JWT user id, so a viewer session cannot start a run', async () => {
+    const reads = await call('GET', runsPath(P_MINE, SID_MINE), { Authorization: `Bearer ${JWT_VIEWER}` })
+    expect(reads.status).toBe(200)
+    expectRuns(reads.body, RUN_MINE)
+
+    const started = await call('POST', runPath(P_MINE, SID_MINE), { Authorization: `Bearer ${JWT_VIEWER}` })
+    expect(started.status).toBe(403)
+    expect(started.body).toMatchObject({
+      ok: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: expect.stringContaining('Viewers have read-only access'),
+      },
+    })
   })
 })
 
