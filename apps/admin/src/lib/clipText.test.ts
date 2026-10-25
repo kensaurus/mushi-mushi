@@ -78,4 +78,25 @@ describe('summaryIsHeading', () => {
     expect(summaryIsHeading({ title: 'Footer links run together' })).toBe(false)
     expect(summaryIsHeading({})).toBe(false)
   })
+
+  it('is false when the heading re-clips a legacy summary and expands to the description', () => {
+    // reportHeading renders a shorter re-clip and "Show full" shows the
+    // description, so the summary reads in full nowhere but the callout.
+    const h = reportHeading({ summary: LEGACY_SUMMARY, description: 'The checkout button does nothing on mobile Safari.' })
+    expect(h.text).not.toBe(LEGACY_SUMMARY)
+    expect(h.full).toBe('The checkout button does nothing on mobile Safari.')
+    expect(
+      summaryIsHeading({ summary: LEGACY_SUMMARY, description: 'The checkout button does nothing on mobile Safari.' }),
+    ).toBe(false)
+  })
+
+  it('is true when a legacy summary is its own full text (no description)', () => {
+    expect(summaryIsHeading({ summary: LEGACY_SUMMARY })).toBe(true)
+  })
+
+  it('is true when the heading renders a server-clipped summary verbatim', () => {
+    expect(
+      summaryIsHeading({ summary: 'Footer links run together…', description: 'Footer links run together on mobile.' }),
+    ).toBe(true)
+  })
 })

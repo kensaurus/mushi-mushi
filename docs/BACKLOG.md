@@ -18,6 +18,7 @@ parked work is visible in one place.
 - **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-115, an owner decision and parked parts of ADR 0038.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
+- **Added 2026-10-25 (report detail render, PR #706):** BL-121, the section streaming the duplicate-breadcrumb fix left out. Needs owner sign-off before the report closes.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
 - **Open items:** 57 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
@@ -138,6 +139,7 @@ parked work is visible in one place.
 | BL-118 | unfinished-feature | `mushi work` picks reports itself (classified / reopened, worst first) instead of asking the server for spend-down's exact order; held-PR retries (ADR 0028 amendment) and per-app concurrency are not applied locally, and a no-PR verdict cannot set `fix_attempts.failure_category` through the PATCH route | relevant | low | `packages/cli/src/commands/work.ts` | — |
 | BL-119 | unfinished-feature | `mushi work` on a schedule (a systemd user timer or the console starting it) and local agents other than the Cursor CLI (`claude`, `codex`) | relevant | low | `packages/cli/src/commands/work.ts` | — |
 | BL-120 | unfinished-feature | Scheduled UX audits per app from the console: today `mushi-ux audit` runs where a cached signed-in profile lives (a machine timer); the console should schedule it per app (a CI workflow template with a stored session, or the local agent) and show its runs | relevant | medium | ADR 0045 | — |
+| BL-121 | tech-debt | `/reports/:id` waits on the whole `GET /v1/admin/reports/:id` payload (classification, fix attempts, comments, spans) before the first paint — about 5.6 s on the report that found it. `DetailSkeleton` covers the wait, but the heavy sections are not split: fix attempts, PDCA story and similar bugs need their own queries (or Suspense) and the endpoint's joins need profiling, with before/after numbers. Related to BL-062 (api isolate boot, about 0.26 s of it) | relevant | med | `apps/admin/src/pages/ReportDetailPage.tsx:110`-`:271`; report `be0ecaf0-cfee-4929-a4b4-d4a15d135acf` | #706 |
 
 ---
 

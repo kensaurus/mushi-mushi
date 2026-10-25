@@ -64,18 +64,23 @@ export function reportHeading(report: {
 
 /**
  * Whether the summary is already what the heading renders, so showing it
- * again as "LLM summary" repeats the heading verbatim. True when no Stage-2
- * title exists (the heading is then derived from the summary), or when the
- * title only echoes it.
+ * again as "LLM summary" repeats the heading verbatim.
+ *
+ * Compares against what `reportHeading` actually renders (`text`) and what
+ * "Show full" expands to (`full`), not against "has no title": a summary at
+ * the legacy cap is re-clipped and its `full` text comes from the
+ * description, so the callout is then the only place the summary reads in
+ * full and must stay.
  */
 export function summaryIsHeading(report: {
   title?: string | null
   summary?: string | null
+  description?: string | null
 }): boolean {
   const summary = report.summary?.trim()
   if (!summary) return false
-  const title = report.title?.trim()
-  if (!title) return true
   const normalize = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
-  return normalize(title) === normalize(summary)
+  const shown = normalize(summary)
+  const heading = reportHeading(report)
+  return normalize(heading.text) === shown || normalize(heading.full) === shown
 }

@@ -7,6 +7,9 @@
  * PURPOSE: The header says whether a merged fix runs in production
  *          (completeness gap #10): "Fixed — not live yet (prod is on <sha>)"
  *          vs "Fixed and live", from `deploy_live` on the report detail.
+ *          Also holds the breadcrumb contract: exactly one "Bugs › Report"
+ *          trail at any viewport width — the in-card one below xl, the shell
+ *          `ChromeBreadcrumb` from xl up.
  */
 
 import { act, createElement } from 'react'
@@ -18,6 +21,7 @@ import type { ReportDeployLive, ReportDetail } from './types'
 vi.mock('../../lib/reportPresence', () => ({ useReportPresence: () => ({ others: [] }) }))
 
 import { ReportDetailHeader } from './ReportDetailHeader'
+import { ChromeBreadcrumb } from '../ChromeBreadcrumb'
 import { deployLiveLabel } from './deployLive'
 
 let container: HTMLDivElement
@@ -109,18 +113,63 @@ describe('ReportDetailHeader chrome', () => {
     return container
   }
 
-  it('does not repeat the top-bar breadcrumb: "Bugs › Report", hidden at xl, no summary leaf', () => {
+  /**
+   * jsdom ships no Tailwind stylesheet, so resolve `hidden` / `flex` and their
+   * `xl:` overrides for a viewport width the way Tailwind would (xl = 1280px).
+   */
+  function shownAt(el: Element, width: number): boolean {
+    let display = 'block'
+    for (const cls of el.className.split(/\s+/)) {
+      const [variant, utility] = cls.includes(':') ? cls.split(':') : [null, cls]
+      if (variant && !(variant === 'xl' && width >= 1280)) continue
+      if (utility === 'hidden' || utility === 'flex' || utility === 'block') display = utility
+    }
+    return display !== 'hidden'
+  }
+
+  /** The top-bar trail as the shell renders it on this route. */
+  function renderShellTrail(reportId: string) {
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [`/reports/${reportId}`] },
+          createElement(ChromeBreadcrumb),
+        ),
+      ),
+    )
+    return container.querySelector('nav[aria-label="Breadcrumb"]')!
+  }
+
+  it('says "Bugs › Report" in the top bar from xl up, where the in-card trail stops', () => {
+    const r = report({})
+    const shell = renderShellTrail(r.id)
+    expect(shell.textContent).toBe('Bugs›Report')
+    const shellWidths = { 390: shownAt(shell, 390), 1024: shownAt(shell, 1024), 1280: shownAt(shell, 1280), 1536: shownAt(shell, 1536) }
+
+    const card = renderHeader(r).querySelector('nav[aria-label="Breadcrumb"]')!.parentElement!
+    // Exactly one trail at every width: the card carries it below xl, the
+    // shell from xl up — so the page is never left without a way back.
+    for (const [width, shellShown] of Object.entries(shellWidths)) {
+      expect({ width, trails: Number(shellShown) + Number(shownAt(card, Number(width))) }).toEqual({ width, trails: 1 })
+    }
+  })
+
+  it('says the same thing in the in-card trail: "Bugs › Report", no summary leaf', () => {
     const nav = renderHeader(report({})).querySelector('nav[aria-label="Breadcrumb"]')
     expect(nav?.textContent).toBe('Bugs›Report')
     expect(nav?.textContent).not.toContain('Reports')
     expect(nav?.textContent).not.toContain('Checkout button does nothing')
-    expect(nav?.parentElement?.className).toContain('xl:hidden')
   })
 
-  it('renders the heading plain, not in the cyan info-tinted block', () => {
-    const h2 = renderHeader(report({})).querySelector('h2')
-    expect(h2?.textContent).toBe('Checkout button does nothing')
-    expect(h2?.parentElement?.className ?? '').not.toContain('bg-info-muted')
+  it('renders the heading plain, with no tinted block behind it', () => {
+    const h2 = renderHeader(report({})).querySelector('h2')!
+    expect(h2.textContent).toBe('Checkout button does nothing')
+    // The info tint read as a filled accent box; nothing between the heading
+    // and the card surface paints a background now.
+    for (let el: HTMLElement | null = h2.parentElement; el && el !== container; el = el.parentElement) {
+      expect(el.className).not.toMatch(/\bbg-(info|brand|ok|warn|danger)/)
+    }
   })
 })
 
