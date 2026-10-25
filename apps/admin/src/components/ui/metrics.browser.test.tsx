@@ -12,8 +12,9 @@
  *   report names as done criteria: 1440x900 and 390x844.
  * - The defect is a row that mixes linked and plain cards: on /admin/tester,
  *   "Balance" / "Total earned" / "Apps joined" link out and carry an arrow,
- *   "Accepted" does not. Without the fix in StatCard the plain card's (i) sits
- *   inline after its label while the other three sit at the card's right edge.
+ *   "Accepted" does not. TesterStatGrid sets reserveLinkSlot on that plain
+ *   card only. A plain-only strip (wallet, Projects, Portfolio) does not, so
+ *   its (i) stays beside the label.
  *
  * DEPENDENCIES:
  * - playwright (chromium) — same opt-in harness shape as packages/ux's
@@ -62,8 +63,8 @@ const TESTER_ROW: TesterStatItem[] = [
 ]
 
 /**
- * The same row with no links — the shape /tester/wallet and the snapshot strips
- * on Projects, Members, Rewards and Portfolio use.
+ * The same labels with no links — the shape /tester/wallet and the plain
+ * snapshot strips use. Those rows must not pick up the arrow slot.
  */
 const PLAIN_ROW: TesterStatItem[] = TESTER_ROW.map(({ to: _to, ...rest }) => rest)
 
@@ -164,17 +165,16 @@ describe.skipIf(!enabled)('StatCard help-icon alignment (real layout)', () => {
       for (const inset of insets) expect(inset).toBeLessThan(32)
     })
 
-    it(`keeps the (i) right-aligned on a plain-only row at ${viewport.name}`, async () => {
-      // StatCard is shared, so a page with no linked cards at all gets the
-      // wider label and the reserved arrow slot too. Those rows must land on
-      // the same inset as a mixed row, or the fix trades one misalignment for
-      // another on every other page.
+    it(`leaves a plain-only row's (i) beside the label at ${viewport.name}`, async () => {
+      // No sibling arrow to match. Pinning these icons to the card edge is
+      // the visual change on wallet, Projects and Portfolio.
       const plain = await measure(PLAIN_ROW, viewport)
       const mixed = await measure(TESTER_ROW, viewport)
-      expect(new Set(plain.map((c) => Math.round(c.cardWidth))).size).toBe(1)
-      const insets = plain.map((c) => c.helpInset)
-      for (const inset of insets) expect(inset).toBeCloseTo(insets[0], 0)
-      expect(insets[0]).toBeCloseTo(mixed[0].helpInset, 0)
+      const plainAccepted = plain.find((card) => card.label === 'Accepted')
+      const mixedAccepted = mixed.find((card) => card.label === 'Accepted')
+      expect(plainAccepted).toBeDefined()
+      expect(mixedAccepted).toBeDefined()
+      expect(plainAccepted!.helpInset).toBeGreaterThan(mixedAccepted!.helpInset + 16)
     })
   }
 })

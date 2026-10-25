@@ -5,6 +5,7 @@
  * OVERVIEW:
  * - Opaque design-token panels (no white/5 dark-mode-only hacks)
  * - Page intro, stat grid, link cards, pipeline rows, progress tracks
+ * - Stat grid reserves the link-arrow slot only when the row mixes linked and plain cards
  * - Wraps admin design-system Card, StatCard, Section, Btn, Badge
  *
  * DEPENDENCIES:
@@ -70,6 +71,9 @@ export interface TesterStatItem {
 }
 
 export function TesterStatGrid({ items }: { items: TesterStatItem[] }) {
+  // /admin/tester mixes linked cards (they draw an arrow) with a plain one.
+  // Only that plain card reserves the arrow width. A plain-only strip does not.
+  const mixed = items.some((item) => Boolean(item.to)) && items.some((item) => !item.to)
   return (
     <MetricStrip cols={4} ariaLabel="Tester account stats">
       {items.map((item) => (
@@ -80,6 +84,7 @@ export function TesterStatGrid({ items }: { items: TesterStatItem[] }) {
           hint={item.hint}
           accent={item.accent}
           to={item.to}
+          reserveLinkSlot={mixed && !item.to}
         />
       ))}
     </MetricStrip>

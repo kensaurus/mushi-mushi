@@ -604,6 +604,12 @@ interface StatCardProps {
   to?: string
   /** Override hover CTA copy (defaults to "Go to {destination}"). */
   linkLabel?: string
+  /**
+   * Plain card sharing a row with a linked card. Reserves the link arrow's
+   * width so this card's help icon lines up with the linked cards' icons.
+   * Off by default: a plain-only strip keeps the icon next to its label.
+   */
+  reserveLinkSlot?: boolean
 }
 
 function StatCardSwapLine({
@@ -651,9 +657,24 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
   return null
 }
 
-export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkLabel }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  accent,
+  delta,
+  trend,
+  detail,
+  hint,
+  tooltip,
+  to,
+  linkLabel,
+  reserveLinkSlot = false,
+}: StatCardProps) {
   const help = tooltip ?? hint
   const destination = to ? (linkLabel ?? statDestinationLabel(to)) : null
+  // Only a plain card that shares a row with a linked card grows a slot.
+  // Every other plain card keeps the icon beside its label.
+  const reserveSlot = Boolean(help) && !to && reserveLinkSlot
   const inner = (
     <>
       <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
@@ -666,19 +687,15 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
             />
           </span>
         ) : (
-          // flex-1 like the linked label above: without it the (i) icon sits
-          // inline after the text, so a row mixing linked and plain cards has
-          // its help icons at different x positions.
-          <span className="flex-1 min-w-0 truncate" title={label}>
+          <span className={`${reserveSlot ? 'flex-1 min-w-0 ' : ''}truncate`} title={label}>
             {label}
           </span>
         )}
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
         {to ? (
           <IconArrowRight size={12} className="stat-card-arrow ml-auto shrink-0 text-brand" />
-        ) : help ? (
-          // Reserves the arrow's width so the (i) lands on the same x as a
-          // linked card's in the same grid row.
+        ) : reserveSlot ? (
+          // Same width as the 12px arrow, so the (i) shares its x with a linked sibling.
           <span aria-hidden className="h-3 w-3 shrink-0" />
         ) : null}
       </div>
