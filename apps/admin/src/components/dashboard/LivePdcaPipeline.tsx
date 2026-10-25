@@ -19,7 +19,10 @@
  *          Collapsed to a one-line disclosure once the project has a merged
  *          fix — the loop needs no four-card explanation after you've shipped
  *          one, and the four cards pushed "Top 3 to triage" below the fold at
- *          1440x900. The open/closed choice persists in localStorage.
+ *          1440x900. "Hide" is offered at every maturity so a user who never
+ *          merged a fix can still dismiss it. The choice persists per project
+ *          in localStorage: one mature app's expanded explainer must not
+ *          expand every other app in the same browser.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -45,8 +48,8 @@ interface Props {
   pdcaStages?: PdcaStage[]
   /**
    * Merged auto-fixes on the active project. Anything above 0 means the user
-   * has already watched a bug go round the loop, so the explainer collapses
-   * to a one-line disclosure instead of four cards.
+   * has already watched a bug go round the loop, so the explainer defaults to
+   * a one-line disclosure instead of four cards.
    */
   mergedFixCount?: number | null
 }
@@ -55,21 +58,28 @@ type DemoState = 'idle' | 'running' | 'done' | 'error'
 
 const EXPLAINER_OPEN_KEY = 'mushi:dashboard:how-mushi-works-open'
 
-/** Opt-in: a project with a merged fix keeps the explainer closed by default. */
-function readExplainerOpen(): boolean {
-  if (typeof window === 'undefined') return false
+/** The preference is per project — apps mature at their own pace. */
+function explainerOpenKey(projectId?: string | null): string {
+  return projectId ? `${EXPLAINER_OPEN_KEY}:${projectId}` : EXPLAINER_OPEN_KEY
+}
+
+/** The user's stored choice for this project, or null when they never chose. */
+function readExplainerPref(projectId?: string | null): boolean | null {
+  if (typeof window === 'undefined') return null
   try {
-    return window.localStorage.getItem(EXPLAINER_OPEN_KEY) === '1'
+    const raw = window.localStorage.getItem(explainerOpenKey(projectId))
+    if (raw === '1') return true
+    if (raw === '0') return false
+    return null
   } catch {
-    return false
+    return null
   }
 }
 
-function writeExplainerOpen(next: boolean): void {
+function writeExplainerPref(projectId: string | null | undefined, next: boolean): void {
   if (typeof window === 'undefined') return
   try {
-    if (next) window.localStorage.setItem(EXPLAINER_OPEN_KEY, '1')
-    else window.localStorage.removeItem(EXPLAINER_OPEN_KEY)
+    window.localStorage.setItem(explainerOpenKey(projectId), next ? '1' : '0')
   } catch {
     /* private mode */
   }
@@ -94,7 +104,7 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
   const [activeStage, setActiveStage] = useState<PdcaStageId | null>(null)
   const [doneStages, setDoneStages] = useState<Set<PdcaStageId>>(new Set())
   const [livePulse, setLivePulse] = useState<PdcaStageId | null>(null)
-  const [explainerOpen, setExplainerOpen] = useState(readExplainerOpen)
+  const [explainerPref, setExplainerPref] = useState<boolean | null>(() => readExplainerPref(projectId))
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const livePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -104,6 +114,12 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
       if (livePulseTimer.current) clearTimeout(livePulseTimer.current)
     }
   }, [])
+
+  // Switching project switches the preference: the component stays mounted
+  // across a project switch, so the stored choice has to be re-read.
+  useEffect(() => {
+    setExplainerPref(readExplainerPref(projectId))
+  }, [projectId])
 
   // Snapshot stage counts on each render so we can diff against the next
   // payload. We compare to a ref instead of state to avoid an extra render
@@ -186,19 +202,22 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
     onDemoReportSent?.()
   }, [animate, demoState, onDemoReportSent, projectId, sendTestReport])
 
+  // A project that has merged a fix already knows the loop, so the explainer
+  // starts as one line there and the triage queue stays above the fold. An
+  // explicit choice wins over that default.
+  const explainerOpen = explainerPref ?? (mergedFixCount ?? 0) === 0
+
+  // The write stays out of the setState updater: React may run an updater
+  // twice (StrictMode), and a persisted side effect does not belong there.
   const toggleExplainer = useCallback(() => {
-    setExplainerOpen((prev) => {
-      writeExplainerOpen(!prev)
-      return !prev
-    })
-  }, [])
+    const next = !explainerOpen
+    setExplainerPref(next)
+    writeExplainerPref(projectId, next)
+  }, [explainerOpen, projectId])
 
   if (!isBeginner) return null
 
-  // A project that has merged a fix already knows the loop. Keep the
-  // explainer one line so the triage queue stays above the fold.
-  const collapsible = (mergedFixCount ?? 0) > 0
-  if (collapsible && !explainerOpen) {
+  if (!explainerOpen) {
     return (
       <section className="mb-4">
         <button
@@ -247,11 +266,9 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
               Open Reports →
             </Link>
           )}
-          {collapsible && (
-            <Btn size="sm" variant="ghost" onClick={toggleExplainer} aria-expanded>
-              Hide
-            </Btn>
-          )}
+          <Btn size="sm" variant="ghost" onClick={toggleExplainer} aria-expanded>
+            Hide
+          </Btn>
         </div>
       </header>
 

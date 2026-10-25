@@ -7,7 +7,9 @@
  *   A single-line strip:
  *     PDCA chip · title [· project scope] · [right children] · copy-link
  *
- *   The optional description renders in a smaller line below.
+ *   The optional description renders in a smaller line below, and on a page
+ *   hub the view switcher follows it (lib/hubViewSlot) so the title leads the
+ *   page there as well.
  *
  *   When helpTitle/helpWhatIsIt are supplied, props are registered with
  *   Layout's `<RoutePageHelp />` so the banner renders full-width above the
@@ -37,6 +39,7 @@ import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
 import { useLocationChrome } from '../lib/locationChrome'
+import { useHubViewSwitcher } from '../lib/hubViewSlot'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
@@ -125,6 +128,9 @@ export function PageHeaderBar({
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
+  // On a page hub (Home, App health, Team) the view switcher renders here,
+  // under the title — every other page leads with its title too.
+  const hubSwitcher = useHubViewSwitcher()
 
   const chipKey =
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
@@ -212,6 +218,8 @@ export function PageHeaderBar({
           {description}
         </p>
       )}
+
+      {hubSwitcher && <div className="mt-2.5">{hubSwitcher}</div>}
     </div>
   )
 }
