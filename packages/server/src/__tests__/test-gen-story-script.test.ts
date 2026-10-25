@@ -4,12 +4,11 @@
  * `playwright-ts`. qa-story-runner skips local stories, so a generated
  * test never ran on the schedule.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { TEST_GEN_MODEL } from '../../supabase/functions/_shared/models.ts'
 import { usableFirecrawlScript } from '../../supabase/functions/test-gen-from-story/firecrawl-script.ts'
-import { pagesForStory, qaStoryInsertRow, storedQaStoryScript } from '../../supabase/functions/test-gen-from-story/story-script.ts'
+import { pagesForAuthAndTarget, pagesForStory, qaStoryInsertRow, storedQaStoryScript } from '../../supabase/functions/test-gen-from-story/story-script.ts'
 
 const PLAYWRIGHT = "import { test, expect } from '@playwright/test'\n"
 const ACTIONS = `
@@ -134,10 +133,7 @@ describe('storedQaStoryScript', () => {
       'signed-in user',
       'logged in member',
       'authenticated',
-      'subscriber',
-      'registered user',
       'account holder',
-      'member',
     ]) {
       const stored = storedQaStoryScript({
         playwright: PLAYWRIGHT,
@@ -198,6 +194,38 @@ describe('storedQaStoryScript', () => {
     expect(publicPage.browser_provider).toBe('firecrawl_actions')
     expect(publicPage.target_url).toBe('https://app.example.com/pricing')
   })
+
+  it('schedules a team member, including one viewing a public page', () => {
+    for (const persona of ['member', 'team member', 'team member viewing a public page', 'subscriber', 'registered user']) {
+      const stored = storedQaStoryScript({
+        playwright: PLAYWRIGHT,
+        firecrawlActions: ACTIONS,
+        pages: [],
+        baseUrls: ['https://app.example.com'],
+        story: { persona },
+      })
+      expect(`${persona}: ${stored.browser_provider}`).toBe(`${persona}: firecrawl_actions`)
+    }
+
+    const onPublicPage = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: [{ id: 'pricing', path: '/pricing' }],
+      baseUrls: ['https://app.example.com'],
+      story: { persona: 'team member' },
+    })
+    expect(onPublicPage.browser_provider).toBe('firecrawl_actions')
+    expect(onPublicPage.target_url).toBe('https://app.example.com/pricing')
+
+    const explicitSignIn = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: [{ id: 'pricing', path: '/pricing', auth_required: false }],
+      baseUrls: ['https://app.example.com'],
+      story: { auth_required: true, persona: 'team member' },
+    })
+    expect(explicitSignIn.browser_provider).toBe('local')
+  })
 })
 
 describe('pagesForStory', () => {
@@ -206,9 +234,26 @@ describe('pagesForStory', () => {
     { id: 'account', path: '/account', auth_required: true, user_story: 'billing' },
   ]
 
-  it('uses the story page ids, then a user_story tag', () => {
+  it('uses listed page ids for prompt routes, and a user_story tag only for auth and target', () => {
     expect(pagesForStory({ id: 'see-pricing', pages: ['pricing'] }, pages).map((p) => p.id)).toEqual(['pricing'])
-    expect(pagesForStory({ id: 'billing', pages: [] }, pages).map((p) => p.id)).toEqual(['account'])
+    expect(pagesForStory({ id: 'billing', pages: [] }, pages)).toEqual([])
+    expect(pagesForStory({ id: 'billing', pages: ['missing'] }, pages)).toEqual([])
+    expect(pagesForAuthAndTarget({ id: 'see-pricing', pages: ['pricing'] }, pages).map((p) => p.id)).toEqual(['pricing'])
+    expect(pagesForAuthAndTarget({ id: 'billing', pages: [] }, pages).map((p) => p.id)).toEqual(['account'])
+    expect(pagesForAuthAndTarget({ id: 'billing', pages: ['missing'] }, pages).map((p) => p.id)).toEqual(['account'])
+
+    const story = { id: 'see-pricing', pages: [] as string[] }
+    const catalog = [{ id: 'pricing', path: '/pricing', auth_required: false, user_story: 'see-pricing' }]
+    expect(pagesForStory(story, catalog)).toEqual([])
+    const stored = storedQaStoryScript({
+      playwright: PLAYWRIGHT,
+      firecrawlActions: ACTIONS,
+      pages: pagesForAuthAndTarget(story, catalog),
+      baseUrls: ['https://app.example.com'],
+      story: { persona: 'team member' },
+    })
+    expect(stored.browser_provider).toBe('firecrawl_actions')
+    expect(stored.target_url).toBe('https://app.example.com/pricing')
   })
 })
 
@@ -321,16 +366,243 @@ describe('qaStoryInsertRow', () => {
   })
 })
 
+const h = vi.hoisted(() => ({
+  served: null as null | ((req: Request) => Promise<Response>),
+  inserted: [] as Array<Record<string, unknown>>,
+  prompts: [] as string[],
+  puts: [] as Array<Record<string, unknown>>,
+  inventory: {} as Record<string, unknown>,
+  output: {
+    path: 'tests/see-pricing.spec.ts',
+    contents: '',
+    firecrawl_actions: '' as string | undefined,
+    summary: 'See pricing',
+    rationale: 'covers the story',
+    needsHumanReview: false,
+  },
+}))
+
+vi.mock('../../supabase/functions/_shared/logger.ts', () => {
+  const log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => log }
+  return { log }
+})
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({
+  withSentry: (fn: (req: Request) => Promise<Response>) => fn,
+  tagLangfuseTrace: () => {},
+}))
+vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ requireServiceRoleAuth: () => null }))
+vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
+  withAnthropicOrOpenAi: async (
+    _db: unknown,
+    _projectId: string,
+    anthropicFn: (key: { key: string; source: string }) => Promise<unknown>,
+  ) => ({ result: await anthropicFn({ key: 'test-key', source: 'byok' }), usedProvider: 'anthropic' }),
+  LlmFailoverError: class LlmFailoverError extends Error {},
+}))
+vi.mock('../../supabase/functions/_shared/llm-usage.ts', () => ({
+  withLlmUsage: async (_db: unknown, _ctx: unknown, fn: () => Promise<unknown>) => fn(),
+}))
+vi.mock('../../supabase/functions/_shared/claude-messages.ts', () => ({
+  claudeGenerateObject: async (args: { prompt: string }) => {
+    h.prompts.push(args.prompt)
+    return { object: h.output }
+  },
+}))
+vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => {} }))
+vi.mock('../../supabase/functions/_shared/observability.ts', () => ({
+  createTrace: () => ({ id: 'trace-1', span: () => ({ end: () => {} }), end: async () => {} }),
+}))
+vi.mock('../../supabase/functions/_shared/openai-compat.ts', () => ({ openAiProvider: () => () => ({}) }))
+
+function fakeDb() {
+  const table = (name: string) => {
+    const result = () => {
+      if (name === 'inventories') return { data: { parsed: h.inventory }, error: null }
+      if (name === 'project_settings') {
+        return {
+          data: {
+            github_repo_url: 'https://github.com/acme/app',
+            github_access_token_ref: 'vault-1',
+          },
+          error: null,
+        }
+      }
+      return { data: null, error: null }
+    }
+    const builder: Record<string, unknown> = {
+      maybeSingle: async () => result(),
+      single: async () => (name === 'qa_stories' ? { data: { id: 'qa-1' }, error: null } : result()),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve),
+      insert: (row: Record<string, unknown>) => {
+        h.inserted.push(row)
+        return builder
+      },
+      update: () => builder,
+    }
+    for (const method of ['select', 'eq', 'order', 'limit']) builder[method] = () => builder
+    return builder
+  }
+  return {
+    from: (name: string) => table(name),
+    rpc: async (fn: string) => (fn === 'vault_get_secret' ? { data: 'test-token' } : { data: null, error: null }),
+  }
+}
+
+vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => fakeDb() }))
+
+function githubFetch(url: string, init?: RequestInit): Promise<Response> {
+  const method = init?.method ?? 'GET'
+  const u = String(url)
+  if (method === 'PUT' && u.includes('/contents/')) {
+    h.puts.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
+    return Promise.resolve(new Response('{}', { status: 201 }))
+  }
+  if (method === 'POST' && u.endsWith('/git/refs')) return Promise.resolve(new Response('{}', { status: 201 }))
+  if (method === 'POST' && u.endsWith('/pulls')) {
+    return Promise.resolve(new Response(JSON.stringify({ html_url: 'https://github.com/acme/app/pull/9' }), { status: 201 }))
+  }
+  if (method === 'GET' && u.includes('/contents/')) return Promise.resolve(new Response('missing', { status: 404 }))
+  if (method === 'GET' && u.includes('/git/ref/heads/')) {
+    return Promise.resolve(new Response(JSON.stringify({ object: { sha: 'abc123' } })))
+  }
+  if (method === 'GET' && u.endsWith('/repos/acme/app')) {
+    return Promise.resolve(new Response(JSON.stringify({ default_branch: 'main' })))
+  }
+  return Promise.reject(new Error(`unexpected fetch ${method} ${u}`))
+}
+
+function decodeGithubContent(b64: string): string {
+  const binary = atob(b64)
+  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+function post(storyId: string): Promise<Response> {
+  return h.served!(new Request('https://edge.local/test-gen-from-story', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: 'p1',
+      story_node_id: storyId,
+      automation_mode: 'review',
+      open_pr: true,
+    }),
+  }))
+}
+
 describe('test-gen-from-story insert', () => {
-  it('inserts the helper payload and still commits the Playwright spec', () => {
-    const src = readFileSync(
-      resolve(__dirname, '../../supabase/functions/test-gen-from-story/index.ts'),
-      'utf8',
-    )
-    expect(src).toMatch(/storedQaStoryScript\(\{[^}]*\bstory\b/)
-    expect(src).toMatch(/const row = qaStoryInsertRow\(/)
-    expect(src).toMatch(/\.insert\(row\)/)
-    expect(src).not.toMatch(/browser_provider:\s*'local'/)
-    expect(src).toMatch(/contents: output\.contents/)
+  beforeAll(async () => {
+    vi.stubGlobal('Deno', {
+      env: { get: () => undefined },
+      serve: (fn: (req: Request) => Promise<Response>) => {
+        h.served = fn
+      },
+    })
+    vi.stubGlobal('fetch', githubFetch)
+    await import('../../supabase/functions/test-gen-from-story/index.ts')
+  })
+
+  beforeEach(() => {
+    h.inserted.length = 0
+    h.prompts.length = 0
+    h.puts.length = 0
+    h.output.path = 'tests/see-pricing.spec.ts'
+    h.output.contents = PLAYWRIGHT
+    h.output.firecrawl_actions = ACTIONS
+    h.output.summary = 'See pricing'
+    h.output.needsHumanReview = false
+  })
+
+  afterAll(() => vi.unstubAllGlobals())
+
+  it('inserts firecrawl actions for a guest story and commits the Playwright spec', async () => {
+    h.inventory = {
+      user_stories: [{
+        id: 'see-pricing',
+        title: 'See pricing',
+        goal: 'View the pricing page',
+        persona: 'team member',
+        pages: [],
+      }],
+      pages: [{
+        id: 'pricing',
+        path: '/pricing',
+        title: 'Pricing',
+        auth_required: false,
+        user_story: 'see-pricing',
+      }],
+      app: { base_url: 'https://app.example.com' },
+    }
+
+    const res = await post('see-pricing')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      data: { qaStoryId: 'qa-1', prUrl: 'https://github.com/acme/app/pull/9', path: 'tests/see-pricing.spec.ts' },
+    })
+
+    expect(h.prompts[0]).toContain('persona: team member')
+    expect(h.prompts[0]).toContain('routes: see goal')
+    expect(h.prompts[0]).not.toContain('/pricing')
+
+    expect(h.inserted).toHaveLength(1)
+    const row = h.inserted[0]
+    expect(row).toMatchObject({
+      project_id: 'p1',
+      name: 'See pricing',
+      prompt: 'View the pricing page',
+      script_lang: 'firecrawl-actions',
+      browser_provider: 'firecrawl_actions',
+      target_url: 'https://app.example.com/pricing',
+      source: 'test_gen_from_story',
+      approval_status: 'pending_review',
+      automation_mode: 'review',
+      origin_story_node_id: 'see-pricing',
+      generation_model: TEST_GEN_MODEL,
+      enabled: false,
+    })
+    expect(row.script).not.toBe(PLAYWRIGHT)
+    expect(JSON.parse(String(row.script))).toMatchObject({
+      actions: [{ type: 'click', selector: "a[href='/pricing']" }, { type: 'screenshot' }],
+      assertContains: ['Pricing'],
+    })
+    expect(h.puts).toHaveLength(1)
+    expect(decodeGithubContent(String(h.puts[0].content))).toBe(PLAYWRIGHT)
+  })
+
+  it('inserts the Playwright spec when the story requires auth, and still commits that spec', async () => {
+    h.inventory = {
+      user_stories: [{
+        id: 'see-account',
+        title: 'See account',
+        goal: 'View the account page',
+        persona: 'buyer',
+        auth_required: true,
+        pages: ['pricing'],
+      }],
+      pages: [{ id: 'pricing', path: '/pricing', title: 'Pricing', auth_required: false }],
+      app: { base_url: 'https://app.example.com' },
+    }
+    h.output.path = 'tests/see-account.spec.ts'
+    h.output.summary = 'See account'
+
+    const res = await post('see-account')
+    expect(res.status).toBe(200)
+    expect(h.inserted).toHaveLength(1)
+    const row = h.inserted[0]
+    expect(row).toMatchObject({
+      name: 'See account',
+      script: PLAYWRIGHT,
+      script_lang: 'playwright-ts',
+      browser_provider: 'local',
+      source: 'test_gen_from_story',
+      approval_status: 'pending_review',
+      origin_story_node_id: 'see-account',
+      generation_model: TEST_GEN_MODEL,
+      enabled: false,
+    })
+    expect(Object.hasOwn(row, 'target_url')).toBe(false)
+    expect(h.prompts[0]).toContain('/pricing')
+    expect(decodeGithubContent(String(h.puts[0].content))).toBe(PLAYWRIGHT)
   })
 })

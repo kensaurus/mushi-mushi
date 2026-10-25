@@ -2,9 +2,10 @@
  * qa_stories fields for test-gen-from-story. The Playwright spec stays on
  * the draft PR. The runner skips `local` and runs `firecrawl_actions` only
  * from the JSON `usableFirecrawlScript` produces. A page with auth_required
- * true, a story flagged auth_required, or a signed-in persona with no linked
- * page keeps Playwright — Firecrawl cannot sign in. So does a story with no
- * public URL: the scheduled run would otherwise record `no_target_url`.
+ * true, or a story flagged auth_required, keeps Playwright — Firecrawl cannot
+ * sign in. So does a story with no public URL (the run would record
+ * `no_target_url`), and a story with no linked page whose persona says the
+ * user is already signed in.
  */
 import { usableFirecrawlScript } from './firecrawl-script.ts'
 
@@ -46,8 +47,24 @@ export interface QaStoryInsertRow {
   enabled: boolean
 }
 
-/** Pages the story runs on: its page ids, else pages tagged with the story. */
+/** Pages named by id on the story. These are the prompt routes.
+ *  A story that lists none stays empty — a user_story tag is not a route.
+ */
 export function pagesForStory(
+  story: { id: string; pages?: string[] | null },
+  pages: readonly StoryPageRef[] | null | undefined,
+): StoryPageRef[] {
+  const ids = story.pages ?? []
+  if (ids.length === 0) return []
+  const idSet = new Set(ids)
+  return (pages ?? []).filter((page) => idSet.has(page.id))
+}
+
+/** Pages for the sign-in decision and the scheduled URL.
+ *  Named pages win. When the story lists no ids (or none match), pages
+ *  tagged with the story still count. The prompt does not use this fallback.
+ */
+export function pagesForAuthAndTarget(
   story: { id: string; pages?: string[] | null },
   pages: readonly StoryPageRef[] | null | undefined,
 ): StoryPageRef[] {
@@ -59,7 +76,9 @@ export function pagesForStory(
 
 const GUEST_PERSONA = /\b(guest|anonymous|visitor|public|unauthenticated|logged[ -]?out|signed[ -]?out)\b/i
 const SIGNED_IN_PHRASE = /\b(logged[ -]?in|signed[ -]?in|account holder)\b/i
-const SIGNED_IN_TOKEN = new Set(['admin', 'administrator', 'authenticated', 'member', 'subscriber', 'registered'])
+// Session words only. Role labels (member, subscriber, registered) stay
+// schedulable unless the story or a page sets auth_required.
+const SIGNED_IN_TOKEN = new Set(['admin', 'administrator', 'authenticated'])
 
 /** True when the persona is someone who already has a session. */
 function personaImpliesSignedIn(persona: string | null | undefined): boolean {

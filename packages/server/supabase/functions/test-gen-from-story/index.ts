@@ -29,7 +29,13 @@ import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
-import { pagesForStory, qaStoryInsertRow, storedQaStoryScript, type StoryPageRef } from './story-script.ts'
+import {
+  pagesForAuthAndTarget,
+  pagesForStory,
+  qaStoryInsertRow,
+  storedQaStoryScript,
+  type StoryPageRef,
+} from './story-script.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -241,7 +247,10 @@ Deno.serve(
     }
 
     const pages = (parsed?.pages ?? []) as StoryPageRef[]
-    const storyPages = pagesForStory(story, pages)
+    // Prompt routes are only the story's own page ids. A user_story tag is
+    // used for the sign-in check and the scheduled URL, not the prompt.
+    const promptPages = pagesForStory(story, pages)
+    const runPages = pagesForAuthAndTarget(story, pages)
     const app = parsed?.app as { base_url?: string; preview_url?: string; staging_url?: string } | undefined
     const appBaseUrl = base_url ?? app?.base_url ?? 'http://localhost:3000'
 
@@ -250,7 +259,7 @@ id: ${story.id}
 title: ${story.title}
 goal: ${story.goal}
 persona: ${story.persona ?? 'end user'}
-routes: ${storyPages.map((p) => `${p.path || p.route || ''} (${p.title ?? ''})`).join(', ') || 'see goal'}
+routes: ${promptPages.map((p) => `${p.path || p.route || ''} (${p.title ?? ''})`).join(', ') || 'see goal'}
 base_url: ${appBaseUrl}
 ${story.actions?.length ? `actions: ${story.actions.join(', ')}` : ''}
 
@@ -337,7 +346,7 @@ Write a comprehensive Playwright TDD test for this user story.`
     const stored = storedQaStoryScript({
       playwright: output.contents,
       firecrawlActions: output.firecrawl_actions,
-      pages: storyPages,
+      pages: runPages,
       baseUrls: [base_url, app?.base_url, app?.staging_url, app?.preview_url],
       story,
     })
