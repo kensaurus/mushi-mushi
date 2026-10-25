@@ -334,6 +334,38 @@ describe('Cursor key model on /credits', () => {
     const changes = Array.from(host.querySelectorAll('a')).filter((a) => a.textContent === 'Change')
     expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
   })
+
+  it('shows follow-up settings without a no-key prompt when there is no Cursor key', async () => {
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [] },
+        followups: {
+          available: true,
+          canManage: true,
+          settings: { enabled: true, keyId: null, model: 'grok-4.7?reasoning_effort=xhigh', escalationModel: null, dailyLimit: 200 },
+        },
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('Review follow-ups')
+    expect(host.textContent).not.toContain('No Cursor key yet')
+  })
+
+  it('still asks for a Cursor key when there are no keys and no follow-ups', async () => {
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('No Cursor key yet')
+    expect(host.textContent).not.toContain('Review follow-ups')
+  })
 })
 
 describe('firecrawlBalance', () => {
@@ -371,6 +403,19 @@ describe('credits load failures', () => {
     await render()
     expect(host.textContent).toContain('Reading your Cursor keys')
     expect(host.textContent).not.toContain('No Cursor key yet')
+  })
+
+  it('keeps review follow-ups when spend-down fails, and retries that request', async () => {
+    state.pageState['/v1/admin/byok/spend-down'] = { data: null, loading: false, error: 'nope' }
+    await render()
+    expect(host.textContent).toContain("Couldn't load Cursor spend-down.")
+    expect(host.textContent).toContain('Review follow-ups')
+    expect(host.textContent).toContain('Rounds run on Grok')
+    const note = Array.from(host.querySelectorAll('p')).find((p) => p.textContent?.includes("Couldn't load Cursor spend-down."))
+    const retry = note?.querySelector('button')
+    expect(retry?.textContent).toBe('Retry')
+    await act(async () => { retry?.click() })
+    expect(state.reloads).toContain('/v1/admin/byok/spend-down')
   })
 
   it('says review follow-ups failed, and keeps the last settings on a failed refresh', async () => {

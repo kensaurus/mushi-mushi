@@ -67,10 +67,19 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
       )}
 
       {failedFirst && (
-        <PanelFetchNote
-          message="Platform rollup unavailable. The /platform-rollup endpoint may not be deployed yet."
-          onRetry={() => reload()}
-        />
+        <>
+          <EmptySectionMessage
+            text="Platform rollup unavailable."
+            hint="The /platform-rollup endpoint may not be deployed yet."
+          />
+          <button
+            type="button"
+            className="mt-1.5 text-xs font-medium text-brand underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
+            onClick={() => reload()}
+          >
+            Retry
+          </button>
+        </>
       )}
 
       {error && data != null && <PanelFetchNote stale className="mb-1.5" onRetry={() => reload()} />}

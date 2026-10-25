@@ -68,6 +68,11 @@ describe('PlatformHealthTile states', () => {
     expect(host.textContent).toContain('Platform rollup unavailable.')
     expect(host.textContent).toContain('may not be deployed yet')
     expect(host.textContent).not.toContain('No multi-platform data yet')
+    const missing = Array.from(host.querySelectorAll('p')).find((p) => p.textContent?.includes('Platform rollup unavailable.'))
+    expect(missing?.getAttribute('role')).not.toBe('alert')
+    expect(missing?.className).toContain('text-fg-muted')
+    expect(missing?.className ?? '').not.toContain('text-danger')
+    expect(host.querySelector('.border-dashed')).not.toBeNull()
     retry()?.click()
     expect(page.reload).toHaveBeenCalledOnce()
 
@@ -84,6 +89,7 @@ describe('PlatformHealthTile states', () => {
     expect(host.textContent).toContain('ios')
     expect(host.textContent).toContain('4')
     expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("Couldn't refresh. Showing the last result.")
     expect(host.textContent).not.toContain('Platform rollup unavailable.')
   })
 })
@@ -141,6 +147,24 @@ describe('QuotaBanner states', () => {
     expect(host.textContent).toContain('mushi')
     expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
   })
+
+  it('stays quiet when a refresh fails and no project is near quota', () => {
+    page.error = 'refresh failed'
+    page.data = {
+      projects: [{
+        project_id: 'p',
+        project_name: 'quiet',
+        plan: 'free',
+        usage: { reports: 10 },
+        limit_reports: 100,
+        over_quota: false,
+      }],
+      free_limit_reports_per_month: 100,
+    }
+    render(createElement(QuotaBanner))
+    expect(host.textContent ?? '').not.toContain("Couldn't refresh")
+    expect(host.textContent ?? '').not.toContain('quiet')
+  })
 })
 
 describe('SdkUpgradeBanner states', () => {
@@ -155,5 +179,14 @@ describe('SdkUpgradeBanner states', () => {
     render(createElement(SdkUpgradeBanner, { projectId: 'p1' }))
     expect(host.textContent).toContain('SDK upgrade available')
     expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
+  })
+
+  it('stays quiet when a refresh fails and the SDK is current', () => {
+    page.error = 'refresh failed'
+    page.data = { projects: [{ id: 'p1', sdk_status: 'current', sdk_version: '1.2.0', sdk_latest_version: '1.2.0' }] }
+    render(createElement(SdkUpgradeBanner, { projectId: 'p1' }))
+    expect(host.textContent ?? '').not.toContain("Couldn't refresh")
+    expect(host.textContent ?? '').not.toContain("Couldn't check for an SDK upgrade")
+    expect(host.textContent ?? '').not.toContain('SDK upgrade available')
   })
 })

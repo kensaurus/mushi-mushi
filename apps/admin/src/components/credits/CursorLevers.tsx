@@ -64,12 +64,6 @@ export function CursorLevers({ spendDown, followups, followupsLoading = false, f
 
   return (
     <div className="space-y-3">
-      {keys.length === 0 && (
-        <p className="text-sm text-fg-muted">
-          No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
-          and Mushi can send open bugs to Cursor before its credits expire.
-        </p>
-      )}
       {keys.length > 0 && (
         <p className="text-xs text-fg-muted">The Cursor keys the open app can use. Another app&apos;s keys show when you switch to it.</p>
       )}

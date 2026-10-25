@@ -49,7 +49,7 @@ export function QuotaBanner() {
       return pb - pa
     })
 
-  if (!error && visible.length === 0) return null
+  if (visible.length === 0) return null
 
   return (
     <div className="space-y-1.5 mb-4" role="status" aria-label="Project quota status">

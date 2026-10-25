@@ -12,6 +12,7 @@
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
+import { PanelFetchNote } from '../components/PanelFetchNote'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Callout, Section } from '../components/ui'
 import { IconCost } from '../components/icons'
@@ -101,9 +102,12 @@ export function CreditsPage() {
 
       <Section title="Cursor: fix bugs">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
-        {spendDown.data && (
+        {spendDown.error && !spendDown.data && (
+          <PanelFetchNote message="Couldn't load Cursor spend-down." onRetry={() => spendDown.reload()} />
+        )}
+        {(!spendDown.loading || spendDown.data != null) && (
           <CursorLevers
-            spendDown={spendDown.data}
+            spendDown={spendDown.data ?? null}
             followups={followups.data ?? null}
             followupsLoading={followups.loading && !followups.data}
             followupsError={followups.error}

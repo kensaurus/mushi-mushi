@@ -33,7 +33,7 @@ export function SdkUpgradeBanner({ projectId }: { projectId: string }) {
   if (error && !data) {
     return <PanelFetchNote message="Couldn't check for an SDK upgrade." onRetry={() => reload()} />
   }
-  if (!stale && !error) return null
+  if (!stale) return null
 
   const from = project?.sdk_version ?? null
   const to = project?.sdk_latest_version ?? null
