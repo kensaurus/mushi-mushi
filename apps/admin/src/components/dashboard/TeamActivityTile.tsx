@@ -6,7 +6,8 @@
  *          without opening the full Audit console. Reuses the existing
  *          GET /v1/admin/audit endpoint (project-scoped via ProjectSwitcher),
  *          which also returns each row's actor_type. Rows deep-link into the
- *          Audit log pre-filtered by that actor.
+ *          Audit log pre-filtered by that actor. A failed fetch is an error
+ *          with Retry, not the empty state.
  */
 
 import { Link } from 'react-router-dom'
@@ -14,6 +15,7 @@ import { Card, PanelHeader } from '../ui'
 import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { relTime } from './types'
+import { TileLoadError } from './TileLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 
@@ -113,13 +115,63 @@ interface Props {
 const RECENT_LIMIT = 8
 
 export function TeamActivityTile({ projectId }: Props) {
-  const { data, loading, reload } = usePageData<AuditResponse>(
+  const { data, loading, error, errorCode, reload } = usePageData<AuditResponse>(
     projectId ? `/v1/admin/audit?limit=${RECENT_LIMIT}` : null,
     { deps: [projectId] },
   )
   useRealtimeReload(['audit_logs'], reload)
 
   const logs = data?.logs ?? []
+  const body = !projectId ? (
+    <EmptySectionMessage
+      text="Pick a project to see who did what."
+      hint="Team activity follows the project selected in the header."
+    />
+  ) : loading && logs.length === 0 && !error ? (
+    <div role="status" aria-busy="true" className="space-y-1.5">
+      <p className="sr-only">Loading team activity</p>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} aria-hidden className="h-8 rounded-md bg-surface-overlay/25 motion-safe:animate-pulse" />
+      ))}
+    </div>
+  ) : error && logs.length === 0 ? (
+    <TileLoadError resource="team activity" error={error} code={errorCode} onRetry={reload} />
+  ) : logs.length === 0 ? (
+    <EmptySectionMessage
+      text="No team activity yet."
+      hint="Member and agent actions (report triage, fixes, settings changes) appear here as they happen."
+    />
+  ) : (
+    <>
+      {error ? <TileLoadError stale resource="team activity" error={error} code={errorCode} onRetry={reload} /> : null}
+      <ul className="space-y-1.5">
+        {logs.map((e) => {
+          const kind = actorKind(e)
+          const who = actorLabel(e, kind)
+          return (
+            <li key={e.id}>
+              <Link
+                to={e.actor_email ? `/audit?actor=${encodeURIComponent(e.actor_email)}` : '/audit'}
+                title={e.actor_id ? `Actor id ${e.actor_id}` : undefined}
+                className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
+              >
+                <div className="flex items-center gap-2">
+                  <SignalChip tone={KIND_TONE[kind]}>{KIND_LABEL[kind]}</SignalChip>
+                  <span className="min-w-0 shrink truncate text-xs font-medium text-fg group-hover:text-fg">
+                    {who}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary" title={e.action}>
+                    {auditActionPhrase(e.action)}
+                  </span>
+                  <SignalChip tone="neutral">{relTime(e.created_at)}</SignalChip>
+                </div>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </>
+  )
 
   return (
     <Card className="min-w-0 p-3">
@@ -131,45 +183,7 @@ export function TeamActivityTile({ projectId }: Props) {
           </ActionPill>
         }
       />
-      {loading && logs.length === 0 ? (
-        <div className="space-y-1.5" aria-hidden>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-8 rounded-md bg-surface-overlay/25 motion-safe:animate-pulse" />
-          ))}
-        </div>
-      ) : logs.length === 0 ? (
-        <EmptySectionMessage
-          text="No team activity yet."
-          hint="Member and agent actions (report triage, fixes, settings changes) appear here as they happen."
-        />
-      ) : (
-        <ul className="space-y-1.5">
-          {logs.map((e) => {
-            const kind = actorKind(e)
-            const who = actorLabel(e, kind)
-            return (
-              <li key={e.id}>
-                <Link
-                  to={e.actor_email ? `/audit?actor=${encodeURIComponent(e.actor_email)}` : '/audit'}
-                  title={e.actor_id ? `Actor id ${e.actor_id}` : undefined}
-                  className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
-                >
-                  <div className="flex items-center gap-2">
-                    <SignalChip tone={KIND_TONE[kind]}>{KIND_LABEL[kind]}</SignalChip>
-                    <span className="min-w-0 shrink truncate text-xs font-medium text-fg group-hover:text-fg">
-                      {who}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary" title={e.action}>
-                      {auditActionPhrase(e.action)}
-                    </span>
-                    <SignalChip tone="neutral">{relTime(e.created_at)}</SignalChip>
-                  </div>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {body}
     </Card>
   )
 }

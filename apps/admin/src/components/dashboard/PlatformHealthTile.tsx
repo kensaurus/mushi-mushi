@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/dashboard/PlatformHealthTile.tsx
  * PURPOSE: Dashboard tile showing 24h report volume, error class breakdown,
  *          and SDK version drift per platform — enabling operators to spot
- *          platform-specific regressions at a glance.
+ *          platform-specific regressions at a glance. A failed rollup is an
+ *          error with Retry, not the empty "no platforms yet" message.
  */
 
 import { Link } from 'react-router-dom'
@@ -10,6 +11,7 @@ import { usePageData } from '../../lib/usePageData'
 import { CardPanel } from '../ui'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { TileLoadError } from './TileLoadError'
 
 interface PlatformRow {
   platform: string
@@ -38,12 +40,81 @@ function sdkShortName(pkg: string | null): string {
 }
 
 export function PlatformHealthTile({ projectId }: { projectId: string }) {
-  const { data, loading, error } = usePageData<PlatformRollupData>(
+  const { data, loading, error, errorCode, reload } = usePageData<PlatformRollupData>(
     `/v1/admin/projects/${projectId}/platform-rollup`,
     { deps: [projectId] },
   )
 
   const rows = data?.platforms ?? []
+  const body = loading && rows.length === 0 && !error ? (
+    <div role="status" aria-busy="true" className="space-y-1.5">
+      <p className="sr-only">Loading platform health</p>
+      {[1, 2, 3].map((i) => (
+        <div key={i} aria-hidden className="h-7 rounded-sm bg-surface-raised animate-pulse" />
+      ))}
+    </div>
+  ) : error && rows.length === 0 ? (
+    <TileLoadError resource="platform health" error={error} code={errorCode} onRetry={reload} />
+  ) : rows.length === 0 ? (
+    <EmptySectionMessage
+      text="No multi-platform data yet."
+      hint="Send reports from iOS, Android, or Web and they will appear here, segmented by platform."
+    />
+  ) : (
+    <div className="space-y-1">
+      {error ? <TileLoadError stale resource="platform health" error={error} code={errorCode} onRetry={reload} /> : null}
+      {rows.map((row) => {
+        const hasCritical = row.critical_24h > 0
+        const hasHigh = row.high_24h > 0
+        return (
+          <Link
+            key={`${row.platform}-${row.sdk_package}`}
+            to={`/reports?platform=${row.platform}`}
+            className="group flex items-center gap-2 rounded-sm px-2 py-1.5 motion-safe:transition-opacity hover:bg-surface-overlay"
+          >
+            <span
+              className={`inline-flex w-14 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-center text-3xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.platform] ?? CHIP_TONE.neutral}`}
+            >
+              {row.platform}
+            </span>
+
+            <span className="w-12 shrink-0 text-2xs text-fg-muted">
+              {sdkShortName(row.sdk_package)}
+            </span>
+
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <span className="font-mono text-2xs text-fg">{row.reports_24h}</span>
+              <span className="text-3xs text-fg-faint">reports</span>
+              {hasCritical && (
+                <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.dangerSubtle}`}>
+                  {row.critical_24h} crit
+                </span>
+              )}
+              {!hasCritical && hasHigh && (
+                <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.warnSubtle}`}>
+                  {row.high_24h} high
+                </span>
+              )}
+            </span>
+
+            {(row.sdk_versions?.length ?? 0) > 1 && (
+              <span
+                className="shrink-0 text-3xs text-warn"
+                title={`Multiple SDK versions: ${row.sdk_versions!.join(', ')}`}
+              >
+                {row.sdk_versions!.length} versions
+              </span>
+            )}
+            {row.sdk_versions?.length === 1 && (
+              <span className="shrink-0 font-mono text-3xs text-fg-faint">
+                v{row.sdk_versions[0]}
+              </span>
+            )}
+          </Link>
+        )
+      })}
+    </div>
+  )
 
   return (
     <CardPanel
@@ -56,82 +127,7 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
         ) : undefined
       }
     >
-      {loading && (
-        <div className="space-y-1.5">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-7 rounded-sm bg-surface-raised animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <EmptySectionMessage
-          text="Platform rollup unavailable."
-          hint="The /platform-rollup endpoint may not be deployed yet."
-        />
-      )}
-
-      {!loading && !error && rows.length === 0 && (
-        <EmptySectionMessage
-          text="No multi-platform data yet."
-          hint="Send reports from iOS, Android, or Web and they will appear here, segmented by platform."
-        />
-      )}
-
-      {!loading && !error && rows.length > 0 && (
-        <div className="space-y-1">
-          {rows.map((row) => {
-            const hasCritical = row.critical_24h > 0
-            const hasHigh = row.high_24h > 0
-            return (
-              <Link
-                key={`${row.platform}-${row.sdk_package}`}
-                to={`/reports?platform=${row.platform}`}
-                className="group flex items-center gap-2 rounded-sm px-2 py-1.5 motion-safe:transition-opacity hover:bg-surface-overlay"
-              >
-                <span
-                  className={`inline-flex w-14 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-center text-3xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.platform] ?? CHIP_TONE.neutral}`}
-                >
-                  {row.platform}
-                </span>
-
-                <span className="w-12 shrink-0 text-2xs text-fg-muted">
-                  {sdkShortName(row.sdk_package)}
-                </span>
-
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="font-mono text-2xs text-fg">{row.reports_24h}</span>
-                  <span className="text-3xs text-fg-faint">reports</span>
-                  {hasCritical && (
-                    <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.dangerSubtle}`}>
-                      {row.critical_24h} crit
-                    </span>
-                  )}
-                  {!hasCritical && hasHigh && (
-                    <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.warnSubtle}`}>
-                      {row.high_24h} high
-                    </span>
-                  )}
-                </span>
-
-                {(row.sdk_versions?.length ?? 0) > 1 && (
-                  <span
-                    className="shrink-0 text-3xs text-warn"
-                    title={`Multiple SDK versions: ${row.sdk_versions!.join(', ')}`}
-                  >
-                    {row.sdk_versions!.length} versions
-                  </span>
-                )}
-                {row.sdk_versions?.length === 1 && (
-                  <span className="shrink-0 font-mono text-3xs text-fg-faint">
-                    v{row.sdk_versions[0]}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </div>
-      )}
+      {body}
     </CardPanel>
   )
 }

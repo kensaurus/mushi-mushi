@@ -13,9 +13,21 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const page = vi.hoisted(() => ({ data: null as unknown }))
+const page = vi.hoisted(() => ({
+  data: null as unknown,
+  loading: false,
+  error: null as string | null,
+  errorCode: null as string | null,
+  reload: vi.fn(),
+}))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: page.data, loading: false, reload: () => {} }),
+  usePageData: () => ({
+    data: page.data,
+    loading: page.loading,
+    error: page.error,
+    errorCode: page.errorCode,
+    reload: page.reload,
+  }),
 }))
 vi.mock('../../lib/realtime', () => ({ useRealtimeReload: () => ({}) }))
 
@@ -25,6 +37,11 @@ let host: HTMLDivElement
 let root: Root
 
 beforeEach(() => {
+  page.data = null
+  page.loading = false
+  page.error = null
+  page.errorCode = null
+  page.reload = vi.fn()
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -66,6 +83,57 @@ describe('TeamActivityTile', () => {
     expect(text).toContain('Member')
     expect(text).not.toContain('Automation')
     expect(text).not.toContain('Agent')
+  })
+})
+
+describe('TeamActivityTile states', () => {
+  function render(projectId: string | null = 'p1') {
+    act(() => root.render(createElement(MemoryRouter, null, createElement(TeamActivityTile, { projectId }))))
+  }
+
+  it('shows an error with retry when the audit fetch fails, not the empty list', () => {
+    page.error = 'Request failed'
+    render()
+    const text = host.textContent ?? ''
+    expect(text).toContain("Couldn't load team activity.")
+    expect(text).not.toContain('No team activity yet.')
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')
+    expect(retry).toBeTruthy()
+    act(() => retry!.click())
+    expect(page.reload).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the last rows when a refresh fails, and still offers retry', () => {
+    page.data = {
+      count: 1,
+      logs: [
+        { id: '1', actor_id: '00000000-0000-0000-0000-000000000000', actor_email: 'retention-sweep@mushi-mushi', action: 'retention.sweep', resource_type: 'project', resource_id: null, created_at: '2026-10-03T00:00:00Z' },
+      ],
+    }
+    page.error = 'Request failed'
+    render()
+    expect(host.textContent).toContain('retention sweep')
+    expect(host.textContent).toContain("Couldn't refresh team activity.")
+    expect(host.textContent).not.toContain('No team activity yet.')
+  })
+
+  it('shows the empty state only when the fetch succeeded with no rows', () => {
+    page.data = { count: 0, logs: [] }
+    render()
+    expect(host.textContent).toContain('No team activity yet.')
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('names the loading state while the first fetch is in flight', () => {
+    page.loading = true
+    render()
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('Loading team activity')
+  })
+
+  it('asks for a project instead of an empty activity list when none is selected', () => {
+    render(null)
+    expect(host.textContent).toContain('Pick a project to see who did what.')
+    expect(host.textContent).not.toContain('No team activity yet.')
   })
 })
 

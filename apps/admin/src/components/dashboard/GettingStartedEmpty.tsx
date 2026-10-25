@@ -28,10 +28,11 @@ import { startFirstRunTour } from '../FirstRunTour'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { FeedbackHubStrip } from '../support/FeedbackHubStrip'
 import { ActionPill, ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
+import { firstLoopPlanStatus } from './firstLoopPlanStatus'
 
 interface LoopStage {
   id: PdcaStageId
-  cta: { to?: string; onClick?: () => void; label: string; primary?: boolean }
+  cta: { to?: string; onClick?: () => void; label: string; primary?: boolean; busy?: boolean }
   state: 'active' | 'next' | 'done'
   /** Per-stage status line under the body — what's currently happening. */
   status?: string
@@ -150,12 +151,11 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
               testStatus === 'fail' ? 'Retry test' :
               'Send test report',
             primary: testStatus !== 'pass',
+            busy: testStatus === 'running',
           }
         : { onClick: onSetup, label: 'Open setup wizard', primary: true },
       state: hasReports ? 'done' : 'active',
-      status: sdkInstalled
-        ? 'SDK is connected — fire a synthetic report or wait for a real one.'
-        : 'Drop the Mushi widget into your app so end-users can flag bugs without DevTools.',
+      status: firstLoopPlanStatus(sdkInstalled, testStatus),
     },
     {
       id: 'do',
@@ -257,7 +257,9 @@ function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number
         </div>
       </div>
       <ContainedBlock tone="muted" className="min-h-12">
-        <p className="text-2xs text-fg-secondary leading-snug">{stage.status ?? outcome.outcome}</p>
+        <p className="text-2xs text-fg-secondary leading-snug" aria-live={stage.id === 'plan' ? 'polite' : undefined}>
+          {stage.status ?? outcome.outcome}
+        </p>
       </ContainedBlock>
       <div className="mt-2.5">
         <StageCta cta={cta} isLocked={isLocked} />
@@ -304,7 +306,8 @@ function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean 
       size="sm"
       variant={cta.primary ? 'primary' : 'ghost'}
       onClick={cta.onClick}
-      disabled={isLocked}
+      disabled={isLocked || cta.busy}
+      loading={cta.busy}
     >
       {cta.label}
     </Btn>

@@ -1,12 +1,14 @@
 /**
  * FILE: apps/admin/src/components/dashboard/QaCoverageTile.tsx
  * PURPOSE: Dashboard tile summarising the QA Coverage suite — total stories,
- *          pass rate, top failing story, and a link to /qa-coverage.
+ *          pass rate, top failing story, and a link to /qa-coverage. A failed
+ *          summary is an error with Retry, not the empty "no stories" line.
  */
 
 import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { CardPanel, PanelSubheader } from '../ui'
+import { TileLoadError } from './TileLoadError'
 
 interface CoverageSummary {
   total: number
@@ -26,14 +28,72 @@ function PassRateBar({ pct }: { pct: number }) {
 }
 
 export function QaCoverageTile({ projectId }: { projectId: string }) {
-  const { data, loading, error } = usePageData<CoverageSummary>(
+  const { data, loading, error, errorCode, reload } = usePageData<CoverageSummary>(
     `/v1/admin/projects/${projectId}/qa-coverage-summary`,
     { deps: [projectId] },
   )
 
+  const hasStories = Boolean(data && data.total > 0)
   const passRate = data && data.total > 0
     ? Math.round((data.passing / data.total) * 100)
     : null
+
+  const body = loading && !hasStories && !error ? (
+    <div role="status" aria-busy="true" className="space-y-1">
+      <p className="sr-only">Loading QA coverage</p>
+      <div aria-hidden className="h-4 w-full animate-pulse rounded-sm bg-surface-raised" />
+      <div aria-hidden className="h-4 w-3/4 animate-pulse rounded-sm bg-surface-raised" />
+    </div>
+  ) : error && !hasStories ? (
+    <TileLoadError resource="QA coverage" error={error} code={errorCode} onRetry={reload} />
+  ) : data && data.total > 0 ? (
+    <div className="space-y-2">
+      {error ? <TileLoadError stale resource="QA coverage" error={error} code={errorCode} onRetry={reload} /> : null}
+      <div className="flex items-center gap-3 text-2xs">
+        <span className="font-mono font-semibold text-fg">{data.total}</span>
+        <span className="text-fg-muted">stories</span>
+        {passRate !== null && (
+          <span
+            className={`ml-auto font-semibold ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}
+          >
+            {passRate}% passing
+          </span>
+        )}
+      </div>
+
+      {passRate !== null && <PassRateBar pct={passRate} />}
+
+      {data.top_failing.length > 0 && (
+        <div className="min-w-0 space-y-1 pt-2">
+          <PanelSubheader title="Failing" />
+          {data.top_failing.slice(0, 3).map((f) => (
+            <Link
+              key={f.story_id}
+              to={`/qa-coverage?highlight=${f.story_id}`}
+              className="group -mx-1 flex items-center gap-2 rounded-sm px-1 py-0.5 motion-safe:transition-opacity hover:bg-surface-overlay"
+            >
+              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary group-hover:text-fg">
+                {f.name}
+              </span>
+              {f.pass_rate_pct !== null && (
+                <span className="shrink-0 font-mono text-3xs text-danger">
+                  {f.pass_rate_pct}%
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className="space-y-1 text-2xs text-fg-faint">
+      <p>No QA stories yet.</p>
+      <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+        Create your first user story test →
+      </Link>
+    </div>
+  )
 
   return (
     <CardPanel
@@ -51,66 +111,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
         </Link>
       }
     >
-      {loading && (
-        <div className="space-y-1">
-          <div className="h-4 w-full animate-pulse rounded-sm bg-surface-raised" />
-          <div className="h-4 w-3/4 animate-pulse rounded-sm bg-surface-raised" />
-        </div>
-      )}
-
-      {error && (
-        <p className="text-2xs italic text-fg-faint">QA Coverage not available.</p>
-      )}
-
-      {!loading && !error && !data?.total && (
-        <div className="space-y-1 text-2xs text-fg-faint">
-          <p>No QA stories yet.</p>
-          <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-            Create your first user story test →
-          </Link>
-        </div>
-      )}
-
-      {!loading && !error && data && data.total > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 text-2xs">
-            <span className="font-mono font-semibold text-fg">{data.total}</span>
-            <span className="text-fg-muted">stories</span>
-            {passRate !== null && (
-              <span
-                className={`ml-auto font-semibold ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}
-              >
-                {passRate}% passing
-              </span>
-            )}
-          </div>
-
-          {passRate !== null && <PassRateBar pct={passRate} />}
-
-          {data.top_failing.length > 0 && (
-            <div className="min-w-0 space-y-1 pt-2">
-              <PanelSubheader title="Failing" />
-              {data.top_failing.slice(0, 3).map((f) => (
-                <Link
-                  key={f.story_id}
-                  to={`/qa-coverage?highlight=${f.story_id}`}
-                  className="group -mx-1 flex items-center gap-2 rounded-sm px-1 py-0.5 motion-safe:transition-opacity hover:bg-surface-overlay"
-                >
-                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary group-hover:text-fg">
-                    {f.name}
-                  </span>
-                  {f.pass_rate_pct !== null && (
-                    <span className="shrink-0 font-mono text-3xs text-danger">
-                      {f.pass_rate_pct}%
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {body}
     </CardPanel>
   )
 }
