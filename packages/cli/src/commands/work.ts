@@ -84,13 +84,13 @@ export function hasLiveAttempt(attempts: readonly AttemptSummary[]): boolean {
   )
 }
 
-/** @internal Exported for tests only. `bugfix/MUSHI-<id>-local-cursor`, the cloud agents' shape (github-pr.ts) with a local suffix. */
 /** @internal Exported for tests only. Pure: the first of base, base-2, base-3… that is not already on origin. */
 export function freeBranchName(base: string, onOrigin: ReadonlySet<string>): string {
   if (!onOrigin.has(base)) return base
   for (let n = 2; ; n++) if (!onOrigin.has(`${base}-${n}`)) return `${base}-${n}`
 }
 
+/** @internal Exported for tests only. `bugfix/MUSHI-<id>-local-cursor`, the cloud agents' shape (github-pr.ts) with a local suffix. */
 export function branchNameFor(reportId: string, category?: string | null, agent = 'cursor'): string {
   const c = (category ?? 'bug').toLowerCase()
   const prefix =
