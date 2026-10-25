@@ -851,6 +851,14 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
       `${stats.byokKeysFailing} BYOK key${stats.byokKeysFailing === 1 ? '' : 's'} failing probe`,
     )
   }
+  const expiring = stats.byokKeysExpiring ?? 0
+  if (expiring > 0) {
+    return attentionBadge(
+      expiring,
+      'warn',
+      `${expiring} BYOK key${expiring === 1 ? '' : 's'} expiring soon`,
+    )
+  }
   if (stats.byokKeysUntested > 0) {
     return attentionBadge(
       stats.byokKeysUntested,
