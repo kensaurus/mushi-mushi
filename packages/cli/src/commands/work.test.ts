@@ -3,6 +3,7 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
+  freeBranchName,
   isMissingModuleFailure,
   failureTail,
   agentEnv,
@@ -229,5 +230,14 @@ describe('wrongAppReason', () => {
     expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-a')).toBeNull()
     expect(wrongAppReason({ id: 'r1' }, 'app-a')).toBeNull()
     expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, undefined)).toBeNull()
+  })
+})
+
+describe('freeBranchName', () => {
+  it('keeps the first name when it is free, else takes the next number', () => {
+    const b = 'bugfix/MUSHI-1-local-cursor'
+    expect(freeBranchName(b, new Set())).toBe(b)
+    expect(freeBranchName(b, new Set([b]))).toBe(`${b}-2`)
+    expect(freeBranchName(b, new Set([b, `${b}-2`]))).toBe(`${b}-3`)
   })
 })
