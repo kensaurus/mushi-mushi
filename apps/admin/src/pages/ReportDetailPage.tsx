@@ -3,7 +3,9 @@
  * PURPOSE: One report in the admin console — diagnosis first, then triage,
  *          evidence, and the reply thread.
  *
- * The shareable skill link is skillTriagePermalink (project + skill). Section
+ * The shareable skill link is skillTriagePermalink (project + skill). Each
+ * recommended skill shows a truncated preview of that URL (full value in the
+ * title and the copy button tooltip) beside a small copy button. Section
  * icons distinguish console logs from the two timelines.
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
@@ -318,8 +320,24 @@ interface ReportDetailViewProps {
   onReload: () => void
 }
 
+/**
+ * On-screen form of a triage permalink. Drops the origin and keeps the report
+ * path plus the query, so ?project= and the skill stay readable. The full
+ * absolute URL stays on the element's title and in the copy button tooltip.
+ */
+function previewTriageUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const pathAndQuery = `${parsed.pathname}${parsed.search}`
+    if (!parsed.origin || pathAndQuery.length >= url.length) return url
+    return `…${pathAndQuery}`
+  } catch {
+    return url
+  }
+}
+
 // ── Recommended Skills section ────────────────────────────────────────────────
-function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
+export function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
   const { push } = useToast()
   // Memoize addToast so it has a stable identity — an inline arrow would be
   // re-created on every render and invalidate the startPipeline useCallback.
@@ -410,12 +428,19 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
                 <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
                 <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
                 <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
-                <p className="mt-1 inline-flex items-center gap-1 text-2xs text-fg-muted">
-                  Share triage link
+                <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-2xs text-fg-muted">
+                  <span className="shrink-0">Share triage link</span>
+                  <code
+                    className="min-w-0 break-all font-mono text-brand"
+                    title={triageHref}
+                    data-testid={`skill-triage-url-${skill.slug}`}
+                  >
+                    {previewTriageUrl(triageHref)}
+                  </code>
                   <CopyButton
                     value={triageHref}
-                    label={`Copy triage link for ${skill.title || skill.slug}`}
-                    size="md"
+                    label={`Copy triage link for ${skill.title || skill.slug}: ${triageHref}`}
+                    size="sm"
                   />
                 </p>
               </div>
