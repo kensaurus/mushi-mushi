@@ -129,7 +129,8 @@ export function PageHeaderBar({
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
   // On a page hub (Home, App health, Team) the view switcher renders here,
-  // under the title — every other page leads with its title too.
+  // under the title — every other page leads with its title too. Only the
+  // first header in the view receives it (lib/hubViewSlot).
   const hubSwitcher = useHubViewSwitcher()
 
   const chipKey =

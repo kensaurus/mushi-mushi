@@ -10,12 +10,13 @@
  *          04f7bd36). The switcher now renders inside the view's
  *          PageHeaderBar, under the title, and still renders above a view
  *          that has no header at all (skeleton, empty state, load error).
+ *          A view that mounts two headers still draws the switcher once.
  *
  * DEPENDENCIES: react-dom/client + act (no testing-library in this app);
  *               useEntitlements is mocked because it fetches.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -101,5 +102,83 @@ describe('PageHubView', () => {
     const content = container.querySelector('p')
     expect(tabs).not.toBeNull()
     expect(content!.compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  })
+
+  it('renders the view switcher once when a view mounts two page headers', () => {
+    renderHub(() =>
+      createElement(
+        'div',
+        null,
+        createElement(PageHeaderBar, { title: 'Home', showCopyLink: false }),
+        createElement(PageHeaderBar, { title: 'Section', showCopyLink: false }),
+      ),
+    )
+
+    const titles = Array.from(container.querySelectorAll('h2'))
+    const tabs = switcher()
+    expect(titles.map((t) => t.textContent)).toEqual(['Home', 'Section'])
+    expect(container.querySelectorAll('[role="radiogroup"]').length).toBe(1)
+    expect(tabs).not.toBeNull()
+    // The only copy sits under the first title, not under the nested one.
+    expect(titles[0].compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(titles[1].compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  })
+
+  it('renders the view switcher once under StrictMode when two headers mount', () => {
+    act(() => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(PageHubView, {
+              hub: HOME_HUB,
+              render: {
+                today: () =>
+                  createElement(
+                    'div',
+                    null,
+                    createElement(PageHeaderBar, { title: 'Home', showCopyLink: false }),
+                    createElement(PageHeaderBar, { title: 'Section', showCopyLink: false }),
+                  ),
+              },
+            }),
+          ),
+        ),
+      )
+    })
+
+    const titles = Array.from(container.querySelectorAll('h2'))
+    expect(titles.map((t) => t.textContent)).toEqual(['Home', 'Section'])
+    expect(container.querySelectorAll('[role="radiogroup"]').length).toBe(1)
+    const tabs = switcher()
+    expect(titles[0].compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(titles[1].compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  })
+
+  it('hands the switcher to the next header when the first one unmounts', () => {
+    function View() {
+      const [first, setFirst] = useState(true)
+      return createElement(
+        'div',
+        null,
+        createElement('button', { type: 'button', onClick: () => setFirst(false) }, 'Drop first'),
+        first ? createElement(PageHeaderBar, { title: 'Home', showCopyLink: false }) : null,
+        createElement(PageHeaderBar, { title: 'Section', showCopyLink: false }),
+      )
+    }
+    renderHub(() => createElement(View))
+
+    expect(container.querySelectorAll('[role="radiogroup"]').length).toBe(1)
+    const drop = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Drop first')
+    act(() => { drop?.click() })
+
+    const titles = Array.from(container.querySelectorAll('h2'))
+    const tabs = switcher()
+    expect(titles.map((t) => t.textContent)).toEqual(['Section'])
+    expect(container.querySelectorAll('[role="radiogroup"]').length).toBe(1)
+    expect(titles[0].compareDocumentPosition(tabs!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

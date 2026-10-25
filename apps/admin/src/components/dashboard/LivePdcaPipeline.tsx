@@ -22,7 +22,10 @@
  *          1440x900. "Hide" is offered at every maturity so a user who never
  *          merged a fix can still dismiss it. The choice persists per project
  *          in localStorage: one mature app's expanded explainer must not
- *          expand every other app in the same browser.
+ *          expand every other app in the same browser. The choice is read
+ *          for the current project during render, so a project switch does
+ *          not paint one frame of the previous app. While the merged-fix
+ *          count is still unknown the explainer stays on the one-line link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -49,7 +52,8 @@ interface Props {
   /**
    * Merged auto-fixes on the active project. Anything above 0 means the user
    * has already watched a bug go round the loop, so the explainer defaults to
-   * a one-line disclosure instead of four cards.
+   * a one-line disclosure instead of four cards. `null` or omitted means the
+   * count is not known yet — stay collapsed instead of treating that as zero.
    */
   mergedFixCount?: number | null
 }
@@ -104,7 +108,19 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
   const [activeStage, setActiveStage] = useState<PdcaStageId | null>(null)
   const [doneStages, setDoneStages] = useState<Set<PdcaStageId>>(new Set())
   const [livePulse, setLivePulse] = useState<PdcaStageId | null>(null)
-  const [explainerPref, setExplainerPref] = useState<boolean | null>(() => readExplainerPref(projectId))
+  // Tagged with the project it belongs to. This component stays mounted
+  // across a project switch; copying the next project's preference in an
+  // effect would paint one frame of the previous app's explainer. A choice
+  // for a different project is ignored and the current project's stored
+  // value is read during render.
+  const [explainerChoice, setExplainerChoice] = useState<{
+    projectId: string | null | undefined
+    pref: boolean
+  } | null>(null)
+  const explainerPref =
+    explainerChoice !== null && explainerChoice.projectId === projectId
+      ? explainerChoice.pref
+      : readExplainerPref(projectId)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const livePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -114,12 +130,6 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
       if (livePulseTimer.current) clearTimeout(livePulseTimer.current)
     }
   }, [])
-
-  // Switching project switches the preference: the component stays mounted
-  // across a project switch, so the stored choice has to be re-read.
-  useEffect(() => {
-    setExplainerPref(readExplainerPref(projectId))
-  }, [projectId])
 
   // Snapshot stage counts on each render so we can diff against the next
   // payload. We compare to a ref instead of state to avoid an extra render
@@ -204,14 +214,15 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, merg
 
   // A project that has merged a fix already knows the loop, so the explainer
   // starts as one line there and the triage queue stays above the fold. An
-  // explicit choice wins over that default.
-  const explainerOpen = explainerPref ?? (mergedFixCount ?? 0) === 0
+  // explicit choice wins over that default. An unknown count is not zero:
+  // zero would flash the four cards while setup is still loading.
+  const explainerOpen = explainerPref ?? (typeof mergedFixCount === 'number' && mergedFixCount === 0)
 
   // The write stays out of the setState updater: React may run an updater
   // twice (StrictMode), and a persisted side effect does not belong there.
   const toggleExplainer = useCallback(() => {
     const next = !explainerOpen
-    setExplainerPref(next)
+    setExplainerChoice({ projectId, pref: next })
     writeExplainerPref(projectId, next)
   }, [explainerOpen, projectId])
 

@@ -5,6 +5,8 @@
  *          orchestration only — data load + composition. Each row is a
  *          dedicated subcomponent in components/dashboard/* so they can
  *          evolve independently and stay below the 30-line-function limit.
+ *          explainerMergedFixCount stays undefined until the active project
+ *          has loaded, so a mature app does not flash the four-card explainer.
  */
 
 import { useCallback, useMemo, useState } from 'react'
@@ -58,6 +60,19 @@ function inferRunningStage(data: DashboardData): PdcaStageId | null {
   if (recent.kind === 'report') return 'plan'
   if (recent.kind === 'fix') return 'do'
   return null
+}
+
+/**
+ * Merged-fix count for the "How Mushi works" explainer.
+ * Undefined while setup is loading or the active project is not in hand.
+ * Zero would mean "brand new" and flash the four cards on a mature project.
+ */
+export function explainerMergedFixCount(
+  loading: boolean,
+  activeProject: { merged_fix_count: number } | null,
+): number | undefined {
+  if (loading || activeProject == null) return undefined
+  return activeProject.merged_fix_count
 }
 
 /** Plain name for an integration health kind ("sentry" → "Sentry"). */
@@ -390,7 +405,7 @@ export function DashboardPage() {
       <LivePdcaPipeline
         projectId={setup.activeProject?.project_id}
         pdcaStages={data.pdcaStages}
-        mergedFixCount={setup.activeProject?.merged_fix_count ?? 0}
+        mergedFixCount={explainerMergedFixCount(setup.loading, setup.activeProject)}
         onDemoReportSent={() => {
           setup.reload()
           reload()
