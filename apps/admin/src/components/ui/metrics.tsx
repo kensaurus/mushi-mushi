@@ -666,13 +666,20 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
             />
           </span>
         ) : (
-          <span className="truncate" title={label}>
+          // flex-1 like the linked label above: without it the (i) icon sits
+          // inline after the text, so a row mixing linked and plain cards has
+          // its help icons at different x positions.
+          <span className="flex-1 min-w-0 truncate" title={label}>
             {label}
           </span>
         )}
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
         {to ? (
           <IconArrowRight size={12} className="stat-card-arrow ml-auto shrink-0 text-brand" />
+        ) : help ? (
+          // Reserves the arrow's width so the (i) lands on the same x as a
+          // linked card's in the same grid row.
+          <span aria-hidden className="h-3 w-3 shrink-0" />
         ) : null}
       </div>
       <div className="flex items-baseline gap-2">
