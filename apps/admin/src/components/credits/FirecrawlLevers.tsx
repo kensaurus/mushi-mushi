@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Btn, Input, ResultChip, Toggle } from '../ui'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { expiryLabel, firecrawlPace, paceLine, type WatchCost } from '../../lib/creditPlan'
@@ -46,10 +47,13 @@ interface Props {
   balance: FirecrawlBalance | null
   /** null while the project list is still loading. */
   projects: Array<{ id: string; name: string }> | null
+  /** Set when the app list failed. `projects` may still hold the last list. */
+  projectsError?: string | null
+  onRetryProjects?: () => void
   now: Date
 }
 
-export function FirecrawlLevers({ balance, projects, now }: Props) {
+export function FirecrawlLevers({ balance, projects, projectsError, onRetryProjects, now }: Props) {
   const [apps, setApps] = useState<AppWatch[] | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
@@ -128,8 +132,14 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
       )}
       {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
 
-      {!apps && <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>}
-      {apps && (
+      {projects && projectsError && <PanelFetchNote stale onRetry={onRetryProjects} />}
+      {projects == null && projectsError ? (
+        <PanelFetchNote message="Couldn't load your apps." onRetry={onRetryProjects} />
+      ) : !apps ? (
+        <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>
+      ) : apps.length === 0 ? (
+        <p className="text-xs text-fg-muted">No apps yet. Create one to watch its live site.</p>
+      ) : (
         <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
           {apps.map((a) => {
             const w = a.watch

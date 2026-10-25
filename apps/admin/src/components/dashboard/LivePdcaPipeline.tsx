@@ -203,6 +203,12 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
         ))}
       </ol>
 
+      {demoState === 'error' && (
+        <p role="alert" className="px-4 pb-1 text-xs text-danger">
+          Couldn&apos;t send the test report. Try again when you&apos;re ready.
+        </p>
+      )}
+
       <footer className="border-t border-edge-subtle px-4 py-2">
         <p className="text-3xs text-fg-faint leading-relaxed">
           Click any stage to jump straight in. Every bug your users feel runs through the same four steps.

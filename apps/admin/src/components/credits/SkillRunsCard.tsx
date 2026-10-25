@@ -11,6 +11,7 @@
 import { Link } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Btn, Input, SelectField, Toggle } from '../ui'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { useToast } from '../../lib/toast'
 import { loadSkillRuns, skillRunLine, startSkillRun, stopSkillRun, type SkillRun, type SkillRunSkill } from '../../lib/skillRuns'
 
@@ -19,12 +20,16 @@ const STATUS_TONE = { active: 'info', done: 'ok', stopped: 'warn' } as const
 
 interface Props {
   projects: Array<{ id: string; name: string }> | null
+  /** Set when the app list failed. `projects` may still hold the last list. */
+  projectsError?: string | null
+  onRetryProjects?: () => void
 }
 
-export function SkillRunsCard({ projects }: Props) {
+export function SkillRunsCard({ projects, projectsError, onRetryProjects }: Props) {
   const toast = useToast()
   const [runs, setRuns] = useState<SkillRun[] | null>(null)
   const [skills, setSkills] = useState<SkillRunSkill[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [projectId, setProjectId] = useState('')
   const [skillSlug, setSkillSlug] = useState('audit-accessibility')
   const [scope, setScope] = useState('')
@@ -38,7 +43,10 @@ export function SkillRunsCard({ projects }: Props) {
       // An API without skill runs answers another shape: show none rather than break the page.
       setRuns(Array.isArray(res.data.runs) ? res.data.runs : [])
       setSkills(Array.isArray(res.data.skills) ? res.data.skills : [])
+      setLoadError(null)
+      return
     }
+    setLoadError(res.error?.message ?? "Couldn't load skill runs.")
   }, [])
   useEffect(() => {
     void load()
@@ -82,6 +90,12 @@ export function SkillRunsCard({ projects }: Props) {
         Improve an app with one skill at a time, on the app&apos;s own Cursor key. Each round is a pull request: the agent measures first, changes only the part you name, and
         Opus reviews it. The next round builds on the last; the run ends when the agent finds nothing left.
       </p>
+      {projects == null && !projectsError && <p className="text-xs text-fg-muted">Reading your apps…</p>}
+      {projects == null && projectsError && <PanelFetchNote message="Couldn't load your apps." onRetry={onRetryProjects} />}
+      {projects && projectsError && <PanelFetchNote stale onRetry={onRetryProjects} />}
+      {projects && projects.length === 0 && (
+        <p className="text-xs text-fg-muted">No apps yet. Create one before starting a skill run.</p>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField label="App" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={!projects?.length}>
           {(projects ?? []).map((p) => (
@@ -122,6 +136,18 @@ export function SkillRunsCard({ projects }: Props) {
       <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
         Start skill run
       </Btn>
+
+      {runs == null && !loadError && <p className="text-xs text-fg-muted">Reading skill runs…</p>}
+      {loadError && (
+        <PanelFetchNote
+          stale={runs != null}
+          message="Couldn't load skill runs."
+          onRetry={() => void load()}
+        />
+      )}
+      {runs && runs.length === 0 && (
+        <p className="text-xs text-fg-muted">No skill runs yet. Start one above; the first round is filed within 10 minutes.</p>
+      )}
 
       {runs && runs.length > 0 && (
         <ul className="divide-y divide-edge-subtle border-t border-edge-subtle">

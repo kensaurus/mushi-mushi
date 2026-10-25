@@ -7,6 +7,7 @@
 import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { CardPanel, PanelSubheader } from '../ui'
+import { PanelFetchNote } from '../PanelFetchNote'
 
 interface CoverageSummary {
   total: number
@@ -26,7 +27,7 @@ function PassRateBar({ pct }: { pct: number }) {
 }
 
 export function QaCoverageTile({ projectId }: { projectId: string }) {
-  const { data, loading, error } = usePageData<CoverageSummary>(
+  const { data, loading, error, reload } = usePageData<CoverageSummary>(
     `/v1/admin/projects/${projectId}/qa-coverage-summary`,
     { deps: [projectId] },
   )
@@ -34,6 +35,8 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
   const passRate = data && data.total > 0
     ? Math.round((data.passing / data.total) * 100)
     : null
+  const hasStories = (data?.total ?? 0) > 0
+  const failedFirst = Boolean(error) && data == null
 
   return (
     <CardPanel
@@ -51,18 +54,18 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
         </Link>
       }
     >
-      {loading && (
-        <div className="space-y-1">
+      {loading && data == null && (
+        <div className="space-y-1" aria-busy="true" aria-label="Loading QA coverage">
           <div className="h-4 w-full animate-pulse rounded-sm bg-surface-raised" />
           <div className="h-4 w-3/4 animate-pulse rounded-sm bg-surface-raised" />
         </div>
       )}
 
-      {error && (
-        <p className="text-2xs italic text-fg-faint">QA Coverage not available.</p>
-      )}
+      {failedFirst && <PanelFetchNote message="Couldn't load QA coverage." onRetry={() => reload()} />}
 
-      {!loading && !error && !data?.total && (
+      {error && data != null && <PanelFetchNote stale className="mb-1.5" onRetry={() => reload()} />}
+
+      {!loading && !failedFirst && !hasStories && (
         <div className="space-y-1 text-2xs text-fg-faint">
           <p>No QA stories yet.</p>
           <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
@@ -71,7 +74,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {!loading && !error && data && data.total > 0 && (
+      {hasStories && data && (
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-2xs">
             <span className="font-mono font-semibold text-fg">{data.total}</span>

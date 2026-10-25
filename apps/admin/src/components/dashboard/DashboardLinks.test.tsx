@@ -19,6 +19,7 @@ const send = vi.hoisted(() => ({ fn: vi.fn() }))
 vi.mock('../../lib/useSendTestReport', () => ({ useSendTestReport: () => send.fn }))
 
 import { FirstReportHero } from './FirstReportHero'
+import { LivePdcaPipeline } from './LivePdcaPipeline'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await Promise.resolve()
@@ -66,5 +67,23 @@ describe('FirstReportHero', () => {
       await flush()
     })
     expect(send.fn).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('LivePdcaPipeline', () => {
+  it('keeps the demo button usable and says when the test report fails', async () => {
+    send.fn.mockResolvedValue({ ok: false, message: 'Network down' })
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(LivePdcaPipeline, { projectId: 'p1' })))
+      await flush()
+    })
+    await act(async () => {
+      button('Watch a bug travel through Mushi')?.click()
+      await flush()
+    })
+    expect(container.textContent).toContain("Couldn't send the test report.")
+    const again = button('Watch a bug travel through Mushi')
+    expect(again).toBeDefined()
+    expect(again?.disabled).toBe(false)
   })
 })

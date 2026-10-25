@@ -9,6 +9,7 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { ResultChip, Toggle } from '../ui'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
 import { expiryLabel } from '../../lib/creditPlan'
@@ -19,6 +20,10 @@ import type { ReviewFollowupsResponse } from '../settings/reviewFollowups'
 interface Props {
   spendDown: SpendDownResponse | null
   followups: ReviewFollowupsResponse | null
+  /** True only while the first follow-up read is in flight. */
+  followupsLoading?: boolean
+  followupsError?: string | null
+  onRetryFollowups?: () => void
   now: Date
   onChanged: () => void
 }
@@ -29,7 +34,7 @@ function canChange(k: SpendDownKeyStatus, canManageOrg: boolean): boolean {
   return true
 }
 
-export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
+export function CursorLevers({ spendDown, followups, followupsLoading = false, followupsError, onRetryFollowups, now, onChanged }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null)
   const keys = spendDown?.keys ?? []
@@ -48,7 +53,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
     if (res.ok) onChanged()
   }
 
-  if (keys.length === 0 && !fu) {
+  if (keys.length === 0 && !fu && !followupsLoading && !followupsError) {
     return (
       <p className="text-sm text-fg-muted">
         No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
@@ -59,57 +64,73 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
 
   return (
     <div className="space-y-3">
+      {keys.length === 0 && (
+        <p className="text-sm text-fg-muted">
+          No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
+          and Mushi can send open bugs to Cursor before its credits expire.
+        </p>
+      )}
       {keys.length > 0 && (
         <p className="text-xs text-fg-muted">The Cursor keys the open app can use. Another app&apos;s keys show when you switch to it.</p>
       )}
-      <ul className="divide-y divide-edge-subtle">
-        {keys.map((k) => {
-          const line = spendDownLine(k)
-          const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
-          const expiry = expiryLabel(k.creditsExpireAt, now)
-          const editable = canChange(k, canManageOrg)
-          return (
-            <li key={k.id} className="space-y-1 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm">
-                  <span className="font-mono text-fg-secondary">{k.keyHint ?? '…'}</span>
-                  {k.label && <span className="ml-2 text-fg-muted">{k.label}</span>}
-                  {expiry && <span className="ml-2 text-xs text-fg-muted">· {expiry}</span>}
+      {keys.length > 0 && (
+        <ul className="divide-y divide-edge-subtle">
+          {keys.map((k) => {
+            const line = spendDownLine(k)
+            const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
+            const expiry = expiryLabel(k.creditsExpireAt, now)
+            const editable = canChange(k, canManageOrg)
+            return (
+              <li key={k.id} className="space-y-1 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm">
+                    <span className="font-mono text-fg-secondary">{k.keyHint ?? '…'}</span>
+                    {k.label && <span className="ml-2 text-fg-muted">{k.label}</span>}
+                    {expiry && <span className="ml-2 text-xs text-fg-muted">· {expiry}</span>}
+                  </p>
+                  <Toggle
+                    label="Fix open bugs before the credits expire"
+                    checked={k.enabled}
+                    disabled={!editable || busy === k.id || (!k.enabled && !k.creditsExpireAt)}
+                    onChange={(v) =>
+                      void save(
+                        k.id,
+                        () => apiFetch(`/v1/admin/byok/keys/${k.id}/spend-down`, { method: 'PATCH', body: JSON.stringify({ enabled: v }) }),
+                        v ? 'Spend-down on.' : 'Spend-down off.',
+                      )
+                    }
+                  />
+                </div>
+                <p className="text-xs text-fg-secondary">
+                  {line.text} Runs on {modelName}.{' '}
+                  <Link className="text-brand hover:underline" to="/settings?tab=byok">Change</Link>
                 </p>
-                <Toggle
-                  label="Fix open bugs before the credits expire"
-                  checked={k.enabled}
-                  disabled={!editable || busy === k.id || (!k.enabled && !k.creditsExpireAt)}
-                  onChange={(v) =>
-                    void save(
-                      k.id,
-                      () => apiFetch(`/v1/admin/byok/keys/${k.id}/spend-down`, { method: 'PATCH', body: JSON.stringify({ enabled: v }) }),
-                      v ? 'Spend-down on.' : 'Spend-down off.',
-                    )
-                  }
-                />
-              </div>
-              <p className="text-xs text-fg-secondary">
-                {line.text} Runs on {modelName}.{' '}
-                <Link className="text-brand hover:underline" to="/settings?tab=byok">Change</Link>
-              </p>
-              {!k.enabled && !k.creditsExpireAt && (
-                <p className="text-xs text-fg-muted">
-                  Set the expiry date first in{' '}
-                  <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
-                </p>
-              )}
-              {!editable && <p className="text-xs text-fg-muted">An owner or admin of this key can change it.</p>}
-              {spendDownOutOfWork(k) && (
-                <p className="text-xs text-fg-muted">
-                  Nothing left to send right now. Watch more of your sites below to find more bugs.
-                </p>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+                {!k.enabled && !k.creditsExpireAt && (
+                  <p className="text-xs text-fg-muted">
+                    Set the expiry date first in{' '}
+                    <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
+                  </p>
+                )}
+                {!editable && <p className="text-xs text-fg-muted">An owner or admin of this key can change it.</p>}
+                {spendDownOutOfWork(k) && (
+                  <p className="text-xs text-fg-muted">
+                    Nothing left to send right now. Watch more of your sites below to find more bugs.
+                  </p>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
+      {followupsLoading && !fu && <p className="text-xs text-fg-muted">Reading review follow-ups…</p>}
+      {followupsError && (
+        <PanelFetchNote
+          stale={Boolean(fu)}
+          message="Couldn't load review follow-ups."
+          onRetry={onRetryFollowups}
+        />
+      )}
       {fu && (
         <div className="space-y-1 border-t border-edge-subtle pt-2">
           <div className="flex flex-wrap items-center justify-between gap-2">

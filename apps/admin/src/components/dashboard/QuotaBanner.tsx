@@ -8,6 +8,7 @@
 
 import { Card } from '../ui'
 import { usePageData } from '../../lib/usePageData'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { ActionPill, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface QuotaProject {
@@ -25,8 +26,16 @@ interface QuotaResponse {
 }
 
 export function QuotaBanner() {
-  const { data, loading, error } = usePageData<QuotaResponse>('/v1/admin/billing')
-  if (loading || error || !data) return null
+  const { data, loading, error, reload } = usePageData<QuotaResponse>('/v1/admin/billing')
+  if (loading && !data) return null
+  if (error && !data) {
+    return (
+      <div className="mb-4">
+        <PanelFetchNote message="Couldn't check report quota." onRetry={() => reload()} />
+      </div>
+    )
+  }
+  if (!data) return null
 
   const visible = data.projects
     .filter((p) => {
@@ -40,10 +49,11 @@ export function QuotaBanner() {
       return pb - pa
     })
 
-  if (visible.length === 0) return null
+  if (!error && visible.length === 0) return null
 
   return (
     <div className="space-y-1.5 mb-4" role="status" aria-label="Project quota status">
+      {error && <PanelFetchNote stale onRetry={() => reload()} />}
       {visible.map((p) => {
         const limit = p.limit_reports!
         const pct = Math.min(100, Math.round((p.usage.reports / Math.max(1, limit)) * 100))

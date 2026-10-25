@@ -27,6 +27,10 @@ const state = vi.hoisted(() => ({
       { id: 'run1', project_id: 'p2', skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: 'rep2', history: [{ round: 1, reportId: 'rep1', outcome: 'merged', prUrl: 'https://github.com/o/r/pull/9' }], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
     ],
   } as unknown,
+  skillRunsError: null as string | null,
+  skillRunsGate: null as Promise<unknown> | null,
+  pageState: {} as Record<string, { data?: unknown; loading?: boolean; error?: string | null }>,
+  reloads: [] as string[],
 }))
 
 const KEY: SpendDownKeyStatus = {
@@ -67,6 +71,8 @@ vi.mock('../lib/supabase', async (importOriginal) => ({
       return { ok: true, data: state.audits[pid] ?? { audit: null, findings: [] } }
     }
     if (method === 'GET' && path === '/v1/admin/skill-runs') {
+      if (state.skillRunsGate) return state.skillRunsGate
+      if (state.skillRunsError) return { ok: false, error: { code: 'ERROR', message: state.skillRunsError } }
       return { ok: true, data: state.skillRuns }
     }
     if (method === 'POST' && path.endsWith('/skill-runs')) {
@@ -88,7 +94,15 @@ vi.mock('../lib/usePageData', () => ({
             : path === '/v1/admin/projects'
               ? { projects: [{ id: 'p1', name: 'mushi-mushi' }, { id: 'p2', name: 'tsumagoi' }, { id: 'p3', name: 'lets-talk' }] }
               : null
-    return { data, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    const over = path ? state.pageState[path] : undefined
+    return {
+      data: over && Object.prototype.hasOwnProperty.call(over, 'data') ? over.data : data,
+      loading: over?.loading ?? false,
+      error: over?.error ?? null,
+      isValidating: false,
+      reload: () => { if (path) state.reloads.push(path) },
+      lastFetchedAt: null,
+    }
   },
 }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
@@ -108,6 +122,19 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-23T02:00:00Z'))
   state.calls = []
+  state.skillRunsError = null
+  state.skillRunsGate = null
+  state.pageState = {}
+  state.reloads = []
+  state.skillRuns = {
+    skills: [
+      { slug: 'audit-accessibility', label: 'Accessibility (WCAG 2.2 AA)', measure: 'axe-core violations on each page in scope', inCatalog: true },
+      { slug: 'audit-responsive', label: 'Layouts at every width', measure: 'horizontal scroll at 360 px', inCatalog: true },
+    ],
+    runs: [
+      { id: 'run1', project_id: 'p2', skill_slug: 'audit-accessibility', scope: 'the booking flow', rounds_max: 3, round: 2, auto_merge: true, status: 'active', stop_reason: null, current_report_id: 'rep2', history: [{ round: 1, reportId: 'rep1', outcome: 'merged', prUrl: 'https://github.com/o/r/pull/9' }], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T10:00:00Z' },
+    ],
+  }
   state.watches = {
     p1: { watch: { base_url: 'https://kensaur.us/mushi-mushi', page_limit: 100, status: 'active', estimated_credits_per_month: 6000 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
     p2: { watch: { base_url: 'https://tsumagoi.kensaur.us', page_limit: 30, status: 'active', estimated_credits_per_month: 1800 }, openPages: [], suggestedUrl: null, firecrawlReady: true },
@@ -233,6 +260,43 @@ describe('skill runs on /credits', () => {
     await act(async () => start.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/skill-runs', method: 'POST', body: { skillSlug: 'audit-responsive', scope: 'the chat screens', rounds: 3, autoMerge: true } })
   })
+
+  it('shows loading, then Retry when skill runs fail, and an empty list after they succeed', async () => {
+    let release!: (value: { ok: boolean; error?: { code: string; message: string }; data?: unknown }) => void
+    state.skillRunsGate = new Promise((resolve) => { release = resolve })
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CreditsPage)))
+    })
+    expect(host.textContent).toContain('Reading skill runs')
+    await act(async () => {
+      release({ ok: false, error: { code: 'ERROR', message: 'Skill runs unavailable' } })
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain("Couldn't load skill runs.")
+    expect(host.textContent).not.toContain('No skill runs yet')
+    state.skillRunsGate = null
+    state.skillRuns = { skills: [], runs: [] }
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')
+    await act(async () => {
+      retry?.click()
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('No skill runs yet')
+  })
+
+  it('keeps the last skill runs when a refresh fails', async () => {
+    await render()
+    expect(host.textContent).toContain('Round 2 of 3 · 1 merged')
+    state.skillRunsError = 'later'
+    const stop = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Stop')
+    await act(async () => {
+      stop?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
+    expect(host.textContent).toContain('Round 2 of 3 · 1 merged')
+  })
 })
 
 describe('search rank on /credits', () => {
@@ -287,5 +351,57 @@ describe('FirecrawlLevers while the project list loads', () => {
     })
     expect(host.textContent).toContain('Reading each app')
     expect(host.textContent).not.toContain('nothing is spent')
+    expect(host.textContent).not.toContain("Couldn't load your apps")
+  })
+
+  it('says there are no apps instead of an empty watch list', async () => {
+    const { FirecrawlLevers } = await import('../components/credits/FirecrawlLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(FirecrawlLevers, { balance: null, projects: [], now: new Date() })))
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(host.textContent).toContain('No apps yet')
+    expect(host.textContent).not.toContain('Reading each app')
+  })
+})
+
+describe('credits load failures', () => {
+  it('does not claim there is no Cursor key while spend-down is still loading', async () => {
+    state.pageState['/v1/admin/byok/spend-down'] = { data: null, loading: true, error: null }
+    await render()
+    expect(host.textContent).toContain('Reading your Cursor keys')
+    expect(host.textContent).not.toContain('No Cursor key yet')
+  })
+
+  it('says review follow-ups failed, and keeps the last settings on a failed refresh', async () => {
+    state.pageState['/v1/admin/byok/review-followups'] = { data: null, loading: false, error: 'nope' }
+    await render()
+    expect(host.textContent).toContain("Couldn't load review follow-ups.")
+    expect(host.textContent).toContain('crsr_e76')
+    expect(host.textContent).not.toContain('Rounds run on Grok')
+
+    state.pageState['/v1/admin/byok/review-followups'] = { error: 'nope' }
+    await render()
+    expect(host.textContent).toContain('Rounds run on Grok')
+    expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
+  })
+
+  it('says the app list failed instead of reading site watches forever', async () => {
+    state.pageState['/v1/admin/projects'] = { data: null, loading: false, error: 'nope' }
+    await render()
+    expect(host.textContent).toContain("Couldn't load your apps.")
+    expect(host.textContent).not.toContain("Reading each app's site watch")
+    const retry = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry')
+    await act(async () => { retry?.click() })
+    expect(state.reloads).toContain('/v1/admin/projects')
+  })
+
+  it('says it is reading apps while the project list is in flight', async () => {
+    state.pageState['/v1/admin/projects'] = { data: null, loading: true, error: null }
+    await render()
+    expect(host.textContent).toContain('Reading your apps')
+    expect(host.textContent).toContain("Reading each app's site watch")
+    expect(host.textContent).not.toContain("Couldn't load your apps")
+    expect(host.textContent).not.toContain('No apps yet')
   })
 })

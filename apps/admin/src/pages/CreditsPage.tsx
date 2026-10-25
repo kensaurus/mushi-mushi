@@ -101,23 +101,38 @@ export function CreditsPage() {
 
       <Section title="Cursor: fix bugs">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
-        <CursorLevers
-          spendDown={spendDown.data ?? null}
-          followups={followups.data ?? null}
-          now={now}
-          onChanged={() => {
-            spendDown.reload()
-            followups.reload()
-          }}
-        />
+        {spendDown.data && (
+          <CursorLevers
+            spendDown={spendDown.data}
+            followups={followups.data ?? null}
+            followupsLoading={followups.loading && !followups.data}
+            followupsError={followups.error}
+            onRetryFollowups={() => followups.reload()}
+            now={now}
+            onChanged={() => {
+              spendDown.reload()
+              followups.reload()
+            }}
+          />
+        )}
       </Section>
 
       <Section title="Cursor: improve your apps with skills">
-        <SkillRunsCard projects={projects.data ? (projects.data.projects ?? []) : null} />
+        <SkillRunsCard
+          projects={projects.data ? (projects.data.projects ?? []) : null}
+          projectsError={projects.error}
+          onRetryProjects={() => projects.reload()}
+        />
       </Section>
 
       <Section title="Firecrawl: find bugs on your live sites">
-        <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
+        <FirecrawlLevers
+          balance={balance}
+          projects={projects.data ? (projects.data.projects ?? []) : null}
+          projectsError={projects.error}
+          onRetryProjects={() => projects.reload()}
+          now={now}
+        />
       </Section>
 
       <p className="text-xs text-fg-muted">

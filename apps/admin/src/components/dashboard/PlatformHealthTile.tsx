@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { CardPanel } from '../ui'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 interface PlatformRow {
@@ -38,12 +39,13 @@ function sdkShortName(pkg: string | null): string {
 }
 
 export function PlatformHealthTile({ projectId }: { projectId: string }) {
-  const { data, loading, error } = usePageData<PlatformRollupData>(
+  const { data, loading, error, reload } = usePageData<PlatformRollupData>(
     `/v1/admin/projects/${projectId}/platform-rollup`,
     { deps: [projectId] },
   )
 
   const rows = data?.platforms ?? []
+  const failedFirst = Boolean(error) && data == null
 
   return (
     <CardPanel
@@ -56,29 +58,31 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
         ) : undefined
       }
     >
-      {loading && (
-        <div className="space-y-1.5">
+      {loading && data == null && (
+        <div className="space-y-1.5" aria-busy="true" aria-label="Loading platform health">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-7 rounded-sm bg-surface-raised animate-pulse" />
           ))}
         </div>
       )}
 
-      {error && (
-        <EmptySectionMessage
-          text="Platform rollup unavailable."
-          hint="The /platform-rollup endpoint may not be deployed yet."
+      {failedFirst && (
+        <PanelFetchNote
+          message="Platform rollup unavailable. The /platform-rollup endpoint may not be deployed yet."
+          onRetry={() => reload()}
         />
       )}
 
-      {!loading && !error && rows.length === 0 && (
+      {error && data != null && <PanelFetchNote stale className="mb-1.5" onRetry={() => reload()} />}
+
+      {!loading && !failedFirst && rows.length === 0 && (
         <EmptySectionMessage
           text="No multi-platform data yet."
           hint="Send reports from iOS, Android, or Web and they will appear here, segmented by platform."
         />
       )}
 
-      {!loading && !error && rows.length > 0 && (
+      {rows.length > 0 && (
         <div className="space-y-1">
           {rows.map((row) => {
             const hasCritical = row.critical_24h > 0

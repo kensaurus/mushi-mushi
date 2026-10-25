@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom'
 import { Card, PanelHeader } from '../ui'
 import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { PanelFetchNote } from '../PanelFetchNote'
 import { relTime } from './types'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
@@ -113,13 +114,14 @@ interface Props {
 const RECENT_LIMIT = 8
 
 export function TeamActivityTile({ projectId }: Props) {
-  const { data, loading, reload } = usePageData<AuditResponse>(
+  const { data, loading, error, reload } = usePageData<AuditResponse>(
     projectId ? `/v1/admin/audit?limit=${RECENT_LIMIT}` : null,
     { deps: [projectId] },
   )
   useRealtimeReload(['audit_logs'], reload)
 
   const logs = data?.logs ?? []
+  const failedFirst = Boolean(error) && data == null
 
   return (
     <Card className="min-w-0 p-3">
@@ -131,19 +133,26 @@ export function TeamActivityTile({ projectId }: Props) {
           </ActionPill>
         }
       />
-      {loading && logs.length === 0 ? (
-        <div className="space-y-1.5" aria-hidden>
+      {loading && data == null ? (
+        <div className="space-y-1.5" aria-busy="true" aria-label="Loading team activity">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-8 rounded-md bg-surface-overlay/25 motion-safe:animate-pulse" />
           ))}
         </div>
+      ) : failedFirst ? (
+        <PanelFetchNote message="Couldn't load team activity." onRetry={() => reload()} />
       ) : logs.length === 0 ? (
-        <EmptySectionMessage
-          text="No team activity yet."
-          hint="Member and agent actions (report triage, fixes, settings changes) appear here as they happen."
-        />
+        <>
+          {error && <PanelFetchNote stale className="mb-1.5" onRetry={() => reload()} />}
+          <EmptySectionMessage
+            text="No team activity yet."
+            hint="Member and agent actions (report triage, fixes, settings changes) appear here as they happen."
+          />
+        </>
       ) : (
-        <ul className="space-y-1.5">
+        <>
+          {error && <PanelFetchNote stale className="mb-1.5" onRetry={() => reload()} />}
+          <ul className="space-y-1.5">
           {logs.map((e) => {
             const kind = actorKind(e)
             const who = actorLabel(e, kind)
@@ -168,7 +177,8 @@ export function TeamActivityTile({ projectId }: Props) {
               </li>
             )
           })}
-        </ul>
+          </ul>
+        </>
       )}
     </Card>
   )
