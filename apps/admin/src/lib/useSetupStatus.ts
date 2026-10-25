@@ -185,6 +185,7 @@ function subscribeSetupGeneration(listener: () => void): () => void {
 }
 
 /**
+ * @internal Exported for tests only.
  * A hung `/v1/admin/setup` used to leave the header on "Loading project"
  * forever. The read's own deadline sets an error; this is the backstop when
  * the request never settles (an aborted retry loop that keeps `loading`
