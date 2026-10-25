@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { apiFetch, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { openSseStream, type SseEvent } from './sseClient'
@@ -547,32 +548,43 @@ export function useSdkUpgrade(projectId: string) {
   }, [projectId, upgradeStatus, upgradeJobId, upgradePrUrl, upgradePrState, upgradeMergedAt, syncStatus])
 
   const mergePr = useCallback(async (jobId: string, method: 'squash' | 'merge' | 'rebase' = 'squash') => {
-    setState((s) => ({ ...s, releaseStatus: 'merging' }))
+    setState((s) => (s.jobId === jobId ? { ...s, releaseStatus: 'merging' } : s))
     const res = await apiFetch<{ ok: boolean; sha?: string | null; alreadyMerged?: boolean; mergedAt?: string | null }>(
       `/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/merge`,
       { method: 'POST', body: JSON.stringify({ method }) },
     )
     if (!res.ok) {
-      setState((s) => ({
-        ...s,
-        releaseStatus: 'pr_opened',
-        error: describeActionError(res.error, 'Could not merge the PR on GitHub. Open it on GitHub to see why.'),
-      }))
+      setState((s) => (
+        s.jobId !== jobId
+          ? s
+          : {
+              ...s,
+              releaseStatus: 'pr_opened',
+              error: describeActionError(res.error, 'Could not merge the PR on GitHub. Open it on GitHub to see why.'),
+            }
+      ))
       return
     }
     const fromServer = res.data?.mergedAt
     const mergedAt = typeof fromServer === 'string' && fromServer.trim() ? fromServer.trim() : undefined
-    setState((s) => {
-      const updated: SdkUpgradeState = {
-        ...s,
-        releaseStatus: 'merged',
-        prState: 'merged',
-        error: undefined,
-        ...(mergedAt ? { mergedAt } : {}),
-      }
-      persistTerminal(projectId, updated)
-      return updated
+    // Run the updater now, then write storage. A replay of the updater must
+    // not touch session storage, and a job that left the screen is left alone.
+    let next: SdkUpgradeState | null = null
+    flushSync(() => {
+      setState((s) => {
+        if (s.jobId !== jobId) return s
+        next = {
+          ...s,
+          releaseStatus: 'merged',
+          prState: 'merged',
+          error: undefined,
+          ...(mergedAt ? { mergedAt } : {}),
+        }
+        return next
+      })
     })
+    if (!next) return
+    persistTerminal(projectId, next)
     // Auto-sync after merge to pick up CI / deploy status. Tracked + guarded so
     // an unmount inside the 5s window doesn't fire a setState on a dead component.
     if (mergeSyncTimer.current) clearTimeout(mergeSyncTimer.current)

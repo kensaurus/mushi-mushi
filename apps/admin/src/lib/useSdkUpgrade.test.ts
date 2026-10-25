@@ -165,6 +165,122 @@ describe('useSdkUpgrade open PR', () => {
     expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/merge'))).toBe(true)
     expect(host.querySelector('[data-testid="pr"]')?.textContent).toBe('merged')
     expect(host.querySelector('[data-testid="merged"]')?.textContent).toBe('2026-10-25T01:02:03.000Z')
+    const stored = JSON.parse(sessionStorage.getItem(`mushi_sdk_upgrade_terminal:${PROJECT}`) ?? '{}') as {
+      jobId?: string
+      prState?: string
+      mergedAt?: string
+    }
+    expect(stored.jobId).toBe('job-137')
+    expect(stored.prState).toBe('merged')
+    expect(stored.mergedAt).toBe('2026-10-25T01:02:03.000Z')
+  })
+
+  it('does not apply or store a merge for a job that is no longer on screen', async () => {
+    function OtherJob() {
+      const { state, mergePr } = useSdkUpgrade(PROJECT)
+      return createElement(
+        'div',
+        null,
+        createElement('span', { 'data-testid': 'pr' }, state.prState ?? 'none'),
+        createElement('span', { 'data-testid': 'release' }, state.releaseStatus ?? 'none'),
+        createElement('span', { 'data-testid': 'error' }, state.error ?? 'none'),
+        createElement('button', { onClick: () => void mergePr('job-other') }, 'do-merge'),
+      )
+    }
+
+    await act(async () => {
+      root.render(createElement(OtherJob))
+    })
+    await flush()
+    const button = host.querySelector('button') as HTMLButtonElement
+    await act(async () => {
+      button.click()
+    })
+    await flush()
+    expect(host.querySelector('[data-testid="pr"]')?.textContent).toBe('open')
+    expect(host.querySelector('[data-testid="release"]')?.textContent).toBe('ready_to_merge')
+    expect(host.querySelector('[data-testid="error"]')?.textContent).toBe('none')
+    const stored = JSON.parse(sessionStorage.getItem(`mushi_sdk_upgrade_terminal:${PROJECT}`) ?? '{}') as {
+      jobId?: string
+      prState?: string
+      releaseStatus?: string
+    }
+    expect(stored.jobId).toBe('job-137')
+    expect(stored.prState).not.toBe('merged')
+    expect(stored.releaseStatus).not.toBe('merged')
+  })
+
+  it('drops a merge result that arrives after that job left the screen', async () => {
+    let releaseMerge: (value: unknown) => void = () => {}
+    const mergeGate = new Promise((resolve) => { releaseMerge = resolve })
+    fetchMock.mockImplementation(async (path: string) => {
+      if (String(path).includes('/sync')) return syncPayload('success')
+      if (String(path).endsWith('/merge')) return mergeGate
+      if (String(path).includes('/in-flight')) return { ok: true, data: OPEN_JOB }
+      return { ok: false, error: { code: 'NO', message: 'unexpected' } }
+    })
+
+    function Race() {
+      const { state, mergePr, reset } = useSdkUpgrade(PROJECT)
+      return createElement(
+        'div',
+        null,
+        createElement('span', { 'data-testid': 'status' }, state.status),
+        createElement('span', { 'data-testid': 'pr' }, state.prState ?? 'none'),
+        createElement('button', { 'data-testid': 'merge', onClick: () => void mergePr('job-137') }, 'merge'),
+        createElement('button', { 'data-testid': 'reset', onClick: () => reset() }, 'reset'),
+      )
+    }
+
+    await act(async () => {
+      root.render(createElement(Race))
+    })
+    await flush()
+    await act(async () => {
+      ;(host.querySelector('[data-testid="merge"]') as HTMLButtonElement).click()
+    })
+    await act(async () => {
+      ;(host.querySelector('[data-testid="reset"]') as HTMLButtonElement).click()
+    })
+    await act(async () => {
+      releaseMerge({ ok: true, data: { alreadyMerged: false, sha: 'abc', mergedAt: '2026-10-25T01:02:03.000Z' } })
+      await Promise.resolve()
+    })
+    await flush()
+    expect(host.querySelector('[data-testid="status"]')?.textContent).toBe('idle')
+    expect(host.querySelector('[data-testid="pr"]')?.textContent).toBe('none')
+    expect(sessionStorage.getItem(`mushi_sdk_upgrade_terminal:${PROJECT}`)).toBeNull()
+  })
+
+  it('does not attach another job merge failure to the upgrade on screen', async () => {
+    fetchMock.mockImplementation(async (path: string) => {
+      if (String(path).includes('/sync')) return syncPayload('success')
+      if (String(path).endsWith('/merge')) return { ok: false, error: { code: 'MERGE_FAILED', message: 'no' } }
+      if (String(path).includes('/in-flight')) return { ok: true, data: OPEN_JOB }
+      return { ok: false, error: { code: 'NO', message: 'unexpected' } }
+    })
+
+    function OtherFailure() {
+      const { state, mergePr } = useSdkUpgrade(PROJECT)
+      return createElement(
+        'div',
+        null,
+        createElement('span', { 'data-testid': 'release' }, state.releaseStatus ?? 'none'),
+        createElement('span', { 'data-testid': 'error' }, state.error ?? 'none'),
+        createElement('button', { onClick: () => void mergePr('job-other') }, 'do-merge'),
+      )
+    }
+
+    await act(async () => {
+      root.render(createElement(OtherFailure))
+    })
+    await flush()
+    await act(async () => {
+      ;(host.querySelector('button') as HTMLButtonElement).click()
+    })
+    await flush()
+    expect(host.querySelector('[data-testid="release"]')?.textContent).toBe('ready_to_merge')
+    expect(host.querySelector('[data-testid="error"]')?.textContent).toBe('none')
   })
 
   it('does not stamp mergedAt from the client clock when the server omits it', async () => {
