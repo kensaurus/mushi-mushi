@@ -474,13 +474,17 @@ export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
  *   - a failing probe is down;
  *   - no probe, or a probe older than 7 days, needs attention (not checked);
  *   - a connection that receives events (Sentry alerts) needs at least one
- *     accepted delivery — a passing API probe alone is only half the loop.
+ *     accepted delivery — a passing API probe alone is only half the loop,
+ *     unless the project pulls those events itself (`inboundPolling`, Sentry's
+ *     automatic import), which closes the loop without a webhook.
  */
 export function classifyPlatformConnection(input: {
   probeStatus: string | null | undefined
   probeCheckedAt: string | null | undefined
   needsInbound?: boolean
   inboundAccepted?: boolean
+  /** The connection pulls events on a schedule, so no webhook is required. */
+  inboundPolling?: boolean
   now?: number
 }): PlatformConnectionVerdict {
   const now = input.now ?? Date.now()
@@ -489,6 +493,6 @@ export function classifyPlatformConnection(input: {
   if (input.probeStatus !== 'ok' || !Number.isFinite(at) || now - at > CONNECTION_VERIFIED_FRESH_MS) {
     return 'attention'
   }
-  if (input.needsInbound && !input.inboundAccepted) return 'attention'
+  if (input.needsInbound && !input.inboundAccepted && !input.inboundPolling) return 'attention'
   return 'working'
 }

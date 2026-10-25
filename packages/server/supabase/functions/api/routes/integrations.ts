@@ -238,6 +238,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       { data: routingRows },
       { data: probes },
       { data: sentryDelivered },
+      { data: sentryPolling },
     ] =
       await Promise.all([
         resolveEffectivePlatformSettings(db, project.id as string),
@@ -260,6 +261,14 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           .eq('webhook_source', 'sentry')
           .eq('outcome', 'accepted')
           .limit(1),
+        // Automatic import pulls new Sentry issues on a schedule, which closes
+        // the intake loop without a webhook. It is not a field the effective
+        // resolver merges (never inherited from the org), so read it here.
+        db
+          .from('project_settings')
+          .select('sentry_auto_import')
+          .eq('project_id', project.id)
+          .maybeSingle(),
       ]);
 
     const row = (effectiveSettings ?? {}) as Record<string, unknown>;
@@ -302,6 +311,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         probeCheckedAt: probe?.checked_at,
         needsInbound: kind === 'sentry',
         inboundAccepted: (sentryDelivered ?? []).length > 0,
+        inboundPolling:
+          (sentryPolling as { sentry_auto_import?: boolean } | null)?.sentry_auto_import === true,
       });
       if (verdict === 'working') platformHealthy += 1;
       else if (verdict === 'down') {

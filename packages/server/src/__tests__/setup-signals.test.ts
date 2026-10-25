@@ -170,6 +170,41 @@ describe('classifyPlatformConnection (finding B25)', () => {
     ).toBe('working')
   })
 
+  it('automatic import closes the loop without a webhook delivery', () => {
+    // Polling-only Sentry: probe ok, zero accepted deliveries, auto-import on.
+    // The card calls this "working", so the banner must not count it as
+    // attention (report 4d2556c7).
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('working')
+    // Polling never rescues a failing or stale probe.
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'down',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('down')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: '2026-09-20T00:00:00Z',
+        needsInbound: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('attention')
+  })
+
   it('failing probes are down; missing or week-old probes need a re-check', () => {
     expect(classifyPlatformConnection({ probeStatus: 'down', probeCheckedAt: recent, now: NOW })).toBe('down')
     expect(classifyPlatformConnection({ probeStatus: 'degraded', probeCheckedAt: recent, now: NOW })).toBe('down')

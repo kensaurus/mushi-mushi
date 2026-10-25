@@ -59,7 +59,7 @@ describe('sentryConnection (finding B25)', () => {
     expect(v.detail).toMatch(/^Connected — waiting for the first event/)
   })
 
-  it('with automatic import on, says it is importing instead of demanding a webhook', () => {
+  it('with automatic import on, a passing probe is working — polling needs no webhook', () => {
     const v = sentryConnection({
       configured: true,
       probe: ok,
@@ -68,9 +68,36 @@ describe('sentryConnection (finding B25)', () => {
       autoImport: { enabled: true, lastRunAt: RECENT },
       now: NOW,
     })
-    // Still attention: the server banner counts only alerts, and the two must agree.
-    expect(v.state).toBe('attention')
-    expect(v.detail).toMatch(/^Connected — importing new Sentry issues automatically \(last run/)
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/^Importing new Sentry issues automatically \(last run/)
+    // The webhook stays on offer as a speed-up, never as something missing.
+    expect(v.detail).toMatch(/For alerts within seconds/)
+  })
+
+  it('automatic import before its first run is still working', () => {
+    const v = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: null,
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: null },
+      now: NOW,
+    })
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/^Importing new Sentry issues automatically; the first run/)
+  })
+
+  it('a rejected webhook alert does not break a working import', () => {
+    const v = sentryConnection({
+      configured: true,
+      probe: ok,
+      latestDelivery: { outcome: 'rejected', created_at: RECENT, error_message: 'Invalid signature' },
+      deliveriesLoaded: true,
+      autoImport: { enabled: true, lastRunAt: RECENT },
+      now: NOW,
+    })
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/The last webhook alert was rejected/)
   })
 
   it('an accepted event makes it working; a rejected one needs attention', () => {

@@ -247,7 +247,7 @@ export function PlatformIntegrationCard({
         deliveriesLoaded: deliveries.data != null,
         deliveriesFailed: Boolean(deliveries.error),
         autoImport: {
-          enabled: config.sentry_auto_import === true,
+          enabled: config.sentry_auto_import === true || autoImportTurnedOn,
           lastRunAt: typeof config.sentry_auto_import_last_at === 'string' ? config.sentry_auto_import_last_at : null,
         },
       })

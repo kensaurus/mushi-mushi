@@ -9,7 +9,9 @@
  *   - "Working" needs a recent passing check, never just saved credentials.
  *   - A failing check shows what failed, in words, never a raw code or JSON.
  *   - A connection that receives events (Sentry alerts) is not working until
- *     one event has arrived: a passing API probe proves only the token.
+ *     one event has arrived: a passing API probe proves only the token. The
+ *     exception is Sentry with automatic import on — polling is the other half
+ *     of the loop, so no webhook delivery is needed.
  */
 
 import { connectionStateFrom, type ConnectionState } from '../components/ui/ConnectionStatus'
@@ -136,9 +138,10 @@ export function sentryConnection(input: {
   deliveriesFailed?: boolean
   /**
    * The card's "Import new Sentry issues automatically" toggle (polling, no
-   * webhook). It changes what the waiting state tells you to do; the state
-   * itself stays "attention" until an alert arrives, as the server's
-   * classifyPlatformConnection counts it, so the banner and card agree.
+   * webhook). Polling is a complete intake path, so with it on a passing probe
+   * is already working — the webhook is only a speed-up. The server's
+   * classifyPlatformConnection takes the same `inboundPolling` shortcut, so the
+   * banner and the card agree.
    */
   autoImport?: { enabled: boolean; lastRunAt: string | null }
   now?: number
@@ -151,16 +154,20 @@ export function sentryConnection(input: {
       : { state: 'checking', detail: 'Checking for Sentry events…' }
   }
   const d = input.latestDelivery
-  if (!d) {
-    const auto = input.autoImport
-    if (auto?.enabled) {
-      return {
-        state: 'attention',
-        detail: auto.lastRunAt
-          ? `Connected — importing new Sentry issues automatically (last run ${formatRelative(auto.lastRunAt)}). For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.`
-          : 'Connected — importing new Sentry issues automatically; the first run is due soon. For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.',
-      }
+  const auto = input.autoImport
+  if (auto?.enabled && (!d || d.outcome !== 'accepted')) {
+    const importing = auto.lastRunAt
+      ? `Importing new Sentry issues automatically (last run ${formatRelative(auto.lastRunAt)}).`
+      : 'Importing new Sentry issues automatically; the first run is due soon.'
+    return {
+      state: 'working',
+      detail: d
+        ? `${importing} The last webhook alert was rejected ${formatRelative(d.created_at)}, so imports are the only path right now.`
+        : `${importing} For alerts within seconds, also add the receive URL below as a webhook in a Sentry alert rule.`,
+      raw: d?.error_message ?? undefined,
     }
+  }
+  if (!d) {
     return {
       state: 'attention',
       detail: 'Connected — waiting for the first event. Turn on "Import new Sentry issues automatically" below (no webhook needed), or add the receive URL below as a webhook in a Sentry alert rule.',
