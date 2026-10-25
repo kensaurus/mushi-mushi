@@ -767,7 +767,13 @@ export function ReportsPage() {
         >
           Import from Sentry
         </Btn>
-        <span className="text-xs text-fg-muted font-mono tabular-nums">
+        {/* The box is sized for the widest form ("137 total · page 1/4") so the
+            count landing never re-wraps the actions row and drops the whole
+            page by a line (layout shift at 390px). `ch` is exact in mono. */}
+        <span
+          className="inline-block text-right text-xs text-fg-muted font-mono tabular-nums"
+          style={{ minWidth: '21ch' }}
+        >
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
         </span>
         <Tooltip content="Show keyboard shortcuts (?)">

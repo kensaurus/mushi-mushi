@@ -82,6 +82,10 @@ export interface KpiTileProps {
   seriesAccent?: string
   /** Optional aria label for the sparkline. Defaults to `${label} trend`. */
   seriesAriaLabel?: string
+  /** Hold the sparkline footer's height while `series` is still loading. A
+   *  tile whose spark only appears once the fetch lands otherwise grows by a
+   *  row and pushes the whole page down (layout shift). */
+  reserveSeriesSpace?: boolean
   /** ISO day strings aligned 1:1 with `series` — enables labeled axes. */
   seriesDays?: string[]
   /** Optional Y-axis caption for the sparkline (e.g. "runs / day"). */
@@ -100,6 +104,10 @@ export interface KpiTileProps {
    *  `MetricStrip`'s stagger injects via `cloneElement`. */
   style?: CSSProperties
 }
+
+/** Plot height of a KPI tile's axis-less sparkline, in px. The reserved
+ *  placeholder matches it exactly so the tile box never changes height. */
+const KPI_SPARK_HEIGHT = 18
 
 const TONE_SPARK_ACCENT: Record<Tone, string> = {
   ok: 'text-ok/70',
@@ -122,6 +130,7 @@ export function KpiTile({
   seriesAccent,
   seriesAriaLabel,
   seriesDays,
+  reserveSeriesSpace = false,
   variant = 'default',
   wide = false,
   density = 'default',
@@ -204,7 +213,7 @@ export function KpiTile({
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
             maxXTicks={2}
-            height={showSparkAxes ? 44 : 18}
+            height={showSparkAxes ? 44 : KPI_SPARK_HEIGHT}
           />
           <ChartAccessibleSummary
             caption={sparkAria}
@@ -215,6 +224,14 @@ export function KpiTile({
             rows={summaryRows}
           />
         </div>
+      )}
+      {!showSpark && reserveSeriesSpace && (
+        <div
+          data-testid="kpi-spark-reserve"
+          aria-hidden="true"
+          className="mt-1.5 w-full"
+          style={{ height: `${KPI_SPARK_HEIGHT}px` }}
+        />
       )}
     </div>
   )
