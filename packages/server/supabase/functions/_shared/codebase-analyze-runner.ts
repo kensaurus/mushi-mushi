@@ -5,13 +5,22 @@
  * The graph is one jsonb row. Writes go through write_codebase_graph
  * (90s timeout, per-project advisory lock, lz4). A second job for the same
  * project is put back on the queue instead of waiting out statement_timeout.
+ *
+ * The index is read page by page: PostgREST's max_rows (1000) truncated the
+ * single `.limit(10000)` read, so the graph was rebuilt from a slice and the
+ * merge put the rest of the stored document back — the jsonb row only grew.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getIndexFingerprint, loadExploreGraph } from './codebase-understand.ts'
 import { invalidateCodebaseUnderstandCaches } from './codebase-impact-resolve.ts'
 import { buildGraphFromIndex, fingerprintFile, mergeGraphUpdate } from './codebase-graph-build.ts'
-import { listIndexedFilePaths, pruneGraphToLivePaths, writeCodebaseGraph } from './codebase-graph-write.ts'
+import {
+  listIndexedFilePaths,
+  listIndexedFileRows,
+  pruneGraphToLivePaths,
+  writeCodebaseGraph,
+} from './codebase-graph-write.ts'
 import { log } from './logger.ts'
 import { runWikiIngestForProject } from './wiki-ingest.ts'
 
@@ -40,6 +49,8 @@ const ANALYZE_DRAIN_BUDGET_MS = 100 * 1000
  * freeze the project until that reaper runs.
  */
 const ANALYZE_SIBLING_ACTIVE_MS = 8 * 60 * 1000
+/** Rows per project_codebase_fingerprints upsert, under the 8s timeout. */
+const FINGERPRINT_BATCH = 500
 
 /** Put a claimed job back on the queue. Only touches a row this worker still owns. */
 async function releaseAnalyzeJob(db: SupabaseClient, jobId: string, error: string): Promise<void> {
@@ -160,15 +171,10 @@ export async function runCodebaseAnalyzeJob(
       .maybeSingle()
     if (repoErr) throw new Error(`project_repos read failed: ${repoErr.message}`)
 
-    const { data: rows, error: rowsErr } = await db
-      .from('project_codebase_files')
-      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, content_hash, imports')
-      .eq('project_id', projectId)
-      .is('tombstoned_at', null)
-      .limit(10000)
-    if (rowsErr) throw new Error(`project_codebase_files read failed: ${rowsErr.message}`)
-
-    const allRows = rows ?? []
+    // Paged: one `.limit(10000)` was capped at PostgREST's max_rows (1000),
+    // so the graph was rebuilt from a slice and the merge put the rest back.
+    const index = await listIndexedFileRows(db, projectId)
+    const allRows = index.rows
     const fileRows = allRows.filter((r) => !r.symbol_name)
     const symbolRows = allRows.filter((r) => r.symbol_name)
 
@@ -180,15 +186,22 @@ export async function runCodebaseAnalyzeJob(
       symbolRows,
     })
 
-    const { data: existingGraphRow, error: graphReadErr } = await db
-      .from('project_codebase_graph')
-      .select('graph')
-      .eq('project_id', projectId)
-      .maybeSingle()
-    if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
+    // A whole-index rebuild is the whole graph. Reading the stored document
+    // back would only re-add nodes the index no longer has — and it is the
+    // multi-megabyte jsonb row this job is about to rewrite.
+    let existingGraph: ReturnType<typeof buildGraphFromIndex> | null = null
+    if (changedPaths.length > 0 || !index.complete) {
+      const { data: existingGraphRow, error: graphReadErr } = await db
+        .from('project_codebase_graph')
+        .select('graph')
+        .eq('project_id', projectId)
+        .maybeSingle()
+      if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
+      existingGraph = (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null
+    }
 
     const merged = mergeGraphUpdate(
-      (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null,
+      existingGraph,
       nextGraph,
       changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
     )
@@ -219,8 +232,10 @@ export async function runCodebaseAnalyzeJob(
       fingerprint: fingerprintFile(r),
       updated_at: new Date().toISOString(),
     }))
-    if (fpRows.length > 0) {
-      await db.from('project_codebase_fingerprints').upsert(fpRows, {
+    // Batched: the index read is no longer capped at 1000 rows, and one
+    // upsert of every fingerprint would run past the 8s statement timeout.
+    for (let i = 0; i < fpRows.length; i += FINGERPRINT_BATCH) {
+      await db.from('project_codebase_fingerprints').upsert(fpRows.slice(i, i + FINGERPRINT_BATCH), {
         onConflict: 'project_id,file_path',
       })
     }

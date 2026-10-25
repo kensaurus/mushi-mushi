@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type Row } from './__stubs__/fake-supabase.ts'
-import { listIndexedFilePaths, pruneGraphToLivePaths, writeCodebaseGraph } from '../../supabase/functions/_shared/codebase-graph-write.ts'
+import { listIndexedFilePaths, listIndexedFileRows, pruneGraphToLivePaths, writeCodebaseGraph } from '../../supabase/functions/_shared/codebase-graph-write.ts'
 import type { KnowledgeGraph } from '../../supabase/functions/_shared/codebase-graph-build.ts'
 vi.mock('../../supabase/functions/_shared/wiki-ingest.ts', () => ({
   runWikiIngestForProject: vi.fn(async () => ({ processed: 0, ready: 0, failed: 0 })),
@@ -87,6 +87,35 @@ describe('listIndexedFilePaths', () => {
     const src = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/codebase-graph-write.ts'), 'utf8')
     expect(src).toMatch(/\.gt\('file_path', after\)/)
     expect(src).not.toMatch(/\.range\(/)
+  })
+})
+
+describe('listIndexedFileRows', () => {
+  it('reads past PostgREST max_rows instead of stopping at 1,000 rows', async () => {
+    const rows: Row[] = []
+    for (let i = 0; i < 2500; i++) {
+      const path = `src/f${String(i).padStart(4, '0')}.ts`
+      rows.push({ ...fileRow(path), content_preview: '' })
+    }
+    const db = makeFakeDb({ project_codebase_files: rows }, { maxRows: 1000 })
+    const index = await listIndexedFileRows(db as never, P)
+    expect(index.complete).toBe(true)
+    expect(index.rows).toHaveLength(2500)
+    expect(new Set(index.rows.map((r) => r.file_path)).size).toBe(2500)
+  })
+
+  it('keeps every chunk row of a path that straddles a page, without duplicates', async () => {
+    const rows: Row[] = []
+    for (let i = 0; i < 1300; i++) {
+      const path = `src/f${String(i).padStart(4, '0')}.ts`
+      rows.push({ ...fileRow(path), id: `${path}#1` }, { ...fileRow(path), id: `${path}#2`, symbol_name: 'x' })
+    }
+    rows.push({ ...fileRow('src/gone.ts'), tombstoned_at: '2026-10-07T00:00:00Z' })
+    const db = makeFakeDb({ project_codebase_files: rows }, { maxRows: 1000 })
+    const index = await listIndexedFileRows(db as never, P)
+    expect(index.rows).toHaveLength(2600)
+    expect(new Set(index.rows.map((r) => r.id)).size).toBe(2600)
+    expect(index.rows.some((r) => r.file_path === 'src/gone.ts')).toBe(false)
   })
 })
 
@@ -180,6 +209,38 @@ describe('runCodebaseAnalyzeJob graph write', () => {
     expect(result).toMatchObject({ ok: true, status: 'completed', pathsAnalyzed: 0 })
     expect(db.rpcCalls.filter((c) => c.fn === 'write_codebase_graph')).toHaveLength(0)
     expect(db.tables.codebase_analyze_jobs[0]).toMatchObject({ status: 'completed', plan: { unchanged: true } })
+  })
+
+  it('writes every indexed file, not the first max_rows page', async () => {
+    const files: Row[] = []
+    for (let i = 0; i < 1200; i++) files.push({ ...fileRow(`src/f${String(i).padStart(4, '0')}.ts`), content_preview: '' })
+    const db = makeFakeDb({
+      codebase_analyze_jobs: [pushJob('job-1', { changed_paths: null })],
+      projects: [{ id: P, name: 'glot.it' }],
+      project_repos: [{ project_id: P, is_primary: true, commit_sha: 'abc123' }],
+      project_codebase_files: files,
+      project_codebase_graph: [],
+    }, { maxRows: 1000 })
+    const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1')
+    expect(result).toMatchObject({ ok: true, status: 'completed' })
+    const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
+    expect((write?.args.p_graph as KnowledgeGraph).nodes).toHaveLength(1200)
+  })
+
+  it('does not merge the stored document back into a whole-index rebuild', async () => {
+    const db = dbWith({
+      codebase_analyze_jobs: [pushJob('job-1', { changed_paths: null })],
+      project_codebase_graph: [{
+        project_id: P,
+        index_fingerprint: 'stale',
+        // No filePath, so neither the merge nor the prune can drop it.
+        graph: graph([{ id: 'ghost', type: 'module', name: 'ghost' }]),
+      }],
+    })
+    const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1')
+    expect(result).toMatchObject({ ok: true, status: 'completed' })
+    const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
+    expect((write?.args.p_graph as KnowledgeGraph).nodes.some((n) => n.id === 'ghost')).toBe(false)
   })
 
   it('requeues when a recent analyze for the same project is already running', async () => {
