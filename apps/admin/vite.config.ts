@@ -270,8 +270,16 @@ export default defineConfig({
           // Graph layout (dagre) — only by the /ci runner map, which is lazy.
           // Kept out of vendor-misc, which index.html preloads on every page.
           if (id.includes('@dagrejs/')) return 'vendor-graph-layout'
-          // Data table runtime — only by list pages.
-          if (id.includes('@tanstack/react-table') || id.includes('@tanstack/react-virtual')) {
+          // Data table runtime — only by list pages. v9 splits the
+          // implementation across table-core and TanStack Store; those
+          // must stay out of the preloaded misc chunk.
+          if (
+            id.includes('@tanstack/react-table') ||
+            id.includes('@tanstack/table-core') ||
+            id.includes('@tanstack/react-store') ||
+            id.includes('@tanstack/store') ||
+            id.includes('@tanstack/react-virtual')
+          ) {
             return 'vendor-table'
           }
           // Everything else — small misc vendor code.
