@@ -24,11 +24,17 @@ export function ProjectScopeNotice() {
   // (layout shift on /reports and /fixes, mushi-ux audit 2026-10-24).
   const name = setup.activeProject?.project_name ?? null
   return (
-    <p className="mb-3 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted" role="status" data-testid="project-scope-notice">
+    <p
+      // A banner, not a footnote: the header chip now names the same app, and
+      // a grey hairline under it read as decoration (report ee6547f5).
+      className="mb-3 flex flex-wrap items-center gap-x-1.5 rounded-md border border-edge-subtle/80 border-l-2 border-l-info/55 bg-info-muted px-2.5 py-2 text-xs text-fg-secondary"
+      role="status"
+      data-testid="project-scope-notice"
+    >
       <span>
         This page shows one app at a time:{' '}
         {name ? (
-          <span className="font-medium text-fg-secondary">{name}</span>
+          <span className="font-medium text-fg">{name}</span>
         ) : (
           <span aria-hidden="true" className="inline-block h-3 w-20 rounded-xs bg-surface-overlay/60 align-middle motion-safe:animate-pulse" />
         )}
