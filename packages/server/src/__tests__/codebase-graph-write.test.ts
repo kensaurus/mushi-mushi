@@ -106,16 +106,37 @@ describe('listIndexedFileRows', () => {
 
   it('keeps every chunk row of a path that straddles a page, without duplicates', async () => {
     const rows: Row[] = []
+    // 3 rows a path, so a 1,000-row page ends inside a path's chunks (an even
+    // count put every boundary between paths and never tested the straddle).
     for (let i = 0; i < 1300; i++) {
       const path = `src/f${String(i).padStart(4, '0')}.ts`
-      rows.push({ ...fileRow(path), id: `${path}#1` }, { ...fileRow(path), id: `${path}#2`, symbol_name: 'x' })
+      for (let c = 1; c <= 3; c++) {
+        rows.push({ ...fileRow(path), id: `${path}-${c}`, symbol_name: c === 1 ? null : `x${c}` })
+      }
     }
     rows.push({ ...fileRow('src/gone.ts'), tombstoned_at: '2026-10-07T00:00:00Z' })
     const db = makeFakeDb({ project_codebase_files: rows }, { maxRows: 1000 })
     const index = await listIndexedFileRows(db as never, P)
-    expect(index.rows).toHaveLength(2600)
-    expect(new Set(index.rows.map((r) => r.id)).size).toBe(2600)
+    expect(index.complete).toBe(true)
+    expect(index.rows).toHaveLength(3900)
+    expect(new Set(index.rows.map((r) => r.id)).size).toBe(3900)
     expect(index.rows.some((r) => r.file_path === 'src/gone.ts')).toBe(false)
+  })
+
+  it('pages inside one path whose rows fill a whole page instead of skipping the rest', async () => {
+    const rows: Row[] = []
+    // One god file with more chunk rows than a page: the walk used to step
+    // past it with `gt` and drop rows 1,001+ while still reporting complete.
+    for (let c = 1; c <= 2300; c++) {
+      rows.push({ ...fileRow('src/big.ts'), id: `src/big.ts-${String(c).padStart(5, '0')}`, symbol_name: `s${c}` })
+    }
+    rows.push({ ...fileRow('src/zz.ts'), id: 'src/zz.ts-1' })
+    const db = makeFakeDb({ project_codebase_files: rows }, { maxRows: 1000 })
+    const index = await listIndexedFileRows(db as never, P)
+    expect(index.complete).toBe(true)
+    expect(index.rows.filter((r) => r.file_path === 'src/big.ts')).toHaveLength(2300)
+    expect(index.rows.some((r) => r.file_path === 'src/zz.ts')).toBe(true)
+    expect(new Set(index.rows.map((r) => r.id)).size).toBe(2301)
   })
 })
 
@@ -241,6 +262,44 @@ describe('runCodebaseAnalyzeJob graph write', () => {
     expect(result).toMatchObject({ ok: true, status: 'completed' })
     const write = db.rpcCalls.find((c) => c.fn === 'write_codebase_graph')
     expect((write?.args.p_graph as KnowledgeGraph).nodes.some((n) => n.id === 'ghost')).toBe(false)
+  })
+
+  it('logs a fingerprint batch that failed instead of dropping the error', async () => {
+    const files: Row[] = []
+    for (let i = 0; i < 600; i++) {
+      files.push({ ...fileRow(`src/f${String(i).padStart(4, '0')}.ts`), content_preview: '' })
+    }
+    const db = makeFakeDb({
+      codebase_analyze_jobs: [pushJob('job-1', { changed_paths: null })],
+      projects: [{ id: P, name: 'glot.it' }],
+      project_repos: [{ project_id: P, is_primary: true, commit_sha: 'abc123' }],
+      project_codebase_files: files,
+      project_codebase_graph: [],
+    }, { maxRows: 1000 })
+    const realFrom = db.from.bind(db)
+    const batches: number[] = []
+    db.from = ((table: string) => {
+      if (table !== 'project_codebase_fingerprints') return realFrom(table)
+      return {
+        upsert: async (payload: Row[]) => {
+          batches.push(payload.length)
+          return batches.length === 2
+            ? { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }
+            : { data: null, error: null }
+        },
+      }
+    }) as typeof db.from
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const result = await runner.runCodebaseAnalyzeJob(db as never, 'job-1')
+      expect(result).toMatchObject({ ok: true, status: 'completed' })
+      expect(batches).toEqual([500, 100])
+      const logged = warn.mock.calls.map((c: unknown[]) => String(c[0])).join('\n')
+      expect(logged).toContain('project_codebase_fingerprints batch upsert failed')
+      expect(logged).toContain('batchStart')
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('requeues when a recent analyze for the same project is already running', async () => {

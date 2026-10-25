@@ -188,7 +188,10 @@ export async function runCodebaseAnalyzeJob(
 
     // A whole-index rebuild is the whole graph. Reading the stored document
     // back would only re-add nodes the index no longer has — and it is the
-    // multi-megabyte jsonb row this job is about to rewrite.
+    // multi-megabyte jsonb row this job is about to rewrite. buildGraphFromIndex
+    // is the only producer of those nodes: write_codebase_graph is the only
+    // writer of the row and this runner is its only caller, so a rebuild that
+    // drops stored nodes without a filePath drops nothing but stale ones.
     let existingGraph: ReturnType<typeof buildGraphFromIndex> | null = null
     if (changedPaths.length > 0 || !index.complete) {
       const { data: existingGraphRow, error: graphReadErr } = await db
@@ -234,10 +237,21 @@ export async function runCodebaseAnalyzeJob(
     }))
     // Batched: the index read is no longer capped at 1000 rows, and one
     // upsert of every fingerprint would run past the 8s statement timeout.
+    // A failed batch is logged, not thrown: the graph is already written and
+    // a stale fingerprint only costs the next push a re-chunk of that file.
     for (let i = 0; i < fpRows.length; i += FINGERPRINT_BATCH) {
-      await db.from('project_codebase_fingerprints').upsert(fpRows.slice(i, i + FINGERPRINT_BATCH), {
-        onConflict: 'project_id,file_path',
-      })
+      const { error: fpErr } = await db
+        .from('project_codebase_fingerprints')
+        .upsert(fpRows.slice(i, i + FINGERPRINT_BATCH), { onConflict: 'project_id,file_path' })
+      if (fpErr) {
+        runnerLog.warn('project_codebase_fingerprints batch upsert failed', {
+          jobId,
+          projectId,
+          batchStart: i,
+          batchSize: Math.min(FINGERPRINT_BATCH, fpRows.length - i),
+          err: fpErr.message,
+        })
+      }
     }
 
     await invalidateCodebaseUnderstandCaches(db, projectId)

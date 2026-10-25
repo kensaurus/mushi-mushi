@@ -121,8 +121,10 @@ export interface IndexedFileRows {
  *
  * Pages keyset on file_path over idx_codebase_files_active. A path's chunk
  * rows can straddle a page, so the next page re-reads that path (`gte`) and
- * ids dedupe the overlap; a page that is one single path cannot be re-read
- * without looping, so it steps past it.
+ * ids dedupe the overlap. A page that is one single path cannot be re-read
+ * without looping, so the walk pages inside that path on `id` until its rows
+ * run out and only then steps past it: stepping past it straight away
+ * dropped the rest of a file with more rows than a page.
  */
 export async function listIndexedFileRows(
   db: SupabaseClient,
@@ -132,14 +134,21 @@ export async function listIndexedFileRows(
   const seen = new Set<string>()
   let after: string | null = null
   let inclusive = false
+  /** Set while paging inside one path whose rows fill a whole page. */
+  let afterId: string | null = null
   for (let page = 0; page < MAX_FILE_ROW_PAGES; page++) {
     let query = db
       .from('project_codebase_files')
       .select(FILE_ROW_COLUMNS)
       .eq('project_id', projectId)
       .is('tombstoned_at', null)
-    if (after !== null) query = inclusive ? query.gte('file_path', after) : query.gt('file_path', after)
-    const { data, error } = await query.order('file_path', { ascending: true }).limit(FILE_ROW_PAGE)
+    if (afterId !== null) {
+      query = query.eq('file_path', after as string).gt('id', afterId).order('id', { ascending: true })
+    } else {
+      if (after !== null) query = inclusive ? query.gte('file_path', after) : query.gt('file_path', after)
+      query = query.order('file_path', { ascending: true }).order('id', { ascending: true })
+    }
+    const { data, error } = await query.limit(FILE_ROW_PAGE)
     if (error) throw new Error(`project_codebase_files read failed: ${error.message}`)
     const batch = (data ?? []) as unknown as IndexedFileRow[]
     for (const row of batch) {
@@ -148,10 +157,23 @@ export async function listIndexedFileRows(
       seen.add(id)
       rows.push(row)
     }
-    if (batch.length < FILE_ROW_PAGE) return { rows, complete: true }
+    if (batch.length < FILE_ROW_PAGE) {
+      // Inside a path: its rows are done, so carry on past it. Otherwise the
+      // whole index is read.
+      if (afterId === null) return { rows, complete: true }
+      afterId = null
+      inclusive = false
+      continue
+    }
     const first = String(batch[0].file_path)
     const last = String(batch[batch.length - 1].file_path)
-    inclusive = first !== last
+    if (first === last) {
+      after = last
+      afterId = String(batch[batch.length - 1].id)
+      continue
+    }
+    inclusive = true
+    afterId = null
     after = last
   }
   return { rows, complete: false }
