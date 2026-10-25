@@ -14,6 +14,7 @@ import {
   dashboardNavBadge,
   mcpNavBadge,
   costsNavBadge,
+  settingsNavBadge,
   doSectionAttention,
   startSectionAttention,
   planSectionAttention,
@@ -237,6 +238,29 @@ describe('costsNavBadge', () => {
     })
     expect(badge?.mode).toBe('attention')
     expect(badge?.tone).toBe('warn')
+  })
+})
+
+describe('settingsNavBadge', () => {
+  const settings = {
+    byokKeysFailing: 0,
+    byokKeysUntested: 0,
+    byokKeysConfigured: 1,
+    slackConfigured: true,
+    githubRepoConfigured: true,
+  }
+
+  it('asks for attention when a key expires soon, like the Settings banner', () => {
+    const badge = settingsNavBadge({ ...settings, byokKeysExpiring: 1 })
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.tone).toBe('warn')
+    expect(badge?.count).toBe(1)
+    expect(badge?.label).toBe('1 BYOK key expiring soon')
+  })
+
+  it('stays informational when nothing needs attention', () => {
+    const badge = settingsNavBadge({ ...settings, byokKeysExpiring: 0 })
+    expect(badge?.mode).toBe('inventory')
   })
 })
 
