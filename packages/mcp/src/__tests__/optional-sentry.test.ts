@@ -66,9 +66,30 @@ describe('initOptionalSentry', () => {
   })
 })
 
+/** Object literal of `export const sentryDataCollection`, ignoring a trailing `satisfies` clause. */
+function sentryDataCollectionLiteral(source: string): string {
+  const marker = 'export const sentryDataCollection = '
+  const start = source.indexOf(marker)
+  if (start < 0) throw new Error('sentryDataCollection export is missing')
+  let i = start + marker.length
+  if (source[i] !== '{') throw new Error('sentryDataCollection is not an object literal')
+  let depth = 0
+  const begin = i
+  for (; i < source.length; i++) {
+    const ch = source[i]
+    if (ch === '{') depth += 1
+    else if (ch === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(begin, i + 1)
+    }
+  }
+  throw new Error('sentryDataCollection object is unterminated')
+}
+
 describe('@sentry/node packaging', () => {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as {
     dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
     peerDependenciesMeta?: Record<string, { optional?: boolean }>
   }
@@ -77,6 +98,22 @@ describe('@sentry/node packaging', () => {
     expect(pkg.dependencies?.['@sentry/node']).toBeUndefined()
     expect(pkg.peerDependencies?.['@sentry/node']).toBeDefined()
     expect(pkg.peerDependenciesMeta?.['@sentry/node']?.optional).toBe(true)
+  })
+
+  it('accepts an installed v10 peer and develops against v11', () => {
+    expect(pkg.peerDependencies?.['@sentry/node']).toBe('^10.57.0 || ^11.8.0')
+    expect(pkg.devDependencies?.['@sentry/node']).toBe('^11.8.0')
+    const note = readFileSync(resolve(__dirname, '../../../../.changeset/sentry-sdk-11.md'), 'utf8')
+    expect(note).toMatch(/'@mushi-mushi\/mcp': patch/)
+    expect(note).toContain('^10.57.0 || ^11.8.0')
+  })
+
+  it('keeps the same privacy baseline as the admin console', () => {
+    const here = readFileSync(resolve(__dirname, '../optional-sentry.ts'), 'utf8')
+    const admin = readFileSync(resolve(__dirname, '../../../../apps/admin/src/lib/sentry.ts'), 'utf8')
+    expect(sentryDataCollectionLiteral(here)).toBe(sentryDataCollectionLiteral(admin))
+    expect(here).toContain('apps/admin/src/lib/sentry.ts')
+    expect(admin).toContain('packages/mcp/src/optional-sentry.ts')
   })
 
   it('is not imported statically by the stdio entry point', () => {

@@ -10,7 +10,8 @@
 /**
  * SDK 11's stand-in for an unset `sendDefaultPii` (restrictive on v10).
  * An unset `dataCollection` collects user info, cookies, and HTTP bodies.
- * Same baseline as `apps/admin/src/lib/sentry.ts`.
+ * Same object literal as `apps/admin/src/lib/sentry.ts` (`sentryDataCollection`).
+ * Keep the two copies identical.
  */
 export const sentryDataCollection = {
   userInfo: false,

@@ -5,7 +5,10 @@
  *          user info, cookies, and HTTP bodies.
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BrowserOptions } from '@sentry/react'
 
 const init = vi.fn()
 
@@ -48,9 +51,14 @@ describe('initSentry', () => {
     vi.stubEnv('VITE_SENTRY_DSN', 'https://public@o1.ingest.sentry.io/1')
     initSentry()
     expect(init).toHaveBeenCalledTimes(1)
-    const options = init.mock.calls[0]?.[0] as { sendDefaultPii?: boolean; dataCollection: unknown }
-    expect(options.sendDefaultPii).toBeUndefined()
-    expect(options.dataCollection).toEqual(sentryDataCollection)
-    expect(sentryDataCollection).toEqual(V10_RESTRICTIVE_BASELINE)
+    const options = init.mock.calls[0]?.[0]
+    expect(options).toEqual(expect.objectContaining({ dataCollection: sentryDataCollection }))
+    expect(options).not.toHaveProperty('sendDefaultPii')
+    expect(sentryDataCollection satisfies NonNullable<BrowserOptions['dataCollection']>).toEqual(V10_RESTRICTIVE_BASELINE)
+  })
+
+  it('annotates the baseline with the SDK dataCollection option type', () => {
+    const source = readFileSync(resolve(__dirname, 'sentry.ts'), 'utf8')
+    expect(source).toContain("satisfies NonNullable<BrowserOptions['dataCollection']>")
   })
 })
