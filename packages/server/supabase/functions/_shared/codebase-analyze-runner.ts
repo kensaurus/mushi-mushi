@@ -5,22 +5,13 @@
  * The graph is one jsonb row. Writes go through write_codebase_graph
  * (90s timeout, per-project advisory lock, lz4). A second job for the same
  * project is put back on the queue instead of waiting out statement_timeout.
- *
- * The index is read page by page: PostgREST's max_rows (1000) truncated the
- * single `.limit(10000)` read, so the graph was rebuilt from a slice and the
- * merge put the rest of the stored document back — the jsonb row only grew.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getIndexFingerprint, loadExploreGraph } from './codebase-understand.ts'
 import { invalidateCodebaseUnderstandCaches } from './codebase-impact-resolve.ts'
 import { buildGraphFromIndex, fingerprintFile, mergeGraphUpdate } from './codebase-graph-build.ts'
-import {
-  listIndexedFilePaths,
-  listIndexedFileRows,
-  pruneGraphToLivePaths,
-  writeCodebaseGraph,
-} from './codebase-graph-write.ts'
+import { listIndexedFilePaths, pruneGraphToLivePaths, writeCodebaseGraph } from './codebase-graph-write.ts'
 import { log } from './logger.ts'
 import { runWikiIngestForProject } from './wiki-ingest.ts'
 
@@ -49,49 +40,6 @@ const ANALYZE_DRAIN_BUDGET_MS = 100 * 1000
  * freeze the project until that reaper runs.
  */
 const ANALYZE_SIBLING_ACTIVE_MS = 8 * 60 * 1000
-/** Rows per project_codebase_fingerprints upsert, under the 8s timeout. */
-const FINGERPRINT_BATCH = 500
-/** Rows per stored-fingerprint read page; PostgREST's max_rows is 1000. */
-const FINGERPRINT_PAGE = 1000
-/** 50k rows, matching the index walk. A full last page means a truncated read. */
-const MAX_FINGERPRINT_PAGES = 50
-
-/**
- * The stored fingerprint of every file, keyed by path, or null when the read
- * failed or ran out of pages — then the caller writes them all, as before.
- *
- * Keyset on file_path like the index walk, so no page re-sorts the project.
- */
-async function listStoredFingerprints(
-  db: SupabaseClient,
-  projectId: string,
-): Promise<Map<string, string> | null> {
-  const stored = new Map<string, string>()
-  let after: string | null = null
-  for (let page = 0; page < MAX_FINGERPRINT_PAGES; page++) {
-    let query = db
-      .from('project_codebase_fingerprints')
-      .select('file_path, fingerprint')
-      .eq('project_id', projectId)
-    if (after !== null) query = query.gt('file_path', after)
-    const { data, error } = await query.order('file_path', { ascending: true }).limit(FINGERPRINT_PAGE)
-    if (error) return null
-    const rows = data ?? []
-    for (const row of rows) stored.set(String(row.file_path), fingerprintDigest(row.fingerprint))
-    if (rows.length < FINGERPRINT_PAGE) return stored
-    after = String(rows[rows.length - 1].file_path)
-  }
-  return null
-}
-
-/**
- * Compare two fingerprints by value. jsonb does not keep key order, so the
- * stored object and a fresh one do not stringify the same way.
- */
-function fingerprintDigest(fp: unknown): string {
-  const f = (fp ?? {}) as { contentHash?: unknown; exportCount?: unknown; importCount?: unknown }
-  return `${String(f.contentHash ?? '')}|${String(f.exportCount ?? '')}|${String(f.importCount ?? '')}`
-}
 
 /** Put a claimed job back on the queue. Only touches a row this worker still owns. */
 async function releaseAnalyzeJob(db: SupabaseClient, jobId: string, error: string): Promise<void> {
@@ -212,10 +160,15 @@ export async function runCodebaseAnalyzeJob(
       .maybeSingle()
     if (repoErr) throw new Error(`project_repos read failed: ${repoErr.message}`)
 
-    // Paged: one `.limit(10000)` was capped at PostgREST's max_rows (1000),
-    // so the graph was rebuilt from a slice and the merge put the rest back.
-    const index = await listIndexedFileRows(db, projectId)
-    const allRows = index.rows
+    const { data: rows, error: rowsErr } = await db
+      .from('project_codebase_files')
+      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, content_hash, imports')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .limit(10000)
+    if (rowsErr) throw new Error(`project_codebase_files read failed: ${rowsErr.message}`)
+
+    const allRows = rows ?? []
     const fileRows = allRows.filter((r) => !r.symbol_name)
     const symbolRows = allRows.filter((r) => r.symbol_name)
 
@@ -227,25 +180,15 @@ export async function runCodebaseAnalyzeJob(
       symbolRows,
     })
 
-    // A whole-index rebuild is the whole graph. Reading the stored document
-    // back would only re-add nodes the index no longer has — and it is the
-    // multi-megabyte jsonb row this job is about to rewrite. buildGraphFromIndex
-    // is the only producer of those nodes: write_codebase_graph is the only
-    // writer of the row and this runner is its only caller, so a rebuild that
-    // drops stored nodes without a filePath drops nothing but stale ones.
-    let existingGraph: ReturnType<typeof buildGraphFromIndex> | null = null
-    if (changedPaths.length > 0 || !index.complete) {
-      const { data: existingGraphRow, error: graphReadErr } = await db
-        .from('project_codebase_graph')
-        .select('graph')
-        .eq('project_id', projectId)
-        .maybeSingle()
-      if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
-      existingGraph = (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null
-    }
+    const { data: existingGraphRow, error: graphReadErr } = await db
+      .from('project_codebase_graph')
+      .select('graph')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
 
     const merged = mergeGraphUpdate(
-      existingGraph,
+      (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null,
       nextGraph,
       changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
     )
@@ -270,38 +213,16 @@ export async function runCodebaseAnalyzeJob(
     }
     if (!written.ok) throw new Error(`project_codebase_graph write failed: ${written.message}`)
 
-    // Only the files whose fingerprint can have moved. A push names them, so
-    // no other file's index row changed; a full rebuild diffs against the
-    // stored rows. Writing all ~26k every run cost 50+ sequential round trips
-    // inside the drain budget to rewrite rows that were already current.
-    const changed = new Set(changedPaths)
-    const fpCandidates = changedPaths.length ? fileRows.filter((r) => changed.has(r.file_path)) : fileRows
-    const storedFps = changedPaths.length ? null : await listStoredFingerprints(db, projectId)
-    const fpRows = fpCandidates
-      .map((r) => ({
-        project_id: projectId,
-        file_path: r.file_path,
-        fingerprint: fingerprintFile(r),
-        updated_at: new Date().toISOString(),
-      }))
-      .filter((row) => !storedFps || storedFps.get(row.file_path) !== fingerprintDigest(row.fingerprint))
-    // Batched: the index read is no longer capped at 1000 rows, and one
-    // upsert of every fingerprint would run past the 8s statement timeout.
-    // A failed batch is logged, not thrown: the graph is already written and
-    // a stale fingerprint only costs the next push a re-chunk of that file.
-    for (let i = 0; i < fpRows.length; i += FINGERPRINT_BATCH) {
-      const { error: fpErr } = await db
-        .from('project_codebase_fingerprints')
-        .upsert(fpRows.slice(i, i + FINGERPRINT_BATCH), { onConflict: 'project_id,file_path' })
-      if (fpErr) {
-        runnerLog.warn('project_codebase_fingerprints batch upsert failed', {
-          jobId,
-          projectId,
-          batchStart: i,
-          batchSize: Math.min(FINGERPRINT_BATCH, fpRows.length - i),
-          err: fpErr.message,
-        })
-      }
+    const fpRows = fileRows.map((r) => ({
+      project_id: projectId,
+      file_path: r.file_path,
+      fingerprint: fingerprintFile(r),
+      updated_at: new Date().toISOString(),
+    }))
+    if (fpRows.length > 0) {
+      await db.from('project_codebase_fingerprints').upsert(fpRows, {
+        onConflict: 'project_id,file_path',
+      })
     }
 
     await invalidateCodebaseUnderstandCaches(db, projectId)
