@@ -106,8 +106,14 @@ describe('mushi work: branch, prompt and PR', () => {
   it('titles the PR as a conventional fix with the report id', () => {
     expect(prTitle('Fractional y-axis ticks on count charts [release:all]', R1)).toBe('fix: fractional y-axis ticks on count charts (MUSHI-11111111)')
     const long = 'buildYTickValues applies 12% headroom and divides linearly (peak*1.12/3), yielding fractional ticks on count charts'
-    expect(prTitle(long, R1)).toBe('fix: buildYTickValues applies 12% headroom and divides linearly… (MUSHI-11111111)')
+    expect(prTitle(long, R1)).toBe('fix: buildYTickValues applies 12% headroom and divides… (MUSHI-11111111)')
     expect(prTitle(long, R1)).not.toContain('[cut]')
+    // The commit header too: commitlint's subject-max-length 72 counts the MUSHI suffix.
+    const yen = 'Skill run 1/2: Loading, empty and error states on the web app pages in apps/web'
+    for (const t of [prTitle(long, R1), prTitle(yen, R1)]) {
+      expect(t.slice('fix: '.length).length).toBeLessThanOrEqual(72)
+      expect(t.length).toBeLessThanOrEqual(100)
+    }
   })
 
   it('reads the agent verdict from its first lines', () => {
