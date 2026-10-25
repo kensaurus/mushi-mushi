@@ -1,9 +1,17 @@
+/**
+ * FILE: apps/admin/src/pages/ReportDetailPage.tsx
+ * PURPOSE: One report in the admin console — diagnosis first, then triage,
+ *          evidence, and the reply thread.
+ *
+ * The shareable skill link is skillTriagePermalink (project + skill). Section
+ * icons distinguish console logs from the two timelines.
+ */
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { reportDetailPath } from '../lib/reportUrl'
+import { reportDetailPath, skillTriagePermalink } from '../lib/reportUrl'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -17,6 +25,7 @@ import {
   Badge,
   Callout,
   InfoHint,
+  CopyButton,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
@@ -39,6 +48,8 @@ import {
   IconNetwork,
   IconHealth,
   IconSkills,
+  IconClock,
+  IconStory,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -89,7 +100,6 @@ import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
-import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
@@ -382,40 +392,46 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
           </select>
         </div>
 
-        {displaySkills.map((skill) => (
-          <div
-            key={skill.slug}
-            className={[
-              'flex items-start gap-3 p-2.5 rounded-lg border',
-              preselectedSlug === skill.slug
-                ? 'border-brand bg-brand/5'
-                : 'border-edge-subtle bg-surface-overlay',
-            ].join(' ')}
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
-              <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
-              <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
-            </div>
-            <Btn
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => startPipeline(skill.slug)}
-              loading={startingSlug === skill.slug}
-              className="flex-shrink-0"
+        {displaySkills.map((skill) => {
+          // This skill's URL, including ?project=, so a shared link opens the
+          // report's app instead of the recipient's previous one (NN/g #5).
+          const triageHref = skillTriagePermalink(report.id, projectId, skill.slug)
+          return (
+            <div
+              key={skill.slug}
+              className={[
+                'flex items-start gap-3 p-2.5 rounded-lg border',
+                preselectedSlug === skill.slug
+                  ? 'border-brand bg-brand/5'
+                  : 'border-edge-subtle bg-surface-overlay',
+              ].join(' ')}
             >
-              {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
-            </Btn>
-          </div>
-        ))}
-
-        <p className="text-2xs text-fg-muted mt-1">
-          Share triage link:{' '}
-          <code className="font-mono text-brand">
-            {appUrl(`/reports/${report.id}?skill=${displaySkills[0]?.slug ?? ''}`)}
-          </code>
-        </p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
+                <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
+                <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
+                <p className="mt-1 inline-flex items-center gap-1 text-2xs text-fg-muted">
+                  Share triage link
+                  <CopyButton
+                    value={triageHref}
+                    label={`Copy triage link for ${skill.title || skill.slug}`}
+                    size="md"
+                  />
+                </p>
+              </div>
+              <Btn
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => startPipeline(skill.slug)}
+                loading={startingSlug === skill.slug}
+                className="flex-shrink-0"
+              >
+                {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
+              </Btn>
+            </div>
+          )
+        })}
       </div>
     </Section>
   )
@@ -754,11 +770,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
         </Section>
 
-        <Section title="Unified timeline" icon={<IconTerminal />}>
+        {/* Clock and story, not the console glyph: these lists were indistinguishable (NN/g #6). */}
+        <Section title="Unified timeline" icon={<IconClock />}>
           <UnifiedTimelineCard reportId={report.id} />
         </Section>
 
-        <Section title="Repro timeline" icon={<IconTerminal />}>
+        <Section title="Repro timeline" icon={<IconStory />}>
           <TimelineCard report={report} />
         </Section>
       </div>
