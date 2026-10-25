@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { initOptionalSentry } from '../optional-sentry.js'
+import { initOptionalSentry, sentryDataCollection } from '../optional-sentry.js'
 
 describe('initOptionalSentry', () => {
   it('never imports @sentry/node when no DSN is set', async () => {
@@ -32,6 +32,13 @@ describe('initOptionalSentry', () => {
       dsn: 'https://k@o1.ingest.sentry.io/1',
       environment: 'staging',
       tracesSampleRate: 0,
+      dataCollection: sentryDataCollection,
+    })
+    expect(sentryDataCollection).toMatchObject({
+      userInfo: false,
+      cookies: false,
+      httpBodies: [],
+      databaseQueryData: false,
     })
   })
 

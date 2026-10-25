@@ -63,7 +63,7 @@
     "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "@sentry/node": "^10.57.0"
+    "@sentry/node": "^11.8.0"
   },
   "peerDependenciesMeta": {
     "@sentry/node": {
@@ -73,7 +73,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@sentry/node": "^10.57.0",
+    "@sentry/node": "^11.8.0",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
     "tsup": "^8.5.1",

@@ -16,7 +16,7 @@ import { emailLinkOptions, passwordSignUpOptions, type SignupIntent } from './au
 
 // Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
 // answer "which user hit this?" without scanning replays. Email is intentionally
-// omitted to stay consistent with `sendDefaultPii: false`.
+// omitted to stay consistent with `dataCollection.userInfo: false`.
 function syncSentryUser(session: Session | null): void {
   if (session?.user?.id) {
     Sentry.setUser({ id: session.user.id })
