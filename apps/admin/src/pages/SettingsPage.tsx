@@ -77,7 +77,6 @@ import {
   sdkDetail,
   sdkTooltip,
 } from '../lib/statTooltips/settings';
-import { slackStatLabel } from '../components/settings/slackAlertStatus';
 import { settingsLinks } from '../lib/statCardLinks';
 import { useRealtimeReload } from '../lib/realtime';
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton';
@@ -319,7 +318,7 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
-            <GeneralPanel slackCanPost={stats.slackCanPost} />
+            <GeneralPanel />
             {/* The General panel grows from a ~320px skeleton to ~3,600px when
                 its settings land; cards rendered below it were pushed off
                 screen (layout shift 0.53, measured 2026-10-24). They mount once
@@ -386,7 +385,9 @@ function SettingsPageBody({
               <StatCard
                 label={copy?.statLabels?.routing ?? 'Alerts'}
                 value={
-                  [slackStatLabel(stats), stats.sentryConfigured && 'Sentry'].filter(Boolean).join(' · ') || 'None'
+                  [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
+                    .filter(Boolean)
+                    .join(' · ') || 'None'
                 }
                 tooltip={routingTooltip(stats)}
                 detail={routingDetail()}

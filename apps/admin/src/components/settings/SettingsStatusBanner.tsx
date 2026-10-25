@@ -13,7 +13,6 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { KeySummary } from './keyStatus'
 import type { SettingsStats, SettingsTabId } from './types'
-import { slackAlertsReady } from './slackAlertStatus'
 
 interface Props {
   stats: SettingsStats
@@ -32,7 +31,6 @@ type BannerPriority =
   | 'sdk_off'
   | 'keys_unchecked'
   | 'routing_optional'
-  | 'slack_incomplete'
   | 'healthy'
 
 function plural(n: number, word: string): string {
@@ -52,10 +50,7 @@ export function settingsBannerPriority(
   if (!hasAnthropicKey) return 'no_anthropic'
   if (!stats.sdkConfigEnabled) return 'sdk_off'
   if (unchecked > 0) return 'keys_unchecked'
-  // slackConfigured is "any Slack field is saved". That includes a channel
-  // id with no bot, which cannot send. slackCanPost is the send check.
-  if (stats.slackConfigured && stats.slackCanPost === false) return 'slack_incomplete'
-  if (!slackAlertsReady(stats) && !stats.sentryConfigured) return 'routing_optional'
+  if (!stats.slackConfigured && !stats.sentryConfigured) return 'routing_optional'
   return 'healthy'
 }
 
@@ -128,15 +123,6 @@ export function SettingsStatusBanner({
         />
       )
     }
-    case 'slack_incomplete':
-      return (
-        <StatusBannerShell
-          tone="warn"
-          title="Slack alerts cannot be sent yet"
-          subtitle="A Slack setting is saved, but nothing can post. Add Mushi to Slack and pick a channel, or paste a webhook."
-          action={go('general', 'Finish Slack setup')}
-        />
-      )
     case 'routing_optional':
       return (
         <StatusBannerShell

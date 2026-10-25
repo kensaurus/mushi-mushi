@@ -10,7 +10,6 @@ import { DetailRows, type DetailRowItem } from '../ui/fields'
 import { EndpointCodeRow } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { SettingsStats } from './types'
-import { slackAlertsReadout } from './slackAlertStatus'
 
 function sentryInboundWebhookUrl(): string {
   return `${RESOLVED_EXTERNAL_API_URL}/v1/webhooks/sentry`
@@ -36,7 +35,7 @@ export function SettingsIntegrationsReadout({
       value: `${stats.byokKeysConfigured} saved · ${stats.byokKeysPassing} accepted · ${stats.byokKeysFailing} failing · ${stats.byokKeysUntested} not checked`,
       wrap: true,
     },
-    { label: 'Slack alerts', value: slackAlertsReadout(stats) },
+    { label: 'Slack alerts', value: stats.slackConfigured ? 'Set up' : 'Not set up' },
     { label: 'Sentry DSN', value: stats.sentryConfigured ? 'Saved' : 'Not saved' },
     { label: 'Bug widget', value: stats.sdkConfigEnabled ? 'On' : 'Off' },
     { label: 'Triage model', value: stats.stage2Model ?? 'default', mono: true, wrap: true },

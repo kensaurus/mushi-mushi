@@ -351,37 +351,3 @@ describe('K1: settings stats count keys like the console rows', () => {
     expect(json.data).toMatchObject({ byokKeysPassing: 1, byokKeysFailing: 0 })
   })
 })
-
-describe('settings stats tell Slack "saved" apart from "can send"', () => {
-  it('a channel id alone is saved but cannot post', async () => {
-    seed()
-    Object.assign(db.table('project_settings')[0], { slack_channel_id: 'C123' })
-    const { status, json } = await call('GET', '/v1/admin/settings/stats')
-    expect(status).toBe(200)
-    expect(json.data).toMatchObject({ slackConfigured: true, slackCanPost: false })
-  })
-
-  it('a webhook, or a bot plus a channel, can post', async () => {
-    seed()
-    Object.assign(db.table('project_settings')[0], {
-      slack_webhook_url: 'https://hooks.slack.com/services/T/B/x',
-    })
-    const webhook = await call('GET', '/v1/admin/settings/stats')
-    expect(webhook.json.data).toMatchObject({ slackConfigured: true, slackCanPost: true })
-
-    seed()
-    Object.assign(db.table('project_settings')[0], {
-      slack_channel_id: 'C123',
-      slack_bot_token_ref: 'vault://bot',
-    })
-    const bot = await call('GET', '/v1/admin/settings/stats')
-    expect(bot.json.data).toMatchObject({ slackConfigured: true, slackCanPost: true })
-  })
-
-  it('a bot token without a channel cannot post', async () => {
-    seed()
-    Object.assign(db.table('project_settings')[0], { slack_bot_token_ref: 'vault://bot' })
-    const { json } = await call('GET', '/v1/admin/settings/stats')
-    expect(json.data).toMatchObject({ slackConfigured: true, slackCanPost: false })
-  })
-})

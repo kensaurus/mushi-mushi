@@ -49,9 +49,4 @@ describe('settingsBannerPriority', () => {
       settingsBannerPriority(stats({ slackConfigured: false, sentryConfigured: false }), summary(), true),
     ).toBe('routing_optional')
   })
-
-  it('does not treat a saved Slack setting that cannot post as ready', () => {
-    expect(settingsBannerPriority(stats({ slackCanPost: false }), summary(), true)).toBe('slack_incomplete')
-    expect(settingsBannerPriority(stats({ slackCanPost: true }), summary(), true)).toBe('healthy')
-  })
 })

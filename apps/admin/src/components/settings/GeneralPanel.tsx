@@ -8,9 +8,7 @@
  *            Daily limits     crawl pages / runs, test generations
  *            Feedback widget  "Bug reports by Mushi" line
  *          Loads + saves `/v1/admin/settings`; secrets come back masked with
- *          a `<column>_set` flag and are never sent back. The Slack row's
- *          "can send" state also reads `slackCanPost` from settings stats
- *          (passed in) plus the row's own channel, webhook, and bot flags.
+ *          a `<column>_set` flag and are never sent back.
  */
 
 import { useMemo, useState } from 'react'
@@ -46,7 +44,6 @@ import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
 import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
-import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -72,8 +69,6 @@ interface ProjectSettings {
   /** Server flags beside masked secrets: the value itself never reaches the console. */
   sentry_webhook_secret_set?: boolean
   slack_webhook_url_set?: boolean
-  /** True when this project's Slack bot token is stored. The token itself never arrives. */
-  slack_bot_token_ref_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
   /** Quick check (Stage 1) model. Claude ids only; the server rejects others. */
@@ -103,7 +98,7 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
-export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
+export function GeneralPanel() {
   const toast = useToast()
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
@@ -175,17 +170,14 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   if (error) return <ErrorAlert message={`Couldn't load your settings: ${error}`} onRetry={reload} />
 
   // ── Statuses: what is saved, and what Mushi has actually confirmed ──────────
-  // A channel id alone cannot post. slackCanPost covers an org or operator
-  // bot that this project's settings row does not list.
-  const slackInput = {
-    channelId: saved.slack_channel_id,
-    webhookSet: saved.slack_webhook_url_set === true,
-    botSet: saved.slack_bot_token_ref_set === true,
-    canPost: slackCanPost,
-    tested: slackTest,
-  }
-  const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
-  const canTestSlack = slackCanOfferTest(slackInput)
+  const slackSaved = Boolean(saved.slack_channel_id) || saved.slack_webhook_url_set === true
+  const slackStatus: RowStatusValue = !slackSaved
+    ? { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
+    : slackTest?.ok
+      ? { state: 'working', detail: 'Test message sent just now.' }
+      : slackTest
+        ? { state: 'attention', detail: "The test message didn't arrive. Check the channel ID and that the Mushi bot is in the channel." }
+        : { state: 'checking', detail: 'Saved. Send a test message to check it.' }
 
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
   const sentryStatus: RowStatusValue = !sentryDsnSaved
@@ -220,7 +212,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           purpose="Posts each new bug with Triage and Fix buttons. Fix progress replies in the same thread."
           status={slackStatus}
           action={
-            canTestSlack ? (
+            slackSaved ? (
               <Btn size="sm" variant="ghost" loading={testingSlack} onClick={() => void testSlack()}>
                 Send test message
               </Btn>
