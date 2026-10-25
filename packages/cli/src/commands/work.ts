@@ -355,6 +355,7 @@ function apiFor(cfg: CliConfig): Api {
 
 interface ReportDetail {
   id: string
+  project_id?: string | null
   summary: string | null
   description?: string | null
   category?: string | null
@@ -367,8 +368,24 @@ interface ReportDetail {
 }
 
 /** @internal Exported for tests only. Reports a local run may take, best first, never more than `max`. */
-export async function pickReports(api: Api, opts: { max: number; reportId?: string }): Promise<ReportDetail[]> {
-  if (opts.reportId) return [await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`)]
+/**
+ * @internal Exported for tests only. A report from another app than the one
+ * `mushi work` was pointed at: an API key bound to one app answers with that
+ * app's reports whatever --project says, and the agent would then "fix" them
+ * in the wrong repo (found 2026-10-25). Null when it matches.
+ */
+export function wrongAppReason(detail: { id: string; project_id?: string | null }, projectId: string | undefined): string | null {
+  if (!projectId || !detail.project_id || detail.project_id === projectId) return null
+  return `Report ${detail.id} belongs to app ${detail.project_id}, not ${projectId}: this CLI key is bound to another app. Sign in for this app: mushi login --project-id ${projectId}`
+}
+
+export async function pickReports(api: Api, opts: { max: number; reportId?: string; projectId?: string }): Promise<ReportDetail[]> {
+  const check = (detail: ReportDetail): ReportDetail => {
+    const wrong = wrongAppReason(detail, opts.projectId)
+    if (wrong) throw new MushiCliError('E_INVALID_INPUT', wrong, `mushi login --project-id ${opts.projectId}`)
+    return detail
+  }
+  if (opts.reportId) return [check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`))]
   const lists = await Promise.all(
     ['classified', 'reopened'].map((status) =>
       api<{ reports: WorkCandidate[] }>(`/v1/admin/reports?status=${status}&limit=50`).then((d) => d.reports ?? []),
@@ -377,7 +394,7 @@ export async function pickReports(api: Api, opts: { max: number; reportId?: stri
   const picked: ReportDetail[] = []
   for (const c of rankCandidates(lists.flat())) {
     if (picked.length >= opts.max) break
-    const detail = await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`)
+    const detail = check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`))
     if (hasLiveAttempt(detail.fix_attempts ?? []) || inLocalCooldown(detail.fix_attempts ?? [])) continue
     picked.push(detail)
   }
@@ -694,7 +711,7 @@ export function registerWorkCommands(program: Command): void {
         if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
         return
       }
-      const picked = await pickReports(api, { max, reportId })
+      const picked = await pickReports(api, { max, reportId, projectId: cfg.projectId })
       if (opts.dryRun) {
         const plan = picked.map((d) => ({ reportId: d.id, severity: d.severity ?? null, summary: d.summary, branch: branchNameFor(d.id, d.category) }))
         if (opts.json) process.stdout.write(`${JSON.stringify({ dryRun: true, plan }, null, 2)}\n`)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  wrongAppReason,
   inLocalCooldown,
   installCommand,
   failureTail,
@@ -199,5 +200,19 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('wrongAppReason', () => {
+  it('stops a run whose reports come from another app (a key bound to one app)', () => {
+    const msg = wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-b')
+    expect(msg).toContain('belongs to app app-a, not app-b')
+    expect(msg).toContain('mushi login --project-id app-b')
+  })
+
+  it('passes a report of the same app, or when either id is unknown', () => {
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, undefined)).toBeNull()
   })
 })
