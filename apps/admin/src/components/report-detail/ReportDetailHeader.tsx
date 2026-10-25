@@ -124,7 +124,11 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             <span className="max-w-48 truncate" title={reporter.title ?? undefined}>
               {reporter.text}
             </span>
-            {reporter.shortId ? <span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span> : null}
+            {/* Real spaces as well as the flex gap: copied text and screen
+                readers read "Signed-in user b850e61a · view all", not
+                "userb850e61a·" (report 1a629775). Whitespace between flex
+                items takes no room, so the layout is unchanged. */}
+            {reporter.shortId ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
                 className="text-3xs text-ok font-semibold uppercase tracking-wide"
@@ -133,7 +137,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
                 ✓ verified
               </span>
             )}
-            {reporterReportsHref(report) ? <span className="text-fg-faint">· view all</span> : null}
+            {reporterReportsHref(report) ? <>{' '}<span className="text-fg-faint">· view all</span></> : null}
           </MetaChip>
           {report.session_id && (
             <MetaChip
@@ -141,7 +145,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               title={`All reports from session ${report.session_id}`}
               to={`/reports?session=${encodeURIComponent(report.session_id)}`}
             >
-              <span className="font-mono">{report.session_id.slice(0, 8)}</span>
+              <span className="font-mono">{report.session_id.slice(0, 8)}</span>{' '}
               <span className="text-fg-faint">· view all</span>
             </MetaChip>
           )}

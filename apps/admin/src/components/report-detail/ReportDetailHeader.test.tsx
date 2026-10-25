@@ -127,6 +127,8 @@ describe('reporter chip spacing', () => {
     // classes: a flex row with a gap is what puts space between the spans.
     expect(value?.className).toContain('inline-flex')
     expect(value?.className).toMatch(/\bgap-1\b/)
+    // Copied text and screen readers get real spaces, not "userb850e61a·".
+    expect(value?.textContent).toBe('Signed-in user b850e61a · view all')
   })
 })
 
