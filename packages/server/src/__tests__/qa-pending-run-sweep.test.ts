@@ -121,18 +121,34 @@ describe('sweepStalePendingManualRuns', () => {
       error_message: RUNNER_DID_NOT_START,
       summary: RUNNER_DID_NOT_START,
       finished_at: NOW.toISOString(),
-      latency_ms: 0,
+      latency_ms: null,
     })
     expect(fresh.status).toBe('pending')
     expect(cron.status).toBe('pending')
     expect(running.status).toBe('running')
     expect(calls).toHaveLength(1)
+    expect(calls[0].patch.latency_ms).toBeNull()
     expect(calls[0].filters).toEqual([
       { op: 'eq', column: 'status', value: 'pending' },
       { op: 'eq', column: 'triggered_by', value: 'manual' },
       { op: 'lt', column: 'started_at', value: CUTOFF },
     ])
     expect(CUTOFF).toBe('2026-10-24T00:00:00.000Z')
+  })
+
+  it('stores null latency when the run never started', async () => {
+    const stale = row({
+      id: 'stale',
+      status: 'pending',
+      triggered_by: 'manual',
+      started_at: '2026-10-23T23:00:00.000Z',
+    })
+    const { db, calls } = fakeDb([stale])
+
+    await sweepStalePendingManualRuns(db, NOW)
+
+    expect(calls[0].patch.latency_ms).toBeNull()
+    expect(stale.latency_ms).toBeNull()
   })
 
   it('leaves a pending manual run that is exactly 10 minutes old', async () => {
@@ -161,18 +177,53 @@ describe('sweepStalePendingManualRuns', () => {
   })
 })
 
+/** Drop line comments so a commented-out call or return cannot satisfy the wiring check. */
+function withoutLineComments(block: string): string {
+  return block.replace(/^\s*\/\/.*$/gm, '')
+}
+
 describe('qa-story-runner cron wiring', () => {
   const src = readFileSync(
     resolve(__dirname, '../../supabase/functions/qa-story-runner/index.ts'),
     'utf8',
   )
 
-  it('sweeps on the cron tick, after a manual invoke has already returned', () => {
-    const manualReturn = src.indexOf('return await executeManualRun')
-    const cronStart = src.indexOf("startCronRun(db, 'qa-story-runner', 'cron')")
-    const call = src.indexOf('await sweepStalePendingManualRuns(')
+  it('sweeps inside the cron branch with the handler clock', () => {
+    const handlerStart = src.indexOf("withSentry('qa-story-runner'")
+    expect(handlerStart).toBeGreaterThan(-1)
+    const handler = src.slice(handlerStart)
+    const code = withoutLineComments(handler)
+
+    const manualReturn = code.indexOf('return await executeManualRun')
+    const cronStart = code.indexOf(
+      "const cronRun = await startCronRun(db, 'qa-story-runner', 'cron')",
+    )
+    const sweepCall =
+      'await sweepStalePendingManualRuns(db as unknown as QaPendingSweepDb, now)'
+    const call = code.indexOf(sweepCall)
+    const callLineEnd = code.indexOf('\n', call)
+    const callLine = code.slice(
+      code.lastIndexOf('\n', call) + 1,
+      callLineEnd === -1 ? undefined : callLineEnd,
+    )
+    const stories = code.indexOf(".from('qa_stories')", call)
+
     expect(manualReturn).toBeGreaterThan(-1)
+    expect(cronStart).toBeGreaterThan(manualReturn)
     expect(call).toBeGreaterThan(cronStart)
-    expect(call).toBeGreaterThan(manualReturn)
+    expect(stories).toBeGreaterThan(call)
+    expect(callLine.trim()).toBe(`const swept = ${sweepCall}`)
+    expect(code.slice(cronStart, call)).not.toMatch(/\breturn\b/)
+    expect(code.match(/sweepStalePendingManualRuns\(/g)).toHaveLength(1)
+
+    // `now` is the handler clock, declared before the try that swallows
+    // sweep failures. A missing binding throws inside that try.
+    const nowDecl = code.indexOf('const now = new Date()')
+    const sweepTry = code.lastIndexOf('try {', call)
+    expect(nowDecl).toBeGreaterThan(-1)
+    expect(nowDecl).toBeLessThan(manualReturn)
+    expect(sweepTry).toBeGreaterThan(nowDecl)
+    expect(sweepTry).toBeLessThan(call)
+    expect(code.slice(0, call).match(/\bconst now\b/g)).toHaveLength(1)
   })
 })

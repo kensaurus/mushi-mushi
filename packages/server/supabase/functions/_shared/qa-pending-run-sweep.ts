@@ -6,6 +6,7 @@
  * fire-and-forgets qa-story-runner. A 503 BOOT_ERROR (or a dropped invoke)
  * leaves that row pending, and the console treats pending as in flight.
  * The runner's own cron tick calls this and marks those rows error.
+ * An expired row keeps latency_ms null: the run never executed.
  */
 
 /** How long a manual run may stay pending before we treat the invoke as lost. */
@@ -31,7 +32,7 @@ export interface QaPendingSweepDb {
       error_message: string
       summary: string
       finished_at: string
-      latency_ms: number
+      latency_ms: null
     }): PendingRunUpdate
   }
 }
@@ -41,6 +42,7 @@ export interface QaPendingSweepDb {
  * The clock is started_at: the manual route leaves the column default
  * (insert time) and never overwrites it when the runner fails to boot.
  * A run that reached `running` is left alone — this only covers "never started".
+ * latency_ms is null. The column is nullable, and the run never started.
  */
 export async function sweepStalePendingManualRuns(
   db: QaPendingSweepDb,
@@ -55,7 +57,7 @@ export async function sweepStalePendingManualRuns(
       error_message: RUNNER_DID_NOT_START,
       summary: RUNNER_DID_NOT_START,
       finished_at: now.toISOString(),
-      latency_ms: 0,
+      latency_ms: null,
     })
     .eq('status', 'pending')
     .eq('triggered_by', 'manual')
