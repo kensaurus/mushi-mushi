@@ -14,12 +14,12 @@ import {
   dashboardNavBadge,
   mcpNavBadge,
   costsNavBadge,
+  settingsNavBadge,
   doSectionAttention,
   startSectionAttention,
   planSectionAttention,
   actSectionAttention,
   workspaceSlicesAttention,
-  settingsNavBadge,
   usersNavBadge,
 } from './extendedNavMeta'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
@@ -255,6 +255,14 @@ describe('settingsNavBadge', () => {
   // number next to it was read as five problems to fix.
   it('shows nothing when every saved key is healthy', () => {
     expect(settingsNavBadge(slice())).toBeNull()
+  })
+
+  it('asks for attention when a key expires soon, like the Settings banner', () => {
+    const badge = settingsNavBadge(slice({ byokKeysExpiring: 1 }))
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.tone).toBe('warn')
+    expect(badge?.count).toBe(1)
+    expect(badge?.label).toBe('1 BYOK key expiring soon')
   })
 
   it('still badges keys that need attention', () => {
