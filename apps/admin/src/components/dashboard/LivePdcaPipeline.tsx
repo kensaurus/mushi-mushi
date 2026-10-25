@@ -16,6 +16,10 @@
  *                immediately afterwards so the demo is anchored in real data.
  *
  *          Hidden in advanced mode (the PdcaCockpit covers power-user needs).
+ *          Collapsed to a one-line disclosure once the project has a merged
+ *          fix — the loop needs no four-card explanation after you've shipped
+ *          one, and the four cards pushed "Top 3 to triage" below the fold at
+ *          1440x900. The open/closed choice persists in localStorage.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -39,9 +43,37 @@ interface Props {
    * SSE rather than a duplicate fetch here.
    */
   pdcaStages?: PdcaStage[]
+  /**
+   * Merged auto-fixes on the active project. Anything above 0 means the user
+   * has already watched a bug go round the loop, so the explainer collapses
+   * to a one-line disclosure instead of four cards.
+   */
+  mergedFixCount?: number | null
 }
 
 type DemoState = 'idle' | 'running' | 'done' | 'error'
+
+const EXPLAINER_OPEN_KEY = 'mushi:dashboard:how-mushi-works-open'
+
+/** Opt-in: a project with a merged fix keeps the explainer closed by default. */
+function readExplainerOpen(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(EXPLAINER_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeExplainerOpen(next: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (next) window.localStorage.setItem(EXPLAINER_OPEN_KEY, '1')
+    else window.localStorage.removeItem(EXPLAINER_OPEN_KEY)
+  } catch {
+    /* private mode */
+  }
+}
 
 const STAGE_CTA: Record<PdcaStageId, { to: string; label: string }> = {
   plan: { to: '/reports', label: 'See your bugs' },
@@ -55,13 +87,14 @@ const STAGE_CTA: Record<PdcaStageId, { to: string; label: string }> = {
 // of the real synthetic report.
 const STAGE_MS = 1100
 
-export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Props) {
+export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages, mergedFixCount }: Props) {
   const { isBeginner } = useAdminMode()
   const sendTestReport = useSendTestReport()
   const [demoState, setDemoState] = useState<DemoState>('idle')
   const [activeStage, setActiveStage] = useState<PdcaStageId | null>(null)
   const [doneStages, setDoneStages] = useState<Set<PdcaStageId>>(new Set())
   const [livePulse, setLivePulse] = useState<PdcaStageId | null>(null)
+  const [explainerOpen, setExplainerOpen] = useState(readExplainerOpen)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const livePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -153,7 +186,33 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
     onDemoReportSent?.()
   }, [animate, demoState, onDemoReportSent, projectId, sendTestReport])
 
+  const toggleExplainer = useCallback(() => {
+    setExplainerOpen((prev) => {
+      writeExplainerOpen(!prev)
+      return !prev
+    })
+  }, [])
+
   if (!isBeginner) return null
+
+  // A project that has merged a fix already knows the loop. Keep the
+  // explainer one line so the triage queue stays above the fold.
+  const collapsible = (mergedFixCount ?? 0) > 0
+  if (collapsible && !explainerOpen) {
+    return (
+      <section className="mb-4">
+        <button
+          type="button"
+          onClick={toggleExplainer}
+          aria-expanded={false}
+          className="inline-flex items-center gap-1.5 text-xs text-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded"
+        >
+          How Mushi works
+          <span aria-hidden="true">↓</span>
+        </button>
+      </section>
+    )
+  }
 
   return (
     <section
@@ -187,6 +246,11 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
             <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Open Reports →
             </Link>
+          )}
+          {collapsible && (
+            <Btn size="sm" variant="ghost" onClick={toggleExplainer} aria-expanded>
+              Hide
+            </Btn>
           )}
         </div>
       </header>

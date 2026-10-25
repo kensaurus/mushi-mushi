@@ -390,6 +390,7 @@ export function DashboardPage() {
       <LivePdcaPipeline
         projectId={setup.activeProject?.project_id}
         pdcaStages={data.pdcaStages}
+        mergedFixCount={setup.activeProject?.merged_fix_count ?? 0}
         onDemoReportSent={() => {
           setup.reload()
           reload()
