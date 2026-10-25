@@ -9,8 +9,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { navSlicesForPaths } from './navBadges'
+import { navBadgeDataRead, navSlicesForPaths } from './navBadges'
 import { CORE_NAV_PATHS } from './navRegistry'
+import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
+import type { NavCounts } from './useNavCounts'
 
 describe('navSlicesForPaths', () => {
   it('always asks for dashboard, /health included', () => {
@@ -48,5 +50,37 @@ describe('navSlicesForPaths', () => {
       'releases',
       'settings',
     ])
+  })
+})
+
+function navCounts(over: Partial<NavCounts> = {}): NavCounts {
+  return {
+    untriagedBacklog: 0, fixesInFlight: 0, fixesFailed: 0, fixesRetryable: 0, prsOpen: 0,
+    urgentOpenReports: 0, regressedActions: 0, inboxOpenActions: 0, notificationsUnread: 0,
+    queueFailed: 0, healthIssues: 0, flaggedDevices: 0, feedbackWithReply: 0, judgeDisagreements: 0,
+    projectCount: 0, projectsNeedingAttention: 0, neverIngestedCount: 0, staleKeyCount: 0,
+    memberCount: null, pendingInvites: 0, membersInactiveCount: 0, membersAtSeatCap: false,
+    membersExpiringInvites: 0, superAdminSignups7d: null, superAdminChurn30d: null,
+    slices: EMPTY_NAV_STAT_SLICES, ready: true, ...over,
+  }
+}
+
+describe('navBadgeDataRead', () => {
+  it('is false until the counters load, whatever the path', () => {
+    expect(navBadgeDataRead('/judge', navCounts({ ready: false }))).toBe(false)
+  })
+
+  it('is true for a counter-backed path, false for a path nothing is read for', () => {
+    expect(navBadgeDataRead('/judge', navCounts())).toBe(true)
+    expect(navBadgeDataRead('/ci', navCounts())).toBe(false)
+  })
+
+  it('follows whether the path\'s slice actually arrived', () => {
+    expect(navBadgeDataRead('/drift', navCounts())).toBe(false)
+    const slices = {
+      ...EMPTY_NAV_STAT_SLICES,
+      drift: { openFindings: 0, criticalOpen: 0, topPriority: 'healthy' as const },
+    }
+    expect(navBadgeDataRead('/drift?range=7d', navCounts({ slices }))).toBe(true)
   })
 })

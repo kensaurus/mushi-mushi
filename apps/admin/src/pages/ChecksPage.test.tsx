@@ -117,4 +117,32 @@ describe('ChecksPage', () => {
     expect(judge?.textContent).toContain('3')
     expect(container.querySelector('a[href="/lessons"]')?.textContent).not.toContain('3')
   })
+
+  it('gives every card a status chip, and never says all clear for unread data', () => {
+    state.features = new Set(['inventory_v2'])
+    state.counts = counts({
+      slices: {
+        ...EMPTY_NAV_STAT_SLICES,
+        lessons: { activeLessons: 0, readyToPromote: 0, criticalLessons: 0, topPriority: 'healthy' },
+      },
+    })
+    render()
+    // Read and empty: a positive resting state, not silence.
+    expect(container.querySelector('a[href="/lessons"]')?.textContent).toContain('All clear')
+    // No slice is read for /ci on this page — it must not claim all clear.
+    const ci = container.querySelector('a[href="/ci"]')?.textContent ?? ''
+    expect(ci).toContain('Not checked here')
+    expect(ci).not.toContain('All clear')
+    for (const path of CARD_PATHS) {
+      const text = container.querySelector(`a[href="${path}"]`)?.textContent ?? ''
+      expect(/All clear|Not checked here/.test(text), path).toBe(true)
+    }
+  })
+
+  it('shows no resting chip before the counters load', () => {
+    state.counts = counts({ ready: false })
+    render()
+    expect(container.textContent).not.toContain('All clear')
+    expect(container.textContent).not.toContain('Not checked here')
+  })
 })

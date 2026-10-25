@@ -120,6 +120,35 @@ const PATH_SLICES: Readonly<Record<string, readonly string[]>> = {
   '/query': ['query'],
 }
 
+/**
+ * Paths whose `resolveNavBadge` case reads only the per-item counters, which
+ * every nav-meta answer carries. They need no slice to be "read".
+ */
+const COUNTER_BACKED_PATHS: ReadonlySet<string> = new Set([
+  '/reports',
+  '/judge',
+  '/feedback',
+  '/inbox',
+  '/notifications',
+  '/queue',
+  '/anti-gaming',
+])
+
+/**
+ * Whether the data behind this path's badge actually arrived. A null badge
+ * means two different things — "read it, nothing to report" and "never read
+ * it" — and only the first may be shown as all clear. Pages that render a
+ * resting chip (the /checks launcher) ask this before claiming no findings.
+ */
+export function navBadgeDataRead(path: string, navCounts: NavCounts): boolean {
+  if (!navCounts.ready) return false
+  const base = path.split('?')[0] ?? path
+  const keys = PATH_SLICES[base]
+  if (!keys) return COUNTER_BACKED_PATHS.has(base)
+  const slices = navCounts.slices as unknown as Record<string, unknown>
+  return keys.every((key) => slices[key] != null)
+}
+
 /** Slices needed to badge `paths` (visible sidebar items, not the open page). */
 export function navSlicesForPaths(paths: readonly string[]): string[] {
   const out = new Set<string>(['dashboard'])
