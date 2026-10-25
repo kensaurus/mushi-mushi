@@ -19,10 +19,7 @@ export function RoutePageHelp() {
 
   const props: PageHelpBannerProps = registration
   const gap = routeHelpClass(pathname)
-
-  return (
-    <div className={gap || undefined}>
-      <PageHelpBanner key={`${pathname}:${props.title}`} {...props} />
-    </div>
-  )
+  const banner = <PageHelpBanner key={`${pathname}:${props.title}`} {...props} />
+  if (!gap) return banner
+  return <div className={gap}>{banner}</div>
 }

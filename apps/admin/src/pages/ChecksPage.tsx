@@ -6,9 +6,9 @@
  *          one card per check page, grouped App checks → AI quality.
  *
  * Labels, descriptions, icons and feature gates come from NAV_REGISTRY (via
- * buildOperatorNav). The chip is the check's own run: Not set up, Not checked
- * yet, Pass, or N findings / Failed. Pass is only shown when a run time was
- * read. See checkCardStatus.ts.
+ * buildOperatorNav). The chip is the check's own run: Not set up, Not run
+ * yet, Status unavailable, Pass, or N findings / Failed. Pass is only shown
+ * when a run time was read. See checkCardStatus.ts.
  */
 
 import { Link } from 'react-router-dom'
@@ -100,7 +100,7 @@ export function ChecksPage() {
         description="Every automatic check on this app in one place."
         helpTitle="About Checks"
         helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, and how well the AI graded, learned from and prompted each fix."
-        helpHowToUse="Open a card to see that check. The chip says Not set up, Not checked yet, Pass, or how many findings it has. Pass is shown only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade."
+        helpHowToUse="Open a card to see that check. The chip says Not set up, Not run yet, Status unavailable, Pass, or how many findings it has. Pass is shown only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade."
       />
 
       {CHECK_GROUPS.map((group) => {
@@ -122,12 +122,12 @@ export function ChecksPage() {
                 const view = views[path] ?? null
                 return (
                   <li key={path} className="min-w-0" data-testid={`checks-card-${path.slice(1)}`}>
-                    <Card className={`flex h-full flex-col gap-2 p-4 ${gated ? 'opacity-80' : ''}`}>
+                    <Card interactive className={`relative flex h-full flex-col gap-2 p-4 ${gated ? 'opacity-80' : ''}`}>
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
                         <Link
                           to={path}
-                          className="truncate rounded-sm text-sm font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                          className="truncate rounded-sm text-sm font-medium text-fg after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                         >
                           {item.label}
                         </Link>
@@ -145,7 +145,7 @@ export function ChecksPage() {
                       {view?.state === 'not_set_up' && view.setupTo && (
                         <Link
                           to={view.setupTo}
-                          className="text-xs font-medium text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                          className="relative z-10 text-xs font-medium text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                         >
                           Set up →
                         </Link>

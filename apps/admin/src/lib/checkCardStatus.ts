@@ -3,17 +3,18 @@
  * PURPOSE: Status line for each card on /checks.
  *
  * A card may say Pass only when a finished run was read and it found nothing.
- * Zero sidebar counts are not a run. Missing data is Not checked yet or
- * Failed, never "All clear".
+ * Zero sidebar counts are not a run. A slice that could not be read is
+ * Status unavailable, never Failed. Not run yet means nothing has run.
  *
- * Four states the page renders: Not set up, Not checked yet, Pass, and a
- * result (N findings or Failed). Pass and a result include the last run time
- * when one was stored.
+ * States: Not set up, Not run yet, Status unavailable, Pass, and a result
+ * (N findings or Failed). Pass and a result include the last run time when
+ * one was stored. Content issues and lesson reinforcements are not check
+ * runs, so those cards never say Pass or Last run.
  */
 
 import { relativeTime } from './setupGuideSteps'
 
-export type CheckCardState = 'not_set_up' | 'not_checked' | 'pass' | 'findings' | 'failed'
+export type CheckCardState = 'not_set_up' | 'not_checked' | 'unavailable' | 'pass' | 'findings' | 'failed'
 
 export interface CheckCardView {
   state: CheckCardState
@@ -87,7 +88,7 @@ export interface CheckCardsInput {
     totalEvaluations?: number
     topPriority?: string
   } | null
-  /** loading: recipe/design/CI cards stay blank. error: those three read Failed. */
+  /** loading: recipe/design/CI cards stay blank. error: those three read Status unavailable. */
   recipePhase: 'loading' | 'error' | 'ready'
   recipeElements: ObservedElement[]
   design: ObservedElement | null
@@ -105,7 +106,16 @@ const NOT_SET_UP: Omit<CheckCardView, 'setupTo'> = {
 
 const NOT_CHECKED: CheckCardView = {
   state: 'not_checked',
-  chip: 'Not checked yet',
+  chip: 'Not run yet',
+  detail: null,
+  setupTo: null,
+  tone: 'neutral',
+}
+
+/** The check's data could not be read. This is not a failed run. */
+const UNAVAILABLE: CheckCardView = {
+  state: 'unavailable',
+  chip: 'Status unavailable',
   detail: null,
   setupTo: null,
   tone: 'neutral',
@@ -165,7 +175,7 @@ function ageMs(iso: string | null | undefined, now: number): number | null {
 }
 
 function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
-  if (!qa) return FAILED
+  if (!qa) return UNAVAILABLE
   const stories = qa.totalStories ?? 0
   const failing = qa.failingStories ?? 0
   if (qa.topPriority === 'no_stories' || stories === 0) return notSetUp('/qa-coverage')
@@ -176,7 +186,7 @@ function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
 }
 
 function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardView {
-  if (!health) return FAILED
+  if (!health) return UNAVAILABLE
   const at = health.lastCronAt ?? health.lastLlmCallAt ?? null
   if (health.topPriority === 'no_project') return NOT_CHECKED
   if ((health.cronErrorCount ?? 0) > 0 || health.topPriority === 'cron_error') return failed(at, now)
@@ -191,8 +201,8 @@ function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardVi
 }
 
 function fromAudit(audit: CheckCardsInput['audit'], now: number): CheckCardView {
-  if (!audit) return FAILED
-  if (audit.topPriority === 'unknown') return failed(audit.lastRunAt, now)
+  if (!audit) return UNAVAILABLE
+  if (audit.topPriority === 'unknown') return UNAVAILABLE
   if (audit.topPriority === 'no_project') return NOT_CHECKED
   if ((audit.failedGateCount ?? 0) > 0) return failed(audit.lastRunAt, now)
   if ((audit.errorCount ?? 0) > 0) return findings(audit.errorCount ?? 0, audit.lastRunAt, now)
@@ -202,7 +212,7 @@ function fromAudit(audit: CheckCardsInput['audit'], now: number): CheckCardView 
 }
 
 function fromInventory(inv: CheckCardsInput['inventory'], now: number): CheckCardView {
-  if (!inv) return FAILED
+  if (!inv) return UNAVAILABLE
   if (inv.hasInventory === false) return notSetUp('/inventory')
   const n = (inv.regressed ?? 0) + (inv.openFindings ?? 0)
   if (n > 0) return findings(n, inv.lastGateRunAt, now)
@@ -210,26 +220,27 @@ function fromInventory(inv: CheckCardsInput['inventory'], now: number): CheckCar
   return withTime(NOT_CHECKED, inv.lastGateRunAt, now)
 }
 
-function fromContent(content: CheckCardsInput['content'], now: number): CheckCardView {
-  if (!content) return FAILED
-  if ((content.failedRegenCount ?? 0) > 0) return failed(content.latestAt, now)
+function fromContent(content: CheckCardsInput['content']): CheckCardView {
+  if (!content) return UNAVAILABLE
+  // latestAt is the newest issue edit, not a scan. Open issues and a failed
+  // regen are still real; neither time is a check run, so no Pass or Last run.
+  if ((content.failedRegenCount ?? 0) > 0) return FAILED
   const open = content.needsAttentionCount ?? content.openCount ?? 0
-  if (open > 0) return findings(open, content.latestAt, now)
-  if (content.topPriority === 'healthy' && content.latestAt) return pass(content.latestAt, now)
-  return withTime(NOT_CHECKED, content.latestAt, now)
+  if (open > 0) return findings(open, null, 0)
+  return NOT_CHECKED
 }
 
-function fromLessons(lessons: CheckCardsInput['lessons'], now: number): CheckCardView {
-  if (!lessons) return FAILED
+function fromLessons(lessons: CheckCardsInput['lessons']): CheckCardView {
+  if (!lessons) return UNAVAILABLE
   if (lessons.topPriority === 'no_data') return notSetUp('/lessons')
   const n = (lessons.criticalLessons ?? 0) + (lessons.readyToPromote ?? 0)
-  if (n > 0) return findings(n, lessons.lastLessonReinforcedAt, now)
-  if (lessons.topPriority === 'healthy' && lessons.lastLessonReinforcedAt) return pass(lessons.lastLessonReinforcedAt, now)
-  return withTime(NOT_CHECKED, lessons.lastLessonReinforcedAt, now)
+  if (n > 0) return findings(n, null, 0)
+  // lastLessonReinforcedAt is when a lesson was reinforced, not a check run.
+  return NOT_CHECKED
 }
 
 function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {
-  if (!prompts) return FAILED
+  if (!prompts) return UNAVAILABLE
   if (prompts.topPriority === 'no_project') return NOT_CHECKED
   if (prompts.topPriority === 'no_dataset') return notSetUp('/judge')
   const n = (prompts.untestedAbCount ?? 0) + (prompts.promoteReadyCount ?? 0)
@@ -239,7 +250,7 @@ function fromPrompts(prompts: CheckCardsInput['prompts']): CheckCardView {
 }
 
 function fromJudge(judge: CheckCardsInput['judge'], now: number): CheckCardView {
-  if (!judge) return FAILED
+  if (!judge) return UNAVAILABLE
   const evals = judge.totalEvaluations ?? 0
   if (judge.topPriority === 'no_project') return NOT_CHECKED
   if (judge.topPriority === 'no_evals' || evals === 0) return notSetUp('/judge')
@@ -291,20 +302,20 @@ export function statusFromElements(elements: ObservedElement[], fallbackSetup: s
 /** One view per checks-page path. Null while that card's read has not finished. */
 export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): Record<string, CheckCardView | null> {
   const pending = input.recipePhase === 'loading'
-  const recipeFailed = input.recipePhase === 'error'
+  const recipeUnread = input.recipePhase === 'error'
   const slice = <T>(value: T | null, map: (value: T | null) => CheckCardView): CheckCardView | null =>
     input.navReady ? map(value) : null
   return {
     '/qa-coverage': slice(input.qa, (qa) => fromQa(qa, now)),
     '/health': slice(input.health, (health) => fromHealth(health, now)),
-    '/ci': pending ? null : recipeFailed ? FAILED : statusFromElements(input.ci ? [input.ci] : [], '/ci', now),
+    '/ci': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.ci ? [input.ci] : [], '/ci', now),
     '/fullstack-audit': slice(input.audit, (audit) => fromAudit(audit, now)),
     '/inventory': slice(input.inventory, (inv) => fromInventory(inv, now)),
-    '/recipe': pending ? null : recipeFailed ? FAILED : statusFromElements(input.recipeElements, '/recipe', now),
-    '/design': pending ? null : recipeFailed ? FAILED : statusFromElements(input.design ? [input.design] : [], '/design', now),
-    '/content': slice(input.content, (content) => fromContent(content, now)),
+    '/recipe': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.recipeElements, '/recipe', now),
+    '/design': pending ? null : recipeUnread ? UNAVAILABLE : statusFromElements(input.design ? [input.design] : [], '/design', now),
+    '/content': slice(input.content, (content) => fromContent(content)),
     '/judge': slice(input.judge, (judge) => fromJudge(judge, now)),
-    '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons, now)),
+    '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),
     '/prompt-lab': slice(input.prompts, (prompts) => fromPrompts(prompts)),
   }
 }

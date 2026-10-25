@@ -8,8 +8,8 @@
  *   - every card carries the registry label and links to the registry path,
  *     so the launcher can never drift from the sidebar;
  *   - a plan-gated check (inventory_v2) stays visible with an upgrade pill;
- *   - the chip is the check's run (set up, not checked, pass, findings), never
- *     "All clear" from an empty counter.
+ *   - the chip is the check's run (set up, not run yet, unavailable, pass,
+ *     findings), never "All clear" from an empty counter.
  */
 
 import { act, createElement } from 'react'
@@ -39,7 +39,11 @@ vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
 vi.mock('../lib/usePageData', () => ({ usePageData: () => state.recipe }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
 vi.mock('../components/PageHeaderBar', () => ({
-  PageHeaderBar: ({ title }: { title: string }) => createElement('h1', null, title),
+  PageHeaderBar: ({ title, helpHowToUse }: { title: string; helpHowToUse?: string }) =>
+    createElement('div', null,
+      createElement('h1', null, title),
+      createElement('p', { 'data-testid': 'checks-help' }, helpHowToUse ?? ''),
+    ),
 }))
 vi.mock('../components/billing/UpgradeNudge', () => ({
   UpgradePill: ({ flag }: { flag: string }) => createElement('span', { 'data-testid': `upgrade-${flag}` }, 'Pro'),
@@ -108,6 +112,20 @@ describe('ChecksPage', () => {
     }
     expect(container.querySelectorAll('li a').length).toBe(CARD_PATHS.length)
     expect(container.textContent).not.toContain('All clear')
+    const help = container.querySelector('[data-testid="checks-help"]')?.textContent ?? ''
+    expect(help).toContain('Not run yet')
+    expect(help).not.toContain('Not checked yet')
+    const qa = container.querySelector('[data-testid="checks-card-qa-coverage"]')
+    expect(qa?.textContent).toContain('Status unavailable')
+    expect(qa?.textContent).not.toContain('Failed')
+    for (const path of CARD_PATHS) {
+      const card = container.querySelector(`[data-testid="checks-card-${path.slice(1)}"]`)
+      const surface = card?.firstElementChild
+      expect(surface?.className, path).toContain('relative')
+      expect(surface?.className, path).toContain('hover:bg-surface-hover')
+      const title = card?.querySelector<HTMLAnchorElement>(`a[href="${path}"]`)
+      expect(title?.className, path).toContain('after:inset-0')
+    }
   })
 
   it('keeps a plan-gated check visible with an upgrade pill, and drops the pill once entitled', () => {
@@ -150,10 +168,15 @@ describe('ChecksPage', () => {
     expect(judge?.textContent).toContain('Last run')
     const content = container.querySelector('[data-testid="checks-card-content"]')
     expect(content?.textContent).toContain('2 findings')
-    expect(content?.textContent).toContain('Last run')
+    expect(content?.textContent).not.toContain('Last run')
     const ci = container.querySelector('[data-testid="checks-card-ci"]')
     expect(ci?.textContent).toContain('Not set up')
-    expect(ci?.querySelector('a[href="/integrations/config"]')?.textContent).toContain('Set up')
+    const setup = ci?.querySelector<HTMLAnchorElement>('a[href="/integrations/config"]')
+    expect(setup?.textContent).toContain('Set up')
+    expect(setup?.className).toContain('z-10')
+    expect(setup?.className).toContain('relative')
+    const title = ci?.querySelector<HTMLAnchorElement>('a[href="/ci"]')
+    expect(title?.className).toContain('after:inset-0')
     expect(container.textContent).not.toContain('All clear')
   })
 

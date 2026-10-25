@@ -11,7 +11,7 @@ description: The Checks page lists every automatic check on this app. Each card 
 
 **Route:** `/checks`
 
-Every automatic check on this app, in one place. This page is a launcher: open a card to see that check. The chip says Not set up, Not checked yet, Pass, or how many findings the last run had. Pass appears only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade.
+Every automatic check on this app, in one place. This page is a launcher: open a card to see that check. The chip says Not set up, Not run yet, Status unavailable, Pass, or how many findings the last run had. Pass appears only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade.
 
 ## App checks
 
