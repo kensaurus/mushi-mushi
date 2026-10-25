@@ -64,7 +64,7 @@ const REVIEW_MAX_HEIGHT = 2400
 export const AUDIT_FILE_CAP = 15
 const AUDIT_DEDUPE_DAYS = 14
 
-/** @internal Exported for tests only. Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
+/** Pure: a path without its query: `/reports?project=…` is one page however it was opened. */
 export function pagePath(path: string): string {
   const q = path.search(/[?#]/)
   return q < 0 ? path : path.slice(0, q)
@@ -436,8 +436,7 @@ export interface AuditResult {
 const DEFAULT_MAX_SCREENS = 30
 
 /**
- * @internal Exported for tests only.
- * Requests an audit lets through on top of `--allow`: a cached session
+ * Requests an audit (and explore) lets through on top of `--allow`: a cached session
  * renewing itself writes no app data, and without it a signed-in app boots
  * blank (Supabase refreshes its access token with this POST; 25 were blocked
  * on the first console audit, 2026-10-24).

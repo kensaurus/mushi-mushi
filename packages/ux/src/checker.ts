@@ -77,7 +77,7 @@ function crop(png: Buffer, box: ChangeRegion): Buffer {
   return PNG.sync.write(out)
 }
 
-/** Pure: the first JSON object in a model's text answer, or null. @internal Exported for tests only. */
+/** Pure: the first JSON object in a model's text answer, or null. */
 export function firstJson(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')

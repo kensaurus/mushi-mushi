@@ -38,6 +38,7 @@ export const CHARTERS = {
 
 export type CharterName = keyof typeof CHARTERS
 
+/** @internal Exported for tests only. */
 export type ExploreAction =
   | { action: 'click'; role: string; name: string }
   | { action: 'fill'; role: string; name: string; value: string }
@@ -46,6 +47,7 @@ export type ExploreAction =
   | { action: 'back' | 'forward' | 'reload' | 'scroll' | 'done' }
   | { action: 'resize'; width: number; height: number }
 
+/** @internal Exported for tests only. */
 export interface Signal {
   kind: 'console-error' | 'page-error' | 'server-error' | 'blank-screen'
   message: string
