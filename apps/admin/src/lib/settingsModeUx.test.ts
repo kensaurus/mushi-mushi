@@ -47,6 +47,10 @@ describe('resolveQuickSettingsTab', () => {
     expect(resolveQuickSettingsTab({ ...ready, slackConfigured: false }, summary({}), true, true)).toBe('general');
   });
 
+  it('opens General when Slack is saved but cannot send', () => {
+    expect(resolveQuickSettingsTab({ ...ready, slackCanPost: false }, summary({}), true, true)).toBe('general');
+  });
+
   it('skips the optional own-key step on a plan without own keys', () => {
     expect(resolveQuickSettingsTab(ready, null, false, true)).toBe('byok');
     expect(resolveQuickSettingsTab(ready, null, false, false)).toBe('sdk');

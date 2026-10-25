@@ -5,6 +5,7 @@
 
 import type { MetricTooltipData } from '../../components/ui'
 import type { SettingsStats } from '../../components/settings/types'
+import { slackAlertsReady } from '../../components/settings/slackAlertStatus'
 import { metricTip } from '../metricTooltipBuilder'
 
 type Opts = { plainLanguage?: boolean }
@@ -57,18 +58,23 @@ export function sdkDetail(stats: SettingsStats): string {
 
 export function routingTooltip(stats: SettingsStats, opts: Opts = {}): MetricTooltipData {
   const plain = opts.plainLanguage ?? false
-  const configured = [stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry'].filter(Boolean)
-  const takeaway =
-    configured.length > 0
-      ? `${configured.join(' and ')} routing configured on the General tab. Full platform integrations live under Integrations.`
+  const partialSlack = stats.slackConfigured && stats.slackCanPost === false
+  const configured = [slackAlertsReady(stats) && 'Slack', stats.sentryConfigured && 'Sentry'].filter(Boolean)
+  const takeaway = partialSlack
+    ? 'Slack is saved, but alerts cannot be sent until a bot and a channel, or a webhook, is set.'
+    : configured.length > 0
+      ? `${configured.join(' and ')} can receive alerts. Full setup lives under Integrations.`
       : plain
         ? 'No Slack or Sentry routing on General tab — add webhooks for new-bug notifications.'
         : 'No Slack or Sentry routing on General tab — add webhooks for triage notifications.'
 
   return metricTip(
-    'Lightweight notification routing configured in Settings → General (Slack webhook, Sentry DSN).',
-    'Boolean flags on project_settings: slack_webhook_url and sentry_dsn for the active project.',
+    'Whether bug alerts can be sent to Slack, and whether a Sentry DSN is saved.',
+    'Slack can send when a webhook is saved, or a channel is saved and a bot can post. Sentry is the DSN on project settings.',
     takeaway,
+    partialSlack
+      ? { tone: 'warn', text: 'Finish Slack under Integrations, or paste a webhook on General.' }
+      : undefined,
   )
 }
 
