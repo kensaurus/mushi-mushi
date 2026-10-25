@@ -19,6 +19,7 @@ import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
+import { preflightForReportRow } from './allAppsRowActions'
 import { REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
 
 interface Props {
@@ -54,6 +55,11 @@ interface Props {
    *  DispatchFixPreflight popover so prerequisites are visible BEFORE the
    *  user clicks Queue (and we never round-trip the 4-check fetch per row). */
   preflight?: PreflightState
+  /**
+   * All apps: the preflight was loaded for this app only. Rows from other
+   * apps get an explanation instead of that checklist. Null in one-app mode.
+   */
+  preflightProjectId?: string | null
 }
 
 interface DisplayRow {
@@ -92,6 +98,7 @@ export function ReportsTable({
   onDismiss,
   onDispatchFix,
   preflight,
+  preflightProjectId = null,
 }: Props) {
   const [tbodyParent] = useAutoAnimate({
     duration: 220,
@@ -235,7 +242,9 @@ export function ReportsTable({
             </tr>
           </thead>
           <tbody ref={tbodyParent}>
-            {displayRows.map((d, i) => (
+            {displayRows.map((d, i) => {
+              const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
+              return (
               <ReportRowView
                 key={d.row.id}
                 row={d.row}
@@ -257,9 +266,11 @@ export function ReportsTable({
                 onCopyLink={() => onCopyLink(d.row)}
                 onDismiss={() => onDismiss(d.row)}
                 onDispatchFix={() => onDispatchFix(d.row)}
-                preflight={preflight}
+                preflight={rowPreflight.preflight}
+                dispatchScopeNote={rowPreflight.dispatchScopeNote}
               />
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </ResponsiveTable>

@@ -14,6 +14,7 @@ import {
   PROJECT_SCOPE_EVENT,
   PROJECT_SCOPE_STORAGE_KEY,
   allAppsSupportFor,
+  combinedFetchScope,
   getStoredProjectScopeMode,
   resolveProjectScopeMode,
   setStoredProjectScopeMode,
@@ -59,6 +60,13 @@ describe('stored scope', () => {
   })
 })
 
+describe('combinedFetchScope', () => {
+  it('drops the project pin only in All apps mode', () => {
+    expect(combinedFetchScope('all')).toBe('enumeration')
+    expect(combinedFetchScope('project')).toBe('project')
+  })
+})
+
 describe('resolveProjectScopeMode', () => {
   it('lets ?apps=all win, ignores other values, else uses storage', () => {
     expect(resolveProjectScopeMode('all', 'project')).toBe('all')
@@ -75,8 +83,9 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/projects')).toBe('account')
     expect(allAppsSupportFor('/org/acme/settings/members')).toBe('account')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
-    expect(allAppsSupportFor('/reports')).toBe('single')
+    expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')
+    expect(allAppsSupportFor('/fixes')).toBe('single')
     expect(allAppsSupportFor('/cinema')).toBe('single')
   })
 })
