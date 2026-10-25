@@ -3,7 +3,7 @@ import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { reportDetailPath } from '../lib/reportUrl'
+import { reportDetailPath, reportSkillPermalink } from '../lib/reportUrl'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -17,6 +17,7 @@ import {
   Badge,
   Callout,
   InfoHint,
+  CopyButton,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
@@ -39,6 +40,8 @@ import {
   IconNetwork,
   IconHealth,
   IconSkills,
+  IconClock,
+  IconStory,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -65,12 +68,11 @@ import { ReportComments } from '../components/report-detail/ReportComments'
 import { KnownIssuesSection } from '../components/report-detail/KnownIssuesSection'
 import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
-import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
+import { capturedEvidence, screenshotEmptyText, uncapturedEvidenceNote } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
 import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
-import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
@@ -86,10 +88,8 @@ import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissi
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
-import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
-import { appUrl } from '../lib/appPath'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
@@ -361,61 +361,73 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
   if (displaySkills.length === 0) return null
 
   return (
-    <Section title="Recommended skills" icon={<IconSkills />}>
+    <Section
+      title="Recommended skills"
+      icon={<IconSkills />}
+      action={
+        <InfoHint content="Matched during classification. Local opens the run in Cursor on your machine. Cloud starts a Cursor cloud agent. The copy control shares this report with that skill selected, including the project so the link does not 404." />
+      }
+    >
       <div className="flex flex-col gap-2">
-        <p className="text-xs text-fg-muted">
-          Skills matched to this report during classification. Start a skill run to guide a Cursor agent through the fix.
-        </p>
-
-        <div className="flex gap-2 items-center mb-1">
-          <label htmlFor="skill-run-mode" className="text-xs text-fg-muted">
+        <div className="flex flex-wrap gap-2 items-center">
+          <label htmlFor="skill-run-mode" className="text-xs text-fg-muted whitespace-nowrap">
             Run mode
           </label>
           <select
             id="skill-run-mode"
             value={mode}
             onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
-            className="input text-xs py-1 h-7"
+            className="input text-xs py-1 h-7 max-w-full"
           >
-            <option value="handoff">Handoff (local Cursor agent)</option>
-            <option value="cloud">Cloud (auto Cursor Cloud)</option>
+            <option value="handoff">Local agent</option>
+            <option value="cloud">Cloud agent</option>
           </select>
         </div>
 
-        {displaySkills.map((skill) => (
-          <div
-            key={skill.slug}
-            className={[
-              'flex items-start gap-3 p-2.5 rounded-lg border',
-              preselectedSlug === skill.slug
-                ? 'border-brand bg-brand/5'
-                : 'border-edge-subtle bg-surface-overlay',
-            ].join(' ')}
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
-              <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
-              <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
-            </div>
-            <Btn
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => startPipeline(skill.slug)}
-              loading={startingSlug === skill.slug}
-              className="flex-shrink-0"
+        {displaySkills.map((skill) => {
+          // One brand button in this card: the skill the triage link named.
+          // The rest stay ghost so they don't compete with Dispatch fix.
+          const linked = preselectedSlug === skill.slug
+          return (
+            <div
+              key={skill.slug}
+              className={[
+                'flex items-start gap-3 p-2.5 rounded-lg border',
+                linked
+                  ? 'border-edge bg-surface-raised'
+                  : 'border-edge-subtle bg-surface-overlay',
+              ].join(' ')}
             >
-              {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
-            </Btn>
-          </div>
-        ))}
-
-        <p className="text-2xs text-fg-muted mt-1">
-          Share triage link:{' '}
-          <code className="font-mono text-brand">
-            {appUrl(`/reports/${report.id}?skill=${displaySkills[0]?.slug ?? ''}`)}
-          </code>
-        </p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
+                <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
+                <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
+                {linked && (
+                  <Badge className="mt-1 bg-surface-overlay text-fg-secondary border border-edge-subtle">
+                    Opened from link
+                  </Badge>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <CopyButton
+                  value={reportSkillPermalink(report.id, projectId, skill.slug)}
+                  label={`Copy link for ${skill.title || skill.slug}`}
+                  size="md"
+                />
+                <Btn
+                  type="button"
+                  variant={linked ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => startPipeline(skill.slug)}
+                  loading={startingSlug === skill.slug}
+                  className="whitespace-nowrap"
+                >
+                  {startingSlug === skill.slug ? 'Starting…' : 'Run skill'}
+                </Btn>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </Section>
   )
@@ -487,6 +499,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
+  // NN/g #8: a quiet report used to render four empty capture cards. Show a
+  // section only when that stream has rows; name the rest in one line.
+  const evidence = capturedEvidence(report)
+  const evidenceNote = uncapturedEvidenceNote(evidence)
   const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
   const handleMerged = useCallback(
@@ -567,10 +583,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           Delivers the brand sub-promise as one surface at the top; the
           detailed classification + evidence sections stay below. */}
       <DiagnosisFixHero report={report} />
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <GenerateTestButton report={report} />
-      </div>
 
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the
           page used to repeat it as a flow graph and a receipt strip too. */}
@@ -722,45 +734,59 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           </Section>
         )}
 
-        <Section id="report-performance" title="Performance metrics" icon={<IconGauge />}>
-          {/* Phase 4b: pass anomalies for σ-above-baseline provenance badges */}
-          <PerformanceMetrics
-            metrics={report.performance_metrics}
-            anomalies={report.anomalies}
-          />
-        </Section>
+        {evidence.performance && (
+          <Section id="report-performance" title="Performance metrics" icon={<IconGauge />}>
+            {/* Phase 4b: pass anomalies for σ-above-baseline provenance badges */}
+            <PerformanceMetrics
+              metrics={report.performance_metrics}
+              anomalies={report.anomalies}
+            />
+          </Section>
+        )}
 
-        <Section id="report-console-logs" title="Console logs" icon={<IconTerminal />}>
-          <ConsoleLogs logs={report.console_logs} />
-          {/* Phase 4d: stack-frame panel with GitHub deeplinks when a fix commit exists */}
-          <CodeFramePanel
-            consoleLogs={report.console_logs}
-            repoUrl={report.project?.repo_url}
-            commitSha={report.fix_attempts?.[0]?.commit_sha}
-          />
-        </Section>
+        {evidence.console && (
+          <Section id="report-console-logs" title="Console logs" icon={<IconTerminal />}>
+            <ConsoleLogs logs={report.console_logs} />
+            {/* Phase 4d: stack-frame panel with GitHub deeplinks when a fix commit exists */}
+            <CodeFramePanel
+              consoleLogs={report.console_logs}
+              repoUrl={report.project?.repo_url}
+              commitSha={report.fix_attempts?.[0]?.commit_sha}
+            />
+          </Section>
+        )}
 
-        <Section id="report-network" title="Network requests" icon={<IconNetwork />}>
-          <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
-          {/* Phase 4a: trace waterfall — client requests + backend spans in causal order */}
-          {((report.network_logs?.some((r) => r.traceId)) || (report.backend_spans?.length ?? 0) > 0) && (
-            <div className="mt-2">
-              <p className="text-2xs font-medium text-fg-faint mb-1">Trace waterfall (client → backend)</p>
-              <TraceWaterfall
-                networkRequests={report.network_logs}
-                backendSpans={report.backend_spans}
-              />
-            </div>
-          )}
-        </Section>
+        {evidence.network && (
+          <Section id="report-network" title="Network requests" icon={<IconNetwork />}>
+            {(report.network_logs?.length ?? 0) > 0 && (
+              <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
+            )}
+            {/* Phase 4a: trace waterfall — client requests + backend spans in causal order */}
+            {((report.network_logs?.some((r) => r.traceId)) || (report.backend_spans?.length ?? 0) > 0) && (
+              <div className={(report.network_logs?.length ?? 0) > 0 ? 'mt-2' : undefined}>
+                <p className="text-2xs font-medium text-fg-faint mb-1">Trace waterfall (client → backend)</p>
+                <TraceWaterfall
+                  networkRequests={report.network_logs}
+                  backendSpans={report.backend_spans}
+                />
+              </div>
+            )}
+          </Section>
+        )}
 
-        <Section title="Unified timeline" icon={<IconTerminal />}>
+        <Section title="Unified timeline" icon={<IconClock />}>
           <UnifiedTimelineCard reportId={report.id} />
         </Section>
 
-        <Section title="Repro timeline" icon={<IconTerminal />}>
-          <TimelineCard report={report} />
-        </Section>
+        {evidence.repro && (
+          <Section title="Repro timeline" icon={<IconStory />}>
+            <TimelineCard report={report} />
+          </Section>
+        )}
+
+        {evidenceNote && (
+          <p className="text-2xs text-fg-faint lg:col-span-2">{evidenceNote}</p>
+        )}
       </div>
 
       <div className="mt-3">
@@ -834,19 +860,10 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
 }
 
-/** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
-const PLATFORM_BADGE: Record<string, string> = {
-  ios:     CHIP_TONE.infoSubtle,
-  android: CHIP_TONE.okSubtle,
-  web:     'bg-brand/12 text-brand border border-brand/28',
-  macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-}
-
 /**
- * Device & Build panel — renders SDK package, version, app version, and
- * the resolved platform tag in a compact definition grid. Mirrors the
- * density of EnvironmentFields so the two panels feel like one surface.
+ * Device & Build panel — SDK package, version, and app version.
+ * Platform stays on the Environment card (same `environment.platform`
+ * value); repeating it here was a second copy of one fact (NN/g #8).
  */
 function DeviceAndBuildPanel({
   report,
@@ -858,12 +875,10 @@ function DeviceAndBuildPanel({
   const snapshots = useProjectSnapshots()
   const snapshot = report.project_id ? snapshots.byId.get(report.project_id) : undefined
   const githubReady = preflight.checks.find((c) => c.key === 'github')?.ready ?? false
-  const platform = (report.environment?.platform ?? '').toLowerCase()
   const rows: Array<{ label: string; value: string }> = [
     report.sdk_package  ? { label: 'SDK',         value: report.sdk_package }  : null,
     report.sdk_version  ? { label: 'SDK version',  value: report.sdk_version }  : null,
     report.app_version  ? { label: 'App version',  value: report.app_version }  : null,
-    platform            ? { label: 'Platform',     value: platform }             : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>
 
   if (rows.length === 0) return null
@@ -874,17 +889,9 @@ function DeviceAndBuildPanel({
         {rows.map((row) => (
           <div key={row.label} className="flex items-center gap-3">
             <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
-            {row.label === 'Platform' ? (
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-              >
-                {row.value}
-              </span>
-            ) : (
-              <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
-                {row.value}
-              </code>
-            )}
+            <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+              {row.value}
+            </code>
           </div>
         ))}
       </div>

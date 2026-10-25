@@ -180,19 +180,28 @@ export interface MetaChipProps {
   label: string
   title?: string
   to?: string
+  /** External URL. Opens in a new tab. Ignored when `to` is set. */
+  href?: string
   className?: string
 }
 
-export function MetaChip({ children, label, title, to, className = '' }: MetaChipProps) {
+export function MetaChip({ children, label, title, to, href, className = '' }: MetaChipProps) {
   const inner = (
     <>
       <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</span>
       <span className="text-fg-muted">{children}</span>
     </>
   )
-  const base = `flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs ${className}`
+  const base = `flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs min-h-6 ${className}`
   if (to) {
     return <Link to={to} title={title} className={`${base} hover:bg-surface-raised transition-opacity`}>{inner}</Link>
+  }
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" title={title} className={`${base} hover:bg-surface-raised transition-opacity`}>
+        {inner}
+      </a>
+    )
   }
   return <div title={title} className={base}>{inner}</div>
 }

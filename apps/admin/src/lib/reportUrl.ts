@@ -42,6 +42,22 @@ export function reportPermalink(reportId: string, projectId?: string | null): st
 }
 
 /**
+ * Share link that opens this report with a skill pre-selected.
+ * Keeps `?project=` so a multi-project console does not 404 on the wrong app.
+ */
+export function reportSkillPermalink(
+  reportId: string,
+  projectId: string | null | undefined,
+  skillSlug: string,
+): string {
+  const path = reportDetailPath(reportId, projectId)
+  const [base, qs = ''] = path.split('?')
+  const params = new URLSearchParams(qs)
+  params.set('skill', skillSlug)
+  return appUrl(`${base}?${params.toString()}`)
+}
+
+/**
  * Returns the fully-qualified URL for the current admin view, including
  * filters in the query string and any hash anchor.
  */

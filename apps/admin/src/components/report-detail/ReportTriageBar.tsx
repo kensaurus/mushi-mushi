@@ -191,6 +191,7 @@ export function ReportTriageBar({
           </SelectField>
           <Btn
             size="sm"
+            className="whitespace-nowrap"
             onClick={() => {
               setClosing(false)
               trackAdHoc('report_closed', {
@@ -204,7 +205,7 @@ export function ReportTriageBar({
           >
             Close report
           </Btn>
-          <Btn size="sm" variant="ghost" onClick={() => setClosing(false)} disabled={saving}>
+          <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => setClosing(false)} disabled={saving}>
             Cancel
           </Btn>
           {(report.sentry_links?.some((l) => !l.resolved_at) ?? false) && (
@@ -257,6 +258,7 @@ export function ReportTriageBar({
         <Btn
           variant="ghost"
           size="sm"
+          className="whitespace-nowrap"
           onClick={syncToIntegrations}
           disabled={syncing}
           loading={syncing}
@@ -290,6 +292,7 @@ export function ReportTriageBar({
           <Btn
             variant={hasCodeLocation ? 'ghost' : 'primary'}
             size={hasCodeLocation ? 'sm' : 'md'}
+            className="whitespace-nowrap"
             onClick={() => {
               setCloseReason('working_as_intended')
               setClosing(true)
@@ -304,6 +307,7 @@ export function ReportTriageBar({
           <Btn
             variant={hasCodeLocation ? 'primary' : 'ghost'}
             size={hasCodeLocation ? 'md' : 'sm'}
+            className="whitespace-nowrap"
             onClick={onRequestDispatch}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}

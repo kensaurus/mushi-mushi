@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
-import { ContainedBlock, MetaChip } from './ReportSurface'
+import { MetaChip } from './ReportSurface'
 import {
   STATUS,
   SEVERITY,
@@ -25,8 +25,8 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   // cut mid-word; the full text is on hover and behind "Show full".
   const heading = reportHeading(report)
   const [headingExpanded, setHeadingExpanded] = useState(false)
-  // Breadcrumb still uses a compact technical summary (shorter context)
-  const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // The headline below is the title. Repeating that sentence in the crumb
+  // made the first fold say it twice (NN/g #8). The crumb is the short id.
   // Provenance: page route where the bug was felt, path only (no query/fragment)
   const pageRoute = routePathname(
     (report.environment as { route?: string } | null)?.route
@@ -42,7 +42,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       <Breadcrumbs
         items={[
           { label: 'Reports', to: '/reports' },
-          { label: breadcrumbLabel, hint: report.id },
+          { label: `Report ${report.id.slice(0, 8)}`, hint: heading.full },
         ]}
       />
       <div className="flex items-start justify-between gap-3">
@@ -73,25 +73,23 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             </Badge>
           )}
         </div>
-        <ContainedBlock tone="info" className="mt-2">
-          <h2
-            className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
-            title={heading.truncated ? heading.full : undefined}
+        <h2
+          className="mt-2 text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
+          title={heading.truncated ? heading.full : undefined}
+        >
+          {headingExpanded ? heading.full : heading.text}
+        </h2>
+        {heading.truncated && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            className="mt-1 whitespace-nowrap"
+            aria-expanded={headingExpanded}
+            onClick={() => setHeadingExpanded((v) => !v)}
           >
-            {headingExpanded ? heading.full : heading.text}
-          </h2>
-          {heading.truncated && (
-            <Btn
-              variant="ghost"
-              size="sm"
-              className="mt-1"
-              aria-expanded={headingExpanded}
-              onClick={() => setHeadingExpanded((v) => !v)}
-            >
-              {headingExpanded ? 'Show less' : 'Show full'}
-            </Btn>
-          )}
-        </ContainedBlock>
+            {headingExpanded ? 'Show less' : 'Show full'}
+          </Btn>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />
@@ -163,15 +161,9 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             </MetaChip>
           )}
           {report.screenshot_url && (
-            <a
-              href={report.screenshot_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs hover:bg-surface-raised transition-opacity"
-            >
-              <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">Screenshot</span>
-              <span className="text-fg-muted">view →</span>
-            </a>
+            <MetaChip label="Screenshot" href={report.screenshot_url} title="What the reporter saw — opens the image">
+              Open
+            </MetaChip>
           )}
         </div>
       </div>

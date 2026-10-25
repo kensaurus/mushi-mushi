@@ -69,6 +69,7 @@ export function GenerateTestButton({ report }: GenerateTestButtonProps) {
         loading={loading}
         leadingIcon={<IconQaCoverage />}
         title="Generate a Playwright regression test from this report"
+        className="whitespace-nowrap"
       >
         Generate test
       </Btn>

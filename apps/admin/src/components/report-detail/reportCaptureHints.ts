@@ -33,6 +33,53 @@ export function screenshotEmptyText(
   return 'No screenshot was captured for this report.'
 }
 
+export interface CapturedEvidence {
+  performance: boolean
+  console: boolean
+  network: boolean
+  repro: boolean
+}
+
+/**
+ * Which capture panels have something to show. Empty panels used to each
+ * render a full card ("No console output…"), so a quiet report was four
+ * blank tiles (NN/g #8). Absent streams collapse to one line instead.
+ */
+export function capturedEvidence(
+  report: Pick<ReportDetail, 'performance_metrics' | 'console_logs' | 'network_logs' | 'repro_timeline'> & {
+    backend_spans?: ReportDetail['backend_spans']
+  },
+): CapturedEvidence {
+  const metrics = report.performance_metrics
+  return {
+    performance: !!metrics && Object.keys(metrics).length > 0,
+    console: (report.console_logs?.length ?? 0) > 0,
+    network: (report.network_logs?.length ?? 0) > 0 || (report.backend_spans?.length ?? 0) > 0,
+    repro: Array.isArray(report.repro_timeline) && report.repro_timeline.length > 0,
+  }
+}
+
+const ABSENT_LABEL: Record<keyof CapturedEvidence, string> = {
+  console: 'console logs',
+  network: 'network',
+  performance: 'performance',
+  repro: 'repro timeline',
+}
+
+const ABSENT_ORDER: Array<keyof CapturedEvidence> = ['console', 'network', 'performance', 'repro']
+
+export function uncapturedEvidenceNote(flags: CapturedEvidence): string | null {
+  const missing = ABSENT_ORDER.filter((key) => !flags[key]).map((key) => ABSENT_LABEL[key])
+  if (missing.length === 0) return null
+  return `Not captured: ${joinAnd(missing)}.`
+}
+
+function joinAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? ''
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`
+}
+
 export function timelineEmpty(
   report: Pick<ReportDetail, 'sdk_package' | 'sdk_version'>,
 ): { title: string; description: string } {

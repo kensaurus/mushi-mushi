@@ -23,14 +23,11 @@ import type { ReactNode } from 'react'
 import { Badge } from '../ui'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
-import {
-  SEVERITY,
-  CATEGORY_LABELS,
-  severityLabel,
-  confidenceBadgeClass,
-} from '../../lib/tokens'
+import { confidenceBadgeClass } from '../../lib/tokens'
+import { reportHeading } from '../../lib/clipText'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { FixWithAgentPanel } from './FixWithAgentPanel'
+import { GenerateTestButton } from './GenerateTestButton'
 import type { ReportDetail } from './types'
 
 /** Below this, we hedge instead of asserting a root cause. */
@@ -48,8 +45,11 @@ export function DiagnosisFixHero({
   const reproHint = (report.stage1_classification as { reproductionHint?: string } | null)
     ?.reproductionHint
   const summary = report.summary?.trim()
-  const categoryText = CATEGORY_LABELS[report.category] ?? report.category
-  const severityText = report.severity ? severityLabel(report.severity) : null
+  // Status, severity and category already sit on the header chips. Repeating
+  // them here, and repeating the headline when it is the summary, competes
+  // with the diagnosis (NN/g #8).
+  const heading = reportHeading(report)
+  const summaryIsHeading = Boolean(summary) && (summary === heading.text || summary === heading.full)
 
   // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
   const view = reportDiagnosisView(report)
@@ -62,7 +62,7 @@ export function DiagnosisFixHero({
   const checkFirst = [
     report.component ? `the \`${report.component}\` component` : null,
     reproHint || null,
-    summary || null,
+    summary && !summaryIsHeading ? summary : null,
   ].filter((x): x is string => Boolean(x))
 
   return (
@@ -79,28 +79,25 @@ export function DiagnosisFixHero({
               : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {severityText && (
-              <Badge className={SEVERITY[report.severity!] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>
-                {severityText}
-              </Badge>
-            )}
-            <Badge className="border border-edge-subtle bg-surface-overlay text-fg-secondary">
-              {categoryText}
-            </Badge>
             <Badge
               className={confidenceBadgeClass(conf)}
               title={conf != null ? `Classifier confidence: ${(conf * 100).toFixed(1)}%` : 'No confidence score'}
             >
               {confLabel} sure
             </Badge>
+            <GenerateTestButton report={report} />
           </div>
         </div>
 
         {stage2 ? (
-          <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} />
-        ) : isConfident ? (
+          <Stage2DiagnosisBody
+            diagnosis={stage2}
+            summary={summaryIsHeading ? null : (summary ?? null)}
+            streaming={view.kind === 'streaming'}
+          />
+        ) : isConfident && !summaryIsHeading ? (
           <p className="text-sm leading-relaxed text-fg-secondary">{summary}</p>
-        ) : (
+        ) : isConfident ? null : (
           <div className="text-sm leading-relaxed text-fg-secondary">
             <p>
               The diagnosis here is shaky, so I won&rsquo;t guess at a single root cause. Start with these and the
@@ -114,7 +111,7 @@ export function DiagnosisFixHero({
               </ul>
             ) : (
               <p className="mt-1.5 text-fg-muted">
-                Reproduce it first, then check the console and network panels below.
+                Reproduce it first, then read the evidence captured with this report.
               </p>
             )}
           </div>

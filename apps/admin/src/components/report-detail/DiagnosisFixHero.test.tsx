@@ -11,6 +11,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReportDetail } from './types'
 
@@ -48,7 +49,9 @@ function report(overrides: Partial<ReportDetail>): ReportDetail {
 }
 
 function render(r: ReportDetail): string {
-  act(() => root.render(createElement(DiagnosisFixHero, { report: r })))
+  act(() =>
+    root.render(createElement(MemoryRouter, null, createElement(DiagnosisFixHero, { report: r }))),
+  )
   return container.textContent ?? ''
 }
 
@@ -81,10 +84,17 @@ describe('DiagnosisFixHero', () => {
   })
 
   it('is honest when only the stage-1 classifier ran', () => {
-    const text = render(report({ stage2_analysis: null }))
+    const text = render(report({ stage2_analysis: null, title: 'Lesson duration' }))
     expect(text).toContain('Lesson card shows the wrong duration')
     expect(text).toContain('Full diagnosis not run (classifier confident)')
     expect(text).not.toContain('Why it broke')
+  })
+
+  it('does not repeat the headline when the summary is the page title', () => {
+    const text = render(report({ stage2_analysis: null }))
+    expect(text).not.toContain('Lesson card shows the wrong duration')
+    expect(text).toContain('Full diagnosis not run (classifier confident)')
+    expect(text).toContain('Generate test')
   })
 })
 

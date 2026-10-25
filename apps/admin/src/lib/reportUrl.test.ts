@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { currentAdminViewUrl, reportDetailPath, reportPermalink } from './reportUrl'
+import { currentAdminViewUrl, reportDetailPath, reportPermalink, reportSkillPermalink } from './reportUrl'
 
 const originalHref = typeof window !== 'undefined' ? window.location.href : null
 
@@ -21,6 +21,17 @@ describe('reportUrl helpers', () => {
   it('builds report permalinks with encoded id and no doubled basename', () => {
     expect(reportPermalink('abc-123')).toMatch(/\/reports\/abc-123$/)
     expect(reportPermalink('abc-123')).not.toMatch(/admin\/mushi-mushi/)
+  })
+
+  it('skill permalink keeps the project and names the skill', () => {
+    const url = reportSkillPermalink(
+      'abc-123',
+      '11111111-1111-4111-8111-111111111111',
+      'enhance-web-ux',
+    )
+    expect(url).toMatch(/\/reports\/abc-123\?/)
+    expect(url).toContain('project=11111111-1111-4111-8111-111111111111')
+    expect(url).toContain('skill=enhance-web-ux')
   })
 
   it('adds project query param to detail paths when scoped', () => {

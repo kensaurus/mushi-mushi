@@ -115,7 +115,7 @@ export function EnvironmentFields({ environment, sessionId }: {
           label: 'Session',
           hint: 'Unique browser session at report time.',
           value: (
-            <code className="break-all rounded-sm px-1.5 py-0.5 font-mono text-2xs bg-brand/12 text-brand border border-brand/28">
+            <code className="break-all rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-2xs text-fg-secondary">
               {sessionId}
             </code>
           ),

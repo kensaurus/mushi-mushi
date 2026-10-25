@@ -75,6 +75,19 @@ function render(r: ReportDetail): HTMLElement | null {
   return container.querySelector('[data-testid="deploy-live"]')
 }
 
+describe('ReportDetailHeader title', () => {
+  it('uses the short id in the breadcrumb and says the headline once', () => {
+    render(report({}))
+    const nav = container.querySelector('nav[aria-label="Breadcrumb"]')
+    expect(nav?.textContent).toContain('Report c0e99783')
+    expect(nav?.textContent).not.toContain('Checkout button does nothing')
+    const headings = container.querySelectorAll('h2')
+    expect(headings).toHaveLength(1)
+    expect(headings[0]?.textContent).toContain('Checkout button does nothing')
+    expect(container.querySelector('h2')?.closest('[class*="bg-info"]')).toBeNull()
+  })
+})
+
 describe('ReportDetailHeader deploy chip', () => {
   it('says "Fixed — not live yet (prod is on <sha>)" with the short prod commit', () => {
     const chip = render(
