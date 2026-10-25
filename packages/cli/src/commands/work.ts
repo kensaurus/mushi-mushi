@@ -13,7 +13,7 @@
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Command } from 'commander'
@@ -330,6 +330,18 @@ function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env
   })
 }
 
+/**
+ * Remove the worktree folder an earlier run left, also when git no longer
+ * knows it as a worktree (a killed run): otherwise `worktree add` fails on the
+ * existing folder on every run. The folder is Mushi's own cache.
+ */
+async function clearWorktree(repoDir: string, wt: string): Promise<void> {
+  if (!existsSync(wt)) return
+  await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: repoDir })
+  if (existsSync(wt)) rmSync(wt, { recursive: true, force: true })
+  await runProc('git', ['worktree', 'prune'], { cwd: repoDir })
+}
+
 async function git(cwd: string, args: string[]): Promise<string> {
   const r = await runProc('git', args, { cwd })
   if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
@@ -475,7 +487,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
   const root = join(homedir(), '.cache', 'mushi', 'work', basename(o.repoDir))
   mkdirSync(root, { recursive: true })
   const wt = join(root, detail.id.slice(0, 8))
-  if (existsSync(wt)) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
+  await clearWorktree(o.repoDir, wt)
   await git(o.repoDir, ['worktree', 'add', '-B', branch, wt, `origin/${base}`])
   await installDeps(wt, o.log)
   let keep = o.keep ?? false
@@ -596,7 +608,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
   const root = join(homedir(), '.cache', 'mushi', 'work', basename(o.repoDir))
   mkdirSync(root, { recursive: true })
   const wt = join(root, `followup-${f.fixId.slice(0, 8)}`)
-  if (existsSync(wt)) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
+  await clearWorktree(o.repoDir, wt)
   await git(o.repoDir, ['worktree', 'add', '-B', `mushi-followup-${f.fixId.slice(0, 8)}`, wt, 'FETCH_HEAD'])
   let keep = o.keep ?? false
   try {
