@@ -459,6 +459,7 @@ export function registerWorkspaceNavMetaRoutes(
         'userFlagOpenCount',
         'failedRegenCount',
         'needsAttentionCount',
+        'latestAt',
         'topPriority',
       ]),
       codeHealth: pick(byPath['/v1/admin/code-health/stats'], [
@@ -473,6 +474,7 @@ export function registerWorkspaceNavMetaRoutes(
             'totalStories',
             'failingStories',
             'pendingRuns',
+            'lastRunAt',
             'topPriority',
           ])
         : null,
@@ -487,6 +489,7 @@ export function registerWorkspaceNavMetaRoutes(
         'activeLessons',
         'readyToPromote',
         'criticalLessons',
+        'lastLessonReinforcedAt',
         'topPriority',
       ]),
       drift: pick(byPath['/v1/admin/drift/stats'], [
@@ -550,6 +553,7 @@ export function registerWorkspaceNavMetaRoutes(
         'errorCount',
         'warnCount',
         'failedGateCount',
+        'lastRunAt',
         'topPriority',
       ]),
       dashboard: pick(byPath['/v1/admin/dashboard/stats'], [
@@ -589,12 +593,23 @@ export function registerWorkspaceNavMetaRoutes(
         'openFindings',
         'stub',
         'total',
+        'hasInventory',
+        'lastGateRunAt',
         'topPriority',
       ]),
       health: pick(byPath['/v1/admin/health/stats'], [
         'cronErrorCount',
         'redCount',
         'amberCount',
+        'lastLlmCallAt',
+        'lastCronAt',
+        'topPriority',
+      ]),
+      judge: pick(byPath['/v1/admin/judge/stats'], [
+        'lastEvalAt',
+        'disagreementCount',
+        'totalEvaluations',
+        'staleHours',
         'topPriority',
       ]),
       fixes: pick(byPath['/v1/admin/fixes/stats'], [

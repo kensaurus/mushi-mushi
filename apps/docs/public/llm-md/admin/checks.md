@@ -4,14 +4,14 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/checks
 
 ---
 title: Checks
-description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+description: The Checks page lists every automatic check on this app. Each card says whether that check is set up, when it last ran, and whether it passed or found something.
 ---
 
 # Checks
 
 **Route:** `/checks`
 
-Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+Every automatic check on this app, in one place. This page is a launcher: open a card to see that check. The chip says Not set up, Not checked yet, Pass, or how many findings the last run had. Pass appears only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade.
 
 ## App checks
 

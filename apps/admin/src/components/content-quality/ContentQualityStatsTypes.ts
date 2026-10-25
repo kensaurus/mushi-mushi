@@ -20,6 +20,8 @@ export interface ContentQualityStats {
   userFlagOpenCount: number
   failedRegenCount: number
   needsAttentionCount: number
+  /** Newest issue write. Null when this project has no content-check rows. */
+  latestAt?: string | null
   topPriority: ContentQualityTopPriority
 }
 

@@ -38,6 +38,8 @@ export interface HealthStats {
   redCount: number
   amberCount: number
   lastLlmCallAt: string | null
+  /** Newest scheduled-job start. Absent on older API answers. */
+  lastCronAt?: string | null
   topPriority: HealthTopPriority
   topPriorityLabel: string | null
   topPriorityTo: string | null

@@ -59,7 +59,7 @@ export interface NavStatSlices {
     | 'failedRegenCount'
     | 'needsAttentionCount'
     | 'topPriority'
-  > | null
+  > & Partial<Pick<ContentQualityStats, 'latestAt'>> | null
   codeHealth: Pick<
     CodeHealthStats,
     'errorCount' | 'warnCount' | 'godFileCount' | 'hasRun' | 'topPriority'
@@ -67,7 +67,7 @@ export interface NavStatSlices {
   qaCoverage: Pick<
     QaCoverageStats,
     'totalStories' | 'failingStories' | 'pendingRuns' | 'topPriority'
-  > | null
+  > & Partial<Pick<QaCoverageStats, 'lastRunAt'>> | null
   experiments: Pick<
     ExperimentsStats,
     'totalExperiments' | 'runningCount' | 'draftsReadyToLaunch' | 'winnersFound' | 'topPriority'
@@ -75,7 +75,7 @@ export interface NavStatSlices {
   lessons: Pick<
     LessonsStats,
     'activeLessons' | 'readyToPromote' | 'criticalLessons' | 'topPriority'
-  > | null
+  > & Partial<Pick<LessonsStats, 'lastLessonReinforcedAt'>> | null
   drift: Pick<DriftStats, 'openFindings' | 'criticalOpen' | 'topPriority'> | null
   anomalies: Pick<
     AnomaliesStats,
@@ -109,7 +109,7 @@ export interface NavStatSlices {
   fullstackAudit: Pick<
     FullstackAuditStats,
     'errorCount' | 'warnCount' | 'failedGateCount' | 'topPriority'
-  > | null
+  > & Partial<Pick<FullstackAuditStats, 'lastRunAt'>> | null
   dashboard: Pick<
     DashboardStats,
     'openBacklog' | 'fixesFailed' | 'fixesInProgress' | 'integrationIssues' | 'topPriority'
@@ -138,11 +138,19 @@ export interface NavStatSlices {
   inventory: Pick<
     InventoryStats,
     'regressed' | 'openFindings' | 'stub' | 'total' | 'topPriority'
-  > | null
+  > & Partial<Pick<InventoryStats, 'hasInventory' | 'lastGateRunAt'>> | null
   health: Pick<
     HealthStats,
     'cronErrorCount' | 'redCount' | 'amberCount' | 'topPriority'
-  > | null
+  > & Partial<Pick<HealthStats, 'lastLlmCallAt' | 'lastCronAt'>> | null
+  /** Judge stats, filled from the same `/v1/admin/judge/stats` read as the disagreement counter. */
+  judge: {
+    lastEvalAt?: string | null
+    disagreementCount?: number
+    totalEvaluations?: number
+    staleHours?: number | null
+    topPriority?: string
+  } | null
   fixes: Pick<FixesStats, 'failed' | 'inProgress' | 'specWarnings' | 'topPriority'> | null
   repo: Pick<RepoStats, 'prOpen' | 'ciFailed' | 'topPriority'> | null
   mcp: McpNavSlice | null
@@ -181,6 +189,7 @@ export const EMPTY_NAV_STAT_SLICES: NavStatSlices = {
   graph: null,
   inventory: null,
   health: null,
+  judge: null,
   fixes: null,
   repo: null,
   mcp: null,

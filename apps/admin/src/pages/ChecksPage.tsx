@@ -6,22 +6,27 @@
  *          one card per check page, grouped App checks → AI quality.
  *
  * Labels, descriptions, icons and feature gates come from NAV_REGISTRY (via
- * buildOperatorNav) and the chips reuse the sidebar's resolveNavBadge, so this
- * page can never say something different from the nav rail.
+ * buildOperatorNav). The chip is the check's own run: Not set up, Not checked
+ * yet, Pass, or N findings / Failed. Pass is only shown when a run time was
+ * read. See checkCardStatus.ts.
  */
 
 import { Link } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { Badge, Card, type BadgeTone } from '../components/ui'
+import { Badge, Card } from '../components/ui'
 import { IconShieldCheck } from '../components/icons'
 import { UpgradePill } from '../components/billing/UpgradeNudge'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { CHECK_SUB_GROUPS, type CheckSubGroupId } from '../lib/navRegistry'
 import { buildOperatorNav, type BuiltNavItem } from '../lib/buildNav'
-import { useNavCounts, type HealthTone } from '../lib/useNavCounts'
-import { navBadgeStatus, navSlicesForPaths, resolveNavBadge } from '../lib/navBadges'
+import { useNavCounts } from '../lib/useNavCounts'
+import { navSlicesForPaths } from '../lib/navBadges'
 import { useEntitlements } from '../lib/useEntitlements'
+import { usePageData } from '../lib/usePageData'
+import type { RecipeElementSummary, RecipeResponse } from '../lib/recipeTypes'
+import { buildCheckCardViews, type ObservedElement } from '../lib/checkCardStatus'
 
 /** Card order per group. Every path must exist in NAV_REGISTRY. */
 const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
@@ -40,16 +45,45 @@ const NAV_BY_PATH: ReadonlyMap<string, BuiltNavItem> = new Map(
   buildOperatorNav().flatMap((section) => section.items.map((item) => [item.path, item] as const)),
 )
 
-const CHIP_TONE: Record<HealthTone, BadgeTone> = {
-  idle: 'neutral',
-  ok: 'okSubtle',
-  warn: 'warnSubtle',
-  danger: 'dangerSubtle',
+function observed(el: RecipeElementSummary | undefined, fallback: string): ObservedElement | null {
+  if (!el) return null
+  const setup = el.links.find((link) => link.to.startsWith('/'))?.to ?? fallback
+  return { state: el.state, lastCheckedAt: el.lastCheckedAt, findingsCount: el.findingsCount, setupTo: setup }
 }
 
 export function ChecksPage() {
   const navCounts = useNavCounts({ live: true, slices: NAV_SLICES })
   const { has, isSuperAdmin } = useEntitlements()
+  const projectId = useActiveProjectId()
+  const recipe = usePageData<RecipeResponse>(
+    projectId ? `/v1/admin/projects/${projectId}/recipe` : null,
+  )
+  const recipePhase = !projectId || (recipe.loading && !recipe.data)
+    ? 'loading'
+    : recipe.error && !recipe.data
+      ? 'error'
+      : recipe.data
+        ? 'ready'
+        : 'loading'
+  const elements = recipe.data ? Object.values(recipe.data.elements) : []
+  const views = buildCheckCardViews({
+    navReady: navCounts.ready,
+    qa: navCounts.slices.qaCoverage,
+    health: navCounts.slices.health,
+    audit: navCounts.slices.fullstackAudit,
+    inventory: navCounts.slices.inventory,
+    content: navCounts.slices.contentQuality,
+    lessons: navCounts.slices.lessons,
+    prompts: navCounts.slices.promptLab,
+    judge: navCounts.slices.judge,
+    recipePhase,
+    recipeElements: elements.flatMap((el) => {
+      const row = observed(el, '/recipe')
+      return row ? [row] : []
+    }),
+    design: observed(recipe.data?.elements.design, '/design'),
+    ci: observed(recipe.data?.elements.ci, '/ci'),
+  })
 
   usePublishPageContext({
     route: '/checks',
@@ -66,7 +100,7 @@ export function ChecksPage() {
         description="Every automatic check on this app in one place."
         helpTitle="About Checks"
         helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, and how well the AI graded, learned from and prompted each fix."
-        helpHowToUse="Open a card to see that check's findings. A chip on the card shows the sidebar's live count or status for it; a Pro pill means the check needs a plan upgrade."
+        helpHowToUse="Open a card to see that check. The chip says Not set up, Not checked yet, Pass, or how many findings it has. Pass is shown only after a run, with when it last ran. A Pro pill means the check needs a plan upgrade."
       />
 
       {CHECK_GROUPS.map((group) => {
@@ -85,30 +119,38 @@ export function ChecksPage() {
                 if (!item) return null
                 const Icon = item.icon
                 const gated = !!item.requiresFeature && !has(item.requiresFeature) && !isSuperAdmin
-                const status = navBadgeStatus(resolveNavBadge(path, navCounts, { criticalReports30d: 0 }))
+                const view = views[path] ?? null
                 return (
-                  <li key={path} className="min-w-0">
-                    <Link
-                      to={path}
-                      className="block h-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                      data-testid={`checks-card-${path.slice(1)}`}
-                    >
-                      <Card interactive className={`flex h-full flex-col gap-2 p-4 ${gated ? 'opacity-80' : ''}`}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
-                          <span className="truncate text-sm font-medium text-fg">{item.label}</span>
-                          <span className="ml-auto flex shrink-0 items-center gap-1">
-                            {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
-                            {status && (
-                              <Badge tone={CHIP_TONE[status.tone]} title={status.label}>
-                                {status.count ?? status.label}
-                              </Badge>
-                            )}
-                          </span>
-                        </div>
-                        <p className="text-xs leading-snug text-fg-muted">{item.description}</p>
-                      </Card>
-                    </Link>
+                  <li key={path} className="min-w-0" data-testid={`checks-card-${path.slice(1)}`}>
+                    <Card className={`flex h-full flex-col gap-2 p-4 ${gated ? 'opacity-80' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
+                        <Link
+                          to={path}
+                          className="truncate rounded-sm text-sm font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                        >
+                          {item.label}
+                        </Link>
+                        <span className="ml-auto flex shrink-0 items-center gap-1">
+                          {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
+                          {view && (
+                            <Badge tone={view.tone} title={view.detail ?? view.chip}>
+                              {view.chip}
+                            </Badge>
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-snug text-fg-muted">{item.description}</p>
+                      {view?.detail && <p className="text-xs text-fg-secondary">{view.detail}</p>}
+                      {view?.state === 'not_set_up' && view.setupTo && (
+                        <Link
+                          to={view.setupTo}
+                          className="text-xs font-medium text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                        >
+                          Set up →
+                        </Link>
+                      )}
+                    </Card>
                   </li>
                 )
               })}

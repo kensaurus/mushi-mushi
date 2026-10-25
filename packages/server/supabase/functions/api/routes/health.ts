@@ -137,6 +137,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       redCount: 0,
       amberCount: 0,
       lastLlmCallAt: null as string | null,
+      lastCronAt: null as string | null,
       topPriority: 'no_project' as
         | 'no_project'
         | 'llm_errors'
@@ -213,6 +214,11 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     let cronStaleCount = 0;
     let cronWarnCount = 0;
     let cronHealthyCount = 0;
+    let lastCronAt: string | null = null;
+    for (const row of cronRows) {
+      const at = (row.started_at as string | null) ?? null;
+      if (at && (lastCronAt === null || at > lastCronAt)) lastCronAt = at;
+    }
 
     for (const job of KNOWN_JOBS) {
       const jobRuns = cronRows.filter((r) => r.job_name === job);
@@ -305,6 +311,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         redCount,
         amberCount,
         lastLlmCallAt: lastCallRes.data?.created_at ?? null,
+        lastCronAt,
         // Trigger now (POST /health/cron/:job/trigger) is owner/admin only.
         canRunJobs: isProjectAdmin(activeProject),
         topPriority,

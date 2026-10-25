@@ -6,6 +6,11 @@ import { useLocation } from 'react-router-dom'
 import { PageHelpBanner, type PageHelpBannerProps } from './ui'
 import { usePageHelpRegistration } from '../lib/pageHelpContext'
 
+/** Space between the check grid and About Checks. Other pages keep the shared gap. */
+export function routeHelpClass(pathname: string): string {
+  return pathname === '/checks' ? 'mt-4' : ''
+}
+
 export function RoutePageHelp() {
   const { pathname } = useLocation()
   const registration = usePageHelpRegistration()
@@ -13,6 +18,11 @@ export function RoutePageHelp() {
   if (!registration) return null
 
   const props: PageHelpBannerProps = registration
+  const gap = routeHelpClass(pathname)
 
-  return <PageHelpBanner key={`${pathname}:${props.title}`} {...props} />
+  return (
+    <div className={gap || undefined}>
+      <PageHelpBanner key={`${pathname}:${props.title}`} {...props} />
+    </div>
+  )
 }
