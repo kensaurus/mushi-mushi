@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  wrongAppReason,
+  inLocalCooldown,
+  installCommand,
+  isMissingModuleFailure,
   failureTail,
   agentEnv,
   branchNameFor,
@@ -173,5 +177,51 @@ describe('failureTail', () => {
   it('returns short output whole and an over-long last line cut from its start', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
+  })
+})
+
+describe('inLocalCooldown', () => {
+  const now = Date.parse('2026-10-24T12:00:00Z')
+  const failed = { id: 'a', status: 'failed', pr_url: null, agent: 'mcp', created_at: '2026-10-24T08:00:00Z' }
+
+  it('skips a report whose local run ended without a PR this week', () => {
+    expect(inLocalCooldown([failed], now)).toBe(true)
+  })
+
+  it('retries after 7 days, after a cloud failure, or when the run opened a PR', () => {
+    expect(inLocalCooldown([{ ...failed, created_at: '2026-10-16T08:00:00Z' }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, agent: 'cursor_cloud' }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, pr_url: 'https://github.com/o/r/pull/1' }], now)).toBe(false)
+  })
+})
+
+describe('installCommand', () => {
+  it('picks the lockfile the repo has, pnpm first', () => {
+    expect(installCommand((f) => f === 'pnpm-lock.yaml' || f === 'package-lock.json')).toEqual(['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']])
+    expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
+    expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
+    expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('isMissingModuleFailure', () => {
+  it('tells a hook that lacks a package from a hook that rejects the change', () => {
+    expect(isMissingModuleFailure("git commit failed: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'jiti' imported from scripts/x.mjs")).toBe(true)
+    expect(isMissingModuleFailure('Error: Cannot find module ./dist/index.js')).toBe(true)
+    expect(isMissingModuleFailure('git commit failed: check-no-secrets: found an API key in src/a.ts')).toBe(false)
+  })
+})
+
+describe('wrongAppReason', () => {
+  it('stops a run whose reports come from another app (a key bound to one app)', () => {
+    const msg = wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-b')
+    expect(msg).toContain('belongs to app app-a, not app-b')
+    expect(msg).toContain('mushi login --project-id app-b')
+  })
+
+  it('passes a report of the same app, or when either id is unknown', () => {
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, undefined)).toBeNull()
   })
 })

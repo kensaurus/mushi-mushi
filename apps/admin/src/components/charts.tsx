@@ -82,6 +82,10 @@ export interface KpiTileProps {
   seriesAccent?: string
   /** Optional aria label for the sparkline. Defaults to `${label} trend`. */
   seriesAriaLabel?: string
+  /** Hold the sparkline footer's height while `series` is still loading. A
+   *  tile whose spark only appears once the fetch lands otherwise grows by a
+   *  row and pushes the whole page down (layout shift). */
+  reserveSeriesSpace?: boolean
   /** ISO day strings aligned 1:1 with `series` — enables labeled axes. */
   seriesDays?: string[]
   /** Optional Y-axis caption for the sparkline (e.g. "runs / day"). */
@@ -100,6 +104,10 @@ export interface KpiTileProps {
    *  `MetricStrip`'s stagger injects via `cloneElement`. */
   style?: CSSProperties
 }
+
+/** Plot height of a KPI tile's axis-less sparkline, in px. The reserved
+ *  placeholder matches it exactly so the tile box never changes height. */
+const KPI_SPARK_HEIGHT = 18
 
 const TONE_SPARK_ACCENT: Record<Tone, string> = {
   ok: 'text-ok/70',
@@ -122,6 +130,7 @@ export function KpiTile({
   seriesAccent,
   seriesAriaLabel,
   seriesDays,
+  reserveSeriesSpace = false,
   variant = 'default',
   wide = false,
   density = 'default',
@@ -145,7 +154,11 @@ export function KpiTile({
   const sparkAria = seriesAriaLabel ?? `${label} trend`
   const summaryRows = showSpark ? sparklineSummaryRows(seriesDays, series!) : []
   const inner = (
-    <div className={`px-3 ${isPrimary ? 'py-3.5' : 'py-2.5'}`}>
+    <div className="px-3 py-2.5">
+      {/* Primary marks emphasis with the ring and a larger numeral only: the box
+          (padding, numeral line, sparkline) is the default's, so a tile that
+          turns primary when its data lands does not move the page (the Bugs
+          Critical tile, layout shift 2026-10-24). */}
       <div className={`pb-1.5 ${PANEL_HEADER_SEPARATOR}`}>
         <div className="flex items-center gap-1 truncate">
           <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
@@ -168,7 +181,7 @@ export function KpiTile({
             "∅ / null" at KPI size. Mono + slashed zero is for small IDs. */}
         <div
           className={`flex-1 min-w-0 font-semibold font-sans tabular-nums truncate ${
-            isPrimary ? 'text-2xl sm:text-3xl' : 'text-lg'
+            isPrimary ? 'text-2xl sm:text-3xl leading-7' : 'text-lg'
           } ${accent ? TONE_TEXT[accent] : 'text-fg'}`}
         >
           {value}
@@ -200,7 +213,7 @@ export function KpiTile({
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
             maxXTicks={2}
-            height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
+            height={showSparkAxes ? 44 : KPI_SPARK_HEIGHT}
           />
           <ChartAccessibleSummary
             caption={sparkAria}
@@ -211,6 +224,14 @@ export function KpiTile({
             rows={summaryRows}
           />
         </div>
+      )}
+      {!showSpark && reserveSeriesSpace && (
+        <div
+          data-testid="kpi-spark-reserve"
+          aria-hidden="true"
+          className="mt-1.5 w-full"
+          style={{ height: `${KPI_SPARK_HEIGHT}px` }}
+        />
       )}
     </div>
   )

@@ -256,13 +256,20 @@ For each report it:
    findings), as data the agent must not take as instructions.
 2. Creates a worktree from `origin/<default branch>` on
    `bugfix/MUSHI-<reportId>-local-cursor` and runs `cursor-agent -p` in it
-   (30 minutes at most). The agent's environment has no credentials, and
+   (30 minutes at most), after installing the worktree's dependencies from
+   its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
+   commit hooks work. The agent's environment has no credentials, and
    version control inside it cannot reach the remote.
 3. With changes: commits, pushes, opens a draft PR with `Mushi report: <id>`,
    registers the fix attempt (like the MCP tool `submit_fix_result`) and
    queues the Opus review, so the PR follows the same review and release
    train as a cloud agent's. Without changes: records the agent's
    `Mushi verdict:` on the attempt.
+
+A report whose local run ended without a pull request in the last 7 days
+(a timeout, no change, or a verdict) is skipped; pass `--report <id>` to run
+it anyway. The agent has 30 minutes, so a report that names several pages is
+fixed one page at a time: split broad reports into one page or cause each.
 
 When Opus says "fix first" on one of these pull requests, run
 `mushi work --followups`. Mushi checks the round (the reviewed commit is still

@@ -56,6 +56,23 @@ export interface AttemptSummary {
   merged_at?: string | null
   error?: string | null
   created_at?: string | null
+  agent?: string | null
+}
+
+/** A local run that ended without a PR leaves the report alone this long (spend-down's cooldown, ADR 0028). */
+const LOCAL_RETRY_COOLDOWN_MS = 7 * 86_400_000
+
+/**
+ * @internal Exported for tests only. A local run in the last 7 days ended
+ * without a PR (timed out, no change, a verdict): the same agent on the same
+ * report would most likely end the same way. `--report` still runs it.
+ */
+export function inLocalCooldown(attempts: readonly AttemptSummary[], nowMs = Date.now()): boolean {
+  return attempts.some((a) => {
+    if (a.agent !== WORK_AGENT_KIND || a.status !== 'failed' || a.pr_url || !a.created_at) return false
+    const at = Date.parse(a.created_at)
+    return Number.isFinite(at) && nowMs - at < LOCAL_RETRY_COOLDOWN_MS
+  })
 }
 
 /** @internal Exported for tests only. A run or an open PR is live for the report: leave it to that one. */
@@ -179,7 +196,8 @@ You are in a git worktree of the repository, branched from \`${p.baseRef}\`. Rea
 2. Run the project's own quick checks for the files you touched if they are obvious (a unit test file, a typecheck of the package).
 3. Only edit files in this worktree. Do NOT commit, push, open a pull request, or run git or gh commands that change anything; Mushi commits and opens the pull request for you.
 4. Never read, print or send secrets, environment variables or credential files.
-5. If you cannot find the cause, change nothing. Make the first line of your final message \`Mushi verdict: <verdict>\`, where <verdict> is one of: already_fixed, wrong_repo, not_actionable, needs_human. Otherwise end with one short paragraph saying what you changed and why.`
+5. You have about ${Math.round(WORK_AGENT_TIMEOUT_MS / 60_000) - 5} minutes. If the report names several pages, screens or causes, fix the first one completely and list the others in your final message; a focused, finished fix beats an unfinished broad one.
+6. If you cannot find the cause, change nothing. Make the first line of your final message \`Mushi verdict: <verdict>\`, where <verdict> is one of: already_fixed, wrong_repo, not_actionable, needs_human. Otherwise end with one short paragraph saying what you changed and why.`
   return body.length > PROMPT_MAX_CHARS ? `${body.slice(0, PROMPT_MAX_CHARS)}\n[cut]` : body
 }
 
@@ -337,6 +355,7 @@ function apiFor(cfg: CliConfig): Api {
 
 interface ReportDetail {
   id: string
+  project_id?: string | null
   summary: string | null
   description?: string | null
   category?: string | null
@@ -349,8 +368,25 @@ interface ReportDetail {
 }
 
 /** @internal Exported for tests only. Reports a local run may take, best first, never more than `max`. */
-export async function pickReports(api: Api, opts: { max: number; reportId?: string }): Promise<ReportDetail[]> {
-  if (opts.reportId) return [await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`)]
+/**
+ * @internal Exported for tests only. A report from another app than the one
+ * `mushi work` was pointed at: an API key bound to one app answers with that
+ * app's reports whatever --project says, and the agent would then "fix" them
+ * in the wrong repo (found 2026-10-25). Null when it matches.
+ */
+export function wrongAppReason(detail: { id: string; project_id?: string | null }, projectId: string | undefined): string | null {
+  if (!projectId || !detail.project_id || detail.project_id === projectId) return null
+  return `Report ${detail.id} belongs to app ${detail.project_id}, not ${projectId}: this CLI key is bound to another app. Sign in for this app: mushi login --project-id ${projectId}`
+}
+
+/** @internal Exported for tests only. */
+export async function pickReports(api: Api, opts: { max: number; reportId?: string; projectId?: string }): Promise<ReportDetail[]> {
+  const check = (detail: ReportDetail): ReportDetail => {
+    const wrong = wrongAppReason(detail, opts.projectId)
+    if (wrong) throw new MushiCliError('E_INVALID_INPUT', wrong, `mushi login --project-id ${opts.projectId}`)
+    return detail
+  }
+  if (opts.reportId) return [check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(opts.reportId)}`))]
   const lists = await Promise.all(
     ['classified', 'reopened'].map((status) =>
       api<{ reports: WorkCandidate[] }>(`/v1/admin/reports?status=${status}&limit=50`).then((d) => d.reports ?? []),
@@ -359,8 +395,8 @@ export async function pickReports(api: Api, opts: { max: number; reportId?: stri
   const picked: ReportDetail[] = []
   for (const c of rankCandidates(lists.flat())) {
     if (picked.length >= opts.max) break
-    const detail = await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`)
-    if (hasLiveAttempt(detail.fix_attempts ?? [])) continue
+    const detail = check(await api<ReportDetail>(`/v1/admin/reports/${encodeURIComponent(c.id)}`))
+    if (hasLiveAttempt(detail.fix_attempts ?? []) || inLocalCooldown(detail.fix_attempts ?? [])) continue
     picked.push(detail)
   }
   return picked
@@ -415,6 +451,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
   const wt = join(root, detail.id.slice(0, 8))
   if (existsSync(wt)) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   await git(o.repoDir, ['worktree', 'add', '-B', branch, wt, `origin/${base}`])
+  await installDeps(wt, o.log)
   let keep = o.keep ?? false
   let fixId: string | null = null
   try {
@@ -448,14 +485,18 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
     fixId = created.fixId
 
     if (!status) {
-      const noPr = run.code === 0 ? parseVerdict(run.stdout) : { verdict: null, reason: cap(run.stderr || run.stdout, 300) || `cursor-agent exited ${run.code}` }
+      const noPr = run.timedOut
+        ? { verdict: null, reason: `timed out after ${WORK_AGENT_TIMEOUT_MS / 60_000} min without a change; the report may need splitting into one page or cause each` }
+        : run.code === 0
+          ? parseVerdict(run.stdout)
+          : { verdict: null, reason: failureTail(run, 300) || `cursor-agent exited ${run.code}` }
       await api(`/v1/admin/fixes/${created.fixId}`, { method: 'PATCH', body: JSON.stringify(submitPayload({ branch, prUrl: null, commitSha: null, filesChanged: [], linesChanged: 0, summary: '', noPr })) })
       return { reportId: detail.id, outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId: created.fixId }
     }
 
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
-    await git(wt, ['commit', '--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
@@ -538,6 +579,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       await done(null, `the branch moved to ${head.slice(0, 7)} before the agent started`)
       return { fixId: f.fixId, outcome: `skipped: ${claim.branch} is at ${head.slice(0, 7)}, not the reviewed ${claim.headSha.slice(0, 7)}` }
     }
+    await installDeps(wt, o.log)
     const empty = join(tmpdir(), `mushi-work-${process.pid}`)
     mkdirSync(empty, { recursive: true })
     o.log(`  agent: cursor-agent on ${claim.branch}, round ${claim.round}, ${claim.findingsSent} finding(s)${claim.findingsDropped ? ` (${claim.findingsDropped} left out by the safety screen)` : ''}`)
@@ -554,7 +596,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
     await git(wt, ['add', '-A'])
-    await git(wt, ['commit', '--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
@@ -567,6 +609,51 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
     return { fixId: f.fixId, outcome: `failed: ${reason} (the change is kept in ${wt})` }
   } finally {
     if (!keep) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
+  }
+}
+
+/**
+ * @internal Exported for tests only. The install command for the worktree's
+ * lockfile, or null when it has none. Without dependencies the agent cannot
+ * run the project's tests, and commit hooks that import a package fail
+ * (`check-config-docs.mjs` needs `jiti`: a commit failed with
+ * ERR_MODULE_NOT_FOUND on 2026-10-24).
+ */
+export function installCommand(has: (file: string) => boolean): [string, string[]] | null {
+  if (has('pnpm-lock.yaml')) return ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+  if (has('package-lock.json')) return ['npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']]
+  if (has('yarn.lock')) return ['yarn', ['install', '--frozen-lockfile']]
+  return null
+}
+
+/**
+ * Install the worktree's dependencies before the agent runs, trying twice (a
+ * second worktree installing at the same moment can lose a store lock). A
+ * failed install is logged and the run goes on.
+ */
+async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
+  const cmd = installCommand((f) => existsSync(join(wt, f)))
+  if (!cmd) return
+  log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
+  let r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
+}
+
+/** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
+export function isMissingModuleFailure(message: string): boolean {
+  return /ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(message)
+}
+
+/** Commit; when a hook failed only because dependencies are missing, install them and commit once more. */
+async function commitWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+  try {
+    await git(wt, ['commit', ...args])
+  } catch (err) {
+    if (!(err instanceof Error) || !isMissingModuleFailure(err.message)) throw err
+    log('  commit: a hook could not find a package; installing dependencies and committing again')
+    await installDeps(wt, log)
+    await git(wt, ['commit', ...args])
   }
 }
 
@@ -647,7 +734,7 @@ export function registerWorkCommands(program: Command): void {
         if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
         return
       }
-      const picked = await pickReports(api, { max, reportId })
+      const picked = await pickReports(api, { max, reportId, projectId: cfg.projectId })
       if (opts.dryRun) {
         const plan = picked.map((d) => ({ reportId: d.id, severity: d.severity ?? null, summary: d.summary, branch: branchNameFor(d.id, d.category) }))
         if (opts.json) process.stdout.write(`${JSON.stringify({ dryRun: true, plan }, null, 2)}\n`)

@@ -112,6 +112,9 @@ async function movePrimaryRepo(
   return error ?? null;
 }
 
+/** Report statuses a newly opened fix PR moves to `fixing` (never fixed, resolved, verified or dismissed). */
+const OPEN_FOR_FIXING = ['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'reopened'];
+
 export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -1935,6 +1938,15 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           })
           .eq('id', fix.report_id)
           .in('project_id', projectIds);
+        // A PR is open for it: the report is being fixed, as the cloud paths
+        // set it (fix-worker, agent-adapters). Only from an open status, so a
+        // late PATCH never moves a fixed or dismissed report back.
+        await db
+          .from('reports')
+          .update({ status: 'fixing', processing_error: null })
+          .eq('id', fix.report_id)
+          .in('project_id', projectIds)
+          .in('status', OPEN_FOR_FIXING);
         try {
           dispatchPluginEventDetached(db, fix.project_id, 'fix.applied', {
             report: { id: fix.report_id },

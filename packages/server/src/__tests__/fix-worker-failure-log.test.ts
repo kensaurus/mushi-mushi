@@ -93,6 +93,10 @@ describe('fix-worker failure logging (MUSHI-MUSHI-SERVER-8)', () => {
       expect(src).toMatch(
         /failureCategory === 'cursor_api_error' && isCursorKeyLimitError\(errMsg\)\)\s*\{[\s\S]{0,400}log\.warn\(/,
       );
+      // A pinned key that was already unusable is the same kind of stop: warn,
+      // stored as cursor_api_error, and retried on the next spend-down tick.
+      expect(src).toContain("if (isSpendDownPinnedKeyUnavailable(msg)) return 'cursor_api_error'");
+      expect(src).toContain("log.warn('Fix worker stopped: spend-down key is not usable'");
     });
   });
 });

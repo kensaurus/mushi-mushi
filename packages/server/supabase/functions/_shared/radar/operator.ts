@@ -187,7 +187,12 @@ async function loadSpendDownRadarKeys(db: Db, projectId: string, rows: readonly 
   for (const row of rows) {
     if (row.provider_slug !== 'cursor' || row.spend_down_enabled !== true) continue
     const key = asSpendDownKey(row)
-    const idleFacts = { servedProjectIds: [] as string[], dispatchedToday: 0, lastSummary: spendDownTick(row.spend_down_last_summary) }
+    const idleFacts = {
+      servedProjectIds: [] as string[],
+      dispatchedToday: 0,
+      lastSummary: spendDownTick(row.spend_down_last_summary),
+      idleNote: null as string | null,
+    }
     if (spendDownWindow(key, now).state === 'active') {
       const [served, dispatchedToday] = await Promise.all([
         keyProjects(db as never, key),
@@ -196,6 +201,7 @@ async function loadSpendDownRadarKeys(db: Db, projectId: string, rows: readonly 
       if (row.project_id == null && served.ids.length > 0 && !served.ids.includes(projectId)) continue
       idleFacts.servedProjectIds = served.ids
       idleFacts.dispatchedToday = dispatchedToday
+      idleFacts.idleNote = served.idleNote
     }
     out.push({ id: row.id, label: row.label, key, ...idleFacts })
   }

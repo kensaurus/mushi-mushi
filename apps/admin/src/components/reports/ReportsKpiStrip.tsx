@@ -180,6 +180,10 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
               series={trendHidden ? [] : sparks[tile.key]}
               delta={trendHidden ? null : severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
+              // The per-day series only exists after the fetch; without the
+              // reservation the four tiles grow a sparkline row on load and
+              // shove the filters and the table down the page.
+              reserveSeriesSpace
               variant={isHero ? 'primary' : 'default'}
             />
             {!loading && total > 0 && sharePct > 0 ? (
