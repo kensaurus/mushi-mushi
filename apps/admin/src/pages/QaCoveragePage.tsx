@@ -7,7 +7,8 @@
  *
  * OVERVIEW:
  * - Story card grid: pass rate bar, last-run status chip, provider badge,
- *   "Run now" action that is disabled while a run is pending/queued.
+ *   "Run now" action that is disabled while a run is pending/queued,
+ *   while the story is off, and for local Playwright stories.
  * - Story drawer: auto-opens after "Run now" and auto-polls every 3 s
  *   while a run is pending or running so the user sees live progress.
  * - Create story modal: NL prompt + optional provider picker.
@@ -169,7 +170,7 @@ const ACTIVE_STATUSES = new Set(['pending', 'running'])
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
-function StoryCard({
+export function StoryCard({
   coverage,
   isQueued,
   onRunNow,
@@ -185,7 +186,9 @@ function StoryCard({
 }) {
   const passRate = coverage.pass_rate_pct
   const barTone = passRate === null ? 'bg-fg-faint/40' : passRate >= 80 ? 'bg-ok' : passRate >= 50 ? 'bg-warn' : 'bg-danger'
-  const disabled = isQueued || !coverage.enabled
+  // Local stories run on the operator's machine. The edge manual trigger
+  // would only record a skipped row.
+  const disabled = isQueued || !coverage.enabled || coverage.browser_provider === 'local'
 
   return (
     <Card
@@ -500,7 +503,7 @@ function RunDetail({
 
 // ── Story drawer ──────────────────────────────────────────────────────────
 
-function StoryDrawer({
+export function StoryDrawer({
   storyId,
   projectId,
   onClose,
@@ -641,7 +644,7 @@ function StoryDrawer({
       size="sm"
       variant="ghost"
       loading={isQueued}
-      disabled={isQueued || !story.enabled}
+      disabled={isQueued || !story.enabled || story.browser_provider === 'local'}
       onClick={() => onRunNow(storyId)}
       title={isQueued ? 'Run already queued' : story.browser_provider === 'local' ? LOCAL_QA_RUN_LABEL : story.enabled ? 'Trigger manual run' : 'Turn the story on first'}
     >

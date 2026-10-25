@@ -27,7 +27,12 @@
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
 // Each story is due from its latest cron slot inside the last hour
 // (QA_SCHEDULE_LOOKBACK_MINUTES) until a run row exists in that slot.
-// A failed read of recent runs leaves those stories out of the tick.
+// The tick inserts those running rows for every story it will start
+// before any of them execute, so a Firecrawl call that outlasts the
+// minute cannot be started again by the next tick. Latest starts are
+// one DISTINCT ON read (`qa_story_latest_started_at`). A failed read
+// leaves those stories out of the tick. Until that function is applied,
+// the tick falls back to one latest-row read per story.
 //
 // Rate limits
 // ───────────
@@ -631,6 +636,76 @@ async function executeManualRun(
   return new Response(JSON.stringify({ ok: true, status: result.status }), { status: 200 })
 }
 
+// One latest `started_at` per story inside the lookback. Defined in
+// 20261026003400_qa_story_latest_started_at.sql. PostgREST reports a
+// function that is not applied yet as PGRST202; Postgres itself uses 42883.
+const LATEST_RUNS_RPC = 'qa_story_latest_started_at'
+
+function missingLatestRunsRpc(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST202' || error?.code === '42883'
+}
+
+async function loadLastRunsPerStory(
+  db: SupabaseClient,
+  stories: QaStory[],
+  since: string,
+): Promise<{ lastRuns: Map<string, string>; unread: Set<string> }> {
+  const lastRuns = new Map<string, string>()
+  const unread = new Set<string>()
+  // Only used when the DISTINCT ON function is not installed yet. One
+  // newest row per story: a shared page lets a chatty story hide another.
+  const RUN_CHUNK = 20
+  for (let i = 0; i < stories.length; i += RUN_CHUNK) {
+    const chunk = stories.slice(i, i + RUN_CHUNK)
+    const reads = await Promise.all(chunk.map(async (story) => {
+      const { data: recent, error: runsErr } = await db
+        .from('qa_story_runs')
+        .select('story_id, started_at')
+        .eq('story_id', story.id)
+        .gte('started_at', since)
+        .order('started_at', { ascending: false })
+        .limit(1)
+      return { id: story.id, recent, runsErr }
+    }))
+    for (const read of reads) {
+      if (read.runsErr) {
+        unread.add(read.id)
+        rlog.warn('failed to read recent qa_story_runs; leaving story out of this tick', {
+          storyId: read.id,
+          err: (read.runsErr.message ?? String(read.runsErr)).slice(0, 300),
+        })
+        continue
+      }
+      for (const [storyId, at] of indexLastRuns(read.recent ?? [])) lastRuns.set(storyId, at)
+    }
+  }
+  return { lastRuns, unread }
+}
+
+async function loadLastRuns(
+  db: SupabaseClient,
+  stories: QaStory[],
+  since: string,
+): Promise<{ lastRuns: Map<string, string>; unread: Set<string> }> {
+  if (stories.length === 0) return { lastRuns: new Map(), unread: new Set() }
+  const { data, error } = await db.rpc(LATEST_RUNS_RPC, {
+    p_story_ids: stories.map((s) => s.id),
+    p_since: since,
+  })
+  if (missingLatestRunsRpc(error)) {
+    rlog.warn('qa_story_latest_started_at is not installed; reading latest runs per story')
+    return loadLastRunsPerStory(db, stories, since)
+  }
+  if (error) {
+    rlog.warn('failed to read recent qa_story_runs; leaving stories out of this tick', {
+      err: (error.message ?? String(error)).slice(0, 300),
+    })
+    return { lastRuns: new Map(), unread: new Set(stories.map((s) => s.id)) }
+  }
+  const rows = (Array.isArray(data) ? data : []) as { story_id: string; started_at: string }[]
+  return { lastRuns: indexLastRuns(rows), unread: new Set() }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────
 Deno.serve(
   withSentry('qa-story-runner', async (req: Request) => {
@@ -718,38 +793,10 @@ Deno.serve(
 
       const cloudStories = (stories ?? []) as QaStory[]
       const since = new Date(now.getTime() - QA_SCHEDULE_LOOKBACK_MINUTES * 60 * 1000).toISOString()
-      const lastRuns = new Map<string, string>()
-      // Stories whose latest-run read failed. Leaving them in with a null
-      // last_run_at would start a duplicate cloud run on a transient error.
-      const unread = new Set<string>()
-      // One newest row per story. A shared page lets a chatty story push
-      // another story's latest start off the page, which then looks unrun.
-      // Any status counts: a skipped Browserbase row is the run for this slot.
-      const RUN_CHUNK = 20
-      for (let i = 0; i < cloudStories.length; i += RUN_CHUNK) {
-        const chunk = cloudStories.slice(i, i + RUN_CHUNK)
-        const reads = await Promise.all(chunk.map(async (story) => {
-          const { data: recent, error: runsErr } = await db
-            .from('qa_story_runs')
-            .select('story_id, started_at')
-            .eq('story_id', story.id)
-            .gte('started_at', since)
-            .order('started_at', { ascending: false })
-            .limit(1)
-          return { id: story.id, recent, runsErr }
-        }))
-        for (const read of reads) {
-          if (read.runsErr) {
-            unread.add(read.id)
-            rlog.warn('failed to read recent qa_story_runs; leaving story out of this tick', {
-              storyId: read.id,
-              err: (read.runsErr.message ?? String(read.runsErr)).slice(0, 300),
-            })
-            continue
-          }
-          for (const [storyId, at] of indexLastRuns(read.recent ?? [])) lastRuns.set(storyId, at)
-        }
-      }
+      // Stories whose latest-run read failed stay out. A null last_run_at
+      // would start a duplicate cloud run on a transient error. Any status
+      // counts: a skipped Browserbase row is the run for this slot.
+      const { lastRuns, unread } = await loadLastRuns(db, cloudStories, since)
 
       const { run: toRun, deferred } = selectScheduledStories(
         cloudStories
@@ -766,13 +813,21 @@ Deno.serve(
         deferred: deferred.length,
       })
 
+      // Claim every story this tick will start before any of them execute.
+      // The next tick treats a story as still due until a run row exists,
+      // and one inline Firecrawl call can outlast the minute.
+      const claimed: Array<{ story: (typeof toRun)[number]; runId: string }> = []
       for (const story of toRun) {
-        const pid = story.project_id
-
-        // Insert a 'running' row so the UI shows live status
         const { data: runRow, error: runInsertErr } = await db
           .from('qa_story_runs')
-          .insert({ story_id: story.id, project_id: pid, status: 'running' })
+          .insert({
+            story_id: story.id,
+            project_id: story.project_id,
+            status: 'running',
+            // The schedule gate reads started_at. The column defaults to
+            // now(); set it here so the claim is the time this tick saw.
+            started_at: new Date().toISOString(),
+          })
           .select('id')
           .single()
 
@@ -780,8 +835,11 @@ Deno.serve(
           rlog.warn('failed to insert run row', { storyId: story.id, err: runInsertErr })
           continue
         }
+        claimed.push({ story, runId: runRow.id as string })
+      }
 
-        const runId: string = runRow.id
+      for (const { story, runId } of claimed) {
+        const pid = story.project_id
 
         // Resolve API key: always derived from browser_provider (byok_provider is
         // an optional override for non-default key pools).

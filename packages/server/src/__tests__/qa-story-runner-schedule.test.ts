@@ -5,7 +5,9 @@
  *
  * A failed latest-run read, a skipped run in the current slot, and a chatty
  * neighbour must not start another cloud run. Local stories and stories past
- * the per-project cap get no row at all.
+ * the per-project cap get no row at all. Latest starts are one RPC. Running
+ * rows for every story this tick starts are inserted before any of them
+ * execute, so a second tick overlapping a long run does not start them again.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
@@ -59,6 +61,51 @@ function runsFor(storyId: string): Row[] {
   return (db.tables.qa_story_runs ?? []).filter((r) => r.story_id === storyId)
 }
 
+const LATEST_RUNS_RPC = 'qa_story_latest_started_at'
+const armedLatestRuns = new WeakSet<FakeDb>()
+
+/** Stand-in for qa_story_latest_started_at: one latest start per story. */
+function latestStartedAt(database: FakeDb, args: Record<string, unknown>): Array<{ story_id: string; started_at: string }> {
+  const ids = new Set((args.p_story_ids as string[] | undefined) ?? [])
+  const since = String(args.p_since ?? '')
+  const best = new Map<string, string>()
+  for (const row of database.tables.qa_story_runs ?? []) {
+    const id = String(row.story_id ?? '')
+    if (!ids.has(id)) continue
+    const at = row.started_at
+    if (typeof at !== 'string' || at < since) continue
+    const prev = best.get(id)
+    if (!prev || at > prev) best.set(id, at)
+  }
+  return [...best].map(([story_id, started_at]) => ({ story_id, started_at }))
+}
+
+function armLatestRuns(database: FakeDb): void {
+  if (armedLatestRuns.has(database)) return
+  armedLatestRuns.add(database)
+  const prior = database.options.rpc
+  database.options.rpc = (fn, args) => {
+    if (fn === LATEST_RUNS_RPC) return latestStartedAt(database, args)
+    return prior ? prior(fn, args) : null
+  }
+}
+
+function countStoryIdFilters(database: FakeDb): { count: () => number } {
+  let n = 0
+  const orig = database.from.bind(database)
+  database.from = (name: string) => {
+    const q = orig(name)
+    if (name !== 'qa_story_runs') return q
+    const origEq = q.eq.bind(q)
+    q.eq = (key: string, value: unknown) => {
+      if (key === 'story_id') n += 1
+      return origEq(key, value)
+    }
+    return q
+  }
+  return { count: () => n }
+}
+
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = {
     env: { get: () => undefined },
@@ -86,51 +133,104 @@ afterAll(() => {
   delete (globalThis as { Deno?: unknown }).Deno
 })
 
-async function tick(): Promise<void> {
+async function tick(): Promise<Response> {
+  armLatestRuns(db)
   expect(served).toBeTypeOf('function')
   const res = await served!(new Request('https://edge.local/qa-story-runner', { method: 'POST' }))
   expect(res.status).toBe(200)
+  return res
+}
+
+async function waitUntil(pred: () => boolean): Promise<void> {
+  for (let i = 0; i < 50; i++) {
+    if (pred()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error('timed out waiting for the scheduled tick')
 }
 
 describe('qa-story-runner scheduled tick', () => {
   it('does not start a story when its latest-run read fails', async () => {
     db = makeFakeDb(
       { qa_stories: [qaStory({ id: 's1' })] },
-      { autoId: true, failRead: (table) => (table === 'qa_story_runs' ? 'connection reset' : null) },
+      { autoId: true, rpcError: () => ({ code: 'XX000', message: 'connection reset' }) },
     )
     await tick()
     expect(db.tables.qa_story_runs ?? []).toHaveLength(0)
   })
 
-  it('starts the story whose read worked when another read failed', async () => {
-    db = makeFakeDb({
-      qa_stories: [qaStory({ id: 'good' }), qaStory({ id: 'bad' })],
-      qa_story_runs: [
-        { id: 'g1', story_id: 'good', project_id: 'p1', status: 'passed', started_at: '2026-10-24T11:00:00.000Z' },
-      ],
-    }, { autoId: true })
-    const orig = db.from.bind(db)
-    db.from = (name: string) => {
-      const q = orig(name)
-      if (name !== 'qa_story_runs') return q
-      let storyId: string | null = null
-      const origEq = q.eq.bind(q)
-      q.eq = (key: string, value: unknown) => {
-        if (key === 'story_id') storyId = String(value)
-        return origEq(key, value)
-      }
-      const origThen = q.then.bind(q)
-      q.then = ((onFulfilled, onRejected) => {
-        if (storyId === 'bad') {
-          return Promise.resolve({ data: null, error: { message: 'connection reset' }, count: null }).then(onFulfilled, onRejected)
-        }
-        return origThen(onFulfilled, onRejected)
-      }) as typeof q.then
-      return q
-    }
+  it('reads every story\'s latest start in one call', async () => {
+    const stories = Array.from({ length: 25 }, (_, i) => qaStory({ id: `s${String(i).padStart(2, '0')}` }))
+    db = makeFakeDb({ qa_stories: stories }, { autoId: true })
+    const filters = countStoryIdFilters(db)
     await tick()
-    expect(runsFor('bad')).toHaveLength(0)
-    expect(runsFor('good')).toHaveLength(2)
+    const calls = db.rpcCalls.filter((c) => c.fn === LATEST_RUNS_RPC)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.args.p_story_ids).toHaveLength(25)
+    expect(calls[0]?.args.p_since).toBe('2026-10-24T11:00:30.000Z')
+    expect(filters.count()).toBe(0)
+    expect(db.tables.qa_story_runs).toHaveLength(3)
+  })
+
+  it('still starts a due story when the latest-run function is not installed yet', async () => {
+    db = makeFakeDb({ qa_stories: [qaStory({ id: 's1' })] }, {
+      autoId: true,
+      rpcError: (fn) => fn === LATEST_RUNS_RPC
+        ? { code: 'PGRST202', message: 'Could not find the function public.qa_story_latest_started_at' }
+        : null,
+    })
+    const filters = countStoryIdFilters(db)
+    await tick()
+    expect(db.rpcCalls.map((c) => c.fn)).toContain(LATEST_RUNS_RPC)
+    expect(filters.count()).toBe(1)
+    expect(runsFor('s1')).toHaveLength(1)
+  })
+
+  it('claims every story before executing, so an overlapping tick does not start them again', async () => {
+    db = makeFakeDb({
+      qa_stories: [qaStory({ id: 'a' }), qaStory({ id: 'b' }), qaStory({ id: 'c' })],
+    }, { autoId: true })
+    armLatestRuns(db)
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let fetches = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      fetches += 1
+      await gate
+      return new Response(
+        JSON.stringify({ success: true, data: { markdown: 'ok' } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }))
+    const first = served!(new Request('https://edge.local/qa-story-runner', { method: 'POST' }))
+    try {
+      await waitUntil(() => fetches >= 1)
+      expect(runsFor('a')).toHaveLength(1)
+      expect(runsFor('b')).toHaveLength(1)
+      expect(runsFor('c')).toHaveLength(1)
+      expect(fetches).toBe(1)
+
+      const second = served!(new Request('https://edge.local/qa-story-runner', { method: 'POST' }))
+      const secondResult = await Promise.race([
+        second.then((res) => ({ kind: 'done' as const, res })),
+        new Promise<{ kind: 'hung' }>((resolve) => setTimeout(() => resolve({ kind: 'hung' }), 1000)),
+      ])
+      expect(secondResult.kind).toBe('done')
+      if (secondResult.kind !== 'done') return
+      expect(secondResult.res.status).toBe(200)
+      expect(await secondResult.res.json()).toMatchObject({ due: 0 })
+      expect(fetches).toBe(1)
+      expect(runsFor('a')).toHaveLength(1)
+      expect(runsFor('b')).toHaveLength(1)
+      expect(runsFor('c')).toHaveLength(1)
+    } finally {
+      release()
+      const firstRes = await first
+      expect(firstRes.status).toBe(200)
+    }
+    expect(runsFor('a')).toHaveLength(1)
+    expect(runsFor('b')).toHaveLength(1)
+    expect(runsFor('c')).toHaveLength(1)
   })
 
   it('counts a skipped run in the current slot as already handled', async () => {

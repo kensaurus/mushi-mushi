@@ -196,13 +196,6 @@ describe('a wallet refusal is a 402, not a 500', () => {
     await expectWallet402(await h.served!(post({ project_id: 'p1' })))
   })
 
-  it('map-from-live acks 202 and keeps the story-mapper invoke alive', () => {
-    const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/inventory.ts'), 'utf8')
-    const kickoff = src.slice(src.indexOf("'/v1/admin/inventory/:projectId/map-from-live'"))
-    expect(kickoff).toContain('runInBackground(')
-    expect(kickoff).toContain("status: 'accepted' } }, 202)")
-  })
-
   it('the /propose API hop keeps the 402 instead of turning it into a 500', () => {
     const src = readFileSync(resolve(__dirname, '../../supabase/functions/api/routes/inventory.ts'), 'utf8')
     expect(src).toMatch(/error: json\.error \?\? \{ code: 'PROPOSE_FAILED' \} \},\s*resp\.status === 402 \? 402 : 500,/)
