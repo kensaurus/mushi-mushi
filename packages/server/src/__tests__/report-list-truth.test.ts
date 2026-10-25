@@ -155,16 +155,29 @@ describe('one report window (#231, #77)', () => {
     expect(routeBody(DASHBOARD, "app.get('/v1/admin/inbox/stats'", 3000)).toContain('reportWindowStartIso(14)')
   })
 
-  it('/reports/stats counts only the active project, like totalAllTime and the list', () => {
+  it('/reports/stats counts only the active project when one is pinned', () => {
     // glot.it, 2026-10-07: the 14-day tiles counted every project the caller owns.
     const start = REPORTS.indexOf("app.get('/v1/admin/reports/stats'")
     const end = REPORTS.indexOf('app.get(', start + 1)
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)
     const stats = REPORTS.slice(start, end)
+    // Team-wide totals are opt-in. A missing pin still uses the active project.
+    expect(stats).toContain("c.req.query('apps') === 'all'")
+    expect(stats).toContain('!resolvedProject.explicit')
+    expect(stats).not.toContain('!resolvedProject.explicit && projectIds.length > 1')
+    expect(stats).toContain('unpinnedReportStats')
+    // The pinned path must not widen to every project.
     expect(stats).not.toContain(".in('project_id', projectIds)")
     const window = stats.slice(stats.indexOf(".select('id, status, severity, created_at')"))
     expect(window.slice(0, 200)).toContain(".eq('project_id', activeProject.id)")
+  })
+
+  it('?apps=all counts every project the caller can open', () => {
+    const helper = routeBody(REPORTS, 'async function unpinnedReportStats', 4500)
+    expect(helper).toContain(".in('project_id', projectIds)")
+    expect(helper).toContain('apps=all')
+    expect(helper).toContain("projectName: 'All apps'")
   })
 
   it('the list understands status=active (what the KPI tiles count)', () => {
