@@ -20,6 +20,7 @@ vi.mock('../../lib/supabase', () => ({ apiFetch }))
 vi.mock('../ProjectSwitcher', () => ({ useActiveProjectId: () => '11111111-1111-4111-8111-111111111111' }))
 
 import { ReportRowView } from './ReportRowView'
+import { REPORTS_CHECKBOX, REPORTS_HIT } from './reportsTableLayout'
 import type { ReportRow } from './types'
 
 const ROW = {
@@ -209,5 +210,28 @@ describe('ReportRowView sample reports', () => {
   it('leaves real reports unlabelled', async () => {
     await renderRow(ROW)
     expect(container.textContent).not.toContain('Test report')
+  })
+})
+
+describe('ReportRowView hit targets', () => {
+  function tokens(el: Element | null): string[] {
+    expect(el).not.toBeNull()
+    return (el!.getAttribute('class') ?? '').split(/\s+/).filter(Boolean)
+  }
+
+  it('puts the 24px hit floor on the row controls', async () => {
+    await render()
+    const hit = REPORTS_HIT.split(' ')
+    for (const label of ['Copy link', 'Dismiss']) {
+      const got = tokens(container.querySelector(`[aria-label="${label}"]`))
+      for (const token of hit) expect(got).toContain(token)
+    }
+    const open = tokens(container.querySelector('a[aria-label="Open in new tab"]'))
+    for (const token of hit) expect(open).toContain(token)
+    const triage = Array.from(container.querySelectorAll('a')).find((a) => a.textContent?.includes('Triage'))
+    const triageTokens = tokens(triage ?? null)
+    for (const token of hit) expect(triageTokens).toContain(token)
+    const box = tokens(container.querySelector('input[type="checkbox"]'))
+    for (const token of REPORTS_CHECKBOX.split(' ')) expect(box).toContain(token)
   })
 })

@@ -5,6 +5,7 @@
  */
 
 import type { SortDir, SortField } from './types'
+import { REPORTS_HIT } from './reportsTableLayout'
 
 interface Props {
   label: string
@@ -52,13 +53,14 @@ export function SortHeader({
   return (
     <th
       scope="col"
+      role="columnheader"
       className={`${cellPx} py-2 font-medium ${alignCls} ${className}`}
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button
         type="button"
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
+        className={`inline-flex ${REPORTS_HIT} items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
         aria-label={fullLabel ? `Sort by ${fullLabel}` : `Sort by ${label}`}
       >
         {labelNode}

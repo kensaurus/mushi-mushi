@@ -28,6 +28,7 @@ import { Link } from 'react-router-dom'
 import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { Btn } from '../ui'
+import { REPORTS_HIT } from './reportsTableLayout'
 
 interface Props {
   busy: boolean
@@ -175,7 +176,7 @@ export function DispatchFixPreflight({
         className={[
           'inline-flex items-center justify-center gap-0.5 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
           isTable
-            ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20'
+            ? `${REPORTS_HIT} shrink-0 px-1.5 text-3xs leading-none bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20`
             : 'px-2 py-1 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20',
         ].join(' ')}
       >

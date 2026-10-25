@@ -52,7 +52,7 @@ export function BulkBar({ count, busy, disabledReason = null, onClear, onSetStat
       <button
         type="button"
         onClick={onClear}
-        className="ml-auto text-2xs text-fg-muted hover:text-fg underline"
+        className="ml-auto inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg underline"
       >
         Clear selection (esc)
       </button>
@@ -78,7 +78,7 @@ function BulkSelect({ label, options, disabled, onPick }: BulkSelectProps) {
         onPick(v)
         e.currentTarget.value = ''
       }}
-      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      className="min-h-6 max-w-full bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
     >
       <option value="">{label}…</option>
       {options.map((o) => (

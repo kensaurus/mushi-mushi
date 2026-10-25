@@ -38,6 +38,8 @@ import {
 } from './types'
 import {
   REPORTS_ACTION_STACK_MAX,
+  REPORTS_CHECKBOX,
+  REPORTS_HIT,
   REPORTS_TABLE_COL,
   TABLE_CELL,
 } from './reportsTableLayout'
@@ -165,8 +167,9 @@ function ReportRowViewInner({
       onMouseEnter={onFocus}
       onAnimationEnd={statusFlash.onAnimationEnd}
       className={`${baseRowCls} ${cursorCls} ${statusFlash.className}`}
+      role="row"
     >
-      <td className={`${REPORTS_TABLE_COL.stripe} p-0 align-stretch`}>
+      <td role="cell" className={`${REPORTS_TABLE_COL.stripe} p-0 align-stretch`}>
         {/* Severity stripe — uses a ::before-style absolute fill so it spans
             the full row height regardless of summary line-clamp wrap. */}
         <div
@@ -174,19 +177,19 @@ function ReportRowViewInner({
           aria-hidden="true"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 align-top pl-3`}>
+      <td role="cell" className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 align-top px-1`}>
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           onClick={(e) => e.stopPropagation()}
           aria-label={isSelected ? 'Deselect report' : 'Select report'}
-          className="h-3.5 w-3.5 accent-brand"
+          className={`${REPORTS_CHECKBOX} accent-brand`}
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
+      <td role="cell" className={`reports-summary-cell ${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
         <div className="min-w-0 space-y-0.5">
-          <div className="flex items-start gap-1 min-w-0">
+          <div className="reports-summary-line flex items-start gap-1 min-w-0">
             {onToggleGroup && (
               <Tooltip portal content={expanded ? 'Hide variants' : `Show ${(variantCount ?? 1) - 1} more variant${(variantCount ?? 1) - 1 === 1 ? '' : 's'}`}>
                 <button
@@ -197,7 +200,7 @@ function ReportRowViewInner({
                   }}
                   aria-expanded={expanded}
                   aria-label={expanded ? 'Collapse variants' : 'Expand variants'}
-                  className="shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                  className={`shrink-0 mt-0.5 inline-flex ${REPORTS_HIT} items-center justify-center rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" className={`motion-safe:transition-transform ${expanded ? 'rotate-90' : ''}`}>
                     <path d="M3 2l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
@@ -279,7 +282,7 @@ function ReportRowViewInner({
           <ReportTagChips row={row} className="mt-1" />
         </div>
       </td>
-      <td className={`reports-metric-cell ${REPORTS_TABLE_COL.status} ${TABLE_CELL.pxMeta}`}>
+      <td role="cell" className={`reports-metric-cell ${REPORTS_TABLE_COL.status} ${TABLE_CELL.pxMeta}`}>
         <div className="reports-metric-cell-slot">
           <StatusStepper
             className="w-full min-w-0 max-w-full"
@@ -290,17 +293,17 @@ function ReportRowViewInner({
           />
         </div>
       </td>
-      <td className={`reports-metric-cell ${REPORTS_TABLE_COL.severity} ${TABLE_CELL.pxMeta}`}>
+      <td role="cell" className={`reports-metric-cell ${REPORTS_TABLE_COL.severity} ${TABLE_CELL.pxMeta}`}>
         <div className="reports-metric-cell-slot">
           <TableSeverityCell severity={row.severity} />
         </div>
       </td>
-      <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
+      <td role="cell" className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
         <div className="reports-metric-cell-slot reports-metric-cell-slot--confidence">
           <TableConfidenceCell confidence={row.confidence} layout="table" />
         </div>
       </td>
-      <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
+      <td role="cell" className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
             <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
@@ -330,7 +333,7 @@ function ReportRowViewInner({
               <Link
                 to={detailPath}
                 onClick={(e) => e.stopPropagation()}
-                className={`inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
+                className={`inline-flex ${REPORTS_HIT} shrink-0 items-center justify-center px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
                 data-testid="report-row-closed-action"
               >
                 {closedAction.label}
@@ -339,7 +342,7 @@ function ReportRowViewInner({
               <Link
                 to={detailPath}
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+                className={`inline-flex ${REPORTS_HIT} shrink-0 items-center justify-center px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover`}
               >
                 Triage →
               </Link>
@@ -376,7 +379,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onCopyLink()
           }}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
+          className={`inline-flex ${REPORTS_HIT} items-center justify-center text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm`}
           aria-label="Copy link"
         >
           <IconShare size={12} />
@@ -388,7 +391,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
+          className={`inline-flex ${REPORTS_HIT} items-center justify-center text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm`}
           aria-label="Open in new tab"
         >
           <IconExternalLink size={12} />
@@ -401,7 +404,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onDismiss()
           }}
-          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
+          className={`inline-flex ${REPORTS_HIT} items-center justify-center text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm`}
           aria-label="Dismiss"
         >
           <IconClose size={12} />
