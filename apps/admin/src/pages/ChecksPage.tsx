@@ -8,6 +8,11 @@
  * Labels, descriptions, icons and feature gates come from NAV_REGISTRY (via
  * buildOperatorNav) and the chips reuse the sidebar's resolveNavBadge, so this
  * page can never say something different from the nav rail.
+ *
+ * Each card also prints one live status line (`lib/checkStatus`) so a reader
+ * can tell a failing check from an all-clear or an unconfigured one without
+ * opening all eleven pages. It reads the nav counts this page already
+ * fetches — no extra requests.
  */
 
 import { Link } from 'react-router-dom'
@@ -21,6 +26,7 @@ import { CHECK_SUB_GROUPS, type CheckSubGroupId } from '../lib/navRegistry'
 import { buildOperatorNav, type BuiltNavItem } from '../lib/buildNav'
 import { useNavCounts, type HealthTone } from '../lib/useNavCounts'
 import { navBadgeStatus, navSlicesForPaths, resolveNavBadge } from '../lib/navBadges'
+import { CHECK_STATUS_TEXT_TONE, resolveCheckStatus } from '../lib/checkStatus'
 import { useEntitlements } from '../lib/useEntitlements'
 
 /** Card order per group. Every path must exist in NAV_REGISTRY. */
@@ -66,7 +72,7 @@ export function ChecksPage() {
         description="Every automatic check on this app in one place."
         helpTitle="About Checks"
         helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, and how well the AI graded, learned from and prompted each fix."
-        helpHowToUse="Open a card to see that check's findings. A chip on the card shows the sidebar's live count or status for it; a Pro pill means the check needs a plan upgrade."
+        helpHowToUse="Open a card to see that check's findings. Each card carries the chip and the one-line status the sidebar shows for that check — what it is saying right now, or 'Set up' when it has no data yet; a Pro pill means the check needs a plan upgrade."
       />
 
       {CHECK_GROUPS.map((group) => {
@@ -86,6 +92,7 @@ export function ChecksPage() {
                 const Icon = item.icon
                 const gated = !!item.requiresFeature && !has(item.requiresFeature) && !isSuperAdmin
                 const status = navBadgeStatus(resolveNavBadge(path, navCounts, { criticalReports30d: 0 }))
+                const live = resolveCheckStatus(path, navCounts, { criticalReports30d: 0 })
                 return (
                   <li key={path} className="min-w-0">
                     <Link
@@ -107,6 +114,17 @@ export function ChecksPage() {
                           </span>
                         </div>
                         <p className="text-xs leading-snug text-fg-muted">{item.description}</p>
+                        {live && (
+                          <p
+                            className={`mt-auto pt-1 text-2xs leading-snug ${CHECK_STATUS_TEXT_TONE[live.tone]}`}
+                            data-testid={`checks-status-${path.slice(1)}`}
+                          >
+                            {live.text}
+                            {live.needsSetup && (
+                              <span className="ml-1 text-brand">Set up →</span>
+                            )}
+                          </p>
+                        )}
                       </Card>
                     </Link>
                   </li>

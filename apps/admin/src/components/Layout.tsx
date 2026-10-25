@@ -874,8 +874,15 @@ export function Layout({ children }: { children: ReactNode }) {
               {children}
               {!focusMode && <DemoProjectHint />}
               {/* Page help sits under the content: a newcomer reads the page
-                  first, the explanation second (audit 2026-10-20). */}
-              {!focusMode && <RoutePageHelp />}
+                  first, the explanation second (audit 2026-10-20). The wrapper
+                  keeps it off the last row of the page (the /checks card grid
+                  used to touch the "About Checks" bar) and collapses when a
+                  page registers no help. */}
+              {!focusMode && (
+                <div className="mt-4 empty:hidden">
+                  <RoutePageHelp />
+                </div>
+              )}
               {/* Developer details (components/readout/ReadoutPanel) portal here, so they close every page. */}
               <div id={PAGE_FOOT_SLOT_ID} className="mt-4 empty:hidden" />
             </div>

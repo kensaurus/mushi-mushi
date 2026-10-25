@@ -117,4 +117,36 @@ describe('ChecksPage', () => {
     expect(judge?.textContent).toContain('3')
     expect(container.querySelector('a[href="/lessons"]')?.textContent).not.toContain('3')
   })
+
+  it('prints a live status line per check, including all-clear and not-set-up', () => {
+    state.counts = counts({
+      judgeDisagreements: 4,
+      slices: {
+        ...EMPTY_NAV_STAT_SLICES,
+        qaCoverage: { totalStories: 7, failingStories: 0, pendingRuns: 0, topPriority: 'healthy' },
+        lessons: { activeLessons: 0, readyToPromote: 0, criticalLessons: 0, topPriority: 'no_lessons' },
+      },
+    })
+    render()
+    // failing check: the sidebar's own sentence, in the danger tone
+    const judge = container.querySelector('[data-testid="checks-status-judge"]')
+    expect(judge?.textContent).toContain('disagreements')
+    expect(judge?.className).toContain('text-danger')
+    // configured and clear
+    expect(
+      container.querySelector('[data-testid="checks-status-qa-coverage"]')?.textContent,
+    ).toContain('7 QA stories')
+    // configured but empty → set-up nudge
+    const lessons = container.querySelector('[data-testid="checks-status-lessons"]')
+    expect(lessons?.textContent).toContain('No lessons learned yet')
+    expect(lessons?.textContent).toContain('Set up')
+    // no readable status → no invented line
+    expect(container.querySelector('[data-testid="checks-status-recipe"]')).toBeNull()
+  })
+
+  it('says nothing while the counts are still loading', () => {
+    state.counts = counts({ ready: false })
+    render()
+    expect(container.querySelector('[data-testid^="checks-status-"]')).toBeNull()
+  })
 })
