@@ -51,6 +51,47 @@ const ANALYZE_DRAIN_BUDGET_MS = 100 * 1000
 const ANALYZE_SIBLING_ACTIVE_MS = 8 * 60 * 1000
 /** Rows per project_codebase_fingerprints upsert, under the 8s timeout. */
 const FINGERPRINT_BATCH = 500
+/** Rows per stored-fingerprint read page; PostgREST's max_rows is 1000. */
+const FINGERPRINT_PAGE = 1000
+/** 50k rows, matching the index walk. A full last page means a truncated read. */
+const MAX_FINGERPRINT_PAGES = 50
+
+/**
+ * The stored fingerprint of every file, keyed by path, or null when the read
+ * failed or ran out of pages — then the caller writes them all, as before.
+ *
+ * Keyset on file_path like the index walk, so no page re-sorts the project.
+ */
+async function listStoredFingerprints(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<Map<string, string> | null> {
+  const stored = new Map<string, string>()
+  let after: string | null = null
+  for (let page = 0; page < MAX_FINGERPRINT_PAGES; page++) {
+    let query = db
+      .from('project_codebase_fingerprints')
+      .select('file_path, fingerprint')
+      .eq('project_id', projectId)
+    if (after !== null) query = query.gt('file_path', after)
+    const { data, error } = await query.order('file_path', { ascending: true }).limit(FINGERPRINT_PAGE)
+    if (error) return null
+    const rows = data ?? []
+    for (const row of rows) stored.set(String(row.file_path), fingerprintDigest(row.fingerprint))
+    if (rows.length < FINGERPRINT_PAGE) return stored
+    after = String(rows[rows.length - 1].file_path)
+  }
+  return null
+}
+
+/**
+ * Compare two fingerprints by value. jsonb does not keep key order, so the
+ * stored object and a fresh one do not stringify the same way.
+ */
+function fingerprintDigest(fp: unknown): string {
+  const f = (fp ?? {}) as { contentHash?: unknown; exportCount?: unknown; importCount?: unknown }
+  return `${String(f.contentHash ?? '')}|${String(f.exportCount ?? '')}|${String(f.importCount ?? '')}`
+}
 
 /** Put a claimed job back on the queue. Only touches a row this worker still owns. */
 async function releaseAnalyzeJob(db: SupabaseClient, jobId: string, error: string): Promise<void> {
@@ -229,12 +270,21 @@ export async function runCodebaseAnalyzeJob(
     }
     if (!written.ok) throw new Error(`project_codebase_graph write failed: ${written.message}`)
 
-    const fpRows = fileRows.map((r) => ({
-      project_id: projectId,
-      file_path: r.file_path,
-      fingerprint: fingerprintFile(r),
-      updated_at: new Date().toISOString(),
-    }))
+    // Only the files whose fingerprint can have moved. A push names them, so
+    // no other file's index row changed; a full rebuild diffs against the
+    // stored rows. Writing all ~26k every run cost 50+ sequential round trips
+    // inside the drain budget to rewrite rows that were already current.
+    const changed = new Set(changedPaths)
+    const fpCandidates = changedPaths.length ? fileRows.filter((r) => changed.has(r.file_path)) : fileRows
+    const storedFps = changedPaths.length ? null : await listStoredFingerprints(db, projectId)
+    const fpRows = fpCandidates
+      .map((r) => ({
+        project_id: projectId,
+        file_path: r.file_path,
+        fingerprint: fingerprintFile(r),
+        updated_at: new Date().toISOString(),
+      }))
+      .filter((row) => !storedFps || storedFps.get(row.file_path) !== fingerprintDigest(row.fingerprint))
     // Batched: the index read is no longer capped at 1000 rows, and one
     // upsert of every fingerprint would run past the 8s statement timeout.
     // A failed batch is logged, not thrown: the graph is already written and

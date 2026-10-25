@@ -22,6 +22,8 @@
  * - A statement timeout is retried once. A busy project lock is not: the
  *   caller requeues the job. A second full timeout can outlive the edge
  *   wall clock; the stale-job reaper picks that up.
+ * - The row walk keeps content_preview only for symbol-less rows; nothing
+ *   reads a symbol row's preview and the walk now holds up to 50k rows.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -41,8 +43,22 @@ const FILE_ROW_PAGE = 1000
  * 50k rows. Unlike the path walk these rows carry content_preview, so the
  * cap is what keeps the edge worker inside its memory limit; the largest
  * project indexes about 26k. Past it the caller merges the stored graph.
+ * Only a symbol-less row's preview is kept (see dropUnusedPreview), so what
+ * the walk holds is bounded by the file count, not the chunk count.
  */
 const MAX_FILE_ROW_PAGES = 50
+
+/**
+ * A symbol row's content_preview is never read: buildGraphFromIndex takes a
+ * node summary and the import fallback from symbol-less rows only, and
+ * fingerprintFile runs on those same rows. Most of a project's index rows
+ * are symbol chunks, so holding their 600-character previews for a whole
+ * 26k-row walk was the bulk of the worker's retained memory for nothing.
+ */
+function dropUnusedPreview(row: IndexedFileRow): IndexedFileRow {
+  if (!row.symbol_name || row.content_preview == null) return row
+  return { ...row, content_preview: null }
+}
 
 type DbError = { code?: string | null; message?: string } | null
 
@@ -155,7 +171,7 @@ export async function listIndexedFileRows(
       const id = String(row.id)
       if (seen.has(id)) continue
       seen.add(id)
-      rows.push(row)
+      rows.push(dropUnusedPreview(row))
     }
     if (batch.length < FILE_ROW_PAGE) {
       // Inside a path: its rows are done, so carry on past it. Otherwise the
