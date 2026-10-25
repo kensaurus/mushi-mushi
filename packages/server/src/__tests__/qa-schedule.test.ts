@@ -1,10 +1,8 @@
 /**
  * FILE: qa-schedule.test.ts
- * PURPOSE: Scheduled QA ticks ignore local stories and defer stories past
- *          the per-project cap instead of writing a skipped run.
+ * PURPOSE: Scheduled QA ticks ignore local stories, defer stories past
+ *          the per-project cap, and only catch up a slot inside the last hour.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { indexLastRuns, selectScheduledStories, type QaScheduleStory } from '../../supabase/functions/_shared/qa-schedule.ts'
 
@@ -63,12 +61,39 @@ describe('selectScheduledStories', () => {
     expect(decision.deferred.map((s) => s.id).sort()).toEqual(['a4', 'b4'])
   })
 
-  it('treats a non-skipped run in the current slot as already started', () => {
+  it('treats a run in the current slot as already started', () => {
     const decision = selectScheduledStories([
       story({ id: 'ran', last_run_at: '2026-10-24T12:00:01.000Z' }),
       story({ id: 'waiting', last_run_at: '2026-10-24T11:00:00.000Z' }),
     ], noon)
     expect(decision.run.map((s) => s.id)).toEqual(['waiting'])
+  })
+
+  it('waits for the first slot at or after the story was created', () => {
+    const created = '2026-10-24T12:30:00.000Z'
+    const early = selectScheduledStories([
+      story({ id: 'new', last_run_at: null, created_at: created }),
+    ], new Date('2026-10-24T12:40:00.000Z'))
+    expect(early.run).toEqual([])
+
+    const onSlot = selectScheduledStories([
+      story({ id: 'new', last_run_at: null, created_at: created }),
+    ], new Date('2026-10-24T13:00:30.000Z'))
+    expect(onSlot.run.map((s) => s.id)).toEqual(['new'])
+  })
+
+  it('catches up a slot from the last hour and drops an older one', () => {
+    const daily = story({
+      id: 'daily',
+      schedule_cron: '0 0 * * *',
+      last_run_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+    })
+    const inside = selectScheduledStories([daily], new Date('2026-10-24T01:00:30.000Z'))
+    expect(inside.run.map((s) => s.id)).toEqual(['daily'])
+
+    const outside = selectScheduledStories([daily], new Date('2026-10-24T01:01:00.000Z'))
+    expect(outside.run).toEqual([])
   })
 })
 
@@ -84,13 +109,3 @@ describe('indexLastRuns', () => {
   })
 })
 
-describe('qa-story-runner scheduled path', () => {
-  const src = readFileSync(resolve(__dirname, '../../supabase/functions/qa-story-runner/index.ts'), 'utf8')
-
-  it('excludes local stories and does not record a skipped row for the cap', () => {
-    expect(src).toContain(".neq('browser_provider', 'local')")
-    expect(src).toContain(".neq('status', 'skipped')")
-    expect(src).toContain('selectScheduledStories')
-    expect(src).not.toContain('rate_limited')
-  })
-})

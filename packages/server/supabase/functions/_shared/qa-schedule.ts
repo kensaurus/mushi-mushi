@@ -8,25 +8,33 @@
  * which consumed their cron slot, so a project whose stories share
  * `0 * * * *` only ever ran the first three.
  *
- * A story is due from its latest cron slot until a non-skipped run starts
- * in that slot. The tick runs the oldest few; the rest stay due and the
- * next minute picks them up. Nothing is written for a story this tick
- * does not run.
+ * A story is due from its latest cron slot inside the last hour until any
+ * run starts in that slot, including a skipped cloud run (Browserbase on
+ * the edge finishes as skipped). The tick runs the oldest few; the rest
+ * stay due and the next minute picks them up. Nothing is written for a
+ * story this tick does not run.
+ *
+ * A new story waits for the first slot at or after `created_at`. The table
+ * has no `enabled_at`, so a story turned back on still runs for a slot
+ * inside the hour. Catch-up stops at one hour: a long outage replays only
+ * stories whose slot is still inside that window.
  */
 
 /** Cloud stories started per project per minute tick. */
 export const QA_SCHEDULE_CAP = 3
 
-/** How far back a missed slot can still be caught up. A day of minute ticks. */
-export const QA_SCHEDULE_LOOKBACK_MINUTES = 24 * 60
+/** Catch-up window. One hour keeps an hourly slot due until the next one. */
+export const QA_SCHEDULE_LOOKBACK_MINUTES = 60
 
 export interface QaScheduleStory {
   id: string
   project_id: string
   browser_provider: string
   schedule_cron: string | null
-  /** Start of the latest non-skipped run, or null when none is known. */
+  /** Start of the latest run in the lookback, any status, or null when none is known. */
   last_run_at: string | null
+  /** Slots that started earlier do not count. Absent callers keep the lookback rule only. */
+  created_at?: string | null
 }
 
 export interface QaScheduleDecision<T extends QaScheduleStory> {
@@ -77,6 +85,11 @@ export function latestCronSlot(
 function isDue(story: QaScheduleStory, now: Date): boolean {
   const slot = latestCronSlot(story.schedule_cron ?? '*/15 * * * *', now)
   if (!slot) return false
+  if (story.created_at) {
+    const created = Date.parse(story.created_at)
+    // The slot's minute started before the story existed.
+    if (!Number.isNaN(created) && slot.getTime() < created) return false
+  }
   if (!story.last_run_at) return true
   const last = Date.parse(story.last_run_at)
   if (Number.isNaN(last)) return true

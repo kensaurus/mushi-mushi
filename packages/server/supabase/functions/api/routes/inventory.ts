@@ -146,6 +146,29 @@ async function countLatestOpenFindings(
   return { count }
 }
 
+/**
+ * The kickoff returns before story-mapper finishes. A network error or a
+ * non-2xx leaves the run row pending unless we mark it failed here. Only a
+ * still-pending row is updated, so a function that already recorded its own
+ * status is left alone.
+ */
+async function markStoryMapInvokeFailed(
+  db: ReturnType<typeof getServiceClient>,
+  runId: string,
+  message: string,
+): Promise<void> {
+  const { error } = await db
+    .from('story_map_runs')
+    .update({
+      status: 'failed',
+      error_message: message.slice(0, 1000),
+      finished_at: new Date().toISOString(),
+    })
+    .eq('id', runId)
+    .eq('status', 'pending')
+  if (error) log.warn('failed to mark story_map_run failed', { runId, error: error.message })
+}
+
 export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
@@ -1703,8 +1726,14 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
             cursor_cloud_refine: body.cursor_cloud_refine ?? false,
             triggered_by: userId,
           }),
-        }).then((res) => {
-          if (!res.ok) log.warn('story-mapper invoke returned non-2xx', { runId, status: res.status })
+        }).then(async (res) => {
+          if (res.ok) return
+          log.warn('story-mapper invoke returned non-2xx', { runId, status: res.status })
+          await markStoryMapInvokeFailed(db, runId, `story-mapper invoke HTTP ${res.status}`)
+        }).catch(async (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          log.warn('story-mapper invoke failed', { runId, err: message.slice(0, 300) })
+          await markStoryMapInvokeFailed(db, runId, message)
         }),
         'story-mapper-kickoff',
       )

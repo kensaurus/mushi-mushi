@@ -153,7 +153,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 User creates story (NL prompt or Playwright script)
   → stored in `qa_stories` table (schedule_cron default: '0 * * * *', hourly)
   → pg_cron fires qa-story-runner every minute
-  → cron gate: due from the latest slot until a non-skipped run starts; `browser_provider = local` is not selected
+  → cron gate: due from the latest slot inside the last hour until a run starts (a skipped run counts); `browser_provider = local` is not selected
   → enabled check: disabled stories are skipped entirely
   → cap: 3 due stories per project per tick (QA_SCHEDULE_CAP); the rest stay due for the next tick (no skipped row)
   → BYOK key resolution (firecrawl / browserbase / openai from mushi_runtime_config)

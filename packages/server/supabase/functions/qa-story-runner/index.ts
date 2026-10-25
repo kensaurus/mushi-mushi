@@ -25,9 +25,9 @@
 // ────
 // Registered in the migration as every-minute via:
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
-// The function itself gates execution on whether each story's
-// schedule_cron aligns with the current time (via a simple cron-match
-// check) so we don't need one pg_cron job per story.
+// Each story is due from its latest cron slot inside the last hour
+// (QA_SCHEDULE_LOOKBACK_MINUTES) until a run row exists in that slot.
+// A failed read of recent runs leaves those stories out of the tick.
 //
 // Rate limits
 // ───────────
@@ -48,7 +48,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
-import { indexLastRuns, QA_SCHEDULE_CAP, selectScheduledStories } from '../_shared/qa-schedule.ts'
+import { indexLastRuns, QA_SCHEDULE_CAP, QA_SCHEDULE_LOOKBACK_MINUTES, selectScheduledStories } from '../_shared/qa-schedule.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -76,6 +76,7 @@ interface QaStory {
   consecutive_failures: number
   slack_failure_ts: string | null
   last_notified_at: string | null
+  created_at?: string | null
 }
 
 interface RunResult {
@@ -716,30 +717,44 @@ Deno.serve(
       }
 
       const cloudStories = (stories ?? []) as QaStory[]
-      const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const since = new Date(now.getTime() - QA_SCHEDULE_LOOKBACK_MINUTES * 60 * 1000).toISOString()
       const lastRuns = new Map<string, string>()
-      // Small chunks so each story's latest non-skipped start fits in one page.
-      for (let i = 0; i < cloudStories.length; i += 20) {
-        const ids = cloudStories.slice(i, i + 20).map((s) => s.id)
-        const { data: recent, error: runsErr } = await db
-          .from('qa_story_runs')
-          .select('story_id, started_at')
-          .in('story_id', ids)
-          .gte('started_at', since)
-          .neq('status', 'skipped')
-          .order('started_at', { ascending: false })
-          .limit(1000)
-        if (runsErr) {
-          rlog.warn('failed to read recent qa_story_runs; stories look unrun', {
-            err: (runsErr.message ?? String(runsErr)).slice(0, 300),
-          })
-          continue
+      // Stories whose latest-run read failed. Leaving them in with a null
+      // last_run_at would start a duplicate cloud run on a transient error.
+      const unread = new Set<string>()
+      // One newest row per story. A shared page lets a chatty story push
+      // another story's latest start off the page, which then looks unrun.
+      // Any status counts: a skipped Browserbase row is the run for this slot.
+      const RUN_CHUNK = 20
+      for (let i = 0; i < cloudStories.length; i += RUN_CHUNK) {
+        const chunk = cloudStories.slice(i, i + RUN_CHUNK)
+        const reads = await Promise.all(chunk.map(async (story) => {
+          const { data: recent, error: runsErr } = await db
+            .from('qa_story_runs')
+            .select('story_id, started_at')
+            .eq('story_id', story.id)
+            .gte('started_at', since)
+            .order('started_at', { ascending: false })
+            .limit(1)
+          return { id: story.id, recent, runsErr }
+        }))
+        for (const read of reads) {
+          if (read.runsErr) {
+            unread.add(read.id)
+            rlog.warn('failed to read recent qa_story_runs; leaving story out of this tick', {
+              storyId: read.id,
+              err: (read.runsErr.message ?? String(read.runsErr)).slice(0, 300),
+            })
+            continue
+          }
+          for (const [storyId, at] of indexLastRuns(read.recent ?? [])) lastRuns.set(storyId, at)
         }
-        for (const [storyId, at] of indexLastRuns(recent ?? [])) lastRuns.set(storyId, at)
       }
 
       const { run: toRun, deferred } = selectScheduledStories(
-        cloudStories.map((s) => ({ ...s, last_run_at: lastRuns.get(s.id) ?? null })),
+        cloudStories
+          .filter((s) => !unread.has(s.id))
+          .map((s) => ({ ...s, last_run_at: lastRuns.get(s.id) ?? null })),
         now,
         QA_SCHEDULE_CAP,
       )

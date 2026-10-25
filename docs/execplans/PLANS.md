@@ -76,7 +76,7 @@ pass/fail results on a dashboard tile and dedicated page.
 
 #### 3c — qa-story-runner Edge Function
 - [x] `packages/server/supabase/functions/qa-story-runner/index.ts`
-  - Due from the latest cron slot until a non-skipped run starts (`_shared/qa-schedule.ts`)
+  - Due from the latest cron slot inside the last hour until a run starts, including skipped (`_shared/qa-schedule.ts`)
   - Cap: 3 stories per project per tick (`QA_SCHEDULE_CAP`); the rest stay due, no skipped row
   - BYOK key resolution via `_shared/byok.ts`
   - Inline execution for `firecrawl_actions`

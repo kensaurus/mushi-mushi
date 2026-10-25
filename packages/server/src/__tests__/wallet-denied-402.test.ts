@@ -122,7 +122,10 @@ beforeEach(() => {
       : new Response(JSON.stringify({ data: { markdown: '# Home', metadata: { title: 'Home' } } })),
   ))
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  delete (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime
+})
 
 function post(body: unknown): Request {
   return new Request('https://edge.local/fn', {
@@ -153,6 +156,10 @@ describe('a wallet refusal is a 402, not a 500', () => {
     await Promise.all(jobs)
     const failed = h.updates.find((u) => u.table === 'story_map_runs' && u.row.status === 'failed')
     expect(failed?.row.error_message).toBe('wallet denied: insufficient')
+  })
+
+  it('clears EdgeRuntime after a test that installed it', () => {
+    expect((globalThis as { EdgeRuntime?: unknown }).EdgeRuntime).toBeUndefined()
   })
 
   it('returns 202 before the crawl finishes', async () => {
