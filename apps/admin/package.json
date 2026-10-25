@@ -56,6 +56,7 @@
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "jsdom": "^29.1.1",
+    "playwright": "^1.61.1",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.6",
