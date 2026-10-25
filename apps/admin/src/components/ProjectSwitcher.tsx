@@ -383,6 +383,14 @@ export function ProjectSwitcher() {
   // Every app the caller can open, across teams once the directory is read
   // (the combined pages read all of them), else this team's.
   const appCount = Math.max(projects.length, directory.data?.projects.length ?? 0)
+  // Apps outside the active team. Team-scoped pages (Apps/portfolio) count
+  // only this team, so a bare "9 apps" read as a disagreement with the
+  // portfolio's "Apps" tile; name the teams the count spans instead.
+  const otherTeamApps = otherTeams.reduce((n, g) => n + g.projects.length, 0)
+  const appCountLabel =
+    otherTeamApps > 0
+      ? `${appCount} apps in ${otherTeams.length + 1} teams combined, where a page supports it`
+      : `${appCount} ${appCount === 1 ? 'app' : 'apps'} combined, where a page supports it`
 
   const snapshot = snapshots.byId.get(active.project_id)
   const chipName = allApps ? 'All apps' : active.project_name
@@ -476,8 +484,8 @@ export function ProjectSwitcher() {
                 <AllAppsGlyph size={16} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">All apps</span>
-                  <span className="block truncate text-3xs text-fg-faint">
-                    {appCount} {appCount === 1 ? 'app' : 'apps'} combined, where a page supports it
+                  <span className="block truncate text-3xs text-fg-faint" title={appCountLabel}>
+                    {appCountLabel}
                   </span>
                 </span>
                 {allApps && <span className="shrink-0 text-2xs text-brand">✓</span>}

@@ -80,6 +80,13 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
     () => (directory.data?.projects ?? []).filter((p) => p.organizationId === orgId).map((p) => ({ projectId: p.id, name: p.name })),
     [directory.data, orgId],
   )
+  // Apps in the user's OTHER teams. This page is one team's, while the header
+  // switcher's "All apps" counts every team, so the "Apps" tile says which
+  // set it counted instead of silently disagreeing with the switcher.
+  const otherTeamApps = useMemo(
+    () => (directory.data?.projects ?? []).filter((p) => p.organizationId !== orgId).length,
+    [directory.data, orgId],
+  )
   const selectGroup = (slug: string | null) => {
     writeActiveGroup(slug)
     const next = new URLSearchParams(searchParams)
@@ -139,7 +146,17 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             show: Boolean(page.data && page.data.cards.length > 0),
             children: page.data ? (
               <StatGrid>
-                <StatCard label="Apps" value={String(page.data.totalProjects)} />
+                <StatCard
+                  label="Apps"
+                  value={String(page.data.totalProjects)}
+                  hint={
+                    group
+                      ? 'Apps in this group'
+                      : otherTeamApps > 0
+                        ? `Apps in this team — ${otherTeamApps} more in your other teams (the header switcher counts those too)`
+                        : 'Apps in this team'
+                  }
+                />
                 <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} hint="Apps with something to fix or not yet checked" />
                 <StatCard label="Fix once" value={String(page.data.repeatedGroups)} hint="Problems open in two or more apps" />
                 <StatCard

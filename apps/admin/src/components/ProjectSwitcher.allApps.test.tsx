@@ -16,6 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const PROJECT_A = '450e6ba8-cf2b-4841-bb38-08141e1ebe77'
 const PROJECT_B = '542b34e0-019e-41fe-b900-7b637717bb86'
 const GONE = '00000000-0000-4000-8000-000000000000'
+const ORG_A = '8f1f6c5e-2d7a-4f0b-9a1e-6c2b0d4e5f10'
+const ORG_B = '0c9d8e7f-6a5b-4c3d-8e2f-1a0b9c8d7e60'
 
 function setupProject(id: string, name: string) {
   return { project_id: id, project_name: name, project_slug: name, report_count: 3, required_complete: 2, required_total: 4, steps: [] }
@@ -27,8 +29,15 @@ const setup = vi.hoisted(() => ({
 
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => setup.value }))
 vi.mock('../lib/useProjectSnapshots', () => ({ useProjectSnapshots: () => ({ byId: new Map(), projects: [] }) }))
+const pageData = vi.hoisted(() => ({ byPath: new Map<string, unknown>() }))
 vi.mock('../lib/usePageData', () => ({
-  usePageData: () => ({ data: null, loading: false, error: null, isValidating: false, reload: () => {} }),
+  usePageData: (path: string | null) => ({
+    data: (path ? pageData.byPath.get(path) : null) ?? null,
+    loading: false,
+    error: null,
+    isValidating: false,
+    reload: () => {},
+  }),
 }))
 vi.mock('../lib/useCreateProject', () => ({ useCreateProject: () => ({ create: vi.fn(), creating: false, error: null }) }))
 vi.mock('../lib/projectGroups', () => ({
@@ -47,6 +56,8 @@ vi.mock('./ProjectSnapshotMeta', () => ({ ProjectSnapshotMeta: () => null }))
 
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { ACTIVE_PROJECT_STORAGE_KEY } from '../lib/activeProject'
+import { ACTIVE_ORG_STORAGE_KEY } from '../lib/activeOrg'
+import { PROJECT_DIRECTORY_PATH } from '../lib/crossTeamProject'
 import { getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -62,6 +73,7 @@ function LocationProbe() {
 
 beforeEach(() => {
   window.localStorage.clear()
+  pageData.byPath.clear()
   setup.value = {
     loading: false,
     error: null,
@@ -108,6 +120,24 @@ describe('ProjectSwitcher — All apps', () => {
     expect(row.getAttribute('aria-selected')).toBe('false')
     expect(row.textContent).toContain('All apps')
     expect(row.textContent).toContain('2 apps')
+  })
+
+  it('says how many teams the count spans, so it cannot read as disagreeing with the one-team Apps page', async () => {
+    window.localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, ORG_A)
+    pageData.byPath.set(PROJECT_DIRECTORY_PATH, {
+      teams: [
+        { id: ORG_A, name: 'Kenji apps', role: 'owner', isPersonal: false },
+        { id: ORG_B, name: 'Side projects', role: 'owner', isPersonal: false },
+      ],
+      projects: [
+        { id: PROJECT_A, name: 'glot.it', organizationId: ORG_A },
+        { id: PROJECT_B, name: 'yen-yen', organizationId: ORG_A },
+        { id: GONE, name: 'mushi-mushi', organizationId: ORG_B },
+      ],
+    })
+    await render(`/ci?project=${PROJECT_A}`)
+    await click(chip())
+    expect(allRow()!.textContent).toContain('3 apps in 2 teams combined')
   })
 
   it('selecting All apps shows it in the header and keeps the concrete app in the URL', async () => {
