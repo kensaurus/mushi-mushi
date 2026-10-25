@@ -58,7 +58,7 @@ export interface UpdateCenterView {
   newerThanPr: boolean
   /** The app reports a version older than the PR moved it to (not shipped yet). */
   appBehindPr: boolean
-  ci: 'passing' | 'failing' | 'running' | 'not_checked'
+  ci: 'passing' | 'failing' | 'running' | 'not_checked' | 'skipped' | 'neutral'
   /** Open PR whose checks concluded success: the card offers Merge. */
   canMerge: boolean
 }
@@ -85,7 +85,11 @@ function cmpSemver(a: string, b: string): number {
 
 function ciFrom(state: SdkUpgradeState): UpdateCenterView['ci'] {
   const c = state.checkRunConclusion
-  if (c === 'success' || c === 'neutral' || c === 'skipped') return 'passing'
+  // A skipped or neutral check did not pass. Calling it passing showed a green
+  // chip while Merge stayed hidden until the conclusion is success.
+  if (c === 'success') return 'passing'
+  if (c === 'neutral') return 'neutral'
+  if (c === 'skipped') return 'skipped'
   if (c === 'failure' || c === 'timed_out' || c === 'cancelled' || c === 'action_required') return 'failing'
   if (state.checkRunStatus && state.checkRunStatus !== 'completed') return 'running'
   return 'not_checked'

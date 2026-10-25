@@ -98,6 +98,8 @@ const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; tone: string }> =
   failing: { label: 'CI failing', tone: CHIP_TONE.dangerSubtle },
   running: { label: 'CI running', tone: CHIP_TONE.infoSubtle },
   not_checked: { label: 'CI not checked yet', tone: CHIP_TONE.neutral },
+  skipped: { label: 'CI skipped', tone: CHIP_TONE.neutral },
+  neutral: { label: 'CI neutral', tone: CHIP_TONE.neutral },
 }
 
 export function UpdateCenter({ project, preflight }: UpdateCenterProps) {

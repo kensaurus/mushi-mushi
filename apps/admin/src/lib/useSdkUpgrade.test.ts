@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, createElement } from 'react'
+import { act, createElement, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -106,7 +106,9 @@ describe('useSdkUpgrade open PR', () => {
     fetchMock.mockReset()
     fetchMock.mockImplementation(async (path: string) => {
       if (String(path).includes('/sync')) return syncPayload('success')
-      if (String(path).endsWith('/merge')) return { ok: true, data: { alreadyMerged: false, sha: 'abc' } }
+      if (String(path).endsWith('/merge')) {
+        return { ok: true, data: { alreadyMerged: false, sha: 'abc', mergedAt: '2026-10-25T01:02:03.000Z' } }
+      }
       if (String(path).includes('/in-flight')) return { ok: true, data: OPEN_JOB }
       return { ok: false, error: { code: 'NO', message: 'unexpected' } }
     })
@@ -127,6 +129,7 @@ describe('useSdkUpgrade open PR', () => {
       null,
       createElement('span', { 'data-testid': 'ci' }, state.checkRunConclusion ?? 'none'),
       createElement('span', { 'data-testid': 'pr' }, state.prState ?? 'none'),
+      createElement('span', { 'data-testid': 'merged' }, state.mergedAt ?? 'none'),
       createElement('button', { onClick: () => void mergePr('job-137') }, 'do-merge'),
     )
   }
@@ -161,5 +164,76 @@ describe('useSdkUpgrade open PR', () => {
     await flush()
     expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/merge'))).toBe(true)
     expect(host.querySelector('[data-testid="pr"]')?.textContent).toBe('merged')
+    expect(host.querySelector('[data-testid="merged"]')?.textContent).toBe('2026-10-25T01:02:03.000Z')
+  })
+
+  it('does not stamp mergedAt from the client clock when the server omits it', async () => {
+    fetchMock.mockImplementation(async (path: string) => {
+      if (String(path).includes('/sync')) return syncPayload('success')
+      if (String(path).endsWith('/merge')) return { ok: true, data: { alreadyMerged: false, sha: 'abc' } }
+      if (String(path).includes('/in-flight')) return { ok: true, data: OPEN_JOB }
+      return { ok: false, error: { code: 'NO', message: 'unexpected' } }
+    })
+    await renderProbe()
+    const button = host.querySelector('button') as HTMLButtonElement
+    await act(async () => {
+      button.click()
+    })
+    await flush()
+    expect(host.querySelector('[data-testid="pr"]')?.textContent).toBe('merged')
+    expect(host.querySelector('[data-testid="merged"]')?.textContent).toBe('none')
+    const stored = JSON.parse(sessionStorage.getItem(`mushi_sdk_upgrade_terminal:${PROJECT}`) ?? '{}') as { mergedAt?: string }
+    expect(stored.mergedAt).toBeUndefined()
+  })
+
+  it('writes the sync onto the stored job after the page closes, not an idle snapshot', async () => {
+    let releaseSync: (value: unknown) => void = () => {}
+    let releaseInFlight: (value: unknown) => void = () => {}
+    const syncGate = new Promise((resolve) => { releaseSync = resolve })
+    const inFlightGate = new Promise((resolve) => { releaseInFlight = resolve })
+    fetchMock.mockImplementation(async (path: string) => {
+      if (String(path).includes('/sync')) return syncGate
+      if (String(path).includes('/in-flight')) return inFlightGate
+      return { ok: false, error: { code: 'NO', message: 'unexpected' } }
+    })
+
+    function CloseEarly() {
+      const { syncStatus } = useSdkUpgrade(PROJECT)
+      useEffect(() => {
+        void syncStatus('job-137')
+      }, [syncStatus])
+      return null
+    }
+
+    await act(async () => {
+      root.render(createElement(CloseEarly))
+    })
+    await act(async () => {
+      root.unmount()
+    })
+    root = createRoot(host)
+
+    const key = `mushi_sdk_upgrade_terminal:${PROJECT}`
+    sessionStorage.setItem(key, JSON.stringify({
+      status: 'completed',
+      jobId: 'job-137',
+      prUrl: OPEN_JOB.pr_url,
+      prState: 'open',
+      checkRunConclusion: 'failure',
+      savedAt: Date.now(),
+    }))
+    await act(async () => {
+      releaseSync(syncPayload('success'))
+      await Promise.resolve()
+    })
+    const stored = JSON.parse(sessionStorage.getItem(key) ?? '{}') as { checkRunConclusion?: string; jobId?: string }
+    expect(stored.jobId).toBe('job-137')
+    expect(stored.checkRunConclusion).toBe('success')
+
+    await act(async () => {
+      releaseInFlight({ ok: true, data: null })
+    })
+    const after = JSON.parse(sessionStorage.getItem(key) ?? '{}') as { checkRunConclusion?: string }
+    expect(after.checkRunConclusion).toBe('success')
   })
 })

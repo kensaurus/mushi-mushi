@@ -95,5 +95,7 @@ describe('POST /v1/admin/projects/:pid/sdk-upgrade/:id/merge — gated', () => {
     expect(res.status).toBe(200)
     expect(mocks.merge).toHaveBeenCalledTimes(1)
     expect(db.tables.sdk_upgrade_jobs[0]).toMatchObject({ release_status: 'merged' })
+    expect(res.json.mergedAt).toBe(db.tables.sdk_upgrade_jobs[0].merged_at)
+    expect(res.json.mergedAt).toEqual(expect.any(String))
   })
 })

@@ -528,7 +528,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       })
       .eq('id', jobId)
 
-    return c.json({ ok: true, alreadyMerged: result.alreadyMerged, sha: result.sha ?? null })
+    return c.json({ ok: true, alreadyMerged: result.alreadyMerged, sha: result.sha ?? null, mergedAt: now })
   })
 
   // -------------------------------------------------------------------------

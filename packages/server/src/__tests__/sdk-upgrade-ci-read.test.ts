@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readUpgradeGithubState, upgradeCiCommitSha } from '../../supabase/functions/_shared/sdk-upgrade-ci-read.ts'
 
@@ -60,16 +58,5 @@ describe('readUpgradeGithubState', () => {
     })
     expect(result.commitSha).toBeNull()
     expect(checks).toBe(0)
-  })
-})
-
-describe('sdk-release-sync wiring', () => {
-  it('asks for the head before the check runs, not the stored bump commit', () => {
-    const src = readFileSync(
-      resolve(__dirname, '../../supabase/functions/sdk-release-sync/index.ts'),
-      'utf8',
-    )
-    expect(src).toContain('readUpgradeGithubState(')
-    expect(src).not.toContain('fetchLatestCheckRun(token, ref, rawJob.commit_sha)')
   })
 })

@@ -68,8 +68,12 @@ describe('deriveUpdateCenterView', () => {
     expect(running.canMerge).toBe(false)
 
     const skipped = deriveUpdateCenterView(GLOT, { ...open, checkRunConclusion: 'skipped' })
-    expect(skipped.ci).toBe('passing')
+    expect(skipped.ci).toBe('skipped')
     expect(skipped.canMerge).toBe(false)
+
+    const neutral = deriveUpdateCenterView(GLOT, { ...open, checkRunConclusion: 'neutral' })
+    expect(neutral.ci).toBe('neutral')
+    expect(neutral.canMerge).toBe(false)
 
     const merged = deriveUpdateCenterView(GLOT, { ...open, prState: 'merged', checkRunConclusion: 'success' })
     expect(merged.mode).toBe('pr_merged')

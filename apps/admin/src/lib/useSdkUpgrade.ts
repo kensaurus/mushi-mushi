@@ -189,10 +189,12 @@ export function useSdkUpgrade(projectId: string) {
   const reachedTerminal = useRef(false)
   const creatingRef = useRef(false)
   const mergeSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stateRef = useRef(state)
+  // Last committed project. An effect, so a discarded render cannot publish
+  // a project the screen never showed.
   const projectRef = useRef(projectId)
-  stateRef.current = state
-  projectRef.current = projectId
+  useEffect(() => {
+    projectRef.current = projectId
+  }, [projectId])
 
   useEffect(
     () => () => {
@@ -515,15 +517,16 @@ export function useSdkUpgrade(projectId: string) {
       // A newer job may have replaced this one while GitHub was answering.
       if (s.jobId !== jobId) return s
       const updated: SdkUpgradeState = { ...s, ...fields }
-      // Persist cockpit fields so a reload restores the freshest sync result,
-      // including when the operator left the page before this request landed.
-      if (updated.jobId === jobId && (updated.status === 'completed' || updated.status === 'completed_no_pr')) {
+      if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
         persistTerminal(forProject, updated)
       }
       return updated
     }
     if (cancelled.current) {
-      apply(stateRef.current)
+      // The screen is gone. Fold GitHub's answer into the stored job. The
+      // last render can still be idle, from before that job committed.
+      const stored = readPersistedTerminal(forProject)
+      if (stored) apply(stored)
       return true
     }
     setState(apply)
@@ -545,7 +548,7 @@ export function useSdkUpgrade(projectId: string) {
 
   const mergePr = useCallback(async (jobId: string, method: 'squash' | 'merge' | 'rebase' = 'squash') => {
     setState((s) => ({ ...s, releaseStatus: 'merging' }))
-    const res = await apiFetch<{ ok: boolean; sha?: string | null; alreadyMerged?: boolean }>(
+    const res = await apiFetch<{ ok: boolean; sha?: string | null; alreadyMerged?: boolean; mergedAt?: string | null }>(
       `/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/merge`,
       { method: 'POST', body: JSON.stringify({ method }) },
     )
@@ -557,13 +560,15 @@ export function useSdkUpgrade(projectId: string) {
       }))
       return
     }
+    const fromServer = res.data?.mergedAt
+    const mergedAt = typeof fromServer === 'string' && fromServer.trim() ? fromServer.trim() : undefined
     setState((s) => {
       const updated: SdkUpgradeState = {
         ...s,
         releaseStatus: 'merged',
         prState: 'merged',
-        mergedAt: new Date().toISOString(),
         error: undefined,
+        ...(mergedAt ? { mergedAt } : {}),
       }
       persistTerminal(projectId, updated)
       return updated

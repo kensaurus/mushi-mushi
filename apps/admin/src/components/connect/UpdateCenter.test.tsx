@@ -58,7 +58,7 @@ const PREFLIGHT = {
 
 const PR_URL = 'https://github.com/kensaurus/help-her-take-photo/pull/137'
 
-function openPr(conclusion: 'failure' | 'success') {
+function openPr(conclusion: 'failure' | 'success' | 'skipped' | 'neutral') {
   return {
     status: 'completed',
     jobId: 'job-137',
@@ -124,5 +124,22 @@ describe('UpdateCenter upgrade PR', () => {
 
     act(() => button(/^Merge PR$/)!.click())
     expect(hook.mergePr).toHaveBeenCalledWith('job-137')
+  })
+
+  it('does not call a skipped or neutral check CI passing, and hides Merge', () => {
+    hook.state = openPr('skipped')
+    render()
+    let text = host.textContent ?? ''
+    expect(text).toContain('CI skipped')
+    expect(text).not.toContain('CI passing')
+    expect(text).toContain('Merge shows up here once CI is green')
+    expect(button(/^Merge$/)).toBeUndefined()
+
+    hook.state = openPr('neutral')
+    render()
+    text = host.textContent ?? ''
+    expect(text).toContain('CI neutral')
+    expect(text).not.toContain('CI passing')
+    expect(button(/^Merge$/)).toBeUndefined()
   })
 })
