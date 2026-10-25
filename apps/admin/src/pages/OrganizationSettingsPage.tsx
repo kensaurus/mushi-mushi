@@ -38,7 +38,7 @@ import { MembersReadout } from '../components/members/MembersReadout'
 import { MembersSnapshotStrip } from '../components/members/MembersSnapshotStrip'
 import { OrgRoleGuideCard } from '../components/members/OrgRoleGuideCard'
 import { SeatBillingCallout } from '../components/members/SeatBillingCallout'
-import { orgRoleDefinition } from '../lib/orgRoleGuide'
+import { memberPlanBadge, orgRoleDefinition } from '../lib/orgRoleGuide'
 import {
   EMPTY_MEMBERS_STATS,
   type MembersStats,
@@ -203,11 +203,13 @@ export function OrganizationSettingsPage() {
   // `/org/:slug/settings/*` names a team in the URL. Resolve it to the
   // canonical members URL for THAT team instead of showing the header's.
   const { slug, '*': slugSubPath } = useParams()
-  const slugOrgsQuery = usePageData<{ organizations: OrganizationSummary[] }>(slug ? '/v1/org' : null, {
+  // Header team pill already reads `billing_mode` from this list. Load it on
+  // every visit so the plan chip can tell a complimentary org from a paid one.
+  const orgsQuery = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',
   })
   const slugResolution =
-    slug && slugOrgsQuery.data ? resolveOrgSettingsLink(slug, slugSubPath, slugOrgsQuery.data.organizations) : null
+    slug && orgsQuery.data ? resolveOrgSettingsLink(slug, slugSubPath, orgsQuery.data.organizations) : null
   const slugRedirectTo = slugResolution?.kind === 'redirect' ? slugResolution.to : null
   const slugRedirectOrg = slugResolution?.kind === 'redirect' ? slugResolution.orgId : null
   useEffect(() => {
@@ -315,6 +317,20 @@ export function OrganizationSettingsPage() {
   const teamsEnabled = entitlements.loading
     ? data?.organization?.plan_id === 'pro' || data?.organization?.plan_id === 'enterprise'
     : entitlements.has('teams')
+
+  const activeOrg = orgsQuery.data?.organizations.find((org) => org.id === activeOrgId) ?? null
+  const billingMode = activeOrg?.billing_mode === 'complimentary'
+    ? 'complimentary' as const
+    : activeOrg
+      ? 'stripe' as const
+      : undefined
+  const viewStats = { ...stats, billingMode: billingMode ?? stats.billingMode }
+  const planBadge = memberPlanBadge({
+    planDisplayName: viewStats.planDisplayName,
+    planId: viewStats.planId ?? data?.organization?.plan_id ?? null,
+    billingMode: viewStats.billingMode,
+    teamsEnabled,
+  })
 
   usePublishPageContext({
     route: '/organization/members',
@@ -610,7 +626,7 @@ export function OrganizationSettingsPage() {
         </div>
       )
     }
-    if (slugOrgsQuery.error) return <ErrorAlert message={slugOrgsQuery.error} onRetry={slugOrgsQuery.reload} />
+    if (orgsQuery.error) return <ErrorAlert message={orgsQuery.error} onRetry={orgsQuery.reload} />
     return <PanelSkeleton rows={5} label="Opening team" />
   }
 
@@ -659,8 +675,8 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
-          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
+        <Badge tone={planBadge.tone} title={planBadge.title}>
+          {planBadge.label}
         </Badge>
       </PageHeaderBar>
 
@@ -670,7 +686,7 @@ export function OrganizationSettingsPage() {
             priority: POSTURE_PRIORITY.status,
             children: (
               <MembersStatusBanner
-                stats={stats}
+                stats={viewStats}
                 teamsEnabled={teamsEnabled}
                 onInvitesTab={() => setTab('invites')}
               />
@@ -680,7 +696,7 @@ export function OrganizationSettingsPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <MembersSnapshotStrip
-                stats={stats}
+                stats={viewStats}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
                 hint={activeMeta.description}
@@ -692,7 +708,7 @@ export function OrganizationSettingsPage() {
             show: activeTab === 'roster',
             children: (
               <MembersReadout
-                stats={stats}
+                stats={viewStats}
                 orgId={activeOrgId}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
@@ -711,11 +727,12 @@ export function OrganizationSettingsPage() {
       />
 
       <SeatBillingCallout
-        planDisplayName={stats.planDisplayName}
-        planId={stats.planId}
-        seatLimit={stats.seatLimit}
-        seatsUsed={stats.seatsUsed}
+        planDisplayName={viewStats.planDisplayName}
+        planId={viewStats.planId}
+        seatLimit={viewStats.seatLimit}
+        seatsUsed={viewStats.seatsUsed}
         teamsEnabled={teamsEnabled}
+        billingMode={viewStats.billingMode}
       />
 
       {(activeTab === 'setup' || !teamsEnabled) && (

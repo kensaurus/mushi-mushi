@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orgRoleDefinition, seatBillingExplainer } from './orgRoleGuide'
+import { memberPlanBadge, orgRoleDefinition, seatBillingExplainer, visiblePlanLabel } from './orgRoleGuide'
 
 describe('orgRoleGuide', () => {
   it('defines all four roles', () => {
@@ -27,5 +27,29 @@ describe('orgRoleGuide', () => {
       teamsEnabled: true,
     })
     expect(copy.headline).toMatch(/2 of 3/)
+    expect(copy.body).toMatch(/You're on Hobby with 1 seat left — upgrade on Billing/)
+  })
+
+  it('complimentary org does not read as a paid Pro plan', () => {
+    expect(visiblePlanLabel('Pro', 'pro', 'complimentary')).toBe('Admin · Pro')
+    const badge = memberPlanBadge({
+      planDisplayName: 'Pro',
+      planId: 'pro',
+      billingMode: 'complimentary',
+      teamsEnabled: true,
+    })
+    expect(badge.label).toBe('Admin · Pro')
+    expect(badge.tone).toBe('brand')
+    const copy = seatBillingExplainer({
+      planDisplayName: 'Pro',
+      planId: 'pro',
+      seatLimit: 5,
+      seatsUsed: 3,
+      teamsEnabled: true,
+      billingMode: 'complimentary',
+    })
+    expect(copy.body).toMatch(/You're on Admin · Pro with 2 seats left/)
+    expect(copy.body).not.toMatch(/upgrade on Billing/i)
+    expect(copy.billingLink).toBe(false)
   })
 })

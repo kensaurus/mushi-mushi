@@ -16,6 +16,7 @@
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import { MetricStrip } from '../MetricStrip'
 import type { MembersStats } from './types'
+import { visiblePlanLabel } from '../../lib/orgRoleGuide'
 
 interface Props {
   stats: MembersStats
@@ -32,6 +33,8 @@ export function MembersSnapshotStrip({
   sectionTitle = 'Team snapshot',
   hint,
 }: Props) {
+  const planLabel = visiblePlanLabel(stats.planDisplayName, stats.planId, stats.billingMode, 'plan')
+  const unlimitedPlan = visiblePlanLabel(stats.planDisplayName, stats.planId, stats.billingMode, 'Pro')
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
@@ -63,8 +66,8 @@ export function MembersSnapshotStrip({
           accent={stats.atSeatCap ? 'text-danger' : stats.seatLimit !== null ? 'text-ok' : undefined}
           hint={
             stats.seatLimit !== null
-              ? `${stats.seatsRemaining ?? 0} remaining on ${stats.planDisplayName ?? stats.planId ?? 'plan'}`
-              : `${stats.planDisplayName ?? stats.planId ?? 'Pro'} — no seat cap`
+              ? `${stats.seatsRemaining ?? 0} remaining on ${planLabel}`
+              : `${unlimitedPlan} — no seat cap`
           }
         />
       </MetricStrip>

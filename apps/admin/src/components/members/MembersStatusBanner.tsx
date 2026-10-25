@@ -6,6 +6,7 @@
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { MembersStats } from './types'
+import { visiblePlanLabel } from '../../lib/orgRoleGuide'
 
 interface Props {
   stats: MembersStats
@@ -15,13 +16,15 @@ interface Props {
 
 export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props) {
   const orgLabel = stats.organizationName ?? 'this team'
+  const planLabel = visiblePlanLabel(stats.planDisplayName, stats.planId, stats.billingMode, 'Hobby')
+  const complimentary = stats.billingMode === 'complimentary'
 
   if (!teamsEnabled) {
     return (
       <StatusBannerShell
         tone="warn"
         title="Teams require Pro or Enterprise"
-        subtitle={`You can preview the roster on ${stats.planDisplayName ?? stats.planId ?? 'Hobby'}, but inviting teammates needs the teams entitlement.`}
+        subtitle={`You can preview the roster on ${planLabel}, but inviting teammates needs the teams entitlement.`}
         action={
           <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }
@@ -34,9 +37,13 @@ export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props
       <StatusBannerShell
         tone="danger"
         title="Seat cap reached"
-        subtitle={`${stats.seatsUsed} of ${stats.seatLimit} seats used for ${orgLabel} (${stats.memberCount} members · ${stats.pendingInvites} pending). Upgrade or remove a member before inviting more.`}
+        subtitle={
+          complimentary
+            ? `${stats.seatsUsed} of ${stats.seatLimit} seats used for ${orgLabel} (${stats.memberCount} members · ${stats.pendingInvites} pending). Remove a member before inviting more. This Admin account is not billed through Stripe.`
+            : `${stats.seatsUsed} of ${stats.seatLimit} seats used for ${orgLabel} (${stats.memberCount} members · ${stats.pendingInvites} pending). Upgrade or remove a member before inviting more.`
+        }
         action={
-          <Btn to="/billing" size="sm" variant="ghost">Upgrade</Btn>
+          <Btn to="/billing" size="sm" variant="ghost">{complimentary ? 'View billing' : 'Upgrade'}</Btn>
         }
       />
     )

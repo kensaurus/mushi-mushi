@@ -16,6 +16,8 @@ export interface MembersStats {
   atSeatCap: boolean
   planId: string | null
   planDisplayName: string | null
+  /** Org `billing_mode` when known. Complimentary teams must not read as a paid plan. */
+  billingMode?: 'stripe' | 'complimentary' | null
   currentUserRole: 'owner' | 'admin' | 'member' | 'viewer'
   canManage: boolean
   organizationName: string | null

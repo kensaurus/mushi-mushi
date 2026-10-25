@@ -1,5 +1,7 @@
 /**
  * Plain-language org role permissions + seat/billing FAQ for Members page.
+ * `visiblePlanLabel` is the shared complimentary label ("Admin · Pro") for
+ * the team chip, seat copy, and the sidebar plan badge.
  */
 
 export type OrgRoleId = 'owner' | 'admin' | 'member' | 'viewer'
@@ -70,12 +72,54 @@ export function orgRoleDefinition(role: OrgRoleId): OrgRoleDefinition {
   return ORG_ROLE_DEFINITIONS.find((r) => r.id === role) ?? ORG_ROLE_DEFINITIONS[2]
 }
 
+export type OrgBillingMode = 'stripe' | 'complimentary'
+
 export interface SeatBillingContext {
   planDisplayName: string | null
   planId: string | null
   seatLimit: number | null
   seatsUsed: number
   teamsEnabled: boolean
+  /**
+   * Org `billing_mode`. Complimentary teams keep the entitlement tier
+   * (Pro, Enterprise) but must not read as a paid Stripe plan.
+   */
+  billingMode?: OrgBillingMode | null
+}
+
+/** Plan name shown on team surfaces. Complimentary orgs lead with Admin. */
+export function visiblePlanLabel(
+  planDisplayName: string | null | undefined,
+  planId: string | null | undefined,
+  billingMode?: OrgBillingMode | null,
+  fallback = 'your plan',
+): string {
+  const tier = planDisplayName?.trim() || planId?.trim() || fallback
+  if (billingMode === 'complimentary') return `Admin · ${tier}`
+  return tier
+}
+
+export function memberPlanBadge(input: {
+  planDisplayName: string | null
+  planId: string | null
+  billingMode?: OrgBillingMode | null
+  teamsEnabled: boolean
+}): { label: string; tone: 'brand' | 'okSubtle' | 'warnSubtle' | 'neutral'; title?: string } {
+  const tier = input.planDisplayName?.trim() || input.planId?.trim() || 'hobby'
+  if (input.billingMode === 'complimentary') {
+    return {
+      label: visiblePlanLabel(input.planDisplayName, input.planId, 'complimentary', 'hobby'),
+      tone: 'brand',
+      title: `Admin account — no Stripe charges. Feature set tracks the ${tier} tier.`,
+    }
+  }
+  if (input.billingMode === 'stripe') {
+    return {
+      label: tier,
+      tone: input.teamsEnabled ? 'okSubtle' : 'warnSubtle',
+    }
+  }
+  return { label: tier, tone: 'neutral' }
 }
 
 /** Answers "will adding an admin cost me money?" in plain language. */
@@ -86,15 +130,18 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   tone: 'neutral' | 'info' | 'warn'
   calloutLabel?: string
 } {
-  const plan = ctx.planDisplayName ?? ctx.planId ?? 'your plan'
+  const plan = visiblePlanLabel(ctx.planDisplayName, ctx.planId, ctx.billingMode)
+  const complimentary = ctx.billingMode === 'complimentary'
 
   if (!ctx.teamsEnabled) {
     return {
       headline: 'Teammates require a Teams plan',
-      body: `${plan} is solo-only. Upgrading to Pro or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
-      billingLink: true,
+      body: complimentary
+        ? `${plan} is solo-only. Invites stay off until this account's entitlement tier includes teams.`
+        : `${plan} is solo-only. Upgrading to Pro or Enterprise unlocks invites — you pay one flat monthly price for the plan, not per person.`,
+      billingLink: !complimentary,
       tone: 'info',
-      calloutLabel: 'Upgrade for teams',
+      calloutLabel: complimentary ? 'Teams' : 'Upgrade for teams',
     }
   }
 
@@ -110,10 +157,13 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
 
   const remaining = Math.max(0, ctx.seatLimit - ctx.seatsUsed)
   const nearCap = ctx.seatsUsed >= ctx.seatLimit - 1
+  const seatsLeft = `${remaining} seat${remaining === 1 ? '' : 's'} left`
   return {
     headline: `${ctx.seatsUsed} of ${ctx.seatLimit} seats used`,
-    body: `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${remaining} seat${remaining === 1 ? '' : 's'} left — upgrade on Billing if you need more.`,
-    billingLink: nearCap,
+    body: complimentary
+      ? `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${seatsLeft}. This team is complimentary, so those seats are not a Stripe upgrade.`
+      : `Each person counts as one seat (any role). Pending invites also reserve a seat. You're on ${plan} with ${seatsLeft} — upgrade on Billing if you need more.`,
+    billingLink: nearCap && !complimentary,
     tone: nearCap ? 'warn' : 'neutral',
     calloutLabel: nearCap ? 'Seat limit' : 'Seat usage',
   }
