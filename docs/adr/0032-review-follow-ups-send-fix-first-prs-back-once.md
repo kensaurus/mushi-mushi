@@ -372,3 +372,34 @@ fixing path.
 - Local PRs get the same two rounds as cloud ones, started from the CLI.
 - Running it on a schedule is BL-119.
 
+
+## Amendment (2026-10-25): local follow-ups also take cloud-agent PRs while cloud follow-ups are off
+
+### Context
+
+On 2026-10-25 about 25 open cloud-agent PRs across six apps had an Opus
+"fix first" and nothing could act on them: the Cursor keys that opened them
+were deleted, cloud review follow-ups were off for both teams, and the local
+route refused them as `NOT_LOCAL`.
+
+### Decision
+
+- `localFollowupAllowedFor(agent, cloudFollowupsOn)`: a local follow-up may
+  work on a `cursor_cloud` or `github_cloud_agent` PR when the project's
+  organization has `review_followup_enabled` off. When it is on, the cloud
+  worker keeps those PRs and the route says so.
+- The round limit counts both workers: local claims and cloud rounds whose
+  agent started (`fix_review_followups.cursor_agent_id`), so a PR still gets
+  at most `FOLLOWUP_MAX_PER_PR` rounds.
+- The same rules otherwise: the reviewed head is the live head, no forks,
+  screened findings, fast-forward push.
+
+### Rejected
+
+- **Turning cloud follow-ups on.** They need a Cursor key whose GitHub can
+  reach the repo; the remaining key's cannot.
+
+### Consequences
+
+- Turning cloud follow-ups on later hands those PRs back to the cloud worker,
+  which counts only its own rounds; a PR could then get up to two more.
