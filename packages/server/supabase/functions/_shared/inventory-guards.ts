@@ -61,7 +61,11 @@ export interface ScopeContext {
   get(key: 'userId'): string | undefined
   get(key: 'projectId'): string | undefined
   get(key: 'authMethod'): string | undefined
-  /** Set by adminOrApiKey for an account key (is_org_scoped, no bound project). */
+  /**
+   * Account key (`is_org_scoped`, no bound project). The API-key branch of
+   * `adminOrApiKey` is `authenticateApiKey`, which does
+   * `c.set('isOrgScopedKey', keyRow.is_org_scoped ?? false)`.
+   */
   get(key: 'isOrgScopedKey'): boolean | undefined
   json(body: unknown, status?: number): Response
 }

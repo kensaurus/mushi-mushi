@@ -18,11 +18,19 @@
  *     drops report a coherent retry-after.
  *   - assertProjectScope: a project-bound API key mismatches with 403; an
  *     account key may act on every project its owner can reach and 403s
- *     outside that set; JWT non-members return 403.
+ *     outside that set; JWT non-members return 403. The account-key path
+ *     is also run through the real `adminOrApiKey` middleware, which is
+ *     what sets `isOrgScopedKey`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { hashApiKey } from '../../supabase/functions/_shared/api-key-mint.ts'
 import { runWithKeyProjectScope } from '../../supabase/functions/_shared/key-project-scope.ts'
+import { makeFakeDb } from './__stubs__/fake-supabase.ts'
+
+const authDb = vi.hoisted(() => ({ current: null as ReturnType<typeof makeFakeDb> | null }))
+vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () => authDb.current }))
+vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ reportError: vi.fn(), reportMessage: vi.fn() }))
 import {
   RateLimiter,
   assertProjectScope,
@@ -507,12 +515,23 @@ describe('assertProjectScope', () => {
     return { ctx, json }
   }
 
-  /** Membership rows `accessibleProjectIds` reads. Owned ids are reachable. */
-  function projectsDb(ownedIds: string[]) {
+  /**
+   * Membership rows `accessibleProjectIds` reads. Only `projects` rows whose
+   * `owner_id` equals the queried user are returned; any other `.eq()` is empty.
+   */
+  function projectsDb(ownedIds: string[], ownerId = 'owner') {
+    const projects: Array<Record<string, unknown>> = ownedIds.map((id) => ({ id, owner_id: ownerId }))
     return {
       from(table: string) {
-        const data = table === 'projects' ? ownedIds.map((id) => ({ id })) : []
-        return { select: () => ({ eq: () => ({ data, error: null }) }) }
+        const rows = table === 'projects' ? projects : []
+        return {
+          select: () => ({
+            eq: (column: string, value: unknown) => ({
+              data: rows.filter((row) => row[column] === value),
+              error: null,
+            }),
+          }),
+        }
       },
     }
   }
@@ -603,6 +622,22 @@ describe('assertProjectScope', () => {
     }
   })
 
+  it('refuses an account key when the project rows belong to someone else', async () => {
+    const { ctx, json } = fakeContext({
+      userId: 'stranger',
+      projectId: 'pA',
+      authMethod: 'apiKey',
+      isOrgScopedKey: true,
+    })
+    const r = await assertProjectScope(ctx, 'pB', projectsDb(['pA', 'pB'], 'owner') as never)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.response.status).toBe(403)
+      const body = json.mock.calls[0]![0] as { error: { code: string } }
+      expect(body.error.code).toBe('FORBIDDEN')
+    }
+  })
+
   it('keeps a project-bound key pinned even when its owner can reach the other project', async () => {
     const { ctx, json } = fakeContext({
       userId: 'owner',
@@ -637,5 +672,59 @@ describe('assertProjectScope', () => {
       const body = json.mock.calls[0]![0] as { error: { code: string } }
       expect(body.error.code).toBe('FORBIDDEN')
     }
+  })
+
+  // requireFeature pins the plan's project onto the context after auth.
+  // That pin is what used to 403 PROJECT_MISMATCH for an account key.
+  it('lets an account key through adminOrApiKey act on a second owned project', async () => {
+    const raw = 'mushi_accountkey0123456789abcdef'
+    const owner = 'owner'
+    authDb.current = makeFakeDb({
+      project_api_keys: [
+        {
+          id: 'k-account',
+          key_hash: await hashApiKey(raw),
+          key_prefix: raw.slice(0, 12),
+          project_id: null,
+          is_org_scoped: true,
+          allowed_project_ids: null,
+          is_active: true,
+          scopes: ['mcp:read'],
+          owner_user_id: owner,
+          last_seen_origin: null,
+          browser_seen_at: null,
+          projects: null,
+        },
+      ],
+      projects: [
+        { id: 'pA', owner_id: owner },
+        { id: 'pB', owner_id: owner },
+      ],
+      organization_members: [],
+      project_members: [],
+    })
+    const { adminOrApiKey } = await import('../../supabase/functions/_shared/auth.ts')
+    const vars: Record<string, unknown> = {}
+    const c = {
+      get: (key: string) => vars[key],
+      set: (key: string, value: unknown) => {
+        vars[key] = value
+      },
+      req: {
+        header: (name: string) => (name.toLowerCase() === 'x-mushi-api-key' ? raw : undefined),
+        path: '/v1/admin/projects/pB/stories/map',
+        url: 'https://api.test/v1/admin/projects/pB/stories/map',
+      },
+      json: (body: unknown, status?: number) => new Response(JSON.stringify(body), { status: status ?? 200 }),
+      header: () => {},
+    }
+    let scope: Awaited<ReturnType<typeof assertProjectScope>> | undefined
+    const out = await adminOrApiKey({ scope: 'mcp:read' })(c as never, async () => {
+      expect(c.get('isOrgScopedKey')).toBe(true)
+      c.set('projectId', 'pA')
+      scope = await assertProjectScope(c as unknown as ScopeContext, 'pB', authDb.current as never)
+    })
+    expect(out).toBeUndefined()
+    expect(scope).toEqual({ ok: true, userId: owner, authMethod: 'apiKey' })
   })
 })
