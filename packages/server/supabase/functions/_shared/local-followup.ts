@@ -37,6 +37,11 @@ export function localFollowupDedupe(fixAttemptId: string, headSha: string): stri
   return `local-followup:${fixAttemptId}:${headSha}`
 }
 
+/** fix_events.dedupe_key of a head whose findings the safety screen dropped entirely (not a round). */
+export function localFollowupSkipDedupe(fixAttemptId: string, headSha: string): string {
+  return `local-followup-skip:${fixAttemptId}:${headSha}`
+}
+
 export interface LocalFollowupInput {
   attempt: { agent: string | null; pr_url: string | null; merged_at: string | null; pr_state: string | null } | null
   review: { status: string; verdict: string | null; head_sha: string | null } | null

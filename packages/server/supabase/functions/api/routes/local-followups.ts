@@ -30,7 +30,7 @@ import {
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
 import { buildFollowupPrompt, screenFindings, type FollowupFinding } from '../../_shared/review-followup.ts';
-import { CLOUD_FIX_AGENTS, LOCAL_FIX_AGENT, localFollowupAllowedFor, localFollowupDedupe, localFollowupGate } from '../../_shared/local-followup.ts';
+import { CLOUD_FIX_AGENTS, LOCAL_FIX_AGENT, localFollowupAllowedFor, localFollowupDedupe, localFollowupGate, localFollowupSkipDedupe } from '../../_shared/local-followup.ts';
 import { dbError, callerCanAccessProject, parseUuidParam } from '../shared.ts';
 
 const llog = log.child('local-followups');
@@ -148,11 +148,15 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
     if (open.length === 0) return c.json({ ok: true, data: { fixes: [] } });
 
     const ids = open.map((a) => a.id);
-    const [{ data: reviews, error: reviewErr }, heads] = await Promise.all([
+    const [{ data: reviews, error: reviewErr }, heads, { data: skips, error: skipErr }] = await Promise.all([
       db.from('fix_reviews').select('fix_attempt_id, status, verdict, head_sha, findings').in('fix_attempt_id', ids),
       roundHeadsFor(db, ids),
+      db.from('fix_events').select('fix_attempt_id, dedupe_key').in('fix_attempt_id', ids).like('dedupe_key', 'local-followup-skip:%'),
     ]);
     if (reviewErr) return dbError(c, reviewErr);
+    if (skipErr) return dbError(c, skipErr);
+    // Heads whose findings the safety screen dropped entirely: no round can run there.
+    const skipped = new Set(((skips ?? []) as Array<{ fix_attempt_id: string; dedupe_key: string }>).map((e) => `${e.fix_attempt_id}:${e.dedupe_key.split(':')[2] ?? ''}`));
     if ('error' in heads) return c.json({ ok: false, error: { code: 'DB_ERROR', message: heads.error } }, 500);
     const byFix = new Map(((reviews ?? []) as Array<{ fix_attempt_id: string; status: string; verdict: string | null; head_sha: string | null; findings: unknown }>).map((r) => [r.fix_attempt_id, r]));
 
@@ -166,7 +170,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       if (done.includes(r.head_sha) || done.length >= 2) continue;
       // A "fix first" with no findings gives the agent nothing to do; the claim refuses it (NO_FINDINGS).
       const findings = asFindings(r.findings).length;
-      if (findings === 0) continue;
+      if (findings === 0 || skipped.has(`${a.id}:${r.head_sha}`)) continue;
       fixes.push({
         fixId: a.id,
         reportId: a.report_id,
@@ -235,6 +239,19 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
     const d = screened.dropped;
     const droppedCount = d.url + d.command + d.injection + d.ciConfig + d.notInPr + d.ciInfra;
     if (screened.kept.length === 0) {
+      // Remember it for this head, so the list stops offering a round the screen will always refuse.
+      const { error: skipErr } = await db.from('fix_events').insert({
+        fix_attempt_id: attempt.id,
+        project_id: attempt.project_id,
+        kind: 'followup',
+        status: 'fail',
+        label: 'Local follow-up skipped',
+        detail: `All ${droppedCount} Opus findings were left out by the safety screen; a person decides this one.`,
+        at: new Date().toISOString(),
+        dedupe_key: localFollowupSkipDedupe(attempt.id, gate.headSha),
+        payload: { local: true, headSha: gate.headSha, dropped: droppedCount },
+      });
+      if (skipErr && skipErr.code !== '23505') llog.warn('local-followup skip not recorded', { fixId: attempt.id, err: skipErr.message });
       return c.json(
         {
           ok: false,
