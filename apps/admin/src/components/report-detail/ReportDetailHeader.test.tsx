@@ -101,6 +101,29 @@ describe('ReportDetailHeader deploy chip', () => {
   })
 })
 
+describe('ReportDetailHeader chrome', () => {
+  function renderHeader(r: ReportDetail) {
+    act(() =>
+      root.render(createElement(MemoryRouter, null, createElement(ReportDetailHeader, { report: r, reporterShort: 'abc123' }))),
+    )
+    return container
+  }
+
+  it('does not repeat the top-bar breadcrumb: "Bugs › Report", hidden at xl, no summary leaf', () => {
+    const nav = renderHeader(report({})).querySelector('nav[aria-label="Breadcrumb"]')
+    expect(nav?.textContent).toBe('Bugs›Report')
+    expect(nav?.textContent).not.toContain('Reports')
+    expect(nav?.textContent).not.toContain('Checkout button does nothing')
+    expect(nav?.parentElement?.className).toContain('xl:hidden')
+  })
+
+  it('renders the heading plain, not in the cyan info-tinted block', () => {
+    const h2 = renderHeader(report({})).querySelector('h2')
+    expect(h2?.textContent).toBe('Checkout button does nothing')
+    expect(h2?.parentElement?.className ?? '').not.toContain('bg-info-muted')
+  })
+})
+
 describe('deployLiveLabel', () => {
   it('omits the sha when no observation named one', () => {
     expect(deployLiveLabel(live({ state: 'not_live', prod_commit: null }))).toBe('Fixed — not live yet')

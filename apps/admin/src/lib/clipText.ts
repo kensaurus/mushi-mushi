@@ -61,3 +61,21 @@ export function reportHeading(report: {
   const text = clipAtWord(description, LEGACY_SUMMARY_CAP)
   return { text, full: description, truncated: text !== description.replace(/\s+/g, ' ').trim() }
 }
+
+/**
+ * Whether the summary is already what the heading renders, so showing it
+ * again as "LLM summary" repeats the heading verbatim. True when no Stage-2
+ * title exists (the heading is then derived from the summary), or when the
+ * title only echoes it.
+ */
+export function summaryIsHeading(report: {
+  title?: string | null
+  summary?: string | null
+}): boolean {
+  const summary = report.summary?.trim()
+  if (!summary) return false
+  const title = report.title?.trim()
+  if (!title) return true
+  const normalize = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
+  return normalize(title) === normalize(summary)
+}

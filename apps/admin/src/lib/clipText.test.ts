@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reportHeading } from './clipText'
+import { reportHeading, summaryIsHeading } from './clipText'
 
 /** The 200-char summary fast-filter stored for report 469f6962, cut mid-word. */
 const LEGACY_SUMMARY = `${'word '.repeat(39)}awkward wrapping`.slice(0, 200) // ends "…word awkwa"
@@ -57,5 +57,25 @@ describe('reportHeading', () => {
 
   it('falls back to "Untitled report"', () => {
     expect(reportHeading({}).text).toBe('Untitled report')
+  })
+})
+
+describe('summaryIsHeading', () => {
+  it('is true without a Stage-2 title — the heading is the summary itself', () => {
+    expect(summaryIsHeading({ summary: 'Button overlaps footer.' })).toBe(true)
+    expect(summaryIsHeading({ summary: 'Button overlaps footer.', title: '  ' })).toBe(true)
+  })
+
+  it('is true when the title only echoes the summary', () => {
+    expect(summaryIsHeading({ title: 'Button overlaps footer.', summary: 'button  overlaps footer.' })).toBe(true)
+  })
+
+  it('is false when the title adds a different headline', () => {
+    expect(summaryIsHeading({ title: 'Footer links run together', summary: 'Button overlaps footer.' })).toBe(false)
+  })
+
+  it('is false with no summary to repeat', () => {
+    expect(summaryIsHeading({ title: 'Footer links run together' })).toBe(false)
+    expect(summaryIsHeading({})).toBe(false)
   })
 })

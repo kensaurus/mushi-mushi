@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
-import { ContainedBlock, MetaChip } from './ReportSurface'
+import { MetaChip } from './ReportSurface'
 import {
   STATUS,
   SEVERITY,
@@ -25,8 +25,6 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   // cut mid-word; the full text is on hover and behind "Show full".
   const heading = reportHeading(report)
   const [headingExpanded, setHeadingExpanded] = useState(false)
-  // Breadcrumb still uses a compact technical summary (shorter context)
-  const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   // Provenance: page route where the bug was felt, path only (no query/fragment)
   const pageRoute = routePathname(
     (report.environment as { route?: string } | null)?.route
@@ -39,12 +37,18 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[transform,opacity]' : ''}`}
     >
-      <Breadcrumbs
-        items={[
-          { label: 'Reports', to: '/reports' },
-          { label: breadcrumbLabel, hint: report.id },
-        ]}
-      />
+      {/* Below xl the top-bar breadcrumb (ChromeBreadcrumb) is hidden, so a
+          deep link from Slack / email needs a path back to the list here. At
+          xl+ the top bar already says "Bugs › Report" — a second trail was a
+          duplicate, and its leaf repeated the heading verbatim. */}
+      <div className="xl:hidden">
+        <Breadcrumbs
+          items={[
+            { label: 'Bugs', to: '/reports' },
+            { label: 'Report', hint: report.id },
+          ]}
+        />
+      </div>
       <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -73,7 +77,9 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             </Badge>
           )}
         </div>
-        <ContainedBlock tone="info" className="mt-2">
+        {/* Plain heading: the info-tinted ContainedBlock read as a bright
+            filled accent box, unlike every other page heading. */}
+        <div className="mt-2">
           <h2
             className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
             title={heading.truncated ? heading.full : undefined}
@@ -91,7 +97,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               {headingExpanded ? 'Show less' : 'Show full'}
             </Btn>
           )}
-        </ContainedBlock>
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />

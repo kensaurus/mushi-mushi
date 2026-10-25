@@ -16,6 +16,7 @@ import {
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
+import { summaryIsHeading } from '../../lib/clipText'
 import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
 
@@ -83,7 +84,9 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
         ]}
       />
 
-      {report.summary && (
+      {/* Hidden when the report header already renders this exact text as its
+          heading (no Stage-2 title), which read as the same sentence twice. */}
+      {report.summary && !summaryIsHeading(report) && (
         <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
           <ProseBlock value={report.summary} mode="auto" />
         </Callout>
