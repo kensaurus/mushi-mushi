@@ -23,13 +23,13 @@ export const FILTER_SELECT_CLASS =
 export function FilterSelect({ label, options, id, className = '', optionLabel, ...rest }: FilterSelectProps) {
   const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
   return (
-    <label className="inline-flex flex-col gap-0.5">
+    <label className="inline-flex w-full min-w-0 max-w-full flex-col gap-0.5 sm:w-auto">
       <span className="sr-only">{label}</span>
       <select
         id={selectId}
         aria-label={label}
         {...rest}
-        className={`${FILTER_SELECT_CLASS} ${className}`}
+        className={`${FILTER_SELECT_CLASS} w-full max-w-full sm:w-auto ${className}`}
       >
         <option value="">All {label}</option>
         {options.filter(Boolean).map((opt) => (

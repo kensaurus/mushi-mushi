@@ -102,6 +102,16 @@ describe('ReportRowView row actions', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
     expect(apiFetch).not.toHaveBeenCalled()
   })
+
+  it('row controls meet the 24px hit floor', async () => {
+    await render()
+    const dismiss = container.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')
+    const triage = Array.from(container.querySelectorAll('a')).find((el) => el.textContent?.includes('Triage'))
+    expect(dismiss?.className).toContain('h-6')
+    expect(dismiss?.className).toContain('w-6')
+    expect(triage?.className).toContain('min-h-6')
+    expect(triage?.className).not.toContain('h-5')
+  })
 })
 
 describe('ReportRowView dispatch gate', () => {

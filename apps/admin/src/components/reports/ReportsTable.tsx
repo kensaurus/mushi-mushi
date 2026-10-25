@@ -171,17 +171,19 @@ export function ReportsTable({
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
               <th scope="col" className={`${REPORTS_TABLE_COL.stripe} p-0`} aria-label="Severity stripe" />
-              <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 text-left pl-3`}>
-                <input
-                  type="checkbox"
-                  aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected
-                  }}
-                  onChange={onToggleSelectAll}
-                  className="h-3.5 w-3.5 accent-brand"
-                />
+              <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} py-2 text-center`}>
+                <label className={`${TABLE_CELL.hit} cursor-pointer`}>
+                  <input
+                    type="checkbox"
+                    aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected
+                    }}
+                    onChange={onToggleSelectAll}
+                    className="h-3.5 w-3.5 accent-brand"
+                  />
+                </label>
               </th>
               {/* Summary text isn't a sortable field — the column shows the
                   free-form summary as primary content with component as a
@@ -264,8 +266,8 @@ export function ReportsTable({
         </table>
       </ResponsiveTable>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
-        <span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
+        <span className="min-w-0">
           Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           {groupCollapse && visibleGroupCount !== reports.length && (
             <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>

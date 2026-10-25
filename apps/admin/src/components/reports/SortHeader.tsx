@@ -58,7 +58,7 @@ export function SortHeader({
       <button
         type="button"
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
+        className={`inline-flex min-h-6 items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
         aria-label={fullLabel ? `Sort by ${fullLabel}` : `Sort by ${label}`}
       >
         {labelNode}

@@ -127,21 +127,25 @@ export function ReportsFilterBar({
 
   return (
     <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
-        <Input
-          ref={searchInputRef}
-          type="search"
-          // Was "Search summary or description… (/)" — 38 chars in a w-64
-          // field, so it rendered clipped as "Search summary or des". The
-          // aria-label below carries the fields searched instead.
-          placeholder="Search bugs… (/)"
-          value={searchInput}
-          onChange={(e) => onSearchInputChange(e.target.value)}
-          name="reports-search"
-          autoComplete="off"
-          aria-label="Search reports by summary or description"
-          className="w-64"
-        />
+      <div className="flex min-w-0 flex-wrap gap-2 items-center">
+        <div className="w-full min-w-0 max-w-full sm:w-64">
+          <Input
+            ref={searchInputRef}
+            type="search"
+            // Was "Search summary or description… (/)" — 38 chars in a w-64
+            // field, so it rendered clipped as "Search summary or des". The
+            // aria-label below carries the fields searched instead.
+            // The wrapper is the width: full column at 390px, 16rem from `sm`
+            // so the field does not stretch across a 1440px page.
+            placeholder="Search bugs… (/)"
+            value={searchInput}
+            onChange={(e) => onSearchInputChange(e.target.value)}
+            name="reports-search"
+            autoComplete="off"
+            aria-label="Search reports by summary or description"
+            className="max-w-full"
+          />
+        </div>
         {/* Status and severity are filtered by the quick-filter chips above. */}
         <FilterSelect
           label="Category"
@@ -149,13 +153,13 @@ export function ReportsFilterBar({
           options={FILTER_OPTIONS.categories}
           onChange={(e) => onSetFilter('category', e.currentTarget.value)}
         />
-        <label className="inline-flex flex-col gap-0.5">
+        <label className="inline-flex w-full min-w-0 max-w-full flex-col gap-0.5 sm:w-auto">
           <span className="sr-only">Platform</span>
           <select
             value={platform}
             onChange={(e) => onSetFilter('platform', e.currentTarget.value)}
             aria-label="Filter by platform"
-            className={FILTER_SELECT_CLASS}
+            className={`${FILTER_SELECT_CLASS} w-full max-w-full sm:w-auto`}
           >
             <option value="">All platforms</option>
             {PLATFORM_FILTER_OPTIONS.map((o) => (
@@ -163,13 +167,13 @@ export function ReportsFilterBar({
             ))}
           </select>
         </label>
-        <label className="inline-flex flex-col gap-0.5">
+        <label className="inline-flex w-full min-w-0 max-w-full flex-col gap-0.5 sm:w-auto">
           <span className="sr-only">SDK</span>
           <select
             value={sdkPackage}
             onChange={(e) => onSetFilter('sdkPackage', e.currentTarget.value)}
             aria-label="Filter by SDK"
-            className={FILTER_SELECT_CLASS}
+            className={`${FILTER_SELECT_CLASS} w-full max-w-full sm:w-auto`}
           >
             <option value="">All SDKs</option>
             {SDK_FILTER_OPTIONS.map((o) => (
@@ -177,14 +181,14 @@ export function ReportsFilterBar({
             ))}
           </select>
         </label>
-        <label className="inline-flex flex-col gap-0.5">
+        <label className="inline-flex w-full min-w-0 max-w-full flex-col gap-0.5 sm:w-auto">
           <span className="sr-only">Where</span>
           <select
             value={origin}
             onChange={(e) => onSetFilter('origin', e.currentTarget.value)}
             aria-label="Filter by where the report was sent from"
             title="Local dev: sent from a developer's machine (a dev server or a phone on the same Wi-Fi)."
-            className={FILTER_SELECT_CLASS}
+            className={`${FILTER_SELECT_CLASS} w-full max-w-full sm:w-auto`}
           >
             <option value="">Deployed and local</option>
             {ORIGIN_FILTER_OPTIONS.map((o) => (

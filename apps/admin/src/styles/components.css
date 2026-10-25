@@ -1666,6 +1666,9 @@
 .responsive-table {
   --row-py: var(--row-py-comfy);
   position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 .responsive-table[data-density="compact"] {
   --row-py: var(--row-py-compact);
@@ -1678,6 +1681,9 @@
 .responsive-table-scroll {
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 .responsive-table::before,
 .responsive-table::after {
@@ -1705,7 +1711,12 @@
 }
 
 /* Sticky lead columns — pin identity columns (summary / report) during
-   horizontal scroll. Offsets come from --sticky-col-* on the wrapper. */
+   horizontal scroll. Offsets come from --sticky-col-* on the wrapper.
+   The reports summary is 34rem. With the md sidebar (15rem) that column is
+   wider than the scrollport until the viewport is about 64rem, and a sticky
+   cell that wide paints over status and actions. Pin only once a 1440-class
+   window can show something beside it. */
+@media (min-width: 64rem) {
 .responsive-table[data-sticky-lead="3"] table thead th:nth-child(1),
 .responsive-table[data-sticky-lead="3"] table tbody td:nth-child(1) {
   position: sticky;
@@ -1736,6 +1747,7 @@
 .responsive-table[data-overflow-left="true"][data-sticky-lead="3"] table thead th:nth-child(3),
 .responsive-table[data-overflow-left="true"][data-sticky-lead="3"] table tbody td:nth-child(3) {
   box-shadow: 6px 0 10px -4px color-mix(in oklch, var(--color-fg) 18%, transparent);
+}
 }
 
 /* Row kebab — visible on touch; hover-reveal on fine pointers (NN/g #7). */
@@ -1880,6 +1892,130 @@
 }
 .reports-triage-table tbody td.reports-action-cell .reports-action-age > * {
   pointer-events: auto;
+}
+
+/* Phone triage list. The desktop table is ~53.5rem with a sticky 34rem
+   summary; at 390px that column covers every other cell. Stack the row
+   instead: stripe, checkbox + summary, the three meters, then the action. */
+@media (max-width: 47.9375rem) {
+  .reports-triage-table {
+    display: block;
+  }
+  .reports-triage-table colgroup {
+    display: none;
+  }
+  .reports-triage-table thead {
+    display: block;
+  }
+  .reports-triage-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+    padding: 0.35rem 0.65rem 0.45rem;
+  }
+  .reports-triage-table thead th {
+    display: block;
+    width: auto;
+    padding: 0;
+  }
+  .reports-triage-table thead th:first-child,
+  .reports-triage-table thead th:nth-child(3) {
+    display: none;
+  }
+  .reports-triage-table tbody {
+    display: block;
+  }
+  .reports-triage-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: 0.5rem;
+    row-gap: 0.35rem;
+    position: relative;
+    padding: 0.55rem 0.65rem 0.6rem 0.85rem;
+  }
+  .reports-triage-table tbody td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .reports-triage-table tbody td:first-child {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0.25rem;
+    padding: 0;
+  }
+  .reports-triage-table tbody td:nth-child(2) {
+    flex: 0 0 auto;
+    padding-top: 0.15rem;
+    padding-left: 0;
+  }
+  .reports-triage-table tbody td:nth-child(3) {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .reports-triage-table tbody td.reports-metric-cell,
+  .reports-triage-table tbody td.reports-action-cell {
+    height: auto;
+    position: static;
+    padding: 0.15rem 0 0;
+  }
+  .reports-triage-table tbody td.reports-metric-cell {
+    flex: 1 1 4.75rem;
+    max-width: calc(33.33% - 0.35rem);
+  }
+  .reports-triage-table tbody td.reports-metric-cell::before,
+  .reports-triage-table tbody td.reports-action-cell::before {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: var(--color-fg-faint);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .reports-triage-table tbody td:nth-child(4)::before { content: "Status"; }
+  .reports-triage-table tbody td:nth-child(5)::before { content: "Severity"; }
+  .reports-triage-table tbody td:nth-child(6)::before { content: "Confidence"; }
+  .reports-triage-table tbody td.reports-action-cell {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .reports-triage-table tbody td.reports-action-cell::before { content: "Action"; }
+  .reports-triage-table tbody td.reports-metric-cell .reports-metric-cell-slot,
+  .reports-triage-table tbody td.reports-action-cell .reports-action-stack {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    height: auto;
+    display: flex;
+    pointer-events: auto;
+  }
+  .reports-triage-table tbody td.reports-metric-cell--confidence .reports-metric-cell-slot--confidence > * {
+    height: auto;
+    min-height: 1.5rem;
+  }
+  .reports-triage-table tbody td.reports-action-cell .reports-action-stack {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    gap: 0.5rem;
+  }
+  .reports-triage-table tbody td.reports-action-cell .reports-action-age {
+    width: auto;
+    max-width: none;
+    margin-left: 0;
+  }
 }
 
 /* Inventory / route paths in triage rows — left-rail monospace, not pill chips. */

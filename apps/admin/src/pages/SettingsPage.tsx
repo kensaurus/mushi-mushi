@@ -261,7 +261,7 @@ function SettingsPageBody({
   }
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-settings">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-settings">
       <PageHeaderBar
         title={copy?.title ?? 'Settings'}
         icon={<IconSettings />}

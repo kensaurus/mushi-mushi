@@ -13,4 +13,8 @@ export const TABLE_CELL = {
   vCenter: 'align-middle h-px',
   /** Stretch `<td>` to full row height; inner stack uses `h-full flex-col justify-between`. */
   actionStretch: 'align-top h-px',
+  /** WCAG 2.5.8 floor — 24×24px. Icon buttons in these tables were 14–20px. */
+  hit: 'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm',
+  /** Same floor for a control that also shows a word (Triage, Fix). */
+  hitText: 'inline-flex min-h-6 shrink-0 items-center justify-center rounded-sm px-1.5',
 } as const
