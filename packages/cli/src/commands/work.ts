@@ -379,6 +379,7 @@ export function wrongAppReason(detail: { id: string; project_id?: string | null 
   return `Report ${detail.id} belongs to app ${detail.project_id}, not ${projectId}: this CLI key is bound to another app. Sign in for this app: mushi login --project-id ${projectId}`
 }
 
+/** @internal Exported for tests only. */
 export async function pickReports(api: Api, opts: { max: number; reportId?: string; projectId?: string }): Promise<ReportDetail[]> {
   const check = (detail: ReportDetail): ReportDetail => {
     const wrong = wrongAppReason(detail, opts.projectId)
@@ -495,7 +496,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
 
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
-    await git(wt, ['commit', '--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
@@ -595,7 +596,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
     await git(wt, ['add', '-A'])
-    await git(wt, ['commit', '--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`])
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
@@ -625,13 +626,35 @@ export function installCommand(has: (file: string) => boolean): [string, string[
   return null
 }
 
-/** Install the worktree's dependencies before the agent runs; a failed install is logged and the run goes on. */
+/**
+ * Install the worktree's dependencies before the agent runs, trying twice (a
+ * second worktree installing at the same moment can lose a store lock). A
+ * failed install is logged and the run goes on.
+ */
 async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
-  if (r.code !== 0) log(`  deps: install failed, the agent works without them (${failureTail(r, 300)})`)
+  let r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) r = await runProc(cmd[0], cmd[1], { cwd: wt, timeoutMs: 10 * 60_000 })
+  if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
+}
+
+/** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
+export function isMissingModuleFailure(message: string): boolean {
+  return /ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(message)
+}
+
+/** Commit; when a hook failed only because dependencies are missing, install them and commit once more. */
+async function commitWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+  try {
+    await git(wt, ['commit', ...args])
+  } catch (err) {
+    if (!(err instanceof Error) || !isMissingModuleFailure(err.message)) throw err
+    log('  commit: a hook could not find a package; installing dependencies and committing again')
+    await installDeps(wt, log)
+    await git(wt, ['commit', ...args])
+  }
 }
 
 async function preflight(repoDir: string): Promise<void> {

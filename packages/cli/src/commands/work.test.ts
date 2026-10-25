@@ -3,6 +3,7 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
+  isMissingModuleFailure,
   failureTail,
   agentEnv,
   branchNameFor,
@@ -200,6 +201,14 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('isMissingModuleFailure', () => {
+  it('tells a hook that lacks a package from a hook that rejects the change', () => {
+    expect(isMissingModuleFailure("git commit failed: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'jiti' imported from scripts/x.mjs")).toBe(true)
+    expect(isMissingModuleFailure('Error: Cannot find module ./dist/index.js')).toBe(true)
+    expect(isMissingModuleFailure('git commit failed: check-no-secrets: found an API key in src/a.ts')).toBe(false)
   })
 })
 
