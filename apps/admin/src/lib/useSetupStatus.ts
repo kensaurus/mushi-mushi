@@ -9,7 +9,7 @@
  *              before reports show up here")
  */
 
-import { useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ZodType } from 'zod'
 import { usePageData } from './usePageData'
 import { invalidateApiCache } from './supabase'
@@ -185,6 +185,27 @@ function subscribeSetupGeneration(listener: () => void): () => void {
 }
 
 /**
+ * A hung `/v1/admin/setup` used to leave the header on "Loading project"
+ * forever. The read's own deadline sets an error; this is the backstop when
+ * the request never settles (an aborted retry loop that keeps `loading`
+ * true and never sets `error`).
+ */
+export const SETUP_LOAD_DEADLINE_MS = 20_000
+
+function useSetupStall(pending: boolean): boolean {
+  const [stalled, setStalled] = useState(false)
+  useEffect(() => {
+    if (!pending) {
+      setStalled(false)
+      return
+    }
+    const id = window.setTimeout(() => setStalled(true), SETUP_LOAD_DEADLINE_MS)
+    return () => window.clearTimeout(id)
+  }, [pending])
+  return stalled
+}
+
+/**
  * Tell every mounted `useSetupStatus` to refetch. Each instance owns its own
  * fetch state, so a reload in one (say, the dashboard) left the setup guide
  * saying "Receive your first bug report — Do this next" after the report had
@@ -215,6 +236,9 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
     scope: 'enumeration',
     deps: [generation],
   })
+  const stalled = useSetupStall(loading && data == null && error == null)
+  const settledError =
+    error ?? (stalled ? 'The server took too long to answer. Try again in a moment.' : null)
 
   return useMemo(() => {
     const projects = (data?.projects ?? []).map(withTabbedCtas)
@@ -240,7 +264,7 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
     return {
       data,
       loading,
-      error,
+      error: settledError,
       reload,
       hasAnyProject: presence.hasAnyProject,
       resolved: presence.resolved,
@@ -253,5 +277,5 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
       },
       getStep: (id: SetupStepId) => stepMap.get(id) ?? null,
     }
-  }, [data, loading, error, reload, activeProjectId])
+  }, [data, loading, settledError, reload, activeProjectId])
 }
