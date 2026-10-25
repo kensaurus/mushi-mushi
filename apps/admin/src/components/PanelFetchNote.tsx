@@ -20,6 +20,20 @@ interface Props {
   className?: string
 }
 
+/** The Retry control shared by panel notes and quiet empty states. */
+export function RetryButton({ onClick, className = '' }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      data-testid="panel-retry"
+      className={['font-medium text-brand underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm', className].filter(Boolean).join(' ')}
+      onClick={onClick}
+    >
+      Retry
+    </button>
+  )
+}
+
 export function PanelFetchNote({ message, stale = false, onRetry, className = '' }: Props) {
   const text = stale ? "Couldn't refresh. Showing the last result." : (message ?? '')
   if (!text && !onRetry) return null
@@ -27,15 +41,7 @@ export function PanelFetchNote({ message, stale = false, onRetry, className = ''
     <p role={stale ? 'status' : 'alert'} className={`text-xs leading-relaxed ${stale ? 'text-fg-muted' : 'text-danger'} ${className}`}>
       {text}
       {text && onRetry ? ' ' : null}
-      {onRetry ? (
-        <button
-          type="button"
-          className="font-medium text-brand underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
-          onClick={onRetry}
-        >
-          Retry
-        </button>
-      ) : null}
+      {onRetry ? <RetryButton onClick={onRetry} /> : null}
     </p>
   )
 }

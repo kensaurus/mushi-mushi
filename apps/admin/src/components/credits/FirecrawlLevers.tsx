@@ -138,7 +138,11 @@ export function FirecrawlLevers({ balance, projects, projectsError, onRetryProje
       ) : !apps ? (
         <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>
       ) : apps.length === 0 ? (
-        <p className="text-xs text-fg-muted">No apps yet. Create one to watch its live site.</p>
+        <p className="text-xs text-fg-muted">
+          No apps yet.{' '}
+          <Link className="text-brand hover:underline" to="/projects?tab=create">Create one</Link>
+          {' '}to watch its live site.
+        </p>
       ) : (
         <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
           {apps.map((a) => {

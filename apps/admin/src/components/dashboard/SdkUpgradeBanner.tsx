@@ -42,21 +42,19 @@ export function SdkUpgradeBanner({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-1.5">
       {error && <PanelFetchNote stale onRetry={() => reload()} />}
-      {stale && (
-        <div
-          role="status"
-          aria-label="SDK upgrade available"
-          className="flex items-center gap-2 rounded-md border border-warn/25 bg-warn-muted px-3 py-2 text-xs"
-        >
-          <IconBolt className="h-3.5 w-3.5 text-warn shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 text-fg-secondary">
-            SDK upgrade available{versionHint}.{' '}
-            <Link to="/connect" className="text-accent-foreground underline hover:no-underline">
-              Create Upgrade PR in Connect &amp; Update
-            </Link>
-          </span>
-        </div>
-      )}
+      <div
+        role="status"
+        aria-label="SDK upgrade available"
+        className="flex items-center gap-2 rounded-md border border-warn/25 bg-warn-muted px-3 py-2 text-xs"
+      >
+        <IconBolt className="h-3.5 w-3.5 text-warn shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 text-fg-secondary">
+          SDK upgrade available{versionHint}.{' '}
+          <Link to="/connect" className="text-accent-foreground underline hover:no-underline">
+            Create Upgrade PR in Connect &amp; Update
+          </Link>
+        </span>
+      </div>
     </div>
   )
 }

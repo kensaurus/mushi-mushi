@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { CardPanel } from '../ui'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
-import { PanelFetchNote } from '../PanelFetchNote'
+import { PanelFetchNote, RetryButton } from '../PanelFetchNote'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 interface PlatformRow {
@@ -72,13 +72,7 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
             text="Platform rollup unavailable."
             hint="The /platform-rollup endpoint may not be deployed yet."
           />
-          <button
-            type="button"
-            className="mt-1.5 text-xs font-medium text-brand underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
-            onClick={() => reload()}
-          >
-            Retry
-          </button>
+          <RetryButton className="mt-1.5 text-xs" onClick={() => reload()} />
         </>
       )}
 

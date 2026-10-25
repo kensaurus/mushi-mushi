@@ -44,6 +44,7 @@ describe('PanelFetchNote', () => {
     const hard = host.querySelector('p')
     expect(hard?.getAttribute('role')).toBe('alert')
     expect(hard?.textContent).toContain("Couldn't load team activity.")
+    expect(hard?.querySelector('[data-testid="panel-retry"]')).not.toBeNull()
     hard?.querySelector('button')?.click()
     expect(onRetry).toHaveBeenCalledOnce()
   })

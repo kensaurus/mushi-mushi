@@ -284,6 +284,18 @@ describe('skill runs on /credits', () => {
     expect(host.textContent).toContain('No skill runs yet')
   })
 
+  it('links to create an app when the skill-run list has none', async () => {
+    const { SkillRunsCard } = await import('../components/credits/SkillRunsCard')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(SkillRunsCard, { projects: [] })))
+    })
+    await act(async () => { await Promise.resolve() })
+    const create = host.querySelector('a[href="/projects?tab=create"]')
+    expect(create?.textContent).toBe('Create one')
+    expect(host.textContent).toContain('No apps yet')
+    expect(host.textContent).toContain('before starting a skill run')
+  })
+
   it('keeps the last skill runs when a refresh fails', async () => {
     await render()
     expect(host.textContent).toContain('Round 2 of 3 · 1 merged')
@@ -335,7 +347,7 @@ describe('Cursor key model on /credits', () => {
     expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
   })
 
-  it('shows follow-up settings without a no-key prompt when there is no Cursor key', async () => {
+  it('shows the add-a-key prompt and follow-up settings when spend-down succeeded with no keys', async () => {
     const { CursorLevers } = await import('../components/credits/CursorLevers')
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
@@ -350,7 +362,22 @@ describe('Cursor key model on /credits', () => {
       })))
     })
     expect(host.textContent).toContain('Review follow-ups')
-    expect(host.textContent).not.toContain('No Cursor key yet')
+    expect(host.textContent).toContain('No Cursor key yet')
+    expect(host.querySelector('a[href="/settings?tab=byok"]')?.textContent).toContain('Add one in Settings')
+  })
+
+  it('does not claim there is no Cursor key when spend-down failed and the key list is empty', async () => {
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [] },
+        spendDownFailed: true,
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent ?? '').not.toContain('No Cursor key yet')
   })
 
   it('still asks for a Cursor key when there are no keys and no follow-ups', async () => {
@@ -394,6 +421,8 @@ describe('FirecrawlLevers while the project list loads', () => {
     await act(async () => { await Promise.resolve() })
     expect(host.textContent).toContain('No apps yet')
     expect(host.textContent).not.toContain('Reading each app')
+    const create = host.querySelector('a[href="/projects?tab=create"]')
+    expect(create?.textContent).toBe('Create one')
   })
 })
 
@@ -405,10 +434,35 @@ describe('credits load failures', () => {
     expect(host.textContent).not.toContain('No Cursor key yet')
   })
 
+  it('does not claim there is no Cursor key when spend-down fails and follow-ups are absent', async () => {
+    state.pageState['/v1/admin/byok/spend-down'] = { data: null, loading: false, error: 'nope' }
+    state.pageState['/v1/admin/byok/review-followups'] = { data: null, loading: false, error: null }
+    await render()
+    expect(host.textContent).toContain("Couldn't load Cursor spend-down.")
+    expect(host.textContent).not.toContain('No Cursor key yet')
+    expect(host.textContent).not.toContain('Review follow-ups')
+  })
+
+  it('keeps the add-a-key prompt beside a failed or loading follow-up read', async () => {
+    state.pageState['/v1/admin/byok/spend-down'] = { data: { projectId: 'p1', keys: [] }, loading: false, error: null }
+    state.pageState['/v1/admin/byok/review-followups'] = { data: null, loading: false, error: 'nope' }
+    await render()
+    expect(host.textContent).toContain('No Cursor key yet')
+    expect(host.querySelector('a[href="/settings?tab=byok"]')?.textContent).toContain('Add one in Settings')
+    expect(host.textContent).toContain("Couldn't load review follow-ups.")
+
+    state.pageState['/v1/admin/byok/review-followups'] = { data: null, loading: true, error: null }
+    await render()
+    expect(host.textContent).toContain('No Cursor key yet')
+    expect(host.textContent).toContain('Reading review follow-ups')
+    expect(host.textContent).not.toContain("Couldn't load review follow-ups.")
+  })
+
   it('keeps review follow-ups when spend-down fails, and retries that request', async () => {
     state.pageState['/v1/admin/byok/spend-down'] = { data: null, loading: false, error: 'nope' }
     await render()
     expect(host.textContent).toContain("Couldn't load Cursor spend-down.")
+    expect(host.textContent).not.toContain('No Cursor key yet')
     expect(host.textContent).toContain('Review follow-ups')
     expect(host.textContent).toContain('Rounds run on Grok')
     const note = Array.from(host.querySelectorAll('p')).find((p) => p.textContent?.includes("Couldn't load Cursor spend-down."))

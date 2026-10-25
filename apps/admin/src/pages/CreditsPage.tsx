@@ -108,6 +108,7 @@ export function CreditsPage() {
         {(!spendDown.loading || spendDown.data != null) && (
           <CursorLevers
             spendDown={spendDown.data ?? null}
+            spendDownFailed={Boolean(spendDown.error) && spendDown.data == null}
             followups={followups.data ?? null}
             followupsLoading={followups.loading && !followups.data}
             followupsError={followups.error}

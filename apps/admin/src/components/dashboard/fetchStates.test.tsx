@@ -7,6 +7,8 @@
  *          that keeps the last result.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
@@ -73,7 +75,10 @@ describe('PlatformHealthTile states', () => {
     expect(missing?.className).toContain('text-fg-muted')
     expect(missing?.className ?? '').not.toContain('text-danger')
     expect(host.querySelector('.border-dashed')).not.toBeNull()
-    retry()?.click()
+    const retryBtn = retry()
+    expect(retryBtn?.getAttribute('data-testid')).toBe('panel-retry')
+    expect(retryBtn?.closest('[role="alert"]')).toBeNull()
+    retryBtn?.click()
     expect(page.reload).toHaveBeenCalledOnce()
 
     page.error = null
@@ -179,6 +184,14 @@ describe('SdkUpgradeBanner states', () => {
     render(createElement(SdkUpgradeBanner, { projectId: 'p1' }))
     expect(host.textContent).toContain('SDK upgrade available')
     expect(host.textContent).toContain("Couldn't refresh. Showing the last result.")
+  })
+
+  it('shows the upgrade banner without a redundant stale guard', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/dashboard/SdkUpgradeBanner.tsx'), 'utf8')
+    expect(src).not.toContain('{stale &&')
+    page.data = { projects: [{ id: 'p1', sdk_status: 'outdated', sdk_version: '1.0.0', sdk_latest_version: '1.2.0' }] }
+    render(createElement(SdkUpgradeBanner, { projectId: 'p1' }))
+    expect(host.querySelector('[aria-label="SDK upgrade available"]')).not.toBeNull()
   })
 
   it('stays quiet when a refresh fails and the SDK is current', () => {

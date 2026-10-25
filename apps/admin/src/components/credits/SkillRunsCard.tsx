@@ -94,7 +94,11 @@ export function SkillRunsCard({ projects, projectsError, onRetryProjects }: Prop
       {projects == null && projectsError && <PanelFetchNote message="Couldn't load your apps." onRetry={onRetryProjects} />}
       {projects && projectsError && <PanelFetchNote stale onRetry={onRetryProjects} />}
       {projects && projects.length === 0 && (
-        <p className="text-xs text-fg-muted">No apps yet. Create one before starting a skill run.</p>
+        <p className="text-xs text-fg-muted">
+          No apps yet.{' '}
+          <Link className="text-brand hover:underline" to="/projects?tab=create">Create one</Link>
+          {' '}before starting a skill run.
+        </p>
       )}
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField label="App" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={!projects?.length}>

@@ -19,6 +19,12 @@ import type { ReviewFollowupsResponse } from '../settings/reviewFollowups'
 
 interface Props {
   spendDown: SpendDownResponse | null
+  /**
+   * Spend-down failed and this view must not treat a missing payload as
+   * "no Cursor key". An empty `keys` array after a successful read still
+   * means there is no key.
+   */
+  spendDownFailed?: boolean
   followups: ReviewFollowupsResponse | null
   /** True only while the first follow-up read is in flight. */
   followupsLoading?: boolean
@@ -34,7 +40,7 @@ function canChange(k: SpendDownKeyStatus, canManageOrg: boolean): boolean {
   return true
 }
 
-export function CursorLevers({ spendDown, followups, followupsLoading = false, followupsError, onRetryFollowups, now, onChanged }: Props) {
+export function CursorLevers({ spendDown, spendDownFailed = false, followups, followupsLoading = false, followupsError, onRetryFollowups, now, onChanged }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null)
   const keys = spendDown?.keys ?? []
@@ -53,17 +59,19 @@ export function CursorLevers({ spendDown, followups, followupsLoading = false, f
     if (res.ok) onChanged()
   }
 
-  if (keys.length === 0 && !fu && !followupsLoading && !followupsError) {
-    return (
-      <p className="text-sm text-fg-muted">
-        No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
-        and Mushi can send open bugs to Cursor before its credits expire.
-      </p>
-    )
-  }
+  // No-key depends only on a successful empty spend-down read. Follow-up
+  // loading and errors render beside that prompt; they do not replace it.
+  const showNoKey = keys.length === 0 && spendDown != null && !spendDownFailed
+  if (!showNoKey && keys.length === 0 && !fu && !followupsLoading && !followupsError) return null
 
   return (
     <div className="space-y-3">
+      {showNoKey && (
+        <p className="text-sm text-fg-muted">
+          No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
+          and Mushi can send open bugs to Cursor before its credits expire.
+        </p>
+      )}
       {keys.length > 0 && (
         <p className="text-xs text-fg-muted">The Cursor keys the open app can use. Another app&apos;s keys show when you switch to it.</p>
       )}
