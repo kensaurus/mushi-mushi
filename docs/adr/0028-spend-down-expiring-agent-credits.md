@@ -221,3 +221,26 @@ paused app with its reason, "probing 1/day" and Resume.
   missing on the live project. Until the migration is applied, the code reads
   the reset as "never" and Resume answers 503 `MIGRATION_PENDING`.
 - Each tick reads each served app's samples once (cached across keys).
+
+## Amendment 2026-10-24: retry a held PR once it can learn from the hold
+
+126 reports sat in `fixing` with a PR the Opus review held (ADR 0030) while
+every Cursor key idled on "No open report to fix": spend-down only picked
+`classified` / `reopened` reports, and the 7-day cooldown covered the rest.
+
+- A report in `fixing` is a candidate only when its newest attempt's latest
+  completed review says `hold`, that attempt is at least 12 hours old, and the
+  report has fewer than 3 attempts (`reportsToRetryAfterHold`). An open PR
+  that waits to merge, or one without a review, is never re-dispatched.
+- The new agent's prompt carries the earlier attempts: each PR's Opus summary
+  and blocker/major findings, or the agent's no-PR note, scrubbed, capped,
+  fenced and screened like review follow-up findings
+  (`_shared/prior-attempts.ts`), so it does not repeat the rejected theory.
+- Held retries count toward the stop-loss like any other spend-down run.
+- A key Cursor refuses for its plan's usage limit (`usage_limit_exceeded`)
+  is marked used up for 6 hours (`byok_keys.exhausted_until`): new agents
+  and the key-to-app assignment go to the next key in the pool, so an
+  account run to 100% hands over instead of idling the next one. Runs a key
+  already started are polled and cancelled with that key
+  (`external_agent_ref.key_id`).
+

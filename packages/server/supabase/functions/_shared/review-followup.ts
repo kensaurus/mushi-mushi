@@ -105,6 +105,7 @@ export const FOLLOWUP_REASONS = {
   autofix_cap: "The app's auto-fix limit is reached.",
   budget_unavailable: "The app's auto-fix limits could not be read.",
   no_cursor_key: 'No Cursor key is available for this app.',
+  key_used_up: "The chosen Cursor key's account reached its plan's usage limit; follow-ups wait until it is back or another key is chosen.",
   key_not_allowed: 'The chosen Cursor key is not one this organization can use.',
   models_unavailable: "Cursor's model list could not be read for this key.",
   model_not_listed: 'The follow-up model is not in this key\'s Cursor model list.',
@@ -508,6 +509,8 @@ export interface FollowupPromptInput {
   findings: FollowupFinding[]
   /** Scrubs untrusted text (sanitizeForLLM in the worker). */
   scrub: (text: string) => string
+  /** A local agent (`mushi work`): it leaves the change in the working tree and the CLI pushes it. */
+  local?: boolean
 }
 
 export interface ScreenedFindings {
@@ -752,7 +755,9 @@ export function buildFollowupPrompt(input: FollowupPromptInput): { text: string;
     '1. Fix exactly the findings above, and nothing else. Keep the pull request\'s scope: no refactors, renames or unrelated changes.',
     '2. Add or adjust tests so each fixed finding is covered: a test that fails without your change and passes with it.',
     '3. Run the tests you touched (and the project\'s typecheck and lint if they are quick) and make them pass.',
-    '4. Commit and push to the CURRENT branch of this pull request. Do not open a new pull request, do not create a new branch, never force-push, never merge.',
+    input.local
+      ? '4. Leave your changes uncommitted in the working tree: Mushi commits them and pushes to this pull request\'s branch. Do not commit, do not create a branch, never push, never merge.'
+      : '4. Commit and push to the CURRENT branch of this pull request. Do not open a new pull request, do not create a new branch, never force-push, never merge.',
     '5. If a finding is wrong (the code is already correct, or the suggested fix would break something), do not change code for it. Explain why in your final message, naming the finding.',
     '6. End with a short final message: which findings you fixed, which you did not and why, and which tests you ran.',
     '',

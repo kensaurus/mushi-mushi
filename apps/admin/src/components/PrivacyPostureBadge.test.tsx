@@ -7,10 +7,10 @@
  *          chip stays out of the way; a real failure still shows.
  */
 
-import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   projectId: null as string | null,
@@ -21,79 +21,142 @@ const state = vi.hoisted(() => ({
     errorMessage: null as string | null,
   },
   paths: [] as Array<string | null>,
-}))
+  deps: [] as unknown[][],
+}));
 
-vi.mock('./ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
+vi.mock('./ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }));
 vi.mock('../lib/usePageData', () => ({
-  usePageData: (path: string | null) => {
-    state.paths.push(path)
-    return { ...state.page, reload: vi.fn() }
+  usePageData: (path: string | null, opts?: { deps?: readonly unknown[] }) => {
+    state.paths.push(path);
+    state.deps.push([...(opts?.deps ?? [])]);
+    return { ...state.page, reload: vi.fn() };
   },
-}))
+}));
 
-import { PrivacyPostureBadge } from './PrivacyPostureBadge'
+import { PrivacyPostureBadge } from './PrivacyPostureBadge';
 
-let root: Root | null = null
-let container: HTMLDivElement
+let root: Root | null = null;
+let container: HTMLDivElement;
 
 function render(props: { compact?: boolean } = {}) {
-  container = document.createElement('div')
-  document.body.appendChild(container)
-  root = createRoot(container)
-  act(() => root!.render(createElement(MemoryRouter, null, createElement(PrivacyPostureBadge, props))))
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() =>
+    root!.render(createElement(MemoryRouter, null, createElement(PrivacyPostureBadge, props))),
+  );
 }
 
 beforeEach(() => {
-  state.projectId = null
-  state.page = { data: null, loading: false, error: null, errorMessage: null }
-  state.paths = []
-})
+  state.projectId = null;
+  state.page = { data: null, loading: false, error: null, errorMessage: null };
+  state.paths = [];
+  state.deps = [];
+});
 
 afterEach(() => {
-  act(() => root?.unmount())
-  root = null
-  document.body.innerHTML = ''
-})
+  act(() => root?.unmount());
+  root = null;
+  document.body.innerHTML = '';
+});
 
 describe('PrivacyPostureBadge', () => {
   it('shows nothing and asks nothing before the first project exists', () => {
-    render()
-    expect(container.textContent).toBe('')
-    expect(state.paths.every((p) => p === null)).toBe(true)
-  })
+    render();
+    expect(container.textContent).toBe('');
+    expect(state.paths.every((p) => p === null)).toBe(true);
+  });
 
   it('shows nothing when the server says the account has no projects', () => {
-    state.projectId = '11111111-1111-4111-8111-111111111111'
-    state.page = { data: null, loading: false, error: 'no_projects (ERROR)', errorMessage: 'no_projects' }
-    render()
-    expect(container.textContent).toBe('')
-  })
+    state.projectId = '11111111-1111-4111-8111-111111111111';
+    state.page = {
+      data: null,
+      loading: false,
+      error: 'no_projects (ERROR)',
+      errorMessage: 'no_projects',
+    };
+    render();
+    expect(container.textContent).toBe('');
+  });
+
+  it('asks for the app on screen, not a project-blind privacy path', () => {
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    state.projectId = projectId;
+    state.page = {
+      data: {
+        byok_configured: true,
+        llm_provider: 'byok',
+        storage_provider: null,
+        region: null,
+        retention_days: null,
+        last_audit_at: null,
+      },
+      loading: false,
+      error: null,
+      errorMessage: null,
+    };
+    render();
+    expect(state.paths).toEqual([`/v1/admin/privacy-status?project_id=${projectId}`]);
+    expect(state.deps).toEqual([[projectId]]);
+    expect(container.textContent).toContain('BYOK');
+  });
+
+  it('shows an unknown chip when the key check failed', () => {
+    state.projectId = '11111111-1111-4111-8111-111111111111';
+    state.page = {
+      data: {
+        byok_configured: null,
+        llm_provider: 'unknown',
+        storage_provider: null,
+        region: null,
+        retention_days: null,
+        last_audit_at: null,
+      },
+      loading: false,
+      error: null,
+      errorMessage: null,
+    };
+    render();
+    expect(container.textContent).toContain('Key unknown');
+    expect(container.textContent).not.toContain('Platform key');
+  });
 
   it('still reports a real failure', () => {
-    state.projectId = '11111111-1111-4111-8111-111111111111'
-    state.page = { data: null, loading: false, error: 'Request failed (HTTP_500)', errorMessage: 'Request failed' }
-    render()
-    expect(container.textContent).toContain('Privacy unavailable')
-  })
+    state.projectId = '11111111-1111-4111-8111-111111111111';
+    state.page = {
+      data: null,
+      loading: false,
+      error: 'Request failed (HTTP_500)',
+      errorMessage: 'Request failed',
+    };
+    render();
+    expect(container.textContent).toContain('Privacy unavailable');
+  });
 
   // The rail flyout is portaled and only mounted on hover, so the rail link
   // must carry its explanation in the DOM, as NavRailLink does.
   it('gives the compact rail link an in-DOM description', () => {
-    state.projectId = '11111111-1111-4111-8111-111111111111'
+    state.projectId = '11111111-1111-4111-8111-111111111111';
     state.page = {
-      data: { byok_configured: false, storage_provider: null, region: null, retention_days: null, last_audit_at: null },
+      data: {
+        byok_configured: false,
+        storage_provider: null,
+        region: null,
+        retention_days: null,
+        last_audit_at: null,
+      },
       loading: false,
       error: null,
       errorMessage: null,
-    }
-    render({ compact: true })
-    const link = container.querySelector('a[aria-describedby]')
-    expect(link).not.toBeNull()
-    const descId = link?.getAttribute('aria-describedby') ?? ''
-    const desc = descId ? document.getElementById(descId) : null
-    expect(desc).not.toBeNull()
-    expect(link?.contains(desc)).toBe(true)
-    expect(desc?.textContent).toContain('Mushi platform API key')
-    expect(desc?.textContent).toContain('Platform key in use')
-  })
-})
+    };
+    render({ compact: true });
+    const link = container.querySelector('a[aria-describedby]');
+    expect(link).not.toBeNull();
+    const descId = link?.getAttribute('aria-describedby') ?? '';
+    const desc = descId ? document.getElementById(descId) : null;
+    expect(desc).not.toBeNull();
+    expect(link?.contains(desc)).toBe(true);
+    expect(desc?.textContent).toContain('Mushi platform API key');
+    expect(desc?.textContent).toContain('Platform key in use');
+  });
+});

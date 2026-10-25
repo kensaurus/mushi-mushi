@@ -50,18 +50,22 @@ function HeaderPdcaChip({ chip }: { chip: string }) {
     ? `Overview: ${meta.hint}`
     : `PDCA stage: ${meta.label}. ${meta.hint}`
   return (
-    <Tooltip content={meta.hint}>
+    // The chip must be able to shrink: the overview label ("Overview — your
+    // loop at a glance") is wider than the header column at 390px, and a
+    // non-shrinking chip overflowed its row and sat on top of the freshness
+    // pill. The hint tooltip and aria-label keep the full wording.
+    <Tooltip content={meta.hint} className="min-w-0 max-w-full">
       <span
-        className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs uppercase tracking-wider cursor-help shrink-0 ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
+        className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
         aria-label={ariaLabel}
       >
         <span
-          className={`inline-flex h-3 w-3 items-center justify-center rounded-sm font-bold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
+          className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-sm font-bold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
           {meta.letter}
         </span>
-        {meta.label}
+        <span className="truncate">{meta.label}</span>
       </span>
     </Tooltip>
   )

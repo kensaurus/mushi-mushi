@@ -238,17 +238,19 @@ function buildReadmeClaimChecks(stats) {
     stats.monorepo.workspacePackages,
     "README at-a-glance workspace packages"
   )
-  // Compact glance <sub> line under the hero stats table
+  // Compact glance <sub> line under the hero stats table. Rounded (10K lines,
+  // 100 files): exact counts failed CI on every agent PR that added a file
+  // (2026-10-24), and the glance line only needs the size.
   add(
     "README.md",
     /~(\d+)K TS lines/g,
-    Math.round(stats.monorepo.tsLines / 1000),
+    Math.round(stats.monorepo.tsLines / 10000) * 10,
     "README glance TS lines (K)"
   )
   add(
     "README.md",
-    /(\d{1,3}(?:,\d{3})*) source files/g,
-    stats.monorepo.tsFiles,
+    /~(\d{1,3}(?:,\d{3})*) source files/g,
+    Math.round(stats.monorepo.tsFiles / 100) * 100,
     "README glance source files"
   )
   add(
