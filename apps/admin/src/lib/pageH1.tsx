@@ -9,6 +9,12 @@
  * sidebar is visible. Below md the sidebar is display:none, so the page
  * h1 is the only one a phone exposes either way.
  *
+ * Intended pattern: a page owns the document h1 by passing `titleAs="h1"`.
+ * This round that is /fixes and /credits.
+ * Later rounds and other console pages should adopt `titleAs="h1"`.
+ * Until they do, the wordmark stays the only h1 and those titles stay h2,
+ * so the outline differs by page on purpose.
+ *
  * DEPENDENCIES: react
  *
  * USAGE: Layout provides PageH1Provider and renders SidebarWordmark.
@@ -71,8 +77,9 @@ export function usePageOwnsH1(): boolean {
 
 /**
  * Brand lockup. An h1 until the open page registers its own, then a paragraph
- * with the same tracking so md+ does not show two h1s. Other pages keep this
- * as their only h1; their titles stay h2.
+ * with the same tracking so md+ does not show two h1s.
+ * Later rounds and other console pages should adopt `titleAs="h1"`.
+ * Until they do, this stays their only h1 and their titles stay h2.
  */
 export function SidebarWordmark({ compact }: { compact: boolean }) {
   const pageOwnsH1 = usePageOwnsH1()

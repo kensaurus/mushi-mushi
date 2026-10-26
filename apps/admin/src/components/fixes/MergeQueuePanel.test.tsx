@@ -43,9 +43,9 @@ afterEach(() => {
   host.remove()
 })
 
-async function render(projectId: string | null = 'p1') {
+async function render(projectId: string | null = 'p1', heading?: 'h2' | 'h3') {
   await act(async () => {
-    root.render(createElement(MergeQueuePanel, { projectId, refreshKey: 0 }))
+    root.render(createElement(MergeQueuePanel, { projectId, refreshKey: 0, ...(heading ? { heading } : {}) }))
   })
 }
 
@@ -103,5 +103,18 @@ describe('MergeQueuePanel', () => {
   it('renders nothing without an active app', async () => {
     await render(null)
     expect(host.innerHTML).toBe('')
+  })
+
+  it('stays an h3 unless the page asks for an h2', async () => {
+    await render()
+    expect(host.querySelector('h3')?.textContent).toBe('Merge when ready')
+    expect(host.querySelector('h2')).toBeNull()
+    await answer([])
+    expect(host.querySelector('h3')?.textContent).toBe('Merge when ready')
+    expect(host.querySelector('h2')).toBeNull()
+
+    await render('p1', 'h2')
+    expect(host.querySelector('h2')?.textContent).toBe('Merge when ready')
+    expect(host.querySelector('h3')).toBeNull()
   })
 })

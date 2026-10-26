@@ -15,6 +15,12 @@ import { DISPATCH_STATUS, DISPATCH_STATUS_LABEL, type DispatchJob } from './type
 
 interface Props {
   dispatches: DispatchJob[]
+  /**
+   * Heading level. Default `h3` is the outline this list had before /fixes
+   * promoted its sections to h2 under a page h1. Only /fixes renders it, and
+   * that page passes `h2`.
+   */
+  heading?: 'h2' | 'h3'
 }
 
 import { stoppedDispatches } from '../../lib/fixesBannerReconcile'
@@ -45,7 +51,8 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
   )
 }
 
-export function InflightDispatches({ dispatches }: Props) {
+export function InflightDispatches({ dispatches, heading = 'h3' }: Props) {
+  const Title = heading
   const active = dispatches.filter((d) => d.status === 'queued' || d.status === 'running')
   // Terminal-but-actionable: the user must see the stop reason to unblock.
   // One definition with the banner reconciliation (lib/fixesBannerReconcile.ts)
@@ -58,7 +65,7 @@ export function InflightDispatches({ dispatches }: Props) {
     <div className="space-y-3">
       {active.length > 0 && (
         <div className="space-y-1.5">
-          <h2 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</h2>
+          <Title className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</Title>
           {active.map((d) => (
             <DispatchCard key={d.id} d={d} />
           ))}

@@ -931,7 +931,7 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+      <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} heading="h2" />
 
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">
@@ -959,7 +959,7 @@ export function FixesPage() {
         </section>
       )}
 
-      <InflightDispatches dispatches={mergedDispatches} />
+      <InflightDispatches dispatches={mergedDispatches} heading="h2" />
 
       {fixes.length === 0 ? (
         <NextStep
