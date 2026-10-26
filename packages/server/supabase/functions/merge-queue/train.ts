@@ -16,7 +16,7 @@ import type { GithubRepoRef, PullRequestDetails } from '../_shared/github.ts'
 import type { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import type { gatedTrainMerge, TrainMember } from '../_shared/gated-merge.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import type { ChecksView } from '../_shared/merge-queue.ts'
+import { MAX_CONFLICT_AGENTS, type ChecksView } from '../_shared/merge-queue.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
   DEFAULT_TRAIN_INTERVAL_MINUTES,
@@ -62,6 +62,8 @@ export interface TrainQueueRow {
   queued_at: string
   queued_by: string | null
   train_id: string | null
+  /** Conflict agents already run on this PR (the single-PR path caps it). */
+  conflict_agents?: number
 }
 
 interface TrainRow {
@@ -273,6 +275,19 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
 /** A red train: bisect, or hold the member that failed alone. */
 async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref: GithubRepoRef, failed: string[], settings: TrainSettings, deps: TrainDeps): Promise<string> {
   const now = new Date().toISOString()
+  // Checks that fail on the base branch too are not the members' fault:
+  // bisecting would split a healthy train and hold an innocent fix.
+  const baseSha = await deps.branchSha(token, ref, train.base_ref)
+  const baseFailed = new Set(baseSha ? (await deps.checks(token, ref, baseSha)).failed : [])
+  if (failed.every((name) => baseFailed.has(name))) {
+    const why = `${train.base_ref} is red too (${failed.slice(0, 4).join(', ')}); the train waits for it to pass.`
+    await deps.closePr(token, ref, train.pr_number!, `${why} No pull request in it is blamed; they ride the next train.`)
+    await deps.deleteBranch(token, ref, train.branch)
+    await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: why }).eq('id', train.id)
+    await setRows(db, train.members.map((m) => m.rowId), { state: 'queued', train_id: null, detail: why })
+    await trainEvent(db, memberRows(train), 'pending', 'Release train waits for the base branch', why, `train-base-red:${train.id}`)
+    return 'base_red'
+  }
   const why = `CI failed: ${failed.slice(0, 4).join(', ')}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)
@@ -320,7 +335,7 @@ export async function runTrainTick(
   let baseRef: string | null = null
   const ids = args.rows.map((r) => r.fix_attempt_id)
   const [{ data: reviews }, { data: attempts }] = await Promise.all([
-    db.from('fix_reviews').select('fix_attempt_id, verdict, head_sha, status').in('fix_attempt_id', ids),
+    db.from('fix_reviews').select('fix_attempt_id, verdict, head_sha, status, completed_at, created_at').in('fix_attempt_id', ids),
     db.from('fix_attempts').select('id, report_id').in('id', ids),
   ])
   const reportIds = ((attempts ?? []) as Array<{ id: string; report_id: string | null }>).map((a) => a.report_id).filter((x): x is string => !!x)
@@ -329,7 +344,10 @@ export async function runTrainTick(
     const pull = await deps.pull(args.token, ref, r.pr_number)
     if (!pull) continue
     baseRef ??= pull.baseRef ?? null
-    const rev = ((reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null; status: string }>).find((x) => x.fix_attempt_id === r.fix_attempt_id)
+    // The latest completed review decides; a queued or running one means a re-review is on its way.
+    const mine = ((reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null; status: string; completed_at: string | null; created_at: string }>).filter((x) => x.fix_attempt_id === r.fix_attempt_id)
+    const rev = mine.filter((x) => x.status === 'completed').sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at))[0]
+    const reviewing = mine.some((x) => x.status === 'queued' || x.status === 'running')
     const att = ((attempts ?? []) as Array<{ id: string; report_id: string | null }>).find((a) => a.id === r.fix_attempt_id)
     const rep = ((reports ?? []) as Array<{ id: string; severity: string | null; source: string | null }>).find((x) => x.id === att?.report_id)
     const c: TrainCandidate = {
@@ -353,8 +371,19 @@ export async function runTrainTick(
       await setRows(db, [r.id], { state: 'removed', detail: 'The pull request was closed without merging.' })
       continue
     }
+    // It conflicts with main itself, not with the other members: no train can
+    // take it until a conflict agent merges main into it (the single-PR path,
+    // at most MAX_CONFLICT_AGENTS runs per PR; past that it stays held).
+    if ((pull.mergeableState ?? '').toLowerCase() === 'dirty' || pull.mergeable === false) {
+      if ((r.conflict_agents ?? 0) < MAX_CONFLICT_AGENTS) {
+        await setRows(db, [r.id], { state: 'resolving', cursor_agent_id: null, detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
+      } else if (r.state !== 'blocked') {
+        await setRows(db, [r.id], { state: 'blocked', detail: `Merge conflict: ${MAX_CONFLICT_AGENTS} agent runs did not resolve it. Resolve it on GitHub.` })
+      }
+      continue
+    }
     // An approved PR got a new commit: ask Opus to review the new head.
-    if (c.verdict === 'merge' && c.headSha && c.verdictHead !== c.headSha && rev?.status !== 'queued' && rev?.status !== 'running') {
+    if (c.verdict === 'merge' && c.headSha && c.verdictHead !== c.headSha && !reviewing) {
       const { data: a } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url').eq('id', r.fix_attempt_id).maybeSingle()
       const at = a as { id: string; project_id: string; report_id: string; pr_url: string } | null
       if (at) await deps.requeueReview(db, { fixAttemptId: at.id, projectId: at.project_id, reportId: at.report_id, prUrl: at.pr_url }, c.headSha, now)

@@ -98,29 +98,6 @@ export function bottleneckHumanHint(ctx: BottleneckContext): string {
   }
 }
 
-/** Compact label for header/switcher chips (human, not P/D/C/A). */
-export function bottleneckChipLabel(ctx: BottleneckContext): string {
-  const count = ctx.count ?? parseCountFromLabel(ctx.label) ?? 1
-  switch (ctx.stage) {
-    case 'do':
-      if (isStoppedFixLabel(ctx.label)) {
-        return count === 1 ? '1 fix stopped' : `${count} fixes stopped`
-      }
-      if (ctx.label?.includes('in flight')) {
-        return count === 1 ? '1 fixing' : `${count} fixing`
-      }
-      return 'Fix queue'
-    case 'plan':
-      return count === 1 ? '1 to triage' : `${count} to triage`
-    case 'check':
-      return count === 1 ? '1 disagree' : `${count} disagree`
-    case 'act':
-      return 'Ship blocked'
-    default:
-      return 'Needs action'
-  }
-}
-
 /** Primary button label on alert cards. */
 export function bottleneckActionLabel(ctx: BottleneckContext): string {
   const count = ctx.count ?? parseCountFromLabel(ctx.label)

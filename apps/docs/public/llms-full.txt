@@ -307,7 +307,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -333,7 +333,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -4947,7 +4947,7 @@ flowchart TB
 Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.29.0`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.29.1`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -5814,7 +5814,7 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 | @mushi-mushi/core, @mushi-mushi/web | 1.33.x |
 | @mushi-mushi/react | 1.32.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.33.x |
+| @mushi-mushi/cli | 0.34.x |
 | @mushi-mushi/mcp | 0.29.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
@@ -6891,6 +6891,73 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+
+### `mushi work`
+
+Fix reports with a coding agent on your own machine instead of a cloud agent.
+The agent (the Cursor CLI, `cursor-agent`, signed in to any Cursor account)
+only edits a worktree of your repo; `mushi work` commits, pushes and opens the
+draft pull request with **your** local credentials. So you can spend a Cursor
+account's allowance without that account's GitHub ever touching your repo.
+
+```bash
+# Show which reports it would take (worst first, none with a run or PR already live)
+mushi work --repo-dir ~/code/my-app --dry-run
+
+# Fix up to 3 reports, one at a time
+mushi work --repo-dir ~/code/my-app --max 3
+
+# One report, a chosen model
+mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
+```
+
+For each report it:
+
+1. Reads Mushi's fix packet and what earlier attempts did (their Opus review
+   findings), as data the agent must not take as instructions.
+2. Creates a worktree from `origin/` on
+   `bugfix/MUSHI--local-cursor` and runs `cursor-agent -p` in it
+   (30 minutes at most), after installing the worktree's dependencies from
+   its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
+   commit hooks work. The agent's environment has no credentials, and
+   version control inside it cannot reach the remote.
+3. With changes: commits, pushes, opens a draft PR with `Mushi report: `,
+   registers the fix attempt (like the MCP tool `submit_fix_result`) and
+   queues the Opus review, so the PR follows the same review and release
+   train as a cloud agent's. Without changes: records the agent's
+   `Mushi verdict:` on the attempt.
+
+A report whose local run ended without a pull request in the last 7 days
+(a timeout, no change, or a verdict) is skipped; pass `--report ` to run
+it anyway. The agent has 30 minutes, so a report that names several pages is
+fixed one page at a time: split broad reports into one page or cause each.
+
+When Opus says "fix first" on one of these pull requests, run
+`mushi work --followups`. Mushi checks the round (the reviewed commit is still
+the PR's head, at most 2 rounds per PR), sends only the findings that pass its
+safety screen, and the agent fixes them in a worktree of the PR's branch.
+`mushi work` commits and pushes to that branch, and Opus reviews the new
+commit. Cloud-agent pull requests get the same follow-up from Mushi itself.
+
+```bash
+# Which pull requests are waiting for a follow-up
+mushi work --repo-dir ~/code/my-app --followups --dry-run
+
+# Run them
+mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
+```
+
+| Flag | Description |
+| --- | --- |
+| `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
+| `--max ` | Reports per run (default 3, at most 10) |
+| `--report ` | Work on this report only |
+| `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
+| `--model ` | Model for the agent (`cursor-agent --list-models`) |
+| `--keep` | Keep the worktree afterwards |
+| `--dry-run` | Show the plan; change nothing |
+
+Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
 
 ### `mushi verify`
 
@@ -8029,7 +8096,7 @@ into your IDE.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.0`. The default for
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. The default for
   Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
   Windsurf. Your client launches the server as a subprocess and pipes
   JSON-RPC over stdio.
@@ -19959,7 +20026,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
@@ -23179,6 +23246,24 @@ The review is advisory: it never keeps or reverts anything.
 
 **File as bug** adds the screen to your normal bug queue (source `ux_loop`) with the
 measurements and the review's notes. It makes no AI call.
+
+## Audit signed-in screens
+
+`mushi-ux audit` finds UI bugs on the screens behind your sign-in and files them as
+reports, without editing code. It reuses a browser profile you are already signed in
+with, so it never asks you to sign in again:
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example --file --dry-run
+```
+
+It maps the screens under that URL read-only, captures each on desktop and phone, and
+files what it measures: serious accessibility rules, a page that scrolls sideways,
+console errors, and content that jumps while loading. Add `--review claude-code` for a
+model to point out concrete visual defects on whole pages. `--file` files at most 15
+reports a run and skips one still open or filed in the last 14 days; `--dry-run` lists
+them instead.
 
 ## Where the changes are
 

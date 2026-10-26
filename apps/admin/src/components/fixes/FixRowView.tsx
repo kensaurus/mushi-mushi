@@ -22,6 +22,9 @@ import { fixRowDomId } from '../../lib/fixDeepLink'
 const AGENT_LABEL: Record<string, string> = {
   cursor_cloud: 'Cursor',
   claude_code_agent: 'Claude',
+  // An agent on someone's machine: `mushi work` (local Cursor CLI) or one
+  // reporting through MCP's submit_fix_result.
+  mcp: 'Local agent',
 }
 
 interface Props {

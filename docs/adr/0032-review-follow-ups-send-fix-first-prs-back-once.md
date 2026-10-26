@@ -330,3 +330,76 @@ price.
 - With the setting empty, behaviour is unchanged.
 - When a better model ships, it becomes the escalation model with no code
   change (ADR 0039).
+
+## Amendment (2026-10-24): follow-ups for pull requests a local agent opened
+
+### Context
+
+`mushi work` (2026-10-24) opens pull requests from a local Cursor CLI agent
+(`fix_attempts.agent = 'mcp'`). Opus reviews them like any other, but the
+follow-up worker only starts Cloud agents on cloud-agent PRs, so a local PR
+that got "fix first" waited for a person. On 2026-10-24 all three of the first
+batch did, while the Cloud keys were used up and local runs were the only
+fixing path.
+
+### Decision
+
+- `POST /v1/admin/fixes/:id/local-followup` (`mcp:write`, members) claims one
+  round for a local fix: the latest review is a completed `fix_first`, its
+  commit is the PR's live head (read from GitHub), the head branch is in the
+  base repo, at most `FOLLOWUP_MAX_PER_PR` rounds, once per head
+  (`_shared/local-followup.ts`). The findings go through the same
+  `screenFindings` and `buildFollowupPrompt` (with `local: true`: leave the
+  change uncommitted). The claim is a `followup` fix event with dedupe key
+  `local-followup:<fix>:<head>`, so two CLIs cannot run the same round.
+- `GET /v1/admin/projects/:id/local-followups` lists the local fixes waiting
+  for one; `POST …/local-followup/done` records pushed or no change and, on a
+  push, queues the review again (the webhook does too).
+- `mushi work --followups` runs the agent in a worktree of the PR branch with
+  the stripped environment, commits, and pushes fast-forward only.
+- No `fix_review_followups` rows: those carry Cursor agent ids the worker polls.
+
+### Rejected
+
+- **The CLI screening findings itself.** It would copy the safety screen into
+  a second place; the server stays the one place that decides what reaches an
+  agent.
+- **Cloud agents on local PRs.** The local route exists so an account's
+  allowance can be spent without its GitHub touching the repo.
+
+### Consequences
+
+- Local PRs get the same two rounds as cloud ones, started from the CLI.
+- Running it on a schedule is BL-119.
+
+
+## Amendment (2026-10-25): local follow-ups also take cloud-agent PRs while cloud follow-ups are off
+
+### Context
+
+On 2026-10-25 about 25 open cloud-agent PRs across six apps had an Opus
+"fix first" and nothing could act on them: the Cursor keys that opened them
+were deleted, cloud review follow-ups were off for both teams, and the local
+route refused them as `NOT_LOCAL`.
+
+### Decision
+
+- `localFollowupAllowedFor(agent, cloudFollowupsOn)`: a local follow-up may
+  work on a `cursor_cloud` or `github_cloud_agent` PR when the project's
+  organization has `review_followup_enabled` off. When it is on, the cloud
+  worker keeps those PRs and the route says so.
+- The round limit counts both workers: local claims and cloud rounds whose
+  agent started (`fix_review_followups.cursor_agent_id`), so a PR still gets
+  at most `FOLLOWUP_MAX_PER_PR` rounds.
+- The same rules otherwise: the reviewed head is the live head, no forks,
+  screened findings, fast-forward push.
+
+### Rejected
+
+- **Turning cloud follow-ups on.** They need a Cursor key whose GitHub can
+  reach the repo; the remaining key's cannot.
+
+### Consequences
+
+- Turning cloud follow-ups on later hands those PRs back to the cloud worker,
+  which counts only its own rounds; a PR could then get up to two more.

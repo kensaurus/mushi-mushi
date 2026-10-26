@@ -21,6 +21,8 @@ export interface PoolKey {
   last_tested_at: string | null;
   last_used_at: string | null;
   cooldown_until: string | null;
+  /** Cursor refused it for the plan's usage limit; new agents use the next key until then. */
+  exhausted_until?: string | null;
   created_at: string;
   /** Owner-entered date the key stops working; null when unknown. */
   expires_at?: string | null;

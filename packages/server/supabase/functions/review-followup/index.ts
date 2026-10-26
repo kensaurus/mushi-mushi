@@ -132,7 +132,8 @@ import {
   type FollowupKey,
   type FollowupSettings,
 } from '../_shared/review-followup-db.ts'
-import { resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { markCursorKeyExhausted, resolveCursorApiKeyWithSource } from '../_shared/agent-adapters.ts'
+import { isCursorKeyLimitError } from '../_shared/spend-down.ts'
 
 const log = rootLog.child('review-followup')
 
@@ -709,6 +710,10 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     } else if (err instanceof CursorApiError && err.status === 409) {
       // agent_busy (one active run per agent): try again next tick.
       return wait('agent_busy', err.message.slice(0, 300))
+    } else if (err instanceof CursorApiError && isCursorKeyLimitError(err.message)) {
+      // The account reached its plan's limit: mark the key for every path and wait (it may come back, or another key may be chosen).
+      if (key.keyId) await markCursorKeyExhausted(db, key.keyId, err.message)
+      return wait('key_used_up', err.message.slice(0, 300))
     } else if (err instanceof CursorApiError && err.status >= 400 && err.status < 500 && err.status !== 429) {
       // Cursor refused the request itself (bad model, no repo access, …): the
       // same request would be refused again. Shown in the console as is.

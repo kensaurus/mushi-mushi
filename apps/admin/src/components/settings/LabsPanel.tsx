@@ -4,7 +4,8 @@
  *          bug → diagnosis → fix loop (lib/labs.ts), grouped the way the
  *          registry groups them. On adds the page to the sidebar; off only
  *          hides it there — every page stays reachable from ⌘K and by link.
- *          State lives in this browser (localStorage), so there is no Save.
+ *          Saved to your account as you switch (lib/labs.ts), so there is no
+ *          Save and other browsers get the same pages.
  */
 
 import { Btn, Toggle } from '../ui'
@@ -47,7 +48,6 @@ export function LabsPanel() {
                         size="sm"
                         variant="ghost"
                         to={f.paths[0]}
-                        disabled={!on}
                         aria-label={`Open ${f.label}`}
                         data-testid={`lab-open-${f.id}`}
                       >

@@ -317,3 +317,17 @@ export const SAFE_INTERNAL_MESSAGE =
 /** Safe client message for DB/RPC failures (detail stays in Sentry). */
 export const SAFE_DB_MESSAGE =
   'We could not load this data right now. Retry in a moment; if it keeps failing, quote the error code in a bug report.'
+
+/**
+ * The HTTP status of a PostgREST call that never reached a query: 0 (the
+ * fetch itself failed), 502/503/504 from the API gateway, or a Cloudflare
+ * 520-527 origin error. postgrest-js parses a JSON gateway body into `error`,
+ * often without a `message`, so the status is the only reliable signal.
+ * MUSHI-MUSHI-SERVER-2R: on 2026-10-23 10:08-10:12 UTC every webhook audit
+ * insert got a 520/522/525 and was reported as "insert returned no row".
+ */
+export function isTransientGatewayStatus(status: number | null | undefined): boolean {
+  if (status === 0) return true
+  if (status === 502 || status === 503 || status === 504) return true
+  return typeof status === 'number' && status >= 520 && status <= 527
+}

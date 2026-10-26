@@ -150,7 +150,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
       {!projectId && (
         <Card className="p-5">
           <p className="text-sm text-fg-muted">Select a project from the switcher or open Copilot from a project card.</p>
-          <Link to="/projects" className="text-xs text-accent underline mt-2 inline-block">Go to Projects</Link>
+          <Link to="/projects" className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}>Go to Projects</Link>
         </Card>
       )}
 
@@ -180,7 +180,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           <p className="text-sm text-fg-muted">
             Project not found — it may have been deleted, or the link is stale.
           </p>
-          <Link to="/projects" className="text-xs text-accent underline mt-2 inline-block">
+          <Link to="/projects" className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}>
             Go to Projects
           </Link>
         </Card>
@@ -232,7 +232,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           <Section title="2 · Install snippet">
             <p className="text-xs text-fg-muted mb-3">
               Use the canonical{' '}
-              <Link to={`/onboarding?tab=sdk&project=${projectId}`} className="text-accent underline">
+              <Link to={`/onboarding?tab=sdk&project=${projectId}`} className={LINK_ACCENT}>
                 Onboarding → SDK tab
               </Link>{' '}
               for the live configurator, connection status chip, and copy-paste snippet.

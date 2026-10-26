@@ -3,6 +3,7 @@ import {
   classifyPlatformConnection,
   deriveIntegrationSignals,
   freshestHeartbeat,
+  isSdkKey,
   type IntegrationSignalInput,
 } from '../../supabase/functions/_shared/setup-signals.ts'
 
@@ -140,6 +141,29 @@ describe('freshestHeartbeat', () => {
 
   it('returns null when no key has checked in', () => {
     expect(freshestHeartbeat([{ last_seen_at: null }])).toBeNull()
+  })
+})
+
+describe('isSdkKey', () => {
+  it('counts only keys an SDK uses: report:write with no MCP scope', () => {
+    expect(isSdkKey(['report:write'])).toBe(true)
+    // A CLI / MCP key often also has report:write; its calls are not the app's SDK.
+    expect(isSdkKey(['report:write', 'mcp:read', 'mcp:write'])).toBe(false)
+    expect(isSdkKey(['report:write', 'mcp:read'])).toBe(false)
+    // mushi-demo's public read-only demo key, called by curl, read "SDK 17d ago".
+    expect(isSdkKey(['mcp:read'])).toBe(false)
+    expect(isSdkKey(['runner:write'])).toBe(false)
+    expect(isSdkKey(['voice:write'])).toBe(false)
+    expect(isSdkKey(null)).toBe(false)
+    expect(isSdkKey([])).toBe(false)
+  })
+
+  it('leaves a project whose only seen key is an MCP key with no SDK heartbeat', () => {
+    const keys = [
+      { scopes: ['mcp:read'], last_seen_at: '2026-10-09T04:00:06Z', last_seen_user_agent: 'curl/8.21.0' },
+      { scopes: ['report:write'], last_seen_at: null },
+    ]
+    expect(freshestHeartbeat(keys.filter((k) => isSdkKey(k.scopes)))).toBeNull()
   })
 })
 

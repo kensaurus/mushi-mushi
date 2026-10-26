@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -55,6 +55,7 @@ import {
   ALL_APPS_VALUE,
   OPEN_PROJECT_SWITCHER_EVENT,
   PROJECT_SCOPE_QUERY_PARAM,
+  allAppsSupportFor,
   getStoredProjectScopeMode,
   setStoredProjectScopeMode,
   useProjectScopeMode,
@@ -80,6 +81,11 @@ export function ProjectSwitcher() {
   // "All apps" (lib/projectScope.ts) rides on top of the active project:
   // `?project=` keeps the last concrete app for pages that show one.
   const scopeMode = useProjectScopeMode()
+  // …which is why the chip names the app the page is *actually* showing: on a
+  // route that can't combine apps, "All apps" in the header contradicted the
+  // one app below it (report ee6547f5). The dropdown keeps the chosen mode.
+  const { pathname } = useLocation()
+  const pageCombinesApps = allAppsSupportFor(pathname) !== 'single'
   // Inline "create new project" affordance — exposed in the dropdown
   // footer so users don't have to navigate away to /projects to spin up
   // a fresh workspace. `creating` toggles the row from a chip to an input.
@@ -297,22 +303,42 @@ export function ProjectSwitcher() {
     }
   }, [creating])
 
-  if (setup.loading) {
-    return <HeaderContextChipSkeleton label="Loading project" />
-  }
   if (!setup.data) {
     // The fetch failed and nothing is cached: say so and offer a retry
     // instead of a skeleton that never resolves (B1, 2026-10-20).
-    return setup.error ? (
-      <HeaderContextChip
-        label="Projects unavailable"
-        trailing={<span className="text-fg-faint">Retry</span>}
-        onClick={() => setup.reload()}
-        title={`Could not load your projects: ${setup.error}. Click to retry.`}
-      />
-    ) : (
-      <HeaderContextChipSkeleton label="Loading project" />
-    )
+    if (setup.error) {
+      return (
+        <HeaderContextChip
+          label="Projects unavailable"
+          trailing={<span className="text-fg-faint">Retry</span>}
+          onClick={() => setup.reload()}
+          title={`Could not load your projects: ${setup.error}. Click to retry.`}
+        />
+      )
+    }
+    // All apps is already known from the URL or storage. Waiting on
+    // /v1/admin/setup to label the chip left it greyed on "Loading project"
+    // for as long as that list took (and for good, if the fetch never settled).
+    if (scopeMode === 'all') {
+      // Clickable while the list is in flight: a fetch that never settles
+      // (the reported grey pill) must still offer a retry. aria-busy is left
+      // off so the control is not skipped as unavailable.
+      return (
+        <HeaderContextChip
+          data-testid="project-switcher-chip"
+          aria-label="Project: All apps — switch project"
+          title="All apps. The app list is still loading. Click to try again."
+          onClick={() => setup.reload()}
+          label={
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <AllAppsGlyph size={14} />
+              <span className="truncate">All apps</span>
+            </span>
+          }
+        />
+      )
+    }
+    return <HeaderContextChipSkeleton label="Loading project" />
   }
   if (setup.data.projects.length === 0) {
     return (
@@ -380,12 +406,19 @@ export function ProjectSwitcher() {
     setOpen(false)
   }
   const allApps = scopeMode === 'all'
+  // What this page is showing, which is what the chip must say.
+  const showingAllApps = allApps && pageCombinesApps
   // Every app the caller can open, across teams once the directory is read
   // (the combined pages read all of them), else this team's.
   const appCount = Math.max(projects.length, directory.data?.projects.length ?? 0)
 
   const snapshot = snapshots.byId.get(active.project_id)
-  const chipName = allApps ? 'All apps' : active.project_name
+  const chipName = showingAllApps ? 'All apps' : active.project_name
+  const chipTitle = showingAllApps
+    ? `All apps (pages that show one app use ${active.project_name})`
+    : allApps
+      ? `This page shows one app at a time: ${active.project_name}. All apps stays on elsewhere.`
+      : `Project: ${active.project_name}`
 
   return (
     <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
@@ -393,12 +426,12 @@ export function ProjectSwitcher() {
         // The favicon already says "project" — the uppercase PROJECT kicker
         // spent header width that long slugs needed, so it lives in the
         // tooltip now instead of truncating the name.
-        title={allApps ? `All apps (pages that show one app use ${active.project_name})` : `Project: ${active.project_name}`}
+        title={chipTitle}
         aria-label={`Project: ${chipName} — switch project`}
         data-testid="project-switcher-chip"
         label={
           <span className="inline-flex items-center gap-1.5 min-w-0">
-            {allApps ? (
+            {showingAllApps ? (
               <AllAppsGlyph size={14} />
             ) : (
               <ProjectFavicon
