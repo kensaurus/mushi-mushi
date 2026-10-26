@@ -35,7 +35,7 @@ const cleanups = new Set<InterruptCleanup>()
  * How long cleanups get before the process exits anyway: well inside
  * systemd's (90 s) and Docker's (10 s) stop timeouts.
  */
-export const INTERRUPT_CLEANUP_MS = 8_000
+const INTERRUPT_CLEANUP_MS = 8_000
 
 /**
  * Run `fn` when SIGINT / SIGTERM arrives, before the process exits: e.g.
