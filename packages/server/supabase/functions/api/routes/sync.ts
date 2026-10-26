@@ -34,7 +34,7 @@ import {
 } from '../../_shared/report-status.ts'
 import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
-import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
+import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -374,16 +374,17 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: updateErr.message } }, 500)
     }
 
-    // Persist the triage note to report_notes (if the table exists).
-    // This is a best-effort write — we don't fail the PATCH if the insert fails.
+    // The note becomes a team note on the report: the console's "Triage
+    // note", internal and never sent to the reporter. A note-only request
+    // fails loudly when it is not saved; with a status or severity change it
+    // is reported as note_saved:false instead of failing the change.
+    let noteSaved: boolean | undefined
     if (note) {
-      await db.from('report_notes').insert({
-        report_id: id,
-        project_id: projectId,
-        body: note,
-        source: 'cli',
-        created_at: new Date().toISOString(),
-      }).then(() => null, () => null)
+      const saved = await postTeamNote(db, { projectId, reportId: id, body: note, authorName: 'CLI / MCP note' })
+      noteSaved = saved.ok
+      if (!saved.ok && status === undefined && severity === undefined) {
+        return c.json({ ok: false, error: { code: 'NOTE_NOT_SAVED', message: saved.error } }, 500)
+      }
     }
 
     // Fire reporter notification when status changes to resolved or dismissed.
@@ -420,7 +421,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         .then(() => null, () => null)
     }
 
-    return c.json({ ok: true, data: updated })
+    return c.json({ ok: true, data: updated, ...(noteSaved === undefined ? {} : { note_saved: noteSaved }) })
   })
 
   // ── POST /v1/sync/reports/:id/reply ──────────────────────────────────────
