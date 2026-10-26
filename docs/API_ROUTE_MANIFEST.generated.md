@@ -2,16 +2,16 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-24 · **747** routes.
+> Generated: 2026-10-26 · **747** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 195 |
+| `adminOrApiKey` | 196 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 384 |
-| `jwtOrApiKey` | 3 |
+| `jwtOrApiKey` | 2 |
 | `public` | 61 |
 | `unknown` | 45 |
 
@@ -445,7 +445,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | PATCH | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | POST | `/v1/admin/projects/:pid/qa-stories/:sid/run` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
-| GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
+| GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | DELETE | `/v1/admin/projects/:pid/sdk-upgrade/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |

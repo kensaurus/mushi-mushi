@@ -309,3 +309,40 @@ Deno.test('a manifest tool scopes to the projectId the caller named (account-lev
   // No project named: the connection's own headers, unchanged.
   assertEquals(calls[1].init.headers['X-Mushi-Project-Id'], undefined);
 });
+
+Deno.test('QA run tools use the named project and the unwrapped runs list', async () => {
+  const calls: Array<{ path: string; init: RequestInit & { headers: Record<string, string> } }> = [];
+  const tools = buildManifestTools({
+    apiCall: (path, init) => {
+      calls.push({ path, init: init as RequestInit & { headers: Record<string, string> } });
+      return Promise.resolve({ runs: [{ id: 'run-1', status: 'failed' }, { id: 'run-2', status: 'passed' }] });
+    },
+    requireString: (value, name) => {
+      if (typeof value !== 'string' || !value) throw new Error(`${name} is required`);
+    },
+    McpError: TestMcpError,
+    ERR_INVALID_PARAMS: -32602,
+  });
+  const projectId = '67a6453c-375d-41d7-833a-b33471159442';
+  const storyId = '11111111-1111-4111-8111-111111111111';
+  const context = { authHeaders: { Authorization: 'Bearer redacted' } };
+
+  await tools.list_qa_story_runs.handler({ projectId, storyId, limit: 5 }, context);
+  assertEquals(calls[0].path, `/v1/admin/projects/${projectId}/qa-stories/${storyId}/runs?limit=5`);
+  assertEquals(calls[0].init.headers['X-Mushi-Project-Id'], projectId);
+  assertEquals(calls[0].init.headers.Authorization, 'Bearer redacted');
+
+  const run = await tools.get_qa_story_run.handler({ projectId, storyId, runId: 'run-1' }, context);
+  assertEquals(run, { id: 'run-1', status: 'failed' });
+  assertEquals(calls[1].path, `/v1/admin/projects/${projectId}/qa-stories/${storyId}/runs?limit=50`);
+  assertEquals(calls[1].init.headers['X-Mushi-Project-Id'], projectId);
+
+  let missing = '';
+  try {
+    await tools.list_qa_story_runs.handler({ storyId }, context);
+  } catch (err) {
+    missing = err instanceof Error ? err.message : String(err);
+  }
+  assertEquals(missing, 'projectId is required');
+  assertEquals(calls.length, 2);
+});

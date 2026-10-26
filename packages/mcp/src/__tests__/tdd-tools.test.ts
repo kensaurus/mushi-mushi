@@ -302,6 +302,81 @@ describe('TDD MCP tools', () => {
     })
   })
 
+  describe('list_qa_story_runs', () => {
+    it('reads runs for the configured project and sends that project header', async () => {
+      fetchMock.pushOk({ runs: [{ id: 'run-1', status: 'passed' }] })
+
+      await client.callTool({
+        name: 'list_qa_story_runs',
+        arguments: { storyId: 'story-1', limit: 5 },
+      })
+
+      const call = fetchMock.lastCall()
+      expect(call.url).toContain(`/projects/${PROJECT_ID}/qa-stories/story-1/runs?limit=5`)
+      expect(call.headers['X-Mushi-Project-Id']).toBe(PROJECT_ID)
+    })
+
+    it('refuses another project on a project-bound connection before calling the API', async () => {
+      const result = await client.callTool({
+        name: 'list_qa_story_runs',
+        arguments: { storyId: 'story-1', projectId: 'other-project' },
+      })
+
+      expect(result.isError).toBe(true)
+      expect(JSON.stringify(result.content)).toContain('PROJECT_SCOPE_MISMATCH')
+      expect(fetchMock.calls).toHaveLength(0)
+    })
+
+    it('uses the projectId an account connection passes, including project_id', async () => {
+      const other = '2000000b-0000-4000-8000-000000000000'
+      const accountFetch = createStubFetch()
+      accountFetch.pushOk({ runs: [] })
+      const server = createMushiServer({
+        version: '0.0.0-test',
+        apiEndpoint: API_ENDPOINT,
+        apiKey: API_KEY,
+        fetch: accountFetch.stub,
+      })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      const account = new Client({ name: 'mushi-mcp-tdd-account', version: '0.0.0' }, { capabilities: {} })
+      await Promise.all([server.connect(serverTransport), account.connect(clientTransport)])
+      try {
+        await account.callTool({
+          name: 'list_qa_story_runs',
+          arguments: { storyId: 'story-1', project_id: other },
+        })
+      } finally {
+        await account.close().catch(() => {})
+      }
+      const call = accountFetch.lastCall()
+      expect(call.url).toContain(`/projects/${other}/qa-stories/story-1/runs`)
+      expect(call.headers['X-Mushi-Project-Id']).toBe(other)
+    })
+  })
+
+  describe('get_qa_story_run', () => {
+    it('picks the run from the unwrapped runs list for the named project', async () => {
+      fetchMock.pushOk({
+        runs: [
+          { id: 'run-other', status: 'passed' },
+          { id: 'run-1', status: 'failed', error_message: 'button missing' },
+        ],
+      })
+
+      const result = await client.callTool({
+        name: 'get_qa_story_run',
+        arguments: { storyId: 'story-1', runId: 'run-1' },
+      })
+
+      const call = fetchMock.lastCall()
+      expect(call.url).toContain(`/projects/${PROJECT_ID}/qa-stories/story-1/runs?limit=50`)
+      expect(call.headers['X-Mushi-Project-Id']).toBe(PROJECT_ID)
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text
+      expect(text).toContain('button missing')
+      expect(text).not.toContain('run-other')
+    })
+  })
+
   describe('improve_qa_story', () => {
     it('calls POST /pdca/improve-qa-stories with project_id', async () => {
       fetchMock.pushOk({ improved: 3 })

@@ -2176,6 +2176,10 @@
       "inputSchema": {
         "type": "object",
         "properties": {
+          "projectId": {
+            "description": "Project UUID that owns the story. Defaults to the configured project. On an account connection, pass the project the story belongs to. (`project_id` is accepted too.)",
+            "type": "string"
+          },
           "storyId": {
             "type": "string",
             "description": "QA story id (uuid)"
@@ -3594,6 +3598,10 @@
       "inputSchema": {
         "type": "object",
         "properties": {
+          "projectId": {
+            "description": "Project UUID that owns the story. Defaults to the configured project. On an account connection, pass the project the story belongs to. (`project_id` is accepted too.)",
+            "type": "string"
+          },
           "storyId": {
             "type": "string",
             "description": "QA story id (uuid)"

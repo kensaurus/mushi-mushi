@@ -248,6 +248,13 @@ export function buildManifestTools(deps: {
           }
         }
         const pid = (args.projectId ?? ctx.projectIdHint) as string | undefined;
+        // An account connection has no projectIdHint. These two tools used to
+        // call `/projects//qa-stories/…/runs`, which the API answers 404 with
+        // `{ error: "Not found" }` — hosted surfaces that as "Upstream 404".
+        const pathOnly = spec.path.split('?')[0] ?? spec.path;
+        if (pathOnly.includes('/qa-stories/') && pathOnly.endsWith('/runs') && !pid) {
+          throw new McpError(ERR_INVALID_PARAMS, 'projectId is required');
+        }
 
         if (spec.transform === 'fix_suggest') {
           const report = (await apiCall(interpolatePath(spec.path, args, ctx), {
@@ -281,12 +288,13 @@ export function buildManifestTools(deps: {
 
         if (spec.transform === 'qa_run_pick') {
           if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required');
+          // apiCall unwraps the envelope, so the body is `{ runs }`, not `{ data: { runs } }`.
           const data = (await apiCall(interpolatePath(spec.path, args, ctx), {
-            headers: ctx.authHeaders,
+            headers: { ...ctx.authHeaders, 'X-Mushi-Project-Id': pid },
           })) as {
-            data?: { runs?: Array<{ id: string }> };
+            runs?: Array<{ id: string }>;
           };
-          const run = data?.data?.runs?.find((r) => r.id === args.runId) ?? null;
+          const run = data?.runs?.find((r) => r.id === args.runId) ?? null;
           if (!run) throw new McpError(ERR_INVALID_PARAMS, 'Run not found in recent runs');
           return run;
         }
