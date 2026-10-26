@@ -191,11 +191,9 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
             </SelectField>
           </div>
         ) : null}
-        {/* 2.125rem is the height of the fields beside it (text-sm 1.25rem +
-            py-1.5 + 1px border), so the button lines up with them instead of
-            sitting as a ~22px chip under their centre line. */}
         <Btn
           size="sm"
+          // mushi-mushi-allowlist: field row is text-sm line-height + py-1.5 + 1px borders (2.125rem); no height token matches
           className="h-[2.125rem] shrink-0"
           onClick={runImport}
           loading={running}
