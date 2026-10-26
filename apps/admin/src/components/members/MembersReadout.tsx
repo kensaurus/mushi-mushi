@@ -16,6 +16,7 @@
 import { DetailRows, type DetailRowItem } from '../ui/fields'
 import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
+import { visiblePlanLabelOr } from '../../lib/visiblePlanLabel'
 import type { MembersStats } from './types'
 import { IconGlobe, IconHealth } from '../icons'
 
@@ -57,7 +58,11 @@ export function MembersReadout({ stats, orgId, fetchedAt, isValidating }: Props)
     },
     {
       label: 'Plan',
-      value: stats.planDisplayName ?? stats.planId ?? '—',
+      value: visiblePlanLabelOr(
+        stats.planDisplayName ?? stats.planId,
+        stats.billingMode === 'complimentary',
+        '—',
+      ),
       tone: stats.planId ? 'info' : 'muted',
     },
     {

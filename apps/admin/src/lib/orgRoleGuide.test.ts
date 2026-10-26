@@ -27,5 +27,19 @@ describe('orgRoleGuide', () => {
       teamsEnabled: true,
     })
     expect(copy.headline).toMatch(/2 of 3/)
+    expect(copy.body).toContain("You're on Hobby with 1 seat left")
+  })
+
+  it('complimentary capped plans do not read as paid Pro', () => {
+    const copy = seatBillingExplainer({
+      planDisplayName: 'Pro',
+      planId: 'pro',
+      seatLimit: 5,
+      seatsUsed: 3,
+      teamsEnabled: true,
+      complimentary: true,
+    })
+    expect(copy.body).toContain("You're on Comp · Pro with 2 seats left")
+    expect(copy.body).not.toContain("You're on Pro ")
   })
 })

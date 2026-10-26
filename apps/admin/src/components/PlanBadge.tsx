@@ -12,6 +12,7 @@
 
 import { Link } from 'react-router-dom'
 import { useActivePlan } from '../lib/useActivePlan'
+import { visiblePlanLabel } from '../lib/visiblePlanLabel'
 import { CHIP_TONE } from '../lib/chipTone'
 
 const TONE: Record<string, string> = {
@@ -71,14 +72,12 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
           ? 'Unlimited reports'
           : null
 
-  // Complimentary accounts (Mushi staff / sponsored / beta) intentionally take
-  // over the entire pill — showing "Pro $99/mo" on a comp account
-  // misrepresents the relationship. We surface "Admin" as the primary identity
-  // and demote the entitlement tier to a secondary chip so the user still
-  // knows which feature set they have access to.
+  // Complimentary accounts (Mushi staff / sponsored / beta) share the header
+  // and Team-page label. "Pro" reads as a paid plan; "Admin" reads as a role.
   if (plan.isComplimentary) {
+    const label = visiblePlanLabel({ name: plan.displayName, complimentary: true })
     const tooltip = [
-      `Admin account — billed by Mushi Mushi at no cost`,
+      `${label} — billed by Mushi Mushi at no cost`,
       `Feature set tracks the ${plan.displayName} tier`,
       usageHint,
     ]
@@ -88,26 +87,14 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       <Link
         to="/billing"
         title={tooltip}
-        aria-label={`Admin account with ${plan.displayName} entitlements. ${usageHint ?? ''} Open billing.`}
+        aria-label={`${label}. ${usageHint ?? ''} Open billing.`}
         data-tour-id="plan-badge"
         className={`inline-flex items-center font-medium motion-safe:transition-opacity min-w-0 ${
           sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
         } ${densityClasses(sidebar)}`}
       >
         <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
-        <span className={sidebar ? 'truncate' : ''}>Admin</span>
-        {sidebar ? (
-          <span className="text-fg-faint font-mono uppercase tracking-wider text-2xs shrink-0">
-            {plan.displayName}
-          </span>
-        ) : (
-          <span
-            className="rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 px-1 py-0.5 text-2xs"
-            aria-hidden="true"
-          >
-            {plan.displayName}
-          </span>
-        )}
+        <span className={sidebar ? 'truncate' : ''}>{label}</span>
       </Link>
     )
   }

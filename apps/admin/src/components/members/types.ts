@@ -16,6 +16,8 @@ export interface MembersStats {
   atSeatCap: boolean
   planId: string | null
   planDisplayName: string | null
+  /** From `organizations.billing_mode`. Absent on cached responses from before the field shipped. */
+  billingMode?: 'stripe' | 'complimentary' | null
   currentUserRole: 'owner' | 'admin' | 'member' | 'viewer'
   canManage: boolean
   organizationName: string | null

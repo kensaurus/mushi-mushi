@@ -604,7 +604,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
 
     const [{ data: org }, { data: memberRows, error: memberErr }, { data: inviteRows, error: inviteErr }] =
       await Promise.all([
-        db.from('organizations').select('id, slug, name, plan_id').eq('id', orgId).maybeSingle(),
+        db.from('organizations').select('id, slug, name, plan_id, billing_mode').eq('id', orgId).maybeSingle(),
         db
           .from('organization_members')
           .select('last_active_at')
@@ -670,6 +670,10 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
         atSeatCap,
         planId: (org as { plan_id?: string | null } | null)?.plan_id ?? null,
         planDisplayName,
+        billingMode:
+          (org as { billing_mode?: string | null } | null)?.billing_mode === 'complimentary'
+            ? 'complimentary'
+            : 'stripe',
         currentUserRole: role,
         canManage,
         organizationName: (org as { name?: string | null } | null)?.name ?? null,

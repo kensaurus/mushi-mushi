@@ -1,6 +1,10 @@
 /**
  * Plain-language org role permissions + seat/billing FAQ for Members page.
+ * Seat copy names the plan through `visiblePlanLabel`, so a complimentary
+ * org does not read as a paid "Pro".
  */
+
+import { visiblePlanLabel } from './visiblePlanLabel'
 
 export type OrgRoleId = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -76,6 +80,8 @@ export interface SeatBillingContext {
   seatLimit: number | null
   seatsUsed: number
   teamsEnabled: boolean
+  /** Org `billing_mode`. Complimentary seats use the shared plan label. */
+  complimentary?: boolean
 }
 
 /** Answers "will adding an admin cost me money?" in plain language. */
@@ -86,7 +92,10 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
   tone: 'neutral' | 'info' | 'warn'
   calloutLabel?: string
 } {
-  const plan = ctx.planDisplayName ?? ctx.planId ?? 'your plan'
+  const plan = visiblePlanLabel({
+    name: ctx.planDisplayName ?? ctx.planId ?? 'your plan',
+    complimentary: ctx.complimentary === true,
+  })
 
   if (!ctx.teamsEnabled) {
     return {

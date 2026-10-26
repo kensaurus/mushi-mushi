@@ -21,6 +21,7 @@ import {
 import { knownProjectTeam } from '../lib/crossTeamProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
+import { visiblePlanLabel } from '../lib/visiblePlanLabel'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
 import { IconMembers } from './icons'
 
@@ -33,23 +34,19 @@ export interface OrganizationSummary {
   is_personal?: boolean
   /**
    * Org-level billing posture from `organizations.billing_mode`.
-   * When `'complimentary'` the team pill renders "admin" instead of the
-   * underlying `plan_id` so internal staff / sponsored orgs don't read as
-   * paying customers in the global header.
+   * Complimentary orgs share `visiblePlanLabel` with the Team page and the
+   * sidebar ("Comp · Pro"), not a bare "comp" and not "admin" — "admin"
+   * next to the team name reads as the viewer's role.
    */
   billing_mode?: 'stripe' | 'complimentary'
 }
 
-/**
- * Render the right-hand chip on each org row. Complimentary orgs get a
- * distinct "comp" label that overrides the raw `plan_id` so a comp Pro org
- * never reads as "Pro" in the header. It used to say "admin", which next to
- * the team name read as the user's role and made the team switcher look like
- * a user menu. Returned as a plain string so the caller stays in control of
- * layout / wrapping.
- */
+/** Right-hand chip on the team pill and each switcher row. */
 function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'comp' : org.plan_id
+  return visiblePlanLabel({
+    name: org.plan_id,
+    complimentary: org.billing_mode === 'complimentary',
+  })
 }
 
 export function OrgSwitcher() {

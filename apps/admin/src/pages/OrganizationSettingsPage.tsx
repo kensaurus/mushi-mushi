@@ -45,6 +45,7 @@ import {
   type MembersTabId,
 } from '../components/members/types'
 import { CHIP_TONE } from '../lib/chipTone'
+import { visiblePlanLabel } from '../lib/visiblePlanLabel'
 
 // Undo window for soft-delete operations on this page. Long enough for the
 // "wait, that wasn't who I meant" reaction (Nielsen reports ~5-10 s for
@@ -659,8 +660,19 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
-          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
+        <Badge
+          tone={
+            stats.billingMode === 'complimentary'
+              ? 'brand'
+              : teamsEnabled
+                ? 'okSubtle'
+                : 'warnSubtle'
+          }
+        >
+          {visiblePlanLabel({
+            name: stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby',
+            complimentary: stats.billingMode === 'complimentary',
+          })}
         </Badge>
       </PageHeaderBar>
 
@@ -716,6 +728,7 @@ export function OrganizationSettingsPage() {
         seatLimit={stats.seatLimit}
         seatsUsed={stats.seatsUsed}
         teamsEnabled={teamsEnabled}
+        complimentary={stats.billingMode === 'complimentary'}
       />
 
       {(activeTab === 'setup' || !teamsEnabled) && (
