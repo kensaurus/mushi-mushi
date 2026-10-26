@@ -60,6 +60,41 @@ export function multiAccountReason(tokens: number, userAgent: string | null | un
     : `Multi-account: ${tokens} reporter tokens from same device`
 }
 
+const MULTI_ACCOUNT_COUNT = /^(Multi-account: )(\d+)( reporter tokens\b)/
+
+/**
+ * The sentence is written once, at the first flag. Tokens added later raise
+ * the device card's count and leave this number behind, so the chip and the
+ * sentence disagree. Replace only the count; keep "same device" vs the
+ * scripted-client clause, which this call cannot re-derive without a User-Agent.
+ */
+export function alignMultiAccountReason(
+  reason: string | null | undefined,
+  tokenCount: number,
+): string | null | undefined {
+  if (typeof reason !== 'string') return reason
+  if (!Number.isInteger(tokenCount) || tokenCount < 0) return reason
+  return reason.replace(MULTI_ACCOUNT_COUNT, `$1${tokenCount}$3`)
+}
+
+/**
+ * Same as {@link alignMultiAccountReason}, but a request that still carries
+ * its User-Agent rewrites the whole sentence so a scripted client stays named.
+ * A manual or velocity reason is not a multi-account sentence and is returned
+ * unchanged.
+ */
+export function refreshStaleMultiAccountReason(
+  reason: string | null | undefined,
+  tokenCount: number,
+  userAgent: string | null | undefined,
+): string | null | undefined {
+  if (typeof reason !== 'string') return reason
+  const match = MULTI_ACCOUNT_COUNT.exec(reason)
+  if (!match || Number(match[2]) === tokenCount) return reason
+  if (!userAgent?.trim()) return alignMultiAccountReason(reason, tokenCount)
+  return multiAccountReason(tokenCount, userAgent)
+}
+
 export async function checkAntiGaming(
   db: SupabaseClient,
   projectId: string,
@@ -169,10 +204,14 @@ async function runMultiAccountCheck(
     let flagged = existing.flagged_as_suspicious
     let reason = existing.flag_reason
 
-    // Multi-account detection
+    // Multi-account detection. Once flagged, keep the sentence's count equal
+    // to the token list — the admin card shows both, and a frozen count
+    // contradicts the chip.
     if (unreviewedTokenCount(tokens.length, existing.reviewed_token_count) > MULTI_ACCOUNT_THRESHOLD && !flagged) {
       flagged = true
       reason = multiAccountReason(tokens.length, device.userAgent)
+    } else if (flagged) {
+      reason = refreshStaleMultiAccountReason(reason, tokens.length, device.userAgent)
     }
 
     await db.from('reporter_devices').update({
