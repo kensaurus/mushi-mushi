@@ -35,7 +35,7 @@ export function FixOpeners({ dispatchers, now }: Props) {
   const rows = [...dispatchers].sort((a, b) => Number(!!b.problem) - Number(!!a.problem) || a.name.localeCompare(b.name))
   return (
     <div className="overflow-x-auto" data-testid="pipeline-openers">
-      <table className="w-full min-w-[40rem] text-left text-2xs">
+      <table className="w-full min-w-160 text-left text-2xs">
         <thead className="text-fg-muted">
           <tr className="border-b border-edge-subtle">
             <th className="py-1.5 pr-3 font-medium">App</th>
