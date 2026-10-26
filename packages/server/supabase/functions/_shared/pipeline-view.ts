@@ -62,6 +62,8 @@ export interface PipelineItem {
   since: string
   lastError: string | null
   lastEventAt: string | null
+  /** What the latest fix event said ("Release train: this fix breaks CI"). */
+  lastEventLabel: string | null
   failingChecks: string[]
   review: { verdict: string | null; summary: string | null; findings: string[] } | null
   queueDetail: string | null
@@ -150,6 +152,12 @@ export interface FollowupRow {
   kind: string | null
 }
 
+export interface EventRow {
+  fix_attempt_id: string
+  at: string
+  label: string | null
+}
+
 export interface DeployRow {
   project_id: string
   observed_version: string | null
@@ -166,6 +174,10 @@ export interface PipelineInput {
   followups: FollowupRow[]
   ciJobs: Map<string, CiJobForRepair[]>
   deploys: DeployRow[]
+  /** Recent fix events; the latest per attempt is shown. */
+  events?: EventRow[]
+  /** Apps whose organization has review follow-ups on; their CI-red and fix-first groups drop the setting link. */
+  followupsOn?: Set<string>
 }
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
@@ -322,6 +334,11 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
   const queueByAttempt = new Map(input.queue.filter((q) => ACTIVE_QUEUE.has(q.state)).map((q) => [q.fix_attempt_id, q]))
   const followupActive = new Set(input.followups.filter((f) => ACTIVE_FOLLOWUP.has(f.status)).map((f) => f.fix_attempt_id))
   const reportsById = new Map(input.reports.map((r) => [r.id, r]))
+  const lastEvent = new Map<string, EventRow>()
+  for (const e of input.events ?? []) {
+    const prev = lastEvent.get(e.fix_attempt_id)
+    if (!prev || e.at > prev.at) lastEvent.set(e.fix_attempt_id, e)
+  }
   // Reports with a fix in flight: not "waiting for a fix", and an older failed attempt is not stuck.
   const liveReports = new Set(
     input.attempts
@@ -333,6 +350,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     const q = queueByAttempt.get(a.id) ?? null
     const rv = reviews.get(a.id) ?? null
     const report = a.report_id ? reportsById.get(a.report_id) : undefined
+    const ev = lastEvent.get(a.id)
     return {
       id: a.id,
       projectId: a.project_id,
@@ -344,7 +362,8 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       queueId: q?.id ?? null,
       since,
       lastError: null,
-      lastEventAt: null,
+      lastEventAt: ev?.at ?? null,
+      lastEventLabel: clip(ev?.label, 140),
       failingChecks: [],
       review: rv ? { verdict: rv.verdict, summary: clip(rv.summary, 400), findings: findingLines(rv.findings) } : null,
       queueDetail: q?.detail ?? null,
@@ -387,13 +406,6 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     const ci = ciHeadState(jobs)
     const failing = ci.state === 'code_failure' ? ci.failing.map((f) => f.name) : []
     const reviewedAt = rv?.completed_at ?? rv?.created_at ?? a.created_at
-
-    // 1. A draft whose CI never ran: nothing moves it until it is marked ready.
-    if (a.pr_state === 'draft' && ci.state === 'none' && !a.check_run_conclusion) {
-      const stuck = age(now, a.created_at) > HOUR
-      groups.add('draft_no_ci', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['draft', 'drafts'], text: 'CI never ran', actions: ['mark_ready', 'close'] }, itemOf(a, a.created_at))
-      continue
-    }
 
     // 2. A conflict agent's row: resolving until the agent pushes.
     if (q?.state === 'resolving') {
@@ -442,6 +454,15 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       } else {
         groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says fix first; no follow-up agent is on it', actions: ['re_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
       }
+      continue
+    }
+
+    // A draft after its review: host repos run no CI on drafts (their gate fails
+    // on purpose), so a red check here is not a test result. The review marks a
+    // PR ready after merge / fix first; one still a draft is stuck until marked ready.
+    if (a.pr_state === 'draft') {
+      const stuck = age(now, reviewedAt) > HOUR
+      groups.add('draft_no_ci', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['draft', 'drafts'], text: 'CI never ran', actions: ['mark_ready', 'close'] }, itemOf(a, reviewedAt))
       continue
     }
 
@@ -531,6 +552,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       since: r.created_at,
       lastError: clip(r.processing_error),
       lastEventAt: null,
+      lastEventLabel: null,
       failingChecks: [],
       review: null,
       queueDetail: null,
@@ -558,6 +580,14 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
   }
 
   const all = groups.build()
+  // The follow-ups link helps only where they are off (held / conflict groups say "off" outright and keep it).
+  if (input.followupsOn) {
+    for (const g of all) {
+      if (g.settings === FOLLOWUPS_SETTING && ['ci_red', 'ci_red_queued', 'fix_first', 'held_fix_first'].includes(g.id) && g.items.every((i) => input.followupsOn!.has(i.projectId))) {
+        g.settings = null
+      }
+    }
+  }
   return PIPELINE_STAGES.map((s) => {
     const mine = all
       .filter((g) => g.stage === s.id)

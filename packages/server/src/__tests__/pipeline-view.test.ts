@@ -143,6 +143,26 @@ describe('buildPipeline', () => {
     expect(hit?.group.actions).toContain('mark_ready')
   })
 
+  it('a reviewed draft with a red check summary is a draft, never "CI is red" with CI repair', () => {
+    // Host gates fail a draft on purpose; ci_jobs not collected yet.
+    const stages = run({ attempts: [attempt({ pr_state: 'draft', check_run_conclusion: 'failure' })], ciJobs: new Map() })
+    expect(group(stages, 'draft_no_ci')?.group.actions).toEqual(['mark_ready', 'close'])
+    expect(group(stages, 'ci_red')).toBeNull()
+    // A held draft stays a review decision.
+    expect(group(run({ attempts: [attempt({ pr_state: 'draft' })], reviews: [review({ verdict: 'hold' })] }), 'hold')).not.toBeNull()
+    // An unreviewed draft waits for the review first.
+    expect(group(run({ attempts: [attempt({ pr_state: 'draft' })], reviews: [] }), 'review_slow')).not.toBeNull()
+  })
+
+  it('each item carries its latest fix event', () => {
+    const events = [
+      { fix_attempt_id: 'f1', at: '2026-10-25T00:00:00Z', label: 'Older' },
+      { fix_attempt_id: 'f1', at: '2026-10-26T00:00:00Z', label: 'Merge queue: waiting for CI' },
+    ]
+    const item = group(run({ queue: [queue()], events }), 'next_train')!.group.items[0]
+    expect(item).toMatchObject({ lastEventAt: '2026-10-26T00:00:00Z', lastEventLabel: 'Merge queue: waiting for CI' })
+  })
+
   it('time in stage comes from when it entered the stage, not updated_at', () => {
     const stages = run({ queue: [queue({ queued_at: '2026-10-24T02:00:00Z' })] })
     const train = stages.find((s) => s.id === 'train')!
@@ -159,6 +179,12 @@ describe('buildPipeline', () => {
 
     const fresh = queue({ state: 'resolving', agent_started_at: '2026-10-24T05:00:00Z', conflict_agents: 1 })
     expect(group(run({ queue: [fresh] }), 'conflict_stuck')?.group.actions).toContain('conflict_agent')
+  })
+
+  it('the follow-ups link on a red-CI group shows only where follow-ups are off', () => {
+    const red = new Map([['h1', [job({ conclusion: 'failure' })]]])
+    expect(group(run({ ciJobs: red }), 'ci_red')?.group.settings).not.toBeNull()
+    expect(group(run({ ciJobs: red, followupsOn: new Set([P]) }), 'ci_red')?.group.settings).toBeNull()
   })
 
   it('a held row says follow-ups are off and links the exact setting', () => {
