@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
 title: Angular quickstart
-description: Add Mushi to an Angular 17+ app — one provideMushi() call registers the Mushi service and error handler, so uncaught errors and user bug reports reach your queue.
+description: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue."
 ---
 
 # Angular quickstart

@@ -601,7 +601,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
 title: Angular quickstart
-description: Add Mushi to an Angular 17+ app — one provideMushi() call registers the Mushi service and error handler, so uncaught errors and user bug reports reach your queue.
+description: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue."
 ---
 
 # Angular quickstart
@@ -7892,7 +7892,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema
 
 ---
 title: '@mushi-mushi/inventory-schema'
-description: The Zod schema, JSON Schema and TypeScript types for inventory.yaml — your app's pages, the buttons and forms on each, what they should do, and the tests that prove it.
+description: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it."
 ---
 
 # `@mushi-mushi/inventory-schema`
@@ -8288,7 +8288,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci
 
 ---
 title: '@mushi-mushi/mcp-ci'
-description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — fail a PR while reports sit untriaged, dispatch a fix for a report, run the pre-release gates, and refresh crawler sign-in."
+description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in."
 ---
 
 # `@mushi-mushi/mcp-ci`
@@ -9771,7 +9771,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/ux
 
 ---
 title: '@mushi-mushi/ux'
-description: '@mushi-mushi/ux runs your coding agent over every screen of your app, one at a time, measures each change, and keeps only the ones that help, on a branch you review.'
+description: '@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.'
 ---
 
 # `@mushi-mushi/ux`

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci
 
 ---
 title: '@mushi-mushi/mcp-ci'
-description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — fail a PR while reports sit untriaged, dispatch a fix for a report, run the pre-release gates, and refresh crawler sign-in."
+description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in."
 ---
 
 # `@mushi-mushi/mcp-ci`

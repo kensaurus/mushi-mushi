@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/ux
 
 ---
 title: '@mushi-mushi/ux'
-description: '@mushi-mushi/ux runs your coding agent over every screen of your app, one at a time, measures each change, and keeps only the ones that help, on a branch you review.'
+description: '@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.'
 ---
 
 # `@mushi-mushi/ux`

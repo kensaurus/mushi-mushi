@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema
 
 ---
 title: '@mushi-mushi/inventory-schema'
-description: The Zod schema, JSON Schema and TypeScript types for inventory.yaml — your app's pages, the buttons and forms on each, what they should do, and the tests that prove it.
+description: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it."
 ---
 
 # `@mushi-mushi/inventory-schema`

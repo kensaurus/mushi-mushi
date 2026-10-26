@@ -1399,7 +1399,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/angular.md",
     keywords: ["quickstart", "angular"],
     headings: [],
-    excerpt: "Add Mushi to an Angular 17+ app — one provideMushi() call registers the Mushi service and error handler, so uncaught errors and user bug reports reach your queue.",
+    excerpt: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue.",
   },
   {
     title: "Capacitor quickstart",
@@ -1651,7 +1651,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/inventory-schema.md",
     keywords: ["sdks", "inventory-schema", "inventory", "schema", "@mushi-mushi/inventory-schema"],
     headings: ["Install", "What inventory.yaml looks like", "Programmatic use", "JSON Schema"],
-    excerpt: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml — your app's pages, the buttons and forms on each, what they should do, and the tests that prove it.",
+    excerpt: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it.",
   },
   {
     title: "MushiMushi (iOS)",
@@ -1687,7 +1687,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/mcp-ci.md",
     keywords: ["sdks", "mcp-ci", "mcp", "@mushi-mushi/mcp-ci"],
     headings: ["Quick start", "Commands", "In your IDE", "Inputs"],
-    excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — fail a PR while reports sit untriaged, dispatch a fix for a report, run the pre-release gates, and refresh crawler sign-in.",
+    excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in.",
   },
   {
     title: "MCP tools reference",
@@ -1795,7 +1795,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/ux.md",
     keywords: ["sdks", "ux", "@mushi-mushi/ux"],
     headings: ["Quick start", "From studio to merge", "What a run does", "Safety", "Agents", "Commands", "Audit and explore signed-in screens", "On GitHub Actions"],
-    excerpt: "@mushi-mushi/ux runs your coding agent over every screen of your app, one at a time, measures each change, and keeps only the ones that help, on a branch you review.",
+    excerpt: "@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.",
   },
   {
     title: "@mushi-mushi/vue",
