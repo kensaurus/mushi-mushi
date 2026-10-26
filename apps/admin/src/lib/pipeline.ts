@@ -23,6 +23,7 @@ export type PipelineAction =
   | 'queue_merge'
   | 'remove'
   | 'close'
+  | 'followup'
 
 export interface PipelineItem {
   id: string
@@ -50,7 +51,8 @@ export interface PipelineGroup {
   count: number
   oldestAt: string | null
   actions: PipelineAction[]
-  settings: { label: string; to: string } | null
+  /** The setting that holds the group; `hint` says what it needs. */
+  settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
 }
 
@@ -131,7 +133,14 @@ interface ActionMeta {
 export const ACTION_META: Record<PipelineAction, ActionMeta> = {
   ci_repair: {
     label: 'Send to CI repair',
-    confirm: 'Queues one Cursor agent per PR to make its CI green without weakening tests. It counts against the review follow-up limits.',
+    confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    needsConfirm: true,
+    needsReason: false,
+    variant: 'success',
+  },
+  followup: {
+    label: 'Send to follow-up',
+    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
     variant: 'success',

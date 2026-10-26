@@ -195,7 +195,12 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
         </button>
         <span className="flex flex-wrap items-center gap-2">
           {group.settings && (
-            <Link to={group.settings.to} className="text-2xs font-medium text-brand hover:underline" data-testid={`pipeline-group-${group.id}-settings`}>
+            <Link
+              to={group.settings.to}
+              title={group.settings.hint}
+              className="text-2xs font-medium text-brand hover:underline"
+              data-testid={`pipeline-group-${group.id}-settings`}
+            >
               {group.settings.label} →
             </Link>
           )}
@@ -210,6 +215,11 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
           />
         </span>
       </div>
+      {group.settings?.hint && (
+        <p className="-mt-1 px-2.5 pb-2 text-2xs text-fg-muted" data-testid={`pipeline-group-${group.id}-settings-hint`}>
+          {group.settings.hint}
+        </p>
+      )}
       {open && (
         <ul className="max-h-128 divide-y divide-edge-subtle overflow-y-auto border-t border-edge-subtle px-2.5">
           {group.items.map((item) => (

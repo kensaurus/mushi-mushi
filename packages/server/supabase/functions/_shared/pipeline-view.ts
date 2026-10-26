@@ -45,6 +45,7 @@ export type PipelineAction =
   | 'queue_merge'
   | 'remove'
   | 'close'
+  | 'followup'
 
 export type GroupTone = 'stuck' | 'moving' | 'done'
 
@@ -78,7 +79,8 @@ export interface PipelineGroup {
   count: number
   oldestAt: string | null
   actions: PipelineAction[]
-  settings: { label: string; to: string } | null
+  /** The setting that holds this group; `hint` says what it needs. */
+  settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
 }
 
@@ -204,7 +206,11 @@ export const RECENT_MS = 7 * 24 * HOUR
 /** Items listed per group; counts are always whole. */
 export const MAX_ITEMS_PER_GROUP = 100
 
-export const FOLLOWUPS_SETTING = { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' }
+export const FOLLOWUPS_SETTING = {
+  label: 'Review follow-ups setting',
+  to: '/settings?tab=byok#review-followups',
+  hint: 'Cloud follow-up agents need a Cursor key on this team. Without one, your local mushi work --followups lanes take follow-ups and CI repairs.',
+}
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
 
@@ -255,10 +261,17 @@ export function repoOfPrUrl(url: string | null): string | null {
  * writes these sentences (merge-queue/worker.ts, train.ts); unknown text
  * falls into `other` and its own words are shown.
  */
-export function queueDetailKind(detail: string | null): 'followups_off' | 'ci_failed' | 'fix_first' | 'hold' | 'train_failed' | 'train_conflict' | 'next_train' | 'other' {
+export function queueDetailKind(
+  detail: string | null,
+): 'followups_off' | 'conflict_person' | 'ci_failed' | 'own_ci_red' | 'base_red' | 'draft' | 'fix_first' | 'hold' | 'train_failed' | 'train_conflict' | 'next_train' | 'other' {
   const d = (detail ?? '').toLowerCase()
   if (d.includes('follow-ups are off')) return 'followups_off'
+  // Conflicts no agent will take (merge-queue worker): a person resolves them.
+  if ((d.startsWith('merge conflict') && !d.includes('agent is merging')) || d.includes('resolve it on github')) return 'conflict_person'
   if (d.startsWith('ci failed')) return 'ci_failed'
+  if (d.startsWith('ci fails on its own commit')) return 'own_ci_red'
+  if (d.includes(' is red too')) return 'base_red'
+  if (d.startsWith('a draft runs no ci') || d.startsWith('marked ready for review')) return 'draft'
   if (d.includes('fix first')) return 'fix_first'
   if (d.includes('hold')) return 'hold'
   if (d.includes('release train failed')) return 'train_failed'
@@ -277,9 +290,13 @@ export function latestReviews(rows: ReviewRow[]): Map<string, ReviewRow> {
   return out
 }
 
-/** Failing check names in a "CI failed: a, b, c." train or queue detail. */
+/**
+ * Failing check names in a train or queue detail: "CI failed: a, b.",
+ * "Members failed CI: a, b." or "CI fails on its own commit (a, b). …".
+ */
 export function failedChecksFromDetail(detail: string | null): string[] {
-  const m = (detail ?? '').match(/^CI failed:\s*(.+?)\.?\s*$/i)
+  const d = detail ?? ''
+  const m = d.match(/^(?:CI failed|Members failed CI):\s*(.+?)\.?\s*$/i) ?? d.match(/^CI fails on its own commit \((.+?)\)/i)
   if (!m) return []
   return m[1].split(',').map((s) => s.trim()).filter(Boolean)
 }
@@ -416,9 +433,9 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       const off = queueDetailKind(q.detail) === 'followups_off'
       const stuck = off || age(now, since) > CONFLICT_STUCK_MS
       const text = off
-        ? 'merge conflict, but follow-ups are off so no agent may push'
+        ? 'merge conflict and no agent may push (follow-ups are off): needs a person, resolve on GitHub'
         : capped && stuck
-          ? 'merge conflict, both conflict agents used'
+          ? 'merge conflict, both conflict agents used: needs a person, resolve on GitHub'
           : stuck
             ? `waiting on a conflict agent for over ${Math.round(CONFLICT_STUCK_MS / 60_000)} min`
             : 'a conflict agent is merging the base in'
@@ -454,7 +471,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (followupActive.has(a.id)) {
         groups.add('fix_first_working', { stage: 'review', tone: 'moving', noun: PR, text: 'a follow-up agent works on the review findings', actions: [] }, itemOf(a, reviewedAt))
       } else {
-        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says fix first; no follow-up agent is on it', actions: ['re_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
+        groups.add('fix_first', { stage: 'review', tone: 'stuck', noun: PR, text: 'Opus says fix first; no follow-up agent is on it', actions: ['followup', 're_review', 'close'], settings: FOLLOWUPS_SETTING }, itemOf(a, reviewedAt))
       }
       continue
     }
@@ -465,6 +482,12 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     if (a.pr_state === 'draft') {
       const stuck = age(now, reviewedAt) > HOUR
       groups.add('draft_no_ci', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['draft', 'drafts'], text: 'CI never ran', actions: ['mark_ready', 'close'] }, itemOf(a, reviewedAt))
+      continue
+    }
+
+    // The base branch is red too: nothing on this PR can fix it; the train waits for the base.
+    if (q && q.state === 'queued' && queueDetailKind(q.detail) === 'base_red') {
+      groups.add('base_red', { stage: 'train', tone: 'stuck', noun: PR, text: 'waiting for the base branch to pass CI', actions: [] }, itemOf(a, q.queued_at, { lastError: clip(q.detail) }))
       continue
     }
 
@@ -522,9 +545,11 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     }
     if (q.state === 'blocked') {
       const spec: Record<string, Omit<GroupSpec, 'stage' | 'noun'>> = {
-        followups_off: { tone: 'stuck', text: 'held: merge conflict, and follow-ups are off', actions: ['update_branch', 'remove'], settings: FOLLOWUPS_SETTING },
+        followups_off: { tone: 'stuck', text: 'held: merge conflict and follow-ups are off: needs a person, resolve on GitHub', actions: ['update_branch', 'remove'], settings: FOLLOWUPS_SETTING },
+        conflict_person: { tone: 'stuck', text: 'held: merge conflict, needs a person: resolve on GitHub', actions: ['update_branch', 'remove'] },
         ci_failed: { tone: 'stuck', text: 'held: CI failed', actions: ['ci_repair', 'rerun_ci', 'remove'] },
-        fix_first: { tone: 'stuck', text: 'held: Opus says fix first', actions: ['re_review', 'remove'], settings: FOLLOWUPS_SETTING },
+        own_ci_red: { tone: 'stuck', text: 'held: their own CI is red', actions: ['ci_repair', 'rerun_ci', 'remove'], settings: FOLLOWUPS_SETTING },
+        fix_first: { tone: 'stuck', text: 'held: Opus says fix first', actions: ['followup', 're_review', 'remove'], settings: FOLLOWUPS_SETTING },
         hold: { tone: 'stuck', text: 'held: Opus says hold', actions: ['re_review', 'remove', 'close'] },
       }
       const s = spec[kind] ?? { tone: 'stuck' as const, text: 'held by the merge queue', actions: ['update_branch', 'remove'] as PipelineAction[] }
@@ -585,7 +610,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
   // The follow-ups link helps only where they are off (held / conflict groups say "off" outright and keep it).
   if (input.followupsOn) {
     for (const g of all) {
-      if (g.settings === FOLLOWUPS_SETTING && ['ci_red', 'ci_red_queued', 'fix_first', 'held_fix_first'].includes(g.id) && g.items.every((i) => input.followupsOn!.has(i.projectId))) {
+      if (g.settings === FOLLOWUPS_SETTING && ['ci_red', 'ci_red_queued', 'fix_first', 'held_fix_first', 'held_own_ci_red'].includes(g.id) && g.items.every((i) => input.followupsOn!.has(i.projectId))) {
         g.settings = null
       }
     }
@@ -649,7 +674,8 @@ export interface DispatcherStatus {
   problem: string | null
 }
 
-function keyServes(k: AgentKeyRow, p: DispatcherInput['projects'][number], orgOwners: DispatcherInput['orgOwners']): boolean {
+/** Whether a Cursor key serves this app: its own, its organization's, or a universal key of an owner (ADR 0031). */
+export function keyServes(k: AgentKeyRow, p: DispatcherInput['projects'][number], orgOwners: DispatcherInput['orgOwners']): boolean {
   if (k.project_id) return k.project_id === p.id
   if (k.organization_id) return k.organization_id === p.organization_id
   if (k.owner_user_id) return k.owner_user_id === p.owner_id || (!!p.organization_id && !!orgOwners.get(p.organization_id)?.has(k.owner_user_id))
