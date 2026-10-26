@@ -52,6 +52,10 @@ export interface SdkUpgradeState {
   error?: string
   /** Last "Check CI status" / "Refresh all" failure, in plain English. Cleared on success. */
   syncError?: string
+  /** True while "Check CI status" waits for GitHub. */
+  syncing?: boolean
+  /** When "Check CI status" last answered (ms), for "Checked just now". */
+  checkedAt?: number
   /** True when POST returned an existing open upgrade PR instead of enqueueing. */
   reused?: boolean
   // Release cockpit fields — populated after PR is opened via syncStatus / mergePr
@@ -424,6 +428,7 @@ export function useSdkUpgrade(projectId: string) {
   }, [enqueueUpgrade])
 
   const syncStatus = useCallback(async (jobId: string) => {
+    setState((s) => ({ ...s, syncing: true }))
     const res = await apiFetch<{
       releaseStatus: string
       prState: string
@@ -440,7 +445,7 @@ export function useSdkUpgrade(projectId: string) {
       // Used to return silently, so "Check CI status" / "Refresh all" looked
       // like nothing happened (QA bug 260). The cockpit fields stay as they
       // were: the server stores nothing when GitHub fails to answer.
-      setState((s) => ({ ...s, syncError: describeSyncFailure(res.error) }))
+      setState((s) => ({ ...s, syncing: false, syncError: describeSyncFailure(res.error) }))
       return
     }
     const d = res.data
@@ -448,6 +453,8 @@ export function useSdkUpgrade(projectId: string) {
       const updated: SdkUpgradeState = {
         ...s,
         syncError: undefined,
+        syncing: false,
+        checkedAt: Date.now(),
         releaseStatus: d.releaseStatus,
         prState: d.prState,
         checkRunStatus: d.checkRunStatus ?? undefined,

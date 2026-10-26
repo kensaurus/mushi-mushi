@@ -5,14 +5,21 @@
 Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
 
 
-Refresh the cookie that lets the Mushi Mushi v2.1 crawler + synthetic
-monitor + observed-route diffing reach **auth-gated routes** in your app.
+Signs in to your app with Playwright, using the login script in your `inventory.yaml`, and hands the session cookie to Mushi so its crawler and synthetic monitor can check the pages behind your login.
+
+```bash
+MUSHI_API_KEY=mushi_xxx MUSHI_PROJECT=<project-uuid> \
+TEST_USER_EMAIL=qa@example.com TEST_USER_PASSWORD=… \
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
+```
+
+Docs: [inventory-auth-runner](https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner)
 
 > Part of the Mushi Mushi v2 bidirectional inventory pipeline. Pairs with
-> [`@mushi-mushi/inventory-schema`](../inventory-schema) (the
-> `auth.scripted` block in `inventory.yaml`) and the
+> [`@mushi-mushi/inventory-schema`](https://www.npmjs.com/package/@mushi-mushi/inventory-schema) (the
+> `auth` block of type `scripted` in `inventory.yaml`) and the
 > `inventory-crawler` / `synthetic-monitor` Edge Functions in
-> [`@mushi-mushi/server`](../server).
+> [`@mushi-mushi/server`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/server).
 
 ## What it does
 
@@ -46,7 +53,7 @@ they only ever see the cookie.
 
 ```bash
 # As a one-shot via npx (no install needed):
-npx --yes @mushi-mushi/inventory-auth-runner refresh
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
 
 # Or as a dev dependency in your repo:
 pnpm add -D @mushi-mushi/inventory-auth-runner
@@ -65,7 +72,7 @@ MUSHI_API_KEY=mushi_xxx \
 MUSHI_PROJECT=00000000-0000-0000-0000-000000000000 \
 TEST_USER_EMAIL=qa@example.com \
 TEST_USER_PASSWORD=… \
-npx --yes @mushi-mushi/inventory-auth-runner refresh
+npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh
 ```
 
 | Var                  | Required | Description                                                                                                |
@@ -73,11 +80,11 @@ npx --yes @mushi-mushi/inventory-auth-runner refresh
 | `MUSHI_API_KEY`      | yes      | Project-scoped API key with the `mcp:write` scope. Mint one on the admin console's Connect page (`/connect`, read + write access) or under Projects → keys. |
 | `MUSHI_PROJECT`      | yes      | Mushi project UUID.                                                                                        |
 | `MUSHI_API_ENDPOINT` | no       | API base URL. Defaults to the hosted Supabase functions endpoint.                                          |
-| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your `auth.scripted.script`; the runner itself doesn't read them. Add whatever your script needs. |
+| `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` | usually | Picked up by your login `script` (as `env.TEST_USER_EMAIL`); the runner itself doesn't read them. Add whatever your script needs. |
 
 `--debug` prints the captured cookie name + a 6-char prefix of the value
-to stdout. **Never use `--debug` in CI** — anything in stdout ends up in
-your build logs.
+to stderr. **Never use `--debug` in CI** — anything the job prints ends up
+in your build logs.
 
 ## Inventory snippet
 
@@ -86,8 +93,8 @@ Your `inventory.yaml` declares the script the runner will execute, as
 
 ```yaml
 app:
-  id: glot-it
-  name: Glot.it
+  id: my-app
+  name: My app
   base_url: https://app.example.com
   auth:
     type: scripted
@@ -99,6 +106,8 @@ app:
         await page.click('[data-testid=submit]')
         await page.waitForURL('**/dashboard')
 ```
+
+`auth` sits under `app`, where [`@mushi-mushi/inventory-schema`](https://www.npmjs.com/package/@mushi-mushi/inventory-schema) defines it. Inline scripts may not contain `require(`, `import(`, `process.`, `globalThis.`, `Function(`, `eval(`, `child_process`, `Deno.` or `Worker(`, and are capped at 8 KB; put anything else in a `js:` file.
 
 Two `script` shapes are accepted:
 
@@ -115,7 +124,7 @@ Two `script` shapes are accepted:
 
 ## CI integration
 
-The [`mushi-mushi-gates`](../mcp-ci) GitHub Action exposes an
+The [`@mushi-mushi/mcp-ci`](https://www.npmjs.com/package/@mushi-mushi/mcp-ci) GitHub Action exposes an
 `auth-bootstrap` command that shells out to this runner:
 
 ```yaml
@@ -158,10 +167,10 @@ TypeScript source through `tsx` for local development.
 
 ## License
 
-See root [LICENSE](../../LICENSE).
+MIT. See [LICENSE](https://github.com/kensaurus/mushi-mushi/blob/master/packages/inventory-auth-runner/LICENSE).
 
 
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

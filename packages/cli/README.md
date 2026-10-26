@@ -4,6 +4,8 @@
 
 The `mushi` command for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Install the SDK in your app, connect your editor, then read bugs, dispatch fixes and merge them without leaving the terminal.
 
+Docs: [CLI reference](https://kensaur.us/mushi-mushi/docs/sdks/cli)
+
 ```mermaid
 flowchart LR
     A["mushi init<br/>SDK in your app"] --> B["mushi setup<br/>editor reads diagnoses"] --> C["mushi reports<br/>see what broke"] --> D["mushi fix<br/>agent opens a draft PR"] --> E["mushi fixes merge"]
@@ -70,7 +72,7 @@ Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoin
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip the "newer version" hint |
 | `MUSHI_DEBUG=1` | Full stack traces on error |
 
-Config lives in `~/.config/mushi/config.json`, written with mode `0o600` (a legacy `~/.mushirc` is auto-migrated). `--endpoint` must be `https://` except on localhost.
+Config lives in `~/.config/mushi/config.json` (`%APPDATA%\mushi\config.json` on Windows, `$XDG_CONFIG_HOME/mushi/config.json` when that is set), written with mode `0o600` on macOS and Linux and an account-only ACL on Windows (a legacy `~/.mushirc` is auto-migrated). `--endpoint` must be `https://` except on localhost.
 
 ## Programmatic use
 

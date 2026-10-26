@@ -5,10 +5,11 @@ description: eslint-plugin-mushi-mushi flags empty event handlers and leftover m
 
 # `eslint-plugin-mushi-mushi`
 
-Two lint rules that run as part of the v2 gates — **`no-dead-handler`**
-flags empty event handlers (`onClick={() => {}}`, `onSubmit={noop}`) and
-**`no-mock-leak`** flags faker / placeholder data left in production
-paths. The composite GitHub check fails when either rule reports.
+Two lint rules for bugs AI coding tools often ship — **`no-dead-handler`**
+flags event handlers that do nothing (`onClick={() => {}}`, a body that only
+logs) and **`no-mock-leak`** flags faker / placeholder data left in
+production paths. They run wherever ESLint runs: your editor, `pnpm lint`,
+and CI.
 
 ## Install
 
@@ -16,13 +17,7 @@ paths. The composite GitHub check fails when either rule reports.
 pnpm add -D eslint-plugin-mushi-mushi
 ```
 
-## Recommended preset
-
-Most projects pick up both rules at their default severity by extending
-the recommended preset. It turns on `no-dead-handler`, `no-mock-leak` and
-`no-allowlist-jsx-textnode` (an allowlist comment written as JSX text) and
-nothing else; the plugin's design-system rules are for the Mushi console
-itself:
+## Turn on the two rules
 
 ```js filename="eslint.config.js"
 import mushi from 'eslint-plugin-mushi-mushi'
@@ -32,7 +27,8 @@ export default [
   {
     plugins: { 'mushi-mushi': mushi },
     rules: {
-      ...mushi.configs.recommended.rules,
+      'mushi-mushi/no-dead-handler': 'error',
+      'mushi-mushi/no-mock-leak': 'error',
     },
   },
 ]
@@ -43,21 +39,44 @@ For legacy `.eslintrc`:
 ```json
 {
   "plugins": ["mushi-mushi"],
-  "extends": ["plugin:mushi-mushi/legacy"]
+  "rules": {
+    "mushi-mushi/no-dead-handler": "error",
+    "mushi-mushi/no-mock-leak": "error"
+  }
 }
 ```
+
+## The recommended preset
+
+`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on the
+two rules above plus `no-allowlist-jsx-textnode`, which catches an allowlist
+comment written as JSX text (it would render on the page) and nothing else.
+
+```js filename="eslint.config.js"
+import mushi from 'eslint-plugin-mushi-mushi'
+
+export default [mushi.configs.recommended]
+```
+
+The plugin's other 16 rules check the Mushi console's own design system
+(tokens, `<Card>`, `<PageHeaderBar>`, page posture, the widget theme) and
+are only in the Mushi monorepo's `internal` preset. Turn one on by name if
+it fits your app.
 
 ## Rules
 
 ### `mushi-mushi/no-dead-handler`
 
-Flags JSX event handlers whose body is empty, only logs, or is a no-op
-arrow (`() => {}`). The CI gate fails on any non-test file that matches.
+Flags inline event handlers (`on*` props, and `onClick` / `onSubmit`-style
+object keys) whose body is empty, returns `null`, holds only `console.*` calls in a
+block, or throws "not implemented", including inside `useCallback`. It checks inline
+functions only: a handler passed by name, such as `onSubmit={noop}`, is not
+followed. Files named `*.test.*`, `*.spec.*` and `*.stories.*` are skipped.
 
 ```jsx
 // ✗ caught
 <button onClick={() => {}}>Submit</button>
-<form onSubmit={noop}><button type="submit">Submit</button></form>
+<button onClick={() => { console.log('clicked') }}>Save</button>
 
 // ✓ allowed
 <button onClick={() => mutate()}>Submit</button>
@@ -69,9 +88,12 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 
 ### `mushi-mushi/no-mock-leak`
 
-Flags arrays of placeholder data (`John Doe`, `lorem ipsum`, `faker.*`,
-`@faker-js/faker`) that live outside `**/*test*`, `**/*stories*`,
-`**/__mocks__/**`, or `**/fixtures/**`. The intent is to catch the
+Flags mock-library imports (`@faker-js/faker`, `faker`, `msw`, and
+similar), arrays of placeholder objects (`John Doe`, `Jane Doe`), and
+`lorem ipsum` or `placeholder@example.com` strings in production files. It
+skips files under a `__tests__`, `test`, `tests`, `spec`, `stories`,
+`fixtures`, `mocks` or `__mocks__` folder, and files named `*.test.*`,
+`*.spec.*`, `*.stories.*` or `*.mock.*`. The intent is to catch the
 moment a developer leaves their seed data wired up in a real page.
 
 ```ts
@@ -87,9 +109,9 @@ export const projects = [
 ]
 ```
 
-## Combining with the gates action
+## In CI
 
-Both rules surface as part of [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)'s
-composite GitHub check. You can also run the rules locally (`pnpm lint`)
-and fix violations before pushing — the action will pick the same set
-back up in CI.
+Run ESLint as its own step (for example `npx eslint .`) so a PR fails when
+either rule reports. The [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates`
+command does not run ESLint and sends no lint findings, so its
+`dead_handler` and `mock_leak` gates pass on their own.

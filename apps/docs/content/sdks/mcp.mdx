@@ -14,12 +14,25 @@ Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
 **SEP-1686 Tasks** envelope so long-running fixes can stream progress back
 into your IDE.
 
+## Quick start
+
+```bash
+npx mushi-mushi setup --ide cursor   # or: claude, continue, zed
+```
+
+Restart the editor and ask "what's broken in prod?". For Cursor and Claude
+Code, `setup` writes the hosted server entry
+(`https://kensaur.us/mushi-mushi/hosted-mcp/`, URL only): the editor opens a
+browser sign-in on first use and no API key is stored on disk. Pass
+`--stdio` for a local server instead. Continue and Zed always get the stdio
+entry.
+
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. The default for
-  Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
-  Windsurf. Your client launches the server as a subprocess and pipes
-  JSON-RPC over stdio.
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. What
+  `mushi setup --stdio` writes, and the only option for Claude Desktop,
+  Continue, Cline and Zed. Your client launches the server as a subprocess
+  and pipes JSON-RPC over stdio.
 - **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
   at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
   `application/json` or `text/event-stream` per content negotiation,
@@ -28,15 +41,19 @@ into your IDE.
   subprocess (typical for OpenAI Agents SDK, ChatGPT Agent, hosted
   CrewAI, or any orchestrator that talks remote MCP).
 
+For browser sign-in, use the URL-only entry `mushi setup` writes. To pass a
+key yourself instead (for an orchestrator that cannot open a browser), send
+it as a header. A static key header turns the client's sign-in off:
+
 ```jsonc
-// .cursor/mcp.json — Streamable HTTP example
+// .cursor/mcp.json — Streamable HTTP with an API key
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
-        "X-Mushi-Project-Id": "proj_…"
+        "X-Mushi-Project-Id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       }
     }
   }
