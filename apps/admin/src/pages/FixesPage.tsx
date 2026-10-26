@@ -826,6 +826,7 @@ export function FixesPage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-fixes">
       <PageHeaderBar
         title={copy?.title ?? 'Fixes'}
+        titleAs="h1"
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
@@ -935,9 +936,9 @@ export function FixesPage() {
       {mergeFailures.length > 0 && (
         <section aria-label="Pull requests that did not merge" className="rounded-md border border-warn/30 bg-warn-muted/40 p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold text-warn-foreground">
+            <h2 className="text-xs font-semibold text-warn-foreground">
               {mergeFailures.length} {pluralize(mergeFailures.length, 'pull request', 'pull requests')} did not merge
-            </h3>
+            </h2>
             <div className="flex gap-1.5">
               <Btn size="sm" loading={bulkBusy} onClick={() => void queueFixes(mergeFailures.map((m) => m.fix))}>
                 Merge {mergeFailures.length === 1 ? 'it' : 'them'} when ready

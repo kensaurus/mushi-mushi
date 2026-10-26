@@ -123,7 +123,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
       ) : (
         <p className="text-sm text-fg-muted">
           No Firecrawl key yet.{' '}
-          <Link className="text-brand hover:underline" to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
+          <Link className="text-brand underline underline-offset-2" to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
         </p>
       )}
       {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
@@ -159,7 +159,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                 ) : !a.firecrawlReady ? (
                   <p className="text-xs text-fg-muted">
                     This app has no Firecrawl key it can use. Add one, or share yours with all your apps, in{' '}
-                    <Link className="text-brand hover:underline" to="/settings?tab=tools">Settings → Web tools</Link>.
+                    <Link className="text-brand underline underline-offset-2" to="/settings?tab=tools">Settings → Web tools</Link>.
                   </p>
                 ) : (
                   <div className="max-w-md">

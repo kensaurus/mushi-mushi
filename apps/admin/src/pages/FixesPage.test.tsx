@@ -74,7 +74,13 @@ vi.mock('../lib/fixesModeUx', () => ({
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
 vi.mock('../components/PageHeaderBar', () => ({
-  PageHeaderBar: ({ children }: { children?: unknown }) => createElement('div', { 'data-testid': 'header' }, children as never),
+  PageHeaderBar: ({ title, titleAs, children }: { title?: string; titleAs?: 'h1' | 'h2'; children?: unknown }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'header' },
+      titleAs === 'h1' ? createElement('h1', null, title) : null,
+      children as never,
+    ),
 }))
 
 import { FixesPage } from './FixesPage'
@@ -157,6 +163,9 @@ describe('FixesPage', () => {
     await render('/fixes?status=failed')
     expect(document.querySelector('[data-testid="fixes-bulk-action-bar"]')).not.toBeNull()
     expect(document.body.textContent).toContain('Checkout button does nothing')
+    expect(document.querySelector('[data-testid="header"] h1')?.textContent).toBe('Fixes')
+    expect(document.querySelector('th .sr-only')?.textContent).toBe('Status stripe')
+    expect([...document.querySelectorAll('h2')].some((h) => h.textContent === 'Merge when ready')).toBe(true)
   })
 
   it('QA 96 + 241: row Retry asks first and sends the failed attempt’s agent', async () => {

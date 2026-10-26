@@ -51,6 +51,7 @@ export function FixesSnapshotStrip({
   return (
     <Section
       title={sectionTitle}
+      heading="h2"
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
       <SnapshotSectionHint text={description} />

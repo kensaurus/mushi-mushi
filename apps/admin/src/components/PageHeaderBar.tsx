@@ -83,6 +83,12 @@ export interface PageHeaderBarProps {
   contextChip?: ReactNode | null
   /** Force-hide PDCA chip even on mobile (e.g. detail pages). */
   suppressContextChip?: boolean
+  /**
+   * Title element. Default `h2` sits under the sidebar wordmark. Pass `h1`
+   * on a page whose only level-one heading is that wordmark, which is
+   * `display: none` below the `md` breakpoint.
+   */
+  titleAs?: 'h1' | 'h2'
   /** Short subtitle line below the title row. Keep under 120 chars. */
   description?: string
   /** Whether to show the copy-current-URL button. Default true. */
@@ -115,6 +121,7 @@ export function PageHeaderBar({
   projectScope,
   contextChip,
   suppressContextChip: suppressContextChipProp,
+  titleAs = 'h2',
   description,
   showCopyLink = true,
   children,
@@ -134,6 +141,7 @@ export function PageHeaderBar({
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
       ? chipForPath(pathname)
       : null
+  const TitleTag = titleAs
   const hasHelp = Boolean(helpTitle && helpWhatIsIt)
   const showProjectScope = projectScope && !locationChrome.suppressProjectScope
 
@@ -188,7 +196,7 @@ export function PageHeaderBar({
           )}
 
           {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
-          <h2
+          <TitleTag
             className="min-w-0 text-sm font-semibold leading-snug text-fg text-balance"
             {...(showProjectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
           >
@@ -199,7 +207,7 @@ export function PageHeaderBar({
                 <span className="font-mono text-xs text-fg-secondary">{projectScope}</span>
               </>
             )}
-          </h2>
+          </TitleTag>
         </div>
 
         {/* Right-side slot */}

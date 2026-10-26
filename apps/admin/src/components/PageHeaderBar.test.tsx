@@ -77,6 +77,8 @@ describe('PageHeaderBar overview chip', () => {
     expect(cls.split(/\s+/)).not.toContain('shrink-0')
     // The tooltip anchor is the actual flex item — it must shrink too.
     expect(chip!.parentElement!.className).toContain('min-w-0')
+    expect(container.querySelector('h2')?.textContent).toContain('Home')
+    expect(container.querySelector('h1')).toBeNull()
   })
 
   it('truncates the chip label rather than widening the header', () => {
@@ -87,5 +89,19 @@ describe('PageHeaderBar overview chip', () => {
     )
     expect(label).toBeDefined()
     expect(label!.className).toContain('truncate')
+  })
+
+  it('can title the page with an h1', () => {
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/fixes'] },
+          createElement(PageHeaderBar, { title: 'Fixes', titleAs: 'h1', showCopyLink: false }),
+        ),
+      )
+    })
+    expect(container.querySelector('h1')?.textContent).toBe('Fixes')
+    expect(container.querySelector('h2')).toBeNull()
   })
 })
