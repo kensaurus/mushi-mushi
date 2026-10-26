@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["The problem it solves", "A real example from our own sites", "What this is (and is not)", "Where it stands today", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
+    headings: ["What happens to a bug", "The problem it solves", "A real example from our own sites", "What this is (and is not)", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -1389,7 +1389,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "fix", "first", "bug", "60", "seconds", "choose", "stack"],
-    headings: ["What you need", "The fastest way: one command", "Start here (editor first)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
+    headings: ["Install", "Send your first report", "Get your first fix", "Pick your framework", "Keys and settings", "Troubleshooting"],
     excerpt: "Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
@@ -1425,7 +1425,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/cli-console-loop",
     markdown: "quickstart/cli-console-loop.md",
     keywords: ["quickstart", "cli-console-loop", "cli", "console", "loop", "setup"],
-    headings: ["Which CLI command?", "Browser sign-in flow (recommended)", "What happens in the terminal", "What happens in the browser", "How sign-in reliability works", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project"],
+    headings: ["Set up in five steps", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project", "4. SDK installed", "5. Wire Cursor MCP (optional but recommended)", "Which CLI command?", "Browser sign-in flow (recommended)"],
     excerpt: "How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.",
   },
   {
@@ -1443,7 +1443,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/incident-loop",
     markdown: "quickstart/incident-loop.md",
     keywords: ["quickstart", "incident-loop", "incident", "loop", "bug", "fix", "prompt"],
-    headings: ["No MCP? Copy the fix prompt", "Prerequisites", "Step 1 — Capture or pick a report", "Step 2 — Pull fix context", "Step 3 — Generate the fix prompt", "Step 4 — Paste and ship", "Troubleshooting", "See also"],
+    headings: ["No MCP? Copy the fix prompt", "Before you start", "The loop", "Capture or pick a report", "Pull the fix context", "Get a deeper fix plan (optional)", "Paste and ship", "Troubleshooting"],
     excerpt: "Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.",
   },
   {
@@ -1461,7 +1461,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/mcp",
     markdown: "quickstart/mcp.md",
     keywords: ["quickstart", "mcp", "server", "bug", "fixing", "cursor", "claude", "code"],
-    headings: ["OAuth login (recommended — no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)", "Manual setup: Cursor", "Manual setup: Claude Desktop", "Hosted Streamable HTTP transport (no subprocess)", "Available tools"],
+    headings: ["Connect in three steps", "Add the Mushi server", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
     excerpt: "Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.",
   },
   {
