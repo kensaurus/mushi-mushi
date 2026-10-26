@@ -37,6 +37,7 @@ import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
 import { useLocationChrome } from '../lib/locationChrome'
+import { useRegisterPageH1 } from '../lib/pageH1'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
@@ -84,9 +85,10 @@ export interface PageHeaderBarProps {
   /** Force-hide PDCA chip even on mobile (e.g. detail pages). */
   suppressContextChip?: boolean
   /**
-   * Title element. Default `h2` sits under the sidebar wordmark. Pass `h1`
-   * on a page whose only level-one heading is that wordmark, which is
-   * `display: none` below the `md` breakpoint.
+   * Title element. Default `h2` sits under the sidebar wordmark (`h1`).
+   * Pass `h1` when this page's title is the level-one heading. The wordmark
+   * then renders as a paragraph, so md+ still has one h1. Below `md` the
+   * sidebar is `display: none`, so this h1 is the only one on a phone.
    */
   titleAs?: 'h1' | 'h2'
   /** Short subtitle line below the title row. Keep under 120 chars. */
@@ -142,6 +144,7 @@ export function PageHeaderBar({
       ? chipForPath(pathname)
       : null
   const TitleTag = titleAs
+  useRegisterPageH1(titleAs === 'h1')
   const hasHelp = Boolean(helpTitle && helpWhatIsIt)
   const showProjectScope = projectScope && !locationChrome.suppressProjectScope
 

@@ -18,6 +18,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { navSlicesForPaths } from '../lib/navBadges'
 import { CORE_NAV_PATHS } from '../lib/navRegistry'
 
+// The shell's import graph reaches the SDK. These tests never send events.
+vi.mock('../lib/track', () => ({ trackSelf: () => {}, trackAdHoc: () => {} }))
+vi.mock('../lib/mushi-self', () => ({
+  getMushiSelf: () => null,
+  initMushiSelf: () => {},
+  isMushiSelfEnabled: () => false,
+}))
+
 const state = vi.hoisted(() => ({
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
@@ -86,6 +94,7 @@ vi.mock('./RoutePageHelp', () => ({ RoutePageHelp: () => null }))
 vi.mock('./RouteProgress', () => ({ RouteProgress: () => null }))
 vi.mock('./SidebarFooterControls', () => ({ SidebarFooterControls: () => null }))
 
+import { useRegisterPageH1 } from '../lib/pageH1'
 import { Layout } from './Layout'
 
 let root: Root | null = null
@@ -155,5 +164,47 @@ describe('Layout nav-meta slices', () => {
     expectSlices(expected)
     expect(expected).toContain('releases')
     expect(expected).not.toContain('billing')
+  })
+})
+
+function wordmark(root: HTMLElement): HTMLElement {
+  const labeled = root.querySelector('[aria-label="mushi mushi admin console"]')
+  if (labeled) return labeled as HTMLElement
+  const full = [...root.querySelectorAll('h1, p')].find((el) => el.textContent === 'mushimushi')
+  if (!full) throw new Error('sidebar wordmark missing')
+  return full as HTMLElement
+}
+
+function PageTitle({ ownsH1 }: { ownsH1: boolean }) {
+  useRegisterPageH1(ownsH1)
+  return createElement(ownsH1 ? 'h1' : 'h2', null, 'Fixes')
+}
+
+describe('Layout heading outline', () => {
+  function renderPage(ownsH1: boolean) {
+    act(() => {
+      root!.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/fixes'] },
+          createElement(Layout, null, createElement(PageTitle, { ownsH1 })),
+        ),
+      )
+    })
+  }
+
+  it('keeps the sidebar wordmark as the only h1 when the page title is an h2', () => {
+    renderPage(false)
+    expect(wordmark(container!).tagName).toBe('H1')
+    expect(container!.querySelectorAll('h1')).toHaveLength(1)
+    expect(container!.querySelector('h2')?.textContent).toContain('Fixes')
+  })
+
+  it('drops the wordmark heading when the page registers an h1', () => {
+    renderPage(true)
+    const brand = wordmark(container!)
+    expect(brand.tagName).toBe('P')
+    expect(brand.className).toContain('heading-rhythm')
+    expect([...container!.querySelectorAll('h1')].map((el) => el.textContent)).toEqual(['Fixes'])
   })
 })

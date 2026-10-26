@@ -92,13 +92,6 @@ vi.mock('../lib/usePageData', () => ({
   },
 }))
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
-vi.mock('../components/PageHeaderBar', async () => {
-  const { createElement: h } = await import('react')
-  return {
-    PageHeaderBar: ({ title, titleAs }: { title: string; titleAs?: string }) =>
-      h(titleAs === 'h1' ? 'h1' : 'h2', null, title),
-  }
-})
 
 import { CreditsPage, firecrawlBalance } from './CreditsPage'
 
@@ -108,6 +101,14 @@ let root: Root
 let host: HTMLDivElement
 
 beforeEach(() => {
+  window.matchMedia = ((q: string) => ({
+    matches: false,
+    media: q,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  })) as unknown as typeof window.matchMedia
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-23T02:00:00Z'))
   state.calls = []
@@ -163,7 +164,10 @@ describe('CreditsPage', () => {
   it('shows the Cursor key expiry and the follow-up models, and turns spend-down on with one switch', async () => {
     await render()
     // The page opens with the one thing to do: a key with an expiry date is not spending down.
-    expect(host.querySelector('h1')?.textContent).toBe('Spend credits')
+    const pageTitle = host.querySelector('h1')
+    expect(pageTitle?.textContent).toBe('Spend credits')
+    expect(pageTitle?.className).toContain('text-balance')
+    expect(host.querySelectorAll('h1')).toHaveLength(1)
     expect([...host.querySelectorAll('h2')].map((h) => h.textContent)).toEqual([
       'Cursor: fix bugs',
       'Cursor: improve your apps with skills',

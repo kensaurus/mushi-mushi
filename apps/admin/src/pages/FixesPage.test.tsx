@@ -73,15 +73,6 @@ vi.mock('../lib/fixesModeUx', () => ({
   }),
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
-vi.mock('../components/PageHeaderBar', () => ({
-  PageHeaderBar: ({ title, titleAs, children }: { title?: string; titleAs?: 'h1' | 'h2'; children?: unknown }) =>
-    createElement(
-      'div',
-      { 'data-testid': 'header' },
-      titleAs === 'h1' ? createElement('h1', null, title) : null,
-      children as never,
-    ),
-}))
 
 import { FixesPage } from './FixesPage'
 import { ToastProvider } from '../lib/toast'
@@ -163,7 +154,10 @@ describe('FixesPage', () => {
     await render('/fixes?status=failed')
     expect(document.querySelector('[data-testid="fixes-bulk-action-bar"]')).not.toBeNull()
     expect(document.body.textContent).toContain('Checkout button does nothing')
-    expect(document.querySelector('[data-testid="header"] h1')?.textContent).toBe('Fixes')
+    const pageTitle = document.querySelector('h1')
+    expect(pageTitle?.textContent).toContain('Fixes')
+    expect(pageTitle?.className).toContain('text-balance')
+    expect(document.querySelectorAll('h1')).toHaveLength(1)
     expect(document.querySelector('th .sr-only')?.textContent).toBe('Status stripe')
     expect([...document.querySelectorAll('h2')].some((h) => h.textContent === 'Merge when ready')).toBe(true)
   })
@@ -277,10 +271,10 @@ describe('FixesPage', () => {
     mocks.fixes = [fix({})]
     mocks.total = 2
     await render('/fixes')
-    expect(document.querySelector('[data-testid="header"]')?.textContent).toContain('1 of 2 attempts')
+    expect(document.body.textContent).toContain('1 of 2 attempts')
     click(buttons('Load 1 older')[0])
     await flush()
     expect(mocks.apiFetch.mock.calls.some(([p]) => String(p).includes('offset=1'))).toBe(true)
-    expect(document.querySelector('[data-testid="header"]')?.textContent).toContain('2 attempts')
+    expect(document.body.textContent).toContain('2 attempts')
   })
 })
