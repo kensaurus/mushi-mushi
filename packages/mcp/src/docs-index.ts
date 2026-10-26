@@ -1399,7 +1399,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/angular.md",
     keywords: ["quickstart", "angular"],
     headings: [],
-    excerpt: "Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.",
+    excerpt: "Add Mushi to an Angular 17+ app — one provideMushi() call registers the Mushi service and error handler, so uncaught errors and user bug reports reach your queue.",
   },
   {
     title: "Capacitor quickstart",

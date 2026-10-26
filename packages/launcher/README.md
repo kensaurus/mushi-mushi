@@ -72,7 +72,7 @@ That's it. Your users now have a shake-to-report button (or a floating widget). 
 
 ## What you get
 
-- **Shake-to-report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
+- **Bug report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
 - **AI-classified reports** — 2-stage pipeline (Haiku fast-filter → Sonnet deep + vision + RAG) tags each report with category, severity, confidence, and the component path. Stage 2 streams partial results to the admin UI as tokens arrive.
 - **Dedup by meaning, not by string** — pgvector knowledge graph collapses duplicate reports across users, routes, and deploys so your queue isn't a noise storm.
 - **Bidirectional inventory (v2)** — opt in to `capture: { discoverInventory: true }` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production. Claude drafts an `inventory.yaml` of user stories + pages + actions for you to accept — most teams will never hand-author one.

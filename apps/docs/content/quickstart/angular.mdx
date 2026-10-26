@@ -1,6 +1,6 @@
 ---
 title: Angular quickstart
-description: Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.
+description: Add Mushi to an Angular 17+ app — one provideMushi() call registers the Mushi service and error handler, so uncaught errors and user bug reports reach your queue.
 ---
 
 import { Callout } from 'nextra/components'
@@ -23,37 +23,45 @@ export const environment = {
 }
 ```
 
-Register Mushi with factory providers:
+Register Mushi once in your app config. `provideMushi()` provides
+`MushiService`, routes uncaught errors to Mushi through Angular's
+`ErrorHandler`, and starts the SDK at startup:
 
 ```ts filename="src/app/app.config.ts"
-import { ErrorHandler, type ApplicationConfig } from '@angular/core'
-import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+import { type ApplicationConfig } from '@angular/core'
+import { provideMushi } from '@mushi-mushi/angular'
 import { environment } from '../environments/environment'
-
-const mushiConfig: MushiConfig = {
-  projectId: environment.mushiProjectId,
-  apiKey: environment.mushiApiKey,
-}
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    { provide: MUSHI_CONFIG, useValue: mushiConfig },
-    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
-    // Angular resolves ErrorHandler while bootstrapping, which starts the SDK
-    // and routes uncaught errors to Mushi.
-    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    provideMushi({ projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey }),
   ],
 }
 ```
 
 <Callout type="warning">
-  These factory providers work with every release of `@mushi-mushi/angular`.
-  Up to 1.0.2 (the current npm release), do not use `provideMushi()` or
-  `...provideMushiAngular()` instead: the package is compiled without
-  Angular's ahead-of-time metadata, so `provideMushiAngular()`'s class
-  provider for `MushiService` needs the JIT compiler and fails at bootstrap in
-  a production build, and `provideMushi()` does not return Angular providers
-  at all.
+  **1.0.2 and earlier:** `provideMushi()` did not return Angular providers,
+  and the package needed the JIT compiler in production builds. Upgrade to
+  1.0.3 or later. If you cannot, register the providers by hand:
+
+  ```ts snippet-skip="1.0.2 fallback; the same file as the example above"
+  import { ErrorHandler, type ApplicationConfig } from '@angular/core'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { environment } from '../environments/environment'
+
+  const mushiConfig: MushiConfig = {
+    projectId: environment.mushiProjectId,
+    apiKey: environment.mushiApiKey,
+  }
+
+  export const appConfig: ApplicationConfig = {
+    providers: [
+      { provide: MUSHI_CONFIG, useValue: mushiConfig },
+      { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+      { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    ],
+  }
+  ```
 </Callout>
 
 Report from a component:
