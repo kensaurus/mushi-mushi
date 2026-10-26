@@ -23,7 +23,7 @@ export interface SdkHealthProblem {
   fix: { kind: SdkHealthFixKind; label: string } | null
 }
 
-export interface SdkHealthNote {
+interface SdkHealthNote {
   check: 'repo' | 'ci_secrets' | 'site_csp' | 'versions'
   detail: string
 }
