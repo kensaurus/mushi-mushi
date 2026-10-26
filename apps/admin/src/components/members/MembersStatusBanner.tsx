@@ -5,6 +5,7 @@
 
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { visiblePlanLabelOr } from '../../lib/visiblePlanLabel'
 import type { MembersStats } from './types'
 
 interface Props {
@@ -21,7 +22,11 @@ export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props
       <StatusBannerShell
         tone="warn"
         title="Teams require Pro or Enterprise"
-        subtitle={`You can preview the roster on ${stats.planDisplayName ?? stats.planId ?? 'Hobby'}, but inviting teammates needs the teams entitlement.`}
+        subtitle={`You can preview the roster on ${visiblePlanLabelOr(
+          stats.planDisplayName ?? stats.planId,
+          stats.billingMode === 'complimentary',
+          'Hobby',
+        )}, but inviting teammates needs the teams entitlement.`}
         action={
           <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }

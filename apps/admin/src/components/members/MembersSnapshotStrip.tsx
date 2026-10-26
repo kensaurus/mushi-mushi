@@ -15,6 +15,7 @@
 
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import { MetricStrip } from '../MetricStrip'
+import { visiblePlanLabelOr } from '../../lib/visiblePlanLabel'
 import type { MembersStats } from './types'
 
 interface Props {
@@ -23,6 +24,15 @@ interface Props {
   isValidating?: boolean
   sectionTitle?: string
   hint?: string
+}
+
+function seatPlanHint(stats: MembersStats): string {
+  const complimentary = stats.billingMode === 'complimentary'
+  const named = stats.planDisplayName ?? stats.planId
+  if (stats.seatLimit !== null) {
+    return `${stats.seatsRemaining ?? 0} remaining on ${visiblePlanLabelOr(named, complimentary, 'plan')}`
+  }
+  return `${visiblePlanLabelOr(named, complimentary, 'Pro')} — no seat cap`
 }
 
 export function MembersSnapshotStrip({
@@ -61,11 +71,7 @@ export function MembersSnapshotStrip({
           label={stats.seatLimit !== null ? 'Seats used' : 'Plan seats'}
           value={stats.seatLimit !== null ? `${stats.seatsUsed}/${stats.seatLimit}` : 'Unlimited'}
           accent={stats.atSeatCap ? 'text-danger' : stats.seatLimit !== null ? 'text-ok' : undefined}
-          hint={
-            stats.seatLimit !== null
-              ? `${stats.seatsRemaining ?? 0} remaining on ${stats.planDisplayName ?? stats.planId ?? 'plan'}`
-              : `${stats.planDisplayName ?? stats.planId ?? 'Pro'} — no seat cap`
-          }
+          hint={seatPlanHint(stats)}
         />
       </MetricStrip>
     </Section>
