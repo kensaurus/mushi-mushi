@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/inventory-schema": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
