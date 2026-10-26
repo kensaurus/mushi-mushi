@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PROJECT_SCOPE_EVENT,
   PROJECT_SCOPE_STORAGE_KEY,
+  allAppsCountText,
   allAppsSupportFor,
   combinedFetchScope,
   getStoredProjectScopeMode,
@@ -31,6 +32,21 @@ const PROJECT_B = '542b34e0-019e-41fe-b900-7b637717bb86'
 
 beforeEach(() => {
   window.localStorage.clear()
+})
+
+describe('allAppsCountText', () => {
+  it('counts this team, and names other teams separately', () => {
+    expect(allAppsCountText({ shown: 2, teamTotal: 2, otherTeams: 0, groupName: null })).toBe(
+      '2 apps combined, where a page supports it',
+    )
+    expect(allAppsCountText({ shown: 8, teamTotal: 8, otherTeams: 1, groupName: null })).toBe(
+      '8 apps in this team · 1 app in other teams. Pages that combine apps include both.',
+    )
+  })
+
+  it('counts the selected group when it is smaller than the team', () => {
+    expect(allAppsCountText({ shown: 8, teamTotal: 9, otherTeams: 0, groupName: 'Shipped' })).toBe('8 apps in Shipped')
+  })
 })
 
 describe('stored scope', () => {

@@ -50,7 +50,7 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
-import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
+import { readActiveGroup, resolveActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
 
 export function PortfolioPage() {
@@ -74,12 +74,22 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const groupList = groups.data?.groups ?? []
   const requested = searchParams.get('group') ?? readActiveGroup()
   // A remembered group that was deleted (or belongs to another team) falls back to all apps.
-  const group = requested && groupList.some((g) => g.slug === requested) ? requested : null
+  const group = resolveActiveGroup(requested, groupList)
+  const activeGroup = groupList.find((g) => g.slug === group) ?? null
   const directory = usePageData<ProjectDirectory>(PROJECT_DIRECTORY_PATH, { scope: 'none' })
   const teamApps = useMemo(
     () => (directory.data?.projects ?? []).filter((p) => p.organizationId === orgId).map((p) => ({ projectId: p.id, name: p.name })),
     [directory.data, orgId],
   )
+  // Names from the directory, which is a cheap read. The recipe rollup is
+  // what takes several seconds; these shells paint first. While a remembered
+  // group is still being confirmed, paint nothing rather than every app.
+  const shellApps = useMemo(() => {
+    if (requested && groups.loading && !groups.data) return []
+    if (!activeGroup) return teamApps
+    const ids = new Set(activeGroup.project_ids)
+    return teamApps.filter((a) => ids.has(a.projectId))
+  }, [requested, groups.loading, groups.data, activeGroup, teamApps])
   const selectGroup = (slug: string | null) => {
     writeActiveGroup(slug)
     const next = new URLSearchParams(searchParams)
@@ -139,7 +149,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             show: Boolean(page.data && page.data.cards.length > 0),
             children: page.data ? (
               <StatGrid>
-                <StatCard label="Apps" value={String(page.data.totalProjects)} />
+                <StatCard
+                  label="Apps"
+                  value={String(page.data.totalProjects)}
+                  hint={activeGroup ? `In ${activeGroup.name}` : undefined}
+                />
                 <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} hint="Apps with something to fix or not yet checked" />
                 <StatCard label="Fix once" value={String(page.data.repeatedGroups)} hint="Problems open in two or more apps" />
                 <StatCard
@@ -168,7 +182,20 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         />
       )}
 
-      {page.loading && !page.data && <Loading text="Reading every app's recipe…" />}
+      {page.loading && !page.data && shellApps.length > 0 && (
+        <section aria-busy="true" aria-label="Apps" className="space-y-3">
+          <h2 className="text-sm font-semibold text-fg">Apps</h2>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {shellApps.map((app) => (
+              <Card key={app.projectId} className="flex min-w-0 flex-col gap-2 p-4">
+                <h3 className="truncate text-sm font-semibold text-fg">{app.name}</h3>
+                <p className="text-xs text-fg-muted">Reading this app…</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+      {page.loading && !page.data && shellApps.length === 0 && <Loading text="Reading every app's recipe…" />}
       {page.error && (
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}

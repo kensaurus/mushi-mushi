@@ -25,16 +25,27 @@ const setup = vi.hoisted(() => ({
   value: null as unknown,
 }))
 
+const pageData = vi.hoisted(() => ({
+  value: { data: null as unknown, loading: false, error: null, isValidating: false, reload: () => {} },
+}))
+
+const groupsState = vi.hoisted(() => ({
+  groups: [] as Array<{ id: string; slug: string; name: string; color: null; sort: number; project_ids: string[] }>,
+}))
+
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => setup.value }))
 vi.mock('../lib/useProjectSnapshots', () => ({ useProjectSnapshots: () => ({ byId: new Map(), projects: [] }) }))
 vi.mock('../lib/usePageData', () => ({
-  usePageData: () => ({ data: null, loading: false, error: null, isValidating: false, reload: () => {} }),
+  usePageData: () => pageData.value,
 }))
 vi.mock('../lib/useCreateProject', () => ({ useCreateProject: () => ({ create: vi.fn(), creating: false, error: null }) }))
 vi.mock('../lib/projectGroups', () => ({
-  useProjectGroups: () => ({ data: { groups: [] } }),
+  useProjectGroups: () => ({ data: { groups: groupsState.groups } }),
   readActiveGroup: () => null,
   writeActiveGroup: () => {},
+  resolveActiveGroup: (requested: string | null, groups: readonly { slug: string }[]) =>
+    requested && groups.some((g) => g.slug === requested) ? requested : null,
+  ACTIVE_GROUP_EVENT: 'mushi:active-project-group',
 }))
 vi.mock('../lib/toast', () => ({ useToast: () => ({ info: vi.fn(), success: vi.fn(), error: vi.fn() }) }))
 vi.mock('../lib/supabase', () => ({
@@ -47,7 +58,12 @@ vi.mock('./ProjectSnapshotMeta', () => ({ ProjectSnapshotMeta: () => null }))
 
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { ACTIVE_PROJECT_STORAGE_KEY } from '../lib/activeProject'
+import { setActiveOrgIdSnapshot } from '../lib/activeOrg'
 import { getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
+
+const ORG = '11111111-1111-4111-8111-111111111111'
+const OTHER_ORG = '22222222-2222-4222-8222-222222222222'
+const PROJECT_C = '33333333-3333-4333-8333-333333333333'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,6 +78,8 @@ function LocationProbe() {
 
 beforeEach(() => {
   window.localStorage.clear()
+  pageData.value = { data: null, loading: false, error: null, isValidating: false, reload: () => {} }
+  groupsState.groups = []
   setup.value = {
     loading: false,
     error: null,
@@ -108,6 +126,42 @@ describe('ProjectSwitcher — All apps', () => {
     expect(row.getAttribute('aria-selected')).toBe('false')
     expect(row.textContent).toContain('All apps')
     expect(row.textContent).toContain('2 apps')
+  })
+
+  it('counts this team, and lists another team’s app without adding it to that count', async () => {
+    setActiveOrgIdSnapshot(ORG)
+    pageData.value = {
+      data: {
+        teams: [
+          { id: ORG, name: 'Kenji', role: 'owner', isPersonal: false },
+          { id: OTHER_ORG, name: 'Other', role: 'owner', isPersonal: false },
+        ],
+        projects: [
+          { id: PROJECT_A, name: 'glot.it', organizationId: ORG },
+          { id: PROJECT_B, name: 'yen-yen', organizationId: ORG },
+          { id: PROJECT_C, name: 'mushi-mushi', organizationId: OTHER_ORG },
+        ],
+      },
+      loading: false,
+      error: null,
+      isValidating: false,
+      reload: () => {},
+    }
+    await render(`/portfolio?project=${PROJECT_A}`)
+    await click(chip())
+    const text = allRow()!.textContent ?? ''
+    expect(text).toContain('2 apps in this team')
+    expect(text).toContain('1 app in other teams')
+    expect(text).not.toContain('3 apps')
+    expect(host.textContent).toContain('mushi-mushi')
+  })
+
+  it('uses the same group filter as the portfolio for the count and the list', async () => {
+    groupsState.groups = [{ id: 'g1', slug: 'shipped', name: 'Shipped', color: null, sort: 0, project_ids: [PROJECT_A] }]
+    await render(`/portfolio?project=${PROJECT_A}&group=shipped`)
+    await click(chip())
+    expect(allRow()!.textContent).toContain('1 app in Shipped')
+    expect(host.textContent).not.toContain('yen-yen')
   })
 
   it('selecting All apps shows it in the header and keeps the concrete app in the URL', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import {
   budgetText,
+  cardHeadlineState,
   cardNextStep,
   cardStatusChips,
   findingGroupTitle,
@@ -66,6 +67,17 @@ describe('portfolioView', () => {
     expect(radarLabel(c.radar).text).toBe('No risks found')
     expect(needsALook(c)).toBe(true)
     expect(c.needsLook?.[0].reason).toMatch(/Mushi setup check/)
+  })
+
+  it('open radar risks mean the app was checked and needs attention', () => {
+    const risks = card({
+      worst: 'unknown',
+      radar: { checkedAt: null, status: 'fail', open: { error: 5, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
+    })
+    expect(cardHeadlineState(risks)).toBe('drift')
+    expect(needsALook(risks)).toBe(true)
+    expect(radarLabel(risks.radar).text).toBe('5 risks to fix')
+    expect(cardHeadlineState(card({ worst: 'error' }))).toBe('error')
   })
 
   it('"Need a look" never counts an app whose only gap is something not set up', () => {

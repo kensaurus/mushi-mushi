@@ -36,7 +36,7 @@ import {
   type TeamAutoSwitchDetail,
 } from '../lib/crossTeamProject'
 import { usePageData } from '../lib/usePageData'
-import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
+import { ACTIVE_GROUP_EVENT, readActiveGroup, resolveActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../lib/chipTone'
 import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
@@ -55,6 +55,7 @@ import {
   ALL_APPS_VALUE,
   OPEN_PROJECT_SWITCHER_EVENT,
   PROJECT_SCOPE_QUERY_PARAM,
+  allAppsCountText,
   allAppsSupportFor,
   getStoredProjectScopeMode,
   setStoredProjectScopeMode,
@@ -158,9 +159,16 @@ export function ProjectSwitcher() {
     scope: 'none',
   })
   const activeTeamRole = teams.data?.organizations?.find((o) => o.id === activeOrg)?.role ?? null
-  // Project groups (Plan 021): narrow this team's list to one group.
+  // Project groups (Plan 021): the same filter as the portfolio. The URL
+  // `?group=` wins (the portfolio writes it); otherwise the remembered slug.
+  // A slug picked in either place updates both.
   const groups = useProjectGroups(activeOrg, open)
-  const [groupFilter, setGroupFilter] = useState<string | null>(() => readActiveGroup())
+  const [storedGroup, setStoredGroup] = useState<string | null>(() => readActiveGroup())
+  useEffect(() => {
+    const sync = () => setStoredGroup(readActiveGroup())
+    window.addEventListener(ACTIVE_GROUP_EVENT, sync)
+    return () => window.removeEventListener(ACTIVE_GROUP_EVENT, sync)
+  }, [])
   const mayCreateProject = offerProjectCreate(activeTeamRole)
 
   // Hydrate the active project from URL > localStorage > first project. Once
@@ -357,7 +365,8 @@ export function ProjectSwitcher() {
     projects[0].project_id
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
   const groupList = groups.data?.groups ?? []
-  const activeGroup = groupList.find((g) => g.slug === groupFilter) ?? null
+  const groupSlug = resolveActiveGroup(searchParams.get('group') ?? storedGroup, groupList)
+  const activeGroup = groupList.find((g) => g.slug === groupSlug) ?? null
   const shownProjects = activeGroup ? projects.filter((p) => activeGroup.project_ids.includes(p.project_id)) : projects
 
   /** Pick a project in another team: switch team first, then project. */
@@ -408,9 +417,18 @@ export function ProjectSwitcher() {
   const allApps = scopeMode === 'all'
   // What this page is showing, which is what the chip must say.
   const showingAllApps = allApps && pageCombinesApps
-  // Every app the caller can open, across teams once the directory is read
-  // (the combined pages read all of them), else this team's.
-  const appCount = Math.max(projects.length, directory.data?.projects.length ?? 0)
+  // This team's apps, after the portfolio's group filter. Other teams are
+  // counted apart so the number matches the portfolio instead of every app
+  // the directory lists.
+  const otherTeamCount = activeOrgId
+    ? otherTeams.reduce((n, g) => n + g.projects.length, 0)
+    : 0
+  const countLabel = allAppsCountText({
+    shown: shownProjects.length,
+    teamTotal: projects.length,
+    otherTeams: otherTeamCount,
+    groupName: activeGroup?.name ?? null,
+  })
 
   const snapshot = snapshots.byId.get(active.project_id)
   const chipName = showingAllApps ? 'All apps' : active.project_name
@@ -482,8 +500,12 @@ export function ProjectSwitcher() {
                     type="button"
                     aria-pressed={selected}
                     onClick={() => {
-                      setGroupFilter(slug)
+                      setStoredGroup(slug)
                       writeActiveGroup(slug)
+                      const next = new URLSearchParams(searchParams)
+                      if (slug) next.set('group', slug)
+                      else next.delete('group')
+                      setSearchParams(next, { replace: true })
                     }}
                     className={`rounded-full border px-2 py-0.5 text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
                   >
@@ -510,7 +532,7 @@ export function ProjectSwitcher() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">All apps</span>
                   <span className="block truncate text-3xs text-fg-faint">
-                    {appCount} {appCount === 1 ? 'app' : 'apps'} combined, where a page supports it
+                    {countLabel}
                   </span>
                 </span>
                 {allApps && <span className="shrink-0 text-2xs text-brand">✓</span>}
