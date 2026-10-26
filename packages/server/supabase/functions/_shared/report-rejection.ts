@@ -33,3 +33,20 @@ export function rejectionIssues(
     code: IDENT.test(i.code) ? i.code : 'unknown',
   }))
 }
+
+/**
+ * The counter's reason: the first issue as `path:code`
+ * (`fingerprintHash:invalid_string`), at most 200 characters.
+ */
+export function rejectionReason(issues: ReadonlyArray<{ path: ReadonlyArray<string | number>; code: string }>): string {
+  const [first] = rejectionIssues(issues, 1)
+  return first ? `${first.path}:${first.code}`.slice(0, 200) : '(root):unknown'
+}
+
+const SDK_PACKAGE = /^@mushi-mushi\/[a-z0-9][a-z0-9-]{0,60}$/
+
+/** The payload's `sdkPackage` when it is one of ours, else '': host text never lands in the counter. */
+export function rejectionSdkPackage(body: unknown): string {
+  const raw = (body as { sdkPackage?: unknown } | null)?.sdkPackage
+  return typeof raw === 'string' && SDK_PACKAGE.test(raw) ? raw : ''
+}
