@@ -41,6 +41,12 @@ const NOTE_LABEL: Record<SdkHealthPayload['notes'][number]['check'], string> = {
   versions: 'SDK versions',
 }
 
+function repoLabel(repoUrl: string | null): string {
+  if (!repoUrl) return 'no repo linked'
+  const match = /github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(repoUrl)
+  return match ? match[1]! : repoUrl
+}
+
 interface SdkHealthPanelProps {
   projectId: string
   /** Inline use (setup checklist): no outer card. */
@@ -121,6 +127,11 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
           body="Each step runs in order and shows its result here."
           details={
             <ul className="list-disc space-y-0.5 pl-4">
+              {confirm.includes('sync_ci_secrets') && (
+                <li>
+                  Repo: <span className="font-mono">{repoLabel(health.data?.repoUrl ?? null)}</span>
+                </li>
+              )}
               {confirm.map((k) => (
                 <li key={k}>{FIX_ACTION_TEXT[k]}</li>
               ))}

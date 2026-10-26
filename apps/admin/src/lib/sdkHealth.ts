@@ -59,7 +59,8 @@ export function fixAllPlan(problems: readonly SdkHealthProblem[]): SdkHealthFixK
 
 /** What Fix all will do, for the confirm dialog. */
 export const FIX_ACTION_TEXT: Record<SdkHealthFixKind, string> = {
-  sync_ci_secrets: 'Create a new SDK key and write it, with the project id and endpoint, to GitHub Actions. Older CI keys are revoked once GitHub accepts the new one.',
+  sync_ci_secrets:
+    'Create a new SDK key and write it, with the project id and endpoint, to GitHub Actions. Older CI keys are revoked once GitHub accepts the new one: store builds already installed with the old key stop sending bug reports until you ship a new build.',
   install_task: 'File a task for your fix agent to add the SDK to the app.',
   upgrade_pr: 'Open a PR that bumps the @mushi-mushi packages.',
   csp_task: "File a task for your fix agent to allow the Mushi API in the site's security policy.",

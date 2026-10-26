@@ -60,6 +60,12 @@ describe('sdkHealthProblems', () => {
     expect(seen.installed).toBe(true)
   })
 
+  it('the CLI or MCP alone is not the SDK', () => {
+    const cliOnly = sdkHealthProblems(input({ packages: { ok: true, value: [{ path: 'package.json', text: pkg({ react: '19' }, { vite: '7', '@mushi-mushi/cli': '^0.30.0', '@mushi-mushi/mcp': '0.24.0' }) }] } }))
+    expect(ids(cliOnly)).toEqual(['not_installed'])
+    expect(cliOnly.installed).toBe(false)
+  })
+
   it('ci_secrets_missing: names absent and no build has checked in', () => {
     const r = sdkHealthProblems(input({ missingCiVars: { ok: true, value: ['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY'] } }))
     const p = r.problems.find((x) => x.id === 'ci_secrets_missing')!
@@ -122,6 +128,12 @@ describe('sdkHealthProblems', () => {
     }))
     expect(ids(ok('^1.33.1'))).toEqual([])
     expect(ids(ok('workspace:*'))).toEqual([])
+    // A jump of more than one major: the upgrade PR would not bump it either.
+    expect(ids(sdkHealthProblems(input({
+      packages: { ok: true, value: [{ path: 'package.json', text: pkg({ '@mushi-mushi/web': '1.33.1' }) }] },
+      lastSeenAt: '2026-10-25T00:00:00Z',
+      latest: { ok: true, value: { '@mushi-mushi/web': '3.0.0' } },
+    })))).toEqual([])
     const noCatalog = sdkHealthProblems(input({
       packages: { ok: true, value: [{ path: 'package.json', text: pkg({ '@mushi-mushi/web': '1.0.0' }) }] },
       lastSeenAt: '2026-10-25T00:00:00Z',
@@ -145,6 +157,15 @@ describe('sdkHealthProblems', () => {
     expect(allowed.notes).toEqual([])
     expect(sdkHealthProblems(input({ lastSeenAt: '2026-10-25T00:00:00Z' })).notes.map((n) => n.check)).toEqual(['site_csp'])
     expect(sdkHealthProblems(input({ lastSeenAt: '2026-10-25T00:00:00Z', csp: { ok: false, reason: 'timed out' } })).notes[0].detail).toContain('timed out')
+  })
+
+  it('an Expo app without the web SDK skips the site CSP check entirely', () => {
+    const expo = { ok: true as const, value: [{ path: 'apps/mobile/package.json', text: pkg({ expo: '54.0.0', '@mushi-mushi/react-native': '0.24.3' }) }] }
+    const blocked = { ok: true as const, value: { url: PAGE.toString(), apiOrigin: API.origin, verdict: { allowed: false, directive: 'connect-src' as const, sources: ["'self'"] } } }
+    const r = sdkHealthProblems(input({ packages: expo, lastSeenAt: '2026-10-25T00:00:00Z', nativeEverSeen: true, csp: blocked }))
+    expect(r.problems).toEqual([])
+    expect(r.notes).toEqual([])
+    expect(sdkHealthProblems(input({ packages: expo, lastSeenAt: '2026-10-25T00:00:00Z', nativeEverSeen: true })).notes).toEqual([])
   })
 
   it('stale: the last check-in is 14 days old or more; info with no fix', () => {
@@ -242,6 +263,7 @@ describe('repo reading helpers', () => {
       'apps/old/ARCHIVED.md',
       'apps/old/package.json',
       'a/b/c/d/e/package.json',
+      'apps/web/dist/package.json',
       'README.md',
     ])).toEqual(['package.json', 'apps/web/package.json'])
   })

@@ -14,7 +14,7 @@
  */
 
 import { buildCiVars, stackFromPackageJsons, type SdkStack } from './sdk-diagnostics.ts'
-import { compareSemver } from './sdk-version-compare.ts'
+import { archivedDirsFrom, computeBumpPlan, isUnderArchivedDir } from './sdk-upgrade-plan.ts'
 
 export type SdkHealthProblemId = 'not_installed' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
@@ -56,8 +56,8 @@ export interface PackageJsonFile {
   text: string
 }
 
-/** Fixtures, examples and vendored code carry package.json files nobody ships. */
-const SKIP_DIR_RE = /(?:^|\/)(?:node_modules|vendor|\.git|fixtures|__fixtures__|testdata|__mocks__|examples?|templates?|e2e)\//
+/** Build output, fixtures, examples and vendored code carry package.json files nobody ships. */
+const SKIP_DIR_RE = /(?:^|\/)(?:node_modules|dist|build|out|\.next|\.turbo|\.output|coverage|vendor|\.git|fixtures|__fixtures__|testdata|__mocks__|examples?|templates?|e2e)\//
 const MAX_PACKAGE_JSON_FILES = 40
 const MAX_PACKAGE_JSON_DEPTH = 4
 
@@ -67,15 +67,11 @@ const MAX_PACKAGE_JSON_DEPTH = 4
  * retired with an ARCHIVED.md.
  */
 export function packageJsonPaths(treePaths: readonly string[]): string[] {
-  const archived = new Set<string>()
-  for (const p of treePaths) {
-    const m = /^(.*)\/ARCHIVED\.md$/i.exec(p)
-    if (m) archived.add(`${m[1]}/`)
-  }
+  const archived = archivedDirsFrom([...treePaths])
   return treePaths
     .filter((p) => (p === 'package.json' || p.endsWith('/package.json')) && !SKIP_DIR_RE.test(p))
     .filter((p) => p.split('/').length <= MAX_PACKAGE_JSON_DEPTH + 1)
-    .filter((p) => ![...archived].some((dir) => p.startsWith(dir)))
+    .filter((p) => !isUnderArchivedDir(p, archived))
     .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
     .slice(0, MAX_PACKAGE_JSON_FILES)
 }
@@ -95,6 +91,28 @@ function parseDeps(text: string): Record<string, string> | null {
     for (const [name, spec] of Object.entries(v)) if (typeof spec === 'string') out[name] = spec
   }
   return out
+}
+
+/** Packages that put the bug-report widget or reporter in an app (not the CLI, MCP or server tools). */
+const SDK_PACKAGES = new Set([
+  '@mushi-mushi/web',
+  '@mushi-mushi/react',
+  '@mushi-mushi/react-native',
+  '@mushi-mushi/capacitor',
+  '@mushi-mushi/vue',
+  '@mushi-mushi/svelte',
+  '@mushi-mushi/angular',
+  '@mushi-mushi/core',
+])
+
+export function isSdkPackage(name: string): boolean {
+  return SDK_PACKAGES.has(name)
+}
+
+/** False for an Expo app without the web SDK: no browser request to block. */
+function cspApplies(files: readonly PackageJsonFile[]): boolean {
+  const target = detectAppTarget(files)
+  return !(target?.stack === 'expo' && !mushiDeps(files).some((d) => d.name === '@mushi-mushi/web'))
 }
 
 export interface MushiDep {
@@ -348,10 +366,12 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   const repo = input.repoLabel ?? 'your repo'
   const files = input.packages.ok ? input.packages.value : []
   const deps = mushiDeps(files)
+  // The CLI or MCP alone in a repo is not the SDK: nothing reports bugs from the app.
+  const sdkDeps = deps.filter((d) => isSdkPackage(d.name))
   const target = detectAppTarget(files)
   const seen = input.lastSeenAt != null
   // A heartbeat proves an install, wherever its package.json lives.
-  const installed = deps.length > 0 || seen ? true : input.packages.ok && files.length > 0 ? false : null
+  const installed = sdkDeps.length > 0 || seen ? true : input.packages.ok && files.length > 0 ? false : null
 
   if (!input.packages.ok) notes.push({ check: 'repo', detail: `Could not read ${repo}: ${input.packages.reason}` })
   else if (files.length === 0 && !seen) notes.push({ check: 'repo', detail: `No package.json found in ${repo}, so Mushi cannot tell whether the SDK is installed.` })
@@ -361,7 +381,7 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
       id: 'not_installed',
       severity: 'error',
       title: "The SDK isn't in your app yet",
-      detail: `No package.json in ${repo} lists a @mushi-mushi package, so the app sends no bug reports.`,
+      detail: `No package.json in ${repo} lists a Mushi SDK package (such as @mushi-mushi/web or @mushi-mushi/react-native), so the app sends no bug reports.`,
       fix: { kind: 'install_task', label: 'File install task' },
     })
   }
@@ -387,8 +407,8 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
     }
   }
 
-  if (deps.length > 0 && !seen) {
-    const where = deps[0].path
+  if (sdkDeps.length > 0 && !seen) {
+    const where = sdkDeps[0].path
     problems.push({
       id: 'never_seen',
       severity: 'error',
@@ -403,25 +423,38 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   if (!input.latest.ok) {
     if (deps.length > 0) notes.push({ check: 'versions', detail: `Could not read the latest SDK versions: ${input.latest.reason}` })
   } else {
-    const behind = deps.filter((d) => d.version && input.latest.ok && input.latest.value[d.name] && compareSemver(d.version, input.latest.value[d.name]) < 0)
+    // The bumps the upgrade PR would make (same plan, same guards), so its
+    // button never ends in "already up to date".
+    const latest = input.latest.value
+    const behind = files.flatMap((f) => {
+      let pkg: unknown
+      try {
+        pkg = JSON.parse(f.text)
+      } catch {
+        return []
+      }
+      if (typeof pkg !== 'object' || pkg === null) return []
+      return computeBumpPlan(pkg as Record<string, unknown>, latest).bumps.map((b) => ({ ...b, path: f.path }))
+    })
     if (behind.length > 0) {
-      const latest = input.latest.value
       problems.push({
         id: 'outdated',
         severity: 'warn',
         title: behind.length === 1 ? 'An SDK update is out' : 'SDK updates are out',
-        detail: behind.map((d) => `${d.name} ${d.version} → ${latest[d.name]} (${d.path})`).join('; ') + '.',
+        detail: behind.map((b) => `${b.package} ${b.from} → ${b.to} (${b.path})`).join('; ') + '.',
         fix: { kind: 'upgrade_pr', label: 'Open upgrade PR' },
       })
     }
   }
 
-  if (input.csp === null) {
+  // An Expo app with no web SDK sends nothing from a browser: a site's CSP cannot block it.
+  const csp = cspApplies(files) ? input.csp : undefined
+  if (csp === null) {
     notes.push({ check: 'site_csp', detail: "No live site address is known, so the site's security policy was not checked. Add the address in Site watch or the site audit." })
-  } else if (!input.csp.ok) {
-    notes.push({ check: 'site_csp', detail: `Could not check the site's security policy: ${input.csp.reason}` })
-  } else if (!input.csp.value.verdict.allowed) {
-    const { url, apiOrigin, verdict } = input.csp.value
+  } else if (csp && !csp.ok) {
+    notes.push({ check: 'site_csp', detail: `Could not check the site's security policy: ${csp.reason}` })
+  } else if (csp && !csp.value.verdict.allowed) {
+    const { url, apiOrigin, verdict } = csp.value
     problems.push({
       id: 'csp_blocks_api',
       severity: 'error',

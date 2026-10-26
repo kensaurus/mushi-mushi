@@ -43,6 +43,7 @@ import {
   cspTaskReport,
   detectAppTarget,
   installTaskReport,
+  isSdkPackage,
   metaCspValues,
   mushiDeps,
   packageJsonPaths,
@@ -141,7 +142,8 @@ async function readCsp(url: string | null, endpoint: string): Promise<CspRead> {
   if (!url) return null
   try {
     const res = await publicFetch(url, { accept: 'text/html', timeoutMs: SITE_FETCH_MS })
-    if (res.status === 0 || res.status >= 500) return { ok: false, reason: `${url} answered ${res.status}` }
+    // A challenge page, a 404 or an error page is not the policy the app runs under.
+    if (res.status < 200 || res.status >= 300) return { ok: false, reason: `${url} answered ${res.status}` }
     const values = [res.headers.get('content-security-policy') ?? '', ...metaCspValues(res.text)].filter((v) => v.trim())
     const apiUrl = new URL(`${endpoint}/v1/reports`)
     const verdict = cspAllowsConnect(parseCspPolicies(values), apiUrl, new URL(res.finalUrl || url))
@@ -204,7 +206,13 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in a) return a.response
     const endpoint = mushiEndpoint()
 
-    const [projectRes, keysRes, versionsRes, site, repoRes] = await Promise.all([
+    // The site fetch runs beside the repo reads, so a slow GitHub and a slow site do not add up.
+    const site = siteUrl(db, a.projectId)
+    const cspRead: Promise<CspRead> = site.then(
+      (url) => readCsp(url, endpoint),
+      (err) => ({ ok: false, reason: `the site address could not be read (${reason(err)})` }),
+    )
+    const [projectRes, keysRes, versionsRes, repoRes] = await Promise.all([
       db.from('projects').select('slug').eq('id', a.projectId).maybeSingle(),
       db
         .from('project_api_keys')
@@ -212,7 +220,6 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
         .eq('project_id', a.projectId)
         .eq('is_active', true),
       db.from('sdk_versions').select('package, version'),
-      siteUrl(db, a.projectId),
       resolveRecipeRepo(db, a.projectId).catch((err): { ok: false; reason: string } => ({ ok: false, reason: reason(err) })),
     ])
     if (keysRes.error) return dbError(c, keysRes.error)
@@ -264,10 +271,10 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       lastSeenAt: lastHeartbeatAt(keys),
       nativeEverSeen: nativeEverSeen(keys),
       latest,
-      csp: await readCsp(site, endpoint),
+      csp: await cspRead,
       now: new Date(),
     })
-    return c.json({ ok: true, data: { ...result, repoUrl, siteUrl: site, checkedAt: new Date().toISOString() } })
+    return c.json({ ok: true, data: { ...result, repoUrl, siteUrl: await site.catch(() => null), checkedAt: new Date().toISOString() } })
   })
 
   app.post('/v1/admin/projects/:id/sdk-health/tasks', jwtAuth, async (c) => {
@@ -308,7 +315,7 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       } catch (err) {
         return c.json({ ok: false, error: { code: 'REPO_UNREADABLE', message: `Could not read the repo: ${reason(err)}` } }, 502)
       }
-      if (mushiDeps(read.files).length > 0) {
+      if (mushiDeps(read.files).some((d) => isSdkPackage(d.name))) {
         return c.json({ ok: false, error: { code: 'ALREADY_INSTALLED', message: 'The repo already lists a @mushi-mushi package. Reload SDK health.' } }, 409)
       }
       return fileTask(c, db, a.projectId, taskKind, installTaskReport({

@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   secretNames: [] as string[] | Error,
   csp: null as string | null,
   siteFails: false,
+  siteStatus: 200,
 }))
 let db: FakeDb
 
@@ -63,7 +64,7 @@ vi.mock('../../supabase/functions/_shared/safe-fetch.ts', () => ({
   publicFetch: async (url: string) => {
     if (state.siteFails) throw new Error('timed out')
     const headers = new Headers(state.csp ? { 'content-security-policy': state.csp } : {})
-    return { status: 200, headers, finalUrl: url, text: '<html></html>', truncated: false }
+    return { status: state.siteStatus, headers, finalUrl: url, text: '<html></html>', truncated: false }
   },
 }))
 
@@ -104,6 +105,7 @@ beforeEach(() => {
   state.secretNames = []
   state.csp = "default-src 'self'; connect-src 'self'"
   state.siteFails = false
+  state.siteStatus = 200
   seed()
 })
 
@@ -158,6 +160,18 @@ describe('GET /sdk-health', () => {
     expect(res.json.data.notes.map((n: { check: string }) => n.check).sort()).toEqual(['ci_secrets', 'repo', 'site_csp'])
   })
 
+  it('a site that answers 403 (a bot challenge) is not checked, never a pass', async () => {
+    state.files = { 'package.json': pkg({ '@mushi-mushi/web': '^1.33.1' }, { vite: '7.0.0' }) }
+    state.secretNames = ['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY']
+    state.csp = null
+    state.siteStatus = 403
+    seed({ project_api_keys: [{ project_id: P, is_active: true, scopes: ['report:write'], last_seen_at: new Date().toISOString() }] })
+    const res = await call('GET', HEALTH)
+    expect(res.json.data.problems).toEqual([])
+    expect(res.json.data.notes).toEqual([expect.objectContaining({ check: 'site_csp', detail: expect.stringContaining('answered 403') })])
+    expect((await call('POST', TASKS, { kind: 'csp' })).status).toBe(502)
+  })
+
   it('no repo connected: notes say why', async () => {
     state.repo = false
     const res = await call('GET', HEALTH)
@@ -198,6 +212,13 @@ describe('POST /sdk-health/tasks', () => {
     const ok = await call('POST', TASKS, { kind: 'csp' })
     expect(ok.status).toBe(409)
     expect(db.table('reports')).toHaveLength(0)
+  })
+
+  it('a repo with only the CLI can still get an install task', async () => {
+    state.files = { 'package.json': pkg({ react: '19.0.0' }, { vite: '7.0.0', '@mushi-mushi/cli': '^0.30.0' }) }
+    const res = await call('POST', TASKS, { kind: 'install' })
+    expect(res.status).toBe(200)
+    expect(db.table('reports')).toHaveLength(1)
   })
 
   it('install refuses when the SDK is already in the repo, or there is no repo', async () => {
