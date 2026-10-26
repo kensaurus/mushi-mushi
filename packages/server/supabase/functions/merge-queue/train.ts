@@ -42,6 +42,8 @@ const log = rootLog.child('merge-train')
 
 /** Drafts marked ready per repo per tick: each one starts a CI run (ADR 0041: one PR per repo in CI). */
 const DRAFTS_READIED_PER_TICK = 1
+/** A conflicting PR blocked at its head is offered to a conflict agent again after this long. */
+const CONFLICT_RECHECK_MS = 60 * 60_000
 /** How far back red trains count against a member's head. */
 const RED_TRAIN_HISTORY_MS = 7 * 24 * 60 * 60_000
 
@@ -78,6 +80,10 @@ export interface TrainQueueRow {
   train_id: string | null
   /** Conflict agents already run on this PR (the single-PR path caps it). */
   conflict_agents?: number
+  /** Why a blocked row is blocked, the head it was blocked at, and when that last changed. */
+  detail?: string | null
+  head_sha?: string | null
+  updated_at?: string | null
 }
 
 interface TrainRow {
@@ -435,6 +441,12 @@ export async function runTrainTick(
     // take it until a conflict agent merges main into it (the single-PR path,
     // at most MAX_CONFLICT_AGENTS runs per PR; past that it stays held).
     if ((pull.mergeableState ?? '').toLowerCase() === 'dirty' || pull.mergeable === false) {
+      // A conflict agent could not start at this very head (follow-ups off, no
+      // key, Cursor refused; resolve() wrote "Merge conflict…"): leave it for
+      // an hour instead of sending it back to `resolving` every other tick.
+      const blockedHere = r.state === 'blocked' && (r.detail ?? '').startsWith('Merge conflict') && !!r.head_sha &&
+        r.head_sha === pull.headSha && now.getTime() - Date.parse(r.updated_at ?? '') < CONFLICT_RECHECK_MS
+      if (blockedHere) continue
       if ((r.conflict_agents ?? 0) < MAX_CONFLICT_AGENTS) {
         await setRows(db, [r.id], { state: 'resolving', cursor_agent_id: null, detail: 'Conflicts with the base branch; a Cursor agent merges it in, then it rides a release train.' })
       } else if (r.state !== 'blocked') {

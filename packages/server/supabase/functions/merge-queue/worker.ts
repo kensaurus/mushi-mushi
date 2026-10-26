@@ -46,7 +46,7 @@ export interface QueueRow {
 }
 
 const ROW_COLUMNS =
-  'id, train_id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, queued_at, claimed_until'
+  'id, train_id, fix_attempt_id, project_id, repo, pr_number, state, detail, head_sha, queued_by, conflict_agents, cursor_agent_id, agent_started_at, agent_head_sha, queued_at, updated_at, claimed_until'
 
 /** Everything that talks to GitHub, Cursor or the merge path; index.ts wires the live ones. */
 export interface MergeQueueDeps {
@@ -403,7 +403,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   if (projectId) q = q.eq('project_id', projectId)
   const { data, error } = await q.order('queued_at', { ascending: true }).limit(500)
   if (error) throw new Error(`merge-queue read failed: ${error.message}`)
-  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; train_id: string | null }>
+  const all = (data ?? []) as Array<QueueRow & { claimed_until: string | null; queued_at: string; updated_at: string | null; train_id: string | null }>
   // A row leased by a tick still running holds its repo.
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
   let rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
