@@ -786,6 +786,8 @@ forwardToApiExt([
 ]);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
+// sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
 
 registerA2ATaskRoutes(app);
 

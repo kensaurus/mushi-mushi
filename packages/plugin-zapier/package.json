@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/plugin-zapier",
   "version": "0.2.10",
   "license": "MIT",
-  "description": "Reference Mushi Mushi plugin: fan out any Mushi event to a Zapier-style incoming webhook.",
+  "description": "Mushi Mushi plugin for Zapier — checks the signature on Mushi bug events and forwards them, flattened, to a Zapier Catch Hook.",
   "type": "module",
   "exports": {
     ".": {
