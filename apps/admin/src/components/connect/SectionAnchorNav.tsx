@@ -51,15 +51,11 @@ export function SectionAnchorNav({
             }
           }
           if (visible.size === 0 || Date.now() < clickedUntil.current) return
-          let bestId = sections[0]!.id
-          let bestRatio = -1
-          for (const [id, ratio] of visible) {
-            if (ratio > bestRatio) {
-              bestRatio = ratio
-              bestId = id
-            }
-          }
-          setActiveId(bestId)
+          // The first visible section in page order wins. Picking the largest
+          // ratio let the right column's Update win over the left column's
+          // SDK health after a jump to #connect-sdk-health.
+          const first = sections.find((s) => visible.has(s.id))
+          if (first) setActiveId(first.id)
         },
         { rootMargin: '-20% 0px -55% 0px', threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
       )

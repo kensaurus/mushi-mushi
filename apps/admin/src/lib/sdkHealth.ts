@@ -16,7 +16,7 @@ import { useSdkUpgrade } from './useSdkUpgrade'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
 
 export interface SdkHealthProblem {
-  id: 'not_installed' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
+  id: 'not_installed' | 'no_repo' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
   severity: 'error' | 'warn' | 'info'
   title: string
   detail: string

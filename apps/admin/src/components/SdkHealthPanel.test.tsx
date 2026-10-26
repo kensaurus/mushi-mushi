@@ -227,10 +227,24 @@ describe('SdkHealthPanel', () => {
     expect(document.querySelector('[data-testid="sdk-health-fix-outdated"]')).toBeNull()
   })
 
+  it('says all good only when every check ran', async () => {
+    await mount([])
+    expect(document.body.textContent).toContain('No SDK problems found.')
+  })
+
+  it('no repo: Connect your GitHub repo stays in the console (no new tab)', async () => {
+    await mount([{ ...problem('no_repo', null), link: { label: 'Connect your GitHub repo', href: `/connect?project=${PROJECT}#connect-github` } }])
+    const link = document.querySelector('[data-testid="sdk-health-link-no_repo"]') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe(`/connect?project=${PROJECT}#connect-github`)
+    expect(link.getAttribute('target')).toBeNull()
+  })
+
   it('lists checks that could not run', async () => {
     await mount([], [{ check: 'site_csp', detail: 'No live site address is known.' }])
     const text = document.body.textContent ?? ''
-    expect(text).toContain('No SDK problems found.')
+    // Never "all good" while a check could not run.
+    expect(text).not.toContain('No SDK problems found.')
+    expect(text).toContain('No problems in the checks that ran, but 1 check could not run (below).')
     expect(text).toContain('Not checked')
     expect(text).toContain('Site security policy: No live site address is known.')
     expect(button(/Fix all/)).toBeUndefined()

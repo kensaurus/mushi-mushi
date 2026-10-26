@@ -5,7 +5,9 @@
  * reports' observable "Done when" lines.
  */
 import { describe, expect, it } from 'vitest'
+import { GLOT_IT_CSP_META } from './fixtures/glot-it-csp-meta.ts'
 import {
+  appPackageFiles,
   cspAllowsConnect,
   cspTaskReport,
   detectAppTarget,
@@ -27,6 +29,8 @@ const pkg = (deps: Record<string, string>, devDeps: Record<string, string> = {})
 
 function input(over: Partial<SdkHealthInput> = {}): SdkHealthInput {
   return {
+    projectId: 'p1',
+    repoConnected: true,
     repoLabel: 'kensaurus/lets-talk',
     packages: { ok: true, value: [{ path: 'package.json', text: pkg({ react: '19.0.0' }, { vite: '7.0.0' }) }] },
     missingCiVars: { ok: true, value: [] },
@@ -170,6 +174,18 @@ describe('sdkHealthProblems', () => {
     expect(sdkHealthProblems(input({ packages: expo, lastSeenAt: '2026-10-25T00:00:00Z', nativeEverSeen: true })).notes).toEqual([])
   })
 
+  it('never seen with no repo (mushi-demo): never_seen plus a Connect your GitHub repo link, never "healthy"', () => {
+    const r = sdkHealthProblems(input({ repoConnected: false, packages: { ok: false, reason: 'No primary GitHub repo is connected to this project.' }, missingCiVars: { ok: false, reason: 'no repo' } }))
+    expect(ids(r).sort()).toEqual(['never_seen', 'no_repo'])
+    expect(r.problems.find((p) => p.id === 'no_repo')).toMatchObject({ fix: null, link: { label: 'Connect your GitHub repo', href: '/connect?project=p1#connect-github' } })
+    expect(r.notes.map((n) => n.check)).not.toContain('repo')
+  })
+
+  it('never_seen when the repo could not be read, and not beside not_installed', () => {
+    expect(ids(sdkHealthProblems(input({ packages: { ok: false, reason: 'GitHub answered 502' } })))).toContain('never_seen')
+    expect(ids(sdkHealthProblems(input()))).toEqual(['not_installed'])
+  })
+
   it('stale: Cold on the key legend, over 7 days without a check-in; no fix', () => {
     const r = sdkHealthProblems(input({ lastSeenAt: '2026-10-11T12:00:00Z' }))
     expect(r.problems).toEqual([expect.objectContaining({ id: 'stale', severity: 'warn', fix: null, title: 'Cold: no check-in for 15 days' })])
@@ -277,6 +293,22 @@ describe('CSP matching', () => {
     expect(allows("connect-src 'unsafe-inline' 'nonce-abc' 'sha256-xyz' 'strict-dynamic'")).toBe(false)
   })
 
+  it("glot.it's live meta tag (quotes as &#x27;) allows the API through https://*.supabase.co", () => {
+    const values = metaCspValues(`<html><head>${GLOT_IT_CSP_META}</head></html>`)
+    expect(values).toHaveLength(1)
+    expect(values[0]).toContain("connect-src 'self' blob: https://*.supabase.co")
+    const policies = parseCspPolicies(values)
+    expect(policies[0].get('connect-src')!.slice(0, 3)).toEqual(["'self'", 'blob:', 'https://*.supabase.co'])
+    expect(cspAllowsConnect(policies, API, new URL('https://kensaur.us/glot-it/')).allowed).toBe(true)
+    expect(cspAllowsConnect(policies, new URL('https://evil.example/x'), new URL('https://kensaur.us/glot-it/')).allowed).toBe(false)
+  })
+
+  it('decodes hex, decimal and named entities before splitting on ;', () => {
+    expect(metaCspValues('<meta http-equiv="Content-Security-Policy" content="connect-src &#x27;self&#x27; &#39;none&#39; https://a.dev&#59; img-src *">')).toEqual([
+      "connect-src 'self' 'none' https://a.dev; img-src *",
+    ])
+  })
+
   it('reads meta CSP tags and ignores Report-Only and other metas', () => {
     const html = `<html><head>
       <meta charset="utf-8">
@@ -310,6 +342,30 @@ describe('repo reading helpers', () => {
       { path: 'package.json', name: '@mushi-mushi/web', spec: '~1.2.3', version: '1.2.3' },
       { path: 'package.json', name: '@mushi-mushi/cli', spec: 'workspace:*', version: null },
     ])
+  })
+
+  it("the mushi-mushi monorepo: the SDK's own packages are not the app; the Next docs site is", () => {
+    const files = [
+      { path: 'package.json', text: JSON.stringify({ name: 'mushi-mushi', devDependencies: { turbo: '2', vite: '7' } }) },
+      { path: 'apps/admin/package.json', text: JSON.stringify({ name: '@mushi-mushi/admin', dependencies: { '@mushi-mushi/web': 'workspace:*' }, devDependencies: { vite: '7' } }) },
+      { path: 'apps/docs/package.json', text: JSON.stringify({ name: 'docs', dependencies: { next: '16', '@mushi-mushi/web': 'workspace:*' } }) },
+      { path: 'packages/react-native/package.json', text: JSON.stringify({ name: '@mushi-mushi/react-native', dependencies: { '@mushi-mushi/core': 'workspace:*' }, devDependencies: { 'react-native': '0.81', expo: '54' } }) },
+      { path: 'packages/web/package.json', text: JSON.stringify({ name: '@mushi-mushi/web', dependencies: { '@mushi-mushi/core': '1.30.0' } }) },
+    ]
+    const apps = appPackageFiles(files)
+    expect(apps.map((f) => f.path)).toEqual(['package.json', 'apps/docs/package.json'])
+    expect(detectAppTarget(apps)).toMatchObject({ stack: 'nextjs', path: 'apps/docs/package.json', sdkPackage: '@mushi-mushi/web' })
+    // Live through the docs site: no Expo CI names, no outdated pin from packages/web.
+    const r = sdkHealthProblems(input({ packages: { ok: true, value: files }, lastSeenAt: '2026-10-26T11:30:00Z', latest: { ok: true, value: { '@mushi-mushi/core': '1.33.0' } } }))
+    expect(r.problems).toEqual([])
+    expect(r.installed).toBe(true)
+  })
+
+  it('prefers the root and apps/* over packages/* for the same framework', () => {
+    expect(detectAppTarget([
+      { path: 'packages/ui/package.json', text: pkg({ next: '16' }) },
+      { path: 'apps/site/package.json', text: pkg({ next: '16' }) },
+    ])?.path).toBe('apps/site/package.json')
   })
 
   it('detectAppTarget: Vite, Next, Expo and Capacitor; the app with the framework, not the root', () => {

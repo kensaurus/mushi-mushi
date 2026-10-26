@@ -16,7 +16,7 @@
 import { buildCiVars, stackFromPackageJsons, type SdkStack } from './sdk-diagnostics.ts'
 import { archivedDirsFrom, computeBumpPlan, isUnderArchivedDir } from './sdk-upgrade-plan.ts'
 
-export type SdkHealthProblemId = 'not_installed' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
+export type SdkHealthProblemId = 'not_installed' | 'no_repo' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
 export type SdkHealthSeverity = 'error' | 'warn' | 'info'
 
@@ -117,6 +117,22 @@ function cspApplies(files: readonly PackageJsonFile[]): boolean {
   return !(target?.stack === 'expo' && !mushiDeps(files).some((d) => d.name === '@mushi-mushi/web'))
 }
 
+/**
+ * The package.json files that can be an app. A package published as
+ * `@mushi-mushi/*` is the SDK's own source (the mushi-mushi monorepo's
+ * packages/react-native made it look like an Expo app, 2026-10-26).
+ */
+export function appPackageFiles(files: readonly PackageJsonFile[]): PackageJsonFile[] {
+  return files.filter((f) => {
+    try {
+      const name = (JSON.parse(f.text) as { name?: unknown } | null)?.name
+      return !(typeof name === 'string' && name.startsWith('@mushi-mushi/'))
+    } catch {
+      return true
+    }
+  })
+}
+
 export interface MushiDep {
   path: string
   name: string
@@ -174,7 +190,11 @@ export function detectAppTarget(files: readonly PackageJsonFile[]): AppTarget | 
   const markers = STACK_MARKERS[stack]
   const matching = parsed.filter((p) => markers.some((m) => m in p.deps))
   const withSdk = matching.filter((p) => Object.keys(p.deps).some((n) => n.startsWith('@mushi-mushi/')))
-  const pick = (withSdk.length > 0 ? withSdk : matching).sort((a, b) => a.path.split('/').length - b.path.split('/').length)[0]
+  // The repo root and apps/* are where apps live; packages/* are libraries.
+  const rank = (path: string) => (path === 'package.json' || path.startsWith('apps/') ? 0 : 1)
+  const pick = (withSdk.length > 0 ? withSdk : matching).sort(
+    (a, b) => rank(a.path) - rank(b.path) || a.path.split('/').length - b.path.split('/').length,
+  )[0]
   if (!pick) return null
   return {
     stack,
@@ -212,15 +232,33 @@ export function parseCspPolicies(values: readonly string[]): CspPolicy[] {
   return policies
 }
 
+const NAMED_ENTITIES: Record<string, string> = { quot: '"', apos: "'", amp: '&', lt: '<', gt: '>', nbsp: ' ' }
+
+/**
+ * Decode character references in an attribute value. Every one must be
+ * decoded before the policy is split on ';': glot.it's meta CSP writes its
+ * quotes as `&#x27;`, whose own ';' split every directive in two, so
+ * connect-src read as `&#x27` and a policy allowing `https://*.supabase.co`
+ * looked like it blocked the API (2026-10-26).
+ */
+function decodeHtmlEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, ref: string) => {
+    if (ref[0] === '#') {
+      const code = ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10)
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole
+    }
+    return NAMED_ENTITIES[ref.toLowerCase()] ?? whole
+  })
+}
+
 /** `<meta http-equiv="Content-Security-Policy" content="…">` values in a page (SPAs often set CSP this way). */
 export function metaCspValues(html: string): string[] {
   const out: string[] = []
-  const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, '&')
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
     if (!/http-equiv\s*=\s*["']?content-security-policy["'\s/>]/i.test(tag)) continue
     const m = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag)
     const content = m ? (m[1] ?? m[2] ?? '') : ''
-    if (content.trim()) out.push(decode(content))
+    if (content.trim()) out.push(decodeHtmlEntities(content))
   }
   return out
 }
@@ -328,6 +366,9 @@ export function siteUrlsFromManifest(manifest: unknown): string[] {
 export type Read<T> = { ok: true; value: T } | { ok: false; reason: string }
 
 export interface SdkHealthInput {
+  projectId: string
+  /** A primary GitHub repo is linked (it may still be unreadable). */
+  repoConnected: boolean
   /** owner/repo, for the copy. */
   repoLabel: string | null
   /** package.json files at the default-branch head. */
@@ -370,7 +411,7 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   const problems: SdkHealthProblem[] = []
   const notes: SdkHealthNote[] = []
   const repo = input.repoLabel ?? 'your repo'
-  const files = input.packages.ok ? input.packages.value : []
+  const files = input.packages.ok ? appPackageFiles(input.packages.value) : []
   const deps = mushiDeps(files)
   // The CLI or MCP alone in a repo is not the SDK: nothing reports bugs from the app.
   const sdkDeps = deps.filter((d) => isSdkPackage(d.name))
@@ -379,7 +420,17 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   // A heartbeat proves an install, wherever its package.json lives.
   const installed = sdkDeps.length > 0 || seen ? true : input.packages.ok && files.length > 0 ? false : null
 
-  if (!input.packages.ok) notes.push({ check: 'repo', detail: `Could not read ${repo}: ${input.packages.reason}` })
+  if (!input.repoConnected) {
+    // Nothing about the install, keys or version can be checked without it; say so as a problem with its fix.
+    problems.push({
+      id: 'no_repo',
+      severity: seen ? 'warn' : 'error',
+      title: 'No GitHub repo is connected',
+      detail: 'Mushi checks the SDK, its CI keys and its version in your repo, and the one-click fixes work there. Connect the repo to run them.',
+      fix: null,
+      link: { label: 'Connect your GitHub repo', href: `/connect?project=${encodeURIComponent(input.projectId)}#connect-github` },
+    })
+  } else if (!input.packages.ok) notes.push({ check: 'repo', detail: `Could not read ${repo}: ${input.packages.reason}` })
   else if (files.length === 0 && !seen) notes.push({ check: 'repo', detail: `No package.json found in ${repo}, so Mushi cannot tell whether the SDK is installed.` })
 
   if (installed === false) {
@@ -425,15 +476,17 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
     })
   }
 
-  if (sdkDeps.length > 0 && !seen) {
-    const where = sdkDeps[0].path
+  // No check-in ever is a problem whatever the repo shows, unless "not installed" already says why.
+  if (!seen && installed !== false) {
+    const where = sdkDeps[0]?.path
+    const intro = where ? `The SDK is in ${where}, but no build has reached Mushi.` : 'No build of this app has reached Mushi yet.'
     problems.push({
       id: 'never_seen',
       severity: 'error',
       title: 'The SDK has never checked in',
       detail: ciProblem
-        ? `The SDK is in ${where}, but no build has reached Mushi. The missing CI keys above are the likely cause: write them, then ship a new build.`
-        : `The SDK is in ${where}, but no build has reached Mushi. Check that the Mushi key and project id are set where the app builds, deploy, then open the app once.`,
+        ? `${intro} The missing CI keys above are the likely cause: write them, then ship a new build.`
+        : `${intro} Check that the SDK is installed and its key and project id are set where the app builds, deploy, then open the app once.`,
       fix: null,
     })
   }

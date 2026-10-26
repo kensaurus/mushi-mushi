@@ -97,9 +97,12 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
           {health.loading
             ? 'Checking your SDK…'
             : problems.length === 0
-              ? health.data
-                ? 'No SDK problems found.'
-                : ''
+              ? !health.data
+                ? ''
+                : notes.length > 0
+                  ? // Never "all good" while a check could not run.
+                    `No problems in the checks that ran, but ${notes.length} ${notes.length === 1 ? 'check' : 'checks'} could not run (below).`
+                  : 'No SDK problems found.'
               : `${problems.length} ${problems.length === 1 ? 'problem' : 'problems'} found.`}
         </p>
         <div className="flex items-center gap-2">
@@ -220,12 +223,17 @@ function ProblemRow({
           {problem.fix.label}
         </Btn>
       )}
-      {problem.link && (
-        <Btn size="sm" variant="ghost" href={problem.link.href} className="shrink-0 gap-1 self-start" data-testid={`sdk-health-link-${problem.id}`}>
-          {problem.link.label}
-          <IconExternalLink className="h-3 w-3" aria-hidden />
-        </Btn>
-      )}
+      {problem.link &&
+        (problem.link.href.startsWith('/') ? (
+          <Btn size="sm" variant="ghost" to={problem.link.href} className="shrink-0 self-start" data-testid={`sdk-health-link-${problem.id}`}>
+            {problem.link.label}
+          </Btn>
+        ) : (
+          <Btn size="sm" variant="ghost" href={problem.link.href} className="shrink-0 gap-1 self-start" data-testid={`sdk-health-link-${problem.id}`}>
+            {problem.link.label}
+            <IconExternalLink className="h-3 w-3" aria-hidden />
+          </Btn>
+        ))}
     </li>
   )
 }

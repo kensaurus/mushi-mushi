@@ -27,6 +27,7 @@ import { runInBackground } from '../../_shared/background.ts';
 import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-deploy-live.ts';
 import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import { bulkClosedReason } from '../../_shared/report-close-reasons.ts';
+import { isSdkKey } from '../../_shared/setup-signals.ts';
 import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
 import {
   NEW_BUCKET_STATUSES,
@@ -115,18 +116,18 @@ async function unpinnedReportStats(
     db.from('project_api_keys').select('id').in('project_id', projectIds).eq('is_active', true).limit(1),
     db
       .from('project_api_keys')
-      .select('last_seen_at')
+      .select('scopes, last_seen_at')
       .in('project_id', projectIds)
       .eq('is_active', true)
       .not('last_seen_at', 'is', null)
       .order('last_seen_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(50),
   ]);
 
   const hasIngest = totalAllTime > 0;
   const hasKey = (keysRes.data ?? []).length > 0;
-  const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+  // SDK keys only: an MCP or CLI key's calls are not the app checking in.
+  const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
   const setupDone = hasKey && hasSdk && hasIngest;
   const lastReportAt = (latest.data?.created_at as string | null | undefined) ?? null;
   const scoped = (path: string) => `${path}${path.includes('?') ? '&' : '?'}apps=all`;
@@ -260,13 +261,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .limit(1),
       db
         .from('project_api_keys')
-        .select('last_seen_at')
+        .select('scopes, last_seen_at')
         .eq('project_id', activeProject.id)
         .eq('is_active', true)
         .not('last_seen_at', 'is', null)
         .order('last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(50),
     ]);
 
     const recentReports = reportsRes.data ?? [];
@@ -300,7 +300,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     const totalAllTime = reportCountRes.count ?? 0;
     const hasKey = (keysRes.data ?? []).length > 0;
-    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+    const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
     const hasIngest = totalAllTime > 0;
     const setupDone = hasKey && hasSdk && hasIngest;
     const lastReportAt = recentReports[0]?.created_at ?? null;

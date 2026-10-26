@@ -40,6 +40,7 @@ import { isUpgradePrStillRelevant } from '../../_shared/sdk-upgrade-gates.ts'
 import {
   OPEN_REPORT_STATUSES,
   SDK_HEALTH_TASK_KINDS,
+  appPackageFiles,
   cspAllowsConnect,
   cspTaskReport,
   detectAppTarget,
@@ -280,7 +281,7 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       ])
       packages = read.status === 'fulfilled' ? { ok: true, value: read.value.files } : { ok: false, reason: reason(read.reason) }
       // The names to expect depend on the framework, so an unread repo leaves them unknown.
-      const stack = packages.ok ? resolveStack(slug, detectAppTarget(packages.value)?.stack) : null
+      const stack = packages.ok ? resolveStack(slug, detectAppTarget(appPackageFiles(packages.value))?.stack) : null
       ci = names.status === 'rejected'
         ? { ok: false, reason: reason(names.reason) }
         : !stack
@@ -302,6 +303,9 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
     }
 
     const result = sdkHealthProblems({
+      projectId: a.projectId,
+      // A failed lookup (DB error) is not "no repo": only say that when the row is missing.
+      repoConnected: repoRes.ok || !('repoConnected' in repoRes) || repoRes.repoConnected,
       repoLabel,
       packages,
       missingCiVars: ci,
@@ -354,14 +358,15 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       } catch (err) {
         return c.json({ ok: false, error: { code: 'REPO_UNREADABLE', message: `Could not read the repo: ${reason(err)}` } }, 502)
       }
-      if (mushiDeps(read.files).some((d) => isSdkPackage(d.name))) {
+      const appFiles = appPackageFiles(read.files)
+      if (mushiDeps(appFiles).some((d) => isSdkPackage(d.name))) {
         return c.json({ ok: false, error: { code: 'ALREADY_INSTALLED', message: 'The repo already lists a @mushi-mushi package. Reload SDK health.' } }, 409)
       }
       return fileTask(c, db, a.projectId, taskKind, installTaskReport({
         appName,
         repoLabel: repoLabelOf(res.repo),
         repoUrl: res.repo.repoUrl,
-        target: detectAppTarget(read.files),
+        target: detectAppTarget(appFiles),
         fallbackStack: resolveStack(slug, null),
         projectId: a.projectId,
         endpoint,

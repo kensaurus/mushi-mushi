@@ -187,7 +187,8 @@ describe('GET /sdk-health', () => {
     state.siteFails = true
     const res = await call('GET', HEALTH)
     expect(res.status).toBe(200)
-    expect(res.json.data.problems).toEqual([])
+    // No check-in ever is still a problem; the unread checks are notes.
+    expect(ids(res.json)).toEqual(['never_seen'])
     expect(res.json.data.installed).toBeNull()
     expect(res.json.data.notes.map((n: { check: string }) => n.check).sort()).toEqual(['ci_secrets', 'repo', 'site_csp'])
   })
@@ -207,8 +208,8 @@ describe('GET /sdk-health', () => {
   it('no repo connected: notes say why', async () => {
     state.repo = false
     const res = await call('GET', HEALTH)
-    expect(ids(res.json)).toEqual(['csp_blocks_api'])
-    expect(res.json.data.notes.find((n: { check: string }) => n.check === 'repo').detail).toContain('No primary GitHub repo')
+    expect(ids(res.json).sort()).toEqual(['csp_blocks_api', 'never_seen', 'no_repo'])
+    expect(res.json.data.problems.find((p: { id: string }) => p.id === 'no_repo').link.href).toBe(`/connect?project=${P}#connect-github`)
   })
 })
 
