@@ -18,13 +18,18 @@ import type { PortfolioCard } from '../../lib/portfolioTypes'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { RecipeStateChip } from '../recipe/RecipeStateChip'
-import { budgetText, cardNextStep, cardStatusChips, kindLabel, spendText, type CardStatusChip } from './portfolioView'
+import { budgetText, cardHeadlineState, cardNextStep, cardStatusChips, kindLabel, spendText, type CardStatusChip } from './portfolioView'
 
 interface Props {
   card: PortfolioCard
   /** Icon source (SDK origin, repo) from the team's project list. */
   favicon: ProjectFaviconSource
   showSpend: boolean
+}
+
+function nextStepTitle(next: { label: string; reason: string; more: number }): string {
+  const more = next.more > 0 ? ` (+${next.more} more on the Recipe page)` : ''
+  return `Next step: ${next.label} — ${next.reason}${more}`
 }
 
 /** The app's own pages, in cycle order. */
@@ -73,7 +78,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
             ) : null}
           </p>
         </div>
-        <RecipeStateChip state={card.worst} className="shrink-0" />
+        <RecipeStateChip state={cardHeadlineState(card)} className="shrink-0" />
       </div>
 
       {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
@@ -85,17 +90,20 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
       </div>
 
       {next && (
-        // Neutral text: red is for errors, and this is a suggestion. A plain
-        // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
-        // the line, which pushed the card wider than a phone screen.
-        <Link
-          to="/recipe"
-          onClick={open}
-          title={next.more > 0 ? `${next.reason} (+${next.more} more on the Recipe page)` : next.reason}
-          className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
-        >
-          <span className="font-medium text-fg">Next step: {next.label}</span> — {next.reason} →
-        </Link>
+        // Neutral text: red is for errors, and this is a suggestion.
+        // Two lines stay visible; the tooltip has the rest. min-w-0 on the
+        // tooltip wrapper lets the line shrink to the card instead of
+        // widening it to the full sentence.
+        <Tooltip content={nextStepTitle(next)} className="w-full min-w-0 max-w-full">
+          <Link
+            to="/recipe"
+            onClick={open}
+            title={nextStepTitle(next)}
+            className="line-clamp-2 min-w-0 text-xs leading-snug text-fg-secondary hover:text-fg hover:underline"
+          >
+            <span className="font-medium text-fg">Next step: {next.label}</span> — {next.reason} →
+          </Link>
+        </Tooltip>
       )}
 
       {showSpend && (
@@ -118,6 +126,8 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
             <>
               Checked <RelativeTime value={card.radar.checkedAt} />
             </>
+          ) : card.radar.open.error + card.radar.open.warn > 0 ? (
+            'Risks found'
           ) : (
             'Not checked yet'
           )}

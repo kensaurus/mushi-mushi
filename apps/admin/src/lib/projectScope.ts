@@ -203,3 +203,30 @@ export function requestOpenProjectSwitcher(): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event(OPEN_PROJECT_SWITCHER_EVENT))
 }
+
+/**
+ * The "All apps" row's count. The number in front is the apps in this team
+ * after the same group filter the portfolio uses, so the two stay equal.
+ * Apps in other teams are a separate clause: combined pages (CI, Bugs) read
+ * those too, and the portfolio does not.
+ */
+export function allAppsCountText(input: {
+  /** Apps in this team after the active group filter. */
+  shown: number
+  /** Apps in this team with no group filter. */
+  teamTotal: number
+  /** Apps the directory lists under other teams. */
+  otherTeams: number
+  /** Selected group name, when that filter is on. */
+  groupName: string | null
+}): string {
+  const n = (c: number) => `${c} ${c === 1 ? 'app' : 'apps'}`
+  const grouped = Boolean(input.groupName) && input.shown !== input.teamTotal
+  const primary = grouped
+    ? `${n(input.shown)} in ${input.groupName}`
+    : input.otherTeams > 0
+      ? `${n(input.shown)} in this team`
+      : `${n(input.shown)} combined, where a page supports it`
+  if (input.otherTeams <= 0) return primary
+  return `${primary} · ${n(input.otherTeams)} in other teams. Pages that combine apps include both.`
+}
