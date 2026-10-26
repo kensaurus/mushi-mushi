@@ -58,7 +58,12 @@ export const qaStoryPatchSchema = qaStoryCreateSchema.partial().extend({
   enabled: z.boolean().optional(),
 });
 
-/** Row written by POST …/qa-stories. `target_url` is what the runner navigates to. */
+/**
+ * Row written by POST …/qa-stories. `target_url` is what the runner navigates to.
+ * A console story is created already on, so it is `approved` here. The schedule
+ * runs only that status; leaving it off the insert would depend on the column
+ * default, and a story that is on but not approved would never be picked.
+ */
 export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaStoryCreateSchema>) {
   return {
     project_id: projectId,
@@ -71,13 +76,15 @@ export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaSto
     schedule_cron: body.schedule_cron ?? '0 * * * *',
     byok_provider: body.byok_provider ?? null,
     enabled: true,
+    approval_status: 'approved',
   };
 }
 
 /**
  * Column patch for PATCH …/qa-stories/:sid. Turning a story on also approves
- * it: the runner only checks `enabled`, so leaving a rejected or pending
- * story's approval_status behind would contradict what the console shows.
+ * it. The scheduled runner only executes `approval_status = 'approved'`, so
+ * a console toggle that left a pending or rejected status behind would show
+ * the story as on while the cron skipped it.
  */
 export function buildQaStoryPatch(body: z.infer<typeof qaStoryPatchSchema>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
