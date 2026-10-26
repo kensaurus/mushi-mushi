@@ -143,7 +143,7 @@ describe('deriveReportFixTruth precedence', () => {
   })
 
   it("an agent's own no-PR verdict is failed but not retryable: a new run gives the same answer", () => {
-    for (const failure_category of ['needs_human', 'already_fixed', 'wrong_repo', 'not_actionable']) {
+    for (const failure_category of ['needs_human', 'wrong_repo', 'not_actionable']) {
       const t = deriveReportFixTruth({
         reportId: 'r',
         report: { id: 'r', status: 'classified' },
@@ -151,12 +151,40 @@ describe('deriveReportFixTruth precedence', () => {
       })
       expect(t).toMatchObject({ state: 'failed', retryable: false })
     }
+    const alreadyFixed = deriveReportFixTruth({
+      reportId: 'r',
+      report: { id: 'r', status: 'classified' },
+      attempts: [{ ...base, status: 'failed', failure_category: 'already_fixed', error: 'Agent found nothing to change' }],
+    })
+    expect(alreadyFixed.state).toBe('none')
     const api = deriveReportFixTruth({
       reportId: 'r',
       report: { id: 'r', status: 'classified' },
       attempts: [{ ...base, status: 'failed', failure_category: 'cursor_api_error', error: 'Cursor 500' }],
     })
     expect(api.retryable).toBe(true)
+  })
+
+  it('leaves already_fixed out of the failed total the summary card and badge share', () => {
+    const truths = deriveReportFixTruths({
+      attempts: [
+        { id: 'gone', report_id: 'gone', status: 'failed', failure_category: 'already_fixed', created_at: '2026-10-01T00:00:00Z' },
+        { id: 'ci', report_id: 'ci', status: 'failed', failure_category: 'ci_failed', created_at: '2026-10-01T00:00:00Z' },
+        { id: 'ask', report_id: 'ask', status: 'failed', failure_category: 'needs_human', created_at: '2026-10-01T00:00:00Z' },
+      ],
+      reportsById: new Map([
+        ['gone', { id: 'gone', status: 'classified' }],
+        ['ci', { id: 'ci', status: 'classified' }],
+        ['ask', { id: 'ask', status: 'classified' }],
+      ]),
+    })
+    expect(summarizeFixTruths(truths.values())).toMatchObject({
+      failed: 2,
+      failureBreakdown: [
+        { category: 'ci_failed', count: 1 },
+        { category: 'needs_human', count: 1 },
+      ],
+    })
   })
 
   it('a dismissed report never counts, and a reopened one ignores its old merge', () => {

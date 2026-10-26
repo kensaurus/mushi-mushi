@@ -53,6 +53,7 @@ import {
   storageNavBadge,
   usersNavBadge,
 } from './extendedNavMeta'
+import { stoppedFixesBadgeLabel } from './fixReportTruth'
 import {
   membersNavBadge,
   projectsNavBadge,
@@ -196,7 +197,7 @@ export function resolveNavBadge(
     case '/connect':
       return sliceBadgeSpec(onboardingNavBadge(slices.onboarding))
     case '/dashboard':
-      return sliceBadgeSpec(dashboardNavBadge(slices.dashboard))
+      return sliceBadgeSpec(dashboardNavBadge(slices.dashboard, slices.fixes))
     case '/content':
       return sliceBadgeSpec(
         contentQualityNavBadge(slices.contentQuality),
@@ -330,7 +331,7 @@ export function resolveNavBadge(
           navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight,
         label:
           navCounts.fixesFailed > 0
-            ? `Auto-fix stopped on ${navCounts.fixesFailed} ${navCounts.fixesFailed === 1 ? 'report' : 'reports'}`
+            ? stoppedFixesBadgeLabel(navCounts.fixesFailed, navCounts.slices.fixes?.failureBreakdown)
             : navCounts.fixesInFlight > 0
               ? `${navCounts.fixesInFlight} fixes in flight`
               : 'No active fixes',

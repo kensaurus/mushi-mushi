@@ -353,6 +353,7 @@ export async function fetchNavSlicesFallback(projectId: string | null): Promise<
           inProgress: fixesStats.inProgress,
           specWarnings: fixesStats.specWarnings,
           topPriority: fixesStats.topPriority,
+          failureBreakdown: fixesStats.failureBreakdown ?? [],
         }
       : null,
     repo: repoStats

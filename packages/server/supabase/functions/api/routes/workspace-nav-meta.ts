@@ -602,6 +602,7 @@ export function registerWorkspaceNavMetaRoutes(
         'inProgress',
         'specWarnings',
         'topPriority',
+        'failureBreakdown',
       ]),
       repo: pick(byPath['/v1/admin/repo/stats'], ['prOpen', 'ciFailed', 'topPriority']),
       mcp: pick(byPath['/v1/admin/mcp/stats'], [

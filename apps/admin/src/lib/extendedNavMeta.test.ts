@@ -12,6 +12,7 @@ import {
   rewardsNavBadge,
   fullstackAuditNavBadge,
   dashboardNavBadge,
+  fixesStatsNavBadge,
   mcpNavBadge,
   costsNavBadge,
   settingsNavBadge,
@@ -212,6 +213,26 @@ describe('dashboardNavBadge', () => {
       topPriority: 'integrations',
     })
     expect(badge?.count).toBe(3)
+  })
+
+  it('names the stopped-fix breakdown on Home, the same line as Fixes', () => {
+    const failureBreakdown = [
+      { category: 'ci_failed', count: 24 },
+      { category: 'needs_human', count: 11 },
+    ]
+    const home = dashboardNavBadge(
+      { openBacklog: 0, fixesFailed: 35, fixesInProgress: 0, integrationIssues: 0, topPriority: 'fixes_failed' },
+      { failed: 35, inProgress: 0, specWarnings: 0, topPriority: 'failed', failureBreakdown },
+    )
+    const fixes = fixesStatsNavBadge({
+      failed: 35,
+      inProgress: 0,
+      specWarnings: 0,
+      topPriority: 'failed',
+      failureBreakdown,
+    })
+    expect(home?.label).toBe('35 fixes stopped (CI failed (24), Needs your decision (11))')
+    expect(fixes?.label).toBe(home?.label)
   })
 })
 

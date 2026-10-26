@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_FIXES_STATS, type FixesStats } from '../../components/fixes/FixesStatsTypes'
-import { completedDetail } from './fixes'
+import { formatFixCauseBreakdown } from '../fixReportTruth'
+import { completedDetail, failedDetail } from './fixes'
 
 const stats = (over: Partial<FixesStats>): FixesStats => ({ ...EMPTY_FIXES_STATS, hasAnyProject: true, ...over })
 
@@ -13,5 +14,35 @@ describe('completedDetail', () => {
   it('keeps the fixed-of-finished ratio and the empty state', () => {
     expect(completedDetail(stats({ completed: 2, failed: 1, prsOpen: 4 }))).toBe('2 of 3 reports fixed')
     expect(completedDetail(stats({}))).toBe('no finished runs')
+  })
+})
+
+describe('failedDetail', () => {
+  it('uses the banner cause breakdown instead of the top cause alone', () => {
+    const failureBreakdown = [
+      { category: 'ci_failed', count: 24 },
+      { category: 'needs_human', count: 11 },
+      { category: 'sandbox_timeout', count: 7 },
+    ]
+    const banner = formatFixCauseBreakdown(failureBreakdown)
+    expect(banner).toBe('CI failed (24), Needs your decision (11), Ran out of time (7)')
+    expect(failedDetail(stats({
+      failed: 42,
+      topFailureCategory: 'ci_failed',
+      topFailureCount: 24,
+      failureBreakdown,
+    }))).toBe(banner)
+  })
+
+  it('does not caption a mixed total as only the top cause', () => {
+    expect(failedDetail(stats({
+      failed: 35,
+      topFailureCategory: 'ci_failed',
+      topFailureCount: 24,
+      failureBreakdown: [
+        { category: 'ci_failed', count: 24 },
+        { category: 'needs_human', count: 11 },
+      ],
+    }))).not.toBe('CI failed')
   })
 })

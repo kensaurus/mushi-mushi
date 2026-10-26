@@ -210,3 +210,35 @@ export function fixCauseLabel(cause: string | null | undefined): string {
   if (!cause) return 'Unrecognised error'
   return CAUSE_LABELS[cause] ?? cause.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 }
+
+export interface FixCauseCount {
+  category: string
+  count: number
+}
+
+/**
+ * The cause line shared by the Fixes banner and the Stopped summary caption:
+ * "CI failed (24), Needs your decision (11)". Most common first, three causes.
+ */
+export function formatFixCauseBreakdown(
+  entries: readonly FixCauseCount[] | null | undefined,
+  limit = 3,
+): string {
+  if (!entries?.length) return ''
+  return [...entries]
+    .filter((e) => e.count > 0 && e.category)
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category))
+    .slice(0, limit)
+    .map((e) => `${fixCauseLabel(e.category)} (${e.count})`)
+    .join(', ')
+}
+
+/** Sidebar badge name for the stopped-fix count, with the same cause line. */
+export function stoppedFixesBadgeLabel(
+  count: number,
+  breakdown?: readonly FixCauseCount[] | null,
+): string {
+  const head = `${count} ${count === 1 ? 'fix' : 'fixes'} stopped`
+  const detail = formatFixCauseBreakdown(breakdown)
+  return detail ? `${head} (${detail})` : head
+}

@@ -91,6 +91,9 @@ describe('fix-loop-status pure rules', () => {
     expect(
       isFixCountedFailed({ status: 'completed', pr_url: 'u', pr_state: 'merged', check_run_conclusion: 'failure' }),
     ).toBe(false)
+    // The agent found nothing to change: not a CI failure, not this count.
+    expect(isFixCountedFailed({ status: 'failed', failure_category: 'already_fixed' })).toBe(false)
+    expect(isFixCountedFailed({ status: 'failed', failure_category: 'needs_human' })).toBe(true)
   })
 
   it('buckets PR failures by why they are blocked when the worker set no category', () => {

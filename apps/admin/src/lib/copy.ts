@@ -1265,7 +1265,7 @@ const COPY: CopyRegistry = {
       statLabels: {
         totalAttempts: 'Fixes (30 days)',
         completed: 'Fixed',
-        failed: 'Failed',
+        failed: 'Stopped',
         inProgress: 'In flight',
         prsOpen: 'PRs open',
         prsCiPassing: 'CI passing',

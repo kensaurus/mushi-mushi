@@ -16,7 +16,8 @@
  *   in_flight — an attempt is queued / running / pending
  *   pr_open   — an attempt has an open (or draft) PR that is not blocked
  *   failed    — the latest attempt failed, was skipped, or its PR closed
- *               unmerged / went red (isFixCountedFailed)
+ *               unmerged / went red (isFixCountedFailed). already_fixed
+ *               ("agent found nothing to change") is not a failure.
  *   none      — nothing to act on
  *
  * Only `fix-loop-status.ts` is imported, so the Deno CI test runs without
@@ -177,10 +178,11 @@ export function deriveReportFixTruth(input: {
   }
   // A rejected key is cleared by a working key, not by retrying the same
   // run. Any other hard failure (status = failed) can be retried, except an
-  // agent's own verdict (it read the code and said it needs a person, was
-  // fixed already, is in another repo, or is not code): the same run gives
-  // the same answer, so a retry only spends credits. Skipped runs, closed
-  // PRs and red CI need a person to decide first.
+  // agent's own verdict (it needs a person, is in another repo, or is not
+  // code): the same run gives the same answer, so a retry only spends
+  // credits. already_fixed never reaches here — isFixCountedFailed excludes
+  // it, so the report is not a stopped fix. Skipped runs, closed PRs and
+  // red CI need a person to decide first.
   const latestStatus = (latest.status ?? '').toLowerCase()
   const agentVerdict = AGENT_VERDICT_CATEGORIES.has((latest.failure_category ?? '').toLowerCase())
   const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed' && !agentVerdict

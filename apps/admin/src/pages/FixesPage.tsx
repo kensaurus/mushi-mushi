@@ -36,7 +36,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { failureCause, fixCauseLabel, fixReportLabel, formatFixCauseBreakdown, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -84,7 +84,7 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
 ]
 
 const SNAPSHOT_HINT =
-  'Completed, failed and in flight count reports. Attempts, PRs open and CI passing count fix attempts; the PR counts use the same rule as Pull requests.'
+  'Completed, stopped and in flight count reports. Attempts, PRs open and CI passing count fix attempts; the PR counts use the same rule as Pull requests. A report the agent found already fixed is not counted as stopped.'
 
 /** Attempts per request; the list route allows up to 200. */
 const FIXES_PAGE_SIZE = 200
@@ -383,20 +383,19 @@ export function FixesPage() {
     [fixesStats, prCounts],
   )
 
-  // "Most common: …" for the failed banner, from the same per-report rows.
+  // Same cause line as the Stopped card caption (failedDetail). Prefer the
+  // stats breakdown — it is the count — and fall back to the loaded rows.
   const causeSummary = useMemo(() => {
+    const fromStats = formatFixCauseBreakdown(fixesStats.failureBreakdown)
+    if (fromStats) return fromStats
     const counts = new Map<string, number>()
     for (const f of fixes) {
       if (!needsAttention(f)) continue
       const cause = failureCause(f)
       counts.set(cause, (counts.get(cause) ?? 0) + 1)
     }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([cause, n]) => `${fixCauseLabel(cause)} (${n})`)
-      .join(', ')
-  }, [fixes])
+    return formatFixCauseBreakdown([...counts.entries()].map(([category, count]) => ({ category, count })))
+  }, [fixes, fixesStats.failureBreakdown])
 
   // "Common causes" chips narrow the failed list to one cause (console QA 93).
   const visibleFixes = useMemo(() => {

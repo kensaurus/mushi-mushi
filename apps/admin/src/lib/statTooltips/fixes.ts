@@ -6,7 +6,7 @@
 import type { MetricTooltipData } from '../../components/ui'
 import type { FixesStats } from '../../components/fixes/FixesStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'
-import { fixCauseLabel } from '../fixReportTruth'
+import { fixCauseLabel, formatFixCauseBreakdown } from '../fixReportTruth'
 import type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
 
 type Opts = PlainStatTooltipOpts
@@ -64,8 +64,10 @@ export function completedDetail(stats: FixesStats): string {
 
 export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltipData {
   const plain = opts.plainLanguage ?? false
-  const top =
-    stats.topFailureCategory && stats.topFailureCount > 0
+  const breakdown = formatFixCauseBreakdown(stats.failureBreakdown)
+  const top = breakdown
+    ? breakdown
+    : stats.topFailureCategory && stats.topFailureCount > 0
       ? `Most common: ${fixCauseLabel(stats.topFailureCategory)} (${stats.topFailureCount}×).`
       : ''
 
@@ -77,21 +79,29 @@ export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltip
         : 'No unfixed report is waiting on a stopped fix — the pipeline is clean or has not run yet.'
 
   return metricTip(
-    'Reports still unfixed whose latest fix attempt failed, was skipped, or whose PR went red on CI or was closed unmerged.',
-    'Counts each report once, by its latest attempt. A report fixed by a later merged PR, or dismissed, is never counted, however many earlier attempts failed.',
+    'Reports still unfixed whose latest fix attempt failed, was skipped, or whose PR went red on CI or was closed unmerged. A report the agent found already fixed is not included.',
+    'Counts each report once, by its latest attempt. A report fixed by a later merged PR, dismissed, or closed with an already-fixed verdict is never counted.',
     takeaway,
     stats.failed > 0
       ? {
           tone: 'warn',
-          text: stats.topFailureCategory
-            ? `${stats.failed} unfixed — most common cause: ${fixCauseLabel(stats.topFailureCategory)}.`
-            : `${stats.failed} unfixed report${stats.failed === 1 ? '' : 's'} need attention.`,
+          text: breakdown
+            ? `${stats.failed} stopped — ${breakdown}.`
+            : stats.topFailureCategory
+              ? `${stats.failed} unfixed — most common cause: ${fixCauseLabel(stats.topFailureCategory)}.`
+              : `${stats.failed} unfixed report${stats.failed === 1 ? '' : 's'} need attention.`,
         }
       : undefined,
   )
 }
 
+/** Caption under the Stopped card. Same words as the banner's cause line. */
 export function failedDetail(stats: FixesStats): string {
+  const line = formatFixCauseBreakdown(stats.failureBreakdown)
+  if (line) return line
+  if (stats.topFailureCategory && stats.topFailureCount > 0 && stats.failed > stats.topFailureCount) {
+    return `${fixCauseLabel(stats.topFailureCategory)} (${stats.topFailureCount} of ${stats.failed})`
+  }
   return stats.topFailureCategory ? fixCauseLabel(stats.topFailureCategory) : 'needs attention'
 }
 

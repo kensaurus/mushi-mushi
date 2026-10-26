@@ -14,6 +14,8 @@ import {
   failureCause,
   failureHeadline,
   fixCauseLabel,
+  formatFixCauseBreakdown,
+  stoppedFixesBadgeLabel,
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
   fixReportLabel,
@@ -110,6 +112,17 @@ describe('glot.it rows', () => {
     })
     expect(failureCause(AUDIO_SKIPPED)).toBe('openai_key_rejected')
     expect(fixCauseLabel('openai_key_rejected')).toBe('OpenAI key rejected')
+  })
+
+  it('writes one cause line for the banner, the Stopped card, and the sidebar badge', () => {
+    const breakdown = [
+      { category: 'needs_human', count: 11 },
+      { category: 'ci_failed', count: 24 },
+    ]
+    const line = formatFixCauseBreakdown(breakdown)
+    expect(line).toBe('CI failed (24), Needs your decision (11)')
+    expect(stoppedFixesBadgeLabel(35, breakdown)).toBe(`35 fixes stopped (${line})`)
+    expect(stoppedFixesBadgeLabel(1)).toBe('1 fix stopped')
   })
 
   it('names the test-machine bucket in the same words as the server (ADR 0033)', () => {

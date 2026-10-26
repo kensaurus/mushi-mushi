@@ -42,6 +42,7 @@ import type {
 } from './remainingNavSliceTypes'
 import type { HealthTone } from './useNavCounts'
 import type { WorkspaceNavBadge } from './workspaceNavMeta'
+import { stoppedFixesBadgeLabel } from './fixReportTruth'
 
 interface AuditNavSlice {
   warnCount24h: number
@@ -143,7 +144,7 @@ export interface NavStatSlices {
     HealthStats,
     'cronErrorCount' | 'redCount' | 'amberCount' | 'topPriority'
   > | null
-  fixes: Pick<FixesStats, 'failed' | 'inProgress' | 'specWarnings' | 'topPriority'> | null
+  fixes: Pick<FixesStats, 'failed' | 'inProgress' | 'specWarnings' | 'topPriority' | 'failureBreakdown'> | null
   repo: Pick<RepoStats, 'prOpen' | 'ciFailed' | 'topPriority'> | null
   mcp: McpNavSlice | null
   marketplace: MarketplaceNavSlice | null
@@ -574,13 +575,16 @@ export function fullstackAuditNavBadge(
   return null
 }
 
-export function dashboardNavBadge(stats: NavStatSlices['dashboard']): WorkspaceNavBadge | null {
+export function dashboardNavBadge(
+  stats: NavStatSlices['dashboard'],
+  fixes?: NavStatSlices['fixes'],
+): WorkspaceNavBadge | null {
   if (!stats) return null
   if (stats.fixesFailed > 0) {
     return attentionBadge(
       stats.fixesFailed,
       'danger',
-      `${stats.fixesFailed} failed fix${stats.fixesFailed === 1 ? '' : 'es'} on dashboard`,
+      stoppedFixesBadgeLabel(stats.fixesFailed, fixes?.failureBreakdown),
     )
   }
   if (stats.integrationIssues > 0) {
@@ -747,7 +751,7 @@ export function fixesStatsNavBadge(stats: NavStatSlices['fixes']): WorkspaceNavB
     return attentionBadge(
       stats.failed,
       'danger',
-      `${stats.failed} failed fix attempt${stats.failed === 1 ? '' : 's'}`,
+      stoppedFixesBadgeLabel(stats.failed, stats.failureBreakdown),
     )
   }
   if (stats.inProgress > 0) {

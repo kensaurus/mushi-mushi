@@ -18,6 +18,7 @@ import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
 import { checkSectionAttention, actSectionAttention, doSectionAttention, planSectionAttention, startSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
+import { stoppedFixesBadgeLabel } from '../lib/fixReportTruth'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -970,7 +971,7 @@ function computeStaleness(
         navCounts.fixesFailed > 0 || extended?.tone === 'danger' ? 'danger' : 'warn'
       const parts: string[] = []
       if (navCounts.fixesFailed > 0) {
-        parts.push(`${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'}`)
+        parts.push(stoppedFixesBadgeLabel(navCounts.fixesFailed, navCounts.slices.fixes?.failureBreakdown))
       } else if (navCounts.fixesInFlight > 0) {
         parts.push(`${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`)
       }
@@ -1138,6 +1139,8 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
           {staleness && (
             <span
               aria-hidden="true"
+              aria-label={staleness.label}
+              title={staleness.label}
               className={`nav-rail-badge ring-1 ring-surface-root ${STALENESS_TONE[staleness.tone]}`}
             >
               {railBadgeText(staleness.count)}

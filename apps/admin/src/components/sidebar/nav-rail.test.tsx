@@ -114,8 +114,11 @@ describe('rail a11y contract', () => {
       },
     })
     expect(html).toContain('3 critical reports (30d)')
-    // The visual pill itself is decorative — the prose above carries it.
+    // The visual pill itself is decorative — the prose above carries it —
+    // and the number still has a hover title and an aria-label to inspect.
     expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain('title="3 critical reports (30d)"')
+    expect(html).toContain('aria-label="3 critical reports (30d)"')
   })
 })
 
@@ -324,7 +327,7 @@ describe('resolveNavBadge', () => {
     expect(resolveNavBadge('/fixes', counts, NO_EXTRAS)).toMatchObject({
       kind: 'health',
       count: 2,
-      label: 'Auto-fix stopped on 2 reports',
+      label: '2 fixes stopped',
     })
   })
 
