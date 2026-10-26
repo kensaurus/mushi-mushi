@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/wasm-classifier",
   "version": "0.2.4",
-  "description": "On-device pre-classification for Mushi Mushi reports using a quantized small language model running in onnxruntime-web (WASM/WebGPU). Filters obvious junk before reports leave the browser, cutting LLM cost and protecting user privacy.",
+  "description": "On-device pre-classification for Mushi Mushi reports: a zero-dependency heuristic drops obvious junk before it leaves the browser. The ONNX (onnxruntime-web) mode is experimental and falls back to the heuristic.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -43,6 +43,7 @@
     "on-device-ai",
     "edge-inference",
     "pre-classification",
+    "experimental",
     "bug-reporting",
     "user-feedback",
     "privacy",
