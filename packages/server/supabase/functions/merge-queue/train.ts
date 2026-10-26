@@ -16,28 +16,42 @@ import type { GithubRepoRef, PullRequestDetails } from '../_shared/github.ts'
 import type { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import type { gatedTrainMerge, TrainMember } from '../_shared/gated-merge.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import { MAX_CONFLICT_AGENTS, type ChecksView } from '../_shared/merge-queue.ts'
+import { MAX_CONFLICT_AGENTS, failuresOnBase, type ChecksView } from '../_shared/merge-queue.ts'
+import { FOLLOWUP_MAX_PER_PR } from '../_shared/review-followup.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
   DEFAULT_TRAIN_INTERVAL_MINUTES,
   DEFAULT_TRAIN_MAX_MEMBERS,
+  RED_TRAIN_DETAIL_PREFIX,
+  benchReason,
   bisectTrain,
+  isApprovedAtHead,
   isExpress,
+  isTrainReady,
   pickTrainMembers,
   trainBranchName,
   trainDue,
   trainPullRequest,
+  type PastTrain,
   type TrainCandidate,
+  type TrainCi,
   type TrainMergeMethod,
 } from '../_shared/merge-train.ts'
 
 const log = rootLog.child('merge-train')
+
+/** Drafts marked ready per repo per tick: each one starts a CI run (ADR 0041: one PR per repo in CI). */
+const DRAFTS_READIED_PER_TICK = 1
+/** How far back red trains count against a member's head. */
+const RED_TRAIN_HISTORY_MS = 7 * 24 * 60 * 60_000
 
 export interface TrainDeps {
   now?: () => Date
   pull: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   checks: (token: string, ref: GithubRepoRef, sha: string) => Promise<ChecksView>
   updateBranch: (token: string, ref: GithubRepoRef, n: number, headSha: string) => Promise<{ ok: boolean; conflict: boolean; message?: string }>
+  /** Mark a draft PR ready for review, so its CI runs. */
+  ready: (token: string, ref: GithubRepoRef, n: number) => Promise<{ ok: boolean; message?: string }>
   branchSha: (token: string, ref: GithubRepoRef, branch: string) => Promise<string | null>
   createBranch: (token: string, ref: GithubRepoRef, branch: string, sha: string) => Promise<boolean>
   /** Merge `head` (a commit) into `branch` server-side. 'conflict' when GitHub cannot. */
@@ -278,8 +292,7 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
   // Checks that fail on the base branch too are not the members' fault:
   // bisecting would split a healthy train and hold an innocent fix.
   const baseSha = await deps.branchSha(token, ref, train.base_ref)
-  const baseFailed = new Set(baseSha ? (await deps.checks(token, ref, baseSha)).failed : [])
-  if (failed.every((name) => baseFailed.has(name))) {
+  if (baseSha && failuresOnBase(failed, await deps.checks(token, ref, baseSha))) {
     const why = `${train.base_ref} is red too (${failed.slice(0, 4).join(', ')}); the train waits for it to pass.`
     await deps.closePr(token, ref, train.pr_number!, `${why} No pull request in it is blamed; they ride the next train.`)
     await deps.deleteBranch(token, ref, train.branch)
@@ -288,13 +301,14 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
     await trainEvent(db, memberRows(train), 'pending', 'Release train waits for the base branch', why, `train-base-red:${train.id}`)
     return 'base_red'
   }
-  const why = `CI failed: ${failed.slice(0, 4).join(', ')}.`
+  const why = `${RED_TRAIN_DETAIL_PREFIX} ${failed.slice(0, 4).join(', ')}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)
   await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: why }).eq('id', train.id)
   const { retry, deferred, failedAlone } = bisectTrain(train.members)
   if (failedAlone) {
-    await setRows(db, [failedAlone.rowId], { state: 'blocked', train_id: null, detail: `${why} It failed alone in a release train; a CI-repair agent may fix it.` })
+    // Stays out of trains at this head (benchReason reads this train back).
+    await setRows(db, [failedAlone.rowId], { state: 'blocked', train_id: null, head_sha: failedAlone.headSha, detail: `${why} It failed alone in a release train; a CI-repair agent may fix it.` })
     await trainEvent(db, [{ fix_attempt_id: failedAlone.fixAttemptId, project_id: train.project_id, repo: train.repo, pr_number: failedAlone.prNumber }], 'fail', 'Release train: this fix breaks CI', why, `train-alone:${train.id}`)
     return 'held'
   }
@@ -311,6 +325,10 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
     prOpen: true,
     severity: null,
     source: null,
+    // Each was admitted green; the retry tests them together again.
+    draft: false,
+    ci: 'green',
+    benched: null,
   }))
   return buildTrain(db, { token, ref, repo: train.repo, projectId: train.project_id, baseRef: train.base_ref, members: candidates, attempt: train.attempt + 1, skippedBefore: deferred.length }, deps)
 }
@@ -332,14 +350,50 @@ export async function runTrainTick(
 
   // Who could ride: each row's PR now, and its latest Opus verdict.
   const candidates: TrainCandidate[] = []
+  /** Why an approved PR does not ride this time (ADR 0044 amendment 2026-10-26). */
+  const notes = new Map<string, { state: 'queued' | 'blocked'; detail: string }>()
   let baseRef: string | null = null
   const ids = args.rows.map((r) => r.fix_attempt_id)
-  const [{ data: reviews }, { data: attempts }] = await Promise.all([
+  const [{ data: reviews }, { data: attempts }, { data: past }] = await Promise.all([
     db.from('fix_reviews').select('fix_attempt_id, verdict, head_sha, status, completed_at, created_at').in('fix_attempt_id', ids),
     db.from('fix_attempts').select('id, report_id').in('id', ids),
+    db.from('release_trains').select('pr_number, detail, members, created_at').eq('repo', args.repo).eq('state', 'failed').order('created_at', { ascending: false }).limit(200),
   ])
+  const since = new Date(now.getTime() - RED_TRAIN_HISTORY_MS).toISOString()
+  const history = ((past ?? []) as Array<PastTrain & { created_at: string }>).filter((t) => t.created_at >= since)
   const reportIds = ((attempts ?? []) as Array<{ id: string; report_id: string | null }>).map((a) => a.report_id).filter((x): x is string => !!x)
   const { data: reports } = reportIds.length ? await db.from('reports').select('id, severity, source').in('id', reportIds) : { data: [] }
+
+  // The base branch's checks and the follow-up rounds used, read once and only when needed.
+  let baseView: Promise<ChecksView | null> | null = null
+  const baseChecks = (base: string) =>
+    (baseView ??= (async () => {
+      const sha = await deps.branchSha(args.token, ref, base)
+      return sha ? await deps.checks(args.token, ref, sha) : null
+    })())
+  let rounds: Promise<Map<string, number>> | null = null
+  const roundsUsed = async (fixAttemptId: string) => {
+    rounds ??= (async () => {
+      const { data } = await db.from('fix_review_followups').select('fix_attempt_id, cursor_agent_id').in('fix_attempt_id', ids)
+      const m = new Map<string, number>()
+      for (const f of (data ?? []) as Array<{ fix_attempt_id: string; cursor_agent_id: string | null }>) {
+        if (f.cursor_agent_id) m.set(f.fix_attempt_id, (m.get(f.fix_attempt_id) ?? 0) + 1)
+      }
+      return m
+    })()
+    return (await rounds).get(fixAttemptId) ?? 0
+  }
+  /** CI on a head: only green rides; a red base is not the PR's fault; no runs while the base has some = not started. */
+  const headCi = async (head: ChecksView, base: string | null): Promise<{ ci: TrainCi; failed: string[] }> => {
+    if (head.pending > 0) return { ci: 'pending', failed: [] }
+    const noRuns = head.failed.length === 0 && head.ran !== undefined && head.ran.length === 0
+    if (!head.failed.length && !noRuns) return { ci: 'green', failed: [] }
+    const b = base ? await baseChecks(base) : null
+    if (noRuns) return { ci: b && (b.pending > 0 || b.failed.length > 0 || (b.ran?.length ?? 0) > 0) ? 'pending' : 'green', failed: [] }
+    return { ci: b && failuresOnBase(head.failed, b) ? 'base_red' : 'red', failed: head.failed }
+  }
+  let readied = 0
+
   for (const r of args.rows) {
     const pull = await deps.pull(args.token, ref, r.pr_number)
     if (!pull) continue
@@ -362,6 +416,9 @@ export async function runTrainTick(
       prOpen: !pull.merged && (pull.state ?? 'open') === 'open',
       severity: rep?.severity ?? null,
       source: rep?.source ?? null,
+      draft: !!pull.draft,
+      ci: 'unknown',
+      benched: null,
     }
     if (pull.merged) {
       await setRows(db, [r.id], { state: 'merged', detail: 'Merged.', merged_at: now.toISOString() })
@@ -388,6 +445,42 @@ export async function runTrainTick(
       const at = a as { id: string; project_id: string; report_id: string; pr_url: string } | null
       if (at) await deps.requeueReview(db, { fixAttemptId: at.id, projectId: at.project_id, reportId: at.report_id, prUrl: at.pr_url }, c.headSha, now)
     }
+    // Approved at its head: it rides only when its own CI is green, so one
+    // red PR cannot sink a train, and a member a red train already found
+    // guilty at this head does not ride again until it has a new commit.
+    if (isApprovedAtHead(c)) {
+      c.benched = benchReason(history, r.id, c.headSha)
+      if (c.benched) {
+        notes.set(r.id, { state: 'blocked', detail: c.benched })
+      } else if (c.draft) {
+        let detail = 'A draft runs no CI. Mushi marks one draft ready per tick; it rides a release train once its CI is green.'
+        if (readied < DRAFTS_READIED_PER_TICK) {
+          readied++
+          const res = await deps.ready(args.token, ref, r.pr_number)
+          detail = res.ok
+            ? 'Marked ready for review so its CI runs; it rides a release train once CI is green.'
+            : `A draft runs no CI, and Mushi could not mark it ready: ${(res.message ?? 'GitHub refused').slice(0, 200)}`
+        }
+        notes.set(r.id, { state: 'queued', detail })
+      } else {
+        const { ci, failed } = await headCi(await deps.checks(args.token, ref, c.headSha!), pull.baseRef ?? null)
+        c.ci = ci
+        const names = failed.slice(0, 4).join(', ')
+        if (ci === 'pending') {
+          notes.set(r.id, { state: 'queued', detail: 'CI is running on its latest commit; it rides a release train once CI is green.' })
+        } else if (ci === 'base_red') {
+          const base = pull.baseRef ?? 'The base branch'
+          notes.set(r.id, { state: 'queued', detail: `${base} is red too (${names}); it rides a release train once ${base} passes.` })
+        } else if (ci === 'red') {
+          notes.set(r.id, {
+            state: 'blocked',
+            detail: (await roundsUsed(r.fix_attempt_id)) >= FOLLOWUP_MAX_PER_PR
+              ? `CI fails on its own commit (${names}) and both follow-up rounds are used. Fix it on GitHub; it rides a release train once its CI is green.`
+              : `CI fails on its own commit (${names}). With review follow-ups on, a CI-repair agent fixes it; it rides a release train once its CI is green.`,
+          })
+        }
+      }
+    }
     candidates.push(c)
   }
   const members = pickTrainMembers(candidates, args.settings.maxMembers)
@@ -397,18 +490,23 @@ export async function runTrainTick(
     lastTrainAt: (last as { created_at?: string } | null)?.created_at ?? null,
     now,
     intervalMinutes: args.settings.intervalMinutes,
-    readyCount: candidates.filter((c) => members.some((m) => m.rowId === c.rowId)).length,
+    readyCount: members.length,
     maxMembers: args.settings.maxMembers,
   })
-  const waiting = candidates.filter((c) => !members.some((m) => m.rowId === c.rowId) && !isExpress(c))
-  if (waiting.length) {
-    await setRows(db, waiting.map((w) => w.rowId), { detail: w0(waiting[0]) })
+  // Each waiting PR says why it waits; rows with the same words are written together.
+  const byNote = new Map<string, { patch: Record<string, unknown>; ids: string[] }>()
+  for (const c of candidates) {
+    if (members.some((m) => m.rowId === c.rowId) || isExpress(c)) continue
+    const patch = notes.get(c.rowId) ?? { detail: w0(c) }
+    const key = JSON.stringify(patch)
+    byNote.set(key, { patch, ids: [...(byNote.get(key)?.ids ?? []), c.rowId] })
   }
+  for (const { patch, ids: rowIds } of byNote.values()) await setRows(db, rowIds, patch)
   if (!due || !baseRef) {
     if (members.length) await setRows(db, members.map((m) => m.rowId), { state: 'queued', detail: 'Approved; waits for the next release train.' })
     return members.length ? 'waiting_for_window' : 'nothing_ready'
   }
-  return buildTrain(db, { token: args.token, ref, repo: args.repo, projectId: args.projectId, baseRef, members, attempt: 1, skippedBefore: Math.max(0, candidates.filter((c) => c.verdict === 'merge').length - members.length) }, deps)
+  return buildTrain(db, { token: args.token, ref, repo: args.repo, projectId: args.projectId, baseRef, members, attempt: 1, skippedBefore: Math.max(0, candidates.filter(isTrainReady).length - members.length) }, deps)
 }
 
 function w0(c: TrainCandidate): string {

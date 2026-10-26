@@ -4,7 +4,7 @@
  *          leaves, how a red train is bisected, and what the train PR says.
  */
 import { describe, expect, it } from 'vitest'
-import { bisectTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
+import { benchReason, bisectTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
 
 const c = (over: Partial<TrainCandidate> = {}): TrainCandidate => ({
   rowId: 'r1',
@@ -18,6 +18,9 @@ const c = (over: Partial<TrainCandidate> = {}): TrainCandidate => ({
   prOpen: true,
   severity: 'medium',
   source: 'widget',
+  draft: false,
+  ci: 'green',
+  benched: null,
   ...over,
 })
 
@@ -28,6 +31,24 @@ describe('who rides', () => {
     expect(isTrainReady(c({ verdict: 'fix_first' }))).toBe(false)
     expect(isTrainReady(c({ held: true }))).toBe(false)
     expect(isTrainReady(c({ prOpen: false }))).toBe(false)
+
+    // ADR 0044 amendment 2026-10-26: its own CI green, not a draft, not benched.
+    expect(isTrainReady(c({ ci: 'red' }))).toBe(false)
+    expect(isTrainReady(c({ ci: 'pending' }))).toBe(false)
+    expect(isTrainReady(c({ ci: 'base_red' }))).toBe(false)
+    expect(isTrainReady(c({ draft: true }))).toBe(false)
+    expect(isTrainReady(c({ benched: 'failed alone' }))).toBe(false)
+  })
+  it('benches a member that failed alone at its head, or rode five red trains there; a new commit clears it', () => {
+    const red = (members: Array<{ rowId: string; headSha: string }>, detail = 'CI failed: e2e.') => ({ pr_number: 9, detail, members })
+    const alone = [red([{ rowId: 'r1', headSha: 'h1' }])]
+    expect(benchReason(alone, 'r1', 'h1')).toMatch(/^It failed CI alone in release train #9 at this commit \(e2e\)/)
+    expect(benchReason(alone, 'r1', 'h2')).toBeNull()
+    const pair = (n: number) => Array.from({ length: n }, () => red([{ rowId: 'r1', headSha: 'h1' }, { rowId: 'r2', headSha: 'h2' }]))
+    expect(benchReason(pair(4), 'r1', 'h1')).toBeNull()
+    expect(benchReason(pair(5), 'r1', 'h1')).toMatch(/^It rode 5 release trains/)
+    // A train that waited on a red base blames nobody.
+    expect(benchReason([red([{ rowId: 'r1', headSha: 'h1' }], 'main is red too (audit); the train waits for it to pass.')], 'r1', 'h1')).toBeNull()
   })
   it('keeps security advisories and critical bugs on the express lane', () => {
     expect(isExpress(c({ source: 'security_advisory' }))).toBe(true)

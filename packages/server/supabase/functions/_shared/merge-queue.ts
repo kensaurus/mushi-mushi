@@ -37,6 +37,23 @@ export interface ChecksView {
   pending: number
   /** Names of check runs that failed on the head. */
   failed: string[]
+  /** Names of check runs that finished and were not skipped. Absent: not read. */
+  ran?: string[]
+}
+
+/**
+ * Whether a head's failed checks are the base branch's, not its own: at
+ * least one also fails on the base, and every other one fails there too or
+ * did not run there. The second rule sees through aggregator jobs: glot.it's
+ * `gate` fails whenever a job it needs fails, but on main it is skipped, so
+ * comparing names alone blamed the members for main's red npm audit
+ * (2026-10-26).
+ */
+export function failuresOnBase(failed: string[], base: ChecksView): boolean {
+  const baseFailed = new Set(base.failed)
+  if (!failed.some((n) => baseFailed.has(n))) return false
+  const ran = base.ran ? new Set(base.ran) : null
+  return failed.every((n) => baseFailed.has(n) || (ran !== null && !ran.has(n)))
 }
 
 export type QueueStep =
@@ -109,11 +126,15 @@ export function reviewRefusal(
 export function checksView(runs: Array<{ name?: string; status?: string; conclusion?: string | null }>): ChecksView {
   let pending = 0
   const failed: string[] = []
+  const ran: string[] = []
   for (const r of runs) {
     if (r.status !== 'completed') pending++
-    else if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+    else {
+      if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+      if (r.conclusion !== 'skipped') ran.push(r.name ?? 'a check')
+    }
   }
-  return { pending, failed }
+  return { pending, failed, ran }
 }
 
 /** The task a Cursor agent gets for a conflicting PR. Pure text; no report content goes in. */

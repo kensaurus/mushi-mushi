@@ -5,7 +5,7 @@
  *          a conflict, CI running or failed on the head, a closed PR.
  */
 import { describe, expect, it } from 'vitest'
-import { checksView, conflictPrompt, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
+import { checksView, conflictPrompt, failuresOnBase, nextQueueStep, queueLine, reviewRefusal } from '../../supabase/functions/_shared/merge-queue.ts'
 
 const pr = (over: Partial<Parameters<typeof nextQueueStep>[0]> = {}) => ({
   state: 'open',
@@ -42,6 +42,19 @@ describe('nextQueueStep', () => {
   })
 })
 
+describe('failuresOnBase', () => {
+  const base = { pending: 0, failed: ['npm audit'], ran: ['npm audit', 'build'] }
+  it('blames the base when every failure fails there or did not run there (an aggregator)', () => {
+    expect(failuresOnBase(['npm audit'], base)).toBe(true)
+    expect(failuresOnBase(['gate', 'npm audit'], base)).toBe(true)
+  })
+  it('blames the PR when a failure passed on the base, or none fails there', () => {
+    expect(failuresOnBase(['build', 'npm audit'], base)).toBe(false)
+    expect(failuresOnBase(['gate'], base)).toBe(false)
+    expect(failuresOnBase(['gate', 'npm audit'], { pending: 0, failed: ['npm audit'] })).toBe(false)
+  })
+})
+
 describe('checksView / conflictPrompt / queueLine', () => {
   it('counts unfinished runs and names failures (neutral and skipped are fine)', () => {
     expect(
@@ -51,7 +64,7 @@ describe('checksView / conflictPrompt / queueLine', () => {
         { name: 'lighthouse', status: 'completed', conclusion: 'neutral' },
         { name: 'e2e', status: 'completed', conclusion: 'skipped' },
       ]),
-    ).toEqual({ pending: 1, failed: ['required'] })
+    ).toEqual({ pending: 1, failed: ['required'], ran: ['required', 'lighthouse'] })
   })
   it('asks the agent to keep both sides and to say needs_human otherwise', () => {
     const p = conflictPrompt({ prUrl: 'https://github.com/o/r/pull/1', baseRef: 'main', headRef: 'fix/x' })
