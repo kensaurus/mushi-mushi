@@ -1,17 +1,30 @@
 ---
 title: Bugsnag
-description: Mirror Mushi bug reports into Bugsnag and close the Bugsnag error when the fix PR merges — install from the marketplace and map release stages.
+description: Copy triaged Mushi bug reports into Bugsnag and mark the error fixed when Mushi applies a fix — a self-hosted plugin with a Data API token.
 ---
 
 # Bugsnag plugin
 
-Mirrors Mushi reports into Bugsnag projects and closes Bugsnag errors when the fix PR merges.
+Copies each bug Mushi triages into Bugsnag as an error, and marks it `fixed`
+when Mushi applies a fix.
 
-## Setup
+**Not available on Mushi Cloud yet.** The console's Marketplace has no
+Bugsnag listing, so Mushi Cloud cannot send this plugin events. It works with
+a Mushi server you run yourself once you add a `plugin_registry` row for it.
+To bring Bugsnag errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
-1. In Mushi: **Marketplace → Bugsnag → Install**.
-2. Provide project API key and release stage mapping.
-3. Set severity filter for which reports sync outbound.
+## Setup (self-hosted Mushi)
+
+```bash
+npm i @mushi-mushi/plugin-bugsnag
+export MUSHI_PLUGIN_SECRET=...      # the signing secret set when the plugin is installed
+export BUGSNAG_API_KEY=...          # Bugsnag Data API token
+export BUGSNAG_PROJECT_SLUG=...     # from your Bugsnag project URL
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-bugsnag mushi-plugin-bugsnag
+```
+
+Point the plugin's webhook URL at `https://<your-host>/mushi/webhook`.
 
 ## Package
 
@@ -21,5 +34,5 @@ Mirrors Mushi reports into Bugsnag projects and closes Bugsnag errors when the f
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Open Bugsnag error with Mushi backlink |
-| `fix.applied` | Resolve Bugsnag error |
+| `report.classified` | Create a Bugsnag error (grouping hash `mushi-<projectId>-<reportId>`) with a link back to the report |
+| `fix.applied` | Set the error's status to `fixed` |
