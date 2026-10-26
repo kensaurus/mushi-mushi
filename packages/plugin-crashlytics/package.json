@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-crashlytics",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Mushi Mushi plugin for Firebase — when Mushi applies a fix, sets a Remote Config flag your mobile app can read to hide a stale crash notice. Self-hosted.",
   "license": "MIT",
   "type": "module",

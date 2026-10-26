@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp-ci",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "description": "GitHub Action for Mushi Mushi: fail a PR while bug reports sit untriaged, have an agent open a fix PR for a report, or run pre-release checks from your workflow.",
   "license": "MIT",
   "type": "module",

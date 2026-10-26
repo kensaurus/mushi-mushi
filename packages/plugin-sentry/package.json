@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-sentry",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "license": "MIT",
   "description": "Mushi Mushi plugin for Sentry — copies user-reported bugs into Sentry next to your errors and resolves them when Mushi applies a fix.",
   "type": "module",

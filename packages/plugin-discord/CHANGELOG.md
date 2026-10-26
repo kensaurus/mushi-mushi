@@ -1,5 +1,13 @@
 # @mushi-mushi/plugin-discord
 
+## 0.1.8
+
+### Patch Changes
+
+- 271abb8: Each plugin's npm page now says up front whether you need it: most of these integrations are built into Mushi Cloud, and the package is for a self-hosted Mushi or a custom server. Environment variables, commands and event names in the setup steps match the source.
+- Updated dependencies [271abb8]
+  - @mushi-mushi/plugin-sdk@0.9.1
+
 ## 0.1.7
 
 ### Patch Changes
