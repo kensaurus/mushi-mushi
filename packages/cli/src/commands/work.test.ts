@@ -18,7 +18,10 @@ import {
   stableKey,
   submitPayload,
   WORK_AGENT_KIND,
+  WORK_STOPPED_PREFIX,
   missingWriteScope,
+  runningPayload,
+  stoppedPayload,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -199,6 +202,39 @@ describe('inLocalCooldown', () => {
     expect(inLocalCooldown([{ ...failed, created_at: '2026-10-16T08:00:00Z' }], now)).toBe(false)
     expect(inLocalCooldown([{ ...failed, agent: 'cursor_cloud' }], now)).toBe(false)
     expect(inLocalCooldown([{ ...failed, pr_url: 'https://github.com/o/r/pull/1' }], now)).toBe(false)
+  })
+
+  it('starts no cooldown for a run that was stopped or reaped: it says nothing about the report', () => {
+    expect(inLocalCooldown([{ ...failed, ...stoppedPayload('b', 'SIGTERM') } as typeof failed], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, error: 'Reaped: the local agent run (mushi work) sent no result within 90 min; its process stopped. Safe to run again.' }], now)).toBe(false)
+    // A real no-change verdict still counts.
+    expect(inLocalCooldown([{ ...failed, error: 'Agent found nothing to change: ticks are integers' }], now)).toBe(true)
+  })
+})
+
+describe('mushi work: the run shows in the console while the agent works', () => {
+  it('marks the registered run running on its branch (in flight, and reapable if the process dies)', () => {
+    expect(runningPayload('bugfix/MUSHI-x-local-cursor')).toEqual({ status: 'running', branch: 'bugfix/MUSHI-x-local-cursor' })
+  })
+
+  it('closes a stopped run as failed with a reason that names the stop, not the report', () => {
+    const at = new Date('2026-10-26T01:00:00Z')
+    expect(stoppedPayload('b', 'SIGTERM', at)).toEqual({
+      status: 'failed',
+      branch: 'b',
+      error: 'mushi work stopped by SIGTERM before the run finished; the report can be picked up again.',
+      completed_at: at.toISOString(),
+    })
+    expect(String(stoppedPayload('b', 'SIGINT').error).startsWith(WORK_STOPPED_PREFIX)).toBe(true)
+  })
+
+  it('a stopped or running row keeps the report from a second lane while it is live', () => {
+    expect(hasLiveAttempt([{ id: 'a', status: 'running', pr_url: null, agent: 'mcp' }])).toBe(true)
+    expect(hasLiveAttempt([{ id: 'a', status: 'failed', pr_url: null, agent: 'mcp', error: stoppedPayload('b', 'SIGTERM').error as string }])).toBe(false)
+  })
+
+  it('uses a fresh idempotency key per run of the same report and branch', () => {
+    expect(stableKey(R1, 'b', '2026-10-26T01:00:00.000Z')).not.toBe(stableKey(R1, 'b', '2026-10-26T01:40:00.000Z'))
   })
 })
 

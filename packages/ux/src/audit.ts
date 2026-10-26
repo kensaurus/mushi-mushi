@@ -31,7 +31,7 @@ import type { SyncConfig } from './sync.js'
 import { VIEWPORTS, type ProbeResult, type Surface, type Viewport } from './types.js'
 
 /** @internal Exported for tests only. */
-export type FindingKind = 'axe' | 'overflow' | 'console' | 'cls' | 'visual' | 'explore'
+export type FindingKind = 'axe' | 'overflow' | 'layout' | 'console' | 'cls' | 'visual' | 'explore'
 type FindingSeverity = 'high' | 'medium' | 'low'
 export type ReviewVia = 'claude-code' | 'anthropic-api' | 'cursor' | 'none'
 
@@ -137,6 +137,34 @@ export function findingsFromProbes(screen: ScreenRef, viewport: Viewport, probes
         evidence: [`document scrollWidth exceeds the ${viewport.width}px viewport (${viewport.name})`],
         expected: `Everything fits the ${viewport.width}px width; wide content (tables, code) scrolls inside its own box.`,
         doneWhen: `${where} has no horizontal page scroll.`,
+      }),
+    )
+  }
+  const overlaps = (probes.layout ?? []).filter((i) => i.kind === 'overlap')
+  if (overlaps.length) {
+    out.push(
+      finding(screen, viewport.name, {
+        kind: 'layout',
+        rule: 'overlapping-boxes',
+        severity: 'medium',
+        summary: `${overlaps.length} element${overlaps.length === 1 ? '' : 's'} drawn on top of another at ${viewport.width}px wide`,
+        evidence: overlaps.slice(0, 4).map((i) => `${viewport.name}: ${i.selector} ${i.detail}`),
+        expected: 'Cards, rows and controls sit side by side or stack; none covers another.',
+        doneWhen: `${where} has no in-flow element overlapping its sibling.`,
+      }),
+    )
+  }
+  const outgrown = (probes.layout ?? []).filter((i) => i.kind === 'outgrows')
+  if (outgrown.length) {
+    out.push(
+      finding(screen, viewport.name, {
+        kind: 'layout',
+        rule: 'control-outgrows-container',
+        severity: 'medium',
+        summary: `${outgrown.length} control${outgrown.length === 1 ? '' : 's'} too big for ${outgrown.length === 1 ? 'its' : 'their'} space at ${viewport.width}px wide`,
+        evidence: outgrown.slice(0, 4).map((i) => `${viewport.name}: ${i.selector} ${i.detail}`),
+        expected: 'Each button fits inside its container on one or two lines, with its whole label visible.',
+        doneWhen: `${where} has no button or link that sticks out of its container, wraps past two lines or cuts its label off.`,
       }),
     )
   }
