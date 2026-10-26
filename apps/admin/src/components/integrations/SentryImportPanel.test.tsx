@@ -133,4 +133,16 @@ describe('SentryImportPanel', () => {
     expect(sentBody(0)).toEqual({ issueIds: ['WEB-12'] })
     expect(buttonByText(container, 'Load next page')).toBeUndefined()
   })
+
+  // jsdom has no layout, so the alignment contract is checked on the classes:
+  // the import button is as tall as the fields next to it, and the row aligns
+  // tops so the input's error line cannot drop the button out of the row.
+  it('sizes the import button to the field height', async () => {
+    await render(['web'])
+    const button = buttonByText(container, 'Import newest')!
+    expect(button.className).toContain('h-[2.125rem]')
+    const row = button.parentElement!
+    expect(row.className).toContain('items-start')
+    expect(row.className).not.toContain('items-end')
+  })
 })
