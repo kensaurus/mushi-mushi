@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  wrongAppReason,
   inLocalCooldown,
   installCommand,
+  freeBranchName,
+  isMissingModuleFailure,
   failureTail,
   agentEnv,
   branchNameFor,
@@ -15,7 +18,10 @@ import {
   stableKey,
   submitPayload,
   WORK_AGENT_KIND,
+  WORK_STOPPED_PREFIX,
   missingWriteScope,
+  runningPayload,
+  stoppedPayload,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -104,8 +110,14 @@ describe('mushi work: branch, prompt and PR', () => {
   it('titles the PR as a conventional fix with the report id', () => {
     expect(prTitle('Fractional y-axis ticks on count charts [release:all]', R1)).toBe('fix: fractional y-axis ticks on count charts (MUSHI-11111111)')
     const long = 'buildYTickValues applies 12% headroom and divides linearly (peak*1.12/3), yielding fractional ticks on count charts'
-    expect(prTitle(long, R1)).toBe('fix: buildYTickValues applies 12% headroom and divides linearly… (MUSHI-11111111)')
+    expect(prTitle(long, R1)).toBe('fix: buildYTickValues applies 12% headroom and divides… (MUSHI-11111111)')
     expect(prTitle(long, R1)).not.toContain('[cut]')
+    // The commit header too: commitlint's subject-max-length 72 counts the MUSHI suffix.
+    const yen = 'Skill run 1/2: Loading, empty and error states on the web app pages in apps/web'
+    for (const t of [prTitle(long, R1), prTitle(yen, R1)]) {
+      expect(t.slice('fix: '.length).length).toBeLessThanOrEqual(72)
+      expect(t.length).toBeLessThanOrEqual(100)
+    }
   })
 
   it('reads the agent verdict from its first lines', () => {
@@ -191,6 +203,39 @@ describe('inLocalCooldown', () => {
     expect(inLocalCooldown([{ ...failed, agent: 'cursor_cloud' }], now)).toBe(false)
     expect(inLocalCooldown([{ ...failed, pr_url: 'https://github.com/o/r/pull/1' }], now)).toBe(false)
   })
+
+  it('starts no cooldown for a run that was stopped or reaped: it says nothing about the report', () => {
+    expect(inLocalCooldown([{ ...failed, ...stoppedPayload('b', 'SIGTERM') } as typeof failed], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, error: 'Reaped: the local agent run (mushi work) sent no result within 90 min; its process stopped. Safe to run again.' }], now)).toBe(false)
+    // A real no-change verdict still counts.
+    expect(inLocalCooldown([{ ...failed, error: 'Agent found nothing to change: ticks are integers' }], now)).toBe(true)
+  })
+})
+
+describe('mushi work: the run shows in the console while the agent works', () => {
+  it('marks the registered run running on its branch (in flight, and reapable if the process dies)', () => {
+    expect(runningPayload('bugfix/MUSHI-x-local-cursor')).toEqual({ status: 'running', branch: 'bugfix/MUSHI-x-local-cursor' })
+  })
+
+  it('closes a stopped run as failed with a reason that names the stop, not the report', () => {
+    const at = new Date('2026-10-26T01:00:00Z')
+    expect(stoppedPayload('b', 'SIGTERM', at)).toEqual({
+      status: 'failed',
+      branch: 'b',
+      error: 'mushi work stopped by SIGTERM before the run finished; the report can be picked up again.',
+      completed_at: at.toISOString(),
+    })
+    expect(String(stoppedPayload('b', 'SIGINT').error).startsWith(WORK_STOPPED_PREFIX)).toBe(true)
+  })
+
+  it('a stopped or running row keeps the report from a second lane while it is live', () => {
+    expect(hasLiveAttempt([{ id: 'a', status: 'running', pr_url: null, agent: 'mcp' }])).toBe(true)
+    expect(hasLiveAttempt([{ id: 'a', status: 'failed', pr_url: null, agent: 'mcp', error: stoppedPayload('b', 'SIGTERM').error as string }])).toBe(false)
+  })
+
+  it('uses a fresh idempotency key per run of the same report and branch', () => {
+    expect(stableKey(R1, 'b', '2026-10-26T01:00:00.000Z')).not.toBe(stableKey(R1, 'b', '2026-10-26T01:40:00.000Z'))
+  })
 })
 
 describe('installCommand', () => {
@@ -199,5 +244,36 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('isMissingModuleFailure', () => {
+  it('tells a hook that lacks a package from a hook that rejects the change', () => {
+    expect(isMissingModuleFailure("git commit failed: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'jiti' imported from scripts/x.mjs")).toBe(true)
+    expect(isMissingModuleFailure('Error: Cannot find module ./dist/index.js')).toBe(true)
+    expect(isMissingModuleFailure('git commit failed: check-no-secrets: found an API key in src/a.ts')).toBe(false)
+  })
+})
+
+describe('wrongAppReason', () => {
+  it('stops a run whose reports come from another app (a key bound to one app)', () => {
+    const msg = wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-b')
+    expect(msg).toContain('belongs to app app-a, not app-b')
+    expect(msg).toContain('mushi login --project-id app-b')
+  })
+
+  it('passes a report of the same app, or when either id is unknown', () => {
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1' }, 'app-a')).toBeNull()
+    expect(wrongAppReason({ id: 'r1', project_id: 'app-a' }, undefined)).toBeNull()
+  })
+})
+
+describe('freeBranchName', () => {
+  it('keeps the first name when it is free, else takes the next number', () => {
+    const b = 'bugfix/MUSHI-1-local-cursor'
+    expect(freeBranchName(b, new Set())).toBe(b)
+    expect(freeBranchName(b, new Set([b]))).toBe(`${b}-2`)
+    expect(freeBranchName(b, new Set([b, `${b}-2`]))).toBe(`${b}-3`)
   })
 })

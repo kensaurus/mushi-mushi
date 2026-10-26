@@ -553,7 +553,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
-  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra)
+  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra, details.draft === true)
   let report: Record<string, unknown> | null = null
   if (attempt.report_id) {
     const { data } = await db.from('reports').select(REPORT_COLUMNS).eq('id', attempt.report_id).maybeSingle()
