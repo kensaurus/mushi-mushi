@@ -92,8 +92,10 @@ export function formatHeartbeatOrigin(origin: string | null | undefined): string
   }
 }
 
-/** @internal Exported for tests only. */
-/** live/stale/cold follow the SDK key legend (`sdkFreshness`): under 1h, up to 7d, after. */
+/**
+ * live/stale/cold follow the SDK key legend (`sdkFreshness`): under 1h, up to 7d, after.
+ * @internal Exported for tests only.
+ */
 export type HeartbeatTone = 'live' | 'stale' | 'cold' | 'mismatch' | 'none'
 
 /** @internal Exported for tests only. */
