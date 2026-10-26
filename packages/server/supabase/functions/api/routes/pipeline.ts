@@ -48,8 +48,12 @@ import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair } from '../../_share
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
 import {
+  buildDispatchers,
   buildPipeline,
   CONFLICT_AGENT_CAP,
+  dispatcherGroup,
+  withDispatcherGroup,
+  type AgentKeyRow,
   summarizeTrains,
   type AttemptRow,
   type DeployRow,
@@ -150,7 +154,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const since14 = new Date(now.getTime() - 14 * DAY).toISOString();
   const [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes, deploysRes] = await Promise.all([
-    db.from('projects').select('id, name').in('id', projectIds),
+    db.from('projects').select('id, name, organization_id, owner_id').in('id', projectIds),
     db
       .from('reports')
       .select('id, project_id, status, title, summary, description, created_at, processing_error')
@@ -233,6 +237,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       if ((await followupsEnabledForProject(db, id)).enabled) followupsOn.add(id);
     }),
   );
+  const dispatchers = await readDispatchers(db, projectIds, (projectsRes.data ?? []) as DispatcherProject[], now);
   const stages = buildPipeline({
     now,
     reports: [...reports, ...fixReports],
@@ -245,6 +250,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     events,
     followupsOn,
   });
+  const withDispatch = dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages;
   const deploys = (deploysRes.data ?? []) as DeployRow[];
   return {
     generatedAt: now.toISOString(),
@@ -252,12 +258,56 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       const last = deploys.filter((d) => d.project_id === p.id).sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
       return { id: p.id, name: p.name, lastDeploy: last ? { at: last.observed_at, version: last.observed_version, ok: last.ok !== false } : null };
     }),
-    stages,
+    stages: withDispatch,
+    // null: the dispatcher reads failed; the stage still shows its PRs.
+    dispatchers,
     trains: summarizeTrains((trainsRes.data ?? []) as TrainRow[]),
-    // Rejected ingests are not logged yet (pipeline-fix adds the log); null means "not recorded", never 0.
+    // Rejected ingests go to the edge logs only (`report rejected`, fix/autofix-pipeline), not a table:
+    // null means "not counted here", never 0.
     intake: null as null | { rejected: number; byReason: Array<{ reason: string; count: number }> },
     ciReadable,
   };
+}
+
+type DispatcherProject = { id: string; name: string; organization_id: string | null; owner_id: string | null };
+
+/**
+ * Who opens fixes per app: the server's dispatcher (spend-down on an active
+ * Cursor key, ADR 0028) and its last 48 h, and local `mushi work` lanes.
+ * Counts only; no key material is read.
+ */
+async function readDispatchers(db: Db, projectIds: string[], projects: DispatcherProject[], now: Date) {
+  const since48 = new Date(now.getTime() - 2 * DAY).toISOString();
+  const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
+  const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((x): x is string => !!x))];
+  try {
+    const [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes] = await Promise.all([
+      db.from('project_settings').select('project_id, autofix_enabled').in('project_id', projectIds),
+      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until').eq('provider_slug', 'cursor').limit(500),
+      orgIds.length
+        ? db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds).eq('role', 'owner')
+        : Promise.resolve({ data: [], error: null }),
+      db.from('fix_dispatch_jobs').select('project_id, created_at').in('project_id', projectIds).gte('created_at', since48).limit(5000),
+      db.from('fix_attempts').select('project_id, agent, status, created_at').in('project_id', projectIds).gte('created_at', since7).limit(5000),
+    ]);
+    for (const r of [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes]) if (r.error) throw new Error(r.error.message);
+    const orgOwners = new Map<string, Set<string>>();
+    for (const m of (ownersRes.data ?? []) as Array<{ organization_id: string; user_id: string }>) {
+      orgOwners.set(m.organization_id, (orgOwners.get(m.organization_id) ?? new Set()).add(m.user_id));
+    }
+    return buildDispatchers({
+      now,
+      projects,
+      orgOwners,
+      autofixOn: new Set(((settingsRes.data ?? []) as Array<{ project_id: string; autofix_enabled: boolean | null }>).filter((r) => r.autofix_enabled).map((r) => r.project_id)),
+      cursorKeys: (keysRes.data ?? []) as AgentKeyRow[],
+      jobs: (jobsRes.data ?? []) as Array<{ project_id: string; created_at: string }>,
+      attempts: (attemptsRes.data ?? []) as Array<{ project_id: string; agent: string | null; status: string; created_at: string }>,
+    });
+  } catch (err) {
+    plog.warn('dispatcher read failed', { err: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
 }
 
 interface ActionResult {
@@ -327,7 +377,7 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
     const db = getServiceClient();
     const scope = await scopedProjectIds(c, db, userId, c.req.query('projectId'));
     if ('denied' in scope) return scope.denied;
-    if (scope.ids.length === 0) return c.json({ ok: true, data: { generatedAt: deps.now().toISOString(), projects: [], stages: [], trains: [], intake: null, ciReadable: true } });
+    if (scope.ids.length === 0) return c.json({ ok: true, data: { generatedAt: deps.now().toISOString(), projects: [], stages: [], dispatchers: [], trains: [], intake: null, ciReadable: true } });
     try {
       return c.json({ ok: true, data: await readPipeline(db, scope.ids, deps.now()) });
     } catch (err) {

@@ -23,7 +23,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Btn, Callout, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconAlertTriangle, IconNetwork, IconReleases, IconShieldCheck } from '../components/icons'
+import { IconAlertTriangle, IconBolt, IconNetwork, IconReleases, IconShieldCheck } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
 import { usePageData } from '../lib/usePageData'
@@ -35,8 +35,10 @@ import { FunnelLegend, PipelineFunnel } from '../components/pipeline/PipelineFun
 import { PipelineGroups } from '../components/pipeline/PipelineGroups'
 import { PipelineActionDialog, type PendingAction } from '../components/pipeline/PipelineActionDialog'
 import { TrainHistory } from '../components/pipeline/TrainHistory'
+import { FixOpeners } from '../components/pipeline/FixOpeners'
 import {
   ageLabel,
+  openerSummary,
   outcomeSummary,
   retryTrains,
   runPipelineAction,
@@ -77,6 +79,7 @@ export function PipelinePage() {
     return stages.flatMap((s) => s.groups.filter((g) => g.tone === 'stuck')).sort((a, b) => b.count - a.count)
   }, [stages, stage])
   const showApp = scope === 'all'
+  const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
 
   usePublishPageContext({
     route: '/pipeline',
@@ -155,7 +158,7 @@ export function PipelinePage() {
       {data && (
         <>
           <section className="space-y-2" aria-label="Stages">
-            <PipelineFunnel stages={stages} selected={stage} onSelect={setStage} now={now} />
+            <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
             <FunnelLegend />
           </section>
 
@@ -163,6 +166,15 @@ export function PipelinePage() {
             <Callout tone="warn" label="CI jobs">
               Mushi could not read the CI jobs just now, so PRs are judged by their check summary only. Refresh in a minute.
             </Callout>
+          )}
+
+          {data.dispatchers && data.dispatchers.length > 0 && (
+            <Section title="Who opens fixes" id="pipeline-openers" icon={<IconBolt />}>
+              <p className="mb-2 text-xs text-fg-muted">
+                The server opens fixes on its own only with an active Cursor key that has spend-down on. Local lanes are your own <code>mushi work</code> runs.
+              </p>
+              <FixOpeners dispatchers={data.dispatchers} now={now} />
+            </Section>
           )}
 
           <Section
@@ -214,7 +226,7 @@ export function PipelinePage() {
                     {data.intake.byReason.length > 0 && ` (${data.intake.byReason.map((r) => `${r.count} ${r.reason}`).join(', ')})`}
                   </span>
                 ) : (
-                  <span className="text-fg-muted" data-testid="pipeline-intake-not-recorded">not recorded yet</span>
+                  <span className="text-fg-muted" data-testid="pipeline-intake-not-recorded">not counted here yet (each one is in the edge logs as “report rejected”)</span>
                 )}
                 <Link to="/connect#connect-sdk-health" className="text-2xs font-medium text-brand hover:underline">
                   SDK health →

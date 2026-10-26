@@ -73,12 +73,40 @@ export interface TrainSummary {
   trains: Array<{ id: string; state: string; prNumber: number | null; members: number; attempt: number; detail: string | null; createdAt: string }>
 }
 
+/** Who opens fixes for one app: the server's dispatcher and local `mushi work` lanes. */
+export interface DispatcherStatus {
+  projectId: string
+  name: string
+  autofixOn: boolean
+  opener: 'server' | 'local' | 'both' | 'nobody'
+  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
+  local: { runs24h: number; running: number; lastAt: string | null }
+  problem: string | null
+}
+
+/** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
+export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number } {
+  let server = 0
+  let local = 0
+  let nobody = 0
+  for (const d of dispatchers) {
+    const s = d.server.dispatches24h > 0
+    const l = d.local.runs24h > 0
+    if (s) server++
+    if (l) local++
+    if (!s && !l) nobody++
+  }
+  return { server, local, nobody }
+}
+
 export interface PipelineData {
   generatedAt: string
   projects: Array<{ id: string; name: string; lastDeploy: { at: string; version: string | null; ok: boolean } | null }>
   stages: PipelineStage[]
+  /** null: the dispatcher reads failed. */
+  dispatchers: DispatcherStatus[] | null
   trains: TrainSummary[]
-  /** null: rejected ingests are not recorded yet. */
+  /** null: rejected ingests go to the edge logs only, not counted here. */
   intake: { rejected: number; byReason: Array<{ reason: string; count: number }> } | null
   ciReadable: boolean
 }
