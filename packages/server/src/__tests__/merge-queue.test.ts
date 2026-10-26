@@ -66,6 +66,16 @@ describe('checksView / conflictPrompt / queueLine', () => {
       ]),
     ).toEqual({ pending: 1, failed: ['required'], ran: ['required', 'lighthouse'] })
   })
+  it('counts a check by its newest run, so a draft guard stop is gone once CI ran after mark-ready', () => {
+    expect(
+      checksView([
+        { id: 1, name: 'gate', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T08:00:00Z' },
+        { id: 2, name: 'gate', status: 'completed', conclusion: 'success', started_at: '2026-10-26T08:10:00Z' },
+        { id: 3, name: 'build', status: 'completed', conclusion: 'success', started_at: '2026-10-26T08:10:00Z' },
+        { id: 4, name: 'build', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T08:20:00Z' },
+      ]),
+    ).toEqual({ pending: 0, failed: ['build'], ran: ['gate', 'build'] })
+  })
   it('asks the agent to keep both sides and to say needs_human otherwise', () => {
     const p = conflictPrompt({ prUrl: 'https://github.com/o/r/pull/1', baseRef: 'main', headRef: 'fix/x' })
     expect(p).toContain('git merge origin/main')

@@ -159,7 +159,7 @@ test('a red train is bisected: its first half rides again, the rest waits', asyn
   assertEquals(out, 'started')
   assertEquals(d.calls.slice(0, 2), ['close 900', 'delete mushi/train/20261024-0000'])
   assertEquals(d.calls.filter((c) => c.startsWith('merge ')), ['merge h1', 'merge h2'])
-  assertEquals(tables.release_trains[0].state, 'failed')
+  assertEquals([tables.release_trains[0].state, tables.release_trains[0].detail], ['failed', 'Members failed CI: gate.'])
   const retry = tables.release_trains[1]
   assertEquals([retry.attempt, (retry.members as Row[]).length], [2, 2])
   assertEquals(tables.fix_merge_queue.find((r) => r.id === 'c')?.state, 'queued')
@@ -287,7 +287,7 @@ test('a PR whose only failures are red on main too (an aggregator skipped there)
   })
   const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
   assertEquals(out, 'nothing_ready')
-  assertEquals([tables.fix_merge_queue[0].state, tables.fix_merge_queue[0].detail], ['queued', 'main is red too (gate, Checks (security)); it rides a release train once main passes.'])
+  assertEquals([tables.fix_merge_queue[0].state, tables.fix_merge_queue[0].detail], ['queued', 'main is red too (Checks (security)); it rides a release train once main passes.'])
 })
 
 test('CI still running, or not started while main has checks, keeps a PR out of the train', async () => {
@@ -315,7 +315,7 @@ test('an approved draft is marked ready, one per tick, and rides only after its 
 })
 
 test('a member that failed alone at its head is not put back into the next train; a new commit lets it ride', async () => {
-  const failedAlone = { id: 'old', repo: 'o/r', state: 'failed', pr_number: 800, detail: 'CI failed: Lint & Build.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }] }
+  const failedAlone = { id: 'old', repo: 'o/r', state: 'failed', pr_number: 800, detail: 'Members failed CI: Lint & Build.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }] }
   const soon = { ...settings, intervalMinutes: 30 }
   const rows = [qrow('a', 1, { state: 'blocked' }), qrow('b', 2)]
   const { db, tables } = setup(rows, { release_trains: [failedAlone] })
@@ -335,7 +335,7 @@ test('a member that failed alone at its head is not put back into the next train
 })
 
 test('a member that keeps riding red trains at one head stops after five', async () => {
-  const red = (i: number) => ({ id: `t${i}`, repo: 'o/r', state: 'failed', pr_number: 800 + i, detail: 'CI failed: e2e.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }, { rowId: `x${i}`, headSha: 'hx' }] })
+  const red = (i: number) => ({ id: `t${i}`, repo: 'o/r', state: 'failed', pr_number: 800 + i, detail: 'Members failed CI: e2e.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }, { rowId: `x${i}`, headSha: 'hx' }] })
   const soon = { ...settings, intervalMinutes: 30 }
   const rows = [qrow('a', 1)]
   const four = setup(rows, { release_trains: [1, 2, 3, 4].map(red) })

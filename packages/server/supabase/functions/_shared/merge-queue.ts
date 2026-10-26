@@ -122,12 +122,24 @@ export function reviewRefusal(
   return { state: 'blocked', detail: message, requeueReview: false }
 }
 
-/** The check runs of a head, reduced to what `nextQueueStep` reads. */
-export function checksView(runs: Array<{ name?: string; status?: string; conclusion?: string | null }>): ChecksView {
+/**
+ * The check runs of a head, reduced to what `nextQueueStep` reads. A name
+ * that ran more than once counts by its newest run: a draft's CI stops on
+ * purpose ("Draft PRs run no CI") and runs again on the same commit once
+ * the PR is marked ready, so the old stop must not read as a failure.
+ */
+export function checksView(runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>): ChecksView {
+  const newest = new Map<string, (typeof runs)[number]>()
+  runs.forEach((r, i) => {
+    const key = r.name ?? `#${i}`
+    const prev = newest.get(key)
+    const later = !prev || (r.started_at ?? '') > (prev.started_at ?? '') || ((r.started_at ?? '') === (prev.started_at ?? '') && (r.id ?? 0) > (prev.id ?? 0))
+    if (later) newest.set(key, r)
+  })
   let pending = 0
   const failed: string[] = []
   const ran: string[] = []
-  for (const r of runs) {
+  for (const r of newest.values()) {
     if (r.status !== 'completed') pending++
     else {
       if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
