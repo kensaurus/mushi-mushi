@@ -6,6 +6,7 @@ import { log } from '../_shared/logger.ts';
 import { checkIngestQuota } from '../_shared/quota.ts';
 import { getStorageAdapter } from '../_shared/storage.ts';
 import { reportSubmissionSchema } from '../_shared/schemas.ts';
+import { rejectionIssues } from '../_shared/report-rejection.ts';
 import { normalizeReportCategory } from '../_shared/report-category.ts';
 import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
@@ -223,6 +224,19 @@ export function resolveReporterIdentity(
   };
 }
 
+/**
+ * Log a report the API refused, with field paths and codes only (no values,
+ * no payload body), so a drop is never silent: on 2026-10-26 every React
+ * Native report had been failing since June with nothing in the logs.
+ */
+export function logReportRejected(
+  projectId: string,
+  stage: 'body' | 'submission' | 'screenshot' | 'batch',
+  issues: ReadonlyArray<{ path: ReadonlyArray<string | number>; code: string }>,
+): void {
+  log.warn('report rejected', { projectId, stage, issues: rejectionIssues(issues) });
+}
+
 export async function ingestReport(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
@@ -269,6 +283,7 @@ export async function ingestReport(
 
   const parsed = reportSubmissionSchema.safeParse(normalizedBody);
   if (!parsed.success) {
+    logReportRejected(projectId, 'submission', parsed.error.issues);
     // Name the field: a bare "Required" left SDK and script authors guessing.
     const issue = parsed.error.issues[0];
     const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
@@ -336,6 +351,7 @@ export async function ingestReport(
     const screenshotBytes = new TextEncoder().encode(report.screenshotDataUrl).length;
     const MAX_SCREENSHOT_DATA_URL_BYTES = 1_500_000 * 4 / 3 + 100; // align with client 1.5 MB decoded cap
     if (screenshotBytes > MAX_SCREENSHOT_DATA_URL_BYTES) {
+      logReportRejected(projectId, 'screenshot', [{ path: ['screenshotDataUrl'], code: 'too_big' }]);
       return { ok: false, error: 'Screenshot exceeds maximum allowed size' };
     }
     try {
