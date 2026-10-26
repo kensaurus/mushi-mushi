@@ -5885,7 +5885,7 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device WASM SLM — pre-classifies before sending |
+| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device pre-classifier (heuristic; ONNX mode experimental) — drops junk before sending |
 | [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
 | [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
 | [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
@@ -7547,7 +7547,10 @@ pnpm add -D eslint-plugin-mushi-mushi
 ## Recommended preset
 
 Most projects pick up both rules at their default severity by extending
-the recommended preset:
+the recommended preset. It turns on `no-dead-handler`, `no-mock-leak` and
+`no-allowlist-jsx-textnode` (an allowlist comment written as JSX text) and
+nothing else; the plugin's design-system rules are for the Mushi console
+itself:
 
 ```js filename="eslint.config.js"
 import mushi from 'eslint-plugin-mushi-mushi'
@@ -7733,7 +7736,7 @@ description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from yo
 
 # `@mushi-mushi/inventory-auth-runner`
 
-A small Playwright runner that executes the `auth.scripted` block of your
+A small Playwright runner that executes the scripted `app.auth` block of your
 [`inventory.yaml`](/sdks/inventory-schema), captures the resulting cookies,
 and stores them in `project_settings` so the v2 crawler and synthetic
 monitor can reach pages behind a login wall.
@@ -7753,17 +7756,22 @@ pnpm add -D @mushi-mushi/inventory-auth-runner
 
 ## Usage
 
-Add an `auth.scripted` block to `inventory.yaml`:
+Add an `auth` block of type `scripted` inside `app` in `inventory.yaml`:
 
 ```yaml filename="inventory.yaml"
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]',    value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click:    { selector: '[data-testid=login]' }
-      - waitFor:  { url: /\/dashboard$/ }
+app:
+  id: acme
+  name: Acme
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.E2E_EMAIL)
+        await page.fill('[data-testid=password]', env.E2E_PASSWORD)
+        await page.click('[data-testid=login]')
+        await page.waitForURL('**/dashboard')
 ```
 
 Then run:
@@ -7772,13 +7780,14 @@ Then run:
 E2E_EMAIL=user@acme.test \
 E2E_PASSWORD=… \
 MUSHI_API_KEY=mushi_… \
-MUSHI_PROJECT_ID=proj_… \
+MUSHI_PROJECT=<project uuid> \
 npx mushi-mushi-auth refresh
 ```
 
-The runner walks the steps headlessly, captures every cookie set by the
-target origin, and POSTs them to `/v1/admin/projects/:id/settings`. The
-crawler and synthetic monitor read from the same row on every run.
+The runner opens `base_url + login_path` headlessly, runs the script,
+picks the session cookie set by the target origin, and PATCHes it to
+`/v1/admin/inventory/:projectId/settings`. The crawler and synthetic
+monitor read from the same row on every run.
 
 ## In CI
 
@@ -7871,16 +7880,25 @@ stories:
                   ui:
                     route_change_to: '/dashboard'
                     visible_text: 'Welcome'
+```
 
-# Optional: feed an authenticated session to the synthetic monitor.
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]', value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click: { selector: '[data-testid=login]' }
-      - waitFor: { url: /\/dashboard$/ }
+To feed an authenticated session to the crawler and synthetic monitor, add
+an `auth` block inside `app` (see
+[`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner)):
+
+```yaml
+app:
+  id: acme-web
+  name: Acme web
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.E2E_EMAIL)
+        await page.fill('[data-testid=password]', env.E2E_PASSWORD)
+        await page.click('[data-testid=login]')
 ```
 
 See [Concepts → Inventory and gates](/concepts/inventory-and-gates) for
@@ -8183,12 +8201,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
-          api-key:    ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command:    gates
+          api-key:       ${{ secrets.MUSHI_API_KEY }}
+          project-id:    ${{ secrets.MUSHI_PROJECT_ID }}
+          command:       gates
+          eslint-report: mushi-eslint.json
 ```
+
+`dead_handler` and `mock_leak` judge the findings in `eslint-report`. A run
+that asks for them without a report fails, so a missing lint step can never
+pass as "no findings". The crawl is not run by this command; start it with
+**Reconcile** on the Inventory page.
 
 The action posts a single composite GitHub status — `mushi-mushi/gates` —
 which rolls up:
@@ -8208,10 +8234,11 @@ which rolls up:
 
 | `command:`           | What it does                                                          |
 | -------------------- | --------------------------------------------------------------------- |
-| `gates`              | The default — runs all five gates and posts the composite check.      |
+| `gates`              | The default — runs the gates and posts the composite check. Needs `eslint-report` for `dead_handler` / `mock_leak`. |
 | `propose`            | Asks the LLM proposer for an updated `inventory.yaml` draft, opens a PR. |
 | `discover-api`       | Crawls the candidate routes the SDK observed in production.           |
 | `discovery-status`   | Prints the current discovery snapshot for the project.                |
+| `spec-drift`         | Gate 6: `oasdiff breaking` between `base-spec` and `head-spec`; fails on a breaking change. |
 | `auth-bootstrap`     | Runs the `inventory.yaml` `auth.scripted` block and seeds the cookies into `project_settings`. |
 
 ## In your IDE
@@ -8224,14 +8251,42 @@ page — see [Admin → User stories · Inventory](/admin/inventory).
 
 ## Inputs
 
-| Input         | Required | Default       | Description                                          |
-| ------------- | :------: | ------------- | ---------------------------------------------------- |
-| `api-key`     | ✓        | —             | Project API key (`mushi_…`).                         |
-| `project-id`  | ✓        | —             | Project ID (`proj_…`).                               |
-| `command`     |          | `gates`       | One of the commands listed above.                    |
-| `api-url`     |          | auto-routed   | Override for self-hosted Mushi deployments.          |
-| `inventory`   |          | `inventory.yaml` | Path to the inventory file (relative to repo root). |
-| `working-directory` |    | `.`           | Sub-directory to run the action from (monorepos).    |
+`action.yml` is the source of truth; a test keeps it in step with the CLI.
+
+| Input               | Required                     | Default            | Description                                                         |
+| ------------------- | :--------------------------: | ------------------ | ------------------------------------------------------------------- |
+| `api-key`           | ✓                            | —                  | Project API key (`mushi_…`). Store it as a repo secret.             |
+| `project-id`        | ✓                            | —                  | Project UUID.                                                       |
+| `command`           | ✓                            | —                  | One of the commands listed above.                                   |
+| `api-endpoint`      |                              | hosted API         | Override for self-hosted Mushi deployments.                         |
+| `fail-on-quota`     |                              | `true`             | Fail the step on `QUOTA_EXCEEDED`; `false` warns and continues.     |
+| `report-id`         | `dispatch-fix`               | —                  | Report to dispatch a fix for.                                       |
+| `inventory-action-node-id` |                       | —                  | `dispatch-fix`: inventory Action to pin the fix to.                 |
+| `question`          | `query`                      | —                  | Natural-language query.                                             |
+| `min-coverage`      |                              | `0.8`              | `check-coverage`: minimum classified ratio.                         |
+| `commit-sha`        |                              | `GITHUB_SHA`       | `gates` / `spec-drift`: commit the run is recorded against.         |
+| `pr-number`         |                              | —                  | `gates` / `spec-drift`: PR used to scope findings.                  |
+| `gates`             |                              | `all`              | `gates`: comma-separated subset; `crawl` is refused.                |
+| `eslint-report`     | `gates` with lint gates      | —                  | ESLint JSON report made with `eslint-plugin-mushi-mushi`.           |
+| `repo-root`         |                              | `GITHUB_WORKSPACE` | `discover-api`: directory to walk; `gates`: root for report paths.  |
+| `openapi-file`      |                              | `openapi.yaml`     | `discover-api`: explicit OpenAPI file.                              |
+| `supabase-url`      |                              | —                  | `discover-api`: Supabase URL to introspect.                         |
+| `supabase-anon-key` |                              | —                  | `discover-api`: Supabase anon key for the introspection.            |
+| `base-spec`         | `spec-drift`                 | —                  | Base OpenAPI spec (path or URL).                                    |
+| `head-spec`         | `spec-drift`                 | —                  | Head OpenAPI spec (path or URL).                                    |
+| `fail-on-breaking`  |                              | `true`             | `spec-drift`: fail on a breaking change.                            |
+
+## Outputs
+
+| Output             | Set by             | Description                                              |
+| ------------------ | ------------------ | -------------------------------------------------------- |
+| `result`           | most commands      | JSON returned by the Mushi API.                          |
+| `coverage`         | `check-coverage`   | Observed classified ratio.                               |
+| `findings`         | `spec-drift`       | JSON array of the oasdiff findings.                      |
+| `ready_to_propose` | `discovery-status` | `"true"` once there is enough discovery data to propose. |
+| `total_events`     | `discovery-status` | SDK discovery events recorded.                           |
+| `route_count`      | `discovery-status` | Routes discovered.                                       |
+| `proposal_id`      | `propose`          | Inventory proposal to review on `/inventory`.            |
 
 ---
 
@@ -9694,29 +9749,55 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
-description: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost."
+description: "@mushi-mushi/wasm-classifier drops obvious junk bug reports in the browser before they reach your LLM, with a zero-dependency heuristic; its ONNX mode is experimental."
 ---
 
 # `@mushi-mushi/wasm-classifier`
 
-Optional on-device pre-classifier built on a Phi-3-mini ONNX model running
-under `onnxruntime-web`. Detects obvious junk before the request even
-leaves the browser, cutting your LLM bill.
+Optional on-device pre-classifier. It scores a report before it leaves the
+browser and blocks obvious junk ("hi", "asdf", a lone emoji), so you pay for
+fewer server classifications.
 
 ```bash
 pnpm add @mushi-mushi/wasm-classifier
 ```
 
-```ts
-import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
+## Heuristic classifier
 
-const classifier = await useWasmClassifier()
-const verdict = await classifier.classify('asdf qwer')
-// → { keep: false, confidence: 0.96, reason: 'low-information' }
+Zero dependencies, about 1 KB gzipped. Pass it to the web SDK:
+
+```ts
+import { Mushi } from '@mushi-mushi/web'
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
+
+Mushi.init({
+  projectId: 'proj_…',
+  apiKey: '…',
+  preFilter: { wasmClassifier: createHeuristicClassifier() },
+})
 ```
 
-The web SDK auto-loads this when present and skips classification on the
-server when the verdict is `keep: false` with confidence ≥ 0.85.
+Or call it yourself:
+
+```ts
+const classifier = createHeuristicClassifier()
+const result = await classifier.classify({ description: 'asdf' })
+// → { verdict: 'block', confidence: …, reason: …, modelId: 'heuristic-v1', durationMs: … }
+```
+
+`block` stops the send and the widget tells the reporter it was not sent;
+`pass` and `unsure` send the report.
+
+## ONNX classifier (experimental)
+
+`createOnnxClassifier({ modelUrl })` loads `onnxruntime-web` (an optional
+peer dependency) and a model you host. **Model inference is not
+implemented yet**: every verdict comes from the heuristic classifier, with
+`modelId: 'heuristic-fallback'` and a reason starting
+`ONNX inference is not implemented yet`, and the first call logs a console
+warning. Use `createHeuristicClassifier()` until this changes; the
+[package README](https://github.com/kensaurus/mushi-mushi/tree/master/packages/wasm-classifier)
+describes the planned model workflow.
 
 ---
 

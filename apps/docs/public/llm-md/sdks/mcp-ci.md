@@ -25,12 +25,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
-          api-key:    ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command:    gates
+          api-key:       ${{ secrets.MUSHI_API_KEY }}
+          project-id:    ${{ secrets.MUSHI_PROJECT_ID }}
+          command:       gates
+          eslint-report: mushi-eslint.json
 ```
+
+`dead_handler` and `mock_leak` judge the findings in `eslint-report`. A run
+that asks for them without a report fails, so a missing lint step can never
+pass as "no findings". The crawl is not run by this command; start it with
+**Reconcile** on the Inventory page.
 
 The action posts a single composite GitHub status — `mushi-mushi/gates` —
 which rolls up:
@@ -50,10 +58,11 @@ which rolls up:
 
 | `command:`           | What it does                                                          |
 | -------------------- | --------------------------------------------------------------------- |
-| `gates`              | The default — runs all five gates and posts the composite check.      |
+| `gates`              | The default — runs the gates and posts the composite check. Needs `eslint-report` for `dead_handler` / `mock_leak`. |
 | `propose`            | Asks the LLM proposer for an updated `inventory.yaml` draft, opens a PR. |
 | `discover-api`       | Crawls the candidate routes the SDK observed in production.           |
 | `discovery-status`   | Prints the current discovery snapshot for the project.                |
+| `spec-drift`         | Gate 6: `oasdiff breaking` between `base-spec` and `head-spec`; fails on a breaking change. |
 | `auth-bootstrap`     | Runs the `inventory.yaml` `auth.scripted` block and seeds the cookies into `project_settings`. |
 
 ## In your IDE
@@ -66,11 +75,39 @@ page — see [Admin → User stories · Inventory](/admin/inventory).
 
 ## Inputs
 
-| Input         | Required | Default       | Description                                          |
-| ------------- | :------: | ------------- | ---------------------------------------------------- |
-| `api-key`     | ✓        | —             | Project API key (`mushi_…`).                         |
-| `project-id`  | ✓        | —             | Project ID (`proj_…`).                               |
-| `command`     |          | `gates`       | One of the commands listed above.                    |
-| `api-url`     |          | auto-routed   | Override for self-hosted Mushi deployments.          |
-| `inventory`   |          | `inventory.yaml` | Path to the inventory file (relative to repo root). |
-| `working-directory` |    | `.`           | Sub-directory to run the action from (monorepos).    |
+`action.yml` is the source of truth; a test keeps it in step with the CLI.
+
+| Input               | Required                     | Default            | Description                                                         |
+| ------------------- | :--------------------------: | ------------------ | ------------------------------------------------------------------- |
+| `api-key`           | ✓                            | —                  | Project API key (`mushi_…`). Store it as a repo secret.             |
+| `project-id`        | ✓                            | —                  | Project UUID.                                                       |
+| `command`           | ✓                            | —                  | One of the commands listed above.                                   |
+| `api-endpoint`      |                              | hosted API         | Override for self-hosted Mushi deployments.                         |
+| `fail-on-quota`     |                              | `true`             | Fail the step on `QUOTA_EXCEEDED`; `false` warns and continues.     |
+| `report-id`         | `dispatch-fix`               | —                  | Report to dispatch a fix for.                                       |
+| `inventory-action-node-id` |                       | —                  | `dispatch-fix`: inventory Action to pin the fix to.                 |
+| `question`          | `query`                      | —                  | Natural-language query.                                             |
+| `min-coverage`      |                              | `0.8`              | `check-coverage`: minimum classified ratio.                         |
+| `commit-sha`        |                              | `GITHUB_SHA`       | `gates` / `spec-drift`: commit the run is recorded against.         |
+| `pr-number`         |                              | —                  | `gates` / `spec-drift`: PR used to scope findings.                  |
+| `gates`             |                              | `all`              | `gates`: comma-separated subset; `crawl` is refused.                |
+| `eslint-report`     | `gates` with lint gates      | —                  | ESLint JSON report made with `eslint-plugin-mushi-mushi`.           |
+| `repo-root`         |                              | `GITHUB_WORKSPACE` | `discover-api`: directory to walk; `gates`: root for report paths.  |
+| `openapi-file`      |                              | `openapi.yaml`     | `discover-api`: explicit OpenAPI file.                              |
+| `supabase-url`      |                              | —                  | `discover-api`: Supabase URL to introspect.                         |
+| `supabase-anon-key` |                              | —                  | `discover-api`: Supabase anon key for the introspection.            |
+| `base-spec`         | `spec-drift`                 | —                  | Base OpenAPI spec (path or URL).                                    |
+| `head-spec`         | `spec-drift`                 | —                  | Head OpenAPI spec (path or URL).                                    |
+| `fail-on-breaking`  |                              | `true`             | `spec-drift`: fail on a breaking change.                            |
+
+## Outputs
+
+| Output             | Set by             | Description                                              |
+| ------------------ | ------------------ | -------------------------------------------------------- |
+| `result`           | most commands      | JSON returned by the Mushi API.                          |
+| `coverage`         | `check-coverage`   | Observed classified ratio.                               |
+| `findings`         | `spec-drift`       | JSON array of the oasdiff findings.                      |
+| `ready_to_propose` | `discovery-status` | `"true"` once there is enough discovery data to propose. |
+| `total_events`     | `discovery-status` | SDK discovery events recorded.                           |
+| `route_count`      | `discovery-status` | Routes discovered.                                       |
+| `proposal_id`      | `propose`          | Inventory proposal to review on `/inventory`.            |

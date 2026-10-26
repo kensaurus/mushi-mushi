@@ -4,26 +4,52 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
-description: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost."
+description: "@mushi-mushi/wasm-classifier drops obvious junk bug reports in the browser before they reach your LLM, with a zero-dependency heuristic; its ONNX mode is experimental."
 ---
 
 # `@mushi-mushi/wasm-classifier`
 
-Optional on-device pre-classifier built on a Phi-3-mini ONNX model running
-under `onnxruntime-web`. Detects obvious junk before the request even
-leaves the browser, cutting your LLM bill.
+Optional on-device pre-classifier. It scores a report before it leaves the
+browser and blocks obvious junk ("hi", "asdf", a lone emoji), so you pay for
+fewer server classifications.
 
 ```bash
 pnpm add @mushi-mushi/wasm-classifier
 ```
 
-```ts
-import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
+## Heuristic classifier
 
-const classifier = await useWasmClassifier()
-const verdict = await classifier.classify('asdf qwer')
-// → { keep: false, confidence: 0.96, reason: 'low-information' }
+Zero dependencies, about 1 KB gzipped. Pass it to the web SDK:
+
+```ts
+import { Mushi } from '@mushi-mushi/web'
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
+
+Mushi.init({
+  projectId: 'proj_…',
+  apiKey: '…',
+  preFilter: { wasmClassifier: createHeuristicClassifier() },
+})
 ```
 
-The web SDK auto-loads this when present and skips classification on the
-server when the verdict is `keep: false` with confidence ≥ 0.85.
+Or call it yourself:
+
+```ts
+const classifier = createHeuristicClassifier()
+const result = await classifier.classify({ description: 'asdf' })
+// → { verdict: 'block', confidence: …, reason: …, modelId: 'heuristic-v1', durationMs: … }
+```
+
+`block` stops the send and the widget tells the reporter it was not sent;
+`pass` and `unsure` send the report.
+
+## ONNX classifier (experimental)
+
+`createOnnxClassifier({ modelUrl })` loads `onnxruntime-web` (an optional
+peer dependency) and a model you host. **Model inference is not
+implemented yet**: every verdict comes from the heuristic classifier, with
+`modelId: 'heuristic-fallback'` and a reason starting
+`ONNX inference is not implemented yet`, and the first call logs a console
+warning. Use `createHeuristicClassifier()` until this changes; the
+[package README](https://github.com/kensaurus/mushi-mushi/tree/master/packages/wasm-classifier)
+describes the planned model workflow.

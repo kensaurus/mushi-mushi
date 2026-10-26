@@ -23,7 +23,10 @@ pnpm add -D eslint-plugin-mushi-mushi
 ## Recommended preset
 
 Most projects pick up both rules at their default severity by extending
-the recommended preset:
+the recommended preset. It turns on `no-dead-handler`, `no-mock-leak` and
+`no-allowlist-jsx-textnode` (an allowlist comment written as JSX text) and
+nothing else; the plugin's design-system rules are for the Mushi console
+itself:
 
 ```js filename="eslint.config.js"
 import mushi from 'eslint-plugin-mushi-mushi'

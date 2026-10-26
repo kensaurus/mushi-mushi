@@ -61,16 +61,25 @@ stories:
                   ui:
                     route_change_to: '/dashboard'
                     visible_text: 'Welcome'
+```
 
-# Optional: feed an authenticated session to the synthetic monitor.
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]', value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click: { selector: '[data-testid=login]' }
-      - waitFor: { url: /\/dashboard$/ }
+To feed an authenticated session to the crawler and synthetic monitor, add
+an `auth` block inside `app` (see
+[`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner)):
+
+```yaml
+app:
+  id: acme-web
+  name: Acme web
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.E2E_EMAIL)
+        await page.fill('[data-testid=password]', env.E2E_PASSWORD)
+        await page.click('[data-testid=login]')
 ```
 
 See [Concepts → Inventory and gates](/concepts/inventory-and-gates) for
