@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/plugin-discord",
   "version": "0.1.7",
-  "description": "Mushi Mushi plugin for Discord — posts rich embeds to an Incoming Webhook for report and fix lifecycle events.",
+  "description": "Mushi Mushi plugin for Discord — posts a channel message when Mushi triages a bug or a fix is proposed or applied. Self-hosted; Mushi Cloud posts to Discord natively.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

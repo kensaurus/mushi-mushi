@@ -31,6 +31,8 @@ function App() {
 }
 ```
 
+A launcher appears in the corner. Docs: [React SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/react)
+
 ### Next.js App Router
 
 The provider uses React context, so it lives in a client component:
