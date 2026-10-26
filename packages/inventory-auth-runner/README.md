@@ -25,8 +25,8 @@ Docs: [inventory-auth-runner](https://kensaur.us/mushi-mushi/docs/sdks/inventory
 
 1. Reads the project's currently-ingested `inventory.yaml` from
    `GET /v1/admin/inventory/:projectId`.
-2. Finds the `auth.scripted` block and runs its `script` against
-   `app.base_url + auth.config.login_path` in a headless Chromium
+2. Finds the `app.auth` block of type `scripted` and runs its `script` against
+   `app.base_url + app.auth.config.login_path` in a headless Chromium
    instance via Playwright.
 3. Picks the resulting session cookie (prefers `*session*` / `*auth*` /
    `sb-*` / `next-auth*` names, then `HttpOnly` + `Secure`).
@@ -88,7 +88,8 @@ in your build logs.
 
 ## Inventory snippet
 
-Your `inventory.yaml` declares the script the runner will execute:
+Your `inventory.yaml` declares the script the runner will execute, as
+`auth` inside `app` (the schema has no top-level `auth`):
 
 ```yaml
 app:
@@ -114,7 +115,9 @@ Two `script` shapes are accepted:
    `context`. Runs via `new Function(...)` so it has no access to the
    runner's local closure.
 2. **File reference** — `script: 'js:./scripts/login.js'`. The runner
-   `import()`s the path relative to CWD; the module must `default-export`
+   `import()`s the path relative to the folder of your local
+   `inventory.yaml` (`--inventory <path>` or `MUSHI_INVENTORY_FILE`;
+   default `./inventory.yaml`, so the working directory); the module must `default-export`
    an `(page, env, context) => Promise<void>` function. Use this when
    you'd rather commit the script to your repo without inline-escaping
    it into YAML.

@@ -4,6 +4,8 @@
 
 An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports. It runs in the browser and stops empty or nonsense reports ("hi", "asdf") before they are sent, so they never reach the server or an LLM.
 
+> **Status: the ONNX mode is experimental.** Model inference is not implemented yet: `createOnnxClassifier()` loads `onnxruntime-web` and your model, then returns the heuristic's verdict for every report (`modelId: 'heuristic-fallback'`) and logs one console warning saying so. Use `createHeuristicClassifier()` in production.
+
 ## Quick start
 
 ```bash
@@ -60,7 +62,9 @@ if (result.verdict === 'block') {
 }
 ```
 
-## Usage — ONNX mode
+## Usage — ONNX mode (experimental)
+
+Every verdict below still comes from the heuristic until inference ships.
 
 ```ts
 import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier';
@@ -90,7 +94,7 @@ This package intentionally does **not** bundle the model file. Recommended workf
 3. Host on a CDN with long `Cache-Control` (e.g. `public, max-age=31536000, immutable`) and a versioned URL.
 4. Pass the URL as `modelUrl`. Set `cacheKey` so re-visits skip re-downloading.
 
-In this version the inference step is a stub: after the runtime and model load, `classify()` still runs the heuristic (with its default thresholds) and logs a console warning once. Every path returns a heuristic verdict, with `modelId` `'heuristic-fallback'` or `'heuristic-v1'`.
+Until that custom head is in place and the inference step is written, the ONNX backend delegates to the heuristic backend: results carry `modelId: 'heuristic-fallback'` and a reason starting `ONNX inference is not implemented yet; heuristic verdict`, and the first call logs a console warning.
 
 ## Verdict semantics
 

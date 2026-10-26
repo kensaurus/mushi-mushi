@@ -221,7 +221,7 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
         </p>
       )}
       {open && (
-        <ul className="max-h-[32rem] divide-y divide-edge-subtle overflow-y-auto border-t border-edge-subtle px-2.5">
+        <ul className="max-h-128 divide-y divide-edge-subtle overflow-y-auto border-t border-edge-subtle px-2.5">
           {group.items.map((item) => (
             <ItemRow key={item.id} item={item} group={group} props={props} />
           ))}

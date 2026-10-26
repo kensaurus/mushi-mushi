@@ -52,7 +52,6 @@ import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
-import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
@@ -706,7 +705,28 @@ registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
 registerEvolutionRoutes(app);
-registerTesterMarketplaceRoutes(app);
+// tester-marketplace.ts (tester portal, public marketplace and roadmap,
+// submission and redemption review, Tremendous webhook); deploy size limit,
+// 2026-10-26. Exact /v1/tester/* paths: community.ts serves others there.
+forwardToApiExt([
+  '/v1/public/marketplace/*',
+  '/v1/public/roadmap/*',
+  '/v1/me/tester-status',
+  '/v1/tester/enroll',
+  '/v1/tester/me',
+  '/v1/tester/kyc',
+  '/v1/tester/export',
+  '/v1/tester/delete',
+  '/v1/tester/wallet',
+  '/v1/tester/wallet/*',
+  '/v1/tester/apps',
+  '/v1/tester/apps/*',
+  '/v1/tester/submissions',
+  '/v1/admin/tester-submissions',
+  '/v1/admin/tester-submissions/*',
+  '/v1/admin/tester-redemptions/*',
+  '/v1/webhooks/tremendous',
+]);
 registerCommunityRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
