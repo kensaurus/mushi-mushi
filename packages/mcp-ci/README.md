@@ -33,6 +33,7 @@ queries against your report corpus — all without leaving your workflow.
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `gates`            | Runs the pre-release gates (`dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) for the current commit and posts a single composite status. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
 | `discover-api`     | Walks the customer repo for Next.js route handlers + OpenAPI + (optionally) Supabase introspection and POSTs the resulting `discovered_apis` to `inventory-gates` so Gate 3 (`api_contract`) has something to diff against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
+| `spec-drift`       | Gate 6: runs `oasdiff breaking` between two OpenAPI specs, records the findings as a `spec_drift` gate run and sets the `findings` output. Fails on a breaking change unless `fail-on-breaking: false`. | `base-spec`, `head-spec` (+ optional `fail-on-breaking`, `commit-sha`, `pr-number`) |
 
 ### Mushi v2.1 — passive discovery & proposal flow
 
@@ -40,7 +41,7 @@ queries against your report corpus — all without leaving your workflow.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
 | `discovery-status` | Reads `GET /v1/admin/inventory/:projectId/discovery` and surfaces `route_count`, `total_events`, `ready_to_propose` as step outputs. Useful as a CI gate before `propose`. | —                                              |
 | `propose`          | Kicks the LLM proposer (`POST /v1/admin/inventory/:projectId/propose` → `inventory-propose` Edge Function). Emits `proposal_id`; chain it into a PR-comment job.   | —                                              |
-| `auth-bootstrap`   | Refreshes the crawler cookie via [`@mushi-mushi/inventory-auth-runner`](../inventory-auth-runner) (shells out to `npx --yes @mushi-mushi/inventory-auth-runner refresh`). Run before any `gates` step that triggers a crawl. | `TEST_USER_*` env vars consumed by your script |
+| `auth-bootstrap`   | Refreshes the crawler cookie via [`@mushi-mushi/inventory-auth-runner`](../inventory-auth-runner) (shells out to `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`). Run before any `gates` step that triggers a crawl. | `TEST_USER_*` env vars consumed by your script |
 
 ## Quick start — gate merges on triage coverage
 
@@ -168,6 +169,7 @@ jobs:
 | `command`           | yes                   | —                                                           | One of the commands above.                                                                                             |
 | `api-endpoint`      | no                    | Hosted Supabase functions URL                               | Override for self-hosted deployments.                                                                                  |
 | `report-id`         | when `dispatch-fix`   | —                                                           | Report UUID to dispatch a fix for.                                                                                     |
+| `inventory-action-node-id` | no             | —                                                           | For `dispatch-fix`: inventory `Action` node to pin the fix to.                                                         |
 | `question`          | when `query`          | —                                                           | Natural-language query text.                                                                                           |
 | `min-coverage`      | no                    | `0.8`                                                       | For `check-coverage`: minimum classified ratio.                                                                        |
 | `fail-on-quota`     | no                    | `true`                                                      | Fail the step on `QUOTA_EXCEEDED`. Set `false` to warn and continue.                                                   |
@@ -179,6 +181,9 @@ jobs:
 | `openapi-file`      | when `discover-api`   | `<repo-root>/openapi.yaml`                                  | Explicit OpenAPI file path.                                                                                            |
 | `supabase-url`      | when `discover-api`   | —                                                           | Supabase project URL to introspect via `/rest/v1/` for `db_deps`.                                                      |
 | `supabase-anon-key` | when `discover-api`   | —                                                           | Supabase anon key for the introspection.                                                                               |
+| `base-spec`         | when `spec-drift`     | —                                                           | Path or URL of the base OpenAPI spec (the previous version).                                                           |
+| `head-spec`         | when `spec-drift`     | —                                                           | Path or URL of the head OpenAPI spec (this PR).                                                                        |
+| `fail-on-breaking`  | no                    | `true`                                                      | For `spec-drift`: fail the step on a breaking change. Set `false` to warn only.                                        |
 
 ## Outputs
 
@@ -186,6 +191,7 @@ jobs:
 | ------------------- | -------------------------------------------------------------------------------------- |
 | `result`            | Raw JSON envelope returned by the Mushi API.                                           |
 | `coverage`          | For `check-coverage`: observed classified ratio (0–1).                                 |
+| `findings`          | For `spec-drift`: JSON array of the oasdiff findings.                                  |
 | `ready_to_propose`  | For `discovery-status`: `'true'` once the project has a defensible-sized SDK sample.   |
 | `total_events`      | For `discovery-status`: total `discovery_events` rows aggregated server-side.          |
 | `route_count`       | For `discovery-status`: distinct route templates observed in the last 30 days.         |
