@@ -702,6 +702,11 @@ export function OnboardingPage() {
                   sdkInstalled: stats.sdkInstalled,
                   reportCount: stats.reportCount,
                 }}
+                completedStepIds={
+                  legacySetup.activeProject && legacySetup.activeProject.project_id === (stats.projectId ?? legacySetup.activeProject.project_id)
+                    ? legacySetup.activeProject.steps.filter((s) => s.complete).map((s) => s.id)
+                    : undefined
+                }
               />
             ),
           },
