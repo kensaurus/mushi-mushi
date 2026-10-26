@@ -357,6 +357,19 @@ export interface ProjectSetupSignals extends IntegrationSignals {
   indexedFileCount: number
 }
 
+/**
+ * A key an SDK uses: it sends reports (`report:write`) and carries no MCP
+ * scope. CLI and MCP keys (`mcp:*`, often with `report:write` too), runner and
+ * voice keys belong to agents and tools, not to an SDK in the app; counting
+ * their calls made a project with no SDK read "SDK 17d ago" (mushi-demo's
+ * read-only demo key, called by curl, 2026-10-26).
+ */
+export function isSdkKey(scopes: readonly string[] | null | undefined): boolean {
+  const s = scopes ?? []
+  return s.includes('report:write') && !s.some((x) => x.startsWith('mcp:'))
+}
+
+
 /** Freshest heartbeat across key rows, compared as instants. */
 export function freshestHeartbeat(
   keys: ReadonlyArray<{
@@ -406,7 +419,7 @@ export async function loadProjectSetupSignals(
   ] = await Promise.all([
     db
       .from('project_api_keys')
-      .select('project_id, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+      .select('project_id, scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
     // Recent reports feed only the "a real SDK sent this" platform signal.
@@ -428,8 +441,16 @@ export async function loadProjectSetupSignals(
     loadProjectCounts(db, projectIds),
   ])
 
-  const keysBy = new Map<string, Array<Record<string, string | null>>>()
-  for (const k of (keysRes.data ?? []) as Array<Record<string, string | null> & { project_id: string }>) {
+  type KeyRow = {
+    project_id: string
+    scopes?: string[] | null
+    last_seen_at?: string | null
+    last_seen_origin?: string | null
+    last_seen_user_agent?: string | null
+    last_seen_endpoint_host?: string | null
+  }
+  const keysBy = new Map<string, KeyRow[]>()
+  for (const k of (keysRes.data ?? []) as KeyRow[]) {
     const list = keysBy.get(k.project_id) ?? []
     list.push(k)
     keysBy.set(k.project_id, list)
@@ -445,7 +466,7 @@ export async function loadProjectSetupSignals(
 
   for (const pid of projectIds) {
     const keys = keysBy.get(pid) ?? []
-    const heartbeat = freshestHeartbeat(keys)
+    const heartbeat = freshestHeartbeat(keys.filter((k) => isSdkKey(k.scopes)))
     const count = counts.get(pid)
     out.set(pid, {
       ...(integrationSignals.get(pid) ?? { hasGithub: false, hasSentry: false, hasByok: false, hasSlack: false }),
