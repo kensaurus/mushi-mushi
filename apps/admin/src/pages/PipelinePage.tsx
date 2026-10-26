@@ -219,22 +219,30 @@ export function PipelinePage() {
           <Section title="Intake and deploys" id="pipeline-intake" icon={<IconShieldCheck />}>
             <ul className="space-y-1.5 text-xs" data-testid="pipeline-intake">
               <li className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium text-fg">Reports rejected at intake:</span>
-                {data.intake ? (
-                  <span data-testid="pipeline-intake-rejected">
-                    {data.intake.rejected}
-                    {data.intake.byReason.length > 0 && ` (${data.intake.byReason.map((r) => `${r.count} ${r.reason}`).join(', ')})`}
-                  </span>
-                ) : (
-                  <span className="text-fg-muted" data-testid="pipeline-intake-not-recorded">not counted here yet (each one is in the edge logs as “report rejected”)</span>
+                <span className="font-medium text-fg">Reports rejected at intake (400), last 7 days</span>
+                {!data.intake && (
+                  <span className="text-fg-muted" data-testid="pipeline-intake-not-recorded">not recorded yet</span>
                 )}
                 <Link to="/connect#connect-sdk-health" className="text-2xs font-medium text-brand hover:underline">
                   SDK health →
                 </Link>
               </li>
-              {data.projects.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted">
+              {data.projects.map((p) => {
+                const rej = data.intake?.apps.find((a) => a.projectId === p.id)
+                return (
+                <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted" data-testid={`pipeline-intake-${p.id}`}>
                   <span className="text-fg-secondary">{p.name}:</span>
+                  {data.intake &&
+                    (rej && rej.rejected > 0 ? (
+                      <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+                        {rej.rejected} rejected ({rej.byReason.slice(0, 3).map((r) => `${r.reason} ×${r.count}`).join(', ')}
+                        {rej.sdkPackages.length > 0 && `; sent by ${rej.sdkPackages.join(', ')}`}) ·
+                      </span>
+                    ) : (
+                      <span className="text-ok-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+                        0 rejected since {new Date(`${data.intake.since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })} ·
+                      </span>
+                    ))}
                   {p.lastDeploy ? (
                     <span>
                       last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
@@ -244,7 +252,8 @@ export function PipelinePage() {
                     <span>no deploy recorded in 14 days</span>
                   )}
                 </li>
-              ))}
+                )
+              })}
             </ul>
           </Section>
         </>

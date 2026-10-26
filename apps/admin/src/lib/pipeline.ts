@@ -106,8 +106,12 @@ export interface PipelineData {
   /** null: the dispatcher reads failed. */
   dispatchers: DispatcherStatus[] | null
   trains: TrainSummary[]
-  /** null: rejected ingests go to the edge logs only, not counted here. */
-  intake: { rejected: number; byReason: Array<{ reason: string; count: number }> } | null
+  /** Reports the API refused in the last 7 days, per app. null: nothing counted yet ("not recorded"). */
+  intake: {
+    /** The window's first day: 7 days ago, or the day counting began. */
+    since: string
+    apps: Array<{ projectId: string; rejected: number; byReason: Array<{ reason: string; count: number }>; sdkPackages: string[]; lastAt: string | null }>
+  } | null
   ciReadable: boolean
 }
 

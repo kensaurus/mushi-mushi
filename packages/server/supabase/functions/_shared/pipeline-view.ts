@@ -735,15 +735,106 @@ export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): Pip
   }
 }
 
-/** Put the dispatcher group first in the "Fix PR" stage and count it. */
+/** Put an extra group (dispatcher, intake rejects) first in its stage and count it as stuck. */
 export function withDispatcherGroup(stages: PipelineStage[], group: PipelineGroup | null): PipelineStage[] {
   if (!group) return stages
   return stages.map((s) => {
-    if (s.id !== 'pr') return s
+    if (s.id !== group.stage) return s
     const groups = [group, ...s.groups]
     const oldest = [s.oldestAt, group.oldestAt].filter((x): x is string => !!x).sort()[0] ?? null
     return { ...s, groups, count: s.count + group.count, stuck: s.stuck + group.count, oldestAt: oldest }
   })
+}
+
+// ── Intake rejects ──────────────────────────────────────────────────────────
+
+/** A `report_ingest_rejections` row: one app, UTC day, stage, reason and SDK package. */
+export interface RejectionRow {
+  project_id: string
+  day: string
+  stage: string
+  reason: string
+  sdk_package: string
+  count: number
+  last_at: string
+}
+
+export interface IntakeApp {
+  projectId: string
+  rejected: number
+  byReason: Array<{ reason: string; count: number }>
+  /** The SDK packages the rejected payloads named ('' left out). */
+  sdkPackages: string[]
+  lastAt: string | null
+}
+
+export interface IntakeSummary {
+  /** The first day the window covers: 7 days ago, or the first day anything was counted. */
+  since: string
+  apps: IntakeApp[]
+}
+
+/**
+ * The last 7 days of rejected ingests per app. null when nothing was ever
+ * counted (the counter is new): "not recorded yet", never 0.
+ */
+export function summarizeIntake(rows: RejectionRow[], projectIds: string[], firstDay: string | null, now: Date): IntakeSummary | null {
+  if (!firstDay) return null
+  const weekAgo = new Date(now.getTime() - 6 * 24 * HOUR).toISOString().slice(0, 10)
+  const since = firstDay > weekAgo ? firstDay : weekAgo
+  const apps = projectIds.map((projectId) => {
+    const mine = rows.filter((r) => r.project_id === projectId && r.day >= since)
+    const byReason = new Map<string, number>()
+    for (const r of mine) byReason.set(r.reason, (byReason.get(r.reason) ?? 0) + r.count)
+    return {
+      projectId,
+      rejected: mine.reduce((n, r) => n + r.count, 0),
+      byReason: [...byReason.entries()].sort((a, b) => b[1] - a[1]).map(([reason, count]) => ({ reason, count })),
+      sdkPackages: [...new Set(mine.map((r) => r.sdk_package).filter(Boolean))].sort(),
+      lastAt: mine.map((r) => r.last_at).sort().pop() ?? null,
+    }
+  })
+  return { since, apps }
+}
+
+export const SDK_HEALTH_LINK = { label: 'SDK health', to: '/connect#connect-sdk-health' }
+
+/** The Reported stage's red group: reports the API refused, per app, with the top reasons. */
+export function intakeGroup(summary: IntakeSummary | null, names: Map<string, string>): PipelineGroup | null {
+  const hit = (summary?.apps ?? []).filter((a) => a.rejected > 0)
+  if (hit.length === 0) return null
+  const total = hit.reduce((n, a) => n + a.rejected, 0)
+  const items: PipelineItem[] = hit
+    .sort((a, b) => b.rejected - a.rejected)
+    .map((a) => ({
+      id: `intake:${a.projectId}`,
+      projectId: a.projectId,
+      reportId: null,
+      title: `${names.get(a.projectId) ?? 'App'}: ${plural(a.rejected, 'report')} rejected`,
+      repo: null,
+      prNumber: null,
+      prUrl: null,
+      queueId: null,
+      since: a.lastAt ?? summary!.since,
+      lastError: a.byReason.slice(0, 4).map((r) => `${r.reason} ×${r.count}`).join(', '),
+      lastEventAt: a.lastAt,
+      lastEventLabel: a.lastAt ? 'last rejected' : null,
+      failingChecks: [],
+      review: null,
+      queueDetail: a.sdkPackages.length ? `Sent by ${a.sdkPackages.join(', ')}.` : null,
+    }))
+  return {
+    id: 'intake_rejected',
+    stage: 'reported',
+    tone: 'stuck',
+    label: `${plural(total, 'report')}: rejected at intake (400) in 7 days`,
+    count: total,
+    // Counts, not waiting items: no age to report for the stage.
+    oldestAt: null,
+    actions: [],
+    settings: SDK_HEALTH_LINK,
+    items,
+  }
 }
 
 // ── Release trains ──────────────────────────────────────────────────────────
