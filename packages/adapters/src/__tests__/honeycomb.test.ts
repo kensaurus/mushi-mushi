@@ -10,7 +10,7 @@ import { createHoneycombWebhookHandler } from '../honeycomb.js'
 import { computeHmacSha256Hex, makeSink } from './shared-hmac-fixtures.js'
 
 const rawBody = readFileSync(new URL('./fixtures/honeycomb-trigger.json', import.meta.url), 'utf8')
-const SECRET = 'hny-trigger-secret-91c2'
+const SECRET = 'hny-trigger-secret-91c2' // gitleaks:allow — fake webhook signing secret for the Honeycomb fixture test
 
 describe('Honeycomb webhook → Mushi report', () => {
   it('turns a fired trigger into the report it should file', async () => {
