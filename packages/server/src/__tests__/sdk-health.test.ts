@@ -5,7 +5,6 @@
  * reports' observable "Done when" lines.
  */
 import { describe, expect, it } from 'vitest'
-import { GLOT_IT_CSP_META } from './fixtures/glot-it-csp-meta.ts'
 import {
   appPackageFiles,
   cspAllowsConnect,
@@ -21,6 +20,13 @@ import {
   sourceMatches,
   type SdkHealthInput,
 } from '../../supabase/functions/_shared/sdk-health.ts'
+
+/**
+ * The CSP meta tag https://kensaur.us/glot-it/ served on 2026-10-26, byte for
+ * byte (entity-encoded quotes, no CSP header). SDK health once read it as
+ * blocking the Mushi API.
+ */
+const GLOT_IT_CSP_META = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src &#x27;self&#x27;; script-src &#x27;self&#x27; &#x27;sha256-0GyuNqHtnicWA4hvbgP8rwIo62UnEhMPtzgGsxUgDOs=&#x27; &#x27;sha256-KBJBg8om+1CcMOn25DYq1uKfDT2HH39Ar79lTtWXhvg=&#x27; &#x27;sha256-tM3cJnDndmegHHvmzFSo00UZd9gml7z0ownHUK90gw8=&#x27; &#x27;sha256-/alKFh07mPrQMW7MiUBpnaprwTk/mMgVhJ5zuVo9l0A=&#x27; &#x27;sha256-2S6FxzLfkfIb3S9nM3Tc/xcfD+dAjp0KG4TUOhKqUHc=&#x27; &#x27;sha256-OBTN3RiyCV4Bq7dFqZ5a2pAXjnCcCYeTJMO2I/LYKeo=&#x27; &#x27;sha256-N+jqjhWDFFfRnAIkIcEXplnroDksBGn/A1ravh7FNJk=&#x27; https://esm.sh https://cdn.jsdelivr.net; style-src &#x27;self&#x27; &#x27;unsafe-inline&#x27; https://fonts.googleapis.com; font-src &#x27;self&#x27; https://fonts.gstatic.com; img-src &#x27;self&#x27; data: blob: https://kensaur.us https://*.supabase.co https://*.fal.ai https://*.googleusercontent.com https://*.cloudfront.net https://img.youtube.com https://i.ytimg.com https://flagcdn.com; connect-src &#x27;self&#x27; blob: https://*.supabase.co wss://*.supabase.co https://kensaur.us https://api.anthropic.com https://api.elevenlabs.io wss://api.elevenlabs.io https://*.cloud.langfuse.com https://*.sentry.io https://*.cloudfront.net https://*.posthog.com https://us.i.posthog.com; media-src &#x27;self&#x27; blob: https://*.supabase.co https://*.elevenlabs.io https://*.cloudfront.net; frame-src https://www.youtube.com https://youtube.com; worker-src &#x27;self&#x27; blob:; object-src &#x27;none&#x27;; base-uri &#x27;self&#x27;; form-action &#x27;self&#x27;;\"/>"
 
 const NOW = new Date('2026-10-26T12:00:00Z')
 const API = new URL('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports')
