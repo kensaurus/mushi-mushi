@@ -21,12 +21,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
-          api-key:    ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command:    gates
+          api-key:       ${{ secrets.MUSHI_API_KEY }}
+          project-id:    ${{ secrets.MUSHI_PROJECT_ID }}
+          command:       gates
+          eslint-report: mushi-eslint.json
 ```
+
+`dead_handler` and `mock_leak` judge the findings in `eslint-report`. A run
+that asks for them without a report fails, so a missing lint step can never
+pass as "no findings". The crawl is not run by this command; start it with
+**Reconcile** on the Inventory page.
 
 The action posts a single composite GitHub status — `mushi-mushi/gates` —
 which rolls up:
@@ -46,7 +54,7 @@ which rolls up:
 
 | `command:`           | What it does                                                          |
 | -------------------- | --------------------------------------------------------------------- |
-| `gates`              | The default — runs all five gates and posts the composite check.      |
+| `gates`              | The default — runs the gates and posts the composite check. Needs `eslint-report` for `dead_handler` / `mock_leak`. |
 | `propose`            | Asks the LLM proposer for an updated `inventory.yaml` draft, opens a PR. |
 | `discover-api`       | Crawls the candidate routes the SDK observed in production.           |
 | `discovery-status`   | Prints the current discovery snapshot for the project.                |
