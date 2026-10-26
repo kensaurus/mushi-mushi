@@ -301,6 +301,49 @@ export function prTitle(summary: string | null, reportId: string): string {
 
 const SUBJECT_MAX = 72
 
+/** commitlint config-conventional: body-max-line-length 100. */
+const BODY_LINE_MAX = 100
+/** A line commitlint's parser reads as a footer ("token: …", "BREAKING CHANGE …"); a URL at a line start counts too. */
+const FOOTER_LIKE = /^(?:[\w-]+(?:\([^)]*\))?!?:|BREAKING[ -]CHANGE\b)/i
+
+/**
+ * A commit body config-conventional accepts: each paragraph wrapped at 100
+ * characters (a word longer than that is split), and no line that starts
+ * like a footer, which commitlint would read as one (such a line is indented
+ * two spaces). glot.it lost a review follow-up to an unwrapped agent summary
+ * ("body's lines must not be longer than 100 characters", 2026-10-26).
+ * @internal Exported for tests only.
+ */
+export function commitBody(...paragraphs: string[]): string {
+  // Room for the two-space indent a footer-like line gets.
+  const width = BODY_LINE_MAX - 2
+  return paragraphs
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((p) => {
+      const lines: string[] = []
+      let line = ''
+      for (let word of p.split(' ')) {
+        while (word.length > width) {
+          if (line) lines.push(line)
+          line = ''
+          lines.push(word.slice(0, width))
+          word = word.slice(width)
+        }
+        if (!word) continue
+        if (!line) line = word
+        else if (line.length + 1 + word.length <= width) line += ` ${word}`
+        else {
+          lines.push(line)
+          line = word
+        }
+      }
+      if (line) lines.push(line)
+      return lines.map((l) => (FOOTER_LIKE.test(l) ? `  ${l}` : l)).join('\n')
+    })
+    .join('\n\n')
+}
+
 /**
  * The agent's environment: no Mushi, GitHub, cloud or model keys, and git /
  * gh unable to reach the remote. Cursor's own sign-in lives in ~/.cursor.
@@ -599,7 +642,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
 
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
-    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`], o.log)
+    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
@@ -709,7 +752,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
     await git(wt, ['add', '-A'])
-    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`], o.log)
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', 'Made by a local Cursor agent through `mushi work --followups`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])

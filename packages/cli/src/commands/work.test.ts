@@ -9,6 +9,7 @@ import {
   agentEnv,
   branchNameFor,
   buildLocalPrompt,
+  commitBody,
   earlierAttemptsBlock,
   hasLiveAttempt,
   parseVerdict,
@@ -275,5 +276,43 @@ describe('freeBranchName', () => {
     expect(freeBranchName(b, new Set())).toBe(b)
     expect(freeBranchName(b, new Set([b]))).toBe(`${b}-2`)
     expect(freeBranchName(b, new Set([b, `${b}-2`]))).toBe(`${b}-3`)
+  })
+})
+
+describe('mushi work: commit messages commitlint config-conventional accepts', () => {
+  // glot.it lost a review follow-up to an unwrapped agent summary (2026-10-26):
+  // "body's lines must not be longer than 100 characters".
+  const footerLike = /^[\w-]+(?:\([^)]*\))?!?:|^BREAKING[ -]CHANGE/i
+  const agentSummary = [
+    'Summary: moved the y-axis tick rounding into buildYTickValues so count charts never show fractional ticks again,',
+    'and added a regression test for 0.5 steps. Fixes: the Opus finding about headroom.',
+    'BREAKING CHANGE none, just wording.',
+    `See https://github.com/kensaurus/glot.it/pull/183/files#diff-${'a'.repeat(140)} for the full diff.`,
+    'x'.repeat(250),
+  ].join(' ')
+
+  it('wraps every body line at 100 characters and never starts one like a footer', () => {
+    const body = commitBody(agentSummary, 'Made by a local Cursor agent through `mushi work --followups`.')
+    const lines = body.split('\n')
+    for (const line of lines) {
+      expect(line.length, line).toBeLessThanOrEqual(100)
+      expect(footerLike.test(line), line).toBe(false)
+    }
+    // Paragraphs stay separated, nothing is lost but whitespace.
+    expect(body).toContain('\n\nMade by a local Cursor agent through `mushi work --followups`.')
+    expect(body.replace(/\s+/g, '')).toBe(`${agentSummary}Made by a local Cursor agent through \`mushi work --followups\`.`.replace(/\s+/g, ''))
+  })
+
+  it('keeps short bodies as they were', () => {
+    expect(commitBody('Mushi report: 1111', 'Made by a local Cursor agent through `mushi work`.')).toBe(
+      'Mushi report: 1111\n\nMade by a local Cursor agent through `mushi work`.',
+    )
+    expect(commitBody('', 'See the diff.')).toBe('See the diff.')
+  })
+
+  it('keeps the subject within 72 characters for a long report summary', () => {
+    const header = prTitle('A'.repeat(300), '22222222-2222-4222-8222-222222222222')
+    expect(header.replace(/^fix: /, '').length).toBeLessThanOrEqual(72)
+    expect(header.length).toBeLessThanOrEqual(100)
   })
 })
