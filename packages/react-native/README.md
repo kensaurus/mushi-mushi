@@ -2,31 +2,14 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and a plain-English diagnosis in your editor, for iOS + Android.
-
-> **One-command setup:** `npx mushi-mushi` auto-detects React Native / Expo and installs this package with the right env vars.
->
-> **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web)
-
-## What this package adds on mobile
-
-Every bug your users feel — a button that won't tap, a screen that freezes, a layout that folds on their device — gets captured, classified by AI, and fed into a lesson library that prevents the same class of mistake in the next PR review and the next AI agent run. That's the closed loop the main [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) README describes. This package is the mobile entry point.
-
-## Error monitoring (optional)
-
-Mushi captures user-reported bugs through its own ingest pipeline. If you also run **Sentry** in your React Native app, wire both for full coverage:
-
-```tsx
-import * as Sentry from '@sentry/react-native'
-
-Sentry.init({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN })
-
-// Mushi handles shake-to-report + screenshot context; Sentry handles thrown errors.
-```
-
-See [`@mushi-mushi/web` Sentry bridge](https://github.com/kensaurus/mushi-mushi/tree/master/packages/web#sentry-companion) for the dual-capture pattern on web.
+The React Native and Expo SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi). It adds a bug button and a report sheet to your iOS and Android app. When a user reports a problem, Mushi gets a screenshot, the screen, device details and recent console and network entries, explains the cause in plain English, and hands your editor a fix to start from.
 
 ## Quick start
+
+```bash
+npx mushi-mushi    # detects React Native / Expo, installs this package, writes env vars
+# or: npm install @mushi-mushi/react-native
+```
 
 ```tsx
 import { MushiProvider } from '@mushi-mushi/react-native'
@@ -40,7 +23,25 @@ export default function App() {
 }
 ```
 
-That renders a floating 🐛 button and a slide-up bottom-sheet report form. The button stays out of the way until tapped. Report data — screenshot, route, device context, last 5 seconds of console and network — flows to your admin console and is classified within seconds.
+That renders a floating bug button and a slide-up report sheet. The button stays out of the way until tapped. With `@react-native-async-storage/async-storage` installed, reports queue offline and send when the connection is back. Docs: [React Native SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/react-native)
+
+Other frameworks: [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web)
+
+## What this package adds on mobile
+
+Every bug your users feel — a button that won't tap, a screen that freezes, a layout that folds on their device — gets captured, classified by AI, and fed into a lesson library that prevents the same class of mistake in the next PR review and the next AI agent run. That's the closed loop the main [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) README describes. This package is the mobile entry point.
+
+## Using Sentry too (optional)
+
+Mushi does not need Sentry. If you already run **Sentry** in your React Native app, keep it; the two do different jobs:
+
+```tsx
+import * as Sentry from '@sentry/react-native'
+
+Sentry.init({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN })
+
+// Mushi handles user reports + screenshot context; Sentry handles thrown errors.
+```
 
 ## Widget trigger modes
 
@@ -154,7 +155,7 @@ When `react-native-view-shot` is installed, the SDK captures the current screen 
 npx expo install react-native-view-shot   # v4+ on Expo SDK 55; v5+ for Fabric / New Architecture
 ```
 
-> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate — finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](../../docs/SDK_SCREENSHOT_PREVIEW.md).
+> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate — finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md).
 
 > **Metro / Hermes hosts.** Optional peers (`react-native-view-shot`, `@react-native-community/netinfo`, `expo-sensors`) load with a literal `require()` inside `try/catch`, which Metro treats as optional. To skip loading entirely, pass them in: `<MushiProvider netInfo={NetInfo} viewShot={ViewShot} expoSensors={ExpoSensors}>`. Versions 0.21–0.23 shipped an esbuild `__require()` shim that crashed under Metro and needed a postinstall patch; drop that patch when you upgrade.
 
@@ -189,7 +190,7 @@ Mushi stores only a SHA-256 hash of the email (the host app owns the raw PII) an
 See the full [CHANGELOG](https://github.com/kensaurus/mushi-mushi/blob/master/packages/react-native/CHANGELOG.md).
 
 Maintainers: report ingest contract and empty-state semantics are documented in
-[`docs/report-ingest-contract.md`](../../docs/report-ingest-contract.md).
+[`docs/report-ingest-contract.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/report-ingest-contract.md).
 
 ## License
 
