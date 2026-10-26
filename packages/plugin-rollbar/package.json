@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-rollbar",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Mushi Mushi plugin for Rollbar — copies triaged bug reports into Rollbar as items and resolves them when Mushi applies a fix. Self-hosted.",
   "license": "MIT",
   "type": "module",

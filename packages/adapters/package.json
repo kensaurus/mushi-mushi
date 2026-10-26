@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/adapters",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "license": "MIT",
   "description": "Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? Forward their webhooks into Mushi for a plain-English diagnosis and a ready fix. One subpath import per source.",
   "type": "module",
