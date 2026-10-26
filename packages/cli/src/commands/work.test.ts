@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  checkCursorSignIn,
+  cursorSignInState,
   wrongAppReason,
   inLocalCooldown,
   installCommand,
@@ -314,5 +316,71 @@ describe('mushi work: commit messages commitlint config-conventional accepts', (
     const header = prTitle('A'.repeat(300), '22222222-2222-4222-8222-222222222222')
     expect(header.replace(/^fix: /, '').length).toBeLessThanOrEqual(72)
     expect(header.length).toBeLessThanOrEqual(100)
+  })
+})
+
+// Mushi report 7880503f: with 7 lanes at once, one lane stopped 5 times on
+// "The Cursor CLI is not signed in" while `cursor-agent status` said
+// "Logged in as …". Only a clear signed-out answer may stop a run.
+describe('cursorSignInState', () => {
+  const proc = (p: Partial<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>) =>
+    ({ code: 0, stdout: '', stderr: '', timedOut: false, ...p })
+
+  it('reads "Logged in as …", with or without colour codes', () => {
+    expect(cursorSignInState(proc({ stdout: '✓ Logged in as dev@example.com\n' }))).toBe('signed_in')
+    expect(cursorSignInState(proc({ stdout: '\u001b[32m✓\u001b[39m Logged in as dev@example.com' }))).toBe('signed_in')
+  })
+
+  it('reads "Not logged in" as signed out, though it contains "logged in"', () => {
+    expect(cursorSignInState(proc({ code: 1, stdout: 'Not logged in. Run cursor-agent login.' }))).toBe('signed_out')
+    expect(cursorSignInState(proc({ code: 0, stdout: 'Not logged in' }))).toBe('signed_out')
+  })
+
+  it('treats a timeout, a crash or an unclear answer as unknown, not signed out', () => {
+    expect(cursorSignInState(proc({ code: null, timedOut: true }))).toBe('unknown')
+    expect(cursorSignInState(proc({ code: 1, stderr: 'Error: EBUSY: resource busy or locked' }))).toBe('unknown')
+    expect(cursorSignInState(proc({ code: 0, stdout: '' }))).toBe('unknown')
+  })
+
+  it('tells a missing cursor-agent apart from a signed-out one', () => {
+    expect(cursorSignInState(proc({ code: null, stderr: 'spawn cursor-agent ENOENT' }))).toBe('missing')
+  })
+})
+
+describe('checkCursorSignIn', () => {
+  type P = { code: number | null; stdout: string; stderr: string; timedOut: boolean }
+  const answers = (...ps: Array<Partial<P>>) => {
+    const queue = ps.map((p) => ({ code: 0, stdout: '', stderr: '', timedOut: false, ...p }))
+    return vi.fn(async (_cmd: string, _args: readonly string[], _opts: { timeoutMs: number }) => queue.shift()!)
+  }
+  const noWait = async () => {}
+
+  it('asks once when the first answer is signed in, with a timeout above 60 s', async () => {
+    const run = answers({ stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(run.mock.calls[0][2].timeoutMs).toBeGreaterThan(60_000)
+  })
+
+  it('retries once after a timeout and accepts the second answer', async () => {
+    const run = answers({ code: null, timedOut: true }, { stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a signed-out answer once (a lane may be rewriting the auth file)', async () => {
+    const run = answers({ code: 1, stdout: 'Not logged in' }, { stdout: 'Logged in as dev@example.com' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_in' })
+  })
+
+  it('reports signed out only when the retry says so too', async () => {
+    const run = answers({ code: 1, stdout: 'Not logged in' }, { code: 1, stdout: 'Not logged in' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'signed_out' })
+  })
+
+  it('stays unknown, not signed out, when both checks time out', async () => {
+    const run = answers({ code: null, timedOut: true }, { code: null, timedOut: true })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toEqual({ state: 'unknown', detail: 'timed out after 90 s' })
+    expect(run).toHaveBeenCalledTimes(2)
   })
 })
