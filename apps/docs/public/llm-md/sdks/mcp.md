@@ -33,7 +33,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. What
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.2`. What
   `mushi setup --stdio` writes, and the only option for Claude Desktop,
   Continue, Cline and Zed. Your client launches the server as a subprocess
   and pipes JSON-RPC over stdio.

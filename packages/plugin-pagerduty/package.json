@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-pagerduty",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "license": "MIT",
   "description": "Mushi Mushi plugin for PagerDuty — pages on-call when Mushi triages a bug as critical and resolves the page when the fix lands.",
   "type": "module",

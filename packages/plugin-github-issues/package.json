@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-github-issues",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Mushi Mushi plugin for GitHub Issues — opens an issue for each triaged bug and closes it when Mushi applies the fix. Self-hosted; Mushi Cloud does this natively.",
   "license": "MIT",
   "type": "module",

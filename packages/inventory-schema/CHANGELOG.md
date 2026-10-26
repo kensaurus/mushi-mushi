@@ -1,5 +1,11 @@
 # @mushi-mushi/inventory-schema
 
+## 0.4.5
+
+### Patch Changes
+
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+
 ## 0.4.4
 
 ### Patch Changes

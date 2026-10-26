@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-bugsnag",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Mushi Mushi plugin for Bugsnag — copies triaged bug reports into Bugsnag as errors and marks them fixed when Mushi applies a fix. Self-hosted.",
   "license": "MIT",
   "type": "module",
