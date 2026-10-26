@@ -43,8 +43,13 @@ export type TrainCi = 'green' | 'pending' | 'red' | 'base_red' | 'unknown'
  */
 export const MAX_RED_TRAINS_PER_HEAD = 5
 
-/** `release_trains.detail` of a train that failed on its members' code (not a red base). */
-export const RED_TRAIN_DETAIL_PREFIX = 'CI failed:'
+/**
+ * `release_trains.detail` of a train that failed on its members' code (not a
+ * red base). Trains written before 2026-10-26 say "CI failed:" and are not
+ * read back: the red-base check could not see through aggregators then, so
+ * many of them failed only because the base branch was red.
+ */
+export const RED_TRAIN_DETAIL_PREFIX = 'Members failed CI:'
 
 export interface TrainCandidate {
   rowId: string

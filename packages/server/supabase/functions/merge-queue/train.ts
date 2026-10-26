@@ -301,10 +301,11 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
     await trainEvent(db, memberRows(train), 'pending', 'Release train waits for the base branch', why, `train-base-red:${train.id}`)
     return 'base_red'
   }
-  const why = `${RED_TRAIN_DETAIL_PREFIX} ${failed.slice(0, 4).join(', ')}.`
+  const names = failed.slice(0, 4).join(', ')
+  const why = `CI failed: ${names}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)
-  await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: why }).eq('id', train.id)
+  await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: `${RED_TRAIN_DETAIL_PREFIX} ${names}.` }).eq('id', train.id)
   const { retry, deferred, failedAlone } = bisectTrain(train.members)
   if (failedAlone) {
     // Stays out of trains at this head (benchReason reads this train back).
@@ -390,7 +391,9 @@ export async function runTrainTick(
     if (!head.failed.length && !noRuns) return { ci: 'green', failed: [] }
     const b = base ? await baseChecks(base) : null
     if (noRuns) return { ci: b && (b.pending > 0 || b.failed.length > 0 || (b.ran?.length ?? 0) > 0) ? 'pending' : 'green', failed: [] }
-    return { ci: b && failuresOnBase(head.failed, b) ? 'base_red' : 'red', failed: head.failed }
+    // A red base names only the checks that fail there; the rest are aggregators of them.
+    if (b && failuresOnBase(head.failed, b)) return { ci: 'base_red', failed: head.failed.filter((n) => b.failed.includes(n)) }
+    return { ci: 'red', failed: head.failed }
   }
   let readied = 0
 

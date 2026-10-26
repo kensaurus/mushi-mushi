@@ -40,7 +40,7 @@ describe('who rides', () => {
     expect(isTrainReady(c({ benched: 'failed alone' }))).toBe(false)
   })
   it('benches a member that failed alone at its head, or rode five red trains there; a new commit clears it', () => {
-    const red = (members: Array<{ rowId: string; headSha: string }>, detail = 'CI failed: e2e.') => ({ pr_number: 9, detail, members })
+    const red = (members: Array<{ rowId: string; headSha: string }>, detail = 'Members failed CI: e2e.') => ({ pr_number: 9, detail, members })
     const alone = [red([{ rowId: 'r1', headSha: 'h1' }])]
     expect(benchReason(alone, 'r1', 'h1')).toMatch(/^It failed CI alone in release train #9 at this commit \(e2e\)/)
     expect(benchReason(alone, 'r1', 'h2')).toBeNull()
@@ -49,6 +49,8 @@ describe('who rides', () => {
     expect(benchReason(pair(5), 'r1', 'h1')).toMatch(/^It rode 5 release trains/)
     // A train that waited on a red base blames nobody.
     expect(benchReason([red([{ rowId: 'r1', headSha: 'h1' }], 'main is red too (audit); the train waits for it to pass.')], 'r1', 'h1')).toBeNull()
+    // Trains from before the 2026-10-26 rule often failed on a red base the old check missed.
+    expect(benchReason([red([{ rowId: 'r1', headSha: 'h1' }], 'CI failed: gate, Checks.')], 'r1', 'h1')).toBeNull()
   })
   it('keeps security advisories and critical bugs on the express lane', () => {
     expect(isExpress(c({ source: 'security_advisory' }))).toBe(true)
