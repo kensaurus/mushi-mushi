@@ -96,6 +96,17 @@ function fixture(): PipelineData {
       stage('reported', 'Reported', []),
       stage('triaged', 'Triaged', []),
       stage('pr', 'Fix PR', [
+        {
+          id: 'autofix_no_agent',
+          stage: 'pr',
+          tone: 'stuck',
+          label: '1 app: auto-fix is on but has no agent key; 0 dispatches in 48h',
+          count: 1,
+          oldestAt: '2026-10-24T01:00:00Z',
+          actions: [],
+          settings: { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' },
+          items: [item('p1', { title: 'glot.it', reportId: null, prUrl: null, prNumber: null, lastError: 'Auto-fix is on but has no agent key; 0 dispatches in 48h' })],
+        },
         { id: 'draft_no_ci', stage: 'pr', tone: 'stuck', label: '1 draft: CI never ran', count: 1, oldestAt: '2026-10-25T12:00:00Z', actions: ['mark_ready', 'close'], settings: null, items: [item('f9')] },
       ]),
       stage('review', 'Reviewed', [
@@ -129,6 +140,26 @@ function fixture(): PipelineData {
       ]),
       stage('merged', 'Merged', []),
       stage('deployed', 'Deployed', []),
+    ],
+    dispatchers: [
+      {
+        projectId: 'p1',
+        name: 'glot.it',
+        autofixOn: true,
+        opener: 'both',
+        server: { agentKeys: 0, offKeys: 1, dispatches24h: 0, dispatches48h: 0, lastAt: '2026-10-24T01:00:00Z' },
+        local: { runs24h: 6, running: 2, lastAt: '2026-10-26T11:00:00Z' },
+        problem: 'Auto-fix is on but has no agent key (1 Cursor key off or spend-down off); 0 dispatches in 48h',
+      },
+      {
+        projectId: 'p2',
+        name: 'quiet-app',
+        autofixOn: false,
+        opener: 'nobody',
+        server: { agentKeys: 0, offKeys: 0, dispatches24h: 0, dispatches48h: 0, lastAt: null },
+        local: { runs24h: 0, running: 0, lastAt: null },
+        problem: null,
+      },
     ],
     trains: [
       {
@@ -206,7 +237,7 @@ describe('PipelinePage', () => {
   it('lists every stuck group by default, biggest first, and one stage after a click', async () => {
     await render()
     const ids = Array.from(document.querySelectorAll('[data-testid^="pipeline-group-"][data-testid$="-toggle"]')).map((e) => e.getAttribute('data-testid'))
-    expect(ids).toEqual(['pipeline-group-ci_red_queued-toggle', 'pipeline-group-draft_no_ci-toggle', 'pipeline-group-hold-toggle'])
+    expect(ids).toEqual(['pipeline-group-ci_red_queued-toggle', 'pipeline-group-autofix_no_agent-toggle', 'pipeline-group-draft_no_ci-toggle', 'pipeline-group-hold-toggle'])
     expect(q('pipeline-group-next_train')).toBeNull()
     await click(q('pipeline-stage-train'))
     expect(q('pipeline-group-next_train')).not.toBeNull()
@@ -301,9 +332,22 @@ describe('PipelinePage', () => {
     expect(q('pipeline-train-kensaurus/glot.it-result')!.textContent).toContain('next one may leave at 16:00 UTC')
   })
 
-  it('says intake rejects are not recorded yet, never 0', async () => {
+  it('shows who opens fixes per app, red where auto-fix is on but nothing can dispatch', async () => {
     await render()
-    expect(q('pipeline-intake-not-recorded')!.textContent).toBe('not recorded yet')
+    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('24h: server 0 · local 1 · nobody 1 apps')
+    const glot = q('pipeline-opener-p1')!
+    expect(glot.textContent).toContain('Server + local')
+    expect(glot.textContent).toContain('On · 0 agent keys (1 off) · 0 in 24h · last 2 d ago')
+    expect(glot.textContent).toContain('6 in 24h · 2 running · last 1 h ago')
+    expect(q('pipeline-opener-p1-problem')!.querySelector('a')!.getAttribute('href')).toBe('/credits#cursor-fix-bugs')
+    expect(q('pipeline-opener-p2')!.textContent).toContain('Nobody')
+    expect(q('pipeline-opener-p2-problem')).toBeNull()
+    expect(q('pipeline-group-autofix_no_agent-settings')!.getAttribute('href')).toBe('/credits#cursor-fix-bugs')
+  })
+
+  it('says intake rejects are not counted yet, never 0', async () => {
+    await render()
+    expect(q('pipeline-intake-not-recorded')!.textContent).toContain('not counted here yet')
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
   })
 
