@@ -473,14 +473,21 @@ export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
  * say "healthy" next to a card that says "Needs attention":
  *   - a failing probe is down;
  *   - no probe, or a probe older than 7 days, needs attention (not checked);
- *   - a connection that receives events (Sentry alerts) needs at least one
- *     accepted delivery — a passing API probe alone is only half the loop.
+ *   - a connection that receives events (Sentry alerts) needs an accepted
+ *     delivery, unless it imports by polling. Polling plus a fresh passing
+ *     probe is working. The latest delivery being rejected is still
+ *     attention: a bad webhook secret is a real misconfiguration.
+ *     Same rule as the console's sentryConnection.
  */
 export function classifyPlatformConnection(input: {
   probeStatus: string | null | undefined
   probeCheckedAt: string | null | undefined
   needsInbound?: boolean
   inboundAccepted?: boolean
+  /** Latest inbound delivery exists and was not accepted. */
+  inboundRejected?: boolean
+  /** Issues are imported on a poll, so a webhook delivery is optional. */
+  inboundPolling?: boolean
   now?: number
 }): PlatformConnectionVerdict {
   const now = input.now ?? Date.now()
@@ -489,6 +496,7 @@ export function classifyPlatformConnection(input: {
   if (input.probeStatus !== 'ok' || !Number.isFinite(at) || now - at > CONNECTION_VERIFIED_FRESH_MS) {
     return 'attention'
   }
-  if (input.needsInbound && !input.inboundAccepted) return 'attention'
+  if (input.needsInbound && input.inboundRejected) return 'attention'
+  if (input.needsInbound && !input.inboundAccepted && !input.inboundPolling) return 'attention'
   return 'working'
 }

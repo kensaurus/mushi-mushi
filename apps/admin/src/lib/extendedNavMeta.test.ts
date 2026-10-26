@@ -21,8 +21,47 @@ import {
   actSectionAttention,
   workspaceSlicesAttention,
   usersNavBadge,
+  integrationsNavBadge,
 } from './extendedNavMeta'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
+
+describe('integrationsNavBadge', () => {
+  it('uses the banner attention count, not how many integrations are saved', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.count).toBe(2)
+  })
+
+  it('a failing connection still outranks attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 1,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(badge?.count).toBe(1)
+    expect(badge?.tone).toBe('danger')
+  })
+
+  it('shows connected inventory when nothing needs attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 3,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge?.mode).toBe('inventory')
+    expect(badge?.count).toBe(3)
+  })
+})
 
 describe('qaCoverageNavBadge', () => {
   it('prioritizes failing stories over inventory', () => {

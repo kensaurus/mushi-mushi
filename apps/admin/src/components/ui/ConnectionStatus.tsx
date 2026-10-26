@@ -10,9 +10,9 @@
  *   not_connected  neutral "Not connected"    + a connect button
  *   checking       neutral "Not checked yet"  + a test button
  *
- * Truth rule: a card never says "Working" without a verification timestamp,
- * and never says "Healthy" because a probe of one half (an API token) passed
- * while the other half (inbound events) has never been seen.
+ * Truth rule: a card never says "Working" without a verification timestamp.
+ * Sentry with no inbound event says "Working" only when automatic import is
+ * on and the API probe passed. A rejected webhook is still "Needs attention".
  */
 
 import { Btn } from './forms'

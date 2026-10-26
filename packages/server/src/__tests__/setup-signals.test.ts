@@ -179,4 +179,47 @@ describe('classifyPlatformConnection (finding B25)', () => {
     ).toBe('attention')
     expect(classifyPlatformConnection({ probeStatus: 'ok', probeCheckedAt: recent, now: NOW })).toBe('working')
   })
+
+  it('polling with a fresh passing probe is working until a delivery is rejected', () => {
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('working')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundAccepted: false,
+        inboundRejected: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('attention')
+    // Polling does not paper over a dead token or a stale probe.
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'down',
+        probeCheckedAt: recent,
+        needsInbound: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('down')
+    expect(
+      classifyPlatformConnection({
+        probeStatus: 'ok',
+        probeCheckedAt: '2026-09-20T00:00:00Z',
+        needsInbound: true,
+        inboundPolling: true,
+        now: NOW,
+      }),
+    ).toBe('attention')
+  })
 })

@@ -1017,6 +1017,16 @@ export function integrationsNavBadge(
       `${disconnected} platform integration${disconnected === 1 ? '' : 's'} not configured`,
     )
   }
+  // Same number the page banner titles ("N connections need attention"):
+  // platformAttention from /v1/admin/integrations/stats, not how many are saved.
+  const attention = stats.platformAttention ?? 0
+  if (attention > 0) {
+    return attentionBadge(
+      attention,
+      'warn',
+      `${attention} connection${attention === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} attention`,
+    )
+  }
   if (stats.routingPaused > 0) {
     return attentionBadge(
       stats.routingPaused,
