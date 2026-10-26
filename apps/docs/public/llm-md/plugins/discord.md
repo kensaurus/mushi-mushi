@@ -4,23 +4,39 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/discord
 
 ---
 title: Discord
-description: Post Mushi report and fix events to a Discord channel through a webhook — create the webhook, install the plugin, and choose which events to send.
+description: Post Mushi report and fix events to a Discord channel — paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.
 ---
 
 # Discord plugin
 
-Sends configurable embeds to a Discord webhook when Mushi events fire — popular with community and startup teams.
+Posts a message to a Discord channel when Mushi triages a bug or a fix
+lands.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. In Discord: create a webhook on your target channel.
-2. In Mushi: **Marketplace → Discord → Install** and paste the webhook URL.
-3. Choose which events to fan out (defaults: classified reports + fix PRs).
+1. In Discord: **Channel settings → Integrations → Webhooks → New Webhook**, then copy its URL.
+2. In the Mushi console: open the **Integrations** page and paste the URL on the Discord card.
 
-## Package
+Mushi posts to the channel itself; you do not need the npm package.
+
+## Self-hosted plugin
 
 [`@mushi-mushi/plugin-discord`](https://www.npmjs.com/package/@mushi-mushi/plugin-discord)
+does the same from your own server. The console's Marketplace has no Discord
+listing, so it only receives events from a Mushi server you run yourself,
+once you add a `plugin_registry` row for it.
 
-## Events
+```bash
+npm i @mushi-mushi/plugin-discord
+export MUSHI_PLUGIN_SECRET=...
+export DISCORD_WEBHOOK_URL=https://discord.com/...
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-discord mushi-plugin-discord
+```
 
-Configurable per event type — embed includes severity, taxonomy, and deep link back to the Mushi report drawer.
+| Event | Embed |
+| --- | --- |
+| `report.classified` | Coloured by severity (critical red, high orange, medium yellow, low green) |
+| `fix.proposed` | Blue, with the PR link when there is one |
+| `fix.applied` | Green |
+| `report.status_changed` | Grey, with the new status |

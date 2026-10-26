@@ -75,21 +75,38 @@ Behavior:
   the webhook are ingested. Sentry User Feedback submissions are also ingested
   on the same endpoint.
 
-## Setup (outbound plugin)
+## Copy Mushi reports into Sentry (outbound plugin)
 
-1. In Mushi: **Marketplace → Sentry → Install**.
-2. Paste your Sentry auth token and org/project slugs.
-3. Configure severity threshold (default: P0/P1 only).
+Everything above is built in. The plugin is only for the other direction:
+copying the bugs your users report through Mushi into Sentry, so they sit
+next to your Sentry errors. You run it on your own server.
+
+1. Start the plugin where Mushi can reach it over public HTTPS:
+
+   ```bash
+   npm i @mushi-mushi/plugin-sentry
+   export MUSHI_PLUGIN_SECRET=...   # must match the signing secret in step 2
+   export SENTRY_DSN=...
+   export SEVERITY_THRESHOLD=high   # optional: low | medium | high | critical
+   # Optional: resolve on fix.applied and attach as User Feedback
+   export SENTRY_AUTH_TOKEN=...     # event:admin + project:read
+   export SENTRY_ORG_SLUG=acme
+   export SENTRY_PROJECT_SLUG=web
+   npx -p @mushi-mushi/plugin-sentry mushi-plugin-sentry
+   ```
+
+2. In the console: **Marketplace → Sentry Mirror → Install**. Set the
+   webhook URL to `https://<your-host>/mushi/webhook`, and use the form's
+   signing secret (Mushi generates one) as `MUSHI_PLUGIN_SECRET`.
 
 ## Package
 
 [`@mushi-mushi/plugin-sentry`](https://www.npmjs.com/package/@mushi-mushi/plugin-sentry)
 
-Pairs with the SDK's Sentry handshake — reports already carry `sentryContext` when `@sentry/browser` is present.
-
 ## Events
 
 | Event | Action |
 | --- | --- |
-| `report.classified` (high severity) | Create or link Sentry issue |
-| `fix.applied` | Resolve linked Sentry issue |
+| `report.classified` (severity ≥ threshold) | Attach as Sentry User Feedback when the report has a `sentry_event_id` and an auth token is set; otherwise capture a Sentry event fingerprinted `['mushi', projectId, reportId]` |
+| `fix.proposed` | Capture an `info` event, only with `MARK_IN_PROGRESS=true` |
+| `fix.applied` | Capture an `info` event tagged `mushi.fixed=true`; with an auth token, resolve the matching Sentry issue |

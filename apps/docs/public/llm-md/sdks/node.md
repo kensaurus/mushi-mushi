@@ -19,6 +19,21 @@ every report with the route, request id, and user (when supplied).
 pnpm add @mushi-mushi/node
 ```
 
+## Create a client
+
+Every handler below takes the same client:
+
+```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
+
+export const client = new MushiNodeClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  environment: process.env.NODE_ENV, // optional
+  release: process.env.GIT_SHA,      // optional
+})
+```
+
 ## Express
 
 ```ts
@@ -27,14 +42,7 @@ import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
-app.use(
-  mushiExpressErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-    environment: process.env.NODE_ENV,
-    release: process.env.GIT_SHA,
-  }),
-) // mount LAST so it sees every other route
+app.use(mushiExpressErrorHandler({ client })) // mount LAST so it sees every other route
 ```
 
 ## Fastify
@@ -44,25 +52,20 @@ import Fastify from 'fastify'
 import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
-mushiFastifyPlugin(app, {
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+mushiFastifyPlugin(app, { client })
 ```
 
 ## Hono
+
+Hono's `onError` must return a Response, so pass your own handler as the
+second argument. Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'
 import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
-app.onError(
-  mushiHonoErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-  }),
-)
+app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
 ```
 
 ## Process-level fallbacks
@@ -72,10 +75,7 @@ Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 ```ts
 import { attachUnhandledHook } from '@mushi-mushi/node'
 
-attachUnhandledHook({
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+attachUnhandledHook({ client })
 ```
 
 ## Programmatic submit

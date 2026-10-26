@@ -33,10 +33,13 @@ interface CodeBlock {
   code: string
   /** 1-based line of the opening fence, for error messages. */
   line: number
+  /** Marked `snippet-skip` on the fence (deliberately partial), as in scripts/check-doc-snippets.mjs. */
+  skip: boolean
 }
 
 const FENCE_OPEN = /^[ \t]*(`{3,}|~{3,})[ \t]*([^\s`]*)(.*)$/
 const FILENAME_ATTR = /filename=(?:"([^"]+)"|'([^']+)')/
+const SNIPPET_SKIP = /(?:^|\s)snippet-skip(?:=(?:"[^"]*"|'[^']*'))?(?=\s|$)/
 
 /**
  * Every fenced block in `mdx`, in order. A fence closes only on the same
@@ -70,6 +73,7 @@ function extractCodeBlocks(mdx: string): CodeBlock[] {
       filename: attr ? (attr[1] ?? attr[2] ?? null) : null,
       code: body.join('\n'),
       line: start + 1,
+      skip: SNIPPET_SKIP.test(open[3] ?? ''),
     })
     i++ // skip the closing fence
   }
@@ -78,6 +82,7 @@ function extractCodeBlocks(mdx: string): CodeBlock[] {
 
 /** True for blocks the TypeScript compiler should check. */
 function isTypeScriptBlock(block: CodeBlock): boolean {
+  if (block.skip) return false
   return block.lang === 'ts' || block.lang === 'tsx' || block.lang === 'typescript'
 }
 
