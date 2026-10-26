@@ -81,7 +81,7 @@ the apps live in personal repos (ADR 0041).
 
 ## Amendment 2026-10-26: only a PR whose own CI is green rides
 
-Status: Proposed (owner to accept)
+Status: Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please").
 
 In the five days to 2026-10-26, few fixes merged: glot.it had 179 red
 trains, mushi-mushi 58, the-wanting-mind 37 and yen-yen 27. On glot.it, 37 of 40 queued PRs failed CI on their own heads.

@@ -1,6 +1,6 @@
 # 0032. Review follow-ups: a "fix first" agent PR goes back to a new Cursor agent once, with the Opus findings
 
-Status: Proposed Date: 2026-10-21
+Status: Accepted (2026-10-26) Date: 2026-10-21. Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please"); live in production since 2026-10-22.
 
 Related: migration `20261021063310_review_followups.sql`, ADR
 [0031](0031-universal-ai-keys-serve-every-app-their-owner-owns.md) (universal keys), `_shared/review-followup.ts`,
@@ -215,7 +215,7 @@ with `prUrl`), `workOnCurrentBranch: true` pushes to the PR's head branch,
 
 ## Amendment (2026-10-22): CI repair for "merge" PRs whose CI fails on the code
 
-Status: Proposed
+Status: Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please").
 
 Related: migration `20261022100000_review_followup_ci_repair.sql`
 (`fix_review_followups.kind`), `_shared/review-followup.ts` (`ciHeadState`,
