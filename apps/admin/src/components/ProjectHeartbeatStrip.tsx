@@ -1,9 +1,11 @@
 /**
  * FILE: apps/admin/src/components/ProjectHeartbeatStrip.tsx
  * PURPOSE: One-line SDK heartbeat readout for the project switcher dropdown.
- *          Surfaces last-seen time + origin with a rich tooltip.
+ *          Surfaces last-seen time + origin with a rich tooltip. With `to`,
+ *          the readout is a link to SDK health, where each problem has a fix.
  */
 
+import { Link } from 'react-router-dom'
 import type { SetupProject } from '../lib/useSetupStatus'
 import { summarizeProjectHeartbeat } from '../lib/resolveProjectDomain'
 import { MetricTooltipContent, Tooltip, type MetricTooltipData } from './ui'
@@ -33,6 +35,9 @@ interface ProjectHeartbeatStripProps {
   adminEndpointHost?: string | null
   /** `corner` — bottom-right of switcher rows (SDK timing only, no origin). */
   placement?: 'inline' | 'corner'
+  /** Link to SDK health (Connect page). Never set inside another button or link. */
+  to?: string
+  onNavigate?: () => void
 }
 
 function buildHeartbeatTooltip(
@@ -48,7 +53,7 @@ function buildHeartbeatTooltip(
           body: 'No API key from this project has reached the backend yet. Install the SDK and load a page with the widget to populate this signal.',
         },
       ],
-      callout: { tone: 'warn', text: 'Generate a key on the Projects page, then embed the SDK in your app.' },
+      callout: { tone: 'warn', text: 'Click to see what is missing and fix it.' },
     }
   }
 
@@ -93,28 +98,42 @@ export function ProjectHeartbeatStrip({
   project,
   adminEndpointHost,
   placement = 'inline',
+  to,
+  onNavigate,
 }: ProjectHeartbeatStripProps) {
   const heartbeat = summarizeProjectHeartbeat(project, adminEndpointHost)
   const tooltip = buildHeartbeatTooltip(heartbeat, adminEndpointHost)
   const isCorner = placement === 'corner'
+  const cursor = to ? 'cursor-pointer hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm' : 'cursor-help'
   const rowClass = isCorner
-    ? 'flex cursor-help items-center gap-1 text-3xs'
-    : 'mt-0.5 flex cursor-help items-center gap-1 truncate text-3xs'
+    ? `flex ${cursor} items-center gap-1 text-3xs`
+    : `mt-0.5 flex ${cursor} items-center gap-1 truncate text-3xs`
+  const wrap = (className: string, children: React.ReactNode) =>
+    to ? (
+      <Link to={to} onClick={onNavigate} className={className} aria-label={`SDK health: ${heartbeat.tone === 'none' ? 'not seen yet' : heartbeat.ago ?? 'seen'}`}>
+        {children}
+      </Link>
+    ) : (
+      <span className={className}>{children}</span>
+    )
 
   if (heartbeat.tone === 'none') {
     return (
       <Tooltip content={<MetricTooltipContent data={tooltip} />} side="left" nowrap={false} portal>
-        <span className={`${rowClass} text-fg-faint`}>
-          <span aria-hidden className={`h-1.5 w-1.5 rounded-full shrink-0 ${TONE_DOT.none}`} />
-          <span>SDK not seen yet</span>
-        </span>
+        {wrap(`${rowClass} text-fg-faint`, (
+          <>
+            <span aria-hidden className={`h-1.5 w-1.5 rounded-full shrink-0 ${TONE_DOT.none}`} />
+            <span>SDK not seen yet</span>
+          </>
+        ))}
       </Tooltip>
     )
   }
 
   return (
     <Tooltip content={<MetricTooltipContent data={tooltip} />} side="left" nowrap={false} portal>
-      <span className={`${rowClass} ${TONE_TEXT[heartbeat.tone]}`}>
+      {wrap(`${rowClass} ${TONE_TEXT[heartbeat.tone]}`, (
+        <>
         <span aria-hidden className={`h-1.5 w-1.5 rounded-full shrink-0 ${TONE_DOT[heartbeat.tone]}`} />
         <span className="shrink-0 font-medium">SDK</span>
         {heartbeat.ago && <span className="shrink-0 tabular-nums">{heartbeat.ago}</span>}
@@ -129,7 +148,8 @@ export function ProjectHeartbeatStrip({
             host mismatch
           </span>
         )}
-      </span>
+        </>
+      ))}
     </Tooltip>
   )
 }

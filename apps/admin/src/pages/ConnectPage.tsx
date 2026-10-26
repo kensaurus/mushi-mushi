@@ -19,6 +19,8 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
+import { SdkHealthPanel } from '../components/SdkHealthPanel'
+import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
@@ -78,6 +80,7 @@ interface ProjectsPayload {
 const CONNECT_SECTIONS = [
   { id: 'connect-studio', label: 'Studio' },
   { id: 'connect-github', label: 'GitHub' },
+  { id: SDK_HEALTH_ANCHOR, label: 'SDK health' },
   { id: 'connect-sdk', label: 'Bug capture' },
   { id: 'connect-native-ci', label: 'Native CI' },
   { id: 'connect-update', label: 'Update' },
@@ -348,6 +351,24 @@ export function ConnectPage() {
                 preflight={preflight}
                 fallbackRepoUrl={fallbackGithubRepoUrl}
               />
+            </Section>
+          </div>
+
+          <div id={SDK_HEALTH_ANCHOR} className="scroll-mt-chrome">
+            <Section title="SDK health">
+              <SectionDescription when={showSectionDescriptions}>
+                Problems that stop bug reports from arriving, each with a fix.
+              </SectionDescription>
+              {project ? (
+                <SdkHealthPanel projectId={project.id} />
+              ) : (
+                <ProjectFallbackNote
+                  card
+                  pending={projectPending}
+                  missing={projectMissing}
+                  hasError={Boolean(feedError)}
+                />
+              )}
             </Section>
           </div>
 
