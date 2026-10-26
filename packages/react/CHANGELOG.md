@@ -1,5 +1,15 @@
 # @mushi-mushi/react
 
+## 1.33.3
+
+### Patch Changes
+
+- 271abb8: The npm pages now open with what the package does, how to install it, a short example that matches the current API, and a link to its docs page. The examples that named options or functions the SDKs no longer have are corrected.
+- Updated dependencies [271abb8]
+- Updated dependencies [15ba9ce]
+  - @mushi-mushi/core@1.33.3
+  - @mushi-mushi/web@1.33.3
+
 ## 1.32.3
 
 ### Patch Changes

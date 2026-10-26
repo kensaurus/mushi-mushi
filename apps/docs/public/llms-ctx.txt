@@ -201,7 +201,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -227,7 +227,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -844,7 +844,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. What
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.2`. What
   `mushi setup --stdio` writes, and the only option for Claude Desktop,
   Continue, Cline and Zed. Your client launches the server as a subprocess
   and pipes JSON-RPC over stdio.
