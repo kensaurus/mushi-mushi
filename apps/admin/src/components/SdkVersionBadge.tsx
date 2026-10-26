@@ -151,13 +151,15 @@ export function SdkVersionBadge({
   const label = (() => {
     const base = `${shortPackage} v${observedVersion}`
     if (compact) {
+      // "↑ v1.33.1" read as the same arrow the report-trend chip uses, so the
+      // update chip says what it is in words instead.
       if (resolution.kind === 'upgrade-available' && resolution.upgradeTarget) {
-        return `↑ v${resolution.upgradeTarget}`
+        return `SDK update v${resolution.upgradeTarget}`
       }
-      if (resolution.kind === 'deprecated') return 'Deprecated'
-      if (resolution.kind === 'catalog-ahead') return 'Ahead'
-      if (resolution.kind === 'up-to-date') return 'Current'
-      return `v${observedVersion}`
+      if (resolution.kind === 'deprecated') return 'SDK deprecated'
+      if (resolution.kind === 'catalog-ahead') return 'SDK ahead of catalogue'
+      if (resolution.kind === 'up-to-date') return 'SDK up to date'
+      return `SDK v${observedVersion}`
     }
     if (resolution.kind === 'upgrade-available' && resolution.upgradeTarget) {
       return (
@@ -195,7 +197,7 @@ export function SdkVersionBadge({
 
   return (
     <Tooltip content={<MetricTooltipContent data={tooltip} />} side="left" nowrap={false} portal>
-      <Badge className={`cursor-help ${toneClass}`} aria-label={aria}>
+      <Badge className={`cursor-help ${toneClass}`} aria-label={aria} title={aria}>
         {label}
       </Badge>
     </Tooltip>
