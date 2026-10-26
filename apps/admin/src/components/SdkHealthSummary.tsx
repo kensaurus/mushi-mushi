@@ -61,7 +61,7 @@ import {
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
 import { CHIP_TONE } from '../lib/chipTone'
-import { freshestHeartbeatKey } from '../lib/heartbeat'
+import { SDK_COLD_MS, SDK_HEALTHY_MS, freshestHeartbeatKey } from '../lib/heartbeat'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -177,14 +177,14 @@ export function diagnoseKey(
       description: `Your SDK is reaching ${k.last_seen_endpoint_host}, but this admin reads from ${adminHost}. Check ${env.endpointVar ?? 'your Mushi API endpoint env var'} in your build env — a stale staging or localhost endpoint is the most common cause.`,
     }
   }
-  if (age < HOUR_MS) {
+  if (age < SDK_HEALTHY_MS) {
     return {
       status: 'healthy',
       label: 'Healthy',
       description: 'SDK is authenticating against this backend.',
     }
   }
-  if (age < 7 * DAY_MS) {
+  if (age <= SDK_COLD_MS) {
     return {
       status: 'stale',
       label: 'Stale',

@@ -14,6 +14,7 @@ import {
   dashboardNavBadge,
   mcpNavBadge,
   costsNavBadge,
+  settingsNavBadge,
   doSectionAttention,
   startSectionAttention,
   planSectionAttention,
@@ -21,7 +22,7 @@ import {
   workspaceSlicesAttention,
   usersNavBadge,
 } from './extendedNavMeta'
-import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
+import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
 
 describe('qaCoverageNavBadge', () => {
   it('prioritizes failing stories over inventory', () => {
@@ -237,6 +238,44 @@ describe('costsNavBadge', () => {
     })
     expect(badge?.mode).toBe('attention')
     expect(badge?.tone).toBe('warn')
+  })
+})
+
+describe('settingsNavBadge', () => {
+  const slice = (over: Partial<NavStatSlices['settings']> = {}) => ({
+    byokKeysFailing: 0,
+    byokKeysUntested: 0,
+    byokKeysConfigured: 5,
+    slackConfigured: true,
+    githubRepoConfigured: true,
+    ...over,
+  })
+
+  // The page banner says "everything that is set up is working"; a sidebar
+  // number next to it was read as five problems to fix.
+  it('shows nothing when every saved key is healthy', () => {
+    expect(settingsNavBadge(slice())).toBeNull()
+  })
+
+  it('asks for attention when a key expires soon, like the Settings banner', () => {
+    const badge = settingsNavBadge(slice({ byokKeysExpiring: 1 }))
+    expect(badge?.mode).toBe('attention')
+    expect(badge?.tone).toBe('warn')
+    expect(badge?.count).toBe(1)
+    expect(badge?.label).toBe('1 BYOK key expiring soon')
+  })
+
+  it('still badges keys that need attention', () => {
+    expect(settingsNavBadge(slice({ byokKeysFailing: 2 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'danger',
+      count: 2,
+    })
+    expect(settingsNavBadge(slice({ byokKeysUntested: 1 }))).toMatchObject({
+      mode: 'attention',
+      tone: 'warn',
+      count: 1,
+    })
   })
 })
 

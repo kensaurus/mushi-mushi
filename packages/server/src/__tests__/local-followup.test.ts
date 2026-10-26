@@ -4,7 +4,7 @@
  *          opened (`mushi work`, ADR 0032 amendment 2026-10-24).
  */
 import { describe, expect, it } from 'vitest'
-import { localFollowupGate, type LocalFollowupInput } from '../../supabase/functions/_shared/local-followup.ts'
+import { localFollowupDedupe, localFollowupGate, localFollowupSkipDedupe, type LocalFollowupInput } from '../../supabase/functions/_shared/local-followup.ts'
 
 const HEAD = 'a'.repeat(40)
 
@@ -14,6 +14,7 @@ function input(over: Partial<LocalFollowupInput> = {}): LocalFollowupInput {
     review: { status: 'completed', verdict: 'fix_first', head_sha: HEAD },
     livePr: { open: true, headSha: HEAD, headRef: 'bugfix/x', headRepoId: 7, baseRepoId: 7 },
     roundHeads: [],
+    cloudFollowupsOn: false,
     ...over,
   }
 }
@@ -23,9 +24,15 @@ describe('localFollowupGate', () => {
     expect(localFollowupGate(input())).toEqual({ ok: true, headSha: HEAD, branch: 'bugfix/x', round: 1 })
   })
 
-  it('leaves cloud-agent PRs to the review-followup worker', () => {
-    const g = localFollowupGate(input({ attempt: { agent: 'cursor_cloud', pr_url: 'https://github.com/o/r/pull/1', merged_at: null, pr_state: 'open' } }))
-    expect(g).toMatchObject({ ok: false, code: 'NOT_LOCAL' })
+  it('leaves cloud-agent PRs to the review-followup worker while cloud follow-ups are on', () => {
+    const cloud = { agent: 'cursor_cloud', pr_url: 'https://github.com/o/r/pull/1', merged_at: null, pr_state: 'open' }
+    expect(localFollowupGate(input({ attempt: cloud, cloudFollowupsOn: true }))).toMatchObject({ ok: false, code: 'NOT_LOCAL', message: expect.stringContaining('follow-ups are on') })
+  })
+
+  it('follows up cloud-agent PRs locally when cloud follow-ups are off, nothing else would', () => {
+    const cloud = { agent: 'cursor_cloud', pr_url: 'https://github.com/o/r/pull/1', merged_at: null, pr_state: 'open' }
+    expect(localFollowupGate(input({ attempt: cloud, cloudFollowupsOn: false }))).toMatchObject({ ok: true, round: 1 })
+    expect(localFollowupGate(input({ attempt: { ...cloud, agent: 'anthropic_managed' } }))).toMatchObject({ ok: false, code: 'NOT_LOCAL' })
   })
 
   it('refuses other verdicts, a running review and no review, saying which', () => {
@@ -49,5 +56,14 @@ describe('localFollowupGate', () => {
     expect(localFollowupGate(input({ roundHeads: [HEAD] }))).toMatchObject({ ok: false, code: 'ALREADY_FOLLOWED_UP' })
     expect(localFollowupGate(input({ roundHeads: ['c'.repeat(40)] }))).toMatchObject({ ok: true, round: 2 })
     expect(localFollowupGate(input({ roundHeads: ['c'.repeat(40), 'd'.repeat(40)] }))).toMatchObject({ ok: false, code: 'ROUNDS_USED' })
+  })
+})
+
+describe('localFollowupSkipDedupe', () => {
+  it('is per fix and head, and never matches the round keys (local-followup:%)', () => {
+    const skip = localFollowupSkipDedupe('f1', HEAD)
+    expect(skip).toBe(`local-followup-skip:f1:${HEAD}`)
+    expect(skip.startsWith('local-followup:')).toBe(false)
+    expect(localFollowupDedupe('f1', HEAD).startsWith('local-followup:')).toBe(true)
   })
 })

@@ -2,13 +2,32 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Write your own small HTTPS server that reacts when Mushi files, triages or
+fixes a bug. The SDK checks Mushi's signature on each request, drops repeat
+deliveries and calls your handler for the event.
 
+You only need this to connect a tool Mushi does not cover. Slack, Discord,
+Teams, Linear, Jira, GitHub Issues, PagerDuty and Sentry are connected on the
+**Integrations** page of the Mushi console with no code.
 
-Build third-party plugins for [Mushi Mushi](https://kensaur.us/mushi-mushi). Plugins are
-stand-alone HTTPS services that receive **signed event webhooks** from the
-Mushi platform and may optionally call back into the REST API to comment on,
-re-classify, or transition reports.
+```bash
+npm i @mushi-mushi/plugin-sdk express
+```
+
+```ts
+import express from 'express'
+import { createPluginHandler } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
+
+const handler = createPluginHandler({
+  secret: process.env.MUSHI_PLUGIN_SECRET!,
+  on: { 'report.classified': async (e) => console.log(e.data) },
+})
+
+express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
+```
+
+Docs: https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk
 
 ## Why a webhook model?
 
@@ -24,17 +43,15 @@ The trade-off is latency: the Mushi pipeline doesn't block on plugin
 acknowledgement (deliveries are async), so plugins that need synchronous
 mutation should call the REST API back from the handler.
 
-## Install
+## Express, with a call back into Mushi
 
-```bash
-npm i @mushi-mushi/plugin-sdk
-```
-
-## Quick start (Express)
+`expressMiddleware` reads the raw body itself, so mount it before
+`express.json()` or the signature check fails.
 
 ```ts
 import express from 'express'
-import { createPluginHandler, expressMiddleware, createMushiClient } from '@mushi-mushi/plugin-sdk'
+import { createPluginHandler, createMushiClient } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
 
 const mushi = createMushiClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -61,11 +78,12 @@ app.post('/mushi/webhook', expressMiddleware(handler))
 app.listen(3000)
 ```
 
-## Quick start (Hono / Edge)
+## Hono / Edge
 
 ```ts
 import { Hono } from 'hono'
-import { createPluginHandler, honoHandler } from '@mushi-mushi/plugin-sdk/hono'
+import { createPluginHandler } from '@mushi-mushi/plugin-sdk'
+import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
 
 const handler = createPluginHandler({
   secret: process.env.MUSHI_PLUGIN_SECRET!,
@@ -86,9 +104,23 @@ export default app
 | `X-Mushi-Project`      | Project UUID                                                         |
 | `X-Mushi-Plugin`       | Plugin slug (matches the marketplace listing)                        |
 | `X-Mushi-Delivery`     | Per-delivery UUID; safe as an idempotency key                        |
+| `webhook-id`           | [Standard Webhooks](https://www.standardwebhooks.com/): same as `X-Mushi-Delivery` |
+| `webhook-timestamp`    | Standard Webhooks: unix seconds                                      |
+| `webhook-signature`    | Standard Webhooks: `v1,<base64>` over `${webhook-id}.${webhook-timestamp}.${rawBody}` |
 
 The `v1` signature is `HMAC_SHA256(secret, "${t}.${rawBody}")` in lowercase
 hex. Tolerance is 5 minutes by default and is verified in constant time.
+`createPluginHandler` checks the Standard Webhooks headers when all three are
+present, and `X-Mushi-Signature` otherwise. To verify by hand, call
+`verifySignature({ rawBody, header, secret })` or
+`verifyStandardWebhooksSignature({ rawBody, webhookId, webhookTimestamp, webhookSignature, secret })`;
+both return `{ ok: true }` or `{ ok: false, reason }`.
+
+The body is `{ event, deliveryId, occurredAt, projectId, pluginSlug, data }`.
+The event names are in `KNOWN_EVENTS` (`report.created`, `report.classified`,
+`report.status_changed`, `fix.requested`, `fix.proposed`, `fix.applied`,
+`fix.failed`, `qa_story.failed`, `qa_story.recovered`, and more). Unknown
+events should be ignored, not treated as errors.
 
 ## Outbound HTTP utilities
 
@@ -119,10 +151,11 @@ use at I/O boundaries.
 
 ## Marketplace
 
-Once your plugin is ready, submit it to the Mushi marketplace by opening a PR
-that adds your `plugin.json` manifest under `apps/admin/src/marketplace/`.
-A reviewer will validate the manifest, the public callback URL, and the
-requested API permissions before listing it.
+The console's **Marketplace** page lists only reviewed plugins. Mushi sends
+events to a plugin once it is installed there with your server's public
+HTTPS URL and a signing secret. To get a listing, submit it with
+`POST /v1/marketplace/submissions`; a reviewer checks the manifest, the
+callback URL and the requested permissions.
 
 ## Reference plugins
 
@@ -132,13 +165,13 @@ copy and adapt them as a starting point:
 **Project management / on-call**
 
 - [`@mushi-mushi/plugin-pagerduty`](../plugin-pagerduty) — paged on critical events; auto-resolves on `fix.applied`.
-- [`@mushi-mushi/plugin-jira`](../plugin-jira) — bidirectional Jira issue sync (HMAC-verified inbound webhook).
-- [`@mushi-mushi/plugin-linear`](../plugin-linear) — bidirectional Linear sync.
+- [`@mushi-mushi/plugin-jira`](../plugin-jira) — creates Jira issues and moves them when the report status changes.
+- [`@mushi-mushi/plugin-linear`](../plugin-linear) — creates and updates Linear issues.
 - [`@mushi-mushi/plugin-github-issues`](../plugin-github-issues) — open + close GitHub Issues with the `mushi-bug` label.
 
 **Chat / notifications**
 
-- [`@mushi-mushi/plugin-slack-app`](../plugin-slack-app) — Block-Kit messages + Slack interaction handler.
+- [`@mushi-mushi/plugin-slack-app`](../plugin-slack-app) — `/mushi` slash command, Slack request verification, OAuth helpers.
 - [`@mushi-mushi/plugin-discord`](../plugin-discord) — embed posts to a Discord webhook.
 - [`@mushi-mushi/plugin-msteams`](../plugin-msteams) — Adaptive Card 1.4 notifications.
 
@@ -147,7 +180,7 @@ copy and adapt them as a starting point:
 - [`@mushi-mushi/plugin-sentry`](../plugin-sentry) — mirror reports into Sentry; resolve on fix.
 - [`@mushi-mushi/plugin-bugsnag`](../plugin-bugsnag) — Bugsnag Data API v2 mirror.
 - [`@mushi-mushi/plugin-rollbar`](../plugin-rollbar) — Rollbar item mirror + auto-resolve.
-- [`@mushi-mushi/plugin-crashlytics`](../plugin-crashlytics) — close Crashlytics issues on fix.
+- [`@mushi-mushi/plugin-crashlytics`](../plugin-crashlytics) — sets a Remote Config `mushi_resolved_*` flag on fix.
 
 **Workflow**
 
@@ -161,4 +194,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 506 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 508 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

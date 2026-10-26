@@ -124,7 +124,7 @@ function designContext(repoRoot: string, files: string[]): string {
 
 function probeLine(label: string, p: ProbeResult): string {
   const axe = p.axe.map((v) => `${v.id}×${v.count}`).join(', ') || 'none'
-  return `${label}: accessibility violations ${axe}; sideways scroll ${p.overflowX ? 'yes' : 'no'}; small tap targets ${p.smallTargets}; console errors ${p.consoleErrors.length}; layout shift ${p.cls}`
+  return `${label}: accessibility violations ${axe}; sideways scroll ${p.overflowX ? 'yes' : 'no'}; small tap targets ${p.smallTargets}; overlapping or oversized boxes ${p.layout?.length ?? 0}; console errors ${p.consoleErrors.length}; layout shift ${p.cls}`
 }
 
 function pngSize(buf: Buffer): { width: number; height: number } {

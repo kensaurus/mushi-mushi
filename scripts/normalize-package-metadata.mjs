@@ -83,7 +83,7 @@ export const PRIMARY_ROLES = {
   '@mushi-mushi/core': 'Types, API client and pre-filter for Mushi SDKs.',
   '@mushi-mushi/web': 'Bug report and user feedback widget for the web.',
   '@mushi-mushi/react': 'React and Next.js bug report widget and hooks.',
-  '@mushi-mushi/react-native': 'Shake-to-report widget for React Native and Expo.',
+  '@mushi-mushi/react-native': 'Bug report widget for React Native and Expo.',
 }
 
 /** Keywords an entry point must carry (npm ranks the bare brand query on them). */
