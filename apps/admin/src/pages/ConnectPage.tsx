@@ -46,6 +46,7 @@ import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
 import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
 import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -207,6 +208,9 @@ export function ConnectPage() {
   const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
   const sdkConnected = sdkLastSeenAt != null
   const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
+  // A fresh load of /connect#connect-sdk-health ran the layout's hash scroll
+  // before the sections above had their height, and stayed at the top.
+  useScrollToHash(!projectsFeed.loading && !mcpStatsQuery.loading)
   // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
   const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
   const setupStatus = useSetupStatus(activeProjectId)
