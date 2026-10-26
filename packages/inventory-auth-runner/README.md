@@ -106,7 +106,9 @@ Two `script` shapes are accepted:
    `context`. Runs via `new Function(...)` so it has no access to the
    runner's local closure.
 2. **File reference** — `script: 'js:./scripts/login.js'`. The runner
-   `import()`s the path relative to CWD; the module must `default-export`
+   `import()`s the path relative to the folder of your local
+   `inventory.yaml` (`--inventory <path>` or `MUSHI_INVENTORY_FILE`;
+   default `./inventory.yaml`, so the working directory); the module must `default-export`
    an `(page, env, context) => Promise<void>` function. Use this when
    you'd rather commit the script to your repo without inline-escaping
    it into YAML.

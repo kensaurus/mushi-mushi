@@ -39,6 +39,8 @@
  *     npx mushi-mushi-auth refresh
  */
 
+import { dirname, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { chromium, type BrowserContext, type Page } from '@playwright/test'
 
 export interface RunnerOptions {
@@ -47,6 +49,12 @@ export interface RunnerOptions {
   projectId: string
   /** When true, prints the cookie value to stdout. NEVER true in CI. */
   debug?: boolean
+  /**
+   * The local inventory.yaml. A `js:` login script path is resolved
+   * against its folder. Defaults to `./inventory.yaml`, so the folder is
+   * the working directory.
+   */
+  inventoryFile?: string
 }
 
 export interface ScriptedAuthBlock {
@@ -190,14 +198,17 @@ export function validateInlineAuthScript(script: string): void {
  *   1. A literal block of JS (treated as a function body that
  *      receives `page`, `env`, `context`). Validated against
  *      `INLINE_SCRIPT_DENY` before execution.
- *   2. A reference like `js:./scripts/login.js` (loaded from disk
- *      relative to CWD — handy for committing the script to your
- *      repo without inline-escaping JS into YAML).
+ *   2. A reference like `js:./scripts/login.js`, resolved against the
+ *      folder of the inventory file (`baseDir`) — handy for committing
+ *      the script to your repo without inline-escaping JS into YAML.
+ *      A bare `import(path)` resolved it against this module's own file
+ *      inside node_modules, so it never loaded (Mushi report b0a9a959).
  */
 async function runLoginScript(
   page: Page,
   context: BrowserContext,
   script: string,
+  baseDir: string = process.cwd(),
 ): Promise<void> {
   const env = new Proxy(
     {},
@@ -210,7 +221,7 @@ async function runLoginScript(
 
   if (script.startsWith('js:')) {
     const path = script.slice(3).trim()
-    const mod = (await import(path)) as { default?: (page: Page, env: unknown, ctx: BrowserContext) => Promise<void> }
+    const mod = (await import(pathToFileURL(resolve(baseDir, path)).href)) as { default?: (page: Page, env: unknown, ctx: BrowserContext) => Promise<void> }
     if (typeof mod.default !== 'function') {
       throw new Error(`auth.scripted file ${path} must default-export a function`)
     }
@@ -334,7 +345,8 @@ export async function refresh(opts: RunnerOptions): Promise<{ cookieName: string
     const context = await browser.newContext()
     const page = await context.newPage()
     await page.goto(loginUrl, { waitUntil: 'networkidle' })
-    await runLoginScript(page, context, auth.config.script)
+    const inventoryFile = resolve(opts.inventoryFile ?? 'inventory.yaml')
+    await runLoginScript(page, context, auth.config.script, dirname(inventoryFile))
 
     // Settle for one networkidle; many login flows redirect after submit.
     await page.waitForLoadState('networkidle').catch(() => undefined)
@@ -383,6 +395,7 @@ export const __test = {
   api,
   loadInventory,
   scriptedAuthOf,
+  runLoginScript,
   pickSessionCookie,
   validateInlineAuthScript,
   isAnalyticsCookie,
