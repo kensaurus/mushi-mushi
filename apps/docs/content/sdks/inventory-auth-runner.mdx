@@ -5,7 +5,7 @@ description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from yo
 
 # `@mushi-mushi/inventory-auth-runner`
 
-A small Playwright runner that executes the `auth.scripted` block of your
+A small Playwright runner that executes the scripted `app.auth` block of your
 [`inventory.yaml`](/sdks/inventory-schema), captures the resulting cookies,
 and stores them in `project_settings` so the v2 crawler and synthetic
 monitor can reach pages behind a login wall.
@@ -25,17 +25,22 @@ pnpm add -D @mushi-mushi/inventory-auth-runner
 
 ## Usage
 
-Add an `auth.scripted` block to `inventory.yaml`:
+Add an `auth` block of type `scripted` inside `app` in `inventory.yaml`:
 
 ```yaml filename="inventory.yaml"
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]',    value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click:    { selector: '[data-testid=login]' }
-      - waitFor:  { url: /\/dashboard$/ }
+app:
+  id: acme
+  name: Acme
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.E2E_EMAIL)
+        await page.fill('[data-testid=password]', env.E2E_PASSWORD)
+        await page.click('[data-testid=login]')
+        await page.waitForURL('**/dashboard')
 ```
 
 Then run:
@@ -44,13 +49,14 @@ Then run:
 E2E_EMAIL=user@acme.test \
 E2E_PASSWORD=… \
 MUSHI_API_KEY=mushi_… \
-MUSHI_PROJECT_ID=proj_… \
+MUSHI_PROJECT=<project uuid> \
 npx mushi-mushi-auth refresh
 ```
 
-The runner walks the steps headlessly, captures every cookie set by the
-target origin, and POSTs them to `/v1/admin/projects/:id/settings`. The
-crawler and synthetic monitor read from the same row on every run.
+The runner opens `base_url + login_path` headlessly, runs the script,
+picks the session cookie set by the target origin, and PATCHes it to
+`/v1/admin/inventory/:projectId/settings`. The crawler and synthetic
+monitor read from the same row on every run.
 
 ## In CI
 

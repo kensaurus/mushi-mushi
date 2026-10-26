@@ -18,8 +18,8 @@ monitor + observed-route diffing reach **auth-gated routes** in your app.
 
 1. Reads the project's currently-ingested `inventory.yaml` from
    `GET /v1/admin/inventory/:projectId`.
-2. Finds the `auth.scripted` block and runs its `script` against
-   `app.base_url + auth.config.login_path` in a headless Chromium
+2. Finds the `app.auth` block of type `scripted` and runs its `script` against
+   `app.base_url + app.auth.config.login_path` in a headless Chromium
    instance via Playwright.
 3. Picks the resulting session cookie (prefers `*session*` / `*auth*` /
    `sb-*` / `next-auth*` names, then `HttpOnly` + `Secure`).
@@ -81,22 +81,23 @@ your build logs.
 
 ## Inventory snippet
 
-Your `inventory.yaml` declares the script the runner will execute:
+Your `inventory.yaml` declares the script the runner will execute, as
+`auth` inside `app` (the schema has no top-level `auth`):
 
 ```yaml
 app:
   id: glot-it
+  name: Glot.it
   base_url: https://app.example.com
-
-auth:
-  type: scripted
-  config:
-    login_path: /login
-    script: |
-      await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
-      await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
-      await page.click('[data-testid=submit]')
-      await page.waitForURL('**/dashboard')
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=submit]')
+        await page.waitForURL('**/dashboard')
 ```
 
 Two `script` shapes are accepted:
