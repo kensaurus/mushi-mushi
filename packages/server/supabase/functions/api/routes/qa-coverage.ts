@@ -25,7 +25,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Context, Next } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { z } from 'npm:zod@3';
-import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
+import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
@@ -114,59 +114,58 @@ function assertUuid(c: Context, value: string, name: string) {
   return null;
 }
 
-// Dual-auth middleware for CLI + browser: accepts either a Supabase JWT (browser)
-// or a project API key (X-Mushi-Api-Key). The API key must belong to the same project.
+// CLI + browser: a Supabase JWT, or an API key with the admin scope for this
+// method. apiKeyAuth is the SDK ingest gate and rejects every account key
+// (ORG_KEY_NOT_ALLOWED). Listing or running a QA story is an admin action, so
+// this uses adminOrApiKey: an account key that can reach the project is
+// accepted when it holds mcp:read (GET) or mcp:write (a run). A public SDK
+// key (report:write only) still fails the scope check.
 async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
-  const apiKey = c.req.header('X-Mushi-Api-Key');
-  if (apiKey) {
-    // Delegate to apiKeyAuth to validate and set projectId
-    let called = false;
-    const rejected = await apiKeyAuth(c as never, async () => { called = true; });
-    if (!called) return rejected; // apiKeyAuth rejected
-    // A project key alone is not enough: the public SDK key (report:write)
-    // ships in every customer's browser bundle. Reads need mcp:read and
-    // anything that starts or changes a run needs mcp:write, like the other
-    // CLI/MCP admin routes.
-    let scoped = false;
-    const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
-    const denied = await requireApiKeyScope(needed)(c as never, async () => { scoped = true; });
-    if (!scoped) return denied;
-    // Verify the route's :pid matches the key's project
-    const keyProjectId = c.get('projectId' as keyof Variables) as string | undefined;
-    const routePid = c.req.param('pid');
-    if (keyProjectId && routePid && keyProjectId !== routePid) {
-      return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+  const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
+  let mismatch: Response | null = null;
+  const rejected = await adminOrApiKey({ scope: needed })(c as never, async () => {
+    // A project-bound key stays on its own project. An account key has no
+    // bound project; the handler checks the owner can reach :pid.
+    if (c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) {
+      const keyProjectId = c.get('projectId') as string | undefined;
+      const routePid = c.req.param('pid');
+      if (keyProjectId && routePid && keyProjectId !== routePid) {
+        mismatch = c.json(
+          { error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } },
+          403,
+        );
+        return;
+      }
     }
-    // Set userId to empty string so downstream handlers don't crash
-    c.set('userId' as keyof Variables, '' as never);
     await next();
-    return;
-  }
-  // Fall back to Supabase JWT auth
-  await jwtAuth(c as never, next);
+  });
+  if (mismatch) return mismatch;
+  return rejected;
 }
 
 export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
-  // When authenticated via API key, userId is '' and projectId is already validated
-  // by the middleware above. When authenticated via JWT, userId is a real UUID and
-  // we check project ownership the normal way.
-  async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, contextProjectId?: string) {
-    // API key path: middleware already validated project ownership
-    if (!userId && contextProjectId === projectId) return projectId;
-    if (!userId && contextProjectId && contextProjectId !== projectId) return null;
+  // A project-bound API key is the grant for its one project (jwtOrApiKey
+  // already refused a different :pid). An account key and a signed-in user
+  // must be able to reach the project; a limited account key only reaches
+  // the projects named on the key.
+  async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, c?: Context) {
+    if (c?.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) {
+      const bound = c.get('projectId') as string | null | undefined;
+      return bound === projectId ? projectId : null;
+    }
     if (!userId) return null;
-    // JWT path: check via ownership table
     const ids = await ownedProjectIds(db, userId);
     if (!ids.includes(projectId)) return null;
     return projectId;
   }
 
   // Viewers read QA coverage. Creating, editing, deleting or running a story
-  // changes the project (a run also spends crawl credits). A project-bound API
-  // key has no userId and was already scoped by the middleware.
+  // changes the project (a run also spends crawl credits). A project-bound
+  // API key is the project's credential. An account key carries its owner's role.
   async function qaViewerDenied(c: Context, db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, action: string) {
+    if (c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) return null;
     if (!userId) return null;
     const access = await userCanAccessProject(db, userId, projectId);
     return denyViewerWrite(c, access.role, action);
@@ -331,9 +330,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   app.get('/v1/admin/projects/:pid/qa-coverage', jwtOrApiKey, async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
-    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, c))) return c.json({ error: 'Not found' }, 404);
 
     // Left-join stories against MV to get live 24h stats
     const { data, error } = await db.rpc('get_qa_coverage', { p_project_id: pid });
@@ -533,9 +531,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
     if (uuidErr) return uuidErr;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
-    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, c))) return c.json({ error: 'Not found' }, 404);
 
     const { data, error } = await db
       .from('qa_story_runs')
@@ -601,9 +598,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const sid = c.req.param('sid')!;
     const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
     if (uuidErr) return uuidErr;
-    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, c))) return c.json({ error: 'Not found' }, 404);
     const qaDenied = await qaViewerDenied(c, db, userId, pid, 'run QA stories');
     if (qaDenied) return qaDenied;
 
