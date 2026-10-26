@@ -238,7 +238,7 @@ export function FixDetailPanel({
       )}
 
       {fix.agent === 'cursor_cloud' && fix.cursor_artifacts && fix.cursor_artifacts.length > 0 && (
-        <CursorArtifactsGallery artifacts={fix.cursor_artifacts} />
+        <CursorArtifactsGallery artifacts={fix.cursor_artifacts} heading="h3" />
       )}
 
       {inventoryAction && (

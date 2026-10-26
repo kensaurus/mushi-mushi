@@ -71,9 +71,15 @@ interface Props {
   refreshKey: number
   /** A row merged: the page reloads its fixes. */
   onMerged?: () => void
+  /**
+   * Heading level. Default `h3` is the outline this panel had before /fixes
+   * promoted its sections to h2 under a page h1. Only /fixes renders it, and
+   * that page passes `h2`.
+   */
+  heading?: 'h2' | 'h3'
 }
 
-export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
+export function MergeQueuePanel({ projectId, refreshKey, onMerged, heading = 'h3' }: Props) {
   const toast = useToast()
   const [rows, setRows] = useState<MergeQueueRow[]>([])
   const [showMerged, setShowMerged] = useState(false)
@@ -139,13 +145,14 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   }
 
   const shown = rows.filter((r) => r.state !== 'removed')
+  const Title = heading
   if (!projectId) return null
   if (!loaded) {
     // The panel's frame while the first read runs, at the size it had last time.
     return (
       <section aria-label="Merge queue" aria-busy="true">
         <Card className={`p-3 space-y-2 ${rememberedNonEmpty(projectId) ? 'h-72' : 'h-24'}`}>
-          <h2 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</h2>
+          <Title className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</Title>
           <div aria-hidden="true" className="h-7 rounded-sm bg-surface-overlay/50 motion-safe:animate-pulse" />
         </Card>
       </section>
@@ -175,7 +182,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     <section aria-label="Merge queue">
     <Card className="p-3 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</h2>
+        <Title className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge when ready</Title>
         <p className="text-2xs text-fg-muted">{mergeQueueSummary(shown)}</p>
       </div>
       {release && (

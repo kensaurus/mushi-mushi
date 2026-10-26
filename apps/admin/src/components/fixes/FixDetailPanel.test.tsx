@@ -66,7 +66,7 @@ async function flush() {
   for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve() })
 }
 
-function render() {
+function render(fix: FixAttempt = FIX) {
   act(() => {
     root.render(
       createElement(
@@ -75,7 +75,7 @@ function render() {
         createElement(
           ToastProvider,
           null,
-          createElement(FixDetailPanel, { fix: FIX, timeline: [], traceUrl: null, onRetry: async () => {} }),
+          createElement(FixDetailPanel, { fix, timeline: [], traceUrl: null, onRetry: async () => {} }),
         ),
       ),
     )
@@ -104,6 +104,16 @@ describe('FixDetailPanel', () => {
   it('asks the fixes page for an h3 merge-checks heading', () => {
     render()
     expect(document.querySelector('[data-testid="gate-heading"]')?.tagName).toBe('H3')
+  })
+
+  it('asks the fixes page for an h3 artifacts heading', () => {
+    render({
+      ...FIX,
+      cursor_artifacts: [{ kind: 'log', path: 'run/log.txt', mime: 'text/plain' }],
+    })
+    const artifacts = [...document.querySelectorAll('h3')].find((h) => h.textContent === 'Cursor agent artifacts')
+    expect(artifacts).toBeDefined()
+    expect(document.querySelector('h4')).toBeNull()
   })
 
   it('QA 95: the receipt link keeps the console base path', () => {

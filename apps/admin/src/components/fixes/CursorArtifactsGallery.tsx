@@ -21,6 +21,12 @@ interface Artifact {
 
 interface Props {
   artifacts: Artifact[];
+  /**
+   * Heading level. Default `h4` is the outline this block had before /fixes
+   * moved its detail headings to h3. Only the fixes detail panel renders it,
+   * and that panel passes `h3` so the heading matches its sibling sections.
+   */
+  heading?: 'h3' | 'h4';
 }
 
 /** Mutually exclusive bucket — MIME wins over kind when they disagree. */
@@ -31,8 +37,9 @@ function artifactBucket(a: Artifact): 'screenshot' | 'video' | 'log' | 'file' {
   return 'file';
 }
 
-export function CursorArtifactsGallery({ artifacts }: Props) {
+export function CursorArtifactsGallery({ artifacts, heading = 'h4' }: Props) {
   if (!artifacts.length) return null;
+  const Title = heading;
 
   const screenshots = artifacts.filter((a) => artifactBucket(a) === 'screenshot');
   const videos = artifacts.filter((a) => artifactBucket(a) === 'video');
@@ -43,7 +50,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-2xs uppercase tracking-wide text-fg-faint">Cursor agent artifacts</h3>
+      <Title className="text-2xs uppercase tracking-wide text-fg-faint">Cursor agent artifacts</Title>
 
       {screenshots.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

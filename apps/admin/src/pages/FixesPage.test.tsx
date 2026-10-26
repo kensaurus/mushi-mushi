@@ -39,7 +39,12 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  dispatches: [] as Array<Record<string, unknown>>,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
@@ -94,13 +99,14 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.dispatches = []
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
       const offset = Number(new URLSearchParams(path.split('?')[1]).get('offset') ?? 0)
       return { ok: true, data: { fixes: offset === 0 ? mocks.fixes : [fix({ id: 'old1', report_id: 'r9', retryable: false })], total: mocks.total } }
     }
-    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: [] } }
+    if (path === '/v1/admin/fixes/dispatches') return { ok: true, data: { dispatches: mocks.dispatches } }
     if (path === '/v1/admin/fixes/dispatch') return { ok: true, data: { dispatchId: 'd1' } }
     return { ok: true, data: null }
   })
@@ -160,6 +166,21 @@ describe('FixesPage', () => {
     expect(document.querySelectorAll('h1')).toHaveLength(1)
     expect(document.querySelector('th .sr-only')?.textContent).toBe('Status stripe')
     expect([...document.querySelectorAll('h2')].some((h) => h.textContent === 'Merge when ready')).toBe(true)
+  })
+
+  it('keeps in-flight dispatches at h2 under the page h1', async () => {
+    mocks.fixes = [fix({})]
+    mocks.total = 1
+    mocks.dispatches = [{
+      id: 'd1',
+      project_id: 'p1',
+      report_id: 'r1',
+      status: 'queued',
+      created_at: '2026-10-24T00:00:00Z',
+    }]
+    await render('/fixes')
+    expect([...document.querySelectorAll('h2')].some((h) => h.textContent === 'In-flight dispatches')).toBe(true)
+    expect([...document.querySelectorAll('h3')].some((h) => h.textContent === 'In-flight dispatches')).toBe(false)
   })
 
   it('QA 96 + 241: row Retry asks first and sends the failed attempt’s agent', async () => {
