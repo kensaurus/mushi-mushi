@@ -148,6 +148,15 @@ async function render() {
   })
 }
 
+/** Axe `link-in-text-block`: an in-text link needs a resting underline, not color plus hover only. */
+function expectRestingUnderline(rootEl: ParentNode) {
+  const links = Array.from(rootEl.querySelectorAll('a'))
+  expect(links.length).toBeGreaterThan(0)
+  for (const a of links) {
+    expect(a.className.split(/\s+/), a.textContent ?? a.getAttribute('href') ?? 'link').toContain('underline')
+  }
+}
+
 function toggle(label: string): HTMLButtonElement | HTMLInputElement {
   const el = Array.from(host.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
     (n.getAttribute('aria-label') ?? n.closest('label')?.textContent ?? '').includes(label),
@@ -269,6 +278,55 @@ describe('Cursor key model on /credits', () => {
     expect(text).toContain("each app's Cursor model")
     const changes = Array.from(host.querySelectorAll('a')).filter((a) => a.textContent === 'Change')
     expect(changes.map((a) => a.getAttribute('href'))).toEqual(['/settings?tab=byok', '/settings?tab=byok'])
+  })
+})
+
+describe('in-text links on /credits', () => {
+  it('underlines every link at rest so color is not the only cue', async () => {
+    await render()
+    expectRestingUnderline(host)
+
+    const { CursorLevers } = await import('../components/credits/CursorLevers')
+    const bare: SpendDownKeyStatus = { ...KEY, id: 'k-bare', enabled: false, creditsExpireAt: null }
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('No Cursor key yet')
+    expectRestingUnderline(host)
+
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(CursorLevers, {
+        spendDown: { projectId: 'p1', keys: [bare] },
+        followups: null,
+        now: new Date('2026-10-23T02:00:00Z'),
+        onChanged: () => {},
+      })))
+    })
+    expect(host.textContent).toContain('Set the expiry date first')
+    expectRestingUnderline(host)
+
+    state.watches = {
+      p1: { watch: null, openPages: [], suggestedUrl: null, firecrawlReady: false },
+    }
+    const { FirecrawlLevers } = await import('../components/credits/FirecrawlLevers')
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(FirecrawlLevers, {
+        balance: null,
+        projects: [{ id: 'p1', name: 'mushi-mushi' }],
+        now: new Date('2026-10-23T02:00:00Z'),
+      })))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('Add one in Settings')
+    expect(host.textContent).toContain('This app has no Firecrawl key')
+    expectRestingUnderline(host)
   })
 })
 

@@ -85,7 +85,7 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
       {audit?.last_error && <p className="text-xs text-warn">{audit.last_error}</p>}
       {on && openFindings > 0 && (
         <p className="text-xs text-fg-muted">
-          Its reports are on <Link className="text-brand hover:underline" to="/reports">Reports</Link>; spend-down sends them to Cursor.
+          Its reports are on <Link className="text-brand underline underline-offset-2" to="/reports">Reports</Link>; spend-down sends them to Cursor.
         </p>
       )}
     </div>
