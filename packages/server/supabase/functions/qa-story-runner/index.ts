@@ -1,8 +1,9 @@
 // ============================================================
 // qa-story-runner — QA Coverage Suite browser agent runner
 //
-// Invoked by pg_cron every minute. Scans for qa_stories whose
-// schedule_cron is due, executes them via the configured browser
+// Invoked by pg_cron every minute. Scans for qa_stories that are
+// enabled and approval_status = 'approved' and whose schedule_cron
+// is due, then executes them via the configured browser
 // provider (firecrawl_actions for Deno Edge; local/browserbase via
 // an external CLI trigger), writes qa_story_runs + qa_story_evidence
 // rows, and triggers A2A push notifications for failures.
@@ -25,9 +26,10 @@
 // ────
 // Registered in the migration as every-minute via:
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
-// The function itself gates execution on whether each story's
-// schedule_cron aligns with the current time (via a simple cron-match
-// check) so we don't need one pg_cron job per story.
+// The function itself gates execution on approval_status = 'approved'
+// and on whether each story's schedule_cron aligns with the current
+// time (via a simple cron-match check) so we don't need one pg_cron
+// job per story. Manual runs skip that approval gate.
 //
 // Rate limits
 // ───────────
@@ -49,6 +51,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
+import { SCHEDULED_APPROVAL_STATUS, selectStoriesForScheduledTick } from './schedule.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -72,6 +75,8 @@ interface QaStory {
   byok_provider: string | null
   /** Explicit scrape target set by the user in the console. Takes precedence over prompt/env. */
   target_url: string | null
+  /** 'pending_review' | 'approved' | 'rejected'. Scheduled ticks require approved. */
+  approval_status?: string | null
   /** Notification state — updated at end of each run */
   last_run_status: string | null
   consecutive_failures: number
@@ -695,7 +700,9 @@ Deno.serve(
     rlog.info('qa-story-runner invoked', { jobName: 'qa-story-runner' })
 
     try {
-      // Fetch all enabled stories. The previous select embedded
+      // Scheduled ticks run only enabled, approved stories. Manual runs
+      // (executeManualRun) keep the API route's own enabled check.
+      // Do not embed projects here. The previous select embedded
       // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
       // which referenced a non-existent `projects → mushi_runtime_config`
       // foreign key (PostgREST returned PGRST200 → 500). The embedded
@@ -708,6 +715,7 @@ Deno.serve(
         .from('qa_stories')
         .select('*')
         .eq('enabled', true)
+        .eq('approval_status', SCHEDULED_APPROVAL_STATUS)
 
       if (storiesErr) {
         // Truncate the message before logging and persisting — a transient Supabase
@@ -741,9 +749,7 @@ Deno.serve(
         return new Response('Internal error', { status: 500 })
       }
 
-      const dueStories = (stories ?? []).filter((s: QaStory) =>
-        cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
-      )
+      const dueStories = selectStoriesForScheduledTick(stories ?? [], now, cronMatches)
 
       rlog.info('stories due', { total: stories?.length ?? 0, due: dueStories.length })
 
