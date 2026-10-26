@@ -1,4 +1,5 @@
 import { legacyHubRoutes } from './lib/pageHubs'
+import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
 import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
@@ -303,11 +304,12 @@ export function App() {
         {/* The marketing landing lives at the product root (kensaur.us/mushi-mushi/),
             served by the docs static export via the CloudFront internal rewrite
             (scripts/cloudfront-mushi-spa-router.js). The admin SPA root
-            (/mushi-mushi/admin/) is the app itself, so `/` bounces straight to the
-            dashboard — ProtectedRoute redirects to /login when unauthenticated.
+            (/mushi-mushi/admin/) is the app itself, so `/` bounces to /reports
+            and keeps the query (`?project=`) and hash. ProtectedRoute redirects
+            to /login when unauthenticated.
             (Retired PublicHomePage so the noindex admin shell no longer duplicates
             the indexable landing.) */}
-        <Route path="/" element={<Navigate to="/reports" replace />} />
+        <Route path="/" element={<ReportsHomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
