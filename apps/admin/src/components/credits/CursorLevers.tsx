@@ -51,7 +51,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
   if (keys.length === 0 && !fu) {
     return (
       <p className="text-sm text-fg-muted">
-        No Cursor key yet. <Link className="text-brand hover:underline" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
+        No Cursor key yet. <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Add one in Settings → AI keys</Link>{' '}
         and Mushi can send open bugs to Cursor before its credits expire.
       </p>
     )
@@ -91,12 +91,12 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
               </div>
               <p className="text-xs text-fg-secondary">
                 {line.text} Runs on {modelName}.{' '}
-                <Link className="text-brand hover:underline" to="/settings?tab=byok">Change</Link>
+                <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Change</Link>
               </p>
               {!k.enabled && !k.creditsExpireAt && (
                 <p className="text-xs text-fg-muted">
                   Set the expiry date first in{' '}
-                  <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
+                  <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Settings → AI keys</Link>.
                 </p>
               )}
               {!editable && <p className="text-xs text-fg-muted">An owner or admin of this key can change it.</p>}
@@ -134,7 +134,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           </p>
           <p className="text-xs text-fg-muted">
             Models, key and daily limit:{' '}
-            <Link className="text-brand hover:underline" to="/settings?tab=byok">Settings → AI keys</Link>.
+            <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Settings → AI keys</Link>.
           </p>
         </div>
       )}
