@@ -205,6 +205,8 @@ export const RECENT_MS = 7 * 24 * HOUR
 export const MAX_ITEMS_PER_GROUP = 100
 
 export const FOLLOWUPS_SETTING = { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' }
+/** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
+export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -602,6 +604,145 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       oldestAt: oldest,
       groups: mine,
     }
+  })
+}
+
+// ── Who opens fixes ─────────────────────────────────────────────────────────
+
+/**
+ * Agents that only the server dispatches. Everything else that opens a PR is
+ * a person's own lane (`mcp`: `mushi work`, the CLI and the editor).
+ */
+export const LOCAL_AGENTS: ReadonlySet<string> = new Set(['mcp', 'local'])
+
+export interface AgentKeyRow {
+  project_id: string | null
+  organization_id: string | null
+  owner_user_id: string | null
+  status: string | null
+  spend_down_enabled: boolean | null
+  exhausted_until: string | null
+}
+
+export interface DispatcherInput {
+  now: Date
+  projects: Array<{ id: string; name: string; organization_id: string | null; owner_id: string | null }>
+  /** organization id → its owners' user ids (a universal key serves its owner's organizations, ADR 0031). */
+  orgOwners: Map<string, Set<string>>
+  autofixOn: Set<string>
+  cursorKeys: AgentKeyRow[]
+  /** fix_dispatch_jobs of the last 48 h. */
+  jobs: Array<{ project_id: string; created_at: string }>
+  /** fix attempts of the last 7 days: who opened them and when. */
+  attempts: Array<{ project_id: string; agent: string | null; status: string; created_at: string }>
+}
+
+export interface DispatcherStatus {
+  projectId: string
+  name: string
+  autofixOn: boolean
+  /** Who opened fixes in the last 7 days. */
+  opener: 'server' | 'local' | 'both' | 'nobody'
+  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
+  local: { runs24h: number; running: number; lastAt: string | null }
+  /** Plain words when auto-fix is on but the server cannot or does not dispatch. */
+  problem: string | null
+}
+
+function keyServes(k: AgentKeyRow, p: DispatcherInput['projects'][number], orgOwners: DispatcherInput['orgOwners']): boolean {
+  if (k.project_id) return k.project_id === p.id
+  if (k.organization_id) return k.organization_id === p.organization_id
+  if (k.owner_user_id) return k.owner_user_id === p.owner_id || (!!p.organization_id && !!orgOwners.get(p.organization_id)?.has(k.owner_user_id))
+  return false
+}
+
+/** Per app: can the server dispatch fixes, does it, and do local lanes. */
+export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
+  const now = input.now.getTime()
+  const within = (iso: string, ms: number) => now - Date.parse(iso) <= ms
+  return input.projects.map((p) => {
+    const keys = input.cursorKeys.filter((k) => keyServes(k, p, input.orgOwners))
+    const usable = keys.filter((k) => k.status === 'active' && !(k.exhausted_until && Date.parse(k.exhausted_until) > now))
+    const agentKeys = usable.filter((k) => k.spend_down_enabled).length
+    const mine = input.attempts.filter((a) => a.project_id === p.id)
+    const serverAttempts = mine.filter((a) => !LOCAL_AGENTS.has(a.agent ?? ''))
+    const localAttempts = mine.filter((a) => LOCAL_AGENTS.has(a.agent ?? ''))
+    const jobs = input.jobs.filter((j) => j.project_id === p.id)
+    const serverTimes = [...jobs.map((j) => j.created_at), ...serverAttempts.map((a) => a.created_at)].sort()
+    const dispatches24h = jobs.filter((j) => within(j.created_at, 24 * HOUR)).length
+    const dispatches48h = jobs.filter((j) => within(j.created_at, 48 * HOUR)).length
+    const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null }
+    const localTimes = localAttempts.map((a) => a.created_at).sort()
+    const local = {
+      runs24h: localAttempts.filter((a) => within(a.created_at, 24 * HOUR)).length,
+      running: localAttempts.filter((a) => a.status === 'running' || a.status === 'pending').length,
+      lastAt: localTimes[localTimes.length - 1] ?? null,
+    }
+    const byServer = serverAttempts.length > 0 || jobs.length > 0
+    const byLocal = localAttempts.length > 0
+    const autofixOn = input.autofixOn.has(p.id)
+    let problem: string | null = null
+    if (autofixOn && agentKeys === 0) {
+      problem = `Auto-fix is on but has no agent key${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${dispatches48h} dispatches in 48h`
+    } else if (autofixOn && dispatches48h === 0) {
+      problem = 'Auto-fix has an agent key but dispatched nothing in 48h'
+    }
+    return {
+      projectId: p.id,
+      name: p.name,
+      autofixOn,
+      opener: byServer && byLocal ? 'both' : byServer ? 'server' : byLocal ? 'local' : 'nobody',
+      server,
+      local,
+      problem,
+    }
+  })
+}
+
+/** The "Fix PR" stage's stuck group for apps whose auto-fix cannot or does not dispatch. */
+export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): PipelineGroup | null {
+  const bad = dispatchers.filter((d) => d.problem)
+  if (bad.length === 0) return null
+  const noKey = bad.every((d) => d.server.agentKeys === 0)
+  const items: PipelineItem[] = bad.map((d) => ({
+    id: d.projectId,
+    projectId: d.projectId,
+    reportId: null,
+    title: d.name,
+    repo: null,
+    prNumber: null,
+    prUrl: null,
+    queueId: null,
+    since: d.server.lastAt ?? new Date(now.getTime() - 48 * HOUR).toISOString(),
+    lastError: d.problem,
+    lastEventAt: d.server.lastAt,
+    lastEventLabel: d.server.lastAt ? 'last server dispatch' : null,
+    failingChecks: [],
+    review: null,
+    queueDetail: d.local.lastAt ? `Local mushi work lanes opened ${d.local.runs24h} in 24h (${d.local.running} running).` : 'No local lane either: nobody opens fixes.',
+  }))
+  items.sort((a, b) => a.since.localeCompare(b.since))
+  return {
+    id: 'autofix_no_agent',
+    stage: 'pr',
+    tone: 'stuck',
+    label: `${plural(bad.length, 'app')}: ${noKey ? 'auto-fix is on but has no agent key' : 'auto-fix dispatches nothing'}; ${bad.reduce((n, d) => n + d.server.dispatches48h, 0)} dispatches in 48h`,
+    count: bad.length,
+    oldestAt: items[0]?.since ?? null,
+    actions: [],
+    settings: DISPATCH_SETTING,
+    items,
+  }
+}
+
+/** Put the dispatcher group first in the "Fix PR" stage and count it. */
+export function withDispatcherGroup(stages: PipelineStage[], group: PipelineGroup | null): PipelineStage[] {
+  if (!group) return stages
+  return stages.map((s) => {
+    if (s.id !== 'pr') return s
+    const groups = [group, ...s.groups]
+    const oldest = [s.oldestAt, group.oldestAt].filter((x): x is string => !!x).sort()[0] ?? null
+    return { ...s, groups, count: s.count + group.count, stuck: s.stuck + group.count, oldestAt: oldest }
   })
 }
 

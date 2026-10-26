@@ -8,7 +8,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  buildDispatchers,
   buildPipeline,
+  dispatcherGroup,
+  withDispatcherGroup,
   failedChecksFromDetail,
   queueDetailKind,
   summarizeTrains,
@@ -278,5 +281,60 @@ describe('helpers', () => {
     expect(s.topFailures[0]).toEqual({ check: 'Build & Test', count: 2 })
     expect(s.trains.map((x) => x.id)).toEqual(['4', '3', '2', '1'])
     expect(s.trains[0].members).toBe(2)
+  })
+})
+
+describe('who opens fixes', () => {
+  const ORG = 'org-1'
+  const projects = [
+    { id: P, name: 'lets-talk', organization_id: ORG, owner_id: 'u-owner' },
+    { id: 'p2', name: 'glot.it', organization_id: ORG, owner_id: 'u-owner' },
+    { id: 'p3', name: 'quiet', organization_id: null, owner_id: 'u-x' },
+  ]
+  const base = {
+    now: NOW,
+    projects,
+    orgOwners: new Map([[ORG, new Set(['u-owner'])]]),
+    autofixOn: new Set([P, 'p2']),
+    cursorKeys: [{ project_id: null, organization_id: null, owner_user_id: 'u-owner', status: 'disabled', spend_down_enabled: false, exhausted_until: null }],
+    jobs: [] as Array<{ project_id: string; created_at: string }>,
+    attempts: [
+      { project_id: P, agent: 'mcp', status: 'running', created_at: '2026-10-26T09:00:00Z' },
+      { project_id: P, agent: 'cursor_cloud', status: 'completed', created_at: '2026-10-24T01:00:00Z' },
+    ],
+  }
+
+  it('auto-fix on with only a disabled universal key: no agent key, 0 dispatches, local lane still runs', () => {
+    const [lets, glot, quiet] = buildDispatchers(base)
+    expect(lets).toMatchObject({
+      opener: 'both',
+      server: { agentKeys: 0, offKeys: 1, dispatches48h: 0, lastAt: '2026-10-24T01:00:00Z' },
+      local: { runs24h: 1, running: 1, lastAt: '2026-10-26T09:00:00Z' },
+      problem: 'Auto-fix is on but has no agent key (1 Cursor key off or spend-down off); 0 dispatches in 48h',
+    })
+    expect(glot.opener).toBe('nobody')
+    // Auto-fix off and a key that does not serve it: no problem to report.
+    expect(quiet).toMatchObject({ autofixOn: false, opener: 'nobody', problem: null, server: { agentKeys: 0, offKeys: 0 } })
+  })
+
+  it('an active spend-down key that dispatched recently is healthy; one that did not is flagged', () => {
+    const live = { ...base, cursorKeys: [{ ...base.cursorKeys[0], status: 'active', spend_down_enabled: true }] }
+    expect(buildDispatchers({ ...live, jobs: [{ project_id: P, created_at: '2026-10-26T10:00:00Z' }] })[0]).toMatchObject({ problem: null, server: { agentKeys: 1, dispatches24h: 1 } })
+    expect(buildDispatchers(live)[0].problem).toBe('Auto-fix has an agent key but dispatched nothing in 48h')
+    // A key Cursor refused for usage is not usable until it is back.
+    const tired = { ...live, cursorKeys: [{ ...live.cursorKeys[0], exhausted_until: '2026-10-26T18:00:00Z' }] }
+    expect(buildDispatchers(tired)[0].server.agentKeys).toBe(0)
+  })
+
+  it('becomes a red group first in the Fix PR stage, linking the spend-down switch', () => {
+    const group = dispatcherGroup(buildDispatchers(base), NOW)!
+    expect(group).toMatchObject({ id: 'autofix_no_agent', tone: 'stuck', count: 2, settings: { to: '/credits#cursor-fix-bugs' } })
+    expect(group.label).toBe('2 apps: auto-fix is on but has no agent key; 0 dispatches in 48h')
+    expect(group.items.find((i) => i.id === P)?.queueDetail).toBe('Local mushi work lanes opened 1 in 24h (1 running).')
+    const stages = withDispatcherGroup(run(), group)
+    const pr = stages.find((s) => s.id === 'pr')!
+    expect(pr.groups[0].id).toBe('autofix_no_agent')
+    expect(pr.stuck).toBe(2)
+    expect(dispatcherGroup([], NOW)).toBeNull()
   })
 })

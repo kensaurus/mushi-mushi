@@ -22,6 +22,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNow } from '../lib/useNow'
+import { useScrollToHash } from '../lib/useScrollToHash'
 import { expiryLabel } from '../lib/creditPlan'
 import type { SpendDownResponse } from '../components/settings/spendDown'
 import type { ReviewFollowupsResponse } from '../components/settings/reviewFollowups'
@@ -50,6 +51,8 @@ export function CreditsPage() {
   const now = new Date(useNow(60_000))
   const credits = usePageData<CreditsResponse>('/v1/admin/byok/credits')
   const spendDown = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down')
+  // /pipeline links here (#cursor-fix-bugs) when auto-fix is on but no Cursor key can dispatch.
+  useScrollToHash(!!spendDown.data)
   const followups = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups')
   const projects = usePageData<{ projects?: Array<{ id: string; name: string }> }>('/v1/admin/projects')
 
@@ -99,7 +102,7 @@ export function CreditsPage() {
       />
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
-      <Section title="Cursor: fix bugs">
+      <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
         <CursorLevers
           spendDown={spendDown.data ?? null}

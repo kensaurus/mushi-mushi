@@ -12,6 +12,8 @@ import { ageLabel, type PipelineStage } from '../../lib/pipeline'
 
 interface Props {
   stages: PipelineStage[]
+  /** Apps by who opened a fix in 24 h, shown on the Fix PR stage. */
+  openers?: { server: number; local: number; nobody: number } | null
   selected: string | null
   onSelect: (stageId: string | null) => void
   now: number
@@ -27,7 +29,7 @@ function split(stage: PipelineStage) {
   return { stuck: stage.stuck, moving, done }
 }
 
-export function PipelineFunnel({ stages, selected, onSelect, now }: Props) {
+export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Props) {
   const max = Math.max(1, ...stages.map((s) => s.count))
   return (
     <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8" aria-label="Pipeline stages" data-testid="pipeline-funnel">
@@ -67,6 +69,13 @@ export function PipelineFunnel({ stages, selected, onSelect, now }: Props) {
                 )}
                 {s.oldestAt && <span className="text-fg-muted tabular-nums" title={`Oldest since ${new Date(s.oldestAt).toLocaleString()}`}>oldest {ageLabel(s.oldestAt, now)}</span>}
               </span>
+              {s.id === 'pr' && openers && (
+                <span className="text-2xs text-fg-muted" data-testid="pipeline-stage-pr-openers">
+                  24h: server <span className={openers.server === 0 ? 'font-medium text-danger-foreground' : 'text-fg-secondary'}>{openers.server}</span> · local{' '}
+                  <span className="text-fg-secondary">{openers.local}</span>
+                  {openers.nobody > 0 && <> · nobody {openers.nobody}</>} apps
+                </span>
+              )}
               <span className="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
                 <span className="h-full bg-danger" style={{ width: pct(parts.stuck) }} />
                 <span className="h-full bg-info" style={{ width: pct(parts.moving) }} />
