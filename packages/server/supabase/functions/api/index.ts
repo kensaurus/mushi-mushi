@@ -722,6 +722,8 @@ forwardToApiExt([
 forwardToApiExt(['/v1/admin/projects/:id/site-audit', '/v1/admin/projects/:id/site-audit/run']);
 // merge-queue.ts (ADR 0041); deploy size limit, 2026-10-23.
 forwardToApiExt(['/v1/admin/merge-queue', '/v1/admin/merge-queue/:id', '/v1/admin/projects/:id/release-settings']);
+// pipeline.ts (console /pipeline); deploy size limit, 2026-10-26.
+forwardToApiExt(['/v1/admin/pipeline', '/v1/admin/pipeline/actions']);
 
 forwardToApiExt(['/v1/admin/projects/:id/local-followups', '/v1/admin/fixes/:id/local-followup', '/v1/admin/fixes/:id/local-followup/done']);
 // skill-runs.ts (ADR 0042); deploy size limit, 2026-10-23.
