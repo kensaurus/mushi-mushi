@@ -1431,6 +1431,13 @@ html:has(.landing-cinematic-hero) {
 }
 
 /* "Start in three steps": numbered, each with its action and a check. */
+.landing-start__extra {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 40rem;
+  margin-top: 0.9rem;
+}
+
 .landing-start {
   display: grid;
   gap: 0.75rem;
@@ -1463,7 +1470,8 @@ html:has(.landing-cinematic-hero) {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 999px;
-  background: var(--mushi-vermillion);
+  /* Darkened: white on plain vermillion is 4.3:1, under AA for small text. */
+  background: color-mix(in oklch, var(--mushi-vermillion) 78%, black);
   color: #fff;
   font-size: 0.85rem;
   font-weight: 700;

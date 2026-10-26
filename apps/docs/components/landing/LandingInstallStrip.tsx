@@ -76,12 +76,6 @@ function EditorButtons() {
           {LANDING_ONE_CLICK.moreLabel} →
         </Link>
       </div>
-      <CopyCommand
-        label={LANDING_ONE_CLICK.claudeLabel}
-        cmd={CLAUDE_CMD}
-        ctaId="landing-copy-claude"
-        location="install-strip"
-      />
       <p className="landing-oneclick__note">{LANDING_ONE_CLICK.note}</p>
     </>
   )
@@ -121,6 +115,15 @@ export function LandingInstallStrip() {
           </li>
         ))}
       </ol>
+      {/* Below the grid, not in step 3, so the three cards stay one height. */}
+      <div className="landing-start__extra">
+        <CopyCommand
+          label={LANDING_ONE_CLICK.claudeLabel}
+          cmd={CLAUDE_CMD}
+          ctaId="landing-copy-claude"
+          location="install-strip"
+        />
+      </div>
       <p className="landing-start__pricing">{LANDING_SIXTY_SECOND.pricing}</p>
     </section>
   )

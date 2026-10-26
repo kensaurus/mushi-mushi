@@ -60,9 +60,10 @@ export const LANDING_SIXTY_SECOND = {
 } as const
 
 /**
- * "Start in three steps" right under the pipeline: the same three steps as
- * the quickstart page (install → first report → first fix), each ending in
- * what you should see, so a newcomer can tell it worked.
+ * "Start in three steps" right under the pipeline: the same cycle as the
+ * console sidebar (ADR 0027: connect, bugs come in, fix and review), worded
+ * as a newcomer's first run and matching the quickstart page (install →
+ * first report → first fix). Each step ends in what you should see.
  */
 export const LANDING_HOW_IT_WORKS = {
   heading: 'Start in three steps',
@@ -94,7 +95,7 @@ export const LANDING_ONE_CLICK = {
   note: 'No key to paste. The first time your editor calls Mushi, your browser opens so you can sign in (or sign up free).',
   cursorAlt: 'Add Mushi to Cursor',
   vscodeLabel: 'Install in VS Code',
-  claudeLabel: 'Claude Code',
+  claudeLabel: 'Using Claude Code? Add Mushi with one command',
   npxCmd: 'npx mushi-mushi',
   moreLabel: 'Windsurf, Zed and more',
   moreHref: '/connect',
