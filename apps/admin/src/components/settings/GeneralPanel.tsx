@@ -47,6 +47,7 @@ import { useByokPool } from './ByokPoolContext'
 import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
+import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -108,6 +109,9 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const entitlements = useEntitlements()
   const { data, loading, error, reload } = usePageData<ProjectSettings>('/v1/admin/settings')
   const pool = useByokPool(!entitlements.loading && entitlements.has('byok'))
+  // The same verdict the Integrations card shows, from the same inputs, so
+  // the two pages never disagree about Sentry.
+  const sentryShared = useSentryConnection()
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
@@ -187,12 +191,19 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const slackStatus: RowStatusValue = slackAlertStatus(slackInput)
   const canTestSlack = slackCanOfferTest(slackInput)
 
+  // What this page alone can see: a DSN and a webhook secret are saved, or
+  // they are not. It is never a verdict — Sentry can be connected and
+  // delivering with its org slug and auth token, which live on Integrations.
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
-  const sentryStatus: RowStatusValue = !sentryDsnSaved
+  const sentrySavedHint: RowStatusValue = !sentryDsnSaved
     ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
     : saved.sentry_webhook_secret_set !== true
       ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
+  // The shared verdict wins once the credentials and probes have been read;
+  // the saved-value line fills in a detail the verdict leaves empty, and
+  // stands in while there is nothing to check (no Sentry credentials yet).
+  const sentryStatus: RowStatusValue = sentryRowStatus(sentryShared, sentrySavedHint)
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
