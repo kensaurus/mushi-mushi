@@ -43,11 +43,14 @@ inputs:
     description: 'For command=gates: pull-request number, used to scope findings on the admin UI.'
     required: false
   gates:
-    description: 'For command=gates: comma-separated subset to run. Defaults to "all".'
+    description: 'For command=gates: comma-separated subset to run. "all" = dead_handler, mock_leak, api_contract, status_claim, orphan_endpoint, unknown_call (crawl runs from Inventory → Reconcile, not here).'
     required: false
     default: 'all'
+  eslint-report:
+    description: 'For command=gates: path to an ESLint JSON report (eslint -f json) made with eslint-plugin-mushi-mushi. Required when dead_handler or mock_leak is run; without it the step fails.'
+    required: false
   repo-root:
-    description: 'For command=discover-api: directory to walk for Next.js route handlers + OpenAPI files. Defaults to GitHub workspace.'
+    description: 'For command=discover-api: directory to walk for Next.js route handlers + OpenAPI files. For command=gates: root that eslint-report file paths are made relative to. Defaults to GitHub workspace.'
     required: false
   openapi-file:
     description: 'For command=discover-api: explicit OpenAPI file path. Defaults to <repo-root>/openapi.yaml.'

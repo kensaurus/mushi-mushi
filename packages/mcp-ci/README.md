@@ -31,7 +31,7 @@ queries against your report corpus — all without leaving your workflow.
 
 | `command`          | What it does                                                                                                                                    | Required inputs                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `gates`            | Runs all five pre-release gates (`dead_handler`, `mock_leak`, `api_contract`, `crawl`, `status_claim`) for the current commit and posts a single composite status. Use `gates: 'crawl,status_claim'` to run a subset. | — (uses `commit-sha` / `pr-number` / `gates`)    |
+| `gates`            | Runs the pre-release gates (`dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) for the current commit and posts a single composite status. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
 | `discover-api`     | Walks the customer repo for Next.js route handlers + OpenAPI + (optionally) Supabase introspection and POSTs the resulting `discovered_apis` to `inventory-gates` so Gate 3 (`api_contract`) has something to diff against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
 
 ### Mushi v2.1 — passive discovery & proposal flow
@@ -117,12 +117,18 @@ jobs:
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: discover-api
 
-      # Run Gates 1–5 server-side and gate the PR on the composite status.
+      # Gates 1 + 2 read your ESLint report: lint with eslint-plugin-mushi-mushi
+      # (no-dead-handler, no-mock-leak) and save it as JSON. `|| true` keeps
+      # lint errors from stopping the job here; the gates step judges them.
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
+
+      # Run the gates and gate the PR on the composite status.
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: gates
+          eslint-report: mushi-eslint.json
           commit-sha: ${{ github.event.pull_request.head.sha }}
           pr-number: ${{ github.event.pull_request.number }}
 ```
@@ -167,8 +173,9 @@ jobs:
 | `fail-on-quota`     | no                    | `true`                                                      | Fail the step on `QUOTA_EXCEEDED`. Set `false` to warn and continue.                                                   |
 | `commit-sha`        | when `gates`          | `GITHUB_SHA`                                                | Commit the gates run against. Surfaces in the admin `/inventory ▸ Gates` view.                                         |
 | `pr-number`         | when `gates`          | —                                                           | Pull-request number used to scope `gate_findings` for the admin UI.                                                    |
-| `gates`             | when `gates`          | `'all'`                                                     | Comma-separated subset (`dead_handler,mock_leak,api_contract,crawl,status_claim`).                                     |
-| `repo-root`         | when `discover-api`   | `GITHUB_WORKSPACE`                                          | Directory to walk for Next.js route handlers + OpenAPI files.                                                          |
+| `gates`             | when `gates`          | `'all'`                                                     | Comma-separated subset of `dead_handler,mock_leak,api_contract,status_claim,orphan_endpoint,unknown_call`. `crawl` is refused: start it from Inventory → Reconcile. |
+| `eslint-report`     | when `gates` runs `dead_handler` or `mock_leak` | —                                     | Path to an ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. Without it those gates fail the step instead of passing on no evidence. |
+| `repo-root`         | when `discover-api`   | `GITHUB_WORKSPACE`                                          | Directory to walk for Next.js route handlers + OpenAPI files. For `gates`, the root `eslint-report` paths are made relative to. |
 | `openapi-file`      | when `discover-api`   | `<repo-root>/openapi.yaml`                                  | Explicit OpenAPI file path.                                                                                            |
 | `supabase-url`      | when `discover-api`   | —                                                           | Supabase project URL to introspect via `/rest/v1/` for `db_deps`.                                                      |
 | `supabase-anon-key` | when `discover-api`   | —                                                           | Supabase anon key for the introspection.                                                                               |
