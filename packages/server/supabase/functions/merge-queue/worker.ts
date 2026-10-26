@@ -368,6 +368,34 @@ export function queueOrder(a: { state: string; queued_at: string; pr_number: num
   return (IN_PROGRESS[a.state] ?? 9) - (IN_PROGRESS[b.state] ?? 9) || (a.queued_at ?? '').localeCompare(b.queued_at ?? '') || a.pr_number - b.pr_number
 }
 
+/** Conflict agents running at once in one train repo: each agent's push runs that repo's CI. */
+export const CONFLICT_AGENTS_PER_REPO = 2
+
+/**
+ * A train app's `resolving` rows (ADR 0044) get their own pass, because the
+ * train tick holds the repo on every tick: the single-PR loop skipped them,
+ * and from 2026-10-24 to 10-26 fourteen glot.it rows sat in `resolving` with
+ * no agent ever started. Every running agent is polled; new ones start,
+ * oldest first, while fewer than CONFLICT_AGENTS_PER_REPO run in the repo;
+ * the rest wait their turn and say how many are ahead.
+ */
+export function pickConflictRows<T extends { repo: string; cursor_agent_id: string | null; state: string; queued_at: string; pr_number: number }>(
+  rows: T[],
+): { work: T[]; inLine: Array<{ row: T; ahead: number }> } {
+  const work: T[] = []
+  const inLine: Array<{ row: T; ahead: number }> = []
+  const byRepo = new Map<string, T[]>()
+  for (const r of rows) byRepo.set(r.repo, [...(byRepo.get(r.repo) ?? []), r])
+  for (const repoRows of byRepo.values()) {
+    const running = repoRows.filter((r) => r.cursor_agent_id)
+    const waiting = repoRows.filter((r) => !r.cursor_agent_id).sort(queueOrder)
+    const free = Math.max(0, CONFLICT_AGENTS_PER_REPO - running.length)
+    work.push(...running, ...waiting.slice(0, free))
+    waiting.slice(free).forEach((row, i) => inLine.push({ row, ahead: running.length + free + i }))
+  }
+  return { work, inLine }
+}
+
 export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, projectId?: string): Promise<Record<string, number>> {
   const now = deps.now ?? (() => new Date())
   const nowIso = now().toISOString()
@@ -380,7 +408,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
   const repos = new Set<string>(all.filter((r) => r.claimed_until && r.claimed_until >= nowIso).map((r) => r.repo))
   let rows = all.filter((r) => !r.claimed_until || r.claimed_until < nowIso).sort(queueOrder)
   const tally: Record<string, number> = {}
-  let trainResolving = new Set<string>()
+  let conflictRows: typeof rows = []
 
   // Release trains (ADR 0044): apps in train mode batch their approved PRs;
   // only express fixes (security advisories, critical bugs) merge alone.
@@ -418,8 +446,9 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     }
     // Train apps keep two things on the single-PR path: express fixes, and
     // PRs a conflict agent is resolving (the train marked them `resolving`).
-    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id) || r.state === 'resolving')
-    trainResolving = new Set(rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id)).map((r) => r.id))
+    // The latter do not share the repo's one-row slot the train just took.
+    conflictRows = rows.filter((r) => trainProjects.has(r.project_id) && !express.has(r.id) && r.state === 'resolving')
+    rows = rows.filter((r) => !trainProjects.has(r.project_id) || express.has(r.id))
   }
   // One active row per repo, then some blocked re-checks.
   const picked: QueueRow[] = []
@@ -436,7 +465,13 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
     repos.add(r.repo)
     picked.push(r)
   }
-  for (const row of picked) {
+  const { work: conflictWork, inLine } = pickConflictRows(conflictRows)
+  for (const { row, ahead } of inLine) {
+    const detail = `Conflicts with the base branch; waits for a free conflict agent (${ahead} ahead in this repo), then rides a release train.`
+    if (row.detail !== detail) await db.from('fix_merge_queue').update({ detail, updated_at: nowIso }).eq('id', row.id)
+  }
+  const trainResolving = new Set(conflictWork.map((r) => r.id))
+  for (const row of [...picked, ...conflictWork]) {
     const until = new Date(now().getTime() + LEASE_MS).toISOString()
     const { data: claimed } = await db
       .from('fix_merge_queue')
