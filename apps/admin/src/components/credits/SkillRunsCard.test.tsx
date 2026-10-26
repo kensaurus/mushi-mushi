@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../lib/skillRuns', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/skillRuns')>()
+  const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, loadSkillRuns: mocks.loadSkillRuns }
 })
 
