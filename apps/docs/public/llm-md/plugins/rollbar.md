@@ -12,9 +12,10 @@ description: Copy triaged Mushi bug reports into Rollbar items and resolve them 
 Copies each bug Mushi triages into Rollbar as an item, and resolves the item
 when Mushi applies a fix.
 
-**Not available on Mushi Cloud yet.** The console's Marketplace has no
-Rollbar listing, so Mushi Cloud cannot send this plugin events. It works with
-a Mushi server you run yourself once you add a `plugin_registry` row for it.
+**Not in the Mushi Cloud Marketplace yet.** The console has no Rollbar
+listing, so you can't install it from there. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin.
 To bring Rollbar errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
 ## Setup (self-hosted Mushi)

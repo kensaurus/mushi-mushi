@@ -6,9 +6,9 @@ Copies each bug Mushi triages into Rollbar as an item, so user reports sit
 next to your Rollbar errors, and resolves that item when Mushi applies a fix.
 
 **Status on Mushi Cloud:** the console's **Marketplace** has no Rollbar
-listing (checked 2026-10-26), so Mushi Cloud cannot send this plugin events
-yet. It works with a Mushi server you run yourself once you add a
-`plugin_registry` row for it. Getting Rollbar errors *into* Mushi is the
+listing yet (checked 2026-10-26), so you can't install it from the console.
+On a Mushi server you run yourself, add a `plugin_registry` row for it and
+install it like any listed plugin. Getting Rollbar errors *into* Mushi is the
 separate `@mushi-mushi/adapters` package.
 
 ```bash

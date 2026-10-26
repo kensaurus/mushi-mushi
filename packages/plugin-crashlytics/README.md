@@ -7,9 +7,9 @@ Firebase Remote Config, which your mobile app can read to stop showing a
 stale crash notice.
 
 **Status on Mushi Cloud:** the console's **Marketplace** has no Crashlytics
-listing (checked 2026-10-26), so Mushi Cloud cannot send this plugin events
-yet. It works with a Mushi server you run yourself once you add a
-`plugin_registry` row for it. Getting Crashlytics crashes *into* Mushi is the
+listing yet (checked 2026-10-26), so you can't install it from the console.
+On a Mushi server you run yourself, add a `plugin_registry` row for it and
+install it like any listed plugin. Getting Crashlytics crashes *into* Mushi is the
 separate `@mushi-mushi/adapters` package.
 
 ```bash
