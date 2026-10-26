@@ -394,10 +394,10 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
-**Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
-**Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
+- **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
+- **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
-What you need, and what `npx` does
+What you need first
 
 - An app you are building, for the web or for phones.
 - A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
