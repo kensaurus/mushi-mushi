@@ -87,7 +87,7 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device WASM SLM — pre-classifies before sending |
+| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device pre-classifier (heuristic; ONNX mode experimental) — drops junk before sending |
 | [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
 | [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
 | [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
