@@ -67,7 +67,7 @@ export interface MergeQueueDeps {
   agentDone: (apiKey: string, agentId: string) => Promise<{ done: boolean; result: string | null }>
   requeueReview: typeof requeueReviewForNewHead
   /** Release trains (ADR 0044); absent → every app merges PR by PR. */
-  train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'finalize' | 'requeueReview' | 'now'>
+  train?: Omit<TrainDeps, 'pull' | 'checks' | 'updateBranch' | 'ready' | 'finalize' | 'requeueReview' | 'now'>
 }
 
 export interface AttemptRow {
@@ -407,7 +407,7 @@ export async function runMergeQueue(db: SupabaseClient, deps: MergeQueueDeps, pr
         const { data: att } = await db.from('fix_attempts').select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, repo_id, summary').eq('id', lead.fix_attempt_id).maybeSingle()
         const token = att ? await deps.token(db, att as AttemptRow) : null
         outcome = token
-          ? await runTrainTick(db, { repo, projectId: lead.project_id, token, rows: repoRows, settings: trainProjects.get(lead.project_id)! }, { ...deps.train, pull: deps.pull, checks: deps.checks, updateBranch: deps.updateBranch, finalize: deps.finalize, requeueReview: deps.requeueReview, now })
+          ? await runTrainTick(db, { repo, projectId: lead.project_id, token, rows: repoRows, settings: trainProjects.get(lead.project_id)! }, { ...deps.train, pull: deps.pull, checks: deps.checks, updateBranch: deps.updateBranch, ready: deps.ready, finalize: deps.finalize, requeueReview: deps.requeueReview, now })
           : 'no_token'
       } catch (err) {
         log.warn('release train tick failed', { repo, err: err instanceof Error ? err.message : String(err) })
