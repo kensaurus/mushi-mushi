@@ -471,7 +471,7 @@ npx mushi-mushi setup --ide cursor
 
 Then ask your editor: *"Get the latest Mushi report and fix it."*
 
-**You'll see:** a fix brief in your editor: the cause, the files to change and how to check it.
+**You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
 
 ## Pick your framework
 

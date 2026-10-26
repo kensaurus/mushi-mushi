@@ -1434,7 +1434,8 @@ html:has(.landing-cinematic-hero) {
 .landing-start__extra {
   display: grid;
   gap: 0.4rem;
-  max-width: 40rem;
+  /* Wide enough for the whole `claude mcp add …` command at desktop; it still scrolls on a phone. */
+  max-width: 48rem;
   margin-top: 0.9rem;
 }
 

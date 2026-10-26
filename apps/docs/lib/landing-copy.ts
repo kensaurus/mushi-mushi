@@ -81,7 +81,7 @@ export const LANDING_HOW_IT_WORKS = {
     {
       title: 'Get your first fix',
       desc: 'Connect your AI editor in one click, then ask it: "Get the latest Mushi report and fix it."',
-      check: 'A fix brief in your editor: the cause, the files to change and how to check it.',
+      check: 'A fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.',
     },
   ],
 } as const
