@@ -420,7 +420,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       // validation.data) to ingestReport so SDK fields not in the schema are preserved.
       const bodyValidation = safeParse(ApiReportBodySchema, body);
       if (bodyValidation instanceof Response) {
-        logReportRejected(projectId, 'body', ApiReportBodySchema.safeParse(body).error?.issues ?? []);
+        logReportRejected(projectId, 'body', ApiReportBodySchema.safeParse(body).error?.issues ?? [], body);
         return bodyValidation;
       }
 
