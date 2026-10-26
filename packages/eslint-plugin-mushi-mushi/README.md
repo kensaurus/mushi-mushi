@@ -9,6 +9,12 @@ ESLint rules that catch the dominant agentic-coding failure modes: empty handler
 
 ## Rules
 
+`recommended` (and `legacy`) turn on the first two rules and
+`no-allowlist-jsx-textnode`. The other rules check the Mushi console's own
+design system (its tokens, `<Card>`, `<PageHeaderBar>`, the widget theme)
+and are only in the Mushi monorepo's `internal` preset. Turn one on by name
+if it fits your app.
+
 | Rule | What it catches |
 | ---- | ---- |
 | `mushi-mushi/no-dead-handler` | `onClick={() => {}}`, `() => null` placeholders, `console.log`-only handlers, `throw new Error('not implemented')` stubs, `useCallback(() => {}, [])`. |
