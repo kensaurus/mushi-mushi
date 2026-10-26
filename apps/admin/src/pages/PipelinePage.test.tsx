@@ -131,7 +131,11 @@ function fixture(): PipelineData {
           count: 2,
           oldestAt: '2026-10-23T12:00:00Z',
           actions: ['ci_repair', 'rerun_ci'],
-          settings: { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' },
+          settings: {
+            label: 'Review follow-ups setting',
+            to: '/settings?tab=byok#review-followups',
+            hint: 'Cloud follow-up agents need a Cursor key on this team. Without one, your local mushi work --followups lanes take follow-ups and CI repairs.',
+          },
           items: [item('f1', { failingChecks: ['Build & Test'], lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' }), item('f2')],
         },
       ]),
@@ -247,6 +251,7 @@ describe('PipelinePage', () => {
   it('opens a group to its items with the evidence and links the blocking setting', async () => {
     await render()
     expect(q('pipeline-group-ci_red_queued-settings')!.getAttribute('href')).toBe('/settings?tab=byok#review-followups')
+    expect(q('pipeline-group-ci_red_queued-settings-hint')!.textContent).toContain('local mushi work --followups lanes take follow-ups and CI repairs')
     await click(q('pipeline-group-ci_red_queued-toggle'))
     const f1 = q('pipeline-item-f1')!
     expect(f1.textContent).toContain('Report f1')
@@ -265,7 +270,7 @@ describe('PipelinePage', () => {
             ok: true,
             data: {
               results: [
-                { id: 'f1', ok: true, message: 'Queued a CI-repair agent; it starts within 10 minutes.' },
+                { id: 'f1', ok: true, message: 'Queued for the local mushi work lanes (glot.it): mushi work --followups takes it on its next run. Review follow-ups are off for this team.' },
                 { id: 'f2', ok: false, message: 'Not queued. Review follow-ups are turned off for this organization.' },
               ],
             },
@@ -274,14 +279,14 @@ describe('PipelinePage', () => {
     await render()
     await click(q('pipeline-group-ci_red_queued-ci_repair'))
     expect(state.posts).toEqual([])
-    expect(document.body.textContent).toContain('Queues one Cursor agent per PR')
+    expect(document.body.textContent).toContain('otherwise your local mushi work lanes')
     const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Send to CI repair' && b.hasAttribute('data-primary'))!
     await click(confirm)
     await flush()
     expect(state.posts).toEqual([{ path: '/v1/admin/pipeline/actions', body: { action: 'ci_repair', fixIds: ['f1', 'f2'] } }])
     expect(state.reloads).toBe(1)
     await click(q('pipeline-group-ci_red_queued-toggle'))
-    expect(q('pipeline-item-f1-result')!.textContent).toBe('Queued a CI-repair agent; it starts within 10 minutes.')
+    expect(q('pipeline-item-f1-result')!.textContent).toBe('Queued for the local mushi work lanes (glot.it): mushi work --followups takes it on its next run. Review follow-ups are off for this team.')
     expect(q('pipeline-item-f2-result')!.textContent).toContain('turned off')
   })
 

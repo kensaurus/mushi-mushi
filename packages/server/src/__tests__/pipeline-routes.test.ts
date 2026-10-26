@@ -8,7 +8,10 @@
  *            - POST /v1/admin/pipeline/actions: viewers and other teams are
  *              refused per item; close and remove need a reason, kept as a
  *              team note on the report; a conflict agent is refused once the
- *              PR used both; CI repair says why it was not queued; train
+ *              PR used both, and with no cloud agent possible says a
+ *              person resolves it on GitHub; CI repair and fix-first
+ *              follow-ups go to the cloud agent when it can run, else to
+ *              the local mushi work lanes (or say why neither can); train
  *              retry says honestly when no train could leave.
  */
 
@@ -21,6 +24,7 @@ const state = vi.hoisted(() => ({
   roles: {} as Record<string, string>,
   query: {} as Record<string, string>,
   enqueue: { queued: false, reason: 'followups_off' } as { queued: boolean; reason?: string; error?: string },
+  followupsOn: false,
   finalized: [] as string[],
 }))
 
@@ -46,6 +50,7 @@ vi.mock('../../supabase/functions/_shared/fix-merge.ts', () => ({
 vi.mock('../../supabase/functions/_shared/review-followup-db.ts', async (orig) => ({
   ...((await orig()) as Record<string, unknown>),
   enqueueReviewFollowup: async () => state.enqueue,
+  followupsEnabledForProject: async () => ({ enabled: state.followupsOn, enabledAt: null }),
 }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
   dbError: (c: { json: (b: unknown, s: number) => unknown }, err: { message?: string } | null) =>
@@ -185,6 +190,7 @@ function setup() {
   state.query = {}
   state.finalized = []
   state.enqueue = { queued: false, reason: 'followups_off' }
+  state.followupsOn = false
   const app = new FakeApp()
   routes.registerPipelineRoutes(app as never, deps as never)
   return { app, db, calls }
@@ -292,8 +298,10 @@ describe('POST /v1/admin/pipeline/actions', () => {
     expect(db.table('fix_merge_queue').find((q) => q.id === 'q3')?.state).toBe('resolving')
   })
 
-  it('a conflict agent under the cap hands the row back to the worker', async () => {
+  it('a conflict agent under the cap hands the row back to the worker when a cloud agent can run', async () => {
     const { app, db, calls } = setup()
+    state.followupsOn = true
+    db.table('byok_keys').find((k) => k.id === 'k1')!.status = 'active'
     db.table('fix_merge_queue').find((q) => q.id === 'q3')!.conflict_agents = 1
     const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'conflict_agent', fixIds: [F3] })
     expect((res.body.data as { results: Array<{ ok: boolean }> }).results[0].ok).toBe(true)
@@ -301,14 +309,73 @@ describe('POST /v1/admin/pipeline/actions', () => {
     expect(calls).toContain(`run:${P2}`)
   })
 
-  it('CI repair says, in plain words, why it was not queued', async () => {
-    const { app } = setup()
+  it('with no cloud agent possible, a conflict needs a person on GitHub, with the PR link', async () => {
+    const { app, db, calls } = setup()
+    db.table('fix_merge_queue').find((q) => q.id === 'q3')!.conflict_agents = 1
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'conflict_agent', fixIds: [F3] })
+    const [r] = (res.body.data as { results: Array<{ ok: boolean; message: string }> }).results
+    expect(r.ok).toBe(false)
+    expect(r.message).toBe(
+      'Needs a person: resolve the conflict on GitHub (https://github.com/kensaurus/glot.it/pull/0). Review follow-ups are off for this team, so no conflict agent can run.',
+    )
+    expect(db.table('fix_merge_queue').find((q) => q.id === 'q3')).toMatchObject({ state: 'resolving', conflict_agents: 1 })
+    expect(calls).toEqual([])
+  })
+
+  it('CI repair goes to the cloud agent when follow-ups can run there', async () => {
+    const { app, db } = setup()
+    state.followupsOn = true
+    db.table('byok_keys').find((k) => k.id === 'k1')!.status = 'active'
+    state.enqueue = { queued: true }
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({ ok: true, message: 'Queued a cloud CI-repair agent; it starts within 10 minutes.' })
+    expect(db.table('fix_events').filter((e) => String(e.dedupe_key ?? '').startsWith('local-ci-repair-request:'))).toHaveLength(0)
+  })
+
+  it('CI repair with cloud follow-ups off is handed to the local mushi work lanes, which read the request', async () => {
+    const { app, db } = setup()
     const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
     const [r] = (res.body.data as { results: Array<{ ok: boolean; message: string }> }).results
-    expect(r).toMatchObject({ ok: false, message: 'Not queued. Review follow-ups are turned off for this organization.' })
-    state.enqueue = { queued: true }
-    const ok = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
-    expect((ok.body.data as { results: Array<{ ok: boolean }> }).results[0].ok).toBe(true)
+    expect(r).toMatchObject({
+      ok: true,
+      message: 'Queued for the local mushi work lanes (glot.it): mushi work --followups takes it on its next run. Review follow-ups are off for this team.',
+    })
+    const req = db.table('fix_events').find((e) => e.dedupe_key === `local-ci-repair-request:${F1}:head-${F1}`)
+    expect(req).toMatchObject({ fix_attempt_id: F1, kind: 'followup', status: 'pending', label: 'CI repair handed to the local lanes' })
+    // Twice is one request (dedupe key), and still a success.
+    const again = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
+    expect((again.body.data as { results: Array<{ ok: boolean }> }).results[0].ok).toBe(true)
+  })
+
+  it('CI repair with follow-ups on but no usable Cursor key also goes local', async () => {
+    const { app } = setup()
+    state.followupsOn = true
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
+    // With cloud follow-ups on, a cloud-agent PR is not the local lanes' either: it says why neither can.
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('No Cursor key can run cloud agents for this app, and the local mushi work lanes cannot take it'),
+    })
+  })
+
+  it('a hand-off the local lanes cannot take says why: CI is green', async () => {
+    const { app, db } = setup()
+    db.table('ci_jobs').find((j) => j.head_sha === `head-${F1}`)!.conclusion = 'success'
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('Review follow-ups are off for this team, and the local mushi work lanes cannot take it: CI on its commit is not failing'),
+    })
+  })
+
+  it('a fix-first follow-up goes to the local lanes while cloud follow-ups are off', async () => {
+    const { app, db } = setup()
+    const rv = db.table('fix_reviews').find((r) => r.fix_attempt_id === F1)!
+    rv.verdict = 'fix_first'
+    rv.findings = [{ issue: 'Fixes one case of three.', severity: 'major' }]
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'followup', fixIds: [F1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({ ok: true, message: expect.stringContaining('Queued for the local mushi work lanes (glot.it)') })
+    expect(db.table('fix_events').find((e) => e.dedupe_key === `local-followup-request:${F1}:head-${F1}`)).toBeTruthy()
   })
 
   it('train retry runs the queue and says when no train could leave yet', async () => {
