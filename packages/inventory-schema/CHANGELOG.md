@@ -1,5 +1,11 @@
 # @mushi-mushi/inventory-schema
 
+## 0.4.4
+
+### Patch Changes
+
+- 6b485ac: Require zod 4.6.7 or later, which fixes GHSA-mrhx-c7xc-m3w5: validating an oversized constrained collection could exhaust memory.
+
 ## 0.4.3
 
 ### Patch Changes

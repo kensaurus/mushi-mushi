@@ -491,12 +491,21 @@ export function describeCi(
   conclusion: string | null | undefined,
   status: string | null | undefined,
   ciInfra?: unknown,
+  prDraft = false,
 ): { text: string; failed: boolean; infra?: true } {
   const infra = readFixCiInfra(ciInfra)
   if (infra?.infra) {
     return { text: `did not finish (${describeCiInfra(infra)})`, failed: false, infra: true }
   }
   const c = (conclusion ?? '').toLowerCase()
+  // Host repos run no CI on a draft (their required gate fails on purpose
+  // with "Draft PRs run no CI") and run it when the PR is marked ready, which
+  // happens after this review. A red check on a draft is not a test result:
+  // reading it as one held good fixes as "CI failed, cause not shown" (25 of
+  // the holds on 2026-10-26). The merge gates still need green CI later.
+  if (prDraft && c !== 'success') {
+    return { text: 'not run yet (the PR is a draft; the repo runs CI when it is marked ready, after this review)', failed: false }
+  }
   if (c === 'success') return { text: 'passed', failed: false }
   if (c === 'failure' || c === 'timed_out' || c === 'cancelled' || c === 'action_required') {
     return { text: `failed (${c})`, failed: true }

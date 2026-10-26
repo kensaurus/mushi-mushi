@@ -30,7 +30,7 @@ import {
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
 import { buildFollowupPrompt, screenFindings, type FollowupFinding } from '../../_shared/review-followup.ts';
-import { LOCAL_FIX_AGENT, localFollowupDedupe, localFollowupGate } from '../../_shared/local-followup.ts';
+import { CLOUD_FIX_AGENTS, LOCAL_FIX_AGENT, localFollowupAllowedFor, localFollowupDedupe, localFollowupGate, localFollowupSkipDedupe } from '../../_shared/local-followup.ts';
 import { dbError, callerCanAccessProject, parseUuidParam } from '../shared.ts';
 
 const llog = log.child('local-followups');
@@ -71,23 +71,36 @@ function asFindings(raw: unknown): FollowupFinding[] {
     .filter((f) => f.issue.trim() !== '');
 }
 
-/** Heads a local round was claimed for, per fix. */
+/**
+ * Heads a follow-up round already ran for, per fix: local rounds (claimed
+ * events) and cloud rounds whose agent started, so one PR gets at most
+ * FOLLOWUP_MAX_PER_PR rounds whichever worker ran them.
+ */
 async function roundHeadsFor(db: ReturnType<typeof getServiceClient>, fixIds: string[]): Promise<Map<string, string[]> | { error: string }> {
   const out = new Map<string, string[]>();
   if (fixIds.length === 0) return out;
-  const { data, error } = await db
-    .from('fix_events')
-    .select('fix_attempt_id, dedupe_key')
-    .in('fix_attempt_id', fixIds)
-    .eq('kind', 'followup')
-    .like('dedupe_key', 'local-followup:%');
-  if (error) return { error: error.message };
-  for (const row of (data ?? []) as Array<{ fix_attempt_id: string; dedupe_key: string }>) {
-    const head = row.dedupe_key.split(':')[2];
-    if (!head) continue;
-    out.set(row.fix_attempt_id, [...(out.get(row.fix_attempt_id) ?? []), head]);
-  }
+  const add = (fixId: string, head: string | null | undefined) => {
+    if (!head) return;
+    const heads = out.get(fixId) ?? [];
+    if (!heads.includes(head)) out.set(fixId, [...heads, head]);
+  };
+  const [local, cloud] = await Promise.all([
+    db.from('fix_events').select('fix_attempt_id, dedupe_key').in('fix_attempt_id', fixIds).eq('kind', 'followup').like('dedupe_key', 'local-followup:%'),
+    db.from('fix_review_followups').select('fix_attempt_id, head_sha_before').in('fix_attempt_id', fixIds).not('cursor_agent_id', 'is', null),
+  ]);
+  if (local.error) return { error: local.error.message };
+  if (cloud.error) return { error: cloud.error.message };
+  for (const row of (local.data ?? []) as Array<{ fix_attempt_id: string; dedupe_key: string }>) add(row.fix_attempt_id, row.dedupe_key.split(':')[2]);
+  for (const row of (cloud.data ?? []) as Array<{ fix_attempt_id: string; head_sha_before: string | null }>) add(row.fix_attempt_id, row.head_sha_before);
   return out;
+}
+
+/** Whether the project's team runs cloud review follow-ups (then cloud-agent PRs are theirs, not a local agent's). */
+async function cloudFollowupsOn(db: ReturnType<typeof getServiceClient>, projectId: string): Promise<boolean | { error: string }> {
+  const { data, error } = await db.from('projects').select('organizations(review_followup_enabled)').eq('id', projectId).maybeSingle();
+  if (error) return { error: error.message };
+  const org = (data as { organizations?: { review_followup_enabled?: boolean | null } | null } | null)?.organizations;
+  return org?.review_followup_enabled === true;
 }
 
 /** The fix, if the caller may change it (members; viewers only read). */
@@ -120,22 +133,30 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       .from('fix_attempts')
       .select(ATTEMPT_COLUMNS)
       .eq('project_id', projectId)
-      .eq('agent', LOCAL_FIX_AGENT)
+      .in('agent', [LOCAL_FIX_AGENT, ...CLOUD_FIX_AGENTS])
       .not('pr_url', 'is', null)
       .is('merged_at', null)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(100);
     if (error) return dbError(c, error);
-    const open = ((attempts ?? []) as AttemptRow[]).filter((a) => a.pr_state !== 'merged' && a.pr_state !== 'closed');
+    const cloudOn = await cloudFollowupsOn(db, projectId);
+    if (typeof cloudOn !== 'boolean') return c.json({ ok: false, error: { code: 'DB_ERROR', message: cloudOn.error } }, 500);
+    const open = ((attempts ?? []) as AttemptRow[]).filter(
+      (a) => a.pr_state !== 'merged' && a.pr_state !== 'closed' && localFollowupAllowedFor(a.agent, cloudOn),
+    );
     if (open.length === 0) return c.json({ ok: true, data: { fixes: [] } });
 
     const ids = open.map((a) => a.id);
-    const [{ data: reviews, error: reviewErr }, heads] = await Promise.all([
+    const [{ data: reviews, error: reviewErr }, heads, { data: skips, error: skipErr }] = await Promise.all([
       db.from('fix_reviews').select('fix_attempt_id, status, verdict, head_sha, findings').in('fix_attempt_id', ids),
       roundHeadsFor(db, ids),
+      db.from('fix_events').select('fix_attempt_id, dedupe_key').in('fix_attempt_id', ids).like('dedupe_key', 'local-followup-skip:%'),
     ]);
     if (reviewErr) return dbError(c, reviewErr);
+    if (skipErr) return dbError(c, skipErr);
+    // Heads whose findings the safety screen dropped entirely: no round can run there.
+    const skipped = new Set(((skips ?? []) as Array<{ fix_attempt_id: string; dedupe_key: string }>).map((e) => `${e.fix_attempt_id}:${e.dedupe_key.split(':')[2] ?? ''}`));
     if ('error' in heads) return c.json({ ok: false, error: { code: 'DB_ERROR', message: heads.error } }, 500);
     const byFix = new Map(((reviews ?? []) as Array<{ fix_attempt_id: string; status: string; verdict: string | null; head_sha: string | null; findings: unknown }>).map((r) => [r.fix_attempt_id, r]));
 
@@ -147,13 +168,16 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       if (a.commit_sha && a.commit_sha !== r.head_sha) continue;
       const done = heads.get(a.id) ?? [];
       if (done.includes(r.head_sha) || done.length >= 2) continue;
+      // A "fix first" with no findings gives the agent nothing to do; the claim refuses it (NO_FINDINGS).
+      const findings = asFindings(r.findings).length;
+      if (findings === 0 || skipped.has(`${a.id}:${r.head_sha}`)) continue;
       fixes.push({
         fixId: a.id,
         reportId: a.report_id,
         prUrl: a.pr_url,
         prNumber: a.pr_number,
         headSha: r.head_sha,
-        findings: asFindings(r.findings).length,
+        findings,
         round: done.length + 1,
       });
     }
@@ -192,7 +216,9 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       }
     }
 
-    const gate = localFollowupGate({ attempt, review: review.row, livePr, roundHeads: heads.get(attempt.id) ?? [] });
+    const cloudOn = await cloudFollowupsOn(db, attempt.project_id);
+    if (typeof cloudOn !== 'boolean') return c.json({ ok: false, error: { code: 'DB_ERROR', message: cloudOn.error } }, 500);
+    const gate = localFollowupGate({ attempt, review: review.row, livePr, roundHeads: heads.get(attempt.id) ?? [], cloudFollowupsOn: cloudOn });
     if (!gate.ok) return c.json({ ok: false, error: { code: gate.code, message: gate.message } }, gate.status);
 
     // Only findings about files this PR changed, with no URL, command or
@@ -213,6 +239,19 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
     const d = screened.dropped;
     const droppedCount = d.url + d.command + d.injection + d.ciConfig + d.notInPr + d.ciInfra;
     if (screened.kept.length === 0) {
+      // Remember it for this head, so the list stops offering a round the screen will always refuse.
+      const { error: skipErr } = await db.from('fix_events').insert({
+        fix_attempt_id: attempt.id,
+        project_id: attempt.project_id,
+        kind: 'followup',
+        status: 'fail',
+        label: 'Local follow-up skipped',
+        detail: `All ${droppedCount} Opus findings were left out by the safety screen; a person decides this one.`,
+        at: new Date().toISOString(),
+        dedupe_key: localFollowupSkipDedupe(attempt.id, gate.headSha),
+        payload: { local: true, headSha: gate.headSha, dropped: droppedCount },
+      });
+      if (skipErr && skipErr.code !== '23505') llog.warn('local-followup skip not recorded', { fixId: attempt.id, err: skipErr.message });
       return c.json(
         {
           ok: false,

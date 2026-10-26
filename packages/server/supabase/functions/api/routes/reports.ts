@@ -19,7 +19,7 @@ import {
 } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
-import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
+import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
 import { buildReportFixPacket } from './report-agent-context.ts';
 import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
@@ -1390,6 +1390,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         400,
       );
     }
+    // `note`: why the change was made, kept as a team note (internal, never
+    // sent to the reporter). MCP transition_status sends its `reason` here.
+    const teamNote = typeof body.note === 'string' ? body.note.trim() : '';
+    if (teamNote.length > 4_000) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'note is at most 4000 chars' } }, 400);
+    }
 
     if (typeof updates.status === 'string') {
       const normalized = normalizeAdminStatus(updates.status as string);
@@ -1413,7 +1419,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       updates.reopened_at = new Date().toISOString();
     }
 
-    if (Object.keys(updates).length === 0 && !reporterMessage) {
+    if (Object.keys(updates).length === 0 && !reporterMessage && !teamNote) {
       return c.json(
         { ok: false, error: { code: 'NO_FIELDS', message: 'No valid fields to update' } },
         400,
@@ -1495,6 +1501,13 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         authorName: 'Developer',
       });
       if (reply.status !== 201) return c.json(reply.body, reply.status);
+    }
+
+    if (teamNote) {
+      // A note for a report this caller cannot read must not look saved.
+      if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+      const saved = await postTeamNote(db, { projectId: report.project_id as string, reportId, body: teamNote, authorName: 'API key / MCP' });
+      if (!saved.ok) return c.json({ ok: false, error: { code: 'NOTE_NOT_SAVED', message: saved.error } }, 500);
     }
 
     return c.json({ ok: true });

@@ -1,5 +1,17 @@
 # @mushi-mushi/ux
 
+## 0.2.0
+
+### Minor Changes
+
+- 3910786: New `mushi-ux audit`: finds UI/UX bugs on the signed-in screens of a live app, read-only, and files them as Mushi reports. It reuses a cached, signed-in browser profile (`--profile-dir`, opened with the installed Chrome) and never opens a fresh sign-in window. Findings come from measurements first (serious accessibility rules, sideways scrolling, console errors, layout shift, a blank screen); `--review claude-code|anthropic-api` adds concrete visual defects on whole pages. `--file` files at most 15 deduped reports a run; `--dry-run` lists them. `discover` and `run` also take `--profile-dir` and `--channel`.
+- 74e95e6: `mushi-ux explore` lets a model (the Cursor CLI, Grok by default) use the signed-in app like a careless user in the audit's read-only browser, and files only errors that happen again when its steps are replayed without the model (ADR 0046). `mushi-ux audit --review cursor` and `--checker-via cursor` review screenshots through the Cursor CLI in read-only ask mode.
+- 863ccf9: Two new layout probes. `overlap` finds in-flow siblings drawn on top of each other, and `outgrows` finds buttons and links that stick out of their container, wrap past two lines or cut their own label off. Deliberate overlap is skipped: positioned layers, negative margins (avatar stacks), transforms, grid items placed in one cell and scroll containers. `mushi-ux audit` files them as one finding per page and rule, the agent packet and judge see them, and a run that adds overlapping or oversized boxes is rolled back.
+
+### Patch Changes
+
+- 6b485ac: Require zod 4.6.7 or later, which fixes GHSA-mrhx-c7xc-m3w5: validating an oversized constrained collection could exhaust memory.
+
 ## 0.1.2
 
 ### Patch Changes
