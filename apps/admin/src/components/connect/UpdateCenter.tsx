@@ -183,8 +183,10 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
             <span className={`${CHIP} ${ci.tone}`}>{ci.label}</span>
           </p>
           <p className="text-2xs text-fg-muted">
-            Review and merge it on GitHub. Lockfile: your Mushi lockfile workflow refreshes it on
-            the PR branch; without one, run your package manager after merging.
+            Review and merge it on GitHub.{' '}
+            {view.lockfileNote
+              ? view.lockfileNote
+              : 'Lockfile: your Mushi lockfile workflow refreshes it on the PR branch; without one, run your package manager after merging.'}
           </p>
         </div>
       )}
