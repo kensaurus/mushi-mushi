@@ -1,7 +1,8 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
- *          Experiments | New, readout at the foot.
+ *          Experiments | New, readout at the foot. Below sm, each experiment
+ *          row stacks so Launch and its icon button stay fully visible at 390px.
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -399,45 +400,56 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
         <Btn size="sm" variant="primary" onClick={onCreate}>+ New experiment</Btn>
       </div>
     )}
-    <Card className="overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
+    <Card className="min-w-0 overflow-hidden">
+      {/* Six columns overflow a 390px card and clip Launch down to "L", plus
+          the trailing icon. Below sm the row is a stack: the name truncates
+          and the actions sit on a full-width line. */}
+      <table className="block w-full text-sm sm:table">
+        <thead className="hidden sm:table-header-group">
           <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
             <th className="px-3 py-2 text-left">Name</th>
             <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-left">Variants</th>
-            <th className="px-3 py-2 text-left">Mode</th>
+            <th className="hidden px-3 py-2 text-left md:table-cell">Variants</th>
+            <th className="hidden px-3 py-2 text-left md:table-cell">Mode</th>
             <th className="px-3 py-2 text-left">Created</th>
-            <th className="px-3 py-2" />
+            <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="block sm:table-row-group">
           {experiments.map((e) => (
-            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
-              <td className="px-3 py-2">
-                <div className="font-medium text-fg">{e.name}</div>
+            <tr key={e.id} className="block border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity sm:table-row">
+              <td className="block min-w-0 px-3 pt-2 sm:table-cell sm:py-2">
+                <div className="font-medium text-fg wrap-break-word">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
+                  {statusBadge(e.status)}
+                  <span className="text-xs tabular-nums text-fg-muted">{e.experiment_variants?.length ?? 0} variants</span>
+                  {e.bandit_enabled
+                    ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
+                    : <span className="text-xs text-fg-muted">Static</span>}
+                  <span className="text-xs text-fg-muted"><RelativeTime value={e.created_at} /></span>
+                </div>
               </td>
-              <td className="px-3 py-2">{statusBadge(e.status)}</td>
-              <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
-              <td className="px-3 py-2">
+              <td className="hidden px-3 py-2 sm:table-cell">{statusBadge(e.status)}</td>
+              <td className="hidden px-3 py-2 tabular-nums text-xs md:table-cell">{e.experiment_variants?.length ?? 0}</td>
+              <td className="hidden px-3 py-2 md:table-cell">
                 {e.bandit_enabled
                   ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
                   : <span className="text-xs text-fg-muted">Static</span>}
               </td>
-              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
-              <td className="px-3 py-2">
-                <div className="flex gap-1 justify-end">
+              <td className="hidden px-3 py-2 text-xs text-fg-muted sm:table-cell"><RelativeTime value={e.created_at} /></td>
+              <td className="block px-3 pt-1 pb-2 sm:table-cell sm:py-2">
+                <div className="flex w-full shrink-0 gap-1 justify-end sm:w-auto">
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
                     // A row action, not the page's main action: one primary per view (Carbon), green for "start".
-                    <Btn size="sm" variant="success" onClick={() => onLaunch(e.id)}>Launch</Btn>
+                    <Btn size="sm" variant="success" className="shrink-0 whitespace-nowrap" onClick={() => onLaunch(e.id)}>Launch</Btn>
                   )}
                   {e.status === 'running' && (
                     <Tooltip content="Stop experiment">
                       <Btn
                         size="sm"
                         variant="ghost"
-                        className="px-2"
+                        className="shrink-0 px-2"
                         aria-label={`Stop experiment ${e.name}`}
                         onClick={() => onStop(e.id)}
                       >
@@ -449,7 +461,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
                     <Btn
                       size="sm"
                       variant="ghost"
-                      className="px-2"
+                      className="shrink-0 px-2"
                       aria-label={`View experiment ${e.name}`}
                       onClick={() => onOpen(e)}
                     >
