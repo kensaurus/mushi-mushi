@@ -47,6 +47,11 @@ export interface BumpEntry {
   migrateToWeb?: boolean
   /** package.json the bump was made in. Set by the runner, not computeBumpPlan. */
   path?: string
+  /**
+   * Set on the first stored bump when the lockfile still needs a package
+   * manager command. Kept off `sdk_upgrade_jobs.error`, which is a failure.
+   */
+  lockfileNote?: string
 }
 
 export interface BumpPlan {
