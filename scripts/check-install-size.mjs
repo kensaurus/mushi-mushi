@@ -56,9 +56,15 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // gives "choose where CI runs" its terminal path (surface parity): the
 // placement preview, request and status renderers. No new dependencies; the
 // growth is that code, measured at cli 211.6/805.2 kB packed/unpacked.
+//
+// Raised 2026-10-26: `mushi work` registers its run when the agent starts and
+// closes it on every exit, and CLI commands get SIGINT/SIGTERM cleanups
+// (onInterrupt), so a local run shows in flight on the console and a stop
+// never leaves it hanging. No new dependencies; the growth is that code and
+// the mushi work changes since 2026-10-22, measured at cli 220.5/837.4 kB.
 export const BUDGETS = [
   { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 220_000, unpacked: 840_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 228_000, unpacked: 870_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

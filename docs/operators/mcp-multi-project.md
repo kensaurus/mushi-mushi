@@ -32,7 +32,7 @@ Put **one** `mushi` server in `~/.cursor/mcp.json`:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
       "env": {
         "MUSHI_API_KEY": "<org-scoped-mcp-write-key>",
         "MUSHI_API_ENDPOINT": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
@@ -124,7 +124,7 @@ MUSHI_API_KEY=mushi_xxx mushi connect \
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.1"],
       "env": { "MUSHI_PROJECT_ID": "<per-repo uuid>", … }
     }
   }

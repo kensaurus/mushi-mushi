@@ -86,6 +86,30 @@ describe('site-audit routes', () => {
     expect((await call('PUT', PATH, { enabled: true, pageLimit: 501 })).json.error.code).toBe('VALIDATION_ERROR')
   })
 
+  it('PUT with a new cadence moves the next run to that many days after the last one', async () => {
+    const lastRun = new Date(Date.now() - 2 * 86_400_000).toISOString()
+    const farOff = new Date(Date.now() + 86_400_000).toISOString()
+    db = makeFakeDb(
+      {
+        site_audits: [{ id: 'sa1', project_id: P, enabled: true, base_url: 'https://tsumagoi.kensaur.us', cadence_days: 3, last_run_at: lastRun, next_run_at: farOff }],
+        site_audit_findings: [],
+        site_watches: [],
+      },
+      { autoId: true },
+    )
+    // Every day: the last run was 2 days ago, so it is due now.
+    await call('PUT', PATH, { enabled: true, cadenceDays: 1 })
+    const due = Date.parse(db.table('site_audits')[0].next_run_at as string)
+    expect(Math.abs(due - Date.now())).toBeLessThan(60_000)
+    // Every 7 days: 5 days from now, later than before.
+    await call('PUT', PATH, { enabled: true, cadenceDays: 7 })
+    expect(db.table('site_audits')[0].next_run_at).toBe(new Date(Date.parse(lastRun) + 7 * 86_400_000).toISOString())
+    // The same cadence again leaves the schedule alone.
+    db.table('site_audits')[0].next_run_at = farOff
+    await call('PUT', PATH, { enabled: true, cadenceDays: 7 })
+    expect(db.table('site_audits')[0].next_run_at).toBe(farOff)
+  })
+
   it('viewers cannot change it', async () => {
     state.role = 'viewer'
     expect((await call('PUT', PATH, { enabled: true, baseUrl: 'https://tsumagoi.kensaur.us' })).status).toBe(403)

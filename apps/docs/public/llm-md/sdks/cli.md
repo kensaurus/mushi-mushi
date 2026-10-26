@@ -231,6 +231,73 @@ console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
 When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
 `fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
 
+### `mushi work`
+
+Fix reports with a coding agent on your own machine instead of a cloud agent.
+The agent (the Cursor CLI, `cursor-agent`, signed in to any Cursor account)
+only edits a worktree of your repo; `mushi work` commits, pushes and opens the
+draft pull request with **your** local credentials. So you can spend a Cursor
+account's allowance without that account's GitHub ever touching your repo.
+
+```bash
+# Show which reports it would take (worst first, none with a run or PR already live)
+mushi work --repo-dir ~/code/my-app --dry-run
+
+# Fix up to 3 reports, one at a time
+mushi work --repo-dir ~/code/my-app --max 3
+
+# One report, a chosen model
+mushi work --repo-dir ~/code/my-app --report <reportId> --model gpt-5
+```
+
+For each report it:
+
+1. Reads Mushi's fix packet and what earlier attempts did (their Opus review
+   findings), as data the agent must not take as instructions.
+2. Creates a worktree from `origin/` on
+   `bugfix/MUSHI--local-cursor` and runs `cursor-agent -p` in it
+   (30 minutes at most), after installing the worktree's dependencies from
+   its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
+   commit hooks work. The agent's environment has no credentials, and
+   version control inside it cannot reach the remote.
+3. With changes: commits, pushes, opens a draft PR with `Mushi report: `,
+   registers the fix attempt (like the MCP tool `submit_fix_result`) and
+   queues the Opus review, so the PR follows the same review and release
+   train as a cloud agent's. Without changes: records the agent's
+   `Mushi verdict:` on the attempt.
+
+A report whose local run ended without a pull request in the last 7 days
+(a timeout, no change, or a verdict) is skipped; pass `--report ` to run
+it anyway. The agent has 30 minutes, so a report that names several pages is
+fixed one page at a time: split broad reports into one page or cause each.
+
+When Opus says "fix first" on one of these pull requests, run
+`mushi work --followups`. Mushi checks the round (the reviewed commit is still
+the PR's head, at most 2 rounds per PR), sends only the findings that pass its
+safety screen, and the agent fixes them in a worktree of the PR's branch.
+`mushi work` commits and pushes to that branch, and Opus reviews the new
+commit. Cloud-agent pull requests get the same follow-up from Mushi itself.
+
+```bash
+# Which pull requests are waiting for a follow-up
+mushi work --repo-dir ~/code/my-app --followups --dry-run
+
+# Run them
+mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
+```
+
+| Flag | Description |
+| --- | --- |
+| `--repo-dir ` | A clone of the app repo; only worktrees are created in it |
+| `--max ` | Reports per run (default 3, at most 10) |
+| `--report ` | Work on this report only |
+| `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
+| `--model ` | Model for the agent (`cursor-agent --list-models`) |
+| `--keep` | Keep the worktree afterwards |
+| `--dry-run` | Show the plan; change nothing |
+
+Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
+
 ### `mushi verify`
 
 The `mushi-verify` workflow that proves an agent's fix with a test that fails

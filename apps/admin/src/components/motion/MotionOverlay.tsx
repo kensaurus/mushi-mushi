@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { MouseEvent, ReactNode } from 'react'
 import { overlayTween } from '../../lib/motion-tokens'
 import { useMotionTransition, useOverlayVariants } from '../../lib/useMotionTransition'
+import { toBody } from '../../lib/bodyPortal'
 
 export interface MotionOverlayProps {
   open: boolean
@@ -31,7 +32,7 @@ export function MotionOverlay({
   const { backdrop } = useOverlayVariants()
   const transition = useMotionTransition(overlayTween)
 
-  return (
+  return toBody(
     <AnimatePresence>
       {open ? (
         <motion.div

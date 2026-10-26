@@ -20,6 +20,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import { resolveFirecrawl } from '../../_shared/firecrawl.ts';
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
+import { nextRunAfterCadenceChange } from '../../_shared/site-audit.ts';
 import { dbError, parseUuidParam, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
 
@@ -103,7 +104,7 @@ export function registerSiteAuditRoutes(app: Hono<{ Variables: Variables }>): vo
     if ('response' in a) return a.response;
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     if (typeof body.enabled !== 'boolean') return bad(c, 'VALIDATION_ERROR', 'enabled must be true or false.');
-    const { data: current, error: readErr } = await db.from('site_audits').select('id, base_url, enabled').eq('project_id', a.projectId).maybeSingle();
+    const { data: current, error: readErr } = await db.from('site_audits').select('id, base_url, enabled, cadence_days, last_run_at, next_run_at').eq('project_id', a.projectId).maybeSingle();
     if (readErr) return dbError(c, readErr);
 
     const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim().replace(/\/$/, '') : ((current?.base_url as string | undefined) ?? '');
@@ -129,6 +130,15 @@ export function registerSiteAuditRoutes(app: Hono<{ Variables: Variables }>): vo
       }
       // Off → on: the first run starts on the next tick.
       if (!current?.enabled) patch.next_run_at = new Date().toISOString();
+      // A new cadence on an audit that stays on moves its next run with it.
+      else if (patch.cadence_days !== undefined && patch.cadence_days !== current.cadence_days) {
+        patch.next_run_at = nextRunAfterCadenceChange({
+          lastRunAt: (current.last_run_at as string | null) ?? null,
+          nextRunAt: (current.next_run_at as string | null) ?? null,
+          cadenceDays: patch.cadence_days as number,
+          now: new Date(),
+        });
+      }
     }
     const { data, error } = current
       ? await db.from('site_audits').update(patch).eq('id', current.id as string).select(COLUMNS).single()

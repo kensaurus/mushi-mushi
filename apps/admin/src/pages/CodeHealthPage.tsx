@@ -43,7 +43,7 @@ import { CodeHealthStatusBanner, isCodeHealthStatusBannerCritical } from '../com
 import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
 import { KnownHolesCard } from '../components/code-health/KnownHolesCard'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -518,7 +518,7 @@ export function CodeHealthPage() {
             <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <p className="text-xs text-fg-secondary">
                 Backend schema &amp; API contract checks live on{' '}
-                <Link to="/fullstack-audit" className="text-accent hover:underline">
+                <Link to="/fullstack-audit" className={LINK_ACCENT}>
                   Full-Stack Audit
                 </Link>
                 .

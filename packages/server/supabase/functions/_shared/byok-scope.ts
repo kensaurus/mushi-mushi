@@ -95,8 +95,16 @@ export function universalKeyApplies(keyOwnerRoleInOrg: string | null | undefined
   return keyOwnerRoleInOrg === 'owner';
 }
 
-/** The users with role `owner` in an organization. Empty on a failed read (no universal keys). */
-export async function organizationOwnerIds(db: SupabaseClient, organizationId: string | null): Promise<string[]> {
+/**
+ * The users with role `owner` in an organization. Empty on a failed read
+ * (no universal keys). `strict` throws instead, so a caller can tell a
+ * failed read from an organization that has no owners.
+ */
+export async function organizationOwnerIds(
+  db: SupabaseClient,
+  organizationId: string | null,
+  opts: { strict?: boolean } = {},
+): Promise<string[]> {
   if (!organizationId) return [];
   try {
     const { data, error } = await db
@@ -104,9 +112,14 @@ export async function organizationOwnerIds(db: SupabaseClient, organizationId: s
       .select('user_id')
       .eq('organization_id', organizationId)
       .eq('role', 'owner');
-    if (error || !Array.isArray(data)) return [];
+    if (error) {
+      if (opts.strict) throw new Error(error.message || 'organization owners read failed');
+      return [];
+    }
+    if (!Array.isArray(data)) return [];
     return (data as Array<{ user_id: string | null }>).map((r) => r.user_id).filter((id): id is string => !!id);
-  } catch {
+  } catch (err) {
+    if (opts.strict) throw err;
     return [];
   }
 }
@@ -193,19 +206,31 @@ export function withOwnerUserColumn(columns: string, ready: boolean): string {
 export async function keyOwnerForProject(
   db: SupabaseClient,
   project: { id: string; organization_id?: string | null },
+  opts: { strict?: boolean } = {},
 ): Promise<KeyOwner> {
   const organizationId = (project.organization_id as string | null | undefined) ?? null;
-  const universalUserIds = (await ownerUserColumnReady(db)) ? await organizationOwnerIds(db, organizationId) : [];
+  const universalUserIds = (await ownerUserColumnReady(db))
+    ? await organizationOwnerIds(db, organizationId, opts)
+    : [];
   return { projectId: project.id, organizationId, universalUserIds };
 }
 
-/** The project's owner triple, read from projects. Null organization on a failed read. */
-export async function projectKeyOwner(db: SupabaseClient, projectId: string): Promise<KeyOwner> {
-  const { data } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle();
+/**
+ * The project's owner triple, read from projects. Null organization on a
+ * failed read, unless `strict`, which throws so the caller does not treat
+ * a database error as "this app has no organization".
+ */
+export async function projectKeyOwner(
+  db: SupabaseClient,
+  projectId: string,
+  opts: { strict?: boolean } = {},
+): Promise<KeyOwner> {
+  const { data, error } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle();
+  if (error && opts.strict) throw new Error(error.message || 'project owner read failed');
   return keyOwnerForProject(db, {
     id: projectId,
     organization_id: (data?.organization_id as string | null | undefined) ?? null,
-  });
+  }, opts);
 }
 
 const SCOPE_RANK: Record<KeyScope, number> = { project: 0, organization: 1, universal: 2 };

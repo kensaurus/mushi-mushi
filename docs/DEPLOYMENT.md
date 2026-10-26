@@ -9,7 +9,7 @@ There are **four deploy pipelines** plus a **manual DB migration** step. A chang
 | Pipeline | Workflow | Trigger | Target |
 | --- | --- | --- | --- |
 | npm SDK packages | `.github/workflows/release.yml` | Merge Changesets version PR to `master` (usually a manual dispatch) | npm registry |
-| Edge Functions | `.github/workflows/deploy-edge-functions.yml` | Push to `master` touching `packages/server/supabase/functions/**` | Supabase Edge |
+| Edge Functions | `.github/workflows/deploy-edge-functions.yml` | Push to `master` touching `packages/server/supabase/functions/**` (changed functions only), nightly (all) | Supabase Edge |
 | Admin console SPA | `.github/workflows/deploy-admin.yml` | Push to `master` touching `apps/admin/**` | S3 + CloudFront |
 | Docs site | `.github/workflows/deploy-docs.yml` | Push to `master` touching `apps/docs/**` | S3 + CloudFront |
 | Hosted MCP proxy | `.github/workflows/deploy-hosted-mcp.yml` | Push touching hosted MCP assets | CloudFront (`/hosted-mcp/`) |
@@ -118,6 +118,13 @@ OIDC provenance.
 individually to the Supabase Management API via `scripts/deploy-edge-function.mjs`
 (the same code path as a local deploy), so one failed function doesn't silently
 abort the batch.
+
+A push deploys only the functions that changed since the last successful deploy
+(`scripts/edge-fns-affected.mjs`): a function whose directory changed, or one
+that imports a changed `_shared/` file directly or through other local imports.
+A change it cannot trace (`config.toml`, `deno.json`, a non-code `_shared/`
+file, the deploy script or workflow) deploys all of them, and so does the
+nightly run at 03:17 JST, the backstop for anything the diff missed.
 
 ### Required secrets (edge functions)
 
