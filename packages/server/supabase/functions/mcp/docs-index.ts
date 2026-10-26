@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 219 pages, generated from llms.txt. */
+/** 220 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -410,6 +410,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "overview", "portfolio"],
     headings: ["What you see", "Data source", "Related"],
     excerpt: "The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.",
+  },
+  {
+    title: "Pipeline",
+    url: docUrl("/admin/pipeline"),
+    route: "/admin/pipeline",
+    markdown: "admin/pipeline.md",
+    keywords: ["admin", "pipeline"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys"],
+    excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {
     title: "Portfolio",
@@ -1686,7 +1695,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/mcp-ci",
     markdown: "sdks/mcp-ci.md",
     keywords: ["sdks", "mcp-ci", "mcp", "@mushi-mushi/mcp-ci"],
-    headings: ["Quick start", "Commands", "In your IDE", "Inputs"],
+    headings: ["Quick start", "Gates on every PR", "Commands", "In your IDE", "Inputs", "Outputs"],
     excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in.",
   },
   {
@@ -1812,7 +1821,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/wasm-classifier",
     markdown: "sdks/wasm-classifier.md",
     keywords: ["sdks", "wasm-classifier", "wasm", "classifier", "@mushi-mushi/wasm-classifier"],
-    headings: ["Use it with the web SDK", "Call it directly", "ONNX backend"],
+    headings: ["Use it with the web SDK", "Call it directly", "ONNX backend (experimental)"],
     excerpt: "@mushi-mushi/wasm-classifier filters junk bug reports in the browser, before they reach the server or your LLM.",
   },
   {

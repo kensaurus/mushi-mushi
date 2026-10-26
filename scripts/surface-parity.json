@@ -87,6 +87,8 @@
     "POST /v1/admin/ci/placement/requests/:id/revert": {"cli": ["runner placement revert"]},
     "GET /v1/admin/ci/policy": {"allow": "jwt-only", "note": "The organization's CI agreement for the console form. CLI and MCP read it inside GET /v1/admin/ci/placement (policy)."},
     "POST /v1/admin/merge-queue": {"allow": "jwt-only"},
+    "GET /v1/admin/pipeline": { "allow": "jwt-only", "note": "Console /pipeline: stages, stuck groups and release trains. The editor reads one fix with get_fix_timeline and get_fix_verification." },
+    "POST /v1/admin/pipeline/actions": { "allow": "jwt-only", "note": "Console /pipeline one-click fixes (CI repair, update branch, conflict agent, mark ready, remove or close with a reason, run the merge queue now); each changes a PR or queue row a person confirmed." },
     "PUT /v1/admin/projects/:id/release-settings": {"allow": "jwt-only", "note": "ADR 0044: how an app ships approved fixes (release trains or each PR), set on /fixes."},
     "POST /v1/admin/projects/:id/skill-runs": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/skill-runs/:runId/stop": {"allow": "jwt-only"},
