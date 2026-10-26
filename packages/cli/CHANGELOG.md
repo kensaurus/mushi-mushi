@@ -1,5 +1,26 @@
 # @mushi-mushi/cli
 
+## 0.34.0
+
+### Minor Changes
+
+- 863ccf9: `mushi work` registers each run in Mushi when the local agent starts and marks it running, so the console's Fixes page counts it in flight for the whole run, not only after the agent finishes. Every way a run ends closes that record exactly once. Ctrl-C or SIGTERM (for example `systemctl stop`) ends the agent, closes the record as "mushi work stopped by …" within a few seconds and never commits or pushes a half-done change; a stopped or reaped run starts no 7-day retry cooldown. CLI commands can now register cleanups that run on SIGINT/SIGTERM before the process exits (8 s budget; a second signal exits at once).
+- 60c5359: Add `mushi work`: fix reports with the Cursor CLI on your own machine. The agent only edits a worktree; the command commits, pushes and opens the draft pull request with your own git and gh, registers the fix in Mushi and queues the Opus review.
+
+### Patch Changes
+
+- af68d85: `list_gate_findings` and `mushi audit findings --gate` accept `portfolio_radar_vulns`: known holes in your dependencies and runtime, matched by exact version against OSV.dev (ADR 0038). `get_radar` and `mushi radar show` list the two new rules, `known_vulnerable_dependency` and `runtime_end_of_life`.
+- 863ccf9: The `reason` of `transition_status` and the `note` of `reopen_report` and `mushi reports triage/resolve/reopen/dismiss --note` are kept as a team note on the report (the console's internal Triage note, never sent to the reporter). They were dropped before.
+- 7314cc5: `mushi work` keeps the commit subject (the PR title, MUSHI suffix included) within 72 characters, so repos whose commitlint enforces `subject-max-length` / `header-max-length` accept the commit instead of losing the agent's change.
+- 972ac1f: `mushi work` skips a report for 7 days after its local run ended without a pull request (`--report` still runs it), says "timed out after 30 min" instead of "exited 143", and tells the agent to fix the first of several named pages completely rather than run out of time on all of them.
+- 3d73196: `mushi work --followups` fixes the Opus "fix first" findings on pull requests `mushi work` opened. Mushi checks the round and sends only the findings that pass its safety screen. The local agent fixes them on the PR's branch, `mushi work` pushes, and Opus reviews the new commit. Each PR gets at most 2 rounds, as cloud-agent PRs do.
+- 2939281: `mushi work` tries the worktree install twice, and when a commit hook fails only because a package is not installed (`ERR_MODULE_NOT_FOUND`), it installs and commits again instead of losing the agent's change.
+- 11bca54: `mushi work` installs the worktree's dependencies from its lockfile (pnpm, npm or yarn) before the agent starts. The agent can then run the project's tests, and commit hooks that import a package no longer fail with ERR_MODULE_NOT_FOUND. A failed install is logged and the run goes on.
+- 3d73196: `mushi work` keeps going when one report fails. If a commit hook, push or `gh pr create` fails after the agent made a change, the change is kept in its worktree, the fix is marked failed with the reason, and the error shows the end of the command's output, where the failure is. The command still exits 1 when any report failed.
+- be9fb01: `mushi work` redoes a report whose earlier pull request was closed without merging: it works on the next free branch name (`…-2`) instead of skipping the report because the old branch is still on origin. An open or merged pull request still skips it.
+- f10339f: `mushi work` removes a worktree folder an earlier run left behind even when git no longer lists it as a worktree (a killed run), instead of failing `git worktree add` on that report every run.
+- 2939281: `mushi work` stops when the reports it is given belong to another app than `--project`. An API key bound to one app answers with that app's reports whatever `--project` says, so the agent would have "fixed" them in the wrong repo. The error names both apps and the `mushi login --project-id` command to run.
+
 ## 0.33.0
 
 ### Minor Changes
