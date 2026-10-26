@@ -73,6 +73,7 @@ const item = (id: string, over: Record<string, unknown> = {}) => ({
   since: '2026-10-24T12:00:00Z',
   lastError: null,
   lastEventAt: null,
+  lastEventLabel: null,
   failingChecks: [],
   review: null,
   queueDetail: null,
@@ -120,7 +121,7 @@ function fixture(): PipelineData {
           oldestAt: '2026-10-23T12:00:00Z',
           actions: ['ci_repair', 'rerun_ci'],
           settings: { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' },
-          items: [item('f1', { failingChecks: ['Build & Test'] }), item('f2')],
+          items: [item('f1', { failingChecks: ['Build & Test'], lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' }), item('f2')],
         },
       ]),
       stage('train', 'Release train', [
@@ -220,6 +221,7 @@ describe('PipelinePage', () => {
     expect(f1.textContent).toContain('Report f1')
     expect(f1.textContent).toContain('Build & Test')
     expect(f1.querySelector('a[href="https://github.com/kensaurus/glot.it/pull/1"]')).not.toBeNull()
+    expect(q('pipeline-item-f1-last-event')!.textContent).toBe('· last: CI finished: failed (3 h ago)')
     await click(q('pipeline-group-hold-toggle'))
     expect(q('pipeline-item-f5')!.textContent).toContain('Opus: hold')
     expect(q('pipeline-item-f5')!.textContent).toContain('The Shop card is not fixed.')

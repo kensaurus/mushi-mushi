@@ -144,6 +144,11 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
         <span className="text-2xs tabular-nums text-fg-faint" title={new Date(item.since).toLocaleString()}>
           {ageLabel(item.since, props.now)} in stage
         </span>
+        {item.lastEventAt && (
+          <span className="text-2xs text-fg-faint" title={new Date(item.lastEventAt).toLocaleString()} data-testid={`pipeline-item-${item.id}-last-event`}>
+            · last: {item.lastEventLabel ?? 'event'} ({ageLabel(item.lastEventAt, props.now)} ago)
+          </span>
+        )}
       </div>
       <Evidence item={item} />
       <div className="flex flex-wrap items-center gap-2">

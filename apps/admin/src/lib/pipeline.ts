@@ -36,6 +36,7 @@ export interface PipelineItem {
   since: string
   lastError: string | null
   lastEventAt: string | null
+  lastEventLabel: string | null
   failingChecks: string[]
   review: { verdict: string | null; summary: string | null; findings: string[] } | null
   queueDetail: string | null
@@ -168,7 +169,7 @@ export interface ActionOutcome {
   url?: string | null
 }
 
-const CHUNK = 25
+const CHUNK = 10
 
 async function viaPipelineRoute(action: PipelineAction, ids: string[], reason?: string): Promise<ActionOutcome[]> {
   const out: ActionOutcome[] = []

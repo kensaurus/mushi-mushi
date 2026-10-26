@@ -32,6 +32,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { fetchWithTimeout } from '../../_shared/http.ts';
+import { runInBackground } from '../../_shared/background.ts';
 import {
   fetchPullRequest,
   installationIdForAttempt,
@@ -42,7 +43,7 @@ import {
   updatePullRequestBranch,
   type GithubRepoRef,
 } from '../../_shared/github.ts';
-import { ciJobsForHeads, enqueueReviewFollowup } from '../../_shared/review-followup-db.ts';
+import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } from '../../_shared/review-followup-db.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
@@ -52,6 +53,7 @@ import {
   summarizeTrains,
   type AttemptRow,
   type DeployRow,
+  type EventRow,
   type FollowupRow,
   type QueueRow,
   type ReportRow,
@@ -69,8 +71,10 @@ type Db = ReturnType<typeof getServiceClient>;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const IN_CHUNK = 100;
 const DAY = 24 * 3600_000;
-/** Per request: each item may make two or three GitHub calls inside the edge wall clock. */
-export const MAX_ACTION_ITEMS = 25;
+/** Per request: each item may make two or three GitHub calls, and the request passes through `api`. */
+export const MAX_ACTION_ITEMS = 10;
+/** How long "Run merge queue now" waits for the worker before answering; the run goes on either way. */
+const TRAIN_RETRY_WAIT_MS = 20_000;
 
 export const PIPELINE_ACTIONS = ['ci_repair', 'update_branch', 'conflict_agent', 'mark_ready', 'remove', 'close', 'train_retry'] as const;
 export type PipelineActionId = (typeof PIPELINE_ACTIONS)[number];
@@ -115,17 +119,17 @@ export const defaultPipelineDeps: PipelineRouteDeps = {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
         body: JSON.stringify({ projectId }),
       },
-      25_000,
+      120_000,
     ).catch(() => null);
     return res?.ok === true;
   },
   now: () => new Date(),
 };
 
-async function inChunks<T>(ids: string[], read: (chunk: string[]) => Promise<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
+async function inChunks<T>(ids: string[], read: (chunk: string[]) => Promise<{ data: unknown; error: { message: string } | null }>, size = IN_CHUNK): Promise<T[]> {
   const out: T[] = [];
-  for (let i = 0; i < ids.length; i += IN_CHUNK) {
-    const { data, error } = await read(ids.slice(i, i + IN_CHUNK));
+  for (let i = 0; i < ids.length; i += size) {
+    const { data, error } = await read(ids.slice(i, i + size));
     if (error) throw new Error(error.message);
     out.push(...((data ?? []) as T[]));
   }
@@ -195,13 +199,21 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   // Titles for the reports behind fix attempts (those are `fixing`, not loaded above).
   const known = new Set(reports.map((r) => r.id));
   const missing = [...new Set(attempts.map((a) => a.report_id).filter((id): id is string => !!id && !known.has(id)))];
-  const [fixReports, reviews, followups] = await Promise.all([
+  const since3 = new Date(now.getTime() - 3 * DAY).toISOString();
+  const [fixReports, reviews, followups, events] = await Promise.all([
     inChunks<ReportRow>(missing, (ids) => db.from('reports').select('id, project_id, status, title, summary, description, created_at, processing_error').in('id', ids) as never),
     inChunks<ReviewRow>(attemptIds, (ids) =>
       db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at').in('fix_attempt_id', ids) as never,
     ),
     inChunks<FollowupRow>(attemptIds, (ids) =>
       db.from('fix_review_followups').select('fix_attempt_id, status, kind').in('fix_attempt_id', ids).in('status', ['queued', 'dispatched', 'running']) as never,
+    ),
+    // The latest event per attempt: small chunks, since CI writes many events per PR.
+    inChunks<EventRow>(attemptIds, (ids) => db.from('fix_events').select('fix_attempt_id, at, label').in('fix_attempt_id', ids).gte('at', since3).order('at', { ascending: false }).limit(1000) as never, 20).catch(
+      (err) => {
+        plog.warn('fix events read failed', { err: err instanceof Error ? err.message : String(err) });
+        return [] as EventRow[];
+      },
     ),
   ]);
   const heads = attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? '');
@@ -215,6 +227,12 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     plog.warn('ci jobs read failed', { err: err instanceof Error ? err.message : String(err) });
   }
 
+  const followupsOn = new Set<string>();
+  await Promise.all(
+    projectIds.map(async (id) => {
+      if ((await followupsEnabledForProject(db, id)).enabled) followupsOn.add(id);
+    }),
+  );
   const stages = buildPipeline({
     now,
     reports: [...reports, ...fixReports],
@@ -224,6 +242,8 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     followups,
     ciJobs,
     deploys: deploysRes.error ? [] : ((deploysRes.data ?? []) as DeployRow[]),
+    events,
+    followupsOn,
   });
   const deploys = (deploysRes.data ?? []) as DeployRow[];
   return {
@@ -334,7 +354,12 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
       if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
       const denied = denyViewerWrite(c, access.role, 'run the merge queue');
       if (denied) return denied;
-      const ran = await deps.runQueue(projectId);
+      // Kept alive in the background: the answer waits at most 20 s, the run does not stop then.
+      const run = deps.runQueue(projectId);
+      runInBackground(run, 'pipeline-train-retry');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const ran = await Promise.race([run, new Promise<null>((r) => (timer = setTimeout(() => r(null), TRAIN_RETRY_WAIT_MS)))]);
+      clearTimeout(timer);
       await logAudit(db, projectId, userId, 'settings.updated', 'release_train', undefined, { action: 'train_retry' }).catch(() => {});
       const { data: trains } = await db
         .from('release_trains')
@@ -358,7 +383,8 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
         if (leaves.getTime() > now.getTime()) return { id: repo, ok: false, message: `No train left: the next one may leave at ${leaves.toISOString().slice(11, 16)} UTC (one train every ${interval} min).` };
         return { id: repo, ok: false, message: 'No train left: no approved PR is ready to ride (each needs a merge verdict and its own CI green).' };
       });
-      if (!ran) results.unshift({ id: projectId, ok: false, message: 'The merge queue did not answer within 25 s; it may still be running. Refresh in a minute.' });
+      if (ran === null) results.unshift({ id: projectId, ok: true, message: 'The merge queue is still running; refresh in a minute to see whether a train left.' });
+      else if (!ran) results.unshift({ id: projectId, ok: false, message: 'The merge queue did not start. Try again in a minute.' });
       return c.json({ ok: true, data: { results } });
     }
 
@@ -445,7 +471,7 @@ async function runAction(db: Db, deps: PipelineRouteDeps, action: PipelineAction
       .update({ state: 'resolving', cursor_agent_id: null, agent_head_sha: null, claimed_until: null, detail: 'Sent to a conflict agent again from the console.', updated_at: now.toISOString() })
       .eq('id', q.id);
     if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
-    void deps.runQueue(a.project_id);
+    runInBackground(deps.runQueue(a.project_id), 'pipeline-conflict-agent');
     return { id: a.id, ok: true, message: 'Handed back to the merge queue; it starts a conflict agent if the PR still conflicts (it needs review follow-ups on).', url };
   }
 

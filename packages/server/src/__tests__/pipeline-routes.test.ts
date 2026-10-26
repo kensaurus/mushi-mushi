@@ -143,6 +143,7 @@ function setup() {
     ],
     fix_attempts: [attempt(F1), attempt(F2, { pr_state: 'draft', check_run_conclusion: null, commit_sha: null }), attempt(F3, { project_id: P2 })],
     fix_reviews: [
+      { fix_attempt_id: F2, status: 'completed', verdict: 'merge', summary: 'Good', findings: [], error: null, head_sha: null, completed_at: '2026-10-23T01:00:00Z', created_at: '2026-10-23T00:20:00Z', id: 'rv2', project_id: P1, report_id: `r-${F2}` },
       { fix_attempt_id: F1, status: 'completed', verdict: 'merge', summary: 'Good', findings: [], error: null, head_sha: `head-${F1}`, completed_at: '2026-10-23T01:00:00Z', created_at: '2026-10-23T00:20:00Z', id: 'rv1', project_id: P1, report_id: `r-${F1}` },
     ],
     fix_merge_queue: [
@@ -157,6 +158,11 @@ function setup() {
     ],
     project_settings: [{ project_id: P1, train_interval_minutes: 360 }],
     deploy_observations: [],
+    fix_events: [
+      { fix_attempt_id: F1, at: '2026-10-25T08:00:00Z', label: 'Release train: CI failed' },
+      { fix_attempt_id: F1, at: '2026-10-26T09:00:00Z', label: 'CI finished: failed' },
+      { fix_attempt_id: F1, at: '2026-10-20T09:00:00Z', label: 'Too old to read' },
+    ],
     fix_review_followups: [],
     report_comments: [],
   })
@@ -171,7 +177,7 @@ function setup() {
   return { app, db, calls }
 }
 
-type Stage = { id: string; count: number; stuck: number; groups: Array<{ id: string; label: string; items: Array<{ id: string; failingChecks: string[]; title: string }> }> }
+type Stage = { id: string; count: number; stuck: number; groups: Array<{ id: string; label: string; items: Array<{ id: string; failingChecks: string[]; title: string; lastEventAt: string | null; lastEventLabel: string | null }> }> }
 
 describe('GET /v1/admin/pipeline', () => {
   it('reads one app: the red queued PR is a CI problem, the draft never ran CI, the new report waits', async () => {
@@ -183,7 +189,7 @@ describe('GET /v1/admin/pipeline', () => {
     const byId = Object.fromEntries(data.stages.map((s) => [s.id, s]))
     const ci = byId.ci.groups.find((g) => g.id === 'ci_red_queued')!
     expect(ci.label).toBe('1 PR: their own CI is red, yet they wait for a release train')
-    expect(ci.items[0]).toMatchObject({ id: F1, failingChecks: ['Build & Test'], title: 'Badge clipped' })
+    expect(ci.items[0]).toMatchObject({ id: F1, failingChecks: ['Build & Test'], title: 'Badge clipped', lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' })
     expect(byId.pr.groups.map((g) => g.id)).toEqual(['draft_no_ci'])
     expect(byId.reported.groups.map((g) => g.id)).toEqual(['triage_slow'])
     // P2's PR is not in this app's picture.
@@ -214,7 +220,7 @@ describe('POST /v1/admin/pipeline/actions', () => {
   it('rejects an unknown action and too many ids', async () => {
     const { app } = setup()
     expect((await app.call('POST', '/v1/admin/pipeline/actions', { action: 'merge_now', fixIds: [F1] })).status).toBe(400)
-    const many = Array.from({ length: 26 }, (_, i) => `3000000a-0000-4000-8000-${String(i).padStart(12, '0')}`)
+    const many = Array.from({ length: 11 }, (_, i) => `3000000a-0000-4000-8000-${String(i).padStart(12, '0')}`)
     expect((await app.call('POST', '/v1/admin/pipeline/actions', { action: 'mark_ready', fixIds: many })).status).toBe(400)
   })
 

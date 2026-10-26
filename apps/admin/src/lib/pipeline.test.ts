@@ -45,11 +45,11 @@ describe('pipeline helpers', () => {
     ])
   })
 
-  it('pipeline actions go in chunks of 25 and a failed request marks each PR', async () => {
+  it('pipeline actions go in chunks of 10 and a failed request marks each PR', async () => {
     state.respond = () => ({ ok: false, error: { code: 'X', message: 'Server down.' } })
     const ids = Array.from({ length: 30 }, (_, i) => `f${i}`)
     const out = await runPipelineAction('update_branch', ids)
-    expect(state.posts.map((p) => (p.body as { fixIds: string[] }).fixIds.length)).toEqual([25, 5])
+    expect(state.posts.map((p) => (p.body as { fixIds: string[] }).fixIds.length)).toEqual([10, 10, 10])
     expect(out).toHaveLength(30)
     expect(out.every((r) => !r.ok && r.message === 'Server down.')).toBe(true)
   })
