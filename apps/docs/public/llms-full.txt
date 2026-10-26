@@ -21082,11 +21082,12 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 | Action | What it does |
 | --- | --- |
-| **Send to CI repair** | Queues one CI-repair agent per PR, under the review follow-up limits. Says why when it cannot. |
+| **Send to CI repair** | Sends the PR to an agent that makes its CI green without weakening tests: Mushi's cloud agent when review follow-ups can run (they need a Cursor key on your team), otherwise your local `mushi work --followups` lanes on their next run. Says why when neither can. |
+| **Send to follow-up** | The same for an Opus "fix first": an agent fixes the review's findings on the PR's branch. |
 | **Re-run CI** | Re-runs the failed CI jobs on the PR's latest commit. |
 | **Re-run review** | Asks Opus to review the PR again. |
 | **Update branch** | GitHub merges the base branch into the PR. |
-| **New conflict agent** | Hands a conflicted PR back to the merge queue, at most 2 agents per PR. |
+| **New conflict agent** | Hands a conflicted PR back to the merge queue, at most 2 agents per PR. Conflict agents are cloud agents: without one, the PR needs a person to resolve the conflict on GitHub, and the page says so with the PR link. |
 | **Mark ready** | Takes a draft out of draft so CI runs. |
 | **Queue to merge** | Puts an approved, green PR in the merge queue. |
 | **Remove from queue** / **Close PR** | Takes it out of the queue, or closes it without merging. The reason is kept as a team note on the report. |

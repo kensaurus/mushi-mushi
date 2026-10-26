@@ -393,3 +393,35 @@ describe('intake rejects', () => {
     expect(intakeGroup(summarizeIntake([], [P], '2026-10-26', NOW), new Map())).toBeNull()
   })
 })
+
+describe('the merge queue detail texts of 2026-10-26', () => {
+  it('reads own-CI-red, base-red, conflict-needs-you and draft details', () => {
+    expect(queueDetailKind('CI fails on its own commit (Build & Test, Lint). With review follow-ups on, a CI-repair agent fixes it.')).toBe('own_ci_red')
+    expect(queueDetailKind('main is red too (gate); it rides a release train once main passes.')).toBe('base_red')
+    expect(queueDetailKind('Merge conflict needs you: the agent could not resolve it.')).toBe('conflict_person')
+    expect(queueDetailKind('The conflict agent did not push within 90 minutes. Resolve it on GitHub.')).toBe('conflict_person')
+    expect(queueDetailKind('Merge conflict: a Cursor agent is merging the base branch into the PR.')).toBe('other')
+    expect(queueDetailKind('Merge conflict. Review follow-ups are off, so no agent may push to the branch.')).toBe('followups_off')
+    expect(queueDetailKind('A draft runs no CI. Mushi marks one draft ready per tick.')).toBe('draft')
+    expect(failedChecksFromDetail('CI fails on its own commit (Build & Test, Lint). With review follow-ups on…')).toEqual(['Build & Test', 'Lint'])
+    expect(failedChecksFromDetail('Members failed CI: gate, check.')).toEqual(['gate', 'check'])
+  })
+
+  it('a PR waiting on a red base branch is its own group, not "their own CI is red"', () => {
+    const red = new Map([['h1', [job({ conclusion: 'failure' })]]])
+    const stages = run({ queue: [queue({ detail: 'main is red too (gate); it rides a release train once main passes.' })], ciJobs: red })
+    expect(group(stages, 'base_red')?.group.label).toBe('1 PR: waiting for the base branch to pass CI')
+    expect(group(stages, 'ci_red_queued')).toBeNull()
+  })
+
+  it('a held conflict no agent will take says a person resolves it on GitHub', () => {
+    const q = queue({ state: 'blocked', detail: 'Merge conflict needs you: the agent pushed nothing.' })
+    expect(group(run({ queue: [q] }), 'held_conflict_person')?.group.label).toBe('1 PR: held: merge conflict, needs a person: resolve on GitHub')
+  })
+
+  it('fix-first groups offer Send to follow-up, and the follow-ups link explains the key and the local lanes', () => {
+    const g = group(run({ reviews: [review({ verdict: 'fix_first' })] }), 'fix_first')!.group
+    expect(g.actions[0]).toBe('followup')
+    expect(g.settings?.hint).toContain('local mushi work --followups lanes')
+  })
+})
