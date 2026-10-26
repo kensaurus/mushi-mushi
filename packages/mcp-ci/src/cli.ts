@@ -335,17 +335,17 @@ async function main(): Promise<void> {
     }
     case 'auth-bootstrap': {
       // Mushi v2.1 — refresh the crawler cookie via the scripted-auth
-      // runner. We don't run Playwright inside this Action's process
-      // (browsers add ~600 MB to the image); instead we invoke the
+      // runner. Playwright is not bundled into this Action; we invoke the
       // published @mushi-mushi/inventory-auth-runner via `npx`. The
-      // runner POSTs the cookie back to the settings endpoint we
-      // expose; this Action just orchestrates.
+      // runner PATCHes the session cookie to
+      // /v1/admin/inventory/:projectId/settings; this Action just
+      // orchestrates.
       //
-      // The bin name (`mushi-mushi-auth`) intentionally differs from
-      // the unscoped package name (`inventory-auth-runner`), so we use
-      // `-p <package> <bin>` instead of the bare `npx <package>` form
-      // — the bare form would fail with `command not found` because
-      // npx tries to invoke a bin that matches the unscoped name.
+      // `-p <package> <bin>` names the bin (`mushi-mushi-auth`)
+      // explicitly. A bare `npx @mushi-mushi/inventory-auth-runner` would
+      // also run it today, because npm runs a package's only bin whatever
+      // its name; naming it keeps the call stable if the package ever
+      // ships a second bin.
       const cmd = `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`
       core.info(`mushi auth-bootstrap → ${cmd}`)
       const env = {
@@ -365,7 +365,7 @@ async function main(): Promise<void> {
     }
     default:
       core.setFailed(
-        `unknown command: ${command}. Expected trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api | discovery-status | propose | auth-bootstrap.`,
+        `unknown command: ${command}. Expected trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api | spec-drift | discovery-status | propose | auth-bootstrap.`,
       )
   }
 }
