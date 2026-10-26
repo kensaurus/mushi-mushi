@@ -233,12 +233,15 @@ export function formatFixCauseBreakdown(
     .join(', ')
 }
 
-/** Sidebar badge name for the stopped-fix count, with the same cause line. */
+/**
+ * Sidebar badge name for the stopped-fix count. The number is reports, not
+ * attempts ("Counts each report once"), with the same cause line.
+ */
 export function stoppedFixesBadgeLabel(
   count: number,
   breakdown?: readonly FixCauseCount[] | null,
 ): string {
-  const head = `${count} ${count === 1 ? 'fix' : 'fixes'} stopped`
+  const head = `${count} ${count === 1 ? 'report' : 'reports'} with a stopped fix`
   const detail = formatFixCauseBreakdown(breakdown)
   return detail ? `${head} (${detail})` : head
 }

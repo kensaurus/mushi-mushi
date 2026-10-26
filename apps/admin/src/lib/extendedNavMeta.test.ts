@@ -231,7 +231,7 @@ describe('dashboardNavBadge', () => {
       topPriority: 'failed',
       failureBreakdown,
     })
-    expect(home?.label).toBe('35 fixes stopped (CI failed (24), Needs your decision (11))')
+    expect(home?.label).toBe('35 reports with a stopped fix (CI failed (24), Needs your decision (11))')
     expect(fixes?.label).toBe(home?.label)
   })
 })

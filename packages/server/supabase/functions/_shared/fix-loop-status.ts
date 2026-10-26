@@ -141,8 +141,11 @@ const CI_HARD_FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_requi
  *
  * `already_fixed` is the agent's "nothing to change" verdict, not a CI
  * failure and not something a retry clears. It stays out of this count.
- * `needs_human` and the other terminal stops still count; the summary
- * caption lists them instead of labeling the whole total as the top cause.
+ * `deriveReportFixTruth` records it as `no_change`, not `none`, so a
+ * caller that treats `none` as "not yet attempted" does not dispatch it
+ * again. `needs_human` and the other terminal stops still count; the
+ * summary caption lists them instead of labeling the whole total as the
+ * top cause.
  */
 export function isFixCountedFailed(a: {
   status?: string | null

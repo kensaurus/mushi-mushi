@@ -156,7 +156,7 @@ describe('deriveReportFixTruth precedence', () => {
       report: { id: 'r', status: 'classified' },
       attempts: [{ ...base, status: 'failed', failure_category: 'already_fixed', error: 'Agent found nothing to change' }],
     })
-    expect(alreadyFixed.state).toBe('none')
+    expect(alreadyFixed).toMatchObject({ state: 'no_change', retryable: false })
     const api = deriveReportFixTruth({
       reportId: 'r',
       report: { id: 'r', status: 'classified' },
@@ -185,6 +185,27 @@ describe('deriveReportFixTruth precedence', () => {
         { category: 'needs_human', count: 1 },
       ],
     })
+    expect(truths.get('gone')).toMatchObject({ state: 'no_change', retryable: false })
+  })
+
+  it('does not pick an already_fixed report up for a new fix run', () => {
+    const alreadyFixed = deriveReportFixTruth({
+      reportId: 'r',
+      report: { id: 'r', status: 'classified' },
+      attempts: [{ ...base, status: 'failed', failure_category: 'already_fixed', error: 'Agent found nothing to change' }],
+    })
+    const untouched = deriveReportFixTruth({
+      reportId: 'fresh',
+      report: { id: 'fresh', status: 'classified' },
+      attempts: [],
+    })
+    // `none` is "not yet attempted" and is eligible. already_fixed must not
+    // look like that, and it is not a retryable failure either.
+    const pickedForNewRun = (t: { state: string; retryable: boolean }) => t.state === 'none' || t.retryable
+    expect(untouched.state).toBe('none')
+    expect(pickedForNewRun(untouched)).toBe(true)
+    expect(alreadyFixed.state).toBe('no_change')
+    expect(pickedForNewRun(alreadyFixed)).toBe(false)
   })
 
   it('a dismissed report never counts, and a reopened one ignores its old merge', () => {

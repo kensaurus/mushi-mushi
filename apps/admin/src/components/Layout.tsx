@@ -1139,7 +1139,6 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
           {staleness && (
             <span
               aria-hidden="true"
-              aria-label={staleness.label}
               title={staleness.label}
               className={`nav-rail-badge ring-1 ring-surface-root ${STALENESS_TONE[staleness.tone]}`}
             >

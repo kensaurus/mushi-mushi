@@ -78,7 +78,7 @@ export interface FixAttempt {
   report_status?: string | null;
   /** The Sentry issue the report came from (GET /v1/admin/fixes); null when it did not. */
   report_sentry_url?: string | null;
-  report_fix_state?: 'resolved' | 'in_flight' | 'pr_open' | 'failed' | 'none' | null;
+  report_fix_state?: 'resolved' | 'in_flight' | 'pr_open' | 'failed' | 'no_change' | 'none' | null;
   /** PR number of the merged attempt that fixed the report. */
   report_fixed_by_pr?: number | null;
   is_latest_attempt?: boolean | null;

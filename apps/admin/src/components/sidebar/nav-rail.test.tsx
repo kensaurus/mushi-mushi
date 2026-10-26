@@ -15,6 +15,8 @@
  * dependency, and the vitest surface stays narrow per vitest.config.ts.
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
@@ -114,11 +116,22 @@ describe('rail a11y contract', () => {
       },
     })
     expect(html).toContain('3 critical reports (30d)')
-    // The visual pill itself is decorative — the prose above carries it —
-    // and the number still has a hover title and an aria-label to inspect.
+    // The visual pill is decorative. The described-by prose carries the
+    // words; a title covers hover. An aria-label on aria-hidden is never read.
     expect(html).toContain('aria-hidden="true"')
     expect(html).toContain('title="3 critical reports (30d)"')
-    expect(html).toContain('aria-label="3 critical reports (30d)"')
+    expect(html).not.toMatch(/aria-hidden="true"[^>]*aria-label=/)
+    expect(html).not.toMatch(/aria-label="[^"]*"[^>]*aria-hidden="true"/)
+    expect(html).toContain('sr-only')
+  })
+})
+
+describe('collapsed section badge', () => {
+  it('keeps the hover title and leaves the name off the aria-hidden pill', () => {
+    const src = readFileSync(resolve(__dirname, '../Layout.tsx'), 'utf8')
+    expect(src).toMatch(/aria-hidden="true"\s+title=\{staleness\.label\}/)
+    expect(src).not.toMatch(/aria-hidden="true"\s+aria-label=\{staleness\.label\}/)
+    expect(src).toContain('{staleness ? ` — ${staleness.label}` : \'\'}')
   })
 })
 
@@ -327,7 +340,7 @@ describe('resolveNavBadge', () => {
     expect(resolveNavBadge('/fixes', counts, NO_EXTRAS)).toMatchObject({
       kind: 'health',
       count: 2,
-      label: '2 fixes stopped',
+      label: '2 reports with a stopped fix',
     })
   })
 

@@ -18,7 +18,9 @@
  *   failed    — the latest attempt failed, was skipped, or its PR closed
  *               unmerged / went red (isFixCountedFailed). already_fixed
  *               ("agent found nothing to change") is not a failure.
- *   none      — nothing to act on
+ *   no_change — the latest attempt is already_fixed: a terminal answer, not
+ *               a failure and not "nothing attempted yet".
+ *   none      — nothing to act on (no attempt, or a non-terminal outcome)
  *
  * Only `fix-loop-status.ts` is imported, so the Deno CI test runs without
  * permissions and the vitest suite imports this file directly.
@@ -35,7 +37,7 @@ export const RESOLVED_REPORT_STATUSES: ReadonlySet<string> = new Set([
 const FIXED_REPORT_STATUSES: ReadonlySet<string> = new Set(['fixed', 'verified', 'resolved'])
 const LIVE_ATTEMPT_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pending', 'dispatched'])
 
-export type ReportFixState = 'resolved' | 'in_flight' | 'pr_open' | 'failed' | 'none'
+export type ReportFixState = 'resolved' | 'in_flight' | 'pr_open' | 'failed' | 'no_change' | 'none'
 
 export interface TruthAttempt {
   id: string
@@ -165,6 +167,12 @@ export function deriveReportFixTruth(input: {
   if (RESOLVED_REPORT_STATUSES.has(status) || merged) return { ...base, state: 'resolved' }
   if (attempts.some(isAttemptLive)) return { ...base, state: 'in_flight' }
   if (attempts.some(isAttemptPrOpen)) return { ...base, state: 'pr_open' }
+  // already_fixed is excluded from isFixCountedFailed so it is not a stopped
+  // fix. It is still a terminal answer: `none` means nothing was attempted,
+  // and a caller that dispatches on `none` would run the same agent again.
+  if (latest && (latest.failure_category ?? '').toLowerCase() === 'already_fixed') {
+    return { ...base, state: 'no_change' }
+  }
   if (!latest || !isFixCountedFailed(latest)) return { ...base, state: 'none' }
 
   const provider = credentialFailureProvider(latest.error, latest.failure_category)
@@ -180,9 +188,8 @@ export function deriveReportFixTruth(input: {
   // run. Any other hard failure (status = failed) can be retried, except an
   // agent's own verdict (it needs a person, is in another repo, or is not
   // code): the same run gives the same answer, so a retry only spends
-  // credits. already_fixed never reaches here — isFixCountedFailed excludes
-  // it, so the report is not a stopped fix. Skipped runs, closed PRs and
-  // red CI need a person to decide first.
+  // credits. already_fixed never reaches here — it is `no_change` above.
+  // Skipped runs, closed PRs and red CI need a person to decide first.
   const latestStatus = (latest.status ?? '').toLowerCase()
   const agentVerdict = AGENT_VERDICT_CATEGORIES.has((latest.failure_category ?? '').toLowerCase())
   const retryable = credential ? credential.keyHealthy === true : latestStatus === 'failed' && !agentVerdict

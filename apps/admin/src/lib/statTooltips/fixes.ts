@@ -66,7 +66,7 @@ export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltip
   const plain = opts.plainLanguage ?? false
   const breakdown = formatFixCauseBreakdown(stats.failureBreakdown)
   const top = breakdown
-    ? breakdown
+    ? `Causes: ${breakdown}.`
     : stats.topFailureCategory && stats.topFailureCount > 0
       ? `Most common: ${fixCauseLabel(stats.topFailureCategory)} (${stats.topFailureCount}×).`
       : ''

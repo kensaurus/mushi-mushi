@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_FIXES_STATS, type FixesStats } from '../../components/fixes/FixesStatsTypes'
 import { formatFixCauseBreakdown } from '../fixReportTruth'
-import { completedDetail, failedDetail } from './fixes'
+import { completedDetail, failedDetail, failedTooltip } from './fixes'
 
 const stats = (over: Partial<FixesStats>): FixesStats => ({ ...EMPTY_FIXES_STATS, hasAnyProject: true, ...over })
 
@@ -32,6 +32,20 @@ describe('failedDetail', () => {
       topFailureCount: 24,
       failureBreakdown,
     }))).toBe(banner)
+  })
+
+  it('names the breakdown as causes in the tooltip, with a trailing period', () => {
+    const tip = failedTooltip(stats({
+      failed: 35,
+      topFailureCategory: 'ci_failed',
+      topFailureCount: 24,
+      failureBreakdown: [
+        { category: 'ci_failed', count: 24 },
+        { category: 'needs_human', count: 11 },
+      ],
+    }))
+    const takeaway = tip.sections.find((s) => s.kind === 'takeaway')?.body ?? ''
+    expect(takeaway).toContain('Causes: CI failed (24), Needs your decision (11).')
   })
 
   it('does not caption a mixed total as only the top cause', () => {

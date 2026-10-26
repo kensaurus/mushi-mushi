@@ -121,8 +121,8 @@ describe('glot.it rows', () => {
     ]
     const line = formatFixCauseBreakdown(breakdown)
     expect(line).toBe('CI failed (24), Needs your decision (11)')
-    expect(stoppedFixesBadgeLabel(35, breakdown)).toBe(`35 fixes stopped (${line})`)
-    expect(stoppedFixesBadgeLabel(1)).toBe('1 fix stopped')
+    expect(stoppedFixesBadgeLabel(35, breakdown)).toBe(`35 reports with a stopped fix (${line})`)
+    expect(stoppedFixesBadgeLabel(1)).toBe('1 report with a stopped fix')
   })
 
   it('names the test-machine bucket in the same words as the server (ADR 0033)', () => {
