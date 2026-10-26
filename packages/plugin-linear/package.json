@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/plugin-linear",
   "version": "0.3.3",
   "license": "MIT",
-  "description": "Reference Mushi Mushi plugin: create and bidirectionally sync Linear issues from Mushi reports.",
+  "description": "Mushi Mushi plugin for Linear — opens a Linear issue for each bug report and updates it once Mushi triages it. Self-hosted; Mushi Cloud connects Linear natively.",
   "type": "module",
   "exports": {
     ".": {

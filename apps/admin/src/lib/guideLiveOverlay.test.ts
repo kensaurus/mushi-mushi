@@ -81,6 +81,12 @@ describe('guideLiveOverlay', () => {
     expect(overlay.metric).toBe('No heartbeat')
   })
 
+  it('projectsHealthOverlay is not ok while one app has no SDK heartbeat', () => {
+    const live = { projectsWithReports: 8, projectCount: 8, activeProjectHasReports: true, activeProjectSdkConnected: true, topPriority: 'sdk_missing' }
+    expect(projectsHealthOverlay('sdk', { ...live, sdkConnectedCount: 7 })).toEqual({ posture: 'warn', metric: '7/8 live' })
+    expect(projectsHealthOverlay('sdk', { ...live, sdkConnectedCount: 8 }).posture).toBe('ok')
+  })
+
   it('driftSeverityOverlay counts critical findings', () => {
     const overlay = driftSeverityOverlay('critical', {
       criticalOpen: 2,
@@ -158,7 +164,7 @@ describe('guideLiveOverlay', () => {
   })
 
   it('onboardingStepOverlay pluralizes single report count', () => {
-    const overlay = onboardingStepOverlay('ingest', {
+    const overlay = onboardingStepOverlay('first_report_received', {
       requiredComplete: 2,
       requiredTotal: 4,
       sdkInstalled: true,
@@ -167,6 +173,20 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('ok')
     expect(overlay.metric).toBe('1 report')
+  })
+
+  it('onboardingStepOverlay marks each done step from the setup API, not only when all are done', () => {
+    // mushi-demo: project, key and first report done; the SDK has never checked in.
+    const stats = {
+      requiredComplete: 3,
+      requiredTotal: 4,
+      sdkInstalled: false,
+      reportCount: 0,
+      nextStepId: 'sdk_installed',
+      completedStepIds: ['project_created', 'api_key_generated', 'first_report_received'],
+    }
+    const rows = ['project_created', 'api_key_generated', 'sdk_installed', 'first_report_received'].map((id) => onboardingStepOverlay(id, stats).metric)
+    expect(rows).toEqual(['Done', 'Done', 'Next', 'Done'])
   })
 
   it('qaProviderOverlay highlights failing stories on firecrawl', () => {

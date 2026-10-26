@@ -2,41 +2,39 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Posts a card to a Microsoft Teams channel when Mushi triages a bug, proposes
+a fix, or applies it.
 
-
-Mushi Mushi plugin: post Adaptive Card 1.4 notifications to a Microsoft
-Teams Incoming Webhook for the major report lifecycle events.
-
-## Install
+**Do you need this package?** Not on Mushi Cloud: paste a Teams incoming
+webhook URL on the **Integrations** page of the console and Mushi posts to
+the channel itself. The console's Marketplace has no Teams listing (checked
+2026-10-26), so this package only receives events from a Mushi server you
+run yourself, once you add a `plugin_registry` row for it.
 
 ```bash
 npm i @mushi-mushi/plugin-msteams
+export MUSHI_PLUGIN_SECRET=...         # the signing secret set when the plugin is installed
+export TEAMS_WEBHOOK_URL=https://...   # Teams incoming webhook URL
+export ADMIN_BASE_URL=https://...      # optional: Mushi console URL, for report links
+npx -p @mushi-mushi/plugin-msteams mushi-plugin-msteams   # POST /mushi/webhook on PORT (default 3000)
 ```
 
-## Run as a stand-alone server
-
-```bash
-MUSHI_PLUGIN_SECRET=...        # set when the plugin is installed in Mushi admin
-TEAMS_WEBHOOK_URL=https://...  # Microsoft Teams Incoming Webhook URL
-ADMIN_BASE_URL=https://...     # Mushi admin base URL (deep-links)
-PORT=3000                      # optional
-npx mushi-plugin-msteams
-```
-
-Install **Microsoft Teams** in the Mushi admin Marketplace and point its
-`webhook_url` at `https://your-host/mushi/webhook`.
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/msteams
 
 ## Programmatic usage
 
-```ts
-import { createMsTeamsPlugin } from '@mushi-mushi/plugin-msteams'
-import express from 'express'
-import { expressMiddleware } from '@mushi-mushi/plugin-sdk'
+```bash
+npm i @mushi-mushi/plugin-msteams @mushi-mushi/plugin-sdk express
+```
 
-const handler = createMsTeamsPlugin({
+```ts
+import { createMsteamsPlugin } from '@mushi-mushi/plugin-msteams'
+import express from 'express'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
+
+const handler = createMsteamsPlugin({
   webhookUrl: process.env.TEAMS_WEBHOOK_URL!,
-  adminBaseUrl: process.env.ADMIN_BASE_URL!,
+  adminBaseUrl: process.env.ADMIN_BASE_URL ?? '',
   mushiSecret: process.env.MUSHI_PLUGIN_SECRET!,
 })
 
@@ -64,4 +62,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 508 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

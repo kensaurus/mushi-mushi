@@ -2,8 +2,13 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Vue 3 plugin — `app.use(MushiPlugin, config)` once. Pulls in `@mushi-mushi/web`
-for the Shadow DOM widget; do not call `Mushi.init()` separately.
+Adds a bug-report widget to your Vue 3 app. When a user reports a problem,
+[Mushi Mushi](https://github.com/kensaurus/mushi-mushi) gets a screenshot, the
+route and recent console and network events, explains the cause in plain
+English, and hands your editor a fix to start from.
+
+Register the plugin once with `app.use(MushiPlugin, config)`. It pulls in
+`@mushi-mushi/web` for the widget, so do not call `Mushi.init()` separately.
 
 ```bash
 npm install @mushi-mushi/vue

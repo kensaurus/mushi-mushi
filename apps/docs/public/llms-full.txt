@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 218
+Pages: 219
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -601,7 +601,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
 title: Angular quickstart
-description: Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.
+description: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue."
 ---
 
 # Angular quickstart
@@ -622,36 +622,44 @@ export const environment = {
 }
 ```
 
-Register Mushi with factory providers:
+Register Mushi once in your app config. `provideMushi()` provides
+`MushiService`, routes uncaught errors to Mushi through Angular's
+`ErrorHandler`, and starts the SDK at startup:
 
 ```ts filename="src/app/app.config.ts"
-import { ErrorHandler, type ApplicationConfig } from '@angular/core'
-import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+import { type ApplicationConfig } from '@angular/core'
+import { provideMushi } from '@mushi-mushi/angular'
 import { environment } from '../environments/environment'
-
-const mushiConfig: MushiConfig = {
-  projectId: environment.mushiProjectId,
-  apiKey: environment.mushiApiKey,
-}
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    { provide: MUSHI_CONFIG, useValue: mushiConfig },
-    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
-    // Angular resolves ErrorHandler while bootstrapping, which starts the SDK
-    // and routes uncaught errors to Mushi.
-    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    provideMushi({ projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey }),
   ],
 }
 ```
 
-  These factory providers work with every release of `@mushi-mushi/angular`.
-  Up to 1.0.2 (the current npm release), do not use `provideMushi()` or
-  `...provideMushiAngular()` instead: the package is compiled without
-  Angular's ahead-of-time metadata, so `provideMushiAngular()`'s class
-  provider for `MushiService` needs the JIT compiler and fails at bootstrap in
-  a production build, and `provideMushi()` does not return Angular providers
-  at all.
+  **1.0.2 and earlier:** `provideMushi()` did not return Angular providers,
+  and the package needed the JIT compiler in production builds. Upgrade to
+  1.0.3 or later. If you cannot, register the providers by hand:
+
+  ```ts snippet-skip="1.0.2 fallback; the same file as the example above"
+  import { ErrorHandler, type ApplicationConfig } from '@angular/core'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { environment } from '../environments/environment'
+
+  const mushiConfig: MushiConfig = {
+    projectId: environment.mushiProjectId,
+    apiKey: environment.mushiApiKey,
+  }
+
+  export const appConfig: ApplicationConfig = {
+    providers: [
+      { provide: MUSHI_CONFIG, useValue: mushiConfig },
+      { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+      { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    ],
+  }
+  ```
 
 Report from a component:
 
@@ -5934,7 +5942,7 @@ description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mu
 
 # `@mushi-mushi/adapters`
 
-Inbound webhook translators that turn third-party observability events into Mushi Mushi reports — so an alert that fires in your existing monitoring also lands in your bug queue, deduped against the same knowledge graph as your user-filed reports.
+Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
 
 ## Install
 
@@ -5991,7 +5999,7 @@ app.post('/webhooks/datadog', async (c) => {
     rawBody: raw,
     headers: Object.fromEntries(c.req.raw.headers),
   });
-  return c.json(res.body ?? {}, res.status);
+  return Response.json(res.body ?? {}, { status: res.status });
 });
 ```
 
@@ -5999,14 +6007,14 @@ app.post('/webhooks/datadog', async (c) => {
 
 Each adapter normalises the source's native severity onto Mushi's four-level scale.
 
-| Mushi      | Datadog | New Relic | Honeycomb | Grafana / AM |
-| ---------- | ------- | --------- | --------- | ------------ |
-| `critical` | P1      | critical  | critical  | critical     |
-| `high`     | P2      | high      | warning   | high         |
-| `medium`   | P3      | medium    | info      | warning      |
-| `low`      | P4–P5   | low       | —         | info         |
+| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
+| ---------- | ---------------- | ------- | ---------------------- | -------------------- | -------------- |
+| `critical` | fatal            | P1      | critical               | critical             | critical, page |
+| `high`     | error            | P2      | —                      | high, error          | high, error    |
+| `medium`   | warning          | P3      | warning                | warn                 | warning, warn  |
+| `low`      | info, debug      | P4–P5   | —                      | info                 | info, low      |
 
-Crash-tracker adapters (Sentry / Bugsnag / Rollbar / Crashlytics) map their `level` / `severity` field directly; Opsgenie / CloudWatch / Firebase Analytics derive severity from the upstream alarm state.
+The other crash-tracker adapters (Bugsnag / Rollbar / Crashlytics) map their `level` / `severity` field directly; Opsgenie / CloudWatch / Firebase Analytics derive severity from the upstream alarm state.
 
 ## Authentication
 
@@ -6026,7 +6034,7 @@ Every adapter uses the strongest auth its upstream supports — never a shared b
 | Honeycomb           | HMAC-SHA256 (`sha256=…`)      | `X-Honeycomb-Signature`   |
 | Grafana / Loki (AM) | shared token (timing-safe)    | `X-Grafana-Token`         |
 
-The package ships ~90 unit tests covering both the happy-path translation and the forged-signature rejection for every adapter — run with `pnpm --filter @mushi-mushi/adapters test`.
+Unit tests cover translation and forged-signature rejection for Sentry, Bugsnag, Rollbar, Crashlytics, Firebase Analytics, CloudWatch and Opsgenie; Datadog, New Relic, Honeycomb and Grafana have none yet. Run them with `pnpm --filter @mushi-mushi/adapters test`.
 
 ---
 
@@ -6372,7 +6380,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/angular
 
 ---
 title: '@mushi-mushi/angular'
-description: API reference for @mushi-mushi/angular — MushiService, MushiErrorHandler and the MUSHI_CONFIG token, wired with factory providers in an Angular 17+ app.
+description: API reference for @mushi-mushi/angular — provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in an Angular 17+ app.
 ---
 
 # `@mushi-mushi/angular`
@@ -6389,43 +6397,53 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-import { MUSHI_CONFIG, MushiService, MushiErrorHandler } from '@mushi-mushi/angular'
+import { provideMushi, MushiService } from '@mushi-mushi/angular'
 ```
 
 | Export | Purpose |
 | --- | --- |
+| `provideMushi(config)` | `EnvironmentProviders` for `bootstrapApplication` or `NgModule.providers`: provides `MushiService`, installs `MushiErrorHandler` as Angular's `ErrorHandler`, and starts the SDK at startup (browser only) |
+| `provideMushiAngular(config)` | The same providers as a plain `Provider[]`, for spreading |
+| `MushiService` | `report({ description, category, metadata })`, `identify(userId, traits)` and `captureError(error, context)` |
+| `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError`, then logs them like Angular's default handler |
 | `MUSHI_CONFIG` | `InjectionToken` holding your project ID and public API key |
-| `MushiService` | Starts the web SDK when constructed in the browser; `report({ description, category, metadata })` and `captureError(error, context)` |
-| `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError` |
-| `provideMushi(config)` | Up to 1.0.2: returns `{ service, errorHandler }` objects, not Angular providers — do not put it in a `providers` array |
-| `provideMushiAngular(config)` | Up to 1.0.2: lists `MushiService` as a class provider, which needs the JIT compiler — avoid in production builds |
 
 ## Setup (standalone bootstrap)
 
-  Register `MushiService` with `useFactory`, as below; it works with every
-  release. Up to 1.0.2 (the current npm release) the package ships without
-  Angular's ahead-of-time metadata, so a plain class provider asks for the JIT
-  compiler and fails at bootstrap in a production build.
-
 ```ts
 // main.ts
-import { ErrorHandler } from '@angular/core'
 import { bootstrapApplication } from '@angular/platform-browser'
-import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+import { provideMushi } from '@mushi-mushi/angular'
 import { AppComponent } from './app/app.component'
 import { environment } from './environments/environment'
 
 bootstrapApplication(AppComponent, {
   providers: [
-    { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
-    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
-    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+    provideMushi({ projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey }),
   ],
 })
 ```
 
-The SDK starts when Angular first resolves `ErrorHandler`, which happens during
-bootstrap. On the server (Angular SSR) `MushiService` skips initialisation.
+On the server (Angular SSR) `MushiService` skips initialisation.
+
+  **1.0.2 and earlier:** `provideMushi()` returned plain objects, not Angular
+  providers, and the package needed the JIT compiler in production builds.
+  Upgrade to 1.0.3 or later. If you cannot, register the providers by hand with
+  factories:
+
+  ```ts snippet-skip="1.0.2 fallback; needs the reader's environment file"
+  import { ErrorHandler } from '@angular/core'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+
+  const providers = [
+    { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
+    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
+  ]
+  ```
+
+  With this fallback the SDK starts when Angular first resolves `ErrorHandler`,
+  which can be the first error rather than startup.
 
 ## Submitting a report
 
@@ -6445,15 +6463,20 @@ export class FeedbackButtonComponent {
 
 ## Identifying users
 
-`MushiService` in 1.0.2 has no identify method. Use the web SDK instance
-directly (add `@mushi-mushi/web` to your own dependencies first, because pnpm
-will not resolve it through the Angular package):
+Call `identify()` on `MushiService` when the signed-in user changes (1.0.3 and later):
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
-Mushi.getInstance()?.setUser({ id: user.id, email: user.email })
+const mushi = inject(MushiService)
+mushi.identify(user.id, { email: user.email, name: user.name })
 ```
+
+On 1.0.2 and earlier, `MushiService` has no `identify()`. Use the web SDK
+instance instead: add `@mushi-mushi/web` to your own dependencies (pnpm will
+not resolve it through the Angular package), then call
+`Mushi.getInstance()?.setUser({ id: user.id, email: user.email })`.
 
 ---
 
@@ -6559,6 +6582,9 @@ import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_API_KEY',
+  // iOS and Android default to Mushi Cloud; the web fallback (ionic serve)
+  // has no default and report() throws until this is set.
+  endpoint:  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 
   triggerMode: 'shake',         // 'shake' | 'button' | 'both' | 'none'
   captureScreenshot: true,      // base64 PNG of the active webview
@@ -6584,8 +6610,8 @@ await Mushi.report({
 ```ts
 await Mushi.showWidget({ category: 'visual' })
 await Mushi.flushQueue()
-await Mushi.setUser({ id: 'u_42', email: 'me@example.com' })
-await Mushi.setMetadata({ build: '2026.4.29' })
+await Mushi.setUser({ user: { id: 'u_42', email: 'me@example.com' } }) // { user: null } on logout
+await Mushi.setMetadata({ key: 'build', value: '2026.4.29' })
 
 const sub = await Mushi.addListener('reportSubmitted', (e) => {
   console.log('Report accepted:', e)
@@ -6595,12 +6621,15 @@ const sub = await Mushi.addListener('reportSubmitted', (e) => {
 ## Position the trigger above your tab bar / dock
 
 Use a preset (`triggerInsetPreset: 'tabBarSafe'` for a 72 dp lift, or
-`'dockSafe'` for a 96 dp lift) or pass your own offsets:
+`'dockSafe'` for a 96 dp lift) or pass your own offsets. With neither, the
+button sits 96 from the bottom and 20 from the side. The side key is
+`trailing` / `leading` on iOS and `end` / `start` on Android, so set both
+for a cross-platform app:
 
 ```ts
 await Mushi.configure({
   /* ... */
-  triggerInset: { bottom: 88, trailing: 16 },
+  triggerInset: { bottom: 88, trailing: 16, end: 16 },
 })
 ```
 
@@ -7390,8 +7419,8 @@ Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--befor
 ```ts
 interface MushiWidgetConfig {
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
-  theme?: 'light' | 'dark' | 'auto'
-  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+  theme?: 'auto' | 'light' | 'dark' | 'inherit'
+  trigger?: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
   /** 1.19+ — privacy caption under screenshot preview */
   screenshotSensitiveHint?: boolean | string
 }
@@ -7400,24 +7429,32 @@ interface MushiWidgetConfig {
 See [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 for the full preview + consent flow.
 
-### `submitReport(input)`
+### `captureEvent(input)`
+
+Send a report from code through the SDK instance (`Mushi.getInstance()` on
+web). The input is `MushiCaptureEventInput`:
 
 ```ts
-interface MushiReport {
+interface MushiCaptureEventInput {
   description: string
-  severity?: 'low' | 'medium' | 'high' | 'critical'
-  category?: 'bug' | 'feature_request' | 'usage_question' | 'other'
+  category?: 'bug' | 'slow' | 'visual' | 'confusing' | 'other'
+  severity?: 'critical' | 'high' | 'medium' | 'low'
   component?: string
-  screenshot?: Blob | string      // base64 or Blob
+  tags?: Record<string, string | number | boolean>
+  source?: string
+  error?: { name?: string; message?: string; stack?: string }
   metadata?: Record<string, unknown>
 }
 ```
 
-### `flushOfflineQueueNow()`
+The full wire shape the SDKs build for you is `MushiReport` (environment,
+console and network logs, `screenshotDataUrl`, reporter token, and more).
 
-Force any queued reports out before page unload or app suspend. The web,
-React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
-the appropriate lifecycle hook automatically.
+### Offline queue
+
+`createOfflineQueue()` is the IndexedDB queue the web SDK uses. Queued
+reports send automatically when the connection returns; there is no manual
+flush call to make.
 
 ### PII scrubbing utilities (1.27+)
 
@@ -7533,10 +7570,11 @@ description: eslint-plugin-mushi-mushi flags empty event handlers and leftover m
 
 # `eslint-plugin-mushi-mushi`
 
-Two lint rules that run as part of the v2 gates — **`no-dead-handler`**
-flags empty event handlers (`onClick={() => {}}`, `onSubmit={noop}`) and
-**`no-mock-leak`** flags faker / placeholder data left in production
-paths. The composite GitHub check fails when either rule reports.
+Two lint rules for bugs AI coding tools often ship — **`no-dead-handler`**
+flags event handlers that do nothing (`onClick={() => {}}`, a body that only
+logs) and **`no-mock-leak`** flags faker / placeholder data left in
+production paths. They run wherever ESLint runs: your editor, `pnpm lint`,
+and CI.
 
 ## Install
 
@@ -7544,10 +7582,7 @@ paths. The composite GitHub check fails when either rule reports.
 pnpm add -D eslint-plugin-mushi-mushi
 ```
 
-## Recommended preset
-
-Most projects pick up both rules at their default severity by extending
-the recommended preset:
+## Turn on the two rules
 
 ```js filename="eslint.config.js"
 import mushi from 'eslint-plugin-mushi-mushi'
@@ -7557,7 +7592,8 @@ export default [
   {
     plugins: { 'mushi-mushi': mushi },
     rules: {
-      ...mushi.configs.recommended.rules,
+      'mushi-mushi/no-dead-handler': 'error',
+      'mushi-mushi/no-mock-leak': 'error',
     },
   },
 ]
@@ -7568,21 +7604,38 @@ For legacy `.eslintrc`:
 ```json
 {
   "plugins": ["mushi-mushi"],
-  "extends": ["plugin:mushi-mushi/legacy"]
+  "rules": {
+    "mushi-mushi/no-dead-handler": "error",
+    "mushi-mushi/no-mock-leak": "error"
+  }
 }
 ```
+
+## The recommended preset
+
+`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on all
+19 rules in the plugin. The other 17 are design rules for Mushi's own admin
+console. Some only look at Mushi's paths, but `no-hand-rolled-dialog` checks
+every file and the page rules (`no-page-root-padding`,
+`no-legacy-page-header-in-pages`, `no-missing-page-posture`,
+`no-hand-rolled-tablist`) check any file named `*Page.tsx`, so in your own
+app they can report errors that do not apply to you. Use the two-rule config
+above unless you are working on Mushi itself.
 
 ## Rules
 
 ### `mushi-mushi/no-dead-handler`
 
-Flags JSX event handlers whose body is empty, only logs, or is a no-op
-arrow (`() => {}`). The CI gate fails on any non-test file that matches.
+Flags inline event handlers (`on*` props, and `onClick` / `onSubmit`-style
+object keys) whose body is empty, returns `null`, holds only `console.*` calls in a
+block, or throws "not implemented", including inside `useCallback`. It checks inline
+functions only: a handler passed by name, such as `onSubmit={noop}`, is not
+followed. Files named `*.test.*`, `*.spec.*` and `*.stories.*` are skipped.
 
 ```jsx
 // ✗ caught
 <button onClick={() => {}}>Submit</button>
-<form onSubmit={noop}><button type="submit">Submit</button></form>
+<button onClick={() => { console.log('clicked') }}>Save</button>
 
 // ✓ allowed
 <button onClick={() => mutate()}>Submit</button>
@@ -7594,9 +7647,12 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 
 ### `mushi-mushi/no-mock-leak`
 
-Flags arrays of placeholder data (`John Doe`, `lorem ipsum`, `faker.*`,
-`@faker-js/faker`) that live outside `**/*test*`, `**/*stories*`,
-`**/__mocks__/**`, or `**/fixtures/**`. The intent is to catch the
+Flags mock-library imports (`@faker-js/faker`, `faker`, `msw`, and
+similar), arrays of placeholder objects (`John Doe`, `Jane Doe`), and
+`lorem ipsum` or `placeholder@example.com` strings in production files. It
+skips files under a `__tests__`, `test`, `tests`, `spec`, `stories`,
+`fixtures`, `mocks` or `__mocks__` folder, and files named `*.test.*`,
+`*.spec.*`, `*.stories.*` or `*.mock.*`. The intent is to catch the
 moment a developer leaves their seed data wired up in a real page.
 
 ```ts
@@ -7612,12 +7668,12 @@ export const projects = [
 ]
 ```
 
-## Combining with the gates action
+## In CI
 
-Both rules surface as part of [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)'s
-composite GitHub check. You can also run the rules locally (`pnpm lint`)
-and fix violations before pushing — the action will pick the same set
-back up in CI.
+Run ESLint as its own step (for example `npx eslint .`) so a PR fails when
+either rule reports. The [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates`
+command does not run ESLint and sends no lint findings, so its
+`dead_handler` and `mock_leak` gates pass on their own.
 
 ---
 
@@ -7715,7 +7771,7 @@ idiomatic shells over [`@mushi-mushi/web`](/sdks/web). Each package depends on
 | --- | --- | --- |
 | [`@mushi-mushi/vue`](/sdks/vue) | `app.use(MushiPlugin, config)` | [Quickstart](/quickstart/vue) |
 | [`@mushi-mushi/svelte`](/sdks/svelte) | `initMushi(config)` | [Quickstart](/quickstart/svelte) |
-| [`@mushi-mushi/angular`](/sdks/angular) | `MUSHI_CONFIG` + `MushiService` / `ErrorHandler` factory providers | [Quickstart](/quickstart/angular) |
+| [`@mushi-mushi/angular`](/sdks/angular) | `providers: [provideMushi(config)]` (1.0.3+; factory providers on 1.0.2 and earlier) | [Quickstart](/quickstart/angular) |
 
 For capture, widget triggers, runtime config, and privacy, read the
 [web SDK](/sdks/web). React has its own package: [`@mushi-mushi/react`](/sdks/react).
@@ -7733,9 +7789,9 @@ description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from yo
 
 # `@mushi-mushi/inventory-auth-runner`
 
-A small Playwright runner that executes the `auth.scripted` block of your
-[`inventory.yaml`](/sdks/inventory-schema), captures the resulting cookies,
-and stores them in `project_settings` so the v2 crawler and synthetic
+A small Playwright runner that signs in to your app with the login script
+in your [`inventory.yaml`](/sdks/inventory-schema), picks the session
+cookie, and saves it to your Mushi project so the crawler and synthetic
 monitor can reach pages behind a login wall.
 
 ## When you need it
@@ -7753,32 +7809,51 @@ pnpm add -D @mushi-mushi/inventory-auth-runner
 
 ## Usage
 
-Add an `auth.scripted` block to `inventory.yaml`:
+Add a scripted `auth` block under `app` in `inventory.yaml`. The script is
+the body of an async function that receives Playwright's `page`, an `env`
+object for your secrets, and `context`; the runner has already opened
+`base_url` + `login_path`:
 
 ```yaml filename="inventory.yaml"
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]',    value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click:    { selector: '[data-testid=login]' }
-      - waitFor:  { url: /\/dashboard$/ }
+app:
+  id: acme-web
+  name: Acme web
+  base_url: https://app.acme.test
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=login]')
+        await page.waitForURL('**/dashboard')
 ```
+
+Inline scripts may not use `require(`, `import(`, `process.`, `eval(` and
+similar escapes, and are capped at 8 KB. For anything longer, set
+`script: 'js:./scripts/login.js'` to a module that default-exports an
+async `(page, env, context)` function.
 
 Then run:
 
 ```bash
-E2E_EMAIL=user@acme.test \
-E2E_PASSWORD=… \
+TEST_USER_EMAIL=user@acme.test \
+TEST_USER_PASSWORD=… \
 MUSHI_API_KEY=mushi_… \
-MUSHI_PROJECT_ID=proj_… \
+MUSHI_PROJECT=<project-uuid> \
 npx mushi-mushi-auth refresh
 ```
 
-The runner walks the steps headlessly, captures every cookie set by the
-target origin, and POSTs them to `/v1/admin/projects/:id/settings`. The
-crawler and synthetic monitor read from the same row on every run.
+Without installing, use
+`npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`.
+`MUSHI_API_KEY` needs the `mcp:write` scope. `MUSHI_API_ENDPOINT` is only
+for self-hosting.
+
+The runner signs in in a fresh headless Chromium, picks the session cookie
+set for your app's domain, and saves it with
+`PATCH /v1/admin/inventory/:projectId/settings`. The crawler and synthetic
+monitor read it from there on every run.
 
 ## In CI
 
@@ -7801,6 +7876,9 @@ jobs:
           api-key:    ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command:    auth-bootstrap
+        env:
+          TEST_USER_EMAIL:    ${{ secrets.MUSHI_TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.MUSHI_TEST_USER_PASSWORD }}
 ```
 
 The `auth-bootstrap` command in [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)
@@ -7814,109 +7892,122 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema
 
 ---
 title: '@mushi-mushi/inventory-schema'
-description: The Zod schema, JSON Schema and TypeScript types for inventory.yaml — the contract that Mushi's gates, crawler, ESLint plugin and CLI all read.
+description: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it."
 ---
 
 # `@mushi-mushi/inventory-schema`
 
-Source of truth for `inventory.yaml` — Zod schema, JSON Schema, and the
-TypeScript types every other v2 surface depends on. The admin ingester,
-the gate runner, the LLM proposer, and the GitHub Action all import from
-here so a schema change is felt in exactly one place.
+Validate an `inventory.yaml`: the file that lists your app's pages, the
+buttons and forms on each one, what each should do, and the test that
+proves it. Zod schema, JSON Schema and TypeScript types, matching what the
+Mushi console accepts when you upload the file.
 
 ## Install
 
 ```bash
-pnpm add -D @mushi-mushi/inventory-schema
+pnpm add @mushi-mushi/inventory-schema
 ```
 
-You usually don't add this directly — the gates runner, ESLint plugin,
-and CLI all bring it in transitively. Add it explicitly only if you're
-writing a tool that produces or consumes `inventory.yaml` documents.
+Add it when you write a tool that produces or checks `inventory.yaml`
+files, or to validate the file in your own CI. Mushi's CLI, ESLint plugin
+and GitHub Action do not depend on it.
 
 ## What `inventory.yaml` looks like
 
 ```yaml filename="inventory.yaml"
-version: 2
-project:
+schema_version: '2.0'          # a string starting with "2"; quote it
+app:
+  id: acme-web
   name: Acme web
-stories:
+  base_url: https://app.acme.test
+  # Optional: how the crawler signs in (see inventory-auth-runner).
+  auth:
+    type: scripted
+    config:
+      login_path: /login
+      script: |
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
+        await page.click('[data-testid=login]')
+user_stories:
   - id: signup
     title: New user signup
-    pages:
-      - id: signup
-        path: /signup
-        elements:
-          - id: email
-            selector: '[data-testid="email"]'
-          - id: password
-            selector: '[data-testid="password"]'
-          - id: submit
-            selector: '[data-testid="signup-submit"]'
-            actions:
-              - id: submit
-                trigger: click
-                # Machine-readable success contract. Threaded into the
-                # fix-worker LLM prompt and asserted by the synthetic
-                # monitor after every probe.
-                expected_outcome:
-                  summary: 'POST /signup returns 200 and creates a user row'
-                  response:
-                    status_in: [200, 201]
-                    json_path:
-                      - { path: '$.user.id', op: 'exists' }
-                  database:
-                    table: 'users'
-                    expect: 'row_exists'
-                  ui:
-                    route_change_to: '/dashboard'
-                    visible_text: 'Welcome'
-
-# Optional: feed an authenticated session to the synthetic monitor.
-auth:
-  scripted:
-    steps:
-      - navigate: /login
-      - type: { selector: '[data-testid=email]', value: '$E2E_EMAIL' }
-      - type: { selector: '[data-testid=password]', value: '$E2E_PASSWORD' }
-      - click: { selector: '[data-testid=login]' }
-      - waitFor: { url: /\/dashboard$/ }
+    pages: [signup]
+pages:
+  - id: signup
+    path: /signup
+    auth_required: false
+    elements:
+      - id: signup-submit
+        type: button             # button, link, form, input, list, toggle, menu, image, media, other
+        action: Creates the account and opens the dashboard
+        user_story: signup
+        testid: signup-submit
+        backend:
+          - { method: POST, path: /signup }
+        db_writes:
+          - { table: users, operation: insert }
+        verified_by:
+          - { file: e2e/signup.spec.ts, name: signs up a new user, framework: playwright }
+        # Machine-readable success contract. Threaded into the
+        # fix-worker LLM prompt and asserted by the synthetic
+        # monitor after every probe.
+        expected_outcome:
+          summary: 'POST /signup returns 200 and creates a user row'
+          response:
+            status_in: [200, 201]
+            json_path:
+              - { path: 'user.id', op: 'exists' }
+          database:
+            table: 'users'
+            expect: 'row_exists'
+          ui:
+            route_change_to: '/dashboard'
+            visible_text: 'Welcome'
 ```
 
+`app` and at least one page are required; `user_stories`, `dependencies`
+and `extensions` are optional. Each element needs `id`, `type` and
+`action`. `auth` can also be `cookie`, `bearer` or `oauth`.
+
 See [Concepts → Inventory and gates](/concepts/inventory-and-gates) for
-the conceptual model and a walkthrough of the five gates.
+the conceptual model and a walkthrough of the gates.
 
 ## Programmatic use
 
 ```ts
 import {
-  InventorySchema,
+  inventorySchema,
   parseInventory,
   type Inventory,
 } from '@mushi-mushi/inventory-schema'
 
 const result = parseInventory(yamlString)
 if (!result.ok) {
-  console.error(result.error.format())
+  for (const issue of result.issues) console.error(`${issue.path}: ${issue.message}`)
   process.exit(1)
 }
-const inventory: Inventory = result.value
+const inventory: Inventory = result.inventory!
 ```
 
-`InventorySchema` is the canonical Zod schema. `parseInventory` is a
-small ergonomic wrapper that runs `safeParse` + a YAML loader.
+`inventorySchema` is the canonical Zod schema. `parseInventory` loads the
+YAML and runs `safeParse`; `validateInventory` does the same for an object
+you already parsed. `computeStats` counts pages, elements, actions, stories,
+API and database dependencies, and tests.
 
 ## JSON Schema
 
-The package also publishes a JSON Schema at
-`@mushi-mushi/inventory-schema/json` for editor completion in any IDE
-that understands `$schema` references:
+For editor completion, point your YAML extension at the published JSON
+Schema:
 
 ```yaml filename="inventory.yaml"
-# yaml-language-server: $schema=https://unpkg.com/@mushi-mushi/inventory-schema/json/inventory.schema.json
-version: 2
+# yaml-language-server: $schema=https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json
+schema_version: '2.0'
 # …
 ```
+
+The same schema is exported as `inventoryJsonSchema` from
+`@mushi-mushi/inventory-schema/json-schema`.
 
 ---
 
@@ -8034,24 +8125,39 @@ npx @mushi-mushi/cli init    # the scoped name
 
 ## What it detects
 
-| Framework      | Detected from                                       |
-| -------------- | --------------------------------------------------- |
-| Next.js        | `next.config.*`, `app/` directory                   |
-| Nuxt           | `nuxt.config.*`                                     |
-| SvelteKit      | `svelte.config.*` + `@sveltejs/kit` dep             |
-| Angular        | `angular.json`                                      |
-| React (Vite)   | `vite.config.*` + `react` dep                       |
-| Vue 3 (Vite)   | `vite.config.*` + `vue@^3` dep                      |
-| Svelte (Vite)  | `vite.config.*` + `svelte` dep                      |
-| Expo           | `app.json` + `expo` dep                             |
-| React Native CLI | `react-native` dep without Expo                   |
-| Capacitor      | `capacitor.config.*`                                |
-| Vanilla        | fallback                                            |
+The wizard reads the dependencies in your `package.json` first, in this
+order, and takes the first match:
 
-The package manager is detected from the lockfile (`pnpm-lock.yaml`,
-`yarn.lock`, `bun.lockb`, `package-lock.json`). Env-var prefixes are
-chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`, `VITE_…`,
-`EXPO_PUBLIC_…`.
+| Framework (`--framework` id) | Detected from |
+| --- | --- |
+| Next.js (`next`) | `next` dependency |
+| Nuxt (`nuxt`) | `nuxt` dependency |
+| SvelteKit (`sveltekit`) | `@sveltejs/kit` dependency |
+| Angular (`angular`) | `@angular/core` dependency |
+| Expo (`expo`) | `expo` dependency |
+| React Native (`react-native`) | `react-native` dependency without Expo |
+| Remix (`remix`) | `@remix-run/react`, `@remix-run/node` or `@remix-run/serve` |
+| Astro (`astro`) | `astro` dependency |
+| Solid (`solid`) | `solid-js` or `@solidjs/start` |
+| Capacitor (`capacitor`) | `@capacitor/core` (with `react` it is treated as React) |
+| Svelte (`svelte`) | `svelte` dependency |
+| Vue (`vue`) | `vue` dependency |
+| Create React App (`cra`) | `react-scripts` dependency |
+| React (`react`) | `react` dependency |
+| Express, Fastify, Hono (`express`, `fastify`, `hono`) | the server framework's dependency |
+| Vanilla (`vanilla`) | fallback |
+
+With no matching dependency it falls back to config files
+(`next.config.*`, `nuxt.config.*`, `svelte.config.js`, `angular.json`,
+`remix.config.*`, `astro.config.*`). Pass `--framework ` to skip
+detection.
+
+The package manager is detected from the lockfile (`bun.lockb` or
+`bun.lock`, `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var
+prefixes are chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`,
+`EXPO_PUBLIC_…`, `REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and
+`VITE_…` for the other browser frameworks. Server frameworks, bare React
+Native and Remix get plain `MUSHI_…` names.
 
 ## Idempotent
 
@@ -8065,12 +8171,15 @@ Running the wizard a second time is safe:
 
 ## When to use the launcher vs the CLI directly
 
-Use **the launcher** when you want one URL to give a teammate
-("`npx mushi-mushi` and you're done").
+Use **the launcher** when you want one command to give a teammate
+("`npx mushi-mushi` and you're done"). Any other command is forwarded to
+`@mushi-mushi/cli`, so `npx mushi-mushi setup --ide cursor` or
+`npx mushi-mushi reports list` works without a global install.
 
-Use **`@mushi-mushi/cli`** directly if you want to run subcommands
-beyond `init` — e.g. `mushi report list`, `mushi triage`, or the
-`mushi migrate` migration helper.
+Install **`@mushi-mushi/cli`** globally (`npm install -g @mushi-mushi/cli`)
+when you use it every day and want the short `mushi` command — e.g.
+`mushi reports list`, `mushi reports triage `, or the `mushi migrate`
+migration helper.
 
 ---
 
@@ -8094,12 +8203,25 @@ Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
 **SEP-1686 Tasks** envelope so long-running fixes can stream progress back
 into your IDE.
 
+## Quick start
+
+```bash
+npx mushi-mushi setup --ide cursor   # or: claude, continue, zed
+```
+
+Restart the editor and ask "what's broken in prod?". For Cursor and Claude
+Code, `setup` writes the hosted server entry
+(`https://kensaur.us/mushi-mushi/hosted-mcp/`, URL only): the editor opens a
+browser sign-in on first use and no API key is stored on disk. Pass
+`--stdio` for a local server instead. Continue and Zed always get the stdio
+entry.
+
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. The default for
-  Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
-  Windsurf. Your client launches the server as a subprocess and pipes
-  JSON-RPC over stdio.
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.1`. What
+  `mushi setup --stdio` writes, and the only option for Claude Desktop,
+  Continue, Cline and Zed. Your client launches the server as a subprocess
+  and pipes JSON-RPC over stdio.
 - **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
   at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
   `application/json` or `text/event-stream` per content negotiation,
@@ -8108,15 +8230,19 @@ into your IDE.
   subprocess (typical for OpenAI Agents SDK, ChatGPT Agent, hosted
   CrewAI, or any orchestrator that talks remote MCP).
 
+For browser sign-in, use the URL-only entry `mushi setup` writes. To pass a
+key yourself instead (for an orchestrator that cannot open a browser), send
+it as a header. A static key header turns the client's sign-in off:
+
 ```jsonc
-// .cursor/mcp.json — Streamable HTTP example
+// .cursor/mcp.json — Streamable HTTP with an API key
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
-        "X-Mushi-Project-Id": "proj_…"
+        "X-Mushi-Project-Id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       }
     }
   }
@@ -8162,57 +8288,56 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci
 
 ---
 title: '@mushi-mushi/mcp-ci'
-description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — run the five-gate composite check on pull requests, draft inventory entries, and bootstrap crawler auth."
+description: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in."
 ---
 
 # `@mushi-mushi/mcp-ci`
 
-The Mushi v2 GitHub Action — runs the five-gate composite check, drafts
-inventory entries from a recent crawl, and bootstraps an authenticated
-session for crawler / synthetic monitor runs against staging.
+Mushi's GitHub Action. It calls the same API the MCP server uses, from a
+short CI job: fail a PR while bug reports sit untriaged, have an agent open
+a fix PR for one report, run the pre-release gates on a commit, or refresh
+the crawler's signed-in session.
 
 ## Quick start
 
-```yaml filename=".github/workflows/mushi-gates.yml"
-name: Mushi gates
-on:
-  pull_request:
-    branches: [main, master]
+```yaml filename=".github/workflows/mushi-gate.yml"
+name: Mushi gate
+on: [pull_request]
 jobs:
-  gates:
+  coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
-          api-key:    ${{ secrets.MUSHI_API_KEY }}
-          project-id: ${{ secrets.MUSHI_PROJECT_ID }}
-          command:    gates
+          api-key:      ${{ secrets.MUSHI_API_KEY }}
+          project-id:   ${{ secrets.MUSHI_PROJECT_ID }}
+          command:      check-coverage
+          min-coverage: '0.9'
 ```
 
-The action posts a single composite GitHub status — `mushi-mushi/gates` —
-which rolls up:
-
-- `mushi-mushi/no-dead-handler` — empty `onClick` / `onSubmit` etc. found
-  by the ESLint plugin.
-- `mushi-mushi/no-mock-leak` — faker / `John Doe` arrays surfaced in
-  non-test paths.
-- **Inventory drift** — actions added, removed, or renamed since the last
-  push.
-- **Agentic-failure detection** — handlers that regressed across deploys
-  (the inventory's `expected_outcome` checks no longer hold).
-- **Synthetic walk health** — the synthetic monitor's last walk against
-  staging.
+`check-coverage` fails the step when fewer than `min-coverage` (default
+`0.8`) of the project's reports are classified. Add a `trigger-judge` step
+before it to classify waiting reports first.
 
 ## Commands
 
 | `command:`           | What it does                                                          |
 | -------------------- | --------------------------------------------------------------------- |
-| `gates`              | The default — runs all five gates and posts the composite check.      |
-| `propose`            | Asks the LLM proposer for an updated `inventory.yaml` draft, opens a PR. |
-| `discover-api`       | Crawls the candidate routes the SDK observed in production.           |
-| `discovery-status`   | Prints the current discovery snapshot for the project.                |
-| `auth-bootstrap`     | Runs the `inventory.yaml` `auth.scripted` block and seeds the cookies into `project_settings`. |
+| `check-coverage`     | Fails when the classified share of reports is under `min-coverage`; sets the `coverage` output. |
+| `trigger-judge`      | Runs classification on up to 50 unclassified reports.                 |
+| `dispatch-fix`       | Queues an agent fix for `report-id` (optionally pinned with `inventory-action-node-id`). |
+| `query`              | Runs a plain-English `question` against your reports and prints the answer. |
+| `gates`              | Runs the gates for `commit-sha` (`all` = `dead_handler`, `mock_leak`, `api_contract`, `crawl`, `status_claim`, `orphan_endpoint`, `unknown_call`) and fails the step when one fails. |
+| `discover-api`       | Walks your repo for Next.js route handlers and OpenAPI files (plus optional Supabase introspection) and sends the routes to Mushi for the `api_contract` gate. |
+| `discovery-status`   | Reads what the SDK has observed; sets `ready_to_propose`, `total_events` and `route_count` outputs. |
+| `propose`            | Asks the LLM proposer for an `inventory.yaml` draft and sets `proposal_id`. It does not open a PR. |
+| `auth-bootstrap`     | Runs [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) (`npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`) to refresh the crawler's sign-in cookie. |
+
+The action fails the step; it does not post a separate GitHub commit status.
+It sends no ESLint findings, so `dead_handler` and `mock_leak` pass here: run
+[`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) as its own CI step to fail
+a PR on those. `crawl` is reported as skipped because the crawler runs on its
+own.
 
 ## In your IDE
 
@@ -8226,12 +8351,24 @@ page — see [Admin → User stories · Inventory](/admin/inventory).
 
 | Input         | Required | Default       | Description                                          |
 | ------------- | :------: | ------------- | ---------------------------------------------------- |
-| `api-key`     | ✓        | —             | Project API key (`mushi_…`).                         |
-| `project-id`  | ✓        | —             | Project ID (`proj_…`).                               |
-| `command`     |          | `gates`       | One of the commands listed above.                    |
-| `api-url`     |          | auto-routed   | Override for self-hosted Mushi deployments.          |
-| `inventory`   |          | `inventory.yaml` | Path to the inventory file (relative to repo root). |
-| `working-directory` |    | `.`           | Sub-directory to run the action from (monorepos).    |
+| `api-key`     | ✓        | —             | Project API key (`mushi_…`). Store it as a repo secret. |
+| `project-id`  | ✓        | —             | Project UUID.                                        |
+| `command`     | ✓        | —             | One of the commands listed above.                    |
+| `api-endpoint` |         | Mushi Cloud   | Override for self-hosted Mushi deployments.          |
+| `report-id`   | for `dispatch-fix` | —   | Report UUID.                                         |
+| `inventory-action-node-id` |  | —     | For `dispatch-fix`: the inventory action to pin the fix to. |
+| `question`    | for `query` | —          | The question to ask.                                 |
+| `min-coverage` |         | `0.8`         | For `check-coverage`: the share of reports that must be classified. |
+| `fail-on-quota` |        | `true`        | Set `false` to warn instead of failing on `QUOTA_EXCEEDED`. |
+| `commit-sha`  |          | `GITHUB_SHA`  | For `gates`: the commit to check.                    |
+| `pr-number`   |          | —             | For `gates`: the PR the findings belong to.          |
+| `gates`       |          | `all`         | For `gates`: a comma-separated subset.               |
+| `repo-root`   |          | the workspace | For `discover-api`: where to look for routes.        |
+| `openapi-file` |         | `openapi.yaml` in `repo-root` | For `discover-api`: an explicit OpenAPI file. |
+| `supabase-url`, `supabase-anon-key` | | — | For `discover-api`: optional Supabase introspection. |
+
+The full input and output list, with more workflow examples, is in the
+[package README](https://www.npmjs.com/package/@mushi-mushi/mcp-ci).
 
 ---
 
@@ -8537,6 +8674,21 @@ every report with the route, request id, and user (when supplied).
 pnpm add @mushi-mushi/node
 ```
 
+## Create a client
+
+Every handler below takes the same client:
+
+```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
+
+export const client = new MushiNodeClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  environment: process.env.NODE_ENV, // optional
+  release: process.env.GIT_SHA,      // optional
+})
+```
+
 ## Express
 
 ```ts
@@ -8545,14 +8697,7 @@ import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
-app.use(
-  mushiExpressErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-    environment: process.env.NODE_ENV,
-    release: process.env.GIT_SHA,
-  }),
-) // mount LAST so it sees every other route
+app.use(mushiExpressErrorHandler({ client })) // mount LAST so it sees every other route
 ```
 
 ## Fastify
@@ -8562,25 +8707,20 @@ import Fastify from 'fastify'
 import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
-mushiFastifyPlugin(app, {
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+mushiFastifyPlugin(app, { client })
 ```
 
 ## Hono
+
+Hono's `onError` must return a Response, so pass your own handler as the
+second argument. Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'
 import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
-app.onError(
-  mushiHonoErrorHandler({
-    apiKey: process.env.MUSHI_API_KEY!,
-    projectId: process.env.MUSHI_PROJECT_ID!,
-  }),
-)
+app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
 ```
 
 ## Process-level fallbacks
@@ -8590,10 +8730,7 @@ Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 ```ts
 import { attachUnhandledHook } from '@mushi-mushi/node'
 
-attachUnhandledHook({
-  apiKey: process.env.MUSHI_API_KEY!,
-  projectId: process.env.MUSHI_PROJECT_ID!,
-})
+attachUnhandledHook({ client })
 ```
 
 ## Programmatic submit
@@ -8664,46 +8801,58 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk
 
 ---
 title: '@mushi-mushi/plugin-sdk'
-description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.
+description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express or Hono.
 ---
 
 # `@mushi-mushi/plugin-sdk`
 
-Build a Mushi plugin in TypeScript. Plugins are HTTPS receivers that
-subscribe to lifecycle events; the SDK handles signature verification,
-delivery deduplication, and structured error responses.
+Write your own small HTTPS server that reacts when Mushi files, triages or
+fixes a bug. The SDK checks Mushi's signature on each request, drops repeat
+deliveries and calls your handler for the event.
+
+You only need it to connect a tool Mushi does not cover. Slack, Discord,
+Teams, Linear, Jira, GitHub Issues, PagerDuty and Sentry are connected on the
+**Integrations** page of the console with no code.
 
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/plugin-sdk
+npm i @mushi-mushi/plugin-sdk express
 ```
 
 ## Express adapter
 
+`createPluginHandler` takes your secret and one handler per event (`'*'`
+catches the rest). `expressMiddleware` wraps it and reads the raw body
+itself, so mount it before `express.json()`.
+
 ```ts
 import express from 'express'
+import { createPluginHandler, createMushiClient } from '@mushi-mushi/plugin-sdk'
 import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
-import { createMushiClient } from '@mushi-mushi/plugin-sdk'
+
+const mushi = createMushiClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+})
+
+const handler = createPluginHandler({
+  secret: process.env.MUSHI_PLUGIN_SECRET!,
+  on: {
+    'report.classified': async (envelope) => {
+      const { report, classification } = envelope.data as {
+        report: { id: string }
+        classification: { severity: string }
+      }
+      if (classification.severity === 'critical') {
+        await mushi.comment(report.id, 'Triaged as critical, paging on-call.')
+      }
+    },
+  },
+})
 
 const app = express()
-const mushi = createMushiClient({ apiKey: process.env.MUSHI_API_KEY! })
-
-app.post(
-  '/mushi/webhook',
-  expressMiddleware({
-    secret: process.env.MUSHI_PLUGIN_SECRET!,
-    handlers: {
-      'report.classified': async (envelope) => {
-        const { report, classification } = envelope.data
-        if (classification.severity === 'critical') {
-          await mushi.comment(report.id, '🚨 Triaged as critical — paging on-call.')
-        }
-      },
-    },
-  }),
-)
-
+app.post('/mushi/webhook', expressMiddleware(handler))
 app.listen(8080)
 ```
 
@@ -8711,33 +8860,38 @@ app.listen(8080)
 
 ```ts
 import { Hono } from 'hono'
+import { createPluginHandler } from '@mushi-mushi/plugin-sdk'
 import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
 
-const app = new Hono()
-app.post('/mushi/webhook', honoHandler({
+const handler = createPluginHandler({
   secret: Deno.env.get('MUSHI_PLUGIN_SECRET')!,
-  handlers: {
-    '*': async (envelope) => console.log(envelope.event, envelope.data),
-  },
-}))
+  on: { '*': async (envelope) => console.log(envelope.event, envelope.data) },
+})
+
+const app = new Hono()
+app.post('/mushi/webhook', honoHandler(handler))
 ```
 
 ## Verify a signature manually
 
-If you'd rather use your own framework, just call `verifySignature` with
-the raw body and the `Mushi-Signature` header:
+Using another framework? Pass the exact raw body and the `X-Mushi-Signature`
+header to `verifySignature`:
 
 ```ts
 import { verifySignature } from '@mushi-mushi/plugin-sdk'
 
-const result = await verifySignature({
-  payload: rawBodyString,
-  header: req.headers['mushi-signature'] as string,
+const result = verifySignature({
+  rawBody,
+  header: req.headers['x-mushi-signature'] as string,
   secret: process.env.MUSHI_PLUGIN_SECRET!,
 })
 
-if (!result.valid) throw new Error(result.reason)
+if (!result.ok) throw new Error(result.reason)
 ```
+
+For the Standard Webhooks headers, use
+`verifyStandardWebhooksSignature({ rawBody, webhookId, webhookTimestamp, webhookSignature, secret })`.
+It returns the same `{ ok, reason }` shape.
 
 ## Wire format
 
@@ -8745,9 +8899,11 @@ Mushi POSTs JSON envelopes shaped like:
 
 ```json
 {
-  "id": "evt_01HXY…",
   "event": "report.classified",
-  "createdAt": "2026-04-17T18:42:00.000Z",
+  "deliveryId": "5b0e…",
+  "occurredAt": "2026-04-17T18:42:00.000Z",
+  "projectId": "8c1d…",
+  "pluginSlug": "your-plugin",
   "data": {
     "report": { "id": "rep_01HXY…", "status": "classified" },
     "classification": { "category": "bug", "severity": "high", "confidence": 0.92, "tags": ["payments.stripe-3ds"] }
@@ -8755,13 +8911,19 @@ Mushi POSTs JSON envelopes shaped like:
 }
 ```
 
-The signature header is Stripe-style:
+Each request carries two signatures over the same body:
 
 ```
-Mushi-Signature: t=1734460920,v1=hex(hmac_sha256(secret, "t=…,b=…"))
+X-Mushi-Signature: t=<unix-ms>,v1=<hex hmac_sha256(secret, "<t>.<rawBody>")>
+webhook-id:        <deliveryId>
+webhook-timestamp: <unix-secs>
+webhook-signature: v1,<base64 hmac_sha256(secret, "<webhook-id>.<webhook-timestamp>.<rawBody>")>
 ```
 
-with a tolerance of 5 minutes (configurable per plugin).
+`createPluginHandler` checks whichever is present. The default tolerance is
+5 minutes; pass `toleranceMs` to `verifySignature` to change it.
+`deliveryId` is unique per delivery, so use it to ignore repeats (the handler
+does this in memory by default; pass `dedupStore` to persist it).
 
 ## See also
 
@@ -9603,6 +9765,191 @@ await mushi.captureEvent({
 
 ---
 
+## @mushi-mushi/ux
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/ux
+
+---
+title: '@mushi-mushi/ux'
+description: '@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.'
+---
+
+# `@mushi-mushi/ux`
+
+Find the UX problems on every screen of your app before your users do, and
+let the coding agent you already pay for fix them one screen at a time.
+Every change is measured. Only the ones that help are kept, on a branch you
+review. It runs on your machine.
+
+## Quick start
+
+```bash
+mushi ux ui                    # through the Mushi CLI: passes your login, so runs show in the console
+npx @mushi-mushi/ux ui         # or standalone
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id> --skill enhance-mobile-native-feel
+```
+
+The package installs a `mushi-ux` command; `mushi ux …` in
+[`@mushi-mushi/cli`](/sdks/cli#ux-pass-over-every-screen) runs the same
+thing and passes your Mushi login along. Your app must run locally, inside
+a git repository. In `--dev`, `{port}` is replaced with a spare port.
+
+Signed-in app? Run `mushi-ux login --url http://localhost:5173` once and
+sign in by hand in the window that opens; later runs reuse that session
+with `--login-url`.
+
+## From studio to merge
+
+1. **Studio (your computer).** `mushi ux ui` opens a page on 127.0.0.1.
+   Pick the agent, model, skill and pages, then watch each attempt live.
+2. **Console (mirror and review).** With sync on, the run is mirrored to
+   the console's [UX runs](/admin/ux-runs) page as it goes. The studio
+   offers sync when you are signed in with the Mushi CLI; from the
+   terminal, add `--sync`.
+3. **Merge.** Open the kept changes as a draft PR from the studio, then
+   merge it from the console (after a confirmation) or on GitHub. Nothing
+   is merged for you.
+
+## What a run does
+
+1. Checks the agent can start and read a file (about a minute), so a
+   signed-out agent fails before anything slow.
+2. Creates a git worktree on a new branch, `mushi-ux/`, and starts
+   your dev server there. Your own checkout is never touched.
+3. Maps the app: every page, plus the tabs, dialogs and menus each one
+   opens.
+4. For each screen: screenshots it at phone and desktop width and measures
+   accessibility (axe), sideways scrolling, tap targets under 24×24 px,
+   console errors and layout shift. The agent gets the screenshots, the
+   problems and your design tokens.
+5. After each attempt it measures again. The edit is **kept** as a commit
+   if nothing got worse and something changed, otherwise **rolled back**
+   with the reason for one more try. Screens already done are checked
+   again, and any that moved are marked **regressed**.
+6. Optionally, a second model compares each changed screen before and
+   after. Its review is advisory and never keeps or reverts anything.
+
+With `--steps` (on by default in the studio) the agent first plans 2–5
+small changes per screen, then makes one per attempt. A stopped run (closed
+laptop, Stop, crash) shows **Resume** in the studio, or continue it from
+the first unfinished screen with `mushi-ux run --resume `.
+
+## Safety
+
+- **Exploring never writes.** Every non-GET request is blocked, forms are
+  never submitted, and buttons like Delete, Pay, Send and Log out are never
+  clicked. If your app reads with POST (Supabase `rpc`, GraphQL), allow it:
+  `--allow "POST /rest/v1/rpc/*"`.
+- **The agent never sees your session or keys.** Credentials are stripped
+  from its environment except its own model key. Claude Code runs with no
+  shell and only the worktree's files.
+- **Your dev server** runs without this tool's keys (`CURSOR_API_KEY`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, `MUSHI_*`). Put app
+  secrets in the app's ignored `.env` files; those are copied into the
+  worktree.
+- **What reaches the console:** phase, screens, scores, problem counts,
+  screenshots, and the names of files read or edited. The agent's words,
+  its commands and their output stay in `.mushi/ux//agent/`.
+- Use a test account if your dev server talks to production data.
+
+## Agents
+
+| `--agent` | Needs | Status |
+| --- | --- | --- |
+| `claude-code` (default) | `claude` on PATH | Verified on Windows |
+| `cursor` | Cursor CLI (`agent`), signed in with `agent login` | Verified on Windows |
+| `codex` | `codex` on PATH | Unverified |
+| `cursor-cloud` | `CURSOR_API_KEY` and an `origin` on GitHub | Unverified |
+
+`mushi-ux models --agent ` lists the models your account can use.
+`--skill` takes a skill name (`mushi-ux skills` lists them; they come from
+`npm:@kensaurus/skills` unless you pass `--skills-repo`), several names
+comma-separated to chain them, or a path to a skill folder. Without one,
+the agent gets built-in UX guidance.
+
+On Windows, start runs from PowerShell or cmd: a Claude Code hook that
+fails under Git Bash makes the Cursor CLI refuse every file read, and the
+start-up check says so.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `mushi-ux ui` | The studio: start runs and watch them |
+| `mushi-ux run --dev ""` | Run the loop from the terminal |
+| `mushi-ux discover --url ` | List the screens, change nothing |
+| `mushi-ux audit --url  --profile-dir ` | Find UX bugs on signed-in screens and file them as Mushi reports |
+| `mushi-ux explore --url  --profile-dir ` | Let a model use the signed-in app like a careless user; file the errors a replay confirms |
+| `mushi-ux login --url ` | Sign in once, in a visible browser |
+| `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
+| `mushi-ux open ` | The local dashboard for a past run |
+
+Common `run` options:
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `--max-surfaces` / `--iterations` / `--timeout` | 10 / 2 / 10 min | Screens, attempts per screen, minutes per attempt |
+| `--base ` | `HEAD` | Branch from this ref, e.g. `origin/main` |
+| `--path ` | — | Work only on these pages (repeatable) |
+| `--ignore ` | — | Not your UI (a dev badge): hidden and skipped. Or mark it `data-mushi-ux-ignore` |
+| `--install ` | from the lockfile | Install command for the worktree; `none` skips it |
+| `--sync` | off | Mirror the run to the console (`mushi ux` passes your login) |
+| `--no-judge` / `--no-preflight` / `--no-dashboard` | — | Skip the review, the agent check, or the local dashboard |
+
+`mushi-ux run --help` lists the rest. Run state and screenshots live in
+`.mushi/ux//`. The run adds its folders to `.git/info/exclude`, so
+`git status` stays clean. `--sync` refuses a run whose app reports to a
+different Mushi project than your login.
+
+## Audit and explore signed-in screens
+
+`mushi-ux audit` checks the live app the way a signed-in user sees it and
+files what is wrong as Mushi reports, so the fix loop picks them up. It
+never edits code and never opens a fresh browser: point it at a cached,
+signed-in browser profile.
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --review claude-code --file --dry-run
+```
+
+- It maps the screens under the URL's path (`--max-pages`, default 15;
+  `--states N` also opens up to N dialogs or tabs a page) and captures each
+  on desktop (1440×900) and phone (390×844).
+- It files measured problems: serious accessibility rules, a page that
+  scrolls sideways, console errors, content that jumps while loading.
+  `--review` adds visual defects a model finds (`claude-code`,
+  `anthropic-api` or `cursor`).
+- `--file` files at most 15 reports a run, one per screen and problem, and
+  skips one filed in the last 14 days or still open. It needs
+  `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`. `--dry-run` files nothing.
+
+`mushi-ux explore` runs short sessions where a model picks what a curious
+or careless user would do next (forms with odd input, back and reload
+mid-task, double-clicks, filters that match nothing), in the same read-only
+browser and profile. The model only chooses actions; code decides what is a
+bug. A finding is filed only when replaying the steps without the model
+shows it again.
+
+```bash
+mushi-ux explore --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --charter forms --charter filters --steps 30 --file --dry-run
+```
+
+## On GitHub Actions
+
+Copy
+[`docs/templates/mushi-ux.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml)
+to `.github/workflows/mushi-ux.yml` and set its `dev-command`. Start it from
+the Actions tab, or with **Run in the cloud** on the console's
+[UX runs](/admin/ux-runs) page. It uses `cursor-cloud`, sees the app signed
+out, and opens one draft PR. Its pushes go to `mushi-ux/**`, so add
+`branches-ignore: ['mushi-ux/**']` to any CI that runs on every push.
+
+---
+
 ## @mushi-mushi/vue
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/vue
@@ -9694,29 +10041,77 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
-description: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost."
+description: "@mushi-mushi/wasm-classifier filters junk bug reports in the browser, before they reach the server or your LLM."
 ---
 
 # `@mushi-mushi/wasm-classifier`
 
-Optional on-device pre-classifier built on a Phi-3-mini ONNX model running
-under `onnxruntime-web`. Detects obvious junk before the request even
-leaves the browser, cutting your LLM bill.
+Optional on-device junk filter for bug reports. It stops empty or nonsense
+reports ("hi", "asdf") in the browser, before they are sent. The default
+backend is a heuristic with no dependencies; an optional ONNX backend runs a
+model you host, through `onnxruntime-web`.
 
 ```bash
 pnpm add @mushi-mushi/wasm-classifier
+# Optional, only for the ONNX backend:
+pnpm add onnxruntime-web
 ```
+
+## Use it with the web SDK
+
+The web SDK does not load the classifier on its own. Pass it in
+`preFilter.wasmClassifier`:
 
 ```ts
-import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
+import { Mushi } from '@mushi-mushi/web'
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
 
-const classifier = await useWasmClassifier()
-const verdict = await classifier.classify('asdf qwer')
-// → { keep: false, confidence: 0.96, reason: 'low-information' }
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'mushi_...',
+  preFilter: { wasmClassifier: createHeuristicClassifier() },
+})
 ```
 
-The web SDK auto-loads this when present and skips classification on the
-server when the verdict is `keep: false` with confidence ≥ 0.85.
+It runs after the SDK's built-in pattern filter. A `block` verdict stops the
+report on the device; `pass` and `unsure` send it, and the server does the
+full classification.
+
+## Call it directly
+
+```ts
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
+
+const classifier = createHeuristicClassifier({ blockThreshold: 0.2, passThreshold: 0.55 })
+const result = await classifier.classify({ description: 'asdf qwer' })
+// → { verdict: 'pass' | 'block' | 'unsure', confidence, reason, modelId: 'heuristic-v1', durationMs }
+```
+
+`classify()` also takes the signals the web SDK passes: `category`, `url`,
+`hasScreenshot`, `hasSelectedElement`, `hasNetworkErrors`,
+`hasConsoleErrors` and `proactiveTrigger`.
+
+## ONNX backend
+
+```ts
+import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier'
+
+const classifier = await createOnnxClassifier({
+  modelUrl: 'https://cdn.your-app.com/mushi/model.onnx',
+  cacheKey: 'model-v1',
+  preload: true,
+  classifyTimeoutMs: 750,
+})
+```
+
+If `onnxruntime-web` is missing, the model fetch fails, or a call exceeds
+`classifyTimeoutMs`, it falls back to the heuristic backend. The package does
+not ship a model.
+
+  Model inference is not implemented yet. The ONNX backend loads the runtime
+  and downloads your model, then still returns heuristic verdicts (`modelId:
+  'heuristic-fallback'`, with a console warning). Use
+  `createHeuristicClassifier()` until that changes.
 
 ---
 
@@ -9732,7 +10127,7 @@ description: Reference for @mushi-mushi/web, the browser SDK — screenshots, co
 # `@mushi-mushi/web`
 
 Browser SDK: screenshots, console logs, network breadcrumbs, and a
-shake-to-report widget in a Shadow DOM so your CSS never leaks in or out.
+report widget in a Shadow DOM so your CSS never leaks in or out.
 
   **Migrating from another bug-capture tool?** We have step-by-step guides
   for [Instabug / Luciq](/migrations/instabug-to-mushi),
@@ -9765,9 +10160,9 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 - **`sampleRate` / `replaySampleRate`** — probabilistic gates for automatic
   error reports and session replay (see below). User-initiated feedback is
   never sampled out.
-- **`pii`** — built-in scrubber masks emails, phones, SSNs,
-  credit-card-shaped strings, and JWTs by default. Add custom regex via
-  `pii.customPatterns`.
+- **Built-in PII scrubber** — always on; masks emails, phones, SSNs,
+  credit-card-shaped strings, and JWTs. It has no init option. To remove
+  anything else, edit or drop the report in `beforeSend`.
 
 ---
 
@@ -12171,18 +12566,32 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/bugsnag
 
 ---
 title: Bugsnag
-description: Mirror Mushi bug reports into Bugsnag and close the Bugsnag error when the fix PR merges — install from the marketplace and map release stages.
+description: Copy triaged Mushi bug reports into Bugsnag and mark the error fixed when Mushi applies a fix — a self-hosted plugin with a Data API token.
 ---
 
 # Bugsnag plugin
 
-Mirrors Mushi reports into Bugsnag projects and closes Bugsnag errors when the fix PR merges.
+Copies each bug Mushi triages into Bugsnag as an error, and marks it `fixed`
+when Mushi applies a fix.
 
-## Setup
+**Not in the Mushi Cloud Marketplace yet.** The console has no Bugsnag
+listing, so you can't install it from there. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin.
+To bring Bugsnag errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
-1. In Mushi: **Marketplace → Bugsnag → Install**.
-2. Provide project API key and release stage mapping.
-3. Set severity filter for which reports sync outbound.
+## Setup (self-hosted Mushi)
+
+```bash
+npm i @mushi-mushi/plugin-bugsnag
+export MUSHI_PLUGIN_SECRET=...      # the signing secret set when the plugin is installed
+export BUGSNAG_API_KEY=...          # Bugsnag Data API token
+export BUGSNAG_PROJECT_SLUG=...     # from your Bugsnag project URL
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-bugsnag mushi-plugin-bugsnag
+```
+
+Point the plugin's webhook URL at `https://<your-host>/mushi/webhook`.
 
 ## Package
 
@@ -12192,8 +12601,8 @@ Mirrors Mushi reports into Bugsnag projects and closes Bugsnag errors when the f
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Open Bugsnag error with Mushi backlink |
-| `fix.applied` | Resolve Bugsnag error |
+| `report.classified` | Create a Bugsnag error (grouping hash `mushi--`) with a link back to the report |
+| `fix.applied` | Set the error's status to `fixed` |
 
 ---
 
@@ -12284,18 +12693,34 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/crashlytics
 
 ---
 title: Crashlytics
-description: Push Mushi mobile bug reports into Firebase Crashlytics issues and close them when fixes merge — service account setup and app ID mapping.
+description: Flag fixed Mushi reports in Firebase Remote Config so your mobile app can hide stale crash notices — a self-hosted plugin with a Google access token.
 ---
 
 # Crashlytics plugin
 
-Pushes Mushi mobile reports into Firebase Crashlytics issues and closes them when fixes merge.
+When Mushi applies a fix, writes a `mushi_resolved_` flag to your
+Firebase Remote Config, which your mobile app can read to stop showing a
+stale crash notice. It does not create Crashlytics issues.
 
-## Setup
+**Not in the Mushi Cloud Marketplace yet.** The console has no Crashlytics
+listing, so you can't install it from there. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin. To bring Crashlytics crashes *into* Mushi, use `@mushi-mushi/adapters`.
 
-1. In Mushi: **Marketplace → Crashlytics → Install**.
-2. Upload Firebase service account JSON with Crashlytics write scope.
-3. Map Android/iOS app IDs to Mushi projects if you run multiple apps.
+## Setup (self-hosted Mushi)
+
+```bash
+npm i @mushi-mushi/plugin-crashlytics
+export MUSHI_PLUGIN_SECRET=...   # the signing secret set when the plugin is installed
+export GCP_ACCESS_TOKEN=...      # OAuth2 access token, firebase + cloud-platform scopes
+export FIREBASE_PROJECT_ID=...
+export FIREBASE_APP_ID=...       # e.g. 1:123456789012:android:abcdef
+npx -p @mushi-mushi/plugin-crashlytics mushi-plugin-crashlytics
+```
+
+The plugin takes a ready access token and does not refresh it (tokens last
+about an hour). Point the plugin's webhook URL at
+`https://<your-host>/mushi/webhook`.
 
 ## Package
 
@@ -12305,8 +12730,7 @@ Pushes Mushi mobile reports into Firebase Crashlytics issues and closes them whe
 
 | Event | Action |
 | --- | --- |
-| `report.classified` (mobile) | Create Crashlytics issue with device metadata |
-| `fix.applied` | Close issue |
+| `fix.applied` | Set Remote Config `mushi_resolved_` to `"true"`; close the Crashlytics issue only if the event carries `crashlyticsIssueId` (Mushi does not send it today) |
 
 ---
 
@@ -12323,29 +12747,34 @@ description: Dispatch a Cursor Cloud Agent automatically when a Mushi report qua
 
 Automatically dispatches a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent) run when a qualifying Mushi event fires. The agent investigates the issue in your codebase, drafts a fix, and opens a signed PR — posting the link back into the Mushi Fixes view without any human in the loop.
 
-The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-cloud-agent`). Unlike standard webhook plugins, it calls the Cursor REST API directly — there is no outbound webhook URL to configure.
+The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-cloud-agent`). Unlike standard webhook plugins, Mushi calls the Cursor REST API directly — it never posts to the webhook URL in the install form.
+
+You do not need the npm package
+[`@mushi-mushi/plugin-cursor-cloud`](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
+for any of this. Mushi calls Cursor itself; the package is only for running
+the same dispatch from your own server.
 
 ## Prerequisites
 
-- A [Cursor](https://cursor.com) account with an API key (Settings → API).
-- Your GitHub integration configured in [Admin → Integrations](/admin/integrations) — the Cursor agent needs repo access to open PRs.
+- A [Cursor](https://cursor.com) account with an API key (cursor.com/dashboard/integrations → API Keys).
+- GitHub connected on the console's **Integrations** page — the agent needs your repo URL to open PRs.
 
 ## Setup
 
-1. Go to **Admin → Marketplace**.
-2. Find **Cursor Cloud Agent** → click **Install**.
-3. Fill in the configuration fields:
+1. On the **Integrations** page, open the **Cursor Cloud** card and paste
+   your Cursor API key (`crsr_…`). Optionally set a default model (default
+   `composer-2.5`) and whether Cursor opens PRs (default on). **Test
+   connection** checks the key.
+2. That is enough to send a report to Cursor by hand (**Send to Cursor** on a
+   report, or `mushi fix  --agent cursor_cloud`).
+3. To start agents automatically, go to **Marketplace → Cursor Cloud Agent →
+   Install**. The form asks for a webhook URL and signing secret like every
+   listing, but Mushi does not call that URL for this plugin; it calls
+   Cursor directly with the key from step 1. Keep the subscribed events
+   (`report.classified`, `qa_story.failed`, `fix.requested`) or narrow them.
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| **API Key** | ✓ | Your Cursor API key (`cur_…`) — stored in the Supabase Vault; never echoed to the UI |
-| **Workspace ID** | ✓ | Your Cursor workspace ID (`ws_…`) — find it at cursor.com/settings |
-| **Model** | — | `composer-2.5` (default) or `composer-latest` |
-| **Auto-create PRs** | — | When enabled, Cursor opens a signed draft PR automatically (default: enabled) |
-| **Max iterations** | — | Retired and ignored: one dispatch is one Cursor run |
-
-4. Click **Install**.
-5. Click **Test** to send a test event and confirm delivery.
+Automatic runs on `report.classified` start only for **critical** reports;
+the install form has no setting to change that.
 
 ## Behaviour
 
@@ -12356,7 +12785,7 @@ The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-c
 | `qa_story.failed` | When a scheduled QA story fails all assertions | Attempts to heal the failing story by opening a PR |
 | `skill_pipeline.step.dispatched` | When a skill pipeline run in `cloud` mode advances to a step | Runs the step's pre-composed context packet as a Cursor Cloud agent prompt, stores the `agentId` on the step row, and checks the step in via the API |
 
-For `skill_pipeline.step.dispatched`, the agent dispatches even when the marketplace plugin is not installed — credentials are read from **Integrations → Cursor Cloud**. Set `repoUrl` in the plugin config so the cloud agent knows which repository to operate on; without it the step is skipped with a warning.
+For `skill_pipeline.step.dispatched`, the agent dispatches even when the marketplace plugin is not installed — credentials are read from the **Cursor Cloud** card on the Integrations page, and the repository from your GitHub connection. Without a GitHub repo URL the step is marked failed.
 
 ## Fixes view integration
 
@@ -12368,9 +12797,11 @@ Once the agent run terminates, the [Fixes page](/admin/fixes) shows:
 
 ## Common tasks
 
-### Limiting dispatch to critical reports only
+### Which reports start an agent
 
-The Cursor Cloud Agent plugin dispatches on every `report.classified` event. To restrict to `p0`/`p1` reports, use the severity gating in the plugin install form — select only the severities you want to trigger a dispatch.
+On `report.classified`, the plugin starts an agent only for critical
+reports. To stop automatic runs for triaged reports entirely, remove
+`report.classified` from the plugin's subscribed events.
 
 ### Triggering manually
 
@@ -12400,7 +12831,7 @@ Navigate to **Admin → Fixes** → find the `cursor_cloud` row → expand the f
 
 ## Related pages
 
-- [Admin → Integrations → Cursor Cloud](/admin/integrations) — configure the Cursor API key and workspace ID
+- [Admin → Integrations → Cursor Cloud](/admin/integrations) — configure the Cursor API key and default model
 - [Admin → Fixes](/admin/fixes) — view Cursor agent runs, badges, and artifact galleries
 - [Concepts → Fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator selects and dispatches agents
 - [Concepts → Connecting your orchestrator](/concepts/orchestrator-interop) — MCP, CLI, REST, and A2A dispatch surfaces
@@ -12413,26 +12844,42 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/discord
 
 ---
 title: Discord
-description: Post Mushi report and fix events to a Discord channel through a webhook — create the webhook, install the plugin, and choose which events to send.
+description: Post Mushi report and fix events to a Discord channel — paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.
 ---
 
 # Discord plugin
 
-Sends configurable embeds to a Discord webhook when Mushi events fire — popular with community and startup teams.
+Posts a message to a Discord channel when Mushi triages a bug or a fix
+lands.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. In Discord: create a webhook on your target channel.
-2. In Mushi: **Marketplace → Discord → Install** and paste the webhook URL.
-3. Choose which events to fan out (defaults: classified reports + fix PRs).
+1. In Discord: **Channel settings → Integrations → Webhooks → New Webhook**, then copy its URL.
+2. In the Mushi console: open the **Integrations** page and paste the URL on the Discord card.
 
-## Package
+Mushi posts to the channel itself; you do not need the npm package.
+
+## Self-hosted plugin
 
 [`@mushi-mushi/plugin-discord`](https://www.npmjs.com/package/@mushi-mushi/plugin-discord)
+does the same from your own server. The console's Marketplace has no Discord
+listing, so it only receives events from a Mushi server you run yourself,
+once you add a `plugin_registry` row for it.
 
-## Events
+```bash
+npm i @mushi-mushi/plugin-discord
+export MUSHI_PLUGIN_SECRET=...
+export DISCORD_WEBHOOK_URL=https://discord.com/...
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-discord mushi-plugin-discord
+```
 
-Configurable per event type — embed includes severity, taxonomy, and deep link back to the Mushi report drawer.
+| Event | Embed |
+| --- | --- |
+| `report.classified` | Coloured by severity (critical red, high orange, medium yellow, low green) |
+| `fix.proposed` | Blue, with the PR link when there is one |
+| `fix.applied` | Green |
+| `report.status_changed` | Grey, with the new status |
 
 ---
 
@@ -12500,29 +12947,43 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/github-issues
 
 ---
 title: GitHub Issues
-description: Open a labelled GitHub issue for every classified Mushi report, with a link back to the report — target repo, default labels and assignee settings.
+description: Open a GitHub issue for every triaged Mushi report and close it when the fix lands — set it up on the Integrations page, or self-host the plugin.
 ---
 
 # GitHub Issues plugin
 
-Opens a labelled GitHub issue when a report is classified, with a backlink to the Mushi report drawer.
+Opens a GitHub issue for each bug Mushi triages, and closes it when the fix
+lands.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. Connect GitHub in **Integrations** (required for repo access).
-2. In Mushi: **Marketplace → GitHub Issues → Install**.
-3. Set target repo, default labels, and assignee mapping.
+1. Create a fine-grained token with **Issues: Read and write** on the repo
+   that should get the issues (it can be a separate public tracker repo).
+2. In the Mushi console: open the **Integrations** page, find **GitHub
+   Issues**, and enter the owner, repo and token. **Test connection** checks it.
 
-## Package
+Mushi opens the issues and closes them itself; you do not need the npm package.
+
+## Self-hosted plugin
 
 [`@mushi-mushi/plugin-github-issues`](https://www.npmjs.com/package/@mushi-mushi/plugin-github-issues)
+does the same from your own server. The console's Marketplace has no GitHub
+Issues listing, so it only receives events from a Mushi server you run
+yourself, once you add a `plugin_registry` row for it.
 
-## Events
+```bash
+npm i @mushi-mushi/plugin-github-issues
+export MUSHI_PLUGIN_SECRET=...
+export GITHUB_TOKEN=...     # Issues: write, Metadata: read
+export GITHUB_OWNER=acme
+export GITHUB_REPO=widget-app
+npx -p @mushi-mushi/plugin-github-issues mushi-plugin-github-issues
+```
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Open issue with Mushi report URL in body |
-| `fix.applied` | Close or comment with squash-merge link |
+| `report.classified` | Open an issue labelled `mushi-bug` (the label is created if missing) |
+| `fix.applied` | Close the issue |
 
 ---
 
@@ -12532,30 +12993,42 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/jira
 
 ---
 title: Jira Cloud
-description: Two-way sync between Mushi reports and Jira Cloud issues — create issues on classification, sync status, and comment fix summaries when fixes land.
+description: Open Jira Cloud issues from Mushi bug reports and keep their status in step — set it up on the Integrations page, or self-host the Jira plugin.
 ---
 
 # Jira Cloud plugin
 
-Bidirectional sync between Mushi reports and Jira Cloud issues — creates issues on `report.classified`, syncs status, and comments fix summaries on `fix.applied`.
+Opens a Jira issue for each Mushi bug report and keeps it in step as the
+report moves to fixed.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. In Mushi: **Marketplace → Jira Cloud → Install**.
-2. Complete OAuth 2.0 (3LO) with your Atlassian app (`read:jira-work`, `write:jira-work`, `offline_access`).
-3. Map project key, issue type, and label defaults in the plugin config.
+1. At **id.atlassian.com → Security → API tokens**, create an API token.
+2. In the Mushi console: open the **Integrations** page, find **Jira**, and
+   enter your Jira base URL (e.g. `https://acme.atlassian.net`), the
+   Atlassian email that owns the token, the token, and the project key
+   (e.g. `BUG`).
+3. Click **Save**, then **Test connection**.
 
-## Package
+Mushi opens and resolves the Jira issues itself; you do not need the npm package.
 
-[`@mushi-mushi/plugin-jira`](https://www.npmjs.com/package/@mushi-mushi/plugin-jira) — see the npm README for OAuth helpers and webhook receiver examples.
+## Self-hosted plugin
 
-## Events
+[`@mushi-mushi/plugin-jira`](https://www.npmjs.com/package/@mushi-mushi/plugin-jira)
+is a library for doing the same from your own server with Jira OAuth 2.0
+(3LO): `buildAuthorizeUrl`, `exchangeCode`, `refreshTokens` and
+`createJiraPluginHandler`. See its README for the code. The console's
+Marketplace has no Jira listing, so it only receives events from a Mushi
+server you run yourself, once you add a `plugin_registry` row for it.
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Create or update Jira issue with Mushi metadata |
-| `report.status_changed` | Transition Jira issue status |
-| `fix.applied` | Comment with fix PR link |
+| `report.created` | Create a Jira issue under `jiraProjectKey`, labelled with category and severity |
+| `report.status_changed` | Run the Jira transition from `statusToTransition` (defaults: pending/classified/grouped → To Do, fixing → In Progress, fixed/dismissed → Done) |
+| `fix.applied` | Comment with the fix PR link or summary |
+
+The report → issue mapping is kept in memory, so after a restart status
+changes and fix comments for older reports are skipped.
 
 ---
 
@@ -12565,63 +13038,57 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/linear
 
 ---
 title: Linear
-description: File a Linear issue automatically when Mushi classifies a bug report — create a Linear API key, install the plugin, and choose the team and filters.
+description: File Linear issues from Mushi bug reports — connect Linear on the Integrations page, or run the self-hosted Linear plugin with an API key and team id.
 ---
 
 # Linear plugin
 
-Files a Linear issue automatically when the Mushi classifier categorises a report.
+Opens a Linear issue for each new Mushi report and updates it once the
+report is triaged.
 
-## Setup
+**Most people don't need the plugin.** Connect Linear on the console's
+**Integrations** page (OAuth or a pasted API key) and Mushi files Linear
+issues and closes them for you. The plugin below is for running the Linear
+calls from your own server.
+
+## Setup (self-run plugin)
 
 1. Create a Linear API key: **Settings → API → Personal API keys** → **New key**.
-2. In Mushi: **Marketplace → Linear → Install**.
-3. Fill in:
-   - **`apiKey`** — pasted into Vault, never echoed back to the UI
-   - **`teamId`** — the Linear team to file issues under (find it in Linear → Settings → Team → copy the team ID from the URL)
-   - **`labelMap`** *(optional)* — JSON object mapping `taxonomy_path → label_id[]`
+2. Start the server where Mushi can reach it over public HTTPS:
+
+   ```bash
+   npm i @mushi-mushi/plugin-linear
+   export MUSHI_PLUGIN_SECRET=...      # must match the signing secret in step 3
+   export LINEAR_API_KEY=lin_api_...
+   export LINEAR_TEAM_ID=...           # the Linear team to file issues under
+   npx -p @mushi-mushi/plugin-linear mushi-plugin-linear
+   ```
+
+3. In the console: **Marketplace → Linear Sync → Install**. Set the webhook
+   URL to `https://<your-host>/mushi/webhook`. Keep the signing secret Mushi
+   generates (or paste your own) and use the same value for
+   `MUSHI_PLUGIN_SECRET`.
 
 ## Behaviour
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Creates a Linear issue with title, Markdown summary, report link, and priority |
-| `report.status_changed → resolved` | Moves the linked Linear issue to *Done*, adds a comment with the merged PR URL |
+| `report.created` | Creates a Linear issue (title, plus the event JSON in the description) |
+| `report.classified` | Updates that issue's title and description |
+| `report.status_changed` | Moves the issue to the state in `stateMap[newStatus]`, if you passed a `stateMap` (programmatic use only) |
 
-Linear issue fields:
-
-| Linear field | Mushi source |
-| --- | --- |
-| `title` | report `title` |
-| `description` | Markdown summary + report permalink |
-| `priority` | `p0 → 1 (Urgent)`, `p1 → 2 (High)`, `p2 → 3 (Medium)`, `p3 → 4 (Low)` |
-| `labelIds` | `labelMap[taxonomy_path] ?? []` |
-
-## Label mapping example
-
-Map Mushi taxonomy paths to Linear label IDs so issues are automatically triage-labelled:
-
-```json
-{
-  "ui/layout": ["lab_abc123"],
-  "performance/slow-load": ["lab_def456", "lab_perf789"],
-  "crash/anr": ["lab_crash999"]
-}
-```
-
-Find label IDs via the Linear API:
-
-```bash
-curl -X POST https://api.linear.app/graphql \
-  -H "Authorization: $LINEAR_API_KEY" \
-  -d '{"query": "{ issueLabels { nodes { id name } } }"}'
-```
+The report → issue mapping is kept in memory unless you pass your own cache
+to `createLinearPlugin(cfg, cache)`, so a restart can lead to a second issue
+for the same report.
 
 ## Troubleshooting
 
-- **Issues not created** — check **Marketplace → Linear → Deliveries**. A `401` means the API key is expired; a `404` means the `teamId` is wrong.
-- **Priority not mapping** — Linear priorities are numeric (1–4). If your Linear project uses custom priorities, the mapping falls back to the default scale.
-- **Duplicate issues** — Mushi only fires `report.classified` once per report. If you see duplicates, check for multiple Linear plugin installs on the same project.
+- **Issues not created** — check the plugin's last delivery status on the
+  **Marketplace** page. A `401` from your server means the signing secret
+  differs from `MUSHI_PLUGIN_SECRET`; a Linear error in your server log
+  usually means the API key or `LINEAR_TEAM_ID` is wrong.
+- **Duplicate issues** — see the in-memory mapping above, and check you have
+  not connected Linear both on the Integrations page and through this plugin.
 
 ---
 
@@ -12631,29 +13098,40 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/msteams
 
 ---
 title: Microsoft Teams
-description: Send Adaptive Cards to a Microsoft Teams channel when Mushi classifies a report or a fix lands — incoming webhook setup and severity filters.
+description: Send cards to a Microsoft Teams channel when Mushi triages a report or a fix lands — paste a webhook on the Integrations page, or self-host the plugin.
 ---
 
 # Microsoft Teams plugin
 
-Delivers Adaptive Cards to a Teams incoming webhook when reports are classified or fixes land.
+Posts a card to a Teams channel when Mushi triages a bug or a fix lands.
 
-## Setup
+## Setup (Mushi Cloud, no code)
 
-1. In Teams: add an **Incoming Webhook** connector to your channel.
-2. In Mushi: **Marketplace → Microsoft Teams → Install** and paste the webhook URL.
-3. Set severity filters if you only want P0/P1 cards.
+1. In Teams: add an incoming webhook to your channel (an **Incoming Webhook** connector, or a Workflows webhook) and copy its URL.
+2. In the Mushi console: open the **Integrations** page and paste the URL on the Teams card.
 
-## Package
+Mushi posts to the channel itself; you do not need the npm package.
+
+## Self-hosted plugin
 
 [`@mushi-mushi/plugin-msteams`](https://www.npmjs.com/package/@mushi-mushi/plugin-msteams)
+does the same from your own server with Adaptive Card 1.4 cards. The
+console's Marketplace has no Teams listing, so it only receives events from a
+Mushi server you run yourself, once you add a `plugin_registry` row for it.
 
-## Events
+```bash
+npm i @mushi-mushi/plugin-msteams
+export MUSHI_PLUGIN_SECRET=...
+export TEAMS_WEBHOOK_URL=https://...
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-msteams mushi-plugin-msteams
+```
 
-| Event | Action |
+| Event | Card |
 | --- | --- |
-| `report.classified` | Adaptive Card with severity + component |
-| `fix.applied` | Card with merge summary |
+| `report.classified` | Coloured by severity |
+| `fix.proposed` | With the PR link when there is one |
+| `fix.applied` | Green confirmation |
 
 ---
 
@@ -12663,43 +13141,67 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/pagerduty
 
 ---
 title: PagerDuty
-description: Page your on-call rotation through PagerDuty when a P0 or P1 bug report lands in Mushi — Events API v2 integration key setup and filters.
+description: Page your on-call rotation through PagerDuty when Mushi triages a bug as critical, and resolve it when the fix lands — Events API v2 routing key setup.
 ---
 
 # PagerDuty plugin
 
-Pages your on-call rotation when a P0 or P1 report lands in Mushi.
+Pages whoever is on call when Mushi triages a bug as critical, and resolves
+the page when the fix lands.
 
-## Setup
+**Most people don't need the plugin.** Add PagerDuty on the console's
+**Integrations** page (paste the Events API v2 routing key) and Mushi pages
+and resolves for you. The plugin below is for sending the PagerDuty calls
+from your own server.
 
-1. In PagerDuty, navigate to **Services → your service → Integrations** and add the **Events API v2** integration.
-2. Copy the **Integration Key** (looks like `R01AB…`).
-3. In Mushi: **Marketplace → PagerDuty → Install**.
-4. Paste the integration key into `routing_key`.
-5. Set `subscribed_severities` — default is `p0,p1`. Change to `p0,p1,p2` to also page for high-severity reports.
+## Setup (self-run plugin)
+
+1. In PagerDuty, go to **Services → your service → Integrations** and add the **Events API v2** integration.
+2. Copy the 32-character **Integration Key** (the routing key).
+3. Start the server where Mushi can reach it over public HTTPS:
+
+   ```bash
+   npm i @mushi-mushi/plugin-pagerduty
+   export MUSHI_PLUGIN_SECRET=...       # must match the signing secret in step 4
+   export PAGERDUTY_ROUTING_KEY=...
+   export SEVERITY_THRESHOLD=critical   # optional: low | medium | high | critical
+   npx -p @mushi-mushi/plugin-pagerduty mushi-plugin-pagerduty
+   ```
+
+4. In the console: **Marketplace → PagerDuty Escalation → Install**. Set the
+   webhook URL to `https://<your-host>/mushi/webhook`, and use the form's
+   signing secret (Mushi generates one) as `MUSHI_PLUGIN_SECRET`. The listing subscribes to `report.classified` and
+   `sla.breached`; add `fix.applied` and `report.status_changed` so pages
+   resolve on their own.
 
 ## Behaviour
 
 | Event | Action |
 | --- | --- |
-| `report.created` where `severity ∈ subscribed_severities` | Fires a PagerDuty `trigger` event |
-| `report.status_changed → resolved` | Fires a `resolve` with the same `dedup_key`, auto-closing the incident |
+| `report.classified` with severity ≥ `SEVERITY_THRESHOLD` | Sends a PagerDuty `trigger` |
+| `sla.breached` | Sends a `trigger` (Mushi does not emit this event yet) |
+| `fix.applied` | Sends a `resolve` with the same `dedup_key` |
+| `report.status_changed` to `fixed` or `resolved` | Sends a `resolve` with the same `dedup_key` |
 
 PagerDuty event fields:
 
 | PagerDuty field | Mushi source |
 | --- | --- |
-| `dedup_key` | `report_id` — prevents double-paging on retries |
-| `summary` | report `title` |
-| `source` | report `url` |
-| `severity` | `p0/p1 → critical`, `p2 → error`, `p3 → warning` |
-| `custom_details` | `{ severity, taxonomy_path, blast_radius }` |
+| `dedup_key` | `mushi::` — a re-sent event updates the same incident |
+| `summary` | report `title` (or its id) |
+| `source` | `mushi-mushi` |
+| `severity` | `critical → critical`, `high → error`, `medium → warning`, `low → info` |
+| `custom_details` | the full Mushi event envelope |
 
 ## Troubleshooting
 
-- **No page fired** — check **Marketplace → PagerDuty → Deliveries** for the last dispatch status. A `401` means the integration key is wrong; a `429` means PagerDuty rate-limited the request.
-- **Duplicate incidents** — confirm `dedup_key = report_id` is being used. If you've installed two PagerDuty plugins on the same project, deduplicate by removing one.
-- **Incident not auto-resolving** — the `report.status_changed` event is only emitted when status is set via the Mushi API or admin console, not when the fix PR is merged (use `fix.applied` for that).
+- **No page fired** — check the plugin's last delivery status on the
+  **Marketplace** page. A `401` from your server means the signing secret
+  differs from `MUSHI_PLUGIN_SECRET`. Check the severity threshold too.
+- **Duplicate incidents** — make sure PagerDuty is not set up both on the
+  Integrations page and through this plugin.
+- **Incident not auto-resolving** — add `fix.applied` and
+  `report.status_changed` to the plugin's subscribed events.
 
 ---
 
@@ -12709,18 +13211,32 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/rollbar
 
 ---
 title: Rollbar
-description: Mirror Mushi bug reports into Rollbar items and resolve them when fixes ship — access token, environment name, and dedup key mapping.
+description: Copy triaged Mushi bug reports into Rollbar items and resolve them when fixes ship — a self-hosted plugin with an access token and project id.
 ---
 
 # Rollbar plugin
 
-Mirrors Mushi reports into Rollbar items and resolves them when fixes ship.
+Copies each bug Mushi triages into Rollbar as an item, and resolves the item
+when Mushi applies a fix.
 
-## Setup
+**Not in the Mushi Cloud Marketplace yet.** The console has no Rollbar
+listing, so you can't install it from there. On a Mushi server you run
+yourself, add a `plugin_registry` row for it and install it like any listed
+plugin.
+To bring Rollbar errors *into* Mushi, use `@mushi-mushi/adapters` instead.
 
-1. In Mushi: **Marketplace → Rollbar → Install**.
-2. Paste Rollbar access token and environment name.
-3. Configure dedup key mapping (defaults to Mushi `report_id`).
+## Setup (self-hosted Mushi)
+
+```bash
+npm i @mushi-mushi/plugin-rollbar
+export MUSHI_PLUGIN_SECRET=...      # the signing secret set when the plugin is installed
+export ROLLBAR_ACCESS_TOKEN=...     # project access token with post_server_item (or write) scope
+export ROLLBAR_PROJECT_ID=...       # required by the server
+export ADMIN_BASE_URL=https://...   # optional: console URL for report links
+npx -p @mushi-mushi/plugin-rollbar mushi-plugin-rollbar
+```
+
+Point the plugin's webhook URL at `https://<your-host>/mushi/webhook`.
 
 ## Package
 
@@ -12730,8 +13246,8 @@ Mirrors Mushi reports into Rollbar items and resolves them when fixes ship.
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Create Rollbar item |
-| `fix.applied` | Resolve item |
+| `report.classified` | Create a Rollbar item (environment `production`, level from severity, fingerprint `mushi--`) |
+| `fix.applied` | Resolve the item |
 
 ---
 
@@ -12816,24 +13332,41 @@ Behavior:
   the webhook are ingested. Sentry User Feedback submissions are also ingested
   on the same endpoint.
 
-## Setup (outbound plugin)
+## Copy Mushi reports into Sentry (outbound plugin)
 
-1. In Mushi: **Marketplace → Sentry → Install**.
-2. Paste your Sentry auth token and org/project slugs.
-3. Configure severity threshold (default: P0/P1 only).
+Everything above is built in. The plugin is only for the other direction:
+copying the bugs your users report through Mushi into Sentry, so they sit
+next to your Sentry errors. You run it on your own server.
+
+1. Start the plugin where Mushi can reach it over public HTTPS:
+
+   ```bash
+   npm i @mushi-mushi/plugin-sentry
+   export MUSHI_PLUGIN_SECRET=...   # must match the signing secret in step 2
+   export SENTRY_DSN=...
+   export SEVERITY_THRESHOLD=high   # optional: low | medium | high | critical
+   # Optional: resolve on fix.applied and attach as User Feedback
+   export SENTRY_AUTH_TOKEN=...     # event:admin + project:read
+   export SENTRY_ORG_SLUG=acme
+   export SENTRY_PROJECT_SLUG=web
+   npx -p @mushi-mushi/plugin-sentry mushi-plugin-sentry
+   ```
+
+2. In the console: **Marketplace → Sentry Mirror → Install**. Set the
+   webhook URL to `https://<your-host>/mushi/webhook`, and use the form's
+   signing secret (Mushi generates one) as `MUSHI_PLUGIN_SECRET`.
 
 ## Package
 
 [`@mushi-mushi/plugin-sentry`](https://www.npmjs.com/package/@mushi-mushi/plugin-sentry)
 
-Pairs with the SDK's Sentry handshake — reports already carry `sentryContext` when `@sentry/browser` is present.
-
 ## Events
 
 | Event | Action |
 | --- | --- |
-| `report.classified` (high severity) | Create or link Sentry issue |
-| `fix.applied` | Resolve linked Sentry issue |
+| `report.classified` (severity ≥ threshold) | Attach as Sentry User Feedback when the report has a `sentry_event_id` and an auth token is set; otherwise capture a Sentry event fingerprinted `['mushi', projectId, reportId]` |
+| `fix.proposed` | Capture an `info` event, only with `MARK_IN_PROGRESS=true` |
+| `fix.applied` | Capture an `info` event tagged `mushi.fixed=true`; with an auth token, resolve the matching Sentry issue |
 
 ---
 
@@ -12843,7 +13376,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/slack
 
 ---
 title: Slack app
-description: Triage Mushi bug reports from Slack — each classified report posts as a card with its root cause and buttons to dispatch a fix, resolve or dismiss.
+description: Triage Mushi bug reports from Slack — add the app from the Integrations page, and each report posts as a card with buttons to fix, resolve or dismiss.
 ---
 
 # Slack app plugin
@@ -12860,13 +13393,18 @@ tab.
 
 ## Setup
 
-1. Create a Slack app with bot scopes in your workspace.
-2. In Mushi: **Marketplace → Slack → Install**, then paste the bot token +
-   signing secret.
-3. Pick the channel for report notifications, and optional thread replies on
-   QA failures.
-4. Point Slack's **Interactivity → Request URL** at
-   `<functions-url>/slack-interactions` so the card buttons work.
+On Mushi Cloud there is nothing to install or host:
+
+1. In the Mushi console, open the **Integrations** page and click **Add to
+   Slack** on the Slack card. Approve the install in Slack.
+2. Pick the channel for report notifications.
+3. Invite the Mushi bot to that channel.
+
+Running the Mushi backend yourself? Create the Slack app from the manifest
+in [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app),
+point its Interactivity Request URL at `<functions-url>/slack-interactions`,
+and set `SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`
+on the server. The package README lists every URL and scope.
 
 ## What's on the card
 
@@ -12905,8 +13443,8 @@ it in channel history.
 
 ## Slash commands
 
-With **Slash Commands → `/mushi`** pointed at
-`<functions-url>/api/v1/webhooks/slack/commands`, the hosted app answers:
+Once Slack is added, `/mushi` answers (self-hosted backends point **Slash
+Commands → `/mushi`** at `<functions-url>/api/v1/webhooks/slack/commands`):
 
 | Command | What happens |
 | --- | --- |
@@ -12928,16 +13466,20 @@ the channel) it came from.
 
 [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)
 
-The `/mushi` slash command (`list`, `open `, `resolve `) ships in this
-package for hosts that mount it themselves.
+You don't need the package on Mushi Cloud. It holds the pieces for hosting
+the Slack side yourself: the slash command router (`list`, `open `,
+`resolve `, `help`), `verifySlackRequest`, the OAuth helpers
+(`buildInstallUrl`, `exchangeCode`), the app manifest, and
+`createSlackPlugin`, which posts `report.classified`, `fix.proposed`,
+`fix.applied` and `report.status_changed` to a Slack incoming webhook.
 
-## Events
+## What gets posted
 
-| Event | Action |
+| Moment | Action |
 | --- | --- |
-| `report.created` / `report.classified` | Post the Block Kit card to the channel |
-| `fix.pr_opened` | Thread with the PR link |
-| `qa_story.failed` / `qa_story.recovered` | Transition-aware threaded updates |
+| A report is triaged | Post the Block Kit card to the channel |
+| A fix PR opens | Thread with the PR link |
+| A QA story fails or recovers | Transition-aware threaded updates |
 
 ## Troubleshooting
 
@@ -12962,50 +13504,53 @@ description: Send every Mushi event to Zapier and on to thousands of apps such a
 
 Fan every Mushi event out to Zapier and wire it into any of the 6,000+ Zapier integrations — Slack, Notion, Google Sheets, HubSpot, Jira, and more.
 
-## Setup
+## Setup (no server)
 
 1. In Zapier, create a **Zap** with the **Webhook by Zapier → Catch Hook** trigger.
 2. Copy the webhook URL (e.g. `https://hooks.zapier.com/hooks/catch/…`).
-3. In Mushi: **Marketplace → Zapier → Install**.
-4. Paste the URL into `webhook_url`.
-5. Optionally restrict to a subset of events (e.g. only `report.created`, `fix.applied`).
+3. In Mushi: **Marketplace → Zapier Bridge → Install**.
+4. Paste the Catch Hook URL as the webhook URL and keep the signing secret Mushi generates.
+5. Optionally narrow the subscribed events (e.g. only `report.classified`, `fix.applied`).
 
-## Signature verification in Zapier
+Zapier then receives Mushi's envelope as is: `{ event, deliveryId,
+occurredAt, projectId, pluginSlug, data }`, with the report under
+`data.report`. Zapier does not check the signature, so anyone who learns the
+Catch Hook URL can post to it.
 
-Mushi signs every payload with `HMAC-SHA256`. To verify inside Zapier, add a **Code by Zapier** step before your action:
+## Setup (with the relay package)
 
-```js
-// Code by Zapier — JavaScript
-const crypto = require('crypto')
+[`@mushi-mushi/plugin-zapier`](https://www.npmjs.com/package/@mushi-mushi/plugin-zapier)
+runs between Mushi and Zapier. It checks Mushi's signature and forwards a
+flat payload (`event`, `report_id`, `report_status`, `report_severity`,
+`report_title`, …, plus the full envelope under `raw`).
 
-const secret = process.env.MUSHI_WEBHOOK_SECRET  // set in Zapier Storage
-const sig = inputData.mushiSignature               // from the webhook header
-const body = JSON.stringify(inputData)
-
-const expected = crypto
-  .createHmac('sha256', secret)
-  .update(body)
-  .digest('hex')
-
-if (sig !== expected) {
-  throw new Error('Invalid signature — possible replay attack')
-}
-output = [{ verified: true }]
+```bash
+npm i @mushi-mushi/plugin-zapier
+export MUSHI_PLUGIN_SECRET=...   # the same signing secret as in the install form
+export ZAPIER_HOOK_URL=https://hooks.zapier.com/hooks/catch/.../...
+export ALLOW_EVENTS=report.classified,fix.applied   # optional
+npx -p @mushi-mushi/plugin-zapier mushi-plugin-zapier
 ```
+
+Set the Zapier Bridge webhook URL to `https://<your-host>/mushi/webhook`
+instead of the Catch Hook URL.
+
+Checking the signature inside a Code by Zapier step is not practical: the
+signature covers the exact raw request body, which Zapier does not pass to
+the step.
 
 ## Common Zaps
 
 | Trigger | Action | Use case |
 | --- | --- | --- |
-| `report.created` (P0) | Post to Slack `#incidents` | Immediate team alert |
+| `report.classified` (critical) | Post to a Slack channel | Immediate team alert |
 | `report.classified` | Create row in Google Sheets | Bug tracking in a spreadsheet |
 | `fix.applied` | Create Notion database entry | Changelog / release notes |
 | `report.created` | Create HubSpot ticket | Link product bugs to customer accounts |
-| `judge.score_recorded` (score < 0.6) | Send Slack DM to team lead | Alert on low-quality fixes |
 
 ## Troubleshooting
 
-- **Zap not firing** — check **Marketplace → Zapier → Deliveries** in Mushi. A non-2xx status from Zapier is logged with the response body.
+- **Zap not firing** — check the plugin's last delivery status on the **Marketplace** page in Mushi.
 - **Events arriving out of order** — Zapier processes webhooks sequentially per Zap. For high-volume projects, create separate Zaps per event type.
 - **Payload too large** — Zapier's webhook step has a 1 MB body limit. Mushi payloads are typically < 10 KB; if they exceed this, contact support.
 
