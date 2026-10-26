@@ -77,6 +77,7 @@ export function CreditsPage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-credits">
       <PageHeaderBar
         title="Spend credits"
+        titleAs="h1"
         icon={<IconCost />}
         description="Credits that expire, and every way Mushi can spend them finding and fixing your bugs."
         helpTitle="About Spend credits"
@@ -99,7 +100,7 @@ export function CreditsPage() {
       />
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
-      <Section title="Cursor: fix bugs">
+      <Section title="Cursor: fix bugs" heading="h2">
         {spendDown.loading && !spendDown.data && <p className="text-xs text-fg-muted">Reading your Cursor keys…</p>}
         <CursorLevers
           spendDown={spendDown.data ?? null}
@@ -112,17 +113,17 @@ export function CreditsPage() {
         />
       </Section>
 
-      <Section title="Cursor: improve your apps with skills">
+      <Section title="Cursor: improve your apps with skills" heading="h2">
         <SkillRunsCard projects={projects.data ? (projects.data.projects ?? []) : null} />
       </Section>
 
-      <Section title="Firecrawl: find bugs on your live sites">
+      <Section title="Firecrawl: find bugs on your live sites" heading="h2">
         <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
       </Section>
 
       <p className="text-xs text-fg-muted">
-        Fixes these levers open: <Link className="text-brand hover:underline" to="/fixes">Fixes</Link>, and the ones Opus already approved under{' '}
-        <Link className="text-brand hover:underline" to="/fixes?status=review_merge">Opus: merge</Link>.
+        Fixes these levers open: <Link className="text-brand underline underline-offset-2" to="/fixes">Fixes</Link>, and the ones Opus already approved under{' '}
+        <Link className="text-brand underline underline-offset-2" to="/fixes?status=review_merge">Opus: merge</Link>.
       </p>
     </div>
   )

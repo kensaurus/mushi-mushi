@@ -136,7 +136,7 @@ export function SkillRunsCard({ projects }: Props) {
                     <>
                       {' '}
                       ·{' '}
-                      <Link className="text-brand hover:underline" to={`/reports/${r.current_report_id}`}>
+                      <Link className="text-brand underline underline-offset-2" to={`/reports/${r.current_report_id}`}>
                         current round
                       </Link>
                     </>

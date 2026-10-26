@@ -58,7 +58,7 @@ export function InflightDispatches({ dispatches }: Props) {
     <div className="space-y-3">
       {active.length > 0 && (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</h3>
+          <h2 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</h2>
           {active.map((d) => (
             <DispatchCard key={d.id} d={d} />
           ))}

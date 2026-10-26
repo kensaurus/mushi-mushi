@@ -94,7 +94,10 @@ vi.mock('../lib/usePageData', () => ({
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
 vi.mock('../components/PageHeaderBar', async () => {
   const { createElement: h } = await import('react')
-  return { PageHeaderBar: ({ title }: { title: string }) => h('h1', null, title) }
+  return {
+    PageHeaderBar: ({ title, titleAs }: { title: string; titleAs?: string }) =>
+      h(titleAs === 'h1' ? 'h1' : 'h2', null, title),
+  }
 })
 
 import { CreditsPage, firecrawlBalance } from './CreditsPage'
@@ -160,6 +163,18 @@ describe('CreditsPage', () => {
   it('shows the Cursor key expiry and the follow-up models, and turns spend-down on with one switch', async () => {
     await render()
     // The page opens with the one thing to do: a key with an expiry date is not spending down.
+    expect(host.querySelector('h1')?.textContent).toBe('Spend credits')
+    expect([...host.querySelectorAll('h2')].map((h) => h.textContent)).toEqual([
+      'Cursor: fix bugs',
+      'Cursor: improve your apps with skills',
+      'Firecrawl: find bugs on your live sites',
+    ])
+    const sentenceLinks = [...host.querySelectorAll('a')].filter((a) => a.className.includes('text-brand'))
+    expect(sentenceLinks.length).toBeGreaterThan(0)
+    for (const a of sentenceLinks) {
+      expect(a.classList.contains('underline')).toBe(true)
+      expect(a.className).not.toContain('hover:underline')
+    }
     expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
     expect(host.textContent).toContain("Runs on each app's Cursor model")

@@ -105,7 +105,9 @@ export function FixesTable({
           </colgroup>
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
-              <th scope="col" className={`${FIXES_TABLE_COL.stripe} p-0`} aria-label="Status stripe" />
+              <th scope="col" className={`${FIXES_TABLE_COL.stripe} p-0`}>
+                <span className="sr-only">Status stripe</span>
+              </th>
               <th scope="col" className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 text-left font-medium`}>Status</th>
               <th scope="col" className={`${FIXES_TABLE_COL.report} ${TABLE_CELL.pxLead} py-2 text-left font-medium`}>Report</th>
               {!compactTable ? (
