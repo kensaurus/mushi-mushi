@@ -11,10 +11,15 @@
  * actions change only GitHub PRs and merge-queue rows the caller can write;
  * the merge queue's own logic (train.ts, worker.ts) is never changed here:
  *
- *   ci_repair       queue one CI-repair follow-up (ADR 0032), under its caps
+ *   ci_repair       a CI-repair follow-up (ADR 0032): Mushi's cloud agent when
+ *                   follow-ups can run there, else handed to the local
+ *                   `mushi work --followups` lanes (a request row they read)
+ *   followup        the same for an Opus "fix first": cloud, else local lanes
  *   update_branch   GitHub "Update branch", pinned to the head Mushi saw
  *   conflict_agent  hand a conflicted queue row back to the worker for a new
- *                   conflict agent (≤ 2 per PR, ADR 0041)
+ *                   conflict agent (≤ 2 per PR, ADR 0041); with no cloud agent
+ *                   possible it says a person resolves it on GitHub (the local
+ *                   lanes push only commits that change files, not merges)
  *   mark_ready      take a draft PR out of draft so CI runs
  *   remove          take the PR out of the merge queue, with a reason
  *   close           close the PR without merging, with a reason
@@ -44,6 +49,8 @@ import {
   type GithubRepoRef,
 } from '../../_shared/github.ts';
 import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } from '../../_shared/review-followup-db.ts';
+import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
+import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
@@ -53,6 +60,7 @@ import {
   CONFLICT_AGENT_CAP,
   dispatcherGroup,
   intakeGroup,
+  keyServes,
   summarizeIntake,
   withDispatcherGroup,
   type AgentKeyRow,
@@ -83,7 +91,7 @@ export const MAX_ACTION_ITEMS = 10;
 /** How long "Run merge queue now" waits for the worker before answering; the run goes on either way. */
 const TRAIN_RETRY_WAIT_MS = 20_000;
 
-export const PIPELINE_ACTIONS = ['ci_repair', 'update_branch', 'conflict_agent', 'mark_ready', 'remove', 'close', 'train_retry'] as const;
+export const PIPELINE_ACTIONS = ['ci_repair', 'followup', 'update_branch', 'conflict_agent', 'mark_ready', 'remove', 'close', 'train_retry'] as const;
 export type PipelineActionId = (typeof PIPELINE_ACTIONS)[number];
 
 const ATTEMPT_COLUMNS =
@@ -377,30 +385,115 @@ async function note(db: Db, a: AttemptForAction, body: string, author: string): 
   return res.ok ? null : `The note was not saved: ${res.error}`;
 }
 
-async function ciRepair(db: Db, a: AttemptForAction, now: Date): Promise<ActionResult> {
+interface CloudReady {
+  /** Cloud follow-ups can start an agent for this app now. */
+  ready: boolean;
+  /** The organization's review follow-ups setting. */
+  enabled: boolean;
+  /** Why not, in plain words; null when ready. */
+  why: string | null;
+  name: string;
+}
+
+/** Per request: whether cloud follow-ups can run for an app (setting on, and a Cursor key serves it). */
+export type CloudReadyCache = Map<string, Promise<CloudReady>>;
+
+async function cloudReady(db: Db, projectId: string, cache: CloudReadyCache): Promise<CloudReady> {
+  let p = cache.get(projectId);
+  if (!p) {
+    p = (async () => {
+      const { data: project } = await db.from('projects').select('id, name, organization_id, owner_id').eq('id', projectId).maybeSingle();
+      const proj = (project ?? { id: projectId, name: 'this app', organization_id: null, owner_id: null }) as {
+        id: string
+        name: string
+        organization_id: string | null
+        owner_id: string | null
+      };
+      const { enabled } = await followupsEnabledForProject(db, projectId);
+      if (!enabled) return { ready: false, enabled, why: 'Review follow-ups are off for this team', name: proj.name };
+      const [{ data: keys }, { data: owners }] = await Promise.all([
+        db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until').eq('provider_slug', 'cursor').limit(500),
+        proj.organization_id
+          ? db.from('organization_members').select('user_id').eq('organization_id', proj.organization_id).eq('role', 'owner')
+          : Promise.resolve({ data: [] as Array<{ user_id: string }> }),
+      ]);
+      const orgOwners = new Map<string, Set<string>>();
+      if (proj.organization_id) orgOwners.set(proj.organization_id, new Set(((owners ?? []) as Array<{ user_id: string }>).map((o) => o.user_id)));
+      const now = Date.now();
+      const usable = ((keys ?? []) as AgentKeyRow[]).some(
+        (k) => k.status === 'active' && !(k.exhausted_until && Date.parse(k.exhausted_until) > now) && keyServes(k, proj, orgOwners),
+      );
+      return usable
+        ? { ready: true, enabled, why: null, name: proj.name }
+        : { ready: false, enabled, why: 'No Cursor key can run cloud agents for this app', name: proj.name };
+    })();
+    cache.set(projectId, p);
+  }
+  return p;
+}
+
+/**
+ * A follow-up on one PR: a CI repair (Opus said merge, CI fails on the code)
+ * or the Opus "fix first" findings. Mushi's cloud agent when follow-ups can
+ * run for the app; otherwise the local `mushi work --followups` lanes, which
+ * read the request row (CI repair) or the review itself (findings).
+ */
+async function sendFollowup(db: Db, a: AttemptForAction, kind: LocalFollowupKind, cache: CloudReadyCache, by: string, now: Date): Promise<ActionResult> {
   const { data: rv, error } = await db
     .from('fix_reviews')
-    .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha, created_at')
+    .select('id, fix_attempt_id, project_id, report_id, status, verdict, head_sha, findings, created_at')
     .eq('fix_attempt_id', a.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) return { id: a.id, ok: false, message: 'Could not read the review.' };
   if (!rv) return { id: a.id, ok: false, message: 'This PR has no review yet; re-run the review first.' };
-  const review = rv as { id: string; fix_attempt_id: string; project_id: string; report_id: string | null; status: string; verdict: string | null; head_sha: string | null };
+  const review = rv as { id: string; fix_attempt_id: string; project_id: string; report_id: string | null; status: string; verdict: string | null; head_sha: string | null; findings: unknown };
   let ci = null;
-  if (review.head_sha) {
+  if (kind === 'ci_repair' && review.head_sha) {
     try {
       ci = ciHeadState((await ciJobsForHeads(db, [a.project_id], [review.head_sha])).get(review.head_sha) ?? []);
     } catch {
       return { id: a.id, ok: false, message: 'Could not read CI for the reviewed commit. Try again in a minute.' };
     }
   }
-  const res = await enqueueReviewFollowup(db, { review, attempt: a, requireEnabled: true, ci }, now);
-  if (res.queued) return { id: a.id, ok: true, message: 'Queued a CI-repair agent; it starts within 10 minutes.' };
-  if (res.error) return { id: a.id, ok: false, message: `Not queued: ${res.error}` };
-  const why = res.reason ? FOLLOWUP_REASONS[res.reason] : 'The follow-up rules did not allow it.';
-  return { id: a.id, ok: false, message: `Not queued. ${why}` };
+  const cloud = await cloudReady(db, a.project_id, cache);
+  if (cloud.ready) {
+    const res = await enqueueReviewFollowup(db, { review, attempt: a, requireEnabled: true, ci }, now);
+    if (res.queued) return { id: a.id, ok: true, message: kind === 'ci_repair' ? 'Queued a cloud CI-repair agent; it starts within 10 minutes.' : 'Queued a cloud follow-up agent; it starts within 10 minutes.' };
+    if (res.error) return { id: a.id, ok: false, message: `Not queued: ${res.error}` };
+    return { id: a.id, ok: false, message: `Not queued. ${res.reason ? FOLLOWUP_REASONS[res.reason] : 'The follow-up rules did not allow it.'}` };
+  }
+
+  // No cloud agent can run: the local lanes, by the same rules their claim checks.
+  const heads = await roundHeadsFor(db, [a.id]);
+  if ('error' in heads) return { id: a.id, ok: false, message: 'Could not read earlier follow-up rounds.' };
+  const handoff = localHandoff({
+    kind,
+    attempt: a,
+    review: { status: review.status, verdict: review.verdict, head_sha: review.head_sha, findings: Array.isArray(review.findings) ? review.findings.length : 0 },
+    roundHeads: heads.get(a.id) ?? [],
+    cloudFollowupsOn: cloud.enabled,
+    ciCodeRed: kind === 'ci_repair' ? ci?.state === 'code_failure' : undefined,
+  });
+  if (!handoff.ok) return { id: a.id, ok: false, message: `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}` };
+  const { error: insErr } = await db.from('fix_events').insert({
+    fix_attempt_id: a.id,
+    project_id: a.project_id,
+    kind: 'followup',
+    status: 'pending',
+    label: kind === 'ci_repair' ? 'CI repair handed to the local lanes' : 'Follow-up handed to the local lanes',
+    detail: `${by} handed ${handoff.headSha.slice(0, 7)} to the local mushi work lanes (${(cloud.why ?? 'no cloud agent').toLowerCase()}); mushi work --followups takes it on its next run.`,
+    at: now.toISOString(),
+    dedupe_key: kind === 'ci_repair' ? localCiRepairRequestDedupe(a.id, handoff.headSha) : `local-followup-request:${a.id}:${handoff.headSha}`,
+    payload: { local: true, kind: `${kind}_request`, headSha: handoff.headSha },
+  });
+  if (insErr && insErr.code !== '23505') return { id: a.id, ok: false, message: 'Could not hand it to the local lanes.' };
+  return {
+    id: a.id,
+    ok: true,
+    message: `Queued for the local mushi work lanes (${cloud.name}): mushi work --followups takes it on its next run. ${cloud.why}.`,
+  };
 }
 
 export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps: PipelineRouteDeps = defaultPipelineDeps): void {
@@ -480,6 +573,7 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
       .in('id', fixIds);
     if (error) return dbError(c, error);
     const roles = new Map<string, string | null>();
+    const cloudCache: CloudReadyCache = new Map();
     const results: ActionResult[] = [];
     const author = 'Mushi console';
     for (const id of fixIds) {
@@ -502,7 +596,7 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
         continue;
       }
       try {
-        results.push(await runAction(db, deps, action, a, reason, author, now));
+        results.push(await runAction(db, deps, action, a, reason, author, now, cloudCache));
       } catch (err) {
         plog.warn('pipeline action failed', { action, fixId: id, err: err instanceof Error ? err.message : String(err) });
         results.push({ id, ok: false, message: 'Something failed on the way; nothing may have changed. Try again.' });
@@ -517,12 +611,23 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
   });
 }
 
-async function runAction(db: Db, deps: PipelineRouteDeps, action: PipelineActionId, a: AttemptForAction, reason: string, author: string, now: Date): Promise<ActionResult> {
+async function runAction(
+  db: Db,
+  deps: PipelineRouteDeps,
+  action: PipelineActionId,
+  a: AttemptForAction,
+  reason: string,
+  author: string,
+  now: Date,
+  cloudCache: CloudReadyCache = new Map(),
+): Promise<ActionResult> {
   const pr = prRef(a);
   const url = a.pr_url;
   if (a.merged_at || a.pr_state === 'merged') return { id: a.id, ok: false, message: 'Already merged.', url };
 
-  if (action === 'ci_repair') return { ...(await ciRepair(db, a, now)), url };
+  if (action === 'ci_repair' || action === 'followup') {
+    return { ...(await sendFollowup(db, a, action === 'ci_repair' ? 'ci_repair' : 'findings', cloudCache, author, now)), url };
+  }
 
   if (action === 'remove' || action === 'conflict_agent') {
     const { data: row, error } = await db
@@ -547,6 +652,11 @@ async function runAction(db: Db, deps: PipelineRouteDeps, action: PipelineAction
       return { id: a.id, ok: false, message: `Both conflict agents (${CONFLICT_AGENT_CAP} of ${CONFLICT_AGENT_CAP}) were used on this PR. Update the branch, or resolve it on GitHub.`, url };
     }
     if (q.state !== 'resolving' && q.state !== 'blocked') return { id: a.id, ok: false, message: 'Only a conflicted PR gets a conflict agent.', url };
+    // Conflict agents are cloud agents; the local lanes push only commits that change files, not a merge.
+    const cloud = await cloudReady(db, a.project_id, cloudCache);
+    if (!cloud.ready) {
+      return { id: a.id, ok: false, message: `Needs a person: resolve the conflict on GitHub (${url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`, url };
+    }
     // The worker starts a new agent for a `resolving` row with no agent when the PR still conflicts.
     const { error: upErr } = await db
       .from('fix_merge_queue')
