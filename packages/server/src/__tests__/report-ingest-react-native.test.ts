@@ -45,7 +45,7 @@ const rn024Report = {
     screenRoute: '/send',
   },
   sessionId: 'sess_rn_1',
-  reporterToken: 'mushi_0f6e7d8c-1b2a-4c3d-9e8f-7a6b5c4d3e2f',
+  reporterToken: 'mushi_0f6e7d8c-1b2a-4c3d-9e8f-7a6b5c4d3e2f', // gitleaks:allow — fake reporter token in the RN payload fixture
   // capture/fingerprint.ts: FNV-style digest, `rnfp_` + 8 hex.
   fingerprintHash: 'rnfp_1c9e04a7',
   appVersion: '2.14.0',
