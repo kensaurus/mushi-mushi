@@ -48,6 +48,7 @@ const JudgePage = lazy(() => import('./pages/JudgePage').then(m => ({ default: m
 const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m.QueryPage })))
 const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ default: m.ResearchPage })))
 const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m.FixesPage })))
+const PipelinePage = lazy(() => import('./pages/PipelinePage').then(m => ({ default: m.PipelinePage })))
 const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.RepoPage })))
 const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m.VoicePage })))
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
@@ -387,6 +388,7 @@ export function App() {
                   <Route path="/query" element={<QueryPage />} />
                   <Route path="/research" element={<ResearchPage />} />
                   <Route path="/fixes" element={<FixesPage />} />
+                  <Route path="/pipeline" element={<PipelinePage />} />
                   <Route path="/repo" element={<RepoPage />} />
                   <Route path="/voice" element={<VoicePage />} />
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />

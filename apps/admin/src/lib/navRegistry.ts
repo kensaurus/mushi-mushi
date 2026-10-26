@@ -312,6 +312,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    id: 'nav:pipeline',
+    path: '/pipeline',
+    label: 'Pipeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'pipeline',
+    paletteDescription: 'Every bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.',
+    paletteKeywords: ['pipeline', 'stuck', 'funnel', 'release train', 'merge queue', 'ci red', 'conflict', 'triage', 'retry', 'blocked'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:repo',
     path: '/repo',
     label: 'Pull requests',
