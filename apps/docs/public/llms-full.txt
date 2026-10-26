@@ -11544,7 +11544,7 @@ benefits from AI triage + AGPLv3 open source + self-host.
 ## References
 
 - [Mushi web SDK](/sdks/web)
-- [LogRocket session URL API](https://docs.logrocket.com/reference/session-url)
+- [LogRocket session URL API](https://docs.logrocket.com/reference/get-session-url)
 - [LogRocket identify API](https://docs.logrocket.com/reference/identify)
 
 ---
