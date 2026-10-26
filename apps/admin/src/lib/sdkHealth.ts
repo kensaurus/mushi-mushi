@@ -8,7 +8,7 @@
  * useSdkUpgrade (sdk-upgrade). Tasks are POST /sdk-health/tasks.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { apiFetchMutate } from './supabase'
 import { useCiSecretSync } from './useCiSecretSync'
 import { useSdkUpgrade } from './useSdkUpgrade'
@@ -16,11 +16,13 @@ import { useSdkUpgrade } from './useSdkUpgrade'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
 
 export interface SdkHealthProblem {
-  id: 'not_installed' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
+  id: 'not_installed' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
   severity: 'error' | 'warn' | 'info'
   title: string
   detail: string
   fix: { kind: SdkHealthFixKind; label: string } | null
+  /** What already exists for it (an open upgrade PR), shown instead of a second fix. */
+  link?: { label: string; href: string }
 }
 
 interface SdkHealthNote {
@@ -60,7 +62,7 @@ export function fixAllPlan(problems: readonly SdkHealthProblem[]): SdkHealthFixK
 /** What Fix all will do, for the confirm dialog. */
 export const FIX_ACTION_TEXT: Record<SdkHealthFixKind, string> = {
   sync_ci_secrets:
-    'Create a new SDK key and write it, with the project id and endpoint, to GitHub Actions. Older CI keys are revoked once GitHub accepts the new one: store builds already installed with the old key stop sending bug reports until you ship a new build.',
+    'Create a new SDK key and write it, with the project id and endpoint, to GitHub Actions. Older CI keys are revoked once GitHub accepts the new one. Apps already in the store keep the old key until their next build, so they stop sending bug reports until you ship one.',
   install_task: 'File a task for your fix agent to add the SDK to the app.',
   upgrade_pr: 'Open a PR that bumps the @mushi-mushi packages.',
   csp_task: "File a task for your fix agent to allow the Mushi API in the site's security policy.",
@@ -76,11 +78,21 @@ export interface TaskState {
 type TaskKind = 'install' | 'csp'
 const TASK_KIND: Partial<Record<SdkHealthFixKind, TaskKind>> = { install_task: 'install', csp_task: 'csp' }
 
-export function useSdkHealthFixes(projectId: string) {
+/**
+ * `onSettled` runs after each fix (after the last one for Fix all), so the
+ * panel can re-read SDK health and drop what is fixed. One fix at a time: a
+ * second click while one runs does nothing (the server dedupe is the second
+ * guard).
+ */
+export function useSdkHealthFixes(projectId: string, onSettled?: () => void) {
   const ci = useCiSecretSync(projectId)
   const upgrade = useSdkUpgrade(projectId)
   const [tasks, setTasks] = useState<Record<TaskKind, TaskState>>({ install: { status: 'idle' }, csp: { status: 'idle' } })
   const [runningAll, setRunningAll] = useState(false)
+  const [running, setRunning] = useState<SdkHealthFixKind | null>(null)
+  /** Fixes run from this panel; only their results are shown (not a job resumed from an earlier visit). */
+  const [ran, setRan] = useState<SdkHealthFixKind[]>([])
+  const busy = useRef(false)
 
   const fileTask = useCallback(
     async (kind: TaskKind) => {
@@ -99,31 +111,55 @@ export function useSdkHealthFixes(projectId: string) {
     [projectId],
   )
 
-  const runFix = useCallback(
+  const runOne = useCallback(
     async (kind: SdkHealthFixKind) => {
-      const task = TASK_KIND[kind]
-      if (task) return fileTask(task)
-      if (kind === 'sync_ci_secrets') return ci.sync()
-      return upgrade.createUpgradePr()
+      setRunning(kind)
+      setRan((r) => (r.includes(kind) ? r : [...r, kind]))
+      try {
+        const task = TASK_KIND[kind]
+        if (task) await fileTask(task)
+        else if (kind === 'sync_ci_secrets') await ci.sync()
+        else await upgrade.createUpgradePr()
+      } finally {
+        setRunning(null)
+      }
     },
     [ci, upgrade, fileTask],
   )
 
+  const runFix = useCallback(
+    async (kind: SdkHealthFixKind) => {
+      if (busy.current) return
+      busy.current = true
+      try {
+        await runOne(kind)
+      } finally {
+        busy.current = false
+        onSettled?.()
+      }
+    },
+    [runOne, onSettled],
+  )
+
   const runAll = useCallback(
     async (problems: readonly SdkHealthProblem[]) => {
+      if (busy.current) return
+      busy.current = true
       setRunningAll(true)
       try {
         // One after another: each result shows as it lands, and a failed
         // step does not stop the rest (they do not depend on each other).
-        for (const kind of fixAllPlan(problems)) await runFix(kind)
+        for (const kind of fixAllPlan(problems)) await runOne(kind)
       } finally {
+        busy.current = false
         setRunningAll(false)
+        onSettled?.()
       }
     },
-    [runFix],
+    [runOne, onSettled],
   )
 
-  return { ci: ci.state, upgrade: upgrade.state, tasks, runFix, runAll, runningAll }
+  return { ci: ci.state, upgrade: upgrade.state, tasks, runFix, runAll, runningAll, running, ran }
 }
 
 export type SdkHealthFixes = ReturnType<typeof useSdkHealthFixes>
@@ -136,8 +172,9 @@ export function fixBusy(fixes: Pick<SdkHealthFixes, 'ci' | 'upgrade' | 'tasks'>,
   return task ? fixes.tasks[task].status === 'running' : false
 }
 
-/** Whether a fix ran and has a result to show instead of its button. */
-export function fixStarted(fixes: Pick<SdkHealthFixes, 'ci' | 'upgrade' | 'tasks'>, kind: SdkHealthFixKind): boolean {
+/** Whether a fix ran from this panel and has a result to show instead of its button. */
+export function fixStarted(fixes: Pick<SdkHealthFixes, 'ci' | 'upgrade' | 'tasks' | 'ran'>, kind: SdkHealthFixKind): boolean {
+  if (!fixes.ran.includes(kind)) return false
   if (kind === 'sync_ci_secrets') return fixes.ci.status !== 'idle'
   if (kind === 'upgrade_pr') return fixes.upgrade.status !== 'idle'
   const task = TASK_KIND[kind]

@@ -120,7 +120,7 @@ describe('SdkHealthPanel', () => {
     act(() => button(/Fix all \(4\)/)!.click())
     expect(api.apiFetchMutate).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('Older CI keys are revoked once GitHub accepts the new one')
-    expect(document.body.textContent).toContain('stop sending bug reports until you ship a new build')
+    expect(document.body.textContent).toContain('Apps already in the store keep the old key until their next build')
     expect(document.body.textContent).toContain('Repo: no repo linked')
     act(() => Array.from(document.body.querySelectorAll('button')).filter((b) => /^Fix all$/.test(b.textContent ?? '')).pop()!.click())
     await flush()
@@ -165,6 +165,56 @@ describe('SdkHealthPanel', () => {
     act(() => button(/File install task/)!.click())
     await flush()
     expect(document.body.textContent).toContain('The task was not filed: check constraint')
+  })
+
+  it('has stable test ids for the panel, each row, each Fix and Fix all', async () => {
+    await mount(ALL)
+    for (const id of ['sdk-health-panel', 'sdk-health-fix-all', 'sdk-health-problem-stale', 'sdk-health-fix-not_installed', 'sdk-health-fix-ci_secrets_missing', 'sdk-health-fix-outdated', 'sdk-health-fix-csp_blocks_api']) {
+      expect(document.querySelector(`[data-testid="${id}"]`), id).toBeTruthy()
+    }
+    expect(document.querySelector('[data-testid="sdk-health-fix-stale"]')).toBeNull()
+  })
+
+  it('a double click files one task, and every button is disabled while a fix runs', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    api.apiFetchMutate.mockImplementation(() => new Promise((r) => { resolve = r }))
+    await mount(ALL)
+    const fix = button(/File install task/)!
+    act(() => {
+      fix.click()
+      fix.click()
+    })
+    await flush()
+    expect(api.apiFetchMutate).toHaveBeenCalledTimes(1)
+    expect(button(/File CSP task/)!.disabled).toBe(true)
+    expect(button(/Fix all/)!.disabled).toBe(true)
+    await act(async () => { resolve({ ok: true, data: { reportId: 'r-1', existing: false } }) })
+    await flush()
+    expect(button(/File CSP task/)!.disabled).toBe(false)
+  })
+
+  it('reads SDK health again after a fix, and keeps the result once its problem is gone', async () => {
+    page.reload.mockImplementation(() => {
+      page.data = { ...(page.data as object), problems: [ALL[0]] }
+    })
+    await mount([ALL[0], ALL[2]])
+    act(() => button(/Write CI secrets/)!.click())
+    act(() => button(/Write secrets/)!.click())
+    await flush()
+    expect(page.reload).toHaveBeenCalled()
+    act(() => root.render(createElement(MemoryRouter, null, createElement(SdkHealthPanel, { projectId: PROJECT }))))
+    await flush()
+    expect(document.querySelector('[data-testid="sdk-health-problem-ci_secrets_missing"]')).toBeNull()
+    const done = document.querySelector('[data-testid="sdk-health-done"]')!
+    expect(done.textContent).toContain('Wrote VITE_MUSHI_API_KEY.')
+    page.reload.mockReset()
+  })
+
+  it('an open upgrade PR is a link, not a second Fix', async () => {
+    await mount([{ ...problem('outdated', null, 'warn'), link: { label: 'Open PR #10001', href: 'https://github.com/a/b/pull/10001' } }])
+    const link = document.querySelector('[data-testid="sdk-health-link-outdated"]') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe('https://github.com/a/b/pull/10001')
+    expect(document.querySelector('[data-testid="sdk-health-fix-outdated"]')).toBeNull()
   })
 
   it('lists checks that could not run', async () => {

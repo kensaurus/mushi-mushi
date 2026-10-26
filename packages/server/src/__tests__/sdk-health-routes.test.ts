@@ -141,12 +141,29 @@ describe('GET /sdk-health', () => {
     expect(res.json.data.problems[0].detail).toContain('0.24.0 → 0.24.3')
   })
 
+  it('yen-yen with upgrade PR #359 open and CI failing: link it, no second upgrade PR', async () => {
+    state.files = { 'apps/mobile/package.json': pkg({ expo: '54.0.0', '@mushi-mushi/react-native': '0.24.0' }) }
+    state.secretNames = ['EXPO_PUBLIC_MUSHI_PROJECT_ID', 'EXPO_PUBLIC_MUSHI_API_KEY']
+    seed({
+      sdk_versions: [{ package: '@mushi-mushi/react-native', version: '0.24.3' }],
+      project_api_keys: [{ project_id: P, is_active: true, scopes: ['report:write'], last_seen_at: new Date().toISOString(), last_seen_user_agent: 'okhttp/4.12' }],
+      sdk_upgrade_jobs: [
+        { project_id: P, status: 'completed', pr_url: 'https://github.com/kensaurus/yen-yen/pull/359', pr_state: 'open', merged_at: null, check_run_status: 'completed', check_run_conclusion: 'failure', finished_at: '2026-10-25T00:00:00Z' },
+      ],
+    })
+    const res = await call('GET', HEALTH)
+    expect(res.json.data.problems).toEqual([
+      expect.objectContaining({ id: 'outdated', fix: null, link: { label: 'Open PR #359', href: 'https://github.com/kensaurus/yen-yen/pull/359' } }),
+    ])
+    expect(res.json.data.problems[0].detail).toContain('Upgrade PR #359 is open; CI failing.')
+  })
+
   it('an MCP key heartbeat is not an SDK check-in', async () => {
     state.files = { 'package.json': pkg({ '@mushi-mushi/web': '^1.33.1' }, { vite: '7.0.0' }) }
     state.secretNames = ['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY']
     state.csp = null
     seed({ project_api_keys: [{ project_id: P, is_active: true, scopes: ['report:write', 'mcp:read'], last_seen_at: new Date().toISOString() }] })
-    expect(ids((await call('GET', HEALTH)).json)).toEqual(['never_seen'])
+    expect(ids((await call('GET', HEALTH)).json).sort()).toEqual(['never_seen', 'no_sdk_key'])
   })
 
   it('failed reads are notes, not problems and not a 500', async () => {

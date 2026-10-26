@@ -54,6 +54,7 @@ import {
   type CspVerdict,
   type PackageJsonFile,
   type Read,
+  type SdkHealthInput,
   type SdkHealthTaskKind,
   type TaskReport,
 } from '../../_shared/sdk-health.ts'
@@ -136,6 +137,28 @@ async function siteUrl(db: Db, projectId: string): Promise<string | null> {
   return candidates.find((u): u is string => typeof u === 'string' && /^https:\/\//i.test(u)) ?? null
 }
 
+interface UpgradeJobRow {
+  pr_url: string | null
+  pr_state: string | null
+  check_run_status: string | null
+  check_run_conclusion: string | null
+}
+
+/** The last upgrade PR while it is still open, with its CI in one word. */
+function openUpgradePr(row: UpgradeJobRow | null): SdkHealthInput['openUpgradePr'] {
+  if (!row?.pr_url || row.pr_state === 'closed' || row.pr_state === 'merged') return null
+  const conclusion = row.check_run_conclusion
+  const ci = conclusion && ['failure', 'cancelled', 'timed_out', 'action_required'].includes(conclusion)
+    ? 'failing'
+    : conclusion === 'success'
+      ? 'passing'
+      : row.check_run_status && row.check_run_status !== 'completed'
+        ? 'running'
+        : null
+  const number = Number(/\/pull\/(\d+)/.exec(row.pr_url)?.[1])
+  return { url: row.pr_url, number: Number.isFinite(number) ? number : null, ci }
+}
+
 type CspRead = Read<{ url: string; apiOrigin: string; verdict: CspVerdict }> | null
 
 async function readCsp(url: string | null, endpoint: string): Promise<CspRead> {
@@ -212,7 +235,7 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       (url) => readCsp(url, endpoint),
       (err) => ({ ok: false, reason: `the site address could not be read (${reason(err)})` }),
     )
-    const [projectRes, keysRes, versionsRes, repoRes] = await Promise.all([
+    const [projectRes, keysRes, versionsRes, upgradeRes, repoRes] = await Promise.all([
       db.from('projects').select('slug').eq('id', a.projectId).maybeSingle(),
       db
         .from('project_api_keys')
@@ -220,6 +243,16 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
         .eq('project_id', a.projectId)
         .eq('is_active', true),
       db.from('sdk_versions').select('package, version'),
+      db
+        .from('sdk_upgrade_jobs')
+        .select('pr_url, pr_state, check_run_status, check_run_conclusion')
+        .eq('project_id', a.projectId)
+        .eq('status', 'completed')
+        .not('pr_url', 'is', null)
+        .is('merged_at', null)
+        .order('finished_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       resolveRecipeRepo(db, a.projectId).catch((err): { ok: false; reason: string } => ({ ok: false, reason: reason(err) })),
     ])
     if (keysRes.error) return dbError(c, keysRes.error)
@@ -270,6 +303,8 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       missingCiVars: ci,
       lastSeenAt: lastHeartbeatAt(keys),
       nativeEverSeen: nativeEverSeen(keys),
+      sdkKeyCount: keys.length,
+      openUpgradePr: openUpgradePr(upgradeRes.data as UpgradeJobRow | null),
       latest,
       csp: await cspRead,
       now: new Date(),

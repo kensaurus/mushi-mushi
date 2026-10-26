@@ -15,7 +15,8 @@ const TONE_DOT: Record<
   string
 > = {
   live: 'bg-ok',
-  stale: 'bg-warn',
+  stale: 'bg-warn/70',
+  cold: 'bg-warn',
   mismatch: 'bg-warn motion-safe:animate-pulse',
   none: 'bg-fg-faint/50',
 }
@@ -25,7 +26,8 @@ const TONE_TEXT: Record<
   string
 > = {
   live: 'text-fg-muted',
-  stale: 'text-warn',
+  stale: 'text-fg-muted',
+  cold: 'text-warn',
   mismatch: 'text-warn',
   none: 'text-fg-faint',
 }
@@ -88,8 +90,10 @@ function buildHeartbeatTooltip(
     callout:
       heartbeat.tone === 'mismatch'
         ? { tone: 'warn', text: 'Host mismatch — your SDK and this admin may be on different backends.' }
-        : heartbeat.tone === 'stale'
-          ? { tone: 'warn', text: 'Heartbeat is stale — confirm the SDK is still embedded and the API key is active.' }
+        : heartbeat.tone === 'cold'
+          ? { tone: 'warn', text: 'Cold: no SDK check-in for over 7 days. Click to see why and fix it.' }
+          : heartbeat.tone === 'stale'
+            ? { tone: 'ok', text: 'Stale: no SDK check-in in the last hour, which is normal for a quiet app.' }
           : { tone: 'ok', text: 'SDK is actively reaching this backend.' },
   }
 }

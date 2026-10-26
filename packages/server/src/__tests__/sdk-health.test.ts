@@ -32,6 +32,8 @@ function input(over: Partial<SdkHealthInput> = {}): SdkHealthInput {
     missingCiVars: { ok: true, value: [] },
     lastSeenAt: null,
     nativeEverSeen: false,
+    sdkKeyCount: 1,
+    openUpgradePr: null,
     latest: { ok: true, value: { '@mushi-mushi/web': '1.33.1', '@mushi-mushi/react-native': '0.24.3' } },
     csp: null,
     now: NOW,
@@ -168,10 +170,43 @@ describe('sdkHealthProblems', () => {
     expect(sdkHealthProblems(input({ packages: expo, lastSeenAt: '2026-10-25T00:00:00Z', nativeEverSeen: true })).notes).toEqual([])
   })
 
-  it('stale: the last check-in is 14 days old or more; info with no fix', () => {
+  it('stale: Cold on the key legend, over 7 days without a check-in; no fix', () => {
     const r = sdkHealthProblems(input({ lastSeenAt: '2026-10-11T12:00:00Z' }))
-    expect(r.problems).toEqual([expect.objectContaining({ id: 'stale', severity: 'info', fix: null, title: 'No check-in for 15 days' })])
-    expect(ids(sdkHealthProblems(input({ lastSeenAt: '2026-10-13T12:00:01Z' })))).toEqual([])
+    expect(r.problems).toEqual([expect.objectContaining({ id: 'stale', severity: 'warn', fix: null, title: 'Cold: no check-in for 15 days' })])
+    expect(ids(sdkHealthProblems(input({ lastSeenAt: '2026-10-19T12:00:01Z' })))).toEqual([])
+    expect(ids(sdkHealthProblems(input({ lastSeenAt: '2026-10-19T11:59:59Z' })))).toEqual(['stale'])
+  })
+
+  it('no_sdk_key: no active SDK key offers Write CI secrets, once, even with the names present', () => {
+    const installed = { ok: true as const, value: [{ path: 'package.json', text: pkg({ '@mushi-mushi/web': '^1.33.1' }, { vite: '7.0.0' }) }] }
+    const r = sdkHealthProblems(input({ packages: installed, sdkKeyCount: 0, lastSeenAt: '2026-10-25T00:00:00Z' }))
+    expect(r.problems).toEqual([expect.objectContaining({ id: 'no_sdk_key', fix: { kind: 'sync_ci_secrets', label: 'Write CI secrets' } })])
+    // The missing names already carry the same fix: no second row.
+    const both = sdkHealthProblems(input({ sdkKeyCount: 0, missingCiVars: { ok: true, value: ['VITE_MUSHI_API_KEY'] } }))
+    expect(both.problems.filter((p) => p.fix?.kind === 'sync_ci_secrets').map((p) => p.id)).toEqual(['ci_secrets_missing'])
+  })
+
+  it('Write CI secrets is never offered for a stale or silent app whose secrets are present', () => {
+    const installed = { ok: true as const, value: [{ path: 'package.json', text: pkg({ '@mushi-mushi/web': '^1.33.1' }, { vite: '7.0.0' }) }] }
+    for (const lastSeenAt of [null, '2026-09-01T00:00:00Z']) {
+      const r = sdkHealthProblems(input({ packages: installed, lastSeenAt }))
+      expect(r.problems.some((p) => p.fix?.kind === 'sync_ci_secrets')).toBe(false)
+    }
+  })
+
+  it('outdated with an open upgrade PR links it and offers no second PR', () => {
+    const r = sdkHealthProblems(input({
+      packages: { ok: true, value: [{ path: 'apps/mobile/package.json', text: pkg({ expo: '54.0.0', '@mushi-mushi/react-native': '0.24.0' }) }] },
+      lastSeenAt: '2026-10-25T00:00:00Z',
+      nativeEverSeen: true,
+      openUpgradePr: { url: 'https://github.com/kensaurus/yen-yen/pull/359', number: 359, ci: 'failing' },
+    }))
+    expect(r.problems[0]).toMatchObject({
+      id: 'outdated',
+      fix: null,
+      link: { label: 'Open PR #359', href: 'https://github.com/kensaurus/yen-yen/pull/359' },
+    })
+    expect(r.problems[0].detail).toMatch(/^Upgrade PR #359 is open; CI failing\. @mushi-mushi\/react-native 0\.24\.0/)
   })
 
   it('orders errors before warnings before info', () => {
@@ -179,8 +214,10 @@ describe('sdkHealthProblems', () => {
       packages: { ok: true, value: [{ path: 'package.json', text: pkg({ '@mushi-mushi/web': '1.0.0' }) }] },
       lastSeenAt: '2026-09-01T00:00:00Z',
       csp: { ok: true, value: { url: PAGE.toString(), apiOrigin: API.origin, verdict: { allowed: false, directive: 'default-src', sources: ["'self'"] } } },
+      missingCiVars: { ok: true, value: [] },
+      sdkKeyCount: 0,
     }))
-    expect(ids(r)).toEqual(['csp_blocks_api', 'outdated', 'stale'])
+    expect(ids(r)).toEqual(['no_sdk_key', 'csp_blocks_api', 'outdated', 'stale'])
   })
 })
 

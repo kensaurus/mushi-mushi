@@ -44,7 +44,8 @@ import {
 } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
-import { latestHeartbeatAt } from '../lib/heartbeat'
+import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
+import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -63,6 +64,7 @@ interface ProjectRow {
   api_keys?: Array<{
     is_active: boolean
     last_seen_at?: string | null
+    scopes?: string[] | null
   }>
 }
 
@@ -127,24 +129,19 @@ function ProjectFallbackNote({
   return card ? <Card>{note}</Card> : note
 }
 
+function isNativeProject(project: ProjectRow | null): boolean {
+  const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
+  return Boolean(project?.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)))
+}
+
 function NativeCiSection({
   project,
-  projectPending,
-  projectMissing,
-  feedError,
   showSectionDescriptions,
 }: {
   project: ProjectRow | null
-  projectPending: boolean
-  projectMissing: boolean
-  feedError: string | null
   showSectionDescriptions: boolean
 }) {
-  const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
-  const isNativeProject = Boolean(
-    project?.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)),
-  )
-  if (!isNativeProject && project) return null
+  if (!project || !isNativeProject(project)) return null
 
   return (
     <div id="connect-native-ci" className="scroll-mt-chrome">
@@ -152,16 +149,7 @@ function NativeCiSection({
         <SectionDescription when={showSectionDescriptions}>
           Detects missing compile-time env vars and can sync them to GitHub Actions.
         </SectionDescription>
-        {project ? (
-          <SdkNativeConnectivityCard projectId={project.id} projectSlug={project.slug} />
-        ) : (
-          <ProjectFallbackNote
-            card
-            pending={projectPending}
-            missing={projectMissing}
-            hasError={Boolean(feedError)}
-          />
-        )}
+        <SdkNativeConnectivityCard projectId={project.id} projectSlug={project.slug} />
       </Section>
     </div>
   )
@@ -215,21 +203,20 @@ export function ConnectPage() {
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
   const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
-  const sdkConnected = latestHeartbeatAt(project?.api_keys) != null
+  // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
+  const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
+  const sdkConnected = sdkLastSeenAt != null
+  const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
+  // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
+  const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
   const setupStatus = useSetupStatus(activeProjectId)
   const nextSetupStep = nextRequiredSetupStep(
     setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
   )
   const requiredSetupDone = setupStatus.selectors.done
 
-  const visibleSections = CONNECT_SECTIONS.filter((s) => {
-    if (s.id !== 'connect-native-ci') return true
-    const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
-    return (
-      !project ||
-      Boolean(project.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)))
-    )
-  })
+  // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
+  const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
@@ -274,7 +261,7 @@ export function ConnectPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: mcpStats.topPriority !== 'healthy' && mcpStats.topPriority !== 'no_project',
+            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
             children: (
               <McpStatusBanner stats={mcpStats} plainBanner />
             ),
@@ -287,7 +274,7 @@ export function ConnectPage() {
                 githubConnected={githubConnected}
                 githubRepoUrl={githubRepoUrl}
                 sdkConnected={sdkConnected}
-                sdkLastSeenAt={latestHeartbeatAt(project?.api_keys)}
+                sdkLastSeenAt={sdkLastSeenAt}
                 sdkVersion={project?.sdk_version ?? null}
                 sdkLatestVersion={project?.sdk_latest_version ?? null}
                 sdkStatus={project?.sdk_status ?? null}
@@ -296,6 +283,7 @@ export function ConnectPage() {
                 statsValidating={statsValidating}
                 compact={connectUx.compactSnapshot}
                 hideLinks={connectUx.hideSnapshotLinks}
+                loading={snapshotLoading}
               />
             ),
           },
@@ -309,6 +297,15 @@ export function ConnectPage() {
           projectId={project?.id ?? activeProjectId}
           projectName={project?.name}
         />
+        {mcpOptional && project ? (
+          <p className="mt-2 text-xs text-fg-muted" data-testid="connect-mcp-optional">
+            Optional: to let your editor's coding agent read this app's reports, add an MCP key with mcp:read. Your SDK
+            key only sends bug reports, which is all the app needs.{' '}
+            <Link to={mintMcpKeyHref(project.id)} className={LINK_ACCENT}>
+              Add an MCP key
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {!sdkConnected && !feedError ? (
@@ -417,13 +414,7 @@ export function ConnectPage() {
             </Section>
           </div>
 
-          <NativeCiSection
-            project={project}
-            projectPending={projectPending}
-            projectMissing={projectMissing}
-            feedError={feedError}
-            showSectionDescriptions={showSectionDescriptions}
-          />
+          <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
         </div>
 
         <div className="space-y-6 min-w-0 xl:sticky xl:top-4">

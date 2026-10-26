@@ -71,6 +71,7 @@ import { ProjectNextStepsPanel } from '../components/projects/ProjectNextStepsPa
 import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
+import { useScrollToHash } from '../lib/useScrollToHash'
 
 const UNDO_WINDOW_MS = 8000
 
@@ -203,6 +204,8 @@ export function ProjectsPage() {
     '/v1/admin/projects/stats',
     { scope: 'enumeration' },
   )
+  // Deep links such as the MCP banner's #mint-key-<id> land once the list is in.
+  useScrollToHash(!loading)
   const activeOrgId = useActiveOrgId()
   const { data: orgData, loading: orgLoading } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',

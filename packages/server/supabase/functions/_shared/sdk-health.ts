@@ -16,7 +16,7 @@
 import { buildCiVars, stackFromPackageJsons, type SdkStack } from './sdk-diagnostics.ts'
 import { archivedDirsFrom, computeBumpPlan, isUnderArchivedDir } from './sdk-upgrade-plan.ts'
 
-export type SdkHealthProblemId = 'not_installed' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
+export type SdkHealthProblemId = 'not_installed' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
 export type SdkHealthSeverity = 'error' | 'warn' | 'info'
 
@@ -26,6 +26,8 @@ export interface SdkHealthProblem {
   title: string
   detail: string
   fix: { kind: SdkHealthFixKind; label: string } | null
+  /** What already exists for it (an open upgrade PR), shown instead of a second fix. */
+  link?: { label: string; href: string }
 }
 
 /** A check that could not run. Shown as "not checked", so a failed read never looks healthy. */
@@ -34,8 +36,8 @@ export interface SdkHealthNote {
   detail: string
 }
 
-/** A heartbeat older than this is stale. */
-const SDK_STALE_DAYS = 14
+/** "Cold" on the console's key legend: no SDK check-in for over 7 days. */
+const SDK_COLD_MS = 7 * 86_400_000
 
 /** The task kinds POST /sdk-health/tasks files. */
 export const SDK_HEALTH_TASK_KINDS = ['install', 'csp'] as const
@@ -335,6 +337,10 @@ export interface SdkHealthInput {
   /** Freshest heartbeat across the app's active SDK keys. */
   lastSeenAt: string | null
   nativeEverSeen: boolean
+  /** Active SDK keys (report:write, no MCP scope). */
+  sdkKeyCount: number
+  /** The newest upgrade PR that is still open, if any. */
+  openUpgradePr: { url: string; number: number | null; ci: 'failing' | 'passing' | 'running' | null } | null
   /** Latest published version per @mushi-mushi package (sdk_versions). */
   latest: Read<Record<string, string>>
   /** The live site's CSP verdict; null when no site address is known. */
@@ -407,6 +413,18 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
     }
   }
 
+  // Writing CI secrets mints a key, so it is the fix when none exists, even
+  // with the names present: the key they hold is revoked or gone.
+  if (input.sdkKeyCount === 0 && !ciProblem && installed !== null) {
+    problems.push({
+      id: 'no_sdk_key',
+      severity: 'error',
+      title: 'This app has no working SDK key',
+      detail: 'No active SDK key exists, so nothing the app sends is accepted. Writing the CI secrets creates one and puts it where the app builds.',
+      fix: { kind: 'sync_ci_secrets', label: 'Write CI secrets' },
+    })
+  }
+
   if (sdkDeps.length > 0 && !seen) {
     const where = sdkDeps[0].path
     problems.push({
@@ -437,12 +455,18 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
       return computeBumpPlan(pkg as Record<string, unknown>, latest).bumps.map((b) => ({ ...b, path: f.path }))
     })
     if (behind.length > 0) {
+      const versions = behind.map((b) => `${b.package} ${b.from} → ${b.to} (${b.path})`).join('; ') + '.'
+      const pr = input.openUpgradePr
+      // An open upgrade PR is the fix in progress: point at it, never offer a second one.
+      const prName = pr ? (pr.number ? `Upgrade PR #${pr.number}` : 'An upgrade PR') : ''
+      const ci = pr?.ci === 'failing' ? '; CI failing' : pr?.ci === 'running' ? '; CI running' : pr?.ci === 'passing' ? '; CI passing' : ''
       problems.push({
         id: 'outdated',
         severity: 'warn',
         title: behind.length === 1 ? 'An SDK update is out' : 'SDK updates are out',
-        detail: behind.map((b) => `${b.package} ${b.from} → ${b.to} (${b.path})`).join('; ') + '.',
-        fix: { kind: 'upgrade_pr', label: 'Open upgrade PR' },
+        detail: pr ? `${prName} is open${ci}. ${versions}` : versions,
+        fix: pr ? null : { kind: 'upgrade_pr', label: 'Open upgrade PR' },
+        ...(pr ? { link: { label: pr.number ? `Open PR #${pr.number}` : 'Open the PR', href: pr.url } } : {}),
       })
     }
   }
@@ -465,12 +489,13 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   }
 
   if (input.lastSeenAt) {
-    const days = daysBetween(input.now, new Date(input.lastSeenAt))
-    if (days >= SDK_STALE_DAYS) {
+    const age = input.now.getTime() - Date.parse(input.lastSeenAt)
+    if (age > SDK_COLD_MS) {
+      const days = daysBetween(input.now, new Date(input.lastSeenAt))
       problems.push({
         id: 'stale',
-        severity: 'info',
-        title: `No check-in for ${days} days`,
+        severity: 'warn',
+        title: `Cold: no check-in for ${days} days`,
         detail: `The SDK last reached Mushi on ${input.lastSeenAt.slice(0, 10)}. If the app is still live, check that its key is active and the latest build still includes the SDK.`,
         fix: null,
       })

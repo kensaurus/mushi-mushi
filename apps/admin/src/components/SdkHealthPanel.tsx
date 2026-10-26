@@ -8,7 +8,7 @@
  * one, so it is confirmed first (QA bug 30), alone or as part of Fix all.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Callout, Card, CopyButton } from './ui'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -34,6 +34,16 @@ const SEVERITY_DOT: Record<SdkHealthProblem['severity'], string> = {
   info: 'bg-fg-faint/60',
 }
 
+/** What each fix made, for results that stay once its problem is gone. */
+const DONE_LABEL: Record<SdkHealthFixKind, string> = {
+  sync_ci_secrets: 'CI secrets',
+  install_task: 'Install task',
+  upgrade_pr: 'Upgrade PR',
+  csp_task: 'CSP task',
+}
+
+const FIX_KINDS = Object.keys(DONE_LABEL) as SdkHealthFixKind[]
+
 const NOTE_LABEL: Record<SdkHealthPayload['notes'][number]['check'], string> = {
   repo: 'Repo',
   ci_secrets: 'CI secrets',
@@ -55,13 +65,24 @@ interface SdkHealthPanelProps {
 
 export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
   const health = usePageData<SdkHealthPayload>(`/v1/admin/projects/${projectId}/sdk-health`)
-  const fixes = useSdkHealthFixes(projectId)
+  const { reload } = health
+  // After every fix SDK health is read again, so a fixed problem leaves the list.
+  const fixes = useSdkHealthFixes(projectId, reload)
   const [confirm, setConfirm] = useState<SdkHealthFixKind[] | null>(null)
+
+  // The upgrade PR opens a little after the click: read again once it is open.
+  const upgradeOpened = fixes.ran.includes('upgrade_pr') && fixes.upgrade.status === 'completed'
+  useEffect(() => {
+    if (upgradeOpened) reload()
+  }, [upgradeOpened, reload])
 
   const problems = health.data?.problems ?? []
   const notes = health.data?.notes ?? []
   const plan = fixAllPlan(problems)
   const pending = plan.filter((k) => !fixStarted(fixes, k))
+  const busy = fixes.runningAll || fixes.running !== null
+  // Results of fixes whose problem is gone after the re-read.
+  const done = FIX_KINDS.filter((k) => fixStarted(fixes, k) && !problems.some((p) => p.fix?.kind === k))
 
   const start = (kinds: SdkHealthFixKind[]) => {
     // A single task or upgrade PR touches nothing live; writing secrets and Fix all are confirmed.
@@ -87,7 +108,7 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
             Check again
           </Btn>
           {pending.length > 1 && (
-            <Btn size="sm" onClick={() => start(pending)} loading={fixes.runningAll}>
+            <Btn size="sm" onClick={() => start(pending)} loading={fixes.runningAll} disabled={busy} data-testid="sdk-health-fix-all">
               Fix all ({pending.length})
             </Btn>
           )}
@@ -103,9 +124,21 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
       {problems.length > 0 && (
         <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle">
           {problems.map((p) => (
-            <ProblemRow key={p.id} problem={p} fixes={fixes} onFix={(k) => start([k])} />
+            <ProblemRow key={p.id} problem={p} fixes={fixes} busy={busy} onFix={(k) => start([k])} />
           ))}
         </ul>
+      )}
+
+      {done.length > 0 && (
+        <div className="space-y-1 rounded-md border border-ok/25 px-3 py-2" data-testid="sdk-health-done">
+          <p className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Done</p>
+          {done.map((k) => (
+            <div key={k}>
+              <p className="text-xs font-medium text-fg-secondary">{DONE_LABEL[k]}</p>
+              <FixResult kind={k} fixes={fixes} />
+            </div>
+          ))}
+        </div>
       )}
 
       {notes.length > 0 && (
@@ -154,7 +187,17 @@ export function SdkHealthPanel({ projectId, bare }: SdkHealthPanelProps) {
   return bare ? body : <Card className="p-3">{body}</Card>
 }
 
-function ProblemRow({ problem, fixes, onFix }: { problem: SdkHealthProblem; fixes: SdkHealthFixes; onFix: (k: SdkHealthFixKind) => void }) {
+function ProblemRow({
+  problem,
+  fixes,
+  busy,
+  onFix,
+}: {
+  problem: SdkHealthProblem
+  fixes: SdkHealthFixes
+  busy: boolean
+  onFix: (k: SdkHealthFixKind) => void
+}) {
   const kind = problem.fix?.kind ?? null
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start" data-testid={`sdk-health-problem-${problem.id}`}>
@@ -165,8 +208,22 @@ function ProblemRow({ problem, fixes, onFix }: { problem: SdkHealthProblem; fixe
         {kind && fixStarted(fixes, kind) && <FixResult kind={kind} fixes={fixes} />}
       </div>
       {kind && problem.fix && !fixStarted(fixes, kind) && (
-        <Btn size="sm" variant="ghost" className="shrink-0 self-start" onClick={() => onFix(kind)} loading={fixBusy(fixes, kind)}>
+        <Btn
+          size="sm"
+          variant="ghost"
+          className="shrink-0 self-start"
+          onClick={() => onFix(kind)}
+          loading={fixes.running === kind || fixBusy(fixes, kind)}
+          disabled={busy}
+          data-testid={`sdk-health-fix-${problem.id}`}
+        >
           {problem.fix.label}
+        </Btn>
+      )}
+      {problem.link && (
+        <Btn size="sm" variant="ghost" href={problem.link.href} className="shrink-0 gap-1 self-start" data-testid={`sdk-health-link-${problem.id}`}>
+          {problem.link.label}
+          <IconExternalLink className="h-3 w-3" aria-hidden />
         </Btn>
       )}
     </li>
