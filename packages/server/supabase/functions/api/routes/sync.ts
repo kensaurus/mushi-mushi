@@ -35,6 +35,7 @@ import {
 import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
+import { isSdkKey } from '../../_shared/setup-signals.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -590,11 +591,11 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     const [keysRes, reportsRes, projectRes] = await Promise.all([
       db
         .from('project_api_keys')
-        .select('last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+        .select('scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
         .eq('project_id', projectId)
         .eq('is_active', true)
         .order('last_seen_at', { ascending: false, nullsFirst: false })
-        .limit(1),
+        .limit(50),
       db
         .from('reports')
         .select('id, environment, created_at')
@@ -614,7 +615,8 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       )
     }
 
-    const heartbeat = keysRes.data?.[0] as {
+    // The freshest SDK key (a CLI or MCP key's calls are not the app's SDK).
+    const heartbeat = (keysRes.data ?? []).find((k) => isSdkKey((k as { scopes?: string[] | null }).scopes)) as {
       last_seen_at?: string | null
       last_seen_origin?: string | null
       last_seen_user_agent?: string | null
