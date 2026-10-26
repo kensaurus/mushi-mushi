@@ -134,8 +134,8 @@ function setup() {
   }
   const db: FakeDb = makeFakeDb({
     projects: [
-      { id: P1, name: 'glot.it', owner_id: 'owner-1' },
-      { id: P2, name: 'yen-yen', owner_id: 'owner-2' },
+      { id: P1, name: 'glot.it', owner_id: 'owner-1', organization_id: 'org-1' },
+      { id: P2, name: 'yen-yen', owner_id: 'owner-2', organization_id: 'org-1' },
     ],
     reports: [
       { id: `r-${F1}`, project_id: P1, status: 'fixing', title: 'Badge clipped', summary: null, description: null, created_at: '2026-10-22T00:00:00Z', processing_error: null },
@@ -156,7 +156,16 @@ function setup() {
     release_trains: [
       { id: 't1', project_id: P1, repo: 'kensaurus/glot.it', pr_number: 900, state: 'failed', members: [{ prNumber: 1 }], attempt: 1, detail: 'CI failed: Build & Test.', created_at: '2026-10-26T10:00:00Z', merged_at: null },
     ],
-    project_settings: [{ project_id: P1, train_interval_minutes: 360 }],
+    project_settings: [
+      { project_id: P1, train_interval_minutes: 360, autofix_enabled: true },
+      { project_id: P2, autofix_enabled: false },
+    ],
+    organization_members: [{ organization_id: 'org-1', user_id: 'owner-1', role: 'owner' }],
+    byok_keys: [
+      { id: 'k1', provider_slug: 'cursor', project_id: null, organization_id: null, owner_user_id: 'owner-1', status: 'disabled', spend_down_enabled: false, exhausted_until: null },
+      { id: 'k2', provider_slug: 'anthropic', project_id: P1, organization_id: null, owner_user_id: null, status: 'active', spend_down_enabled: false, exhausted_until: null },
+    ],
+    fix_dispatch_jobs: [],
     deploy_observations: [],
     fix_events: [
       { fix_attempt_id: F1, at: '2026-10-25T08:00:00Z', label: 'Release train: CI failed' },
@@ -190,7 +199,11 @@ describe('GET /v1/admin/pipeline', () => {
     const ci = byId.ci.groups.find((g) => g.id === 'ci_red_queued')!
     expect(ci.label).toBe('1 PR: their own CI is red, yet they wait for a release train')
     expect(ci.items[0]).toMatchObject({ id: F1, failingChecks: ['Build & Test'], title: 'Badge clipped', lastEventAt: '2026-10-26T09:00:00Z', lastEventLabel: 'CI finished: failed' })
-    expect(byId.pr.groups.map((g) => g.id)).toEqual(['draft_no_ci'])
+    // Auto-fix on, the only Cursor key off: a red group first in Fix PR.
+    expect(byId.pr.groups.map((g) => g.id)).toEqual(['autofix_no_agent', 'draft_no_ci'])
+    expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no agent key; 0 dispatches in 48h')
+    const d = (res.body.data as { dispatchers: Array<{ name: string; opener: string; server: { agentKeys: number; offKeys: number } }> }).dispatchers
+    expect(d).toEqual([expect.objectContaining({ name: 'glot.it', opener: 'server', server: expect.objectContaining({ agentKeys: 0, offKeys: 1 }) })])
     expect(byId.reported.groups.map((g) => g.id)).toEqual(['triage_slow'])
     // P2's PR is not in this app's picture.
     expect(byId.train.count).toBe(0)
