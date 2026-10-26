@@ -9,7 +9,7 @@
  *          model (from that key's Cursor model list) and the daily limit.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
@@ -46,6 +46,12 @@ export function ReviewFollowupsSection() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  // /pipeline links straight here (#review-followups) when follow-ups being off holds PRs.
+  const loaded = !!status.data?.settings;
+  useEffect(() => {
+    if (!loaded || typeof window === 'undefined' || window.location.hash !== '#review-followups') return;
+    document.getElementById('review-followups')?.scrollIntoView({ block: 'start' });
+  }, [loaded]);
 
   const data = status.data;
   if (status.loading || !data || !data.available || !data.settings) return null;
@@ -79,7 +85,7 @@ export function ReviewFollowupsSection() {
   }
 
   return (
-    <section aria-label="Review follow-ups" className="space-y-2 border-t border-edge-subtle pt-3">
+    <section id="review-followups" aria-label="Review follow-ups" className="space-y-2 scroll-mt-20 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Review follow-ups</h4>
       <p className="text-xs text-fg-muted">
         When Opus says an agent&apos;s pull request needs fixes first, Mushi sends it back to a new Cursor agent once,

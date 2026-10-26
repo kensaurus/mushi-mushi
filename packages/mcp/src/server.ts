@@ -3582,7 +3582,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         method: 'PATCH',
         body: JSON.stringify({
           status: args.status,
-          reason: args.reason,
+          // Kept as a team note on the report (the console's Triage note).
+          note: args.reason,
           closed_reason: args.closedReason,
           reporter_message: args.reporterMessage,
         }),

@@ -273,6 +273,15 @@ describe('prompt: untrusted data stays data', () => {
     expect(describeCi(null, 'in_progress')).toEqual({ text: 'still running', failed: false })
     expect(describeCi(null, null).failed).toBe(false)
   })
+
+  it('does not read a red check on a draft PR as a test result (host CI runs once the PR is ready)', () => {
+    const draft = describeCi('failure', 'completed', null, true)
+    expect(draft.failed).toBe(false)
+    expect(draft.text).toMatch(/^not run yet \(the PR is a draft/)
+    expect(describeCi('success', 'completed', null, true)).toEqual({ text: 'passed', failed: false })
+    // A non-draft failure is still a failure.
+    expect(describeCi('failure', 'completed', null, false)).toEqual({ text: 'failed (failure)', failed: true })
+  })
 })
 
 describe('PR comment', () => {

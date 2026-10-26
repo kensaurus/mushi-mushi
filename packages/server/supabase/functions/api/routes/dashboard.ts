@@ -22,6 +22,7 @@ import {
   summarizeHealthByKind,
 } from '../../_shared/integration-health-rollup.ts';
 import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
+import { isSdkKey } from '../../_shared/setup-signals.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
 function fixActivityLabel(
@@ -355,11 +356,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -400,7 +401,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         ungradedReports,
         lastEvalAt,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
@@ -682,11 +684,11 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
           'sdk heartbeat',
           db
             .from('project_api_keys')
-            .select('last_seen_at')
+            .select('scopes, last_seen_at')
             .eq('project_id', activeProject.id)
             .eq('is_active', true)
             .not('last_seen_at', 'is', null)
-            .limit(1),
+            .limit(50),
         ),
         exactCount(
           'report count',
@@ -724,7 +726,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         llmCalls14d,
         llmOk14d,
         hasKey: keyRows.length > 0,
-        hasSdk: heartbeatRows.length > 0,
+        // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+        hasSdk: (heartbeatRows as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes)),
         reportCount,
         lastReport,
         lastFix,
