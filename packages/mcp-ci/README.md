@@ -10,8 +10,18 @@ GitHub Action that runs Mushi Mushi MCP-style tools from CI. Use it to
 deploy, dispatch fixes for a specific report, or run natural-language
 queries against your report corpus — all without leaving your workflow.
 
+```yaml
+- uses: kensaurus/mushi-mushi/packages/mcp-ci@master
+  with:
+    api-key: ${{ secrets.MUSHI_API_KEY }}
+    project-id: ${{ secrets.MUSHI_PROJECT_ID }}
+    command: check-coverage   # fail the step when under 80% of reports are triaged
+```
+
+Docs: [mcp-ci reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci)
+
 > Not a full MCP server. For the full MCP experience (tools, prompts,
-> streaming), install [`@mushi-mushi/mcp`](../mcp) and run it against your
+> streaming), install [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp) and run it against your
 > local Claude Code / Codex / Cursor setup. This Action is the 80% glue
 > path: short-lived CI jobs that call the same REST endpoints the MCP
 > server exposes, with no stdio transport overhead.
@@ -31,7 +41,7 @@ queries against your report corpus — all without leaving your workflow.
 
 | `command`          | What it does                                                                                                                                    | Required inputs                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `gates`            | Runs the pre-release gates (`dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) for the current commit and posts a single composite status. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
+| `gates`            | Runs the pre-release gates for the current commit (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`), prints one line per gate, and fails the step when any gate fails, errors or returns no result. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
 | `discover-api`     | Walks the customer repo for Next.js route handlers + OpenAPI + (optionally) Supabase introspection and POSTs the resulting `discovered_apis` to `inventory-gates` so Gate 3 (`api_contract`) has something to diff against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
 | `spec-drift`       | Gate 6: runs `oasdiff breaking` between two OpenAPI specs, records the findings as a `spec_drift` gate run and sets the `findings` output. Fails on a breaking change unless `fail-on-breaking: false`. | `base-spec`, `head-spec` (+ optional `fail-on-breaking`, `commit-sha`, `pr-number`) |
 
@@ -41,7 +51,7 @@ queries against your report corpus — all without leaving your workflow.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
 | `discovery-status` | Reads `GET /v1/admin/inventory/:projectId/discovery` and surfaces `route_count`, `total_events`, `ready_to_propose` as step outputs. Useful as a CI gate before `propose`. | —                                              |
 | `propose`          | Kicks the LLM proposer (`POST /v1/admin/inventory/:projectId/propose` → `inventory-propose` Edge Function). Emits `proposal_id`; chain it into a PR-comment job.   | —                                              |
-| `auth-bootstrap`   | Refreshes the crawler cookie via [`@mushi-mushi/inventory-auth-runner`](../inventory-auth-runner) (shells out to `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`). Run before any `gates` step that triggers a crawl. | `TEST_USER_*` env vars consumed by your script |
+| `auth-bootstrap`   | Refreshes the crawler cookie via [`@mushi-mushi/inventory-auth-runner`](https://www.npmjs.com/package/@mushi-mushi/inventory-auth-runner) (shells out to `npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`). Run before any `gates` step that triggers a crawl. | `TEST_USER_*` env vars consumed by your script |
 
 ## Quick start — gate merges on triage coverage
 
@@ -101,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Refresh the crawler cookie so Gate 4 can hit auth-gated routes.
+      # Refresh the crawler cookie so the crawler can reach auth-gated routes.
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
@@ -123,7 +133,7 @@ jobs:
       # lint errors from stopping the job here; the gates step judges them.
       - run: npx eslint -f json -o mushi-eslint.json src/ || true
 
-      # Run the gates and gate the PR on the composite status.
+      # Run the gates; the step fails when any gate fails.
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
@@ -169,7 +179,7 @@ jobs:
 | `command`           | yes                   | —                                                           | One of the commands above.                                                                                             |
 | `api-endpoint`      | no                    | Hosted Supabase functions URL                               | Override for self-hosted deployments.                                                                                  |
 | `report-id`         | when `dispatch-fix`   | —                                                           | Report UUID to dispatch a fix for.                                                                                     |
-| `inventory-action-node-id` | no             | —                                                           | For `dispatch-fix`: inventory `Action` node to pin the fix to.                                                         |
+| `inventory-action-node-id` | no             | —                                                           | For `dispatch-fix`: pin the fix to one inventory action so its `expected_outcome` goes into the agent's prompt.        |
 | `question`          | when `query`          | —                                                           | Natural-language query text.                                                                                           |
 | `min-coverage`      | no                    | `0.8`                                                       | For `check-coverage`: minimum classified ratio.                                                                        |
 | `fail-on-quota`     | no                    | `true`                                                      | Fail the step on `QUOTA_EXCEEDED`. Set `false` to warn and continue.                                                   |
@@ -205,4 +215,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -2,8 +2,14 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Angular — `provideMushi(config)` (or `provideMushiAngular`) once. Pulls in
-`@mushi-mushi/web` for the Shadow DOM widget; do not call `Mushi.init()` separately.
+Adds a bug-report widget to your Angular app (17 or later). When a user reports
+a problem, [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) gets a
+screenshot, the route and recent console and network events, explains the
+cause in plain English, and hands your editor a fix to start from.
+
+Add `provideMushi(config)` to your app's providers once. It also sends
+uncaught errors to Mushi through Angular's `ErrorHandler`. It pulls in
+`@mushi-mushi/web` for the widget, so do not call `Mushi.init()` separately.
 
 ```bash
 npm install @mushi-mushi/angular
@@ -22,6 +28,8 @@ bootstrapApplication(AppComponent, {
   ],
 })
 ```
+
+`import.meta.env` works in Vite-based Angular setups. In an Angular CLI app, read the project ID and key from your `environments/environment.ts` file instead.
 
 Docs: [Angular SDK](https://kensaur.us/mushi-mushi/docs/sdks/angular) ·
 [Quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/angular) ·

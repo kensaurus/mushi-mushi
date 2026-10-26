@@ -14,7 +14,8 @@
  *          Routes here: CI runners and placement (Plan 022), inventory, Ask Mushi,
  *          verified fixes (Plan 024), known holes in dependencies (ADR 0038),
  *          the merge queue (ADR 0041), skill runs (ADR 0042), local review
- *          follow-ups for `mushi work` PRs (ADR 0032 amendment 2026-10-24).
+ *          follow-ups for `mushi work` PRs (ADR 0032 amendment 2026-10-24),
+ *          SDK health and its fix tasks, the pipeline view and its actions.
  */
 
 import { Hono } from 'npm:hono@4'
@@ -40,6 +41,8 @@ import { registerMergeQueueRoutes } from '../api/routes/merge-queue.ts'
 import { registerSkillRunRoutes } from '../api/routes/skill-runs.ts'
 import { registerSearchRankRoutes } from '../api/routes/search-rank.ts'
 import { registerLocalFollowupRoutes } from '../api/routes/local-followups.ts'
+import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
+import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 
 ensureSentry('api-ext')
 
@@ -67,6 +70,8 @@ registerMergeQueueRoutes(app)
 registerSkillRunRoutes(app)
 registerSearchRankRoutes(app)
 registerLocalFollowupRoutes(app)
+registerSdkHealthRoutes(app)
+registerPipelineRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

@@ -162,7 +162,7 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *               token so tone is consistent with PageHero severity
    *               and SidebarHealthDot.
    */
-  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'success'
+  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'destructive' | 'success'
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -225,6 +225,9 @@ const BTN_VARIANTS = {
     `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:
     `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
+  // The confirm of a dialog that cannot be undone: a solid danger fill, so it never looks like Cancel.
+  destructive:
+    'bg-danger text-danger-fg border border-danger/55 font-semibold shadow-card hover:shadow-glow-danger hover:-translate-y-px',
 }
 
 export function Btn({

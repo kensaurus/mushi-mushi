@@ -42,6 +42,7 @@ import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
+import { sdkHealthHref } from '../lib/sdkHealth'
 import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -522,7 +523,7 @@ export function ProjectSwitcher() {
             {shownProjects.map((p) => {
               const isActive = !allApps && p.project_id === active.project_id
               return (
-                <li key={p.project_id}>
+                <li key={p.project_id} className="relative">
                   <button
                     type="button"
                     role="option"
@@ -558,14 +559,18 @@ export function ProjectSwitcher() {
                       </div>
                       {isActive && <span className="shrink-0 text-2xs text-brand">✓</span>}
                     </div>
-                    <div className="flex justify-end">
-                      <ProjectHeartbeatStrip
-                        project={p}
-                        adminEndpointHost={setup.data?.admin_endpoint_host}
-                        placement="corner"
-                      />
-                    </div>
+                    {/* Room for the SDK readout, a link that cannot sit inside this button. */}
+                    <div aria-hidden className="h-3" />
                   </button>
+                  <div className="absolute bottom-2 right-2.5">
+                    <ProjectHeartbeatStrip
+                      project={p}
+                      adminEndpointHost={setup.data?.admin_endpoint_host}
+                      placement="corner"
+                      to={sdkHealthHref(p.project_id)}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </div>
                 </li>
               )
             })}

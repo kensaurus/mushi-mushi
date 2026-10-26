@@ -202,6 +202,10 @@ export function projectsHealthOverlay(
   }
   if (signalId === 'sdk') {
     if (stats.sdkConnectedCount === 0) return { posture: 'open', metric: 'No heartbeat' }
+    // Not "ok" while any app has no SDK heartbeat.
+    if (stats.sdkConnectedCount < stats.projectCount) {
+      return { posture: 'warn', metric: `${stats.sdkConnectedCount}/${stats.projectCount} live` }
+    }
     return { posture: 'ok', metric: `${stats.sdkConnectedCount} live` }
   }
   if (signalId === 'github') {
@@ -339,6 +343,8 @@ export function onboardingStepOverlay(
     sdkInstalled: boolean
     reportCount: number
     nextStepId: string | null
+    /** Steps GET /v1/admin/setup marks complete (canonical ids). */
+    completedStepIds?: readonly string[]
   },
   optional = false,
 ): WorkflowStageOverlay {
@@ -348,13 +354,21 @@ export function onboardingStepOverlay(
   if (stepId === stats.nextStepId) {
     return { posture: 'open', metric: 'Next', actionLine: 'Complete this step to continue setup.' }
   }
+  if (stepId === 'first_report_received' && stats.reportCount > 0) {
+    return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
+  }
+  // Each row follows its own step. Without this every required row read
+  // "Pending" until all were done (mushi-demo at 3/4, 2026-10-26).
+  if (stats.completedStepIds?.includes(stepId)) {
+    return { posture: 'ok', metric: 'Done' }
+  }
   if (stats.requiredComplete >= stats.requiredTotal) {
     return { posture: 'clear', metric: 'Done' }
   }
-  if (stepId === 'sdk' && stats.sdkInstalled) {
+  if (stepId === 'sdk_installed' && stats.sdkInstalled) {
     return { posture: 'ok', metric: 'Installed' }
   }
-  if (stepId === 'ingest' && stats.reportCount > 0) {
+  if (stepId === 'first_report_received' && stats.reportCount > 0) {
     return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
   }
   return { posture: 'clear', metric: 'Pending' }

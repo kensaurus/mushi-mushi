@@ -2,18 +2,26 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Opens a Jira Cloud issue for each new Mushi bug report, moves it through
+your Jira workflow as the report changes status, and comments when the fix
+lands. It is a library: you write the small server around it.
 
-
-Bidirectional sync between Mushi Mushi reports and Jira Cloud issues.
-Creates issues on `report.created`, transitions status on
-`report.status_changed`, and comments fix summaries on `fix.applied`.
-
-## Install
+**Do you need this package?** Not on Mushi Cloud: add Jira on the
+**Integrations** page of the console (base URL, email, API token, project
+key) and Mushi opens and resolves Jira issues itself. The console's
+Marketplace has no Jira listing (checked 2026-10-26), so this package only
+receives events from a Mushi server you run yourself, once you add a
+`plugin_registry` row for it.
 
 ```bash
-npm i @mushi-mushi/plugin-jira
+npm i @mushi-mushi/plugin-jira @mushi-mushi/plugin-sdk express
 ```
+
+You need Jira OAuth tokens first (below), then mount
+`createJiraPluginHandler` on `POST /mushi/webhook`
+([example](#wire-up-the-webhook-handler)).
+
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/jira
 
 ## OAuth setup (one-time per tenant)
 
@@ -55,7 +63,7 @@ const tokens = { ...stored, ...refreshed, cloudId: stored.cloudId, cloudUrl: sto
 ```ts
 import express from 'express'
 import { createJiraPluginHandler } from '@mushi-mushi/plugin-jira'
-import { expressMiddleware } from '@mushi-mushi/plugin-sdk'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
 
 const handler = createJiraPluginHandler({
   secret: process.env.MUSHI_PLUGIN_SECRET!,
@@ -80,7 +88,12 @@ app.post('/mushi/webhook', expressMiddleware(handler))
 | `report.status_changed`   | Transitions the issue via `statusToTransition` map.                |
 | `fix.applied`             | Adds a comment linking the GitHub PR (or fix summary).             |
 
-Other Mushi events are ignored — add them to the `on` map to customize.
+Other Mushi events are ignored.
+
+The report → issue key map lives in memory. After a restart,
+`report.status_changed` and `fix.applied` for reports created before it do
+nothing. Jira → Mushi sync (closing the Mushi report from Jira) is not part
+of this package's exports.
 
 ## Status mapping defaults
 
@@ -103,4 +116,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

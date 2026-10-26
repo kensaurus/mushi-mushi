@@ -4,6 +4,12 @@
 
 Find the UX problems on every screen of your app before your users do, and let the coding agent you already pay for fix them one screen at a time. Every change is measured. Only the ones that help are kept, on a branch you review. Part of [Mushi Mushi](https://github.com/kensaurus/mushi-mushi).
 
+```bash
+npx @mushi-mushi/ux ui   # the studio on 127.0.0.1: pick agent, model and pages, then watch each attempt
+```
+
+Docs: [@mushi-mushi/ux](https://kensaur.us/mushi-mushi/docs/sdks/ux) · [UX runs in the console](https://kensaur.us/mushi-mushi/docs/admin/ux-runs)
+
 ```mermaid
 flowchart LR
     subgraph local["Your computer"]

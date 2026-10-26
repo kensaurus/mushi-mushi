@@ -24,6 +24,7 @@ export default {
 
   '-- Fix': { type: 'separator', title: '3 · Fix' },
   fixes: 'Fix orchestrator',
+  pipeline: 'Pipeline',
   'verified-merge': 'Verified merge',
   ci: 'CI runners',
   credits: 'Spend credits',

@@ -1,114 +1,118 @@
 ---
 title: '@mushi-mushi/inventory-schema'
-description: The Zod schema, JSON Schema and TypeScript types for inventory.yaml — the contract that Mushi's gates, crawler, ESLint plugin and CLI all read.
+description: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it."
 ---
 
 # `@mushi-mushi/inventory-schema`
 
-Source of truth for `inventory.yaml` — Zod schema, JSON Schema, and the
-TypeScript types every other v2 surface depends on. The admin ingester,
-the gate runner, the LLM proposer, and the GitHub Action all import from
-here so a schema change is felt in exactly one place.
+Validate an `inventory.yaml`: the file that lists your app's pages, the
+buttons and forms on each one, what each should do, and the test that
+proves it. Zod schema, JSON Schema and TypeScript types, matching what the
+Mushi console accepts when you upload the file.
 
 ## Install
 
 ```bash
-pnpm add -D @mushi-mushi/inventory-schema
+pnpm add @mushi-mushi/inventory-schema
 ```
 
-You usually don't add this directly — the gates runner, ESLint plugin,
-and CLI all bring it in transitively. Add it explicitly only if you're
-writing a tool that produces or consumes `inventory.yaml` documents.
+Add it when you write a tool that produces or checks `inventory.yaml`
+files, or to validate the file in your own CI. Mushi's CLI, ESLint plugin
+and GitHub Action do not depend on it.
 
 ## What `inventory.yaml` looks like
 
 ```yaml filename="inventory.yaml"
-version: 2
-project:
-  name: Acme web
-stories:
-  - id: signup
-    title: New user signup
-    pages:
-      - id: signup
-        path: /signup
-        elements:
-          - id: email
-            selector: '[data-testid="email"]'
-          - id: password
-            selector: '[data-testid="password"]'
-          - id: submit
-            selector: '[data-testid="signup-submit"]'
-            actions:
-              - id: submit
-                trigger: click
-                # Machine-readable success contract. Threaded into the
-                # fix-worker LLM prompt and asserted by the synthetic
-                # monitor after every probe.
-                expected_outcome:
-                  summary: 'POST /signup returns 200 and creates a user row'
-                  response:
-                    status_in: [200, 201]
-                    json_path:
-                      - { path: '$.user.id', op: 'exists' }
-                  database:
-                    table: 'users'
-                    expect: 'row_exists'
-                  ui:
-                    route_change_to: '/dashboard'
-                    visible_text: 'Welcome'
-```
-
-To feed an authenticated session to the crawler and synthetic monitor, add
-an `auth` block inside `app` (see
-[`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner)):
-
-```yaml
+schema_version: '2.0'          # a string starting with "2"; quote it
 app:
   id: acme-web
   name: Acme web
   base_url: https://app.acme.test
+  # Optional: how the crawler signs in (see inventory-auth-runner).
   auth:
     type: scripted
     config:
       login_path: /login
       script: |
-        await page.fill('[data-testid=email]', env.E2E_EMAIL)
-        await page.fill('[data-testid=password]', env.E2E_PASSWORD)
+        await page.fill('[data-testid=email]', env.TEST_USER_EMAIL)
+        await page.fill('[data-testid=password]', env.TEST_USER_PASSWORD)
         await page.click('[data-testid=login]')
+user_stories:
+  - id: signup
+    title: New user signup
+    pages: [signup]
+pages:
+  - id: signup
+    path: /signup
+    auth_required: false
+    elements:
+      - id: signup-submit
+        type: button             # button, link, form, input, list, toggle, menu, image, media, other
+        action: Creates the account and opens the dashboard
+        user_story: signup
+        testid: signup-submit
+        backend:
+          - { method: POST, path: /signup }
+        db_writes:
+          - { table: users, operation: insert }
+        verified_by:
+          - { file: e2e/signup.spec.ts, name: signs up a new user, framework: playwright }
+        # Machine-readable success contract. Threaded into the
+        # fix-worker LLM prompt and asserted by the synthetic
+        # monitor after every probe.
+        expected_outcome:
+          summary: 'POST /signup returns 200 and creates a user row'
+          response:
+            status_in: [200, 201]
+            json_path:
+              - { path: 'user.id', op: 'exists' }
+          database:
+            table: 'users'
+            expect: 'row_exists'
+          ui:
+            route_change_to: '/dashboard'
+            visible_text: 'Welcome'
 ```
 
+`app` and at least one page are required; `user_stories`, `dependencies`
+and `extensions` are optional. Each element needs `id`, `type` and
+`action`. `auth` can also be `cookie`, `bearer` or `oauth`.
+
 See [Concepts → Inventory and gates](/concepts/inventory-and-gates) for
-the conceptual model and a walkthrough of the five gates.
+the conceptual model and a walkthrough of the gates.
 
 ## Programmatic use
 
 ```ts
 import {
-  InventorySchema,
+  inventorySchema,
   parseInventory,
   type Inventory,
 } from '@mushi-mushi/inventory-schema'
 
 const result = parseInventory(yamlString)
 if (!result.ok) {
-  console.error(result.error.format())
+  for (const issue of result.issues) console.error(`${issue.path}: ${issue.message}`)
   process.exit(1)
 }
-const inventory: Inventory = result.value
+const inventory: Inventory = result.inventory!
 ```
 
-`InventorySchema` is the canonical Zod schema. `parseInventory` is a
-small ergonomic wrapper that runs `safeParse` + a YAML loader.
+`inventorySchema` is the canonical Zod schema. `parseInventory` loads the
+YAML and runs `safeParse`; `validateInventory` does the same for an object
+you already parsed. `computeStats` counts pages, elements, actions, stories,
+API and database dependencies, and tests.
 
 ## JSON Schema
 
-The package also publishes a JSON Schema at
-`@mushi-mushi/inventory-schema/json` for editor completion in any IDE
-that understands `$schema` references:
+For editor completion, point your YAML extension at the published JSON
+Schema:
 
 ```yaml filename="inventory.yaml"
-# yaml-language-server: $schema=https://unpkg.com/@mushi-mushi/inventory-schema/json/inventory.schema.json
-version: 2
+# yaml-language-server: $schema=https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json
+schema_version: '2.0'
 # …
 ```
+
+The same schema is exported as `inventoryJsonSchema` from
+`@mushi-mushi/inventory-schema/json-schema`.

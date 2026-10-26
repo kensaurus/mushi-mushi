@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/wasm-classifier",
   "version": "0.2.4",
-  "description": "On-device pre-classification for Mushi Mushi reports: a zero-dependency heuristic drops obvious junk before it leaves the browser. The ONNX (onnxruntime-web) mode is experimental and falls back to the heuristic.",
+  "description": "Optional junk filter for Mushi bug reports. Stops empty or nonsense reports in the browser before they are sent. The ONNX backend is experimental and falls back to the heuristic.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
