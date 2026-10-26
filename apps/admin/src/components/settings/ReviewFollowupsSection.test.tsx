@@ -121,8 +121,7 @@ function change(el: HTMLSelectElement | HTMLInputElement, value: string) {
 describe('ReviewFollowupsSection', () => {
   let container: HTMLDivElement
   let root: Root
-  const render = async () =>
-    act(async () => root.render(createElement(ReviewFollowupsSection, { keysToken: 'key-1' })))
+  const render = async () => act(async () => root.render(createElement(ReviewFollowupsSection)))
   beforeEach(() => {
     mocks.apiFetch.mockReset()
     mocks.apiFetch.mockResolvedValue({ ok: true, data: {} })

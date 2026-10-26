@@ -7,8 +7,6 @@
  *          follow-ups produced in the last 7 days and lets an organization
  *          owner or admin turn them on or off and pick the Cursor key, the
  *          model (from that key's Cursor model list) and the daily limit.
- *          Re-reads when the Cursor key list above changes (`keysToken`), so
- *          a removed key cannot still be picked here.
  */
 
 import { useEffect, useState } from 'react';
@@ -43,19 +41,8 @@ function draftFrom(s: ReviewFollowupSettings): Draft {
   };
 }
 
-interface Props {
-  /**
-   * The Cursor keys this panel belongs to, as one string. The key picker is
-   * read from this section's own endpoint, so without this a key removed (or
-   * added) in the key list above would stay selectable until a page reload.
-   */
-  keysToken: string;
-}
-
-export function ReviewFollowupsSection({ keysToken }: Props) {
-  const status = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups', {
-    deps: [keysToken],
-  });
+export function ReviewFollowupsSection() {
+  const status = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
