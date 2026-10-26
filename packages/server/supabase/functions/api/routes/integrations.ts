@@ -263,10 +263,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           .eq('webhook_source', 'sentry')
           .order('created_at', { ascending: false })
           .limit(1),
-        // Polling lives on the project row, not the inherited settings resolver.
+        // sentry_auto_import is per-app, not inherited. It is listed in
+        // PER_APP_FIELDS_BY_KIND (platform-config.ts) and is absent from the
+        // resolver's project/org field lists (integration-settings.ts), so an
+        // org default cannot turn another app's import on. The project row is
+        // authoritative — the same row the Sentry card reads. The poller writes
+        // sentry_auto_import_last_at on that row; effectiveSettings never has it.
         db
           .from('project_settings')
-          .select('sentry_auto_import')
+          .select('sentry_auto_import, sentry_auto_import_last_at')
           .eq('project_id', project.id)
           .maybeSingle(),
       ]);
@@ -274,7 +279,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const latestSentryOutcome = ((sentryLatest ?? [])[0] as { outcome?: string } | undefined)?.outcome;
     const sentryInboundAccepted = latestSentryOutcome === 'accepted';
     const sentryInboundRejected = latestSentryOutcome != null && !sentryInboundAccepted;
-    const sentryPolling = (sentryImport as { sentry_auto_import?: boolean } | null)?.sentry_auto_import === true;
+    const sentryImportRow = sentryImport as {
+      sentry_auto_import?: boolean;
+      sentry_auto_import_last_at?: string | null;
+    } | null;
+    const sentryPolling = sentryImportRow?.sentry_auto_import === true;
+    const sentryPolledAt =
+      typeof sentryImportRow?.sentry_auto_import_last_at === 'string'
+        ? sentryImportRow.sentry_auto_import_last_at
+        : null;
 
     const row = (effectiveSettings ?? {}) as Record<string, unknown>;
     // Also collect env-backed fields so we count them as connected in stats.
@@ -318,6 +331,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         inboundAccepted: kind === 'sentry' && sentryInboundAccepted,
         inboundRejected: kind === 'sentry' && sentryInboundRejected,
         inboundPolling: kind === 'sentry' && sentryPolling,
+        inboundPolledAt: kind === 'sentry' ? sentryPolledAt : null,
       });
       if (verdict === 'working') platformHealthy += 1;
       else if (verdict === 'down') {

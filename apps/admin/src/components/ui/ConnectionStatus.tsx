@@ -12,7 +12,8 @@
  *
  * Truth rule: a card never says "Working" without a verification timestamp.
  * Sentry with no inbound event says "Working" only when automatic import is
- * on and the API probe passed. A rejected webhook is still "Needs attention".
+ * on, the API probe passed, and a poll has finished recently. A rejected
+ * webhook, or a poll that has not run, is still "Needs attention".
  */
 
 import { Btn } from './forms'

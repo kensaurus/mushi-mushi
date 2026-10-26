@@ -61,6 +61,45 @@ describe('integrationsNavBadge', () => {
     expect(badge?.mode).toBe('inventory')
     expect(badge?.count).toBe(3)
   })
+
+  it('uses the attention count when platform integrations are not all configured', () => {
+    // Nothing saved: the not-configured count is 3. The banner's number is
+    // platformAttention, and that is the badge.
+    const noneSaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(noneSaved?.mode).toBe('attention')
+    expect(noneSaved?.count).toBe(2)
+    expect(noneSaved?.label).toBe('2 connections need attention')
+
+    // Some saved, some not (platformConnected < platformTotal): still attention,
+    // not (platformTotal - platformConnected).
+    const partlySaved = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 1,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 2,
+    })
+    expect(partlySaved?.count).toBe(2)
+    expect(partlySaved?.label).toBe('2 connections need attention')
+  })
+
+  it('shows the not-configured count only when nothing needs attention', () => {
+    const badge = integrationsNavBadge({
+      platformDown: 0,
+      platformConnected: 0,
+      platformTotal: 3,
+      routingPaused: 0,
+      platformAttention: 0,
+    })
+    expect(badge?.count).toBe(3)
+    expect(badge?.label).toMatch(/not configured/)
+  })
 })
 
 describe('qaCoverageNavBadge', () => {
