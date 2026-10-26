@@ -41,8 +41,9 @@ Docs: [mcp-ci reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci)
 
 | `command`          | What it does                                                                                                                                    | Required inputs                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `gates`            | Runs the pre-release gates for the current commit (`all` = `dead_handler`, `mock_leak`, `api_contract`, `crawl`, `status_claim`, `orphan_endpoint`, `unknown_call`), prints one line per gate, and fails the step when any gate fails. Use `gates: 'api_contract,status_claim'` to run a subset. The action sends no lint findings, so `dead_handler` and `mock_leak` always pass here; run ESLint with `eslint-plugin-mushi-mushi` as its own CI step. `crawl` is reported as skipped (the crawler runs separately). | — (uses `commit-sha` / `pr-number` / `gates`)    |
+| `gates`            | Runs the pre-release gates for the current commit (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`), prints one line per gate, and fails the step when any gate fails, errors or returns no result. `dead_handler` and `mock_leak` read your ESLint JSON report (`eslint-report`); without it the step fails. The crawl runs from Inventory → Reconcile, not here. Use `gates: 'api_contract,status_claim'` to run a subset. | `eslint-report` for the lint gates (also `commit-sha` / `pr-number` / `gates`) |
 | `discover-api`     | Walks the customer repo for Next.js route handlers + OpenAPI + (optionally) Supabase introspection and POSTs the resulting `discovered_apis` to `inventory-gates` so Gate 3 (`api_contract`) has something to diff against. | — (uses `repo-root` / `openapi-file` / `supabase-*`) |
+| `spec-drift`       | Gate 6: runs `oasdiff breaking` between two OpenAPI specs, records the findings as a `spec_drift` gate run and sets the `findings` output. Fails on a breaking change unless `fail-on-breaking: false`. | `base-spec`, `head-spec` (+ optional `fail-on-breaking`, `commit-sha`, `pr-number`) |
 
 ### Mushi v2.1 — passive discovery & proposal flow
 
@@ -127,12 +128,18 @@ jobs:
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: discover-api
 
-      # Run the gates server-side; the step fails when any gate fails.
+      # Gates 1 + 2 read your ESLint report: lint with eslint-plugin-mushi-mushi
+      # (no-dead-handler, no-mock-leak) and save it as JSON. `|| true` keeps
+      # lint errors from stopping the job here; the gates step judges them.
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
+
+      # Run the gates; the step fails when any gate fails.
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: gates
+          eslint-report: mushi-eslint.json
           commit-sha: ${{ github.event.pull_request.head.sha }}
           pr-number: ${{ github.event.pull_request.number }}
 ```
@@ -178,11 +185,15 @@ jobs:
 | `fail-on-quota`     | no                    | `true`                                                      | Fail the step on `QUOTA_EXCEEDED`. Set `false` to warn and continue.                                                   |
 | `commit-sha`        | when `gates`          | `GITHUB_SHA`                                                | Commit the gates run against. Surfaces in the admin `/inventory ▸ Gates` view.                                         |
 | `pr-number`         | when `gates`          | —                                                           | Pull-request number used to scope `gate_findings` for the admin UI.                                                    |
-| `gates`             | when `gates`          | `'all'`                                                     | Comma-separated subset of `dead_handler,mock_leak,api_contract,crawl,status_claim,orphan_endpoint,unknown_call`.       |
-| `repo-root`         | when `discover-api`   | `GITHUB_WORKSPACE`                                          | Directory to walk for Next.js route handlers + OpenAPI files.                                                          |
+| `gates`             | when `gates`          | `'all'`                                                     | Comma-separated subset of `dead_handler,mock_leak,api_contract,status_claim,orphan_endpoint,unknown_call`. `crawl` is refused: start it from Inventory → Reconcile. |
+| `eslint-report`     | when `gates` runs `dead_handler` or `mock_leak` | —                                     | Path to an ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. Without it those gates fail the step instead of passing on no evidence. |
+| `repo-root`         | when `discover-api`   | `GITHUB_WORKSPACE`                                          | Directory to walk for Next.js route handlers + OpenAPI files. For `gates`, the root `eslint-report` paths are made relative to. |
 | `openapi-file`      | when `discover-api`   | `<repo-root>/openapi.yaml`                                  | Explicit OpenAPI file path.                                                                                            |
 | `supabase-url`      | when `discover-api`   | —                                                           | Supabase project URL to introspect via `/rest/v1/` for `db_deps`.                                                      |
 | `supabase-anon-key` | when `discover-api`   | —                                                           | Supabase anon key for the introspection.                                                                               |
+| `base-spec`         | when `spec-drift`     | —                                                           | Path or URL of the base OpenAPI spec (the previous version).                                                           |
+| `head-spec`         | when `spec-drift`     | —                                                           | Path or URL of the head OpenAPI spec (this PR).                                                                        |
+| `fail-on-breaking`  | no                    | `true`                                                      | For `spec-drift`: fail the step on a breaking change. Set `false` to warn only.                                        |
 
 ## Outputs
 
@@ -190,6 +201,7 @@ jobs:
 | ------------------- | -------------------------------------------------------------------------------------- |
 | `result`            | Raw JSON envelope returned by the Mushi API.                                           |
 | `coverage`          | For `check-coverage`: observed classified ratio (0–1).                                 |
+| `findings`          | For `spec-drift`: JSON array of the oasdiff findings.                                  |
 | `ready_to_propose`  | For `discovery-status`: `'true'` once the project has a defensible-sized SDK sample.   |
 | `total_events`      | For `discovery-status`: total `discovery_events` rows aggregated server-side.          |
 | `route_count`       | For `discovery-status`: distinct route templates observed in the last 30 days.         |
@@ -203,4 +215,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 508 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

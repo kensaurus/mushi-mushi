@@ -45,6 +45,8 @@ export const es: MushiLocale = {
     screenshotCapturing: 'Tomando captura…',
     screenshotRetry: 'Reintentar',
     screenshotShareTab: 'Compartir esta pestaña',
+    notSentBlocked: 'No se envió. El reporte se filtró antes de enviarse. Tu texto sigue aquí; añade algo más de detalle e inténtalo de nuevo.',
+    notSentThrottled: 'No se envió. Demasiados reportes en poco tiempo. Tu texto sigue aquí; espera un minuto e inténtalo de nuevo.',
     screenshotErrors: {
       permission: 'Se bloqueó la captura. Permítela y reintenta.',
       unsupported: 'Este navegador no puede capturar la página. Descríbelo.',

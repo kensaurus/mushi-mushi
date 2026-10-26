@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 219
+Pages: 220
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -5893,7 +5893,7 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device WASM SLM — pre-classifies before sending |
+| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device pre-classifier (heuristic; ONNX mode experimental) — drops junk before sending |
 | [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
 | [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
 | [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
@@ -7613,14 +7613,20 @@ For legacy `.eslintrc`:
 
 ## The recommended preset
 
-`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on all
-19 rules in the plugin. The other 17 are design rules for Mushi's own admin
-console. Some only look at Mushi's paths, but `no-hand-rolled-dialog` checks
-every file and the page rules (`no-page-root-padding`,
-`no-legacy-page-header-in-pages`, `no-missing-page-posture`,
-`no-hand-rolled-tablist`) check any file named `*Page.tsx`, so in your own
-app they can report errors that do not apply to you. Use the two-rule config
-above unless you are working on Mushi itself.
+`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on the
+two rules above plus `no-allowlist-jsx-textnode`, which catches an allowlist
+comment written as JSX text (it would render on the page) and nothing else.
+
+```js filename="eslint.config.js"
+import mushi from 'eslint-plugin-mushi-mushi'
+
+export default [mushi.configs.recommended]
+```
+
+The plugin's other 16 rules check the Mushi console's own design system
+(tokens, ``, ``, page posture, the widget theme) and
+are only in the Mushi monorepo's `internal` preset. Turn one on by name if
+it fits your app.
 
 ## Rules
 
@@ -7833,7 +7839,10 @@ app:
 Inline scripts may not use `require(`, `import(`, `process.`, `eval(` and
 similar escapes, and are capped at 8 KB. For anything longer, set
 `script: 'js:./scripts/login.js'` to a module that default-exports an
-async `(page, env, context)` function.
+async `(page, env, context)` function. The path resolves against the folder
+of your local `inventory.yaml` (`--inventory ` or
+`MUSHI_INVENTORY_FILE`; default `./inventory.yaml`, so the working
+directory).
 
 Then run:
 
@@ -8319,6 +8328,28 @@ jobs:
 `0.8`) of the project's reports are classified. Add a `trigger-judge` step
 before it to classify waiting reports first.
 
+### Gates on every PR
+
+```yaml filename=".github/workflows/mushi-gates.yml"
+name: Mushi gates
+on: [pull_request]
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      - run: npx eslint -f json -o mushi-eslint.json src/ || true
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
+        with:
+          api-key:       ${{ secrets.MUSHI_API_KEY }}
+          project-id:    ${{ secrets.MUSHI_PROJECT_ID }}
+          command:       gates
+          eslint-report: mushi-eslint.json
+          commit-sha:    ${{ github.event.pull_request.head.sha }}
+          pr-number:     ${{ github.event.pull_request.number }}
+```
+
 ## Commands
 
 | `command:`           | What it does                                                          |
@@ -8327,17 +8358,20 @@ before it to classify waiting reports first.
 | `trigger-judge`      | Runs classification on up to 50 unclassified reports.                 |
 | `dispatch-fix`       | Queues an agent fix for `report-id` (optionally pinned with `inventory-action-node-id`). |
 | `query`              | Runs a plain-English `question` against your reports and prints the answer. |
-| `gates`              | Runs the gates for `commit-sha` (`all` = `dead_handler`, `mock_leak`, `api_contract`, `crawl`, `status_claim`, `orphan_endpoint`, `unknown_call`) and fails the step when one fails. |
+| `gates`              | Runs the gates for `commit-sha` (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) and fails the step when one fails, errors or returns no result. |
 | `discover-api`       | Walks your repo for Next.js route handlers and OpenAPI files (plus optional Supabase introspection) and sends the routes to Mushi for the `api_contract` gate. |
+| `spec-drift`         | Gate 6: runs `oasdiff breaking` between `base-spec` and `head-spec`, records the findings and sets the `findings` output; fails on a breaking change unless `fail-on-breaking: false`. |
 | `discovery-status`   | Reads what the SDK has observed; sets `ready_to_propose`, `total_events` and `route_count` outputs. |
 | `propose`            | Asks the LLM proposer for an `inventory.yaml` draft and sets `proposal_id`. It does not open a PR. |
 | `auth-bootstrap`     | Runs [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) (`npx --yes -p @mushi-mushi/inventory-auth-runner mushi-mushi-auth refresh`) to refresh the crawler's sign-in cookie. |
 
 The action fails the step; it does not post a separate GitHub commit status.
-It sends no ESLint findings, so `dead_handler` and `mock_leak` pass here: run
-[`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) as its own CI step to fail
-a PR on those. `crawl` is reported as skipped because the crawler runs on its
-own.
+`dead_handler` and `mock_leak` judge the findings in `eslint-report` (an
+ESLint JSON report made with [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin)).
+A run that asks for them without a report fails, so a missing lint step can
+never pass as "no findings". `crawl` is not run by this command: start a crawl
+with **Reconcile** on the Inventory page; `api_contract` reads its result. A
+skipped gate prints its reason.
 
 ## In your IDE
 
@@ -8348,6 +8382,8 @@ server is configured. Inside the admin console you can also click
 page — see [Admin → User stories · Inventory](/admin/inventory).
 
 ## Inputs
+
+`action.yml` is the source of truth; a test keeps it in step with the CLI.
 
 | Input         | Required | Default       | Description                                          |
 | ------------- | :------: | ------------- | ---------------------------------------------------- |
@@ -8360,14 +8396,29 @@ page — see [Admin → User stories · Inventory](/admin/inventory).
 | `question`    | for `query` | —          | The question to ask.                                 |
 | `min-coverage` |         | `0.8`         | For `check-coverage`: the share of reports that must be classified. |
 | `fail-on-quota` |        | `true`        | Set `false` to warn instead of failing on `QUOTA_EXCEEDED`. |
-| `commit-sha`  |          | `GITHUB_SHA`  | For `gates`: the commit to check.                    |
-| `pr-number`   |          | —             | For `gates`: the PR the findings belong to.          |
-| `gates`       |          | `all`         | For `gates`: a comma-separated subset.               |
-| `repo-root`   |          | the workspace | For `discover-api`: where to look for routes.        |
+| `commit-sha`  |          | `GITHUB_SHA`  | For `gates` and `spec-drift`: the commit to check.   |
+| `pr-number`   |          | —             | For `gates` and `spec-drift`: the PR the findings belong to. |
+| `gates`       |          | `all`         | For `gates`: a comma-separated subset; `crawl` is refused. |
+| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. |
+| `repo-root`   |          | the workspace | For `discover-api`: where to look for routes. For `gates`: the root `eslint-report` paths are made relative to. |
 | `openapi-file` |         | `openapi.yaml` in `repo-root` | For `discover-api`: an explicit OpenAPI file. |
 | `supabase-url`, `supabase-anon-key` | | — | For `discover-api`: optional Supabase introspection. |
+| `base-spec`, `head-spec` | for `spec-drift` | — | Base and head OpenAPI specs (path or URL). |
+| `fail-on-breaking` |     | `true`        | For `spec-drift`: fail on a breaking change.         |
 
-The full input and output list, with more workflow examples, is in the
+## Outputs
+
+| Output             | Set by             | Description                                              |
+| ------------------ | ------------------ | -------------------------------------------------------- |
+| `result`           | most commands      | JSON returned by the Mushi API.                          |
+| `coverage`         | `check-coverage`   | Observed classified ratio.                               |
+| `findings`         | `spec-drift`       | JSON array of the oasdiff findings.                      |
+| `ready_to_propose` | `discovery-status` | `"true"` once there is enough discovery data to propose. |
+| `total_events`     | `discovery-status` | SDK discovery events recorded.                           |
+| `route_count`      | `discovery-status` | Routes discovered.                                       |
+| `proposal_id`      | `propose`          | Inventory proposal to review on `/inventory`.            |
+
+More workflow examples are in the
 [package README](https://www.npmjs.com/package/@mushi-mushi/mcp-ci).
 
 ---
@@ -10091,7 +10142,7 @@ const result = await classifier.classify({ description: 'asdf qwer' })
 `hasScreenshot`, `hasSelectedElement`, `hasNetworkErrors`,
 `hasConsoleErrors` and `proactiveTrigger`.
 
-## ONNX backend
+## ONNX backend (experimental)
 
 ```ts
 import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier'
@@ -10110,7 +10161,8 @@ not ship a model.
 
   Model inference is not implemented yet. The ONNX backend loads the runtime
   and downloads your model, then still returns heuristic verdicts (`modelId:
-  'heuristic-fallback'`, with a console warning). Use
+  'heuristic-fallback'`, a reason starting "ONNX inference is not
+  implemented yet", and one console warning). Use
   `createHeuristicClassifier()` until that changes.
 
 ---
@@ -21035,6 +21087,72 @@ from [Projects](/admin/projects).
 
   Overview is org-scoped. Activity and most other console pages are project-scoped —
   use a card footer link to switch project context before drilling in.
+
+---
+
+## Pipeline
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/pipeline
+
+---
+title: Pipeline
+description: The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.
+---
+
+# Pipeline
+
+**Route:** `/pipeline`
+
+Every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
+
+## Stages
+
+| Stage | What is in it |
+| --- | --- |
+| **Reported** | Reports not triaged yet (stuck after an hour, or when triage failed), and reports the API refused at intake. |
+| **Triaged** | Triaged reports with no fix started. Stuck after 3 days. |
+| **Fix PR** | Apps whose auto-fix cannot dispatch, agents writing a fix, agents that failed without a PR, and drafts whose CI never ran. |
+| **Reviewed** | PRs waiting for the Opus review, and PRs Opus held or sent back ("fix first"). |
+| **CI** | PRs whose own CI is red, never ran, is still running, or stopped on the test machine. |
+| **Release train** | Approved, green PRs in the merge queue, on a train, held, or waiting on a conflict agent. |
+| **Merged** | Fixes merged in the last 7 days. |
+| **Deployed** | Merged fixes that a deploy recorded after the merge. |
+
+Each stage shows its count, how many are stuck, and how long the oldest item has been in it. The time is counted from when the item entered the stage, not from the last time a worker touched it. Click a stage to see only its groups.
+
+A PR whose own CI is red counts under **CI**, even when it is in the merge queue. A red PR in a release train only makes the train fail. A test machine stop is not a code failure, and a skipped check is not a pass.
+
+## Who opens fixes
+
+One row per app: who opened fixes in the last 7 days (the server, your local `mushi work` lanes, both, or nobody), the server's agent keys, dispatches in 24 hours and last dispatch, and the local lanes' runs, how many are running and the last run. The **Fix PR** stage counts apps by who opened a fix in the last 24 hours.
+
+The server opens fixes on its own only through spend-down, with an active Cursor key that has spend-down on. When an app has auto-fix on but no such key, or its key dispatched nothing in 48 hours, the app is red here and in a stuck group in **Fix PR** that links to the switch on the Spend credits page.
+
+## Stuck groups
+
+Each group says its reason in plain words, for example "12 PRs: their own CI is red". Open it to see each PR with its report, how long it has waited, the failing checks, the Opus verdict and its findings, and the merge queue's last message. When a setting holds the group (review follow-ups off), the group links to it.
+
+| Action | What it does |
+| --- | --- |
+| **Send to CI repair** | Sends the PR to an agent that makes its CI green without weakening tests: Mushi's cloud agent when review follow-ups can run (they need a Cursor key on your team), otherwise your local `mushi work --followups` lanes on their next run. Says why when neither can. |
+| **Send to follow-up** | The same for an Opus "fix first": an agent fixes the review's findings on the PR's branch. |
+| **Re-run CI** | Re-runs the failed CI jobs on the PR's latest commit. |
+| **Re-run review** | Asks Opus to review the PR again. |
+| **Update branch** | GitHub merges the base branch into the PR. |
+| **New conflict agent** | Hands a conflicted PR back to the merge queue, at most 2 agents per PR. Conflict agents are cloud agents: without one, the PR needs a person to resolve the conflict on GitHub, and the page says so with the PR link. |
+| **Mark ready** | Takes a draft out of draft so CI runs. |
+| **Queue to merge** | Puts an approved, green PR in the merge queue. |
+| **Remove from queue** / **Close PR** | Takes it out of the queue, or closes it without merging. The reason is kept as a team note on the report. |
+
+Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
+
+## Release trains
+
+One row per repository with the trains of the last 7 days: green merged, red failed, blue on the way. Click a square for that train's detail. The checks that failed the trains most often are listed under the row. **Run merge queue now** checks the queue at once and says whether a train left, and if not, when the next one may leave or why it waits.
+
+## Intake and deploys
+
+Each app shows the reports the API refused (HTTP 400) in the last 7 days, with the first failing field and its check (`fingerprintHash:invalid_string`) and the SDK package that sent them. They also form a red group in **Reported**. An app with none reads **0 rejected since** the day counting began; before anything was ever counted it reads **not recorded yet**, never 0. Each app also shows its last recorded deploy.
 
 ---
 

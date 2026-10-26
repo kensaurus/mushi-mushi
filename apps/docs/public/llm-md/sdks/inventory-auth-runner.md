@@ -53,7 +53,10 @@ app:
 Inline scripts may not use `require(`, `import(`, `process.`, `eval(` and
 similar escapes, and are capped at 8 KB. For anything longer, set
 `script: 'js:./scripts/login.js'` to a module that default-exports an
-async `(page, env, context)` function.
+async `(page, env, context)` function. The path resolves against the folder
+of your local `inventory.yaml` (`--inventory ` or
+`MUSHI_INVENTORY_FILE`; default `./inventory.yaml`, so the working
+directory).
 
 Then run:
 
