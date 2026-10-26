@@ -143,6 +143,16 @@ describe('SdkHealthPanel', () => {
     expect(calls.order).toEqual(['install'])
   })
 
+  it('a successful secrets write hides the new key until Reveal key', async () => {
+    await mount([ALL[2]])
+    act(() => button(/Write CI secrets/)!.click())
+    act(() => button(/Write secrets/)!.click())
+    await flush()
+    expect(document.body.textContent).not.toContain('mushi_secret')
+    act(() => button(/Reveal key/)!.click())
+    expect(document.querySelector('[data-testid="sdk-health-minted-key"]')!.textContent).toContain('mushi_secret')
+  })
+
   it('a forbidden secrets write shows the key once and the commands to run', async () => {
     api.apiFetchMutate.mockResolvedValue({
       ok: false,

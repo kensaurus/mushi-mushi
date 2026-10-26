@@ -103,8 +103,8 @@ function heroVerify(stats: ProjectsStats): PageHeroVerify {
         },
         {
           label: 'SDK live',
-          value: stats.sdkConnectedCount,
-          tone: stats.sdkConnectedCount > 0 ? 'ok' : 'warn',
+          value: stats.projectCount > 0 ? `${stats.sdkConnectedCount}/${stats.projectCount}` : stats.sdkConnectedCount,
+          tone: stats.sdkConnectedCount > 0 && stats.sdkConnectedCount === stats.projectCount ? 'ok' : 'warn',
         },
         {
           label: 'Reports 24h',

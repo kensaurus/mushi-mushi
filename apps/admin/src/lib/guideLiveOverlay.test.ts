@@ -81,6 +81,12 @@ describe('guideLiveOverlay', () => {
     expect(overlay.metric).toBe('No heartbeat')
   })
 
+  it('projectsHealthOverlay is not ok while one app has no SDK heartbeat', () => {
+    const live = { projectsWithReports: 8, projectCount: 8, activeProjectHasReports: true, activeProjectSdkConnected: true, topPriority: 'sdk_missing' }
+    expect(projectsHealthOverlay('sdk', { ...live, sdkConnectedCount: 7 })).toEqual({ posture: 'warn', metric: '7/8 live' })
+    expect(projectsHealthOverlay('sdk', { ...live, sdkConnectedCount: 8 }).posture).toBe('ok')
+  })
+
   it('driftSeverityOverlay counts critical findings', () => {
     const overlay = driftSeverityOverlay('critical', {
       criticalOpen: 2,

@@ -148,7 +148,7 @@ describe('GET /sdk-health', () => {
       sdk_versions: [{ package: '@mushi-mushi/react-native', version: '0.24.3' }],
       project_api_keys: [{ project_id: P, is_active: true, scopes: ['report:write'], last_seen_at: new Date().toISOString(), last_seen_user_agent: 'okhttp/4.12' }],
       sdk_upgrade_jobs: [
-        { project_id: P, status: 'completed', pr_url: 'https://github.com/kensaurus/yen-yen/pull/359', pr_state: 'open', merged_at: null, check_run_status: 'completed', check_run_conclusion: 'failure', finished_at: '2026-10-25T00:00:00Z' },
+        { project_id: P, status: 'completed', pr_url: 'https://github.com/kensaurus/yen-yen/pull/359', pr_state: 'open', merged_at: null, check_run_status: 'completed', check_run_conclusion: 'failure', finished_at: new Date().toISOString() },
       ],
     })
     const res = await call('GET', HEALTH)
@@ -156,6 +156,21 @@ describe('GET /sdk-health', () => {
       expect.objectContaining({ id: 'outdated', fix: null, link: { label: 'Open PR #359', href: 'https://github.com/kensaurus/yen-yen/pull/359' } }),
     ])
     expect(res.json.data.problems[0].detail).toContain('Upgrade PR #359 is open; CI failing.')
+  })
+
+  it('an upgrade PR closed without merging is history: the Fix is offered again', async () => {
+    state.files = { 'apps/mobile/package.json': pkg({ expo: '54.0.0', '@mushi-mushi/react-native': '0.24.0' }) }
+    state.secretNames = ['EXPO_PUBLIC_MUSHI_PROJECT_ID', 'EXPO_PUBLIC_MUSHI_API_KEY']
+    seed({
+      sdk_versions: [{ package: '@mushi-mushi/react-native', version: '0.24.3' }],
+      project_api_keys: [{ project_id: P, is_active: true, scopes: ['report:write'], last_seen_at: new Date().toISOString(), last_seen_user_agent: 'okhttp/4.12' }],
+      sdk_upgrade_jobs: [
+        { project_id: P, status: 'completed', pr_url: 'https://github.com/kensaurus/yen-yen/pull/358', pr_state: 'closed', merged_at: null, finished_at: new Date().toISOString() },
+      ],
+    })
+    const res = await call('GET', HEALTH)
+    expect(res.json.data.problems[0]).toMatchObject({ id: 'outdated', fix: { kind: 'upgrade_pr' } })
+    expect(res.json.data.problems[0].link).toBeUndefined()
   })
 
   it('an MCP key heartbeat is not an SDK check-in', async () => {

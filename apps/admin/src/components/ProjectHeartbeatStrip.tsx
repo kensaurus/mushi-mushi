@@ -15,7 +15,7 @@ const TONE_DOT: Record<
   string
 > = {
   live: 'bg-ok',
-  stale: 'bg-warn/70',
+  stale: 'bg-warn',
   cold: 'bg-warn',
   mismatch: 'bg-warn motion-safe:animate-pulse',
   none: 'bg-fg-faint/50',
@@ -26,7 +26,7 @@ const TONE_TEXT: Record<
   string
 > = {
   live: 'text-fg-muted',
-  stale: 'text-fg-muted',
+  stale: 'text-warn',
   cold: 'text-warn',
   mismatch: 'text-warn',
   none: 'text-fg-faint',
@@ -93,7 +93,7 @@ function buildHeartbeatTooltip(
         : heartbeat.tone === 'cold'
           ? { tone: 'warn', text: 'Cold: no SDK check-in for over 7 days. Click to see why and fix it.' }
           : heartbeat.tone === 'stale'
-            ? { tone: 'ok', text: 'Stale: no SDK check-in in the last hour, which is normal for a quiet app.' }
+            ? { tone: 'warn', text: 'Stale: no SDK check-in in the last hour. Normal for a quiet app; check it if you expect traffic.' }
           : { tone: 'ok', text: 'SDK is actively reaching this backend.' },
   }
 }

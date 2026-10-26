@@ -230,6 +230,30 @@ function ProblemRow({
   )
 }
 
+/** The key sync just minted, hidden until asked: needed where the app builds outside GitHub Actions. */
+function MintedKey({ rawKey, prefix }: { rawKey: string; prefix?: string }) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="space-y-1" data-testid="sdk-health-minted-key">
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">
+          {shown ? rawKey : `${prefix ?? rawKey.slice(0, 12)}…`}
+        </code>
+        {shown ? (
+          <CopyButton value={rawKey} label="Copy API key" copiedLabel="Copied" size="sm" />
+        ) : (
+          <Btn size="sm" variant="ghost" onClick={() => setShown(true)}>
+            Reveal key
+          </Btn>
+        )}
+      </div>
+      <p className="text-2xs text-fg-faint">
+        This is the only time the full key is shown. If the app also builds on a host (Vercel, Netlify, EAS), set it there too.
+      </p>
+    </div>
+  )
+}
+
 function Line({ tone, children }: { tone: 'ok' | 'warn' | 'muted'; children: React.ReactNode }) {
   const cls = tone === 'ok' ? 'text-ok-foreground' : tone === 'warn' ? 'text-warn-foreground' : 'text-fg-muted'
   return <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${cls}`}>{children}</p>
@@ -279,10 +303,13 @@ function FixResult({ kind, fixes }: { kind: SdkHealthFixKind; fixes: SdkHealthFi
   if (s.status === 'syncing') return <Line tone="muted">Writing the secrets…</Line>
   if (s.status === 'ok') {
     return (
-      <Line tone="ok">
-        <IconCheck className="h-3.5 w-3.5" aria-hidden />
-        <span>Wrote {s.written?.join(', ')}. Ship a new build so the app picks them up.</span>
-      </Line>
+      <div className="space-y-1">
+        <Line tone="ok">
+          <IconCheck className="h-3.5 w-3.5" aria-hidden />
+          <span>Wrote {s.written?.join(', ')}. Ship a new build so the app picks them up.</span>
+        </Line>
+        {s.rawKey && <MintedKey rawKey={s.rawKey} prefix={s.keyPrefix} />}
+      </div>
     )
   }
   const manual = s.status === 'forbidden' || s.status === 'no-repo' || s.status === 'partial' || s.status === 'failed'

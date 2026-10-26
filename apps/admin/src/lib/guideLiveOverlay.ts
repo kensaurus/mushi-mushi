@@ -202,6 +202,10 @@ export function projectsHealthOverlay(
   }
   if (signalId === 'sdk') {
     if (stats.sdkConnectedCount === 0) return { posture: 'open', metric: 'No heartbeat' }
+    // Not "ok" while any app has no SDK heartbeat.
+    if (stats.sdkConnectedCount < stats.projectCount) {
+      return { posture: 'warn', metric: `${stats.sdkConnectedCount}/${stats.projectCount} live` }
+    }
     return { posture: 'ok', metric: `${stats.sdkConnectedCount} live` }
   }
   if (signalId === 'github') {

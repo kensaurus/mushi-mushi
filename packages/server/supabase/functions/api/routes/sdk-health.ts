@@ -36,6 +36,7 @@ import {
 import { lastHeartbeatAt, missingCiVars, nativeEverSeen, requiredCiVarNames, resolveStack, type KeyHeartbeat } from '../../_shared/sdk-diagnostics.ts'
 import { pickHighestVersion } from '../../_shared/sdk-version-compare.ts'
 import { isSdkKey } from '../../_shared/setup-signals.ts'
+import { isUpgradePrStillRelevant } from '../../_shared/sdk-upgrade-gates.ts'
 import {
   OPEN_REPORT_STATUSES,
   SDK_HEALTH_TASK_KINDS,
@@ -138,15 +139,17 @@ async function siteUrl(db: Db, projectId: string): Promise<string | null> {
 }
 
 interface UpgradeJobRow {
+  status: string
   pr_url: string | null
   pr_state: string | null
+  merged_at: string | null
   check_run_status: string | null
   check_run_conclusion: string | null
 }
 
 /** The last upgrade PR while it is still open, with its CI in one word. */
 function openUpgradePr(row: UpgradeJobRow | null): SdkHealthInput['openUpgradePr'] {
-  if (!row?.pr_url || row.pr_state === 'closed' || row.pr_state === 'merged') return null
+  if (!row?.pr_url || !isUpgradePrStillRelevant(row) || row.merged_at || row.pr_state === 'merged') return null
   const conclusion = row.check_run_conclusion
   const ci = conclusion && ['failure', 'cancelled', 'timed_out', 'action_required'].includes(conclusion)
     ? 'failing'
@@ -245,11 +248,12 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
       db.from('sdk_versions').select('package, version'),
       db
         .from('sdk_upgrade_jobs')
-        .select('pr_url, pr_state, check_run_status, check_run_conclusion')
+        .select('status, pr_url, pr_state, merged_at, check_run_status, check_run_conclusion')
         .eq('project_id', a.projectId)
         .eq('status', 'completed')
         .not('pr_url', 'is', null)
-        .is('merged_at', null)
+        // The same window and relevance rule the Update center uses (sdk-upgrade in-flight).
+        .gte('finished_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
         .order('finished_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
