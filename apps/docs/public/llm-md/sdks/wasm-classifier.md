@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
-description: "@mushi-mushi/wasm-classifier drops obvious junk bug reports in the browser before they reach your LLM, with a zero-dependency heuristic; its ONNX mode is experimental."
+description: "@mushi-mushi/wasm-classifier drops junk bug reports in the browser. ONNX mode is experimental."
 ---
 
 # `@mushi-mushi/wasm-classifier`
@@ -43,7 +43,7 @@ const result = await classifier.classify({ description: 'asdf' })
 `block` stops the send and the widget tells the reporter it was not sent;
 `pass` and `unsure` send the report.
 
-## ONNX classifier (experimental)
+## ONNX (experimental)
 
 `createOnnxClassifier({ modelUrl })` loads `onnxruntime-web` (an optional
 peer dependency) and a model you host. **Model inference is not

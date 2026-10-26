@@ -1686,7 +1686,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/mcp-ci",
     markdown: "sdks/mcp-ci.md",
     keywords: ["sdks", "mcp-ci", "mcp", "@mushi-mushi/mcp-ci"],
-    headings: ["Quick start", "Commands", "In your IDE", "Inputs"],
+    headings: ["Quick start", "Commands", "In your IDE", "Inputs", "Outputs"],
     excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — run the five-gate composite check on pull requests, draft inventory entries, and bootstrap crawler auth.",
   },
   {
@@ -1803,8 +1803,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/wasm-classifier",
     markdown: "sdks/wasm-classifier.md",
     keywords: ["sdks", "wasm-classifier", "wasm", "classifier", "@mushi-mushi/wasm-classifier"],
-    headings: [],
-    excerpt: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost.",
+    headings: ["Heuristic classifier", "ONNX (experimental)"],
+    excerpt: "@mushi-mushi/wasm-classifier drops junk bug reports in the browser. ONNX mode is experimental.",
   },
   {
     title: "JavaScript bug reporting SDK for the browser",
