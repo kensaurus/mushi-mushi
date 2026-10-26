@@ -30,6 +30,12 @@ Docs: [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslin
 
 ## Rules
 
+`recommended` (and `legacy`) turn on the first two rules and
+`no-allowlist-jsx-textnode`. The other rules check the Mushi console's own
+design system (its tokens, `<Card>`, `<PageHeaderBar>`, the widget theme)
+and are only in the Mushi monorepo's `internal` preset. Turn one on by name
+if it fits your app.
+
 | Rule | What it catches |
 | ---- | ---- |
 | `mushi-mushi/no-dead-handler` | `onClick={() => {}}`, `() => null` placeholders, `console.log`-only handlers, `throw new Error('not implemented')` stubs, `useCallback(() => {}, [])`. |
@@ -91,4 +97,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 508 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

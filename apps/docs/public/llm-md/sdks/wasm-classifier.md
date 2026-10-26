@@ -54,7 +54,7 @@ const result = await classifier.classify({ description: 'asdf qwer' })
 `hasScreenshot`, `hasSelectedElement`, `hasNetworkErrors`,
 `hasConsoleErrors` and `proactiveTrigger`.
 
-## ONNX backend
+## ONNX backend (experimental)
 
 ```ts
 import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier'
@@ -73,5 +73,6 @@ not ship a model.
 
   Model inference is not implemented yet. The ONNX backend loads the runtime
   and downloads your model, then still returns heuristic verdicts (`modelId:
-  'heuristic-fallback'`, with a console warning). Use
+  'heuristic-fallback'`, a reason starting "ONNX inference is not
+  implemented yet", and one console warning). Use
   `createHeuristicClassifier()` until that changes.

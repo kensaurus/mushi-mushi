@@ -4,7 +4,8 @@ import mushiPlugin from 'eslint-plugin-mushi-mushi';
 export default [
   { ignores: ['.next/**', 'node_modules/**'] },
   ...baseConfig,
-  mushiPlugin.configs.recommended,
+  // The monorepo's own preset: recommended plus the design-system rules.
+  mushiPlugin.configs.internal,
   {
     rules: {
       'no-console': 'off',

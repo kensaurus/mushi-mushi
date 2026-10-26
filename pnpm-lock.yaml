@@ -751,6 +751,9 @@ importers:
       '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
+      '@mushi-mushi/inventory-schema':
+        specifier: workspace:*
+        version: link:../inventory-schema
       '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -927,6 +930,9 @@ importers:
       eslint:
         specifier: ^10.6.0
         version: 10.6.0(jiti@2.7.0)
+      eslint-plugin-mushi-mushi:
+        specifier: workspace:*
+        version: link:../eslint-plugin-mushi-mushi
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.23)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)

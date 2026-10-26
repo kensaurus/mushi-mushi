@@ -52,14 +52,20 @@ For legacy `.eslintrc`:
 
 ## The recommended preset
 
-`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on all
-19 rules in the plugin. The other 17 are design rules for Mushi's own admin
-console. Some only look at Mushi's paths, but `no-hand-rolled-dialog` checks
-every file and the page rules (`no-page-root-padding`,
-`no-legacy-page-header-in-pages`, `no-missing-page-posture`,
-`no-hand-rolled-tablist`) check any file named `*Page.tsx`, so in your own
-app they can report errors that do not apply to you. Use the two-rule config
-above unless you are working on Mushi itself.
+`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on the
+two rules above plus `no-allowlist-jsx-textnode`, which catches an allowlist
+comment written as JSX text (it would render on the page) and nothing else.
+
+```js filename="eslint.config.js"
+import mushi from 'eslint-plugin-mushi-mushi'
+
+export default [mushi.configs.recommended]
+```
+
+The plugin's other 16 rules check the Mushi console's own design system
+(tokens, ``, ``, page posture, the widget theme) and
+are only in the Mushi monorepo's `internal` preset. Turn one on by name if
+it fits your app.
 
 ## Rules
 
