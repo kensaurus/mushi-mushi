@@ -345,9 +345,25 @@ describe('PipelinePage', () => {
     expect(q('pipeline-group-autofix_no_agent-settings')!.getAttribute('href')).toBe('/credits#cursor-fix-bugs')
   })
 
-  it('says intake rejects are not counted yet, never 0', async () => {
+  it('shows rejected reports per app with reasons, and 0 since counting began for the rest', async () => {
+    ;(state.data as PipelineData).projects.push({ id: 'p2', name: 'quiet-app', lastDeploy: null })
+    ;(state.data as PipelineData).intake = {
+      since: '2026-10-24',
+      apps: [
+        { projectId: 'p1', rejected: 4, byReason: [{ reason: 'fingerprintHash:invalid_string', count: 4 }], sdkPackages: ['@mushi-mushi/react-native'], lastAt: '2026-10-26T07:00:00Z' },
+        { projectId: 'p2', rejected: 0, byReason: [], sdkPackages: [], lastAt: null },
+      ],
+    }
     await render()
-    expect(q('pipeline-intake-not-recorded')!.textContent).toContain('not counted here yet')
+    expect(q('pipeline-intake-not-recorded')).toBeNull()
+    expect(q('pipeline-intake-p1-rejected')!.textContent).toBe('4 rejected (fingerprintHash:invalid_string ×4; sent by @mushi-mushi/react-native) ·')
+    expect(q('pipeline-intake-p2-rejected')!.textContent).toMatch(/^0 rejected since Oct 24 ·$/)
+  })
+
+  it('says intake rejects are not recorded yet when nothing was ever counted, never 0', async () => {
+    await render()
+    expect(q('pipeline-intake-not-recorded')!.textContent).toBe('not recorded yet')
+    expect(q('pipeline-intake-p1-rejected')).toBeNull()
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
   })
 

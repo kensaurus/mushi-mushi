@@ -166,6 +166,10 @@ function setup() {
       { id: 'k2', provider_slug: 'anthropic', project_id: P1, organization_id: null, owner_user_id: null, status: 'active', spend_down_enabled: false, exhausted_until: null },
     ],
     fix_dispatch_jobs: [],
+    report_ingest_rejections: [
+      { project_id: P1, day: '2026-10-26', stage: 'submission', reason: 'fingerprintHash:invalid_string', sdk_package: '@mushi-mushi/react-native', count: 4, last_at: '2026-10-26T07:00:00Z' },
+      { project_id: P2, day: '2026-10-24', stage: 'body', reason: 'description:too_small', sdk_package: '', count: 1, last_at: '2026-10-24T07:00:00Z' },
+    ],
     deploy_observations: [],
     fix_events: [
       { fix_attempt_id: F1, at: '2026-10-25T08:00:00Z', label: 'Release train: CI failed' },
@@ -204,11 +208,16 @@ describe('GET /v1/admin/pipeline', () => {
     expect(byId.pr.groups[0].label).toBe('1 app: auto-fix is on but has no agent key; 0 dispatches in 48h')
     const d = (res.body.data as { dispatchers: Array<{ name: string; opener: string; server: { agentKeys: number; offKeys: number } }> }).dispatchers
     expect(d).toEqual([expect.objectContaining({ name: 'glot.it', opener: 'server', server: expect.objectContaining({ agentKeys: 0, offKeys: 1 }) })])
-    expect(byId.reported.groups.map((g) => g.id)).toEqual(['triage_slow'])
+    expect(byId.reported.groups.map((g) => g.id)).toEqual(['intake_rejected', 'triage_slow'])
+    expect(byId.reported.groups[0].label).toBe('4 reports: rejected at intake (400) in 7 days')
     // P2's PR is not in this app's picture.
     expect(byId.train.count).toBe(0)
     expect(data.trains).toMatchObject([{ repo: 'kensaurus/glot.it', failed: 1 }])
-    expect(data.intake).toBeNull()
+    // P2's rejections are another app's; counting began on 10-24.
+    expect(data.intake).toEqual({
+      since: '2026-10-24',
+      apps: [{ projectId: P1, rejected: 4, byReason: [{ reason: 'fingerprintHash:invalid_string', count: 4 }], sdkPackages: ['@mushi-mushi/react-native'], lastAt: '2026-10-26T07:00:00Z' }],
+    })
     expect(data.projects.map((p) => p.name)).toEqual(['glot.it'])
   })
 
@@ -219,6 +228,14 @@ describe('GET /v1/admin/pipeline', () => {
     const train = stages.find((s) => s.id === 'train')!
     expect(train.groups.map((g) => g.id)).toEqual(['conflict_capped'])
     expect(train.stuck).toBe(1)
+  })
+
+  it('intake reads "not recorded" (null) while nothing was ever counted', async () => {
+    const { app, db } = setup()
+    db.table('report_ingest_rejections').length = 0
+    state.query = { projectId: P1 }
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    expect((res.body.data as { intake: unknown }).intake).toBeNull()
   })
 
   it('an app the caller cannot open is a 404', async () => {

@@ -11,6 +11,8 @@ import {
   buildDispatchers,
   buildPipeline,
   dispatcherGroup,
+  intakeGroup,
+  summarizeIntake,
   withDispatcherGroup,
   failedChecksFromDetail,
   queueDetailKind,
@@ -336,5 +338,58 @@ describe('who opens fixes', () => {
     expect(pr.groups[0].id).toBe('autofix_no_agent')
     expect(pr.stuck).toBe(2)
     expect(dispatcherGroup([], NOW)).toBeNull()
+  })
+})
+
+describe('intake rejects', () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    project_id: P,
+    day: '2026-10-26',
+    stage: 'submission',
+    reason: 'fingerprintHash:invalid_string',
+    sdk_package: '@mushi-mushi/react-native',
+    count: 3,
+    last_at: '2026-10-26T09:00:00Z',
+    ...over,
+  })
+
+  it('nothing ever counted is "not recorded" (null), never 0', () => {
+    expect(summarizeIntake([], [P], null, NOW)).toBeNull()
+  })
+
+  it('sums the last 7 days per app by reason; an app with no rows reads 0 since counting began', () => {
+    const rows = [
+      row(),
+      row({ day: '2026-10-25', count: 1, stage: 'body' }),
+      row({ reason: 'category:invalid_enum_value', count: 2, sdk_package: '' }),
+      row({ day: '2026-10-10', count: 50 }),
+    ]
+    const s = summarizeIntake(rows, [P, 'p2'], '2026-10-25', NOW)!
+    expect(s.since).toBe('2026-10-25')
+    expect(s.apps[0]).toEqual({
+      projectId: P,
+      rejected: 6,
+      byReason: [
+        { reason: 'fingerprintHash:invalid_string', count: 4 },
+        { reason: 'category:invalid_enum_value', count: 2 },
+      ],
+      sdkPackages: ['@mushi-mushi/react-native'],
+      lastAt: '2026-10-26T09:00:00Z',
+    })
+    expect(s.apps[1]).toMatchObject({ projectId: 'p2', rejected: 0, byReason: [], lastAt: null })
+    // Counting older than a week: the window is the last 7 days.
+    expect(summarizeIntake(rows, [P], '2026-09-01', NOW)!.since).toBe('2026-10-20')
+  })
+
+  it('becomes a red group first in the Reported stage, linking SDK health', () => {
+    const s = summarizeIntake([row()], [P, 'p2'], '2026-10-26', NOW)
+    const g = intakeGroup(s, new Map([[P, 'yen-yen']]))!
+    expect(g).toMatchObject({ id: 'intake_rejected', stage: 'reported', tone: 'stuck', count: 3, settings: { to: '/connect#connect-sdk-health' } })
+    expect(g.label).toBe('3 reports: rejected at intake (400) in 7 days')
+    expect(g.items).toHaveLength(1)
+    expect(g.items[0]).toMatchObject({ title: 'yen-yen: 3 reports rejected', lastError: 'fingerprintHash:invalid_string ×3', queueDetail: 'Sent by @mushi-mushi/react-native.' })
+    const reported = withDispatcherGroup(run(), g).find((x) => x.id === 'reported')!
+    expect(reported).toMatchObject({ count: 3, stuck: 3 })
+    expect(intakeGroup(summarizeIntake([], [P], '2026-10-26', NOW), new Map())).toBeNull()
   })
 })

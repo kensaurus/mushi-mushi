@@ -52,6 +52,8 @@ import {
   buildPipeline,
   CONFLICT_AGENT_CAP,
   dispatcherGroup,
+  intakeGroup,
+  summarizeIntake,
   withDispatcherGroup,
   type AgentKeyRow,
   summarizeTrains,
@@ -61,6 +63,7 @@ import {
   type FollowupRow,
   type QueueRow,
   type ReportRow,
+  type RejectionRow,
   type ReviewRow,
   type TrainRow,
 } from '../../_shared/pipeline-view.ts';
@@ -250,7 +253,12 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     events,
     followupsOn,
   });
-  const withDispatch = dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages;
+  const intake = await readIntake(db, projectIds, now);
+  const names = new Map(((projectsRes.data ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]));
+  const withDispatch = withDispatcherGroup(
+    dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages,
+    intakeGroup(intake, names),
+  );
   const deploys = (deploysRes.data ?? []) as DeployRow[];
   return {
     generatedAt: now.toISOString(),
@@ -262,11 +270,35 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     // null: the dispatcher reads failed; the stage still shows its PRs.
     dispatchers,
     trains: summarizeTrains((trainsRes.data ?? []) as TrainRow[]),
-    // Rejected ingests go to the edge logs only (`report rejected`, fix/autofix-pipeline), not a table:
-    // null means "not counted here", never 0.
-    intake: null as null | { rejected: number; byReason: Array<{ reason: string; count: number }> },
+    // null: nothing counted yet (or the table is not there): "not recorded yet", never 0.
+    intake,
     ciReadable,
   };
+}
+
+/**
+ * Rejected ingests of the last 7 days per app (`report_ingest_rejections`,
+ * written by the api's fire-and-forget counter). null when nothing was ever
+ * counted or the table cannot be read.
+ */
+async function readIntake(db: Db, projectIds: string[], now: Date) {
+  const since = new Date(now.getTime() - 6 * DAY).toISOString().slice(0, 10);
+  const [rowsRes, firstRes] = await Promise.all([
+    db
+      .from('report_ingest_rejections')
+      .select('project_id, day, stage, reason, sdk_package, count, last_at')
+      .in('project_id', projectIds)
+      .gte('day', since)
+      .limit(2000),
+    // When counting began: one row, the earliest day of any app (a date, nothing else).
+    db.from('report_ingest_rejections').select('day').order('day', { ascending: true }).limit(1),
+  ]);
+  if (rowsRes.error || firstRes.error) {
+    plog.warn('intake rejections read failed', { err: (rowsRes.error ?? firstRes.error)?.message });
+    return null;
+  }
+  const first = ((firstRes.data ?? []) as Array<{ day: string }>)[0]?.day ?? null;
+  return summarizeIntake((rowsRes.data ?? []) as RejectionRow[], projectIds, first, now);
 }
 
 type DispatcherProject = { id: string; name: string; organization_id: string | null; owner_id: string | null };
