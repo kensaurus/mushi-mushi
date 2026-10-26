@@ -1,0 +1,182 @@
+# @mushi-mushi/ux
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/ux
+
+---
+title: '@mushi-mushi/ux'
+description: '@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.'
+---
+
+# `@mushi-mushi/ux`
+
+Find the UX problems on every screen of your app before your users do, and
+let the coding agent you already pay for fix them one screen at a time.
+Every change is measured. Only the ones that help are kept, on a branch you
+review. It runs on your machine.
+
+## Quick start
+
+```bash
+mushi ux ui                    # through the Mushi CLI: passes your login, so runs show in the console
+npx @mushi-mushi/ux ui         # or standalone
+mushi ux run --dev "pnpm dev --port {port}" --agent cursor --model <id> --skill enhance-mobile-native-feel
+```
+
+The package installs a `mushi-ux` command; `mushi ux …` in
+[`@mushi-mushi/cli`](/sdks/cli#ux-pass-over-every-screen) runs the same
+thing and passes your Mushi login along. Your app must run locally, inside
+a git repository. In `--dev`, `{port}` is replaced with a spare port.
+
+Signed-in app? Run `mushi-ux login --url http://localhost:5173` once and
+sign in by hand in the window that opens; later runs reuse that session
+with `--login-url`.
+
+## From studio to merge
+
+1. **Studio (your computer).** `mushi ux ui` opens a page on 127.0.0.1.
+   Pick the agent, model, skill and pages, then watch each attempt live.
+2. **Console (mirror and review).** With sync on, the run is mirrored to
+   the console's [UX runs](/admin/ux-runs) page as it goes. The studio
+   offers sync when you are signed in with the Mushi CLI; from the
+   terminal, add `--sync`.
+3. **Merge.** Open the kept changes as a draft PR from the studio, then
+   merge it from the console (after a confirmation) or on GitHub. Nothing
+   is merged for you.
+
+## What a run does
+
+1. Checks the agent can start and read a file (about a minute), so a
+   signed-out agent fails before anything slow.
+2. Creates a git worktree on a new branch, `mushi-ux/`, and starts
+   your dev server there. Your own checkout is never touched.
+3. Maps the app: every page, plus the tabs, dialogs and menus each one
+   opens.
+4. For each screen: screenshots it at phone and desktop width and measures
+   accessibility (axe), sideways scrolling, tap targets under 24×24 px,
+   console errors and layout shift. The agent gets the screenshots, the
+   problems and your design tokens.
+5. After each attempt it measures again. The edit is **kept** as a commit
+   if nothing got worse and something changed, otherwise **rolled back**
+   with the reason for one more try. Screens already done are checked
+   again, and any that moved are marked **regressed**.
+6. Optionally, a second model compares each changed screen before and
+   after. Its review is advisory and never keeps or reverts anything.
+
+With `--steps` (on by default in the studio) the agent first plans 2–5
+small changes per screen, then makes one per attempt. A stopped run (closed
+laptop, Stop, crash) shows **Resume** in the studio, or continue it from
+the first unfinished screen with `mushi-ux run --resume `.
+
+## Safety
+
+- **Exploring never writes.** Every non-GET request is blocked, forms are
+  never submitted, and buttons like Delete, Pay, Send and Log out are never
+  clicked. If your app reads with POST (Supabase `rpc`, GraphQL), allow it:
+  `--allow "POST /rest/v1/rpc/*"`.
+- **The agent never sees your session or keys.** Credentials are stripped
+  from its environment except its own model key. Claude Code runs with no
+  shell and only the worktree's files.
+- **Your dev server** runs without this tool's keys (`CURSOR_API_KEY`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GITHUB_TOKEN`, `MUSHI_*`). Put app
+  secrets in the app's ignored `.env` files; those are copied into the
+  worktree.
+- **What reaches the console:** phase, screens, scores, problem counts,
+  screenshots, and the names of files read or edited. The agent's words,
+  its commands and their output stay in `.mushi/ux//agent/`.
+- Use a test account if your dev server talks to production data.
+
+## Agents
+
+| `--agent` | Needs | Status |
+| --- | --- | --- |
+| `claude-code` (default) | `claude` on PATH | Verified on Windows |
+| `cursor` | Cursor CLI (`agent`), signed in with `agent login` | Verified on Windows |
+| `codex` | `codex` on PATH | Unverified |
+| `cursor-cloud` | `CURSOR_API_KEY` and an `origin` on GitHub | Unverified |
+
+`mushi-ux models --agent ` lists the models your account can use.
+`--skill` takes a skill name (`mushi-ux skills` lists them; they come from
+`npm:@kensaurus/skills` unless you pass `--skills-repo`), several names
+comma-separated to chain them, or a path to a skill folder. Without one,
+the agent gets built-in UX guidance.
+
+On Windows, start runs from PowerShell or cmd: a Claude Code hook that
+fails under Git Bash makes the Cursor CLI refuse every file read, and the
+start-up check says so.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `mushi-ux ui` | The studio: start runs and watch them |
+| `mushi-ux run --dev ""` | Run the loop from the terminal |
+| `mushi-ux discover --url ` | List the screens, change nothing |
+| `mushi-ux audit --url  --profile-dir ` | Find UX bugs on signed-in screens and file them as Mushi reports |
+| `mushi-ux explore --url  --profile-dir ` | Let a model use the signed-in app like a careless user; file the errors a replay confirms |
+| `mushi-ux login --url ` | Sign in once, in a visible browser |
+| `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
+| `mushi-ux open ` | The local dashboard for a past run |
+
+Common `run` options:
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `--max-surfaces` / `--iterations` / `--timeout` | 10 / 2 / 10 min | Screens, attempts per screen, minutes per attempt |
+| `--base ` | `HEAD` | Branch from this ref, e.g. `origin/main` |
+| `--path ` | — | Work only on these pages (repeatable) |
+| `--ignore ` | — | Not your UI (a dev badge): hidden and skipped. Or mark it `data-mushi-ux-ignore` |
+| `--install ` | from the lockfile | Install command for the worktree; `none` skips it |
+| `--sync` | off | Mirror the run to the console (`mushi ux` passes your login) |
+| `--no-judge` / `--no-preflight` / `--no-dashboard` | — | Skip the review, the agent check, or the local dashboard |
+
+`mushi-ux run --help` lists the rest. Run state and screenshots live in
+`.mushi/ux//`. The run adds its folders to `.git/info/exclude`, so
+`git status` stays clean. `--sync` refuses a run whose app reports to a
+different Mushi project than your login.
+
+## Audit and explore signed-in screens
+
+`mushi-ux audit` checks the live app the way a signed-in user sees it and
+files what is wrong as Mushi reports, so the fix loop picks them up. It
+never edits code and never opens a fresh browser: point it at a cached,
+signed-in browser profile.
+
+```bash
+mushi-ux audit --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --review claude-code --file --dry-run
+```
+
+- It maps the screens under the URL's path (`--max-pages`, default 15;
+  `--states N` also opens up to N dialogs or tabs a page) and captures each
+  on desktop (1440×900) and phone (390×844).
+- It files measured problems: serious accessibility rules, a page that
+  scrolls sideways, console errors, content that jumps while loading.
+  `--review` adds visual defects a model finds (`claude-code`,
+  `anthropic-api` or `cursor`).
+- `--file` files at most 15 reports a run, one per screen and problem, and
+  skips one filed in the last 14 days or still open. It needs
+  `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`. `--dry-run` files nothing.
+
+`mushi-ux explore` runs short sessions where a model picks what a curious
+or careless user would do next (forms with odd input, back and reload
+mid-task, double-clicks, filters that match nothing), in the same read-only
+browser and profile. The model only chooses actions; code decides what is a
+bug. A finding is filed only when replaying the steps without the model
+shows it again.
+
+```bash
+mushi-ux explore --url https://example.com/admin \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --charter forms --charter filters --steps 30 --file --dry-run
+```
+
+## On GitHub Actions
+
+Copy
+[`docs/templates/mushi-ux.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-ux.yml)
+to `.github/workflows/mushi-ux.yml` and set its `dev-command`. Start it from
+the Actions tab, or with **Run in the cloud** on the console's
+[UX runs](/admin/ux-runs) page. It uses `cursor-cloud`, sees the app signed
+out, and opens one draft PR. Its pushes go to `mushi-ux/**`, so add
+`branches-ignore: ['mushi-ux/**']` to any CI that runs on every push.

@@ -5,7 +5,28 @@
 Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
 
 
-ESLint rules that catch the dominant agentic-coding failure modes: empty handlers (Gate 1) and mock-data leaks into production paths (Gate 2).
+ESLint rules for two bugs AI coding tools often ship: a button wired to a handler that does nothing, and fake data (faker, MSW, `John Doe` arrays) left in production code.
+
+```bash
+npm install --save-dev eslint-plugin-mushi-mushi
+```
+
+```js
+// eslint.config.js
+import mushi from 'eslint-plugin-mushi-mushi'
+
+export default [
+  {
+    plugins: { 'mushi-mushi': mushi },
+    rules: {
+      'mushi-mushi/no-dead-handler': 'error',
+      'mushi-mushi/no-mock-leak': 'error',
+    },
+  },
+]
+```
+
+Docs: [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin)
 
 ## Rules
 
@@ -22,30 +43,33 @@ ESLint rules that catch the dominant agentic-coding failure modes: empty handler
 | `mushi-mushi/prefer-card-primitive` | Hand-rolled `rounded border bg-surface-*` — prefer `<Card>` / `<Panel>`. |
 | `mushi-mushi/no-allowlist-jsx-textnode` | `// mushi-mushi-allowlist` written as a JSX child (renders as visible text). Use a JSX block comment or an attribute-line `//`. |
 
-## Install
+Only `no-dead-handler` and `no-mock-leak` are meant for any app. The other rules are design rules for Mushi's own admin console.
 
-```bash
-npm install --save-dev eslint-plugin-mushi-mushi
-```
+## The `recommended` preset
 
-## Use (flat config)
+`mushi.configs.recommended` (also exported as `eslint-plugin-mushi-mushi/recommended`) turns on all 19 rules in the plugin, not only the two above. Besides the table, it enables nine more design rules for Mushi's own console (listed in `src/index.ts`). Some of them only look at Mushi's own paths, but `no-hand-rolled-dialog` checks every file and the `*Page.tsx` rules check any file with that name, so in your own app they can report errors that do not apply to you. Prefer the two-rule config above.
 
 ```js
 import mushi from 'eslint-plugin-mushi-mushi'
 
 export default [
-  mushi.configs.recommended,
+  mushi.configs.recommended, // all 19 rules
 ]
 ```
 
-## Use (legacy)
+## Legacy `.eslintrc`
 
 ```json
 {
   "plugins": ["mushi-mushi"],
-  "extends": ["plugin:mushi-mushi/legacy"]
+  "rules": {
+    "mushi-mushi/no-dead-handler": "error",
+    "mushi-mushi/no-mock-leak": "error"
+  }
 }
 ```
+
+`"extends": ["plugin:mushi-mushi/legacy"]` is the legacy form of `recommended`, with the same 19 rules.
 
 ## Why
 
@@ -67,4 +91,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 508 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

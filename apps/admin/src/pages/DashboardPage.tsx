@@ -24,7 +24,8 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { NextStep } from '../components/NextStep'
-import { openSetupGuide } from '../lib/setupGuidePrefs'
+import { SetupChecklist } from '../components/SetupChecklist'
+import { sdkHealthHref } from '../lib/sdkHealth'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
@@ -199,6 +200,19 @@ export function DashboardPage() {
   // checklist + hero intro so the user has exactly one thing to do.
   const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
+  // While a required step is open the hero says so, with its fix, never "healthy".
+  const openSetupStep = setupIncomplete ? (setup.activeProject?.steps.find((s) => s.required && !s.complete) ?? null) : null
+  const heroSetupStep =
+    openSetupStep && setup.activeProject
+      ? {
+          label: openSetupStep.label,
+          description: openSetupStep.description,
+          ctaLabel: openSetupStep.id === 'sdk_installed' ? 'Fix it' : openSetupStep.cta_label,
+          ctaTo: openSetupStep.id === 'sdk_installed' ? sdkHealthHref(setup.activeProject.project_id) : openSetupStep.cta_to,
+          done: setup.selectors.required_complete,
+          total: setup.selectors.required_total,
+        }
+      : null
   const hasPdcaStages = !!(data.pdcaStages && data.pdcaStages.length > 0)
 
   const dashboardInsight =
@@ -350,6 +364,7 @@ export function DashboardPage() {
                 focusStage={data.focusStage}
                 projectName={projectName}
                 lastReportAt={lastReportAt}
+                setupStep={heroSetupStep}
               />
             ),
           },
@@ -357,12 +372,23 @@ export function DashboardPage() {
       />
 
       <div className="space-y-4 border-b border-edge-subtle pb-4">
-      {/* The dashboard's one next step. The setup list itself lives in the
-          docked setup guide, so it is not repeated here. */}
+      {/* The dashboard's one next step. While setup is open the checklist
+          below lists the setup steps, so this names real work only. */}
       <NextStep variant="card" />
 
       {setup.activeProject && (
         <SdkUpgradeBanner projectId={setup.activeProject.project_id} />
+      )}
+
+      {setupIncomplete && !showFullDashboard && setup.activeProject && (
+        // The setup steps, with Fix it on the SDK step. The docked guide this
+        // used to open was removed, so its button did nothing (2026-10-26).
+        <SetupChecklist
+          project={setup.activeProject}
+          mode="banner"
+          onRefresh={setup.reload}
+          adminEndpointHost={setup.data?.admin_endpoint_host}
+        />
       )}
 
       {setupIncomplete && !showFullDashboard && (
@@ -371,11 +397,6 @@ export function DashboardPage() {
             Finish setup to unlock the full dashboard. You can peek now if you like.
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            {/* The setup list lives in the docked guide; bring it back if the
-                user dismissed it (and in Advanced, where no card shows). */}
-            <Btn size="sm" variant="ghost" onClick={openSetupGuide}>
-              Show setup guide
-            </Btn>
             <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
               Show full dashboard
             </Btn>

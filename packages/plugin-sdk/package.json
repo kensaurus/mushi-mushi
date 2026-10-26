@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/plugin-sdk",
   "version": "0.9.0",
   "license": "MIT",
-  "description": "TypeScript SDK for building third-party Mushi Mushi plugins (webhook handlers + signature verification + typed events).",
+  "description": "Build your own Mushi Mushi plugin — a small server that gets signed events when bugs are filed, triaged or fixed. Signature checks, delivery dedup and typed events.",
   "type": "module",
   "exports": {
     ".": {

@@ -4,26 +4,74 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
-description: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost."
+description: "@mushi-mushi/wasm-classifier filters junk bug reports in the browser, before they reach the server or your LLM."
 ---
 
 # `@mushi-mushi/wasm-classifier`
 
-Optional on-device pre-classifier built on a Phi-3-mini ONNX model running
-under `onnxruntime-web`. Detects obvious junk before the request even
-leaves the browser, cutting your LLM bill.
+Optional on-device junk filter for bug reports. It stops empty or nonsense
+reports ("hi", "asdf") in the browser, before they are sent. The default
+backend is a heuristic with no dependencies; an optional ONNX backend runs a
+model you host, through `onnxruntime-web`.
 
 ```bash
 pnpm add @mushi-mushi/wasm-classifier
+# Optional, only for the ONNX backend:
+pnpm add onnxruntime-web
 ```
+
+## Use it with the web SDK
+
+The web SDK does not load the classifier on its own. Pass it in
+`preFilter.wasmClassifier`:
 
 ```ts
-import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
+import { Mushi } from '@mushi-mushi/web'
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
 
-const classifier = await useWasmClassifier()
-const verdict = await classifier.classify('asdf qwer')
-// → { keep: false, confidence: 0.96, reason: 'low-information' }
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'mushi_...',
+  preFilter: { wasmClassifier: createHeuristicClassifier() },
+})
 ```
 
-The web SDK auto-loads this when present and skips classification on the
-server when the verdict is `keep: false` with confidence ≥ 0.85.
+It runs after the SDK's built-in pattern filter. A `block` verdict stops the
+report on the device; `pass` and `unsure` send it, and the server does the
+full classification.
+
+## Call it directly
+
+```ts
+import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
+
+const classifier = createHeuristicClassifier({ blockThreshold: 0.2, passThreshold: 0.55 })
+const result = await classifier.classify({ description: 'asdf qwer' })
+// → { verdict: 'pass' | 'block' | 'unsure', confidence, reason, modelId: 'heuristic-v1', durationMs }
+```
+
+`classify()` also takes the signals the web SDK passes: `category`, `url`,
+`hasScreenshot`, `hasSelectedElement`, `hasNetworkErrors`,
+`hasConsoleErrors` and `proactiveTrigger`.
+
+## ONNX backend
+
+```ts
+import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier'
+
+const classifier = await createOnnxClassifier({
+  modelUrl: 'https://cdn.your-app.com/mushi/model.onnx',
+  cacheKey: 'model-v1',
+  preload: true,
+  classifyTimeoutMs: 750,
+})
+```
+
+If `onnxruntime-web` is missing, the model fetch fails, or a call exceeds
+`classifyTimeoutMs`, it falls back to the heuristic backend. The package does
+not ship a model.
+
+  Model inference is not implemented yet. The ONNX backend loads the runtime
+  and downloads your model, then still returns heuristic verdicts (`modelId:
+  'heuristic-fallback'`, with a console warning). Use
+  `createHeuristicClassifier()` until that changes.
