@@ -7,10 +7,12 @@ On-device spam filter — zero server cost before a report sends.
 
 > On-device pre-classification for Mushi Mushi reports — filter obvious junk before the report ever leaves the browser.
 
+> **Status: the ONNX mode is experimental.** Model inference is not implemented yet: `createOnnxClassifier()` loads `onnxruntime-web` and your model, then returns the heuristic's verdict for every report (`modelId: 'heuristic-fallback'`) and logs one console warning saying so. Use `createHeuristicClassifier()` in production.
+
 This is the V5.3 §2.12 lead-spec implementation of the **WASM On-Device Pre-Classification** layer. It runs in two modes:
 
 1. **Heuristic mode** (default, zero deps, ~1 KB gz) — pattern-based score over the description, attached signals, and proactive triggers. Always available.
-2. **ONNX mode** — lazy-loads `onnxruntime-web` (peer dep) and a quantized small language model (typically Phi-3-mini int4) hosted on a CDN. Falls back to heuristic mode automatically if the runtime, model, or WebGPU/WASM backend is unavailable.
+2. **ONNX mode (experimental)** — lazy-loads `onnxruntime-web` (peer dep) and a quantized small language model (typically Phi-3-mini int4) hosted on a CDN. Inference is not implemented yet, so every verdict comes from the heuristic; it also falls back if the runtime, model, or WebGPU/WASM backend is unavailable.
 
 ## Why
 
@@ -49,7 +51,9 @@ if (result.verdict === 'block') {
 }
 ```
 
-## Usage — ONNX mode
+## Usage — ONNX mode (experimental)
+
+Every verdict below still comes from the heuristic until inference ships.
 
 ```ts
 import { createOnnxClassifier } from '@mushi-mushi/wasm-classifier';
@@ -96,7 +100,7 @@ This package intentionally does **not** bundle the model file. Recommended workf
 3. Host on a CDN with long `Cache-Control` (e.g. `public, max-age=31536000, immutable`) and a versioned URL.
 4. Pass the URL as `modelUrl`. Set `cacheKey` so re-visits skip re-downloading.
 
-Until that custom head is in place, the ONNX backend delegates to the heuristic backend and reports `modelId: 'phi-3-mini-onnx-int4'` with the heuristic reason annotated.
+Until that custom head is in place and the inference step is written, the ONNX backend delegates to the heuristic backend: results carry `modelId: 'heuristic-fallback'` and a reason starting `ONNX inference is not implemented yet; heuristic verdict`, and the first call logs a console warning.
 
 ## Verdict semantics
 
