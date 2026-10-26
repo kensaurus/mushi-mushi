@@ -8,6 +8,11 @@
 import { useMemo } from 'react'
 import { KpiTile, type KpiTileProps } from '../charts'
 import { MetricStrip } from '../MetricStrip'
+import {
+  HOME_FIXES_IN_FLIGHT_MEANING,
+  homeCriticalTileCopy,
+  homeOpenPrSublabel,
+} from '../../lib/criticalMetricCopy'
 import type { DashboardCounts, FixSummary, LlmDay, PdcaStage, ReportDay } from './types'
 
 function last7UtcDays(): string[] {
@@ -75,19 +80,20 @@ export function KpiRow({ counts, fixSummary, reportsByDay, pdcaStages = [] }: Pr
     return pctDelta(last3, prev3)
   }, [stage7d.fixes])
 
-  const heroIsBacklog = counts.openBacklog > 0
+  const critical = counts.openCritical14d ?? 0
+  const criticalTile = homeCriticalTileCopy()
 
   return (
     <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger panel>
       <KpiTile
         density="flat"
-        label="Critical to decide"
-        value={counts.openCritical14d ?? 0}
-        sublabel={`${counts.openBacklog} new, not yet triaged`}
+        label={criticalTile.label}
+        value={critical}
+        sublabel={criticalTile.sublabel}
         to="/reports?status=open&severity=critical&days=14"
-        accent={(counts.openCritical14d ?? 0) > 0 ? 'danger' : counts.openBacklog > 0 ? 'warn' : 'ok'}
-        meaning="Open critical reports from the last 14 days that still need your decision: the same list the To-do page and the banner above count. The small number is reports no one has triaged yet."
-        variant={heroIsBacklog ? 'primary' : 'default'}
+        accent={critical > 0 ? 'danger' : 'ok'}
+        meaning={criticalTile.meaning}
+        variant={critical > 0 ? 'primary' : 'default'}
       />
       <KpiTile
         density="flat"
@@ -101,20 +107,20 @@ export function KpiRow({ counts, fixSummary, reportsByDay, pdcaStages = [] }: Pr
         seriesDays={intakeDays}
         seriesAriaLabel="Reports per day, last 14 days"
         meaning="Total user-reported friction events received in the last 14 days. Up = more pain reaching users; down = healthier release."
-        variant={heroIsBacklog ? 'default' : 'primary'}
+        variant={critical > 0 ? 'default' : 'primary'}
       />
       <KpiTile
         density="flat"
         label="Fixes in flight"
         value={fixSummary.inProgress}
-        sublabel={`${counts.openPrs} PR${counts.openPrs === 1 ? '' : 's'} open · ${fixSummary.failed} stopped`}
+        sublabel={homeOpenPrSublabel(counts.openPrs, fixSummary.failed)}
         to="/fixes"
         accent={fixSummary.failed > 0 ? 'danger' : fixSummary.inProgress > 0 || counts.openPrs > 0 ? 'ok' : 'muted'}
         delta={fixDelta}
         series={stage7d.fixes ?? undefined}
         seriesDays={stage7d.fixes ? stage7d.days : undefined}
         seriesAriaLabel="Fix dispatches per day, last 7 days"
-        meaning="Fixes being drafted right now, with how many pull requests wait for your review and how many attempts stopped. The sparkline shows fixes dispatched per day."
+        meaning={HOME_FIXES_IN_FLIGHT_MEANING}
       />
       <KpiTile
         density="flat"

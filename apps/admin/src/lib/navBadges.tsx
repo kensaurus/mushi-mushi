@@ -345,7 +345,7 @@ export function resolveNavBadge(
         kind: 'health',
         tone: 'ok',
         count: navCounts.prsOpen,
-        label: `${navCounts.prsOpen} PRs open awaiting review`,
+        label: `${navCounts.prsOpen} open ${navCounts.prsOpen === 1 ? 'PR' : 'PRs'}, one per report (30d)`,
       }
     }
     case '/health': {

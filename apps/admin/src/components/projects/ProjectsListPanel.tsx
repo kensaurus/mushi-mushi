@@ -33,6 +33,7 @@ import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import { bottleneckDeepLink, bottleneckHumanHeadline } from '../../lib/pdcaBottleneck'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { critical30dChipLabel } from '../../lib/criticalMetricCopy'
 import { pluralize } from '../../lib/format'
 import { useToast } from '../../lib/toast'
 import { HeroPlugIntegration } from '../illustrations/HeroIllustrations'
@@ -923,7 +924,7 @@ function ProjectContextRail({ project }: { project: Project }) {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {sev.critical > 0 && (
               <span title={`${sev.critical} critical reports (30d)`}>
-                <SignalChip tone="danger">Crit {sev.critical}</SignalChip>
+                <SignalChip tone="danger">{critical30dChipLabel(sev.critical)}</SignalChip>
               </span>
             )}
             {sev.major > 0 && (

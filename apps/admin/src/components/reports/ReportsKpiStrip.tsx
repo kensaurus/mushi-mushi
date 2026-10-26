@@ -12,6 +12,7 @@ import { KpiTile, type KpiDelta } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 import { useAdminMode } from '../../lib/mode'
+import { BUGS_CRITICAL_OPEN_MEANING, bugsSeverityTileLabel } from '../../lib/criticalMetricCopy'
 import { PageLoadError } from '../PageLoadError'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
@@ -79,7 +80,7 @@ const TILES_ADVANCED: Array<{
   meaning: string
 }> = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Critical reports from the window that are not fixed yet (the line below counts all that came in). These usually block user flow: triage first.' },
+    meaning: BUGS_CRITICAL_OPEN_MEANING },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -90,7 +91,7 @@ const TILES_ADVANCED: Array<{
 
 const TILES_PLAIN: typeof TILES_ADVANCED = [
   { key: 'critical', label: 'Critical', accent: 'danger',
-    meaning: 'Bugs that block user flow — review these first.' },
+    meaning: BUGS_CRITICAL_OPEN_MEANING },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'Broken functionality with a workaround — fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
@@ -164,7 +165,7 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
               density="flat"
               // The quick-filter chips count all time; these tiles count a
               // window, so the label says which.
-              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · open`}
+              label={bugsSeverityTileLabel(tile.label, windowDays, openCount != null)}
               value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading

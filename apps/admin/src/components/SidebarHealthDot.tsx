@@ -11,6 +11,7 @@
  */
 
 import type { HealthTone } from '../lib/useNavCounts'
+import { badgeWindowNote } from '../lib/criticalMetricCopy'
 
 interface Props {
   /** Health tone. 'idle' renders a muted dot (no issues, no action). */
@@ -44,6 +45,7 @@ const TONE_TEXT: Record<HealthTone | 'loading', string> = {
 export function SidebarHealthDot({ tone, count, label, hideWhenZero = false }: Props) {
   if (hideWhenZero && (count ?? 0) === 0) return null
   const showCount = typeof count === 'number' && count > 0
+  const windowNote = badgeWindowNote(label)
   return (
     <span
       role="img"
@@ -53,7 +55,10 @@ export function SidebarHealthDot({ tone, count, label, hideWhenZero = false }: P
     >
       <span className={`inline-block w-1.5 h-1.5 rounded-full ${TONE_DOT[tone]}`} />
       {showCount && (
-        <span className={TONE_TEXT[tone]}>{count! > 99 ? '99+' : count}</span>
+        <span className={TONE_TEXT[tone]}>
+          {count! > 99 ? '99+' : count}
+          {windowNote ? <span className="font-normal text-fg-muted"> {windowNote}</span> : null}
+        </span>
       )}
     </span>
   )

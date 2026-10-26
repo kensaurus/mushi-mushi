@@ -23,6 +23,7 @@ import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
 import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
+import { criticalChipHint } from '../../lib/criticalMetricCopy'
 
 type StatsResponse = ReportStatusStats
 
@@ -94,7 +95,7 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
           active={severity === b.value}
           onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
           tone={b.tone}
-          hint={`Filter to ${b.value}-severity reports`}
+          hint={b.value === 'critical' ? criticalChipHint() : `Filter to ${b.value}-severity reports`}
         />
       ))}
     </div>

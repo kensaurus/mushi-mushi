@@ -12,6 +12,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
+import { homeCriticalPageSummary } from '../lib/criticalMetricCopy'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -138,7 +139,7 @@ export function DashboardPage() {
     : !data || data.empty
       ? 'Waiting for first report'
       : dashCounts
-        ? `${dashCounts.openCritical14d ?? 0} critical to decide · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
+        ? `${homeCriticalPageSummary(dashCounts.openCritical14d ?? 0)} · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
         : undefined
   usePublishPageContext({
     route: '/dashboard',

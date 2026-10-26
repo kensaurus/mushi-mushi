@@ -174,6 +174,23 @@ describe('inbox/stats', () => {
 })
 
 describe('/v1/admin/dashboard', () => {
+  it('counts critical reports still awaiting a decision in 14 days, not the triage backlog', async () => {
+    // Home "Critical · 14d" is this count. A report already in a fix, a closed
+    // one, and a critical older than 14 days stay out. The triage backlog is
+    // a different number (any severity, any age, new bucket only).
+    seed([
+      report(1, { severity: 'critical', status: 'classified', created_at: iso(DAY) }),
+      report(2, { severity: 'critical', status: 'new', created_at: iso(DAY) }),
+      report(3, { severity: 'critical', status: 'fixing', created_at: iso(DAY) }),
+      report(4, { severity: 'critical', status: 'fixed', created_at: iso(DAY) }),
+      report(5, { severity: 'critical', status: 'new', created_at: iso(30 * DAY) }),
+      report(6, { severity: 'high', status: 'new', created_at: iso(DAY) }),
+    ])
+    const { body } = await get('/v1/admin/dashboard')
+    expect(body.data.counts.openCritical14d).toBe(2)
+    expect(body.data.counts.openBacklog).toBe(3)
+  })
+
   it('reads exact counts, the shared backlog, and the latest health per kind', async () => {
     seed(
       [

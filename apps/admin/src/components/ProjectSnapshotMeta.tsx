@@ -17,6 +17,7 @@ import {
   buildTrendTooltip,
 } from '../lib/projectMetaTooltips'
 import { SdkVersionBadge } from './SdkVersionBadge'
+import { critical30dChipLabel } from '../lib/criticalMetricCopy'
 import { SignalChip } from './report-detail/ReportSurface'
 import { MetricTooltipContent, Tooltip } from './ui'
 
@@ -99,7 +100,7 @@ export function ProjectSnapshotMeta({
         >
           <span className="cursor-help">
             <SignalChip tone="danger" className="text-3xs tabular-nums">
-              Crit {critical}
+              {critical30dChipLabel(critical)}
             </SignalChip>
           </span>
         </Tooltip>

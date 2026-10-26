@@ -8,6 +8,7 @@
  */
 
 import { ORIGIN_FILTER_OPTIONS } from './reportOrigin'
+import { criticalAllTimeChipLabel } from './criticalMetricCopy'
 
 /** Stats shape from GET /v1/admin/stats that the quick-filter chips read. */
 export interface ReportStatusStats {
@@ -60,7 +61,7 @@ export const STATUS_CHIPS: ReadonlyArray<{
  * `major`, which no report has.
  */
 export const SEVERITY_CHIPS: ReadonlyArray<{ value: string; label: string; tone: 'warn' | 'danger' | 'info' | 'default' }> = [
-  { value: 'critical', label: 'Critical', tone: 'danger' },
+  { value: 'critical', label: criticalAllTimeChipLabel(), tone: 'danger' },
   { value: 'high', label: 'High', tone: 'warn' },
   { value: 'medium', label: 'Medium', tone: 'info' },
   { value: 'low', label: 'Low', tone: 'default' },
