@@ -103,7 +103,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/checks.md",
     keywords: ["admin", "checks"],
     headings: ["App checks", "AI quality"],
-    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+    excerpt: "The Checks page lists every automatic check on this app. Each card says whether that check is set up, when it last ran, and whether it passed or found something.",
   },
   {
     title: "CI runners",

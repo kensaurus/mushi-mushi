@@ -161,6 +161,26 @@ describe('useNavCounts', () => {
     expect(seen.layout.healthIssues).toBe(2)
   })
 
+  it('asks for the union of every live caller in one request', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
+    vi.resetModules()
+    const { useNavCounts } = await import('./useNavCounts')
+    function Sidebar() {
+      useNavCounts({ live: true, slices: ['dashboard', 'fixes'] })
+      return null
+    }
+    function Checks() {
+      useNavCounts({ live: true, slices: ['health', 'qaCoverage'] })
+      return null
+    }
+    await act(async () => {
+      root.render(createElement('div', null, createElement(Sidebar), createElement(Checks)))
+    })
+    expect(api.apiFetch).toHaveBeenCalledTimes(1)
+    const slices = new URLSearchParams(String(api.apiFetch.mock.calls[0][0]).split('?')[1] ?? '').get('slices')
+    expect(slices?.split(',').sort()).toEqual(['dashboard', 'fixes', 'health', 'qaCoverage'])
+  })
+
   it('asks only for the slices the sidebar renders', async () => {
     api.apiFetch.mockResolvedValue({ ok: true, data: navMeta() })
     await renderReaders(['layout'], ['settings', 'dashboard', 'fixes'])

@@ -10,7 +10,7 @@
  *          after something changes — no page reload needed.
  */
 
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useId, useSyncExternalStore } from 'react'
 import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
 import { getActiveProjectIdSnapshot, useActiveProjectSignal } from './activeProject'
@@ -357,6 +357,60 @@ function requestRealtimeLoad(ctx: LoadContext): void {
 /** The context the `live` caller last asked for; `refreshNavCounts` reuses it. */
 let liveCtx: LoadContext | null = null
 
+/**
+ * Every `live` caller (the sidebar, and /checks) contributes the slices it
+ * renders. One request asks for the union, so the sidebar's later effect
+ * cannot drop the check slices.
+ */
+interface LiveOwner {
+  inventoryEnabled: boolean
+  isSuperAdmin: boolean
+  slices: readonly string[] | null
+  org: string
+  project: string
+}
+
+const liveOwners = new Map<string, LiveOwner>()
+let mergeQueued = false
+let mergeFresh = false
+
+function mergedLoadContext(): LoadContext | null {
+  if (liveOwners.size === 0) return null
+  let inventoryEnabled = false
+  let isSuperAdmin = false
+  let org = ''
+  let project = ''
+  const names = new Set<string>()
+  let everySlice = true
+  for (const owner of liveOwners.values()) {
+    inventoryEnabled = inventoryEnabled || owner.inventoryEnabled
+    isSuperAdmin = isSuperAdmin || owner.isSuperAdmin
+    org = owner.org
+    project = owner.project
+    if (owner.slices == null) everySlice = false
+    else for (const name of owner.slices) names.add(name)
+  }
+  const slices = everySlice ? [...names].sort() : null
+  const slicesKey = slices ? slices.join(',') : '*'
+  const key = `${org}|${project}|${inventoryEnabled ? 1 : 0}|${isSuperAdmin ? 1 : 0}|${slicesKey}`
+  return { key, inventoryEnabled, isSuperAdmin, slices }
+}
+
+/** Coalesce owners that register in the same commit into one nav-meta read. */
+function scheduleMergedLoad(fresh: boolean): void {
+  mergeFresh = mergeFresh || fresh
+  if (mergeQueued) return
+  mergeQueued = true
+  queueMicrotask(() => {
+    mergeQueued = false
+    const freshNow = mergeFresh
+    mergeFresh = false
+    const ctx = mergedLoadContext()
+    if (!ctx) return
+    requestLoad(ctx, freshNow)
+  })
+}
+
 /** Load for `ctx` unless that exact context is already loaded or loading. */
 function requestLoad(ctx: LoadContext, fresh: boolean): void {
   liveCtx = ctx
@@ -382,14 +436,14 @@ export function refreshNavCounts(): void {
 /**
  * Sidebar counters, shared across every caller.
  *
- * The `live` caller (Layout, exactly one) owns loading: it says which slices
- * the visible sidebar and page need (`slices`, null = all) and subscribes to
- * realtime. Every other caller only reads the shared snapshot, so a second
- * reader never starts a second request set.
+ * `live` callers own loading. Their slice lists are unioned into one
+ * nav-meta request (the sidebar, plus /checks). Every other caller only
+ * reads the shared snapshot.
  */
 export function useNavCounts(
   opts: { live?: boolean; slices?: readonly string[] | null } = {},
 ): NavCounts {
+  const ownerId = useId()
   const counts = useSyncExternalStore(subscribe, () => snapshot, () => INITIAL)
   const { isSuperAdmin, has: hasFeature, loading: entitlementsLoading } = useEntitlements()
   const inventoryEnabled = hasFeature('inventory_v2')
@@ -405,14 +459,24 @@ export function useNavCounts(
     // them sent a second full nav-meta request once they landed (measured on
     // prod 2026-10-16: nav-meta at 1.8 s and again at 6.8 s, ~5 s each).
     if (!live || entitlementsLoading) return
-    requestLoad({ key, inventoryEnabled, isSuperAdmin, slices }, false)
-    // `slices` is captured through `key` (slicesKey).
-  }, [live, key, inventoryEnabled, isSuperAdmin, entitlementsLoading])
+    liveOwners.set(ownerId, {
+      inventoryEnabled,
+      isSuperAdmin,
+      slices,
+      org: activeOrgSignal,
+      project: activeProjectSignal,
+    })
+    scheduleMergedLoad(false)
+    return () => {
+      liveOwners.delete(ownerId)
+      liveCtx = mergedLoadContext()
+    }
+  }, [live, ownerId, key, inventoryEnabled, isSuperAdmin, entitlementsLoading, activeOrgSignal, activeProjectSignal, slices])
 
   useRealtimeReload(
     NAV_COUNT_TABLES,
     () => {
-      requestRealtimeLoad({ key, inventoryEnabled, isSuperAdmin, slices })
+      requestRealtimeLoad(mergedLoadContext() ?? { key, inventoryEnabled, isSuperAdmin, slices })
     },
     { debounceMs: 1500, enabled: live },
   )

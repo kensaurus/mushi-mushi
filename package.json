@@ -221,5 +221,6 @@
       "@react-navigation/core@7": ">=7.23.0 <8",
       "katex": ">=0.18.2 <0.19"
     }
-  }
+  },
+  "workspaces": ["packages/*", "apps/*", "tooling/*", "examples/*", "examples/realworld/*"]
 }

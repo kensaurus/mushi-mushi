@@ -42,7 +42,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Anti-gaming](https://kensaur.us/mushi-mushi/docs/admin/anti-gaming): The Anti-gaming page flags reporters whose patterns look abusive — near-duplicate spam, reward farming or synthetic sessions — for you to review.
 - [Audit log](https://kensaur.us/mushi-mushi/docs/admin/audit): The Audit log records every admin action and agent run in Mushi — who minted API keys, who dispatched a fix, and what triggered a pull request.
 - [Billing](https://kensaur.us/mushi-mushi/docs/admin/billing): The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.
-- [Checks](https://kensaur.us/mushi-mushi/docs/admin/checks): The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+- [Checks](https://kensaur.us/mushi-mushi/docs/admin/checks): The Checks page lists every automatic check on this app. Each card says whether that check is set up, when it last ran, and whether it passed or found something.
 - [CI runners](https://kensaur.us/mushi-mushi/docs/admin/ci): The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.
 - [CLI device auth](https://kensaur.us/mushi-mushi/docs/admin/cli-auth): The page that mushi login opens so you can approve a CLI device code while signed in to the console, and how the device authorization flow works.
 - [Code health](https://kensaur.us/mushi-mushi/docs/admin/code-health): The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
