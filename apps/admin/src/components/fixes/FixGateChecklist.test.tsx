@@ -69,9 +69,9 @@ afterEach(() => {
   host.remove()
 })
 
-async function render() {
+async function render(heading?: 'h3' | 'h4') {
   await act(async () => {
-    root.render(createElement(FixGateChecklist, { fixId: 'fix-1' }))
+    root.render(createElement(FixGateChecklist, { fixId: 'fix-1', ...(heading ? { heading } : {}) }))
   })
   await act(async () => {
     await Promise.resolve()
@@ -177,5 +177,16 @@ describe('FixGateChecklist', () => {
     expect(q('fix-gate-notice')!.textContent).toContain('re-checked this fix 6 times in the last hour')
     expect(q('fix-gate-notice')!.textContent).not.toContain('Too many requests')
     expect(q('fix-gate-ci')).not.toBeNull()
+  })
+
+  it('uses h4 on the report page unless the caller asks for h3', async () => {
+    mocks.apiFetch.mockResolvedValue({ ok: true, data: { events: [] } })
+    await render()
+    expect(host.querySelector('h4')?.textContent).toBe('Merge checks')
+    expect(host.querySelector('h3')).toBeNull()
+
+    await render('h3')
+    expect(host.querySelector('h3')?.textContent).toBe('Merge checks')
+    expect(host.querySelector('h4')).toBeNull()
   })
 })

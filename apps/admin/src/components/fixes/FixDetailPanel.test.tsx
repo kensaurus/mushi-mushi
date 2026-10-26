@@ -21,7 +21,13 @@ const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('@sentry/react', () => ({ captureMessage: vi.fn() }))
 // Covered by FixGateChecklist.test.tsx; its own reads would share this apiFetch mock.
-vi.mock('./FixGateChecklist', () => ({ FixGateChecklist: () => null }))
+vi.mock('./FixGateChecklist', async () => {
+  const { createElement: h } = await import('react')
+  return {
+    FixGateChecklist: ({ heading }: { heading?: string }) =>
+      h(heading === 'h3' ? 'h3' : 'h4', { 'data-testid': 'gate-heading' }, 'Merge checks'),
+  }
+})
 
 import { FixDetailPanel } from './FixDetailPanel'
 import { ToastProvider } from '../../lib/toast'
@@ -93,6 +99,11 @@ describe('FixDetailPanel', () => {
     act(() => btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     await flush()
     expect(document.body.textContent).toContain('Synced with GitHub')
+  })
+
+  it('asks the fixes page for an h3 merge-checks heading', () => {
+    render()
+    expect(document.querySelector('[data-testid="gate-heading"]')?.tagName).toBe('H3')
   })
 
   it('QA 95: the receipt link keeps the console base path', () => {

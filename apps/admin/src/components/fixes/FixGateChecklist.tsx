@@ -27,9 +27,15 @@ function StatusChip({ glyph, word, tone }: { glyph: string; word: string; tone: 
 
 interface Props {
   fixId: string
+  /**
+   * Heading level. Default `h4` is the report-detail outline (this block
+   * sits under that page's h3s). The fixes page passes `h3` so the heading
+   * does not skip a level under its h2 sections.
+   */
+  heading?: 'h3' | 'h4'
 }
 
-export function FixGateChecklist({ fixId }: Props) {
+export function FixGateChecklist({ fixId, heading = 'h4' }: Props) {
   const [verification, setVerification] = useState<FixVerification | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +77,7 @@ export function FixGateChecklist({ fixId }: Props) {
   const gates = verification?.gates ?? []
   const autoMerge = verification ? autoMergeView(verification.autoMerge.state, verification.autoMerge.detail) : null
   const shortSha = verification?.headSha ? verification.headSha.slice(0, 7) : null
+  const Title = heading
 
   return (
     <section
@@ -80,7 +87,7 @@ export function FixGateChecklist({ fixId }: Props) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-xs font-medium text-fg">Merge checks</h3>
+          <Title className="text-xs font-medium text-fg">Merge checks</Title>
           {verification && (
             <p className="text-2xs text-fg-muted" data-testid="fix-gate-summary">
               {gatesSummary(gates)}

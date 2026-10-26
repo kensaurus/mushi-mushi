@@ -97,6 +97,14 @@ describe('MergeFixPreflight — Opus review gate', () => {
     document.body.innerHTML = ''
   })
 
+  it('keeps merge checks at h4 on the report page', async () => {
+    respond(NOT_REVIEWED)
+    await open()
+    const heading = document.querySelector('[data-testid="fix-gate-checklist"] :is(h3, h4)')
+    expect(heading?.tagName).toBe('H4')
+    expect(heading?.textContent).toBe('Merge checks')
+  })
+
   it('a hold shows its findings and blocks the merge until "Merge anyway" is ticked', async () => {
     respond(HOLD)
     await open()

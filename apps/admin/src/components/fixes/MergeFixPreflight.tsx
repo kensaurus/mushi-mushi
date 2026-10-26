@@ -205,7 +205,7 @@ export function MergeFixPreflight({
           </div>
 
           <div className="mt-2">
-            <FixGateChecklist fixId={fixId} />
+            <FixGateChecklist fixId={fixId} heading="h4" />
           </div>
 
           {reviewPending && (

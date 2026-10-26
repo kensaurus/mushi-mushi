@@ -23,6 +23,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PageH1Provider, SidebarWordmark } from '../lib/pageH1'
 import { PageHeaderBar } from './PageHeaderBar'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -103,5 +104,52 @@ describe('PageHeaderBar overview chip', () => {
     })
     expect(container.querySelector('h1')?.textContent).toBe('Fixes')
     expect(container.querySelector('h2')).toBeNull()
+  })
+
+  it('replaces the sidebar wordmark h1 when the page title is an h1', () => {
+    act(() => {
+      root.render(
+        createElement(
+          PageH1Provider,
+          null,
+          createElement(
+            'div',
+            null,
+            createElement(SidebarWordmark, { compact: false }),
+            createElement(
+              MemoryRouter,
+              { initialEntries: ['/fixes'] },
+              createElement(PageHeaderBar, { title: 'Fixes', titleAs: 'h1', showCopyLink: false }),
+            ),
+          ),
+        ),
+      )
+    })
+    const brand = [...container.querySelectorAll('p')].find((el) => el.textContent === 'mushimushi')
+    expect(brand?.className).toContain('heading-rhythm')
+    expect([...container.querySelectorAll('h1')].map((el) => el.textContent)).toEqual(['Fixes'])
+  })
+
+  it('leaves the sidebar wordmark as the only h1 when the page title stays an h2', () => {
+    act(() => {
+      root.render(
+        createElement(
+          PageH1Provider,
+          null,
+          createElement(
+            'div',
+            null,
+            createElement(SidebarWordmark, { compact: false }),
+            createElement(
+              MemoryRouter,
+              { initialEntries: ['/dashboard'] },
+              createElement(PageHeaderBar, { title: 'Home', showCopyLink: false }),
+            ),
+          ),
+        ),
+      )
+    })
+    expect([...container.querySelectorAll('h1')].map((el) => el.textContent)).toEqual(['mushimushi'])
+    expect(container.querySelector('h2')?.textContent).toContain('Home')
   })
 })

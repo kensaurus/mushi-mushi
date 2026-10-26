@@ -177,7 +177,7 @@ export function FixDetailPanel({
         )}
       </div>
 
-      {fix.pr_url && CLOUD_AGENTS.has(fix.agent) && <FixGateChecklist fixId={fix.id} />}
+      {fix.pr_url && CLOUD_AGENTS.has(fix.agent) && <FixGateChecklist fixId={fix.id} heading="h3" />}
 
       {timeline ? (
         <div>

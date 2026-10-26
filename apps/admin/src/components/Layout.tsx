@@ -58,6 +58,7 @@ import { useFaviconBadge } from '../lib/favicon'
 import { isConsentFocusPath, useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
+import { PageH1Provider, SidebarWordmark } from '../lib/pageH1'
 import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
@@ -443,17 +444,7 @@ export function Layout({ children }: { children: ReactNode }) {
           rail still has a recognisable identity at the top. */}
       <div className="border-b border-edge/60 overflow-visible shrink-0">
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
-          {compact ? (
-            <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
-              <span className="text-brand">m</span>
-              <span className="text-fg-secondary">m</span>
-            </h1>
-          ) : (
-            <h1 className="text-sm font-bold tracking-tight leading-none">
-              <span className="text-brand">mushi</span>
-              <span className="text-fg-secondary">mushi</span>
-            </h1>
-          )}
+          <SidebarWordmark compact={compact} />
         </div>
         <div className={compact ? 'px-2.5 pb-2.5' : 'px-4 pb-2'}>
           <SidebarBrandToggles compact={compact} showMode={false} mode={mode} onSelectMode={setMode} />
@@ -647,6 +638,7 @@ export function Layout({ children }: { children: ReactNode }) {
   )
 
   return (
+    <PageH1Provider>
     <div className="flex h-full min-h-0 overflow-hidden">
       <RouteProgress />
       {/* Skip nav — a11y */}
@@ -903,6 +895,7 @@ export function Layout({ children }: { children: ReactNode }) {
         seedThreadId={askPanel.threadId}
       />
     </div>
+    </PageH1Provider>
   )
 }
 
