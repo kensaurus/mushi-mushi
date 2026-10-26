@@ -36,7 +36,7 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
-import { failureCause, fixCauseLabel, fixReportLabel, formatFixCauseBreakdown, needsAttention, retryCandidates } from '../lib/fixReportTruth'
+import { attentionCauseBreakdown, failureCause, fixCauseLabel, fixReportLabel, formatFixCauseBreakdown, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
   commonRetryAgent,
@@ -108,6 +108,8 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
+  // already_fixed is `no_change`: a terminal answer, not a stopped fix.
+  if (fix.report_fix_state === 'no_change') return 'all'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -388,13 +390,7 @@ export function FixesPage() {
   const causeSummary = useMemo(() => {
     const fromStats = formatFixCauseBreakdown(fixesStats.failureBreakdown)
     if (fromStats) return fromStats
-    const counts = new Map<string, number>()
-    for (const f of fixes) {
-      if (!needsAttention(f)) continue
-      const cause = failureCause(f)
-      counts.set(cause, (counts.get(cause) ?? 0) + 1)
-    }
-    return formatFixCauseBreakdown([...counts.entries()].map(([category, count]) => ({ category, count })))
+    return formatFixCauseBreakdown(attentionCauseBreakdown(fixes))
   }, [fixes, fixesStats.failureBreakdown])
 
   // "Common causes" chips narrow the failed list to one cause (console QA 93).

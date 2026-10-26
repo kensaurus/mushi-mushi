@@ -27,6 +27,7 @@ import {
   reportTitle,
 } from '../../supabase/functions/_shared/fix-report-truth-load.ts'
 import { GLOT_ATTEMPTS, GLOT_REPORT_IDS, GLOT_REPORTS } from './fixtures/glot-fix-attempts.ts'
+import { reportsWithNoRetryVerdict } from '../../supabase/functions/_shared/spend-down.ts'
 
 const reportsById = new Map<string, TruthReport>(GLOT_REPORTS.map((r) => [r.id, r]))
 
@@ -199,13 +200,16 @@ describe('deriveReportFixTruth precedence', () => {
       report: { id: 'fresh', status: 'classified' },
       attempts: [],
     })
-    // `none` is "not yet attempted" and is eligible. already_fixed must not
-    // look like that, and it is not a retryable failure either.
-    const pickedForNewRun = (t: { state: string; retryable: boolean }) => t.state === 'none' || t.retryable
-    expect(untouched.state).toBe('none')
-    expect(pickedForNewRun(untouched)).toBe(true)
-    expect(alreadyFixed.state).toBe('no_change')
-    expect(pickedForNewRun(alreadyFixed)).toBe(false)
+    expect(untouched).toMatchObject({ state: 'none', retryable: false })
+    expect(alreadyFixed).toMatchObject({ state: 'no_change', retryable: false })
+    // Spend-down is the dispatcher that starts a new automatic fix run.
+    // It settles a report from the newest attempt's verdict.
+    const settled = reportsWithNoRetryVerdict([
+      { report_id: 'r', failure_category: 'already_fixed', created_at: '2026-10-01T00:00:00Z' },
+      { report_id: 'fresh', failure_category: null, created_at: '2026-10-01T00:00:00Z' },
+    ])
+    expect(settled.has('r')).toBe(true)
+    expect(settled.has('fresh')).toBe(false)
   })
 
   it('a dismissed report never counts, and a reopened one ignores its old merge', () => {

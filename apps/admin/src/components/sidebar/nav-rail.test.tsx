@@ -15,11 +15,10 @@
  * dependency, and the vitest surface stays narrow per vitest.config.ts.
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
+import { SectionRailHeader } from './SectionRailHeader'
 import { NavRailLink, railBadgeText, railDescriptionId } from './NavRailLink'
 import { NavRailFlyout } from './NavRailFlyout'
 import { navBadgeStatus, resolveNavBadge, type NavBadgeSpec } from '../../lib/navBadges'
@@ -128,10 +127,22 @@ describe('rail a11y contract', () => {
 
 describe('collapsed section badge', () => {
   it('keeps the hover title and leaves the name off the aria-hidden pill', () => {
-    const src = readFileSync(resolve(__dirname, '../Layout.tsx'), 'utf8')
-    expect(src).toMatch(/aria-hidden="true"\s+title=\{staleness\.label\}/)
-    expect(src).not.toMatch(/aria-hidden="true"\s+aria-label=\{staleness\.label\}/)
-    expect(src).toContain('{staleness ? ` — ${staleness.label}` : \'\'}')
+    const label = '51 reports with a stopped fix (CI failed (24), Needs your decision (11))'
+    const html = renderToStaticMarkup(
+      <SectionRailHeader
+        section={{ id: 'do', title: 'Fix', hint: 'Draft fixes for reports', stage: 'D' }}
+        expanded={false}
+        isActiveStage={false}
+        staleness={{ count: 51, tone: 'danger', label }}
+        onSelect={() => {}}
+      />,
+    )
+    expect(html).toContain(`title="${label}"`)
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).not.toMatch(/aria-hidden="true"[^>]*aria-label=/)
+    expect(html).not.toMatch(/aria-label="[^"]*"[^>]*aria-hidden="true"/)
+    expect(html).toContain(`— ${label}`)
+    expect(html).toContain('>51<')
   })
 })
 

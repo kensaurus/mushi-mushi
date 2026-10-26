@@ -14,7 +14,7 @@ import { CursorAgentBadge } from './CursorAgentBadge'
 import { ClaudeAgentBadge } from './ClaudeAgentBadge'
 import { buildFixPipelineStages, fixStatusStripeClass } from './fixPipelineStages'
 import { ciBadge, type FixAttempt } from './types'
-import { credentialAdvice, failureHeadline, fixReportLabel, isSuperseded, needsAttention, supersededLabel } from '../../lib/fixReportTruth'
+import { credentialAdvice, failureHeadline, fixReportLabel, isSuperseded, needsAttention, reportFixStateLabel, supersededLabel } from '../../lib/fixReportTruth'
 import { IconChevronDown, IconChevronUp } from '../icons'
 import { FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 import { fixRowDomId } from '../../lib/fixDeepLink'
@@ -67,7 +67,14 @@ function FixRowViewInner({
   // reason inline (A12, glot.it 2026-10-04).
   const superseded = isSuperseded(fix)
   const stopped = needsAttention(fix)
-  const headline = stopped || (!superseded && fix.error) ? failureHeadline(fix) : null
+  // The attempt status is `failed` for an already_fixed verdict. The report
+  // state is `no_change` (or the category, if the state has not caught up),
+  // which is not a failure label.
+  const noChange =
+    fix.is_latest_attempt !== false &&
+    (fix.report_fix_state === 'no_change' || (fix.failure_category ?? '').toLowerCase() === 'already_fixed')
+  const noChangeLabel = noChange ? reportFixStateLabel('no_change') : null
+  const headline = !noChangeLabel && (stopped || (!superseded && fix.error)) ? failureHeadline(fix) : null
   const keyAdvice = stopped ? credentialAdvice(fix) : null
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -140,6 +147,10 @@ function FixRowViewInner({
               <Badge className="w-fit max-w-full min-w-0 truncate text-2xs bg-surface-overlay text-fg-muted">
                 Superseded
               </Badge>
+            ) : noChangeLabel ? (
+              <Badge title={noChangeLabel} className="w-fit max-w-full min-w-0 truncate text-2xs bg-surface-overlay text-fg-muted">
+                {noChangeLabel}
+              </Badge>
             ) : (
               <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
                 {pipelineStatusLabel(fix.status)}
@@ -161,6 +172,10 @@ function FixRowViewInner({
             {superseded ? (
               <p className="text-2xs text-fg-muted truncate" data-testid="fix-row-superseded">
                 {supersededLabel(fix)}
+              </p>
+            ) : noChangeLabel ? (
+              <p className="text-2xs text-fg-muted truncate" data-testid="fix-row-state" title={noChangeLabel}>
+                {noChangeLabel}
               </p>
             ) : headline ? (
               <div className="min-w-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>

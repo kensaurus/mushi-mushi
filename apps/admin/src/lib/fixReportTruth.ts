@@ -33,8 +33,14 @@ const PROVIDER_ROUTE: Record<string, string> = {
   github: '/integrations/config',
 }
 
-/** Newest attempt on a report whose last auto-fix stopped and is still unfixed. */
+/**
+ * Newest attempt on a report whose last auto-fix stopped and is still unfixed.
+ * `no_change` is the agent's "nothing to change" answer (`already_fixed`),
+ * not a stop — the same exclusion as the server's `isFixCountedFailed`.
+ */
 export function needsAttention(fix: FixAttempt): boolean {
+  if (fix.report_fix_state === 'no_change') return false
+  if ((fix.failure_category ?? '').toLowerCase() === 'already_fixed') return false
   return fix.report_fix_state === 'failed' && fix.is_latest_attempt === true
 }
 
@@ -163,6 +169,30 @@ export function fixReportLabel(fix: FixAttempt): string {
 }
 
 /**
+ * Plain label for a report fix state the attempt status would misname.
+ * `no_change` is not "Failed": the agent finished and found nothing to change.
+ * Other states keep the attempt's own status label.
+ */
+export function reportFixStateLabel(state: FixAttempt['report_fix_state']): string | null {
+  switch (state) {
+    case 'no_change':
+      return 'Agent found nothing to change'
+    case 'resolved':
+    case 'in_flight':
+    case 'pr_open':
+    case 'failed':
+    case 'none':
+    case null:
+    case undefined:
+      return null
+    default: {
+      const _exhaustive: never = state
+      return _exhaustive
+    }
+  }
+}
+
+/**
  * Same words as the server's `_shared/fix-loop-status.ts` (ADR 0033).
  * @internal Exported for tests only.
  */
@@ -214,6 +244,20 @@ export function fixCauseLabel(cause: string | null | undefined): string {
 export interface FixCauseCount {
   category: string
   count: number
+}
+
+/**
+ * Cause counts for the banner when `/fixes/stats` has no breakdown yet.
+ * Same rows as the Failed filter: `needsAttention` (excludes `already_fixed`).
+ */
+export function attentionCauseBreakdown(fixes: readonly FixAttempt[]): FixCauseCount[] {
+  const counts = new Map<string, number>()
+  for (const fix of fixes) {
+    if (!needsAttention(fix)) continue
+    const cause = failureCause(fix)
+    counts.set(cause, (counts.get(cause) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([category, count]) => ({ category, count }))
 }
 
 /**

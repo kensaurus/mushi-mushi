@@ -41,7 +41,14 @@ export function buildFixPipelineStages(fix: FixAttempt): Array<{ label: string; 
 export function fixStatusStripeClass(fix: FixAttempt): string {
   if (isFixMerged(fix)) return 'bg-ok'
   // An earlier attempt on a report a later PR fixed is history, not a failure.
-  if (fix.report_fix_state === 'resolved') return 'bg-edge-subtle'
+  // `no_change` / already_fixed is the agent's "nothing to change" answer, not a failed run.
+  if (
+    fix.report_fix_state === 'resolved' ||
+    fix.report_fix_state === 'no_change' ||
+    (fix.failure_category ?? '').toLowerCase() === 'already_fixed'
+  ) {
+    return 'bg-edge-subtle'
+  }
   const status = fix.status?.toLowerCase()
   if (status === 'failed') return 'bg-danger'
   if (status === 'queued' || status === 'running') return 'bg-info motion-safe:animate-pulse'

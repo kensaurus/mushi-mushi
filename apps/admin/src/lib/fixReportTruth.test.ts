@@ -18,9 +18,11 @@ import {
   stoppedFixesBadgeLabel,
   fixCiInfraLabel,
   CI_INFRA_STOPPED_LABEL,
+  attentionCauseBreakdown,
   fixReportLabel,
   isSuperseded,
   needsAttention,
+  reportFixStateLabel,
   openPrReports,
   retryCandidates,
   supersededLabel,
@@ -147,6 +149,41 @@ describe('glot.it rows', () => {
   it('names the report, never its id', () => {
     expect(fixReportLabel(AUDIO_SKIPPED)).toBe('Audio playback is severely degraded')
     expect(fixReportLabel(fix({ report_title: null }))).toBe('Untitled report')
+  })
+
+  it('names a no_change report instead of leaving the state blank', () => {
+    expect(reportFixStateLabel('no_change')).toBe('Agent found nothing to change')
+    expect(reportFixStateLabel('failed')).toBeNull()
+    expect(reportFixStateLabel(undefined)).toBeNull()
+  })
+
+  it('does not count already_fixed in the fallback cause line when stats are missing', () => {
+    const gone = fix({
+      id: 'gone',
+      report_id: 'r-gone',
+      report_fix_state: 'failed',
+      is_latest_attempt: true,
+      failure_category: 'already_fixed',
+      error: 'Agent found nothing to change',
+    })
+    const quiet = fix({
+      id: 'quiet',
+      report_id: 'r-quiet',
+      report_fix_state: 'no_change',
+      is_latest_attempt: true,
+      failure_category: 'already_fixed',
+    })
+    const ci = fix({
+      id: 'ci',
+      report_id: 'r-ci',
+      report_fix_state: 'failed',
+      is_latest_attempt: true,
+      failure_category: 'ci_failed',
+    })
+    expect(needsAttention(gone)).toBe(false)
+    expect(needsAttention(quiet)).toBe(false)
+    expect(needsAttention(ci)).toBe(true)
+    expect(formatFixCauseBreakdown(attentionCauseBreakdown([gone, quiet, ci]))).toBe('CI failed (1)')
   })
 })
 

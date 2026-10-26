@@ -21,7 +21,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FixAttempt } from '../components/fixes/types'
-import { EMPTY_FIXES_STATS } from '../components/fixes/FixesStatsTypes'
+import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
 
 function fix(over: Partial<FixAttempt>): FixAttempt {
   return {
@@ -39,12 +39,18 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
   } as FixAttempt
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), fixes: [] as unknown[], total: 0 }))
+const mocks = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  fixes: [] as unknown[],
+  total: 0,
+  stats: null as Partial<FixesStats> | null,
+  showPosture: false,
+}))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
   usePageData: () => ({
-    data: { ...EMPTY_FIXES_STATS, hasAnyProject: true },
+    data: { ...EMPTY_FIXES_STATS, hasAnyProject: true, ...(mocks.stats ?? {}) },
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -72,7 +78,19 @@ vi.mock('../lib/fixesModeUx', () => ({
     hideFixesSnapshot: true,
   }),
 }))
-vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: {} }))
+vi.mock('../components/PagePosture', () => ({
+  PagePosture: ({ slots }: { slots?: { show?: boolean; children?: unknown }[] }) =>
+    mocks.showPosture
+      ? createElement(
+          'div',
+          { 'data-testid': 'posture' },
+          (slots ?? [])
+            .filter((slot) => slot.show !== false)
+            .map((slot, index) => createElement('div', { key: index }, slot.children as never)),
+        )
+      : null,
+  POSTURE_PRIORITY: {},
+}))
 vi.mock('../components/PageHeaderBar', () => ({
   PageHeaderBar: ({ children }: { children?: unknown }) => createElement('div', { 'data-testid': 'header' }, children as never),
 }))
@@ -97,6 +115,8 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.stats = null
+  mocks.showPosture = false
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -262,6 +282,56 @@ describe('FixesPage', () => {
     expect(new URLSearchParams(currentSearch).get('status')).toBe('failed')
     expect(new URLSearchParams(currentSearch).get('cause')).not.toBeNull()
     expect(document.body.textContent).toContain('Cause')
+  })
+
+  it('labels a no_change row and leaves already_fixed out of the fallback cause line', async () => {
+    mocks.stats = {
+      hasGithub: true,
+      codebaseIndexEnabled: true,
+      indexedFiles: 3,
+      failed: 1,
+      topPriority: 'failed',
+      topPriorityLabel: '1 report still unfixed after the last attempt',
+      failureBreakdown: [],
+    }
+    mocks.fixes = [
+      fix({
+        id: 'gone',
+        report_id: 'r-gone',
+        report_title: 'Already gone',
+        report_fix_state: 'no_change',
+        is_latest_attempt: true,
+        failure_category: 'already_fixed',
+        error: undefined,
+        retryable: false,
+      }),
+      fix({
+        id: 'stale',
+        report_id: 'r-stale',
+        report_title: 'Stale already fixed',
+        report_fix_state: 'failed',
+        is_latest_attempt: true,
+        failure_category: 'already_fixed',
+        error: 'Agent found nothing to change',
+        retryable: false,
+      }),
+      fix({
+        id: 'ci',
+        report_id: 'r-ci',
+        report_title: 'CI red',
+        failure_category: 'ci_failed',
+        error: 'checks failed',
+      }),
+    ]
+    mocks.total = 3
+    mocks.showPosture = true
+    await render('/fixes')
+    const states = [...document.querySelectorAll('[data-testid="fix-row-state"]')].map((el) => el.textContent)
+    expect(states).toEqual(['Agent found nothing to change', 'Agent found nothing to change'])
+    expect(document.body.textContent).toContain('Most common: CI failed (1).')
+    expect(document.body.textContent).not.toContain('Agent found nothing to change (1)')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped1')
   })
 
   it('QA 91: counts every attempt and loads older ones', async () => {
