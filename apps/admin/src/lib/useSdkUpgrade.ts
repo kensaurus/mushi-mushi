@@ -4,6 +4,11 @@
  *          Mirrors `useDispatchFix` in dispatchFix.ts — POST to enqueue,
  *          then SSE stream with polling fallback.
  *
+ *          When the card opens on an upgrade PR that is still open, CI is
+ *          re-read from GitHub at most once a minute. The saved conclusion
+ *          is the bump commit's until that refresh, so the card otherwise
+ *          stays on "CI failing" after the PR head is green.
+ *
  * Usage:
  *   const { state, createUpgradePr, cancel } = useSdkUpgrade(projectId)
  */
@@ -123,6 +128,125 @@ function clearPersistedTerminal(projectId: string) {
   } catch { /* ignore */ }
 }
 
+/** Page-open CI re-read. A minute matches the console's other GitHub refreshes. */
+export const UPGRADE_CI_REFRESH_MS = 60_000
+
+export interface UpgradeCiPayload {
+  releaseStatus: string
+  prState: string | null
+  checkRunStatus: string | null
+  checkRunConclusion: string | null
+  deployStatus: string | null
+  deployUrl: string | null
+  workflowUrl: string | null
+}
+
+/** True when this open upgrade PR should re-read CI. Merged and closed PRs do not. */
+export function openUpgradePrWantsCiRefresh(job: {
+  status: string
+  jobId?: string
+  prUrl?: string | null
+  prState?: string | null
+  mergedAt?: string | null
+}): boolean {
+  if (job.status !== 'completed' || !job.jobId || !job.prUrl) return false
+  if (job.mergedAt) return false
+  if (job.prState === 'merged' || job.prState === 'closed') return false
+  return true
+}
+
+/** True when the last successful page-open refresh is missing or older than the interval. */
+export function upgradeCiRefreshDue(
+  lastAtMs: number | null,
+  nowMs: number,
+  intervalMs = UPGRADE_CI_REFRESH_MS,
+): boolean {
+  if (lastAtMs == null || !Number.isFinite(lastAtMs)) return true
+  return nowMs - lastAtMs >= intervalMs
+}
+
+export function upgradeCiRefreshDecision(
+  job: Parameters<typeof openUpgradePrWantsCiRefresh>[0],
+  lastAtMs: number | null,
+  nowMs: number,
+): 'refresh' | 'skip' {
+  if (!openUpgradePrWantsCiRefresh(job)) return 'skip'
+  return upgradeCiRefreshDue(lastAtMs, nowMs) ? 'refresh' : 'skip'
+}
+
+export function upgradeCiRefreshStorageKey(projectId: string, jobId: string): string {
+  return `mushi_sdk_upgrade_ci_refresh:${projectId}:${jobId}`
+}
+
+export function readUpgradeCiRefreshAt(
+  storage: Pick<Storage, 'getItem'>,
+  projectId: string,
+  jobId: string,
+): number | null {
+  try {
+    const raw = storage.getItem(upgradeCiRefreshStorageKey(projectId, jobId))
+    if (!raw) return null
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
+}
+
+export function markUpgradeCiRefresh(
+  storage: Pick<Storage, 'setItem'>,
+  projectId: string,
+  jobId: string,
+  nowMs: number,
+): void {
+  try {
+    storage.setItem(upgradeCiRefreshStorageKey(projectId, jobId), String(nowMs))
+  } catch { /* quota / private mode */ }
+}
+
+export function applyUpgradeCi(state: SdkUpgradeState, data: UpgradeCiPayload): SdkUpgradeState {
+  return {
+    ...state,
+    syncError: undefined,
+    releaseStatus: data.releaseStatus,
+    prState: data.prState ?? undefined,
+    checkRunStatus: data.checkRunStatus ?? undefined,
+    checkRunConclusion: data.checkRunConclusion ?? undefined,
+    deployStatus: data.deployStatus ?? undefined,
+    deployUrl: data.deployUrl ?? undefined,
+    workflowUrl: data.workflowUrl ?? undefined,
+  }
+}
+
+/**
+ * Fold a loaded job together with a CI sync that may already have finished.
+ * The sync response can land before the saved snapshot is committed; without
+ * this the snapshot's stale "failure" overwrites the green head.
+ */
+export function mergeLoadedUpgradeJob(
+  current: SdkUpgradeState,
+  next: SdkUpgradeState,
+  syncedJobId: string | null,
+  pending: { jobId: string; data: UpgradeCiPayload } | null,
+): SdkUpgradeState {
+  if (next.jobId && current.jobId === next.jobId && syncedJobId === next.jobId) {
+    return {
+      ...next,
+      syncError: current.syncError,
+      releaseStatus: current.releaseStatus,
+      prState: current.prState,
+      checkRunStatus: current.checkRunStatus,
+      checkRunConclusion: current.checkRunConclusion,
+      deployStatus: current.deployStatus,
+      deployUrl: current.deployUrl,
+      workflowUrl: current.workflowUrl,
+      mergedAt: current.mergedAt ?? next.mergedAt,
+    }
+  }
+  if (pending && next.jobId && pending.jobId === next.jobId) return applyUpgradeCi(next, pending.data)
+  return next
+}
+
 export function useSdkUpgrade(projectId: string) {
   const [state, setState] = useState<SdkUpgradeState>({ status: 'idle' })
   const cancelled = useRef(false)
@@ -130,6 +254,11 @@ export function useSdkUpgrade(projectId: string) {
   const reachedTerminal = useRef(false)
   const creatingRef = useRef(false)
   const mergeSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Bumped when the project changes so an in-flight sync cannot paint the previous app. */
+  const syncEpoch = useRef(0)
+  const syncProjectId = useRef<string | null>(null)
+  const ciSyncedJobId = useRef<string | null>(null)
+  const pendingCi = useRef<{ jobId: string; data: UpgradeCiPayload } | null>(null)
 
   useEffect(
     () => () => {
@@ -253,18 +382,87 @@ export function useSdkUpgrade(projectId: string) {
     [projectId, poll],
   )
 
+  const syncStatus = useCallback(async (jobId: string, epoch = syncEpoch.current) => {
+    const res = await apiFetch<UpgradeCiPayload>(
+      `/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`,
+      { method: 'POST' },
+    )
+    // A project switch bumps the epoch. Drop the previous app's conclusion.
+    // A discarded request does not count toward the once-a-minute limit, so
+    // the next open of the card still re-reads CI.
+    if (epoch !== syncEpoch.current || cancelled.current) return
+    if (typeof window !== 'undefined') markUpgradeCiRefresh(window.sessionStorage, projectId, jobId, Date.now())
+    if (!res.ok || !res.data) {
+      // Used to return silently, so "Check CI status" / "Refresh all" looked
+      // like nothing happened (QA bug 260).
+      const message = describeActionError(res.error, 'Could not check CI status on GitHub. Try again in a moment.')
+      setState((s) => (s.jobId === jobId ? { ...s, syncError: message } : s))
+      return
+    }
+    const data = res.data
+    ciSyncedJobId.current = jobId
+    pendingCi.current = { jobId, data }
+    setState((s) => {
+      // The saved snapshot may not be committed yet. `mergeLoadedUpgradeJob`
+      // applies `pendingCi` when it is.
+      if (s.jobId && s.jobId !== jobId) return s
+      if (!s.jobId) return s
+      const updated = applyUpgradeCi(s, data)
+      if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
+        persistTerminal(projectId, updated)
+      }
+      return updated
+    })
+  }, [projectId])
+
   // Resume tracking if the operator reloads while a job is still queued/running.
+  // An open upgrade PR re-reads CI here. The card used to paint the conclusion
+  // saved at completion and never ask GitHub again, so it stayed "CI failing"
+  // after the head's required check went green.
   useEffect(() => {
     if (!projectId) return
+    if (syncProjectId.current !== projectId) {
+      if (syncProjectId.current !== null) {
+        syncEpoch.current += 1
+        ciSyncedJobId.current = null
+        pendingCi.current = null
+      }
+      syncProjectId.current = projectId
+    }
+    const epoch = syncEpoch.current
     cancelled.current = false
     reachedTerminal.current = false
     let disposed = false
+
+    const refreshOpenPrCi = (job: {
+      status: string
+      jobId?: string
+      prUrl?: string | null
+      prState?: string | null
+      mergedAt?: string | null
+    }) => {
+      if (disposed || !job.jobId || typeof window === 'undefined') return
+      const now = Date.now()
+      const lastAt = readUpgradeCiRefreshAt(window.sessionStorage, projectId, job.jobId)
+      if (upgradeCiRefreshDecision(job, lastAt, now) !== 'refresh') return
+      void syncStatus(job.jobId, epoch)
+    }
+
+    const showJob = (next: SdkUpgradeState, persist: boolean) => {
+      const pending = pendingCi.current
+      const upgraded = pending?.jobId === next.jobId
+      if (persist || upgraded) {
+        persistTerminal(projectId, upgraded && pending ? applyUpgradeCi(next, pending.data) : next)
+      }
+      setState((current) => mergeLoadedUpgradeJob(current, next, ciSyncedJobId.current, pendingCi.current))
+    }
 
     ;(async () => {
       const persisted = readPersistedTerminal(projectId)
       if (persisted) {
         reachedTerminal.current = true
-        setState(persisted)
+        showJob(persisted, false)
+        refreshOpenPrCi(persisted)
         return
       }
 
@@ -289,8 +487,9 @@ export function useSdkUpgrade(projectId: string) {
             deployUrl: job.deploy_url ?? undefined,
             mergedAt: job.merged_at ?? undefined,
           }
-          persistTerminal(projectId, next)
-          setState(next)
+          if (disposed) return
+          showJob(next, true)
+          refreshOpenPrCi(next)
         } else if (job.status === 'completed_no_pr') {
           const next = { status: 'completed_no_pr' as const, jobId: job.id, error: job.error ?? 'All packages up to date.' }
           persistTerminal(projectId, next)
@@ -319,7 +518,7 @@ export function useSdkUpgrade(projectId: string) {
     return () => {
       disposed = true
     }
-  }, [projectId, subscribeStream])
+  }, [projectId, subscribeStream, syncStatus])
 
   const enqueueUpgrade = useCallback(
     async (options?: { refresh?: boolean }) => {
@@ -411,47 +610,6 @@ export function useSdkUpgrade(projectId: string) {
   const refreshUpgradePr = useCallback(async () => {
     await enqueueUpgrade({ refresh: true })
   }, [enqueueUpgrade])
-
-  const syncStatus = useCallback(async (jobId: string) => {
-    const res = await apiFetch<{
-      releaseStatus: string
-      prState: string
-      checkRunStatus: string | null
-      checkRunConclusion: string | null
-      workflowStatus: string | null
-      workflowConclusion: string | null
-      workflowUrl: string | null
-      deployStatus: string | null
-      deployUrl: string | null
-      deployEnvironment: string | null
-    }>(`/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`, { method: 'POST' })
-    if (!res.ok || !res.data) {
-      // Used to return silently, so "Check CI status" / "Refresh all" looked
-      // like nothing happened (QA bug 260).
-      const message = describeActionError(res.error, 'Could not check CI status on GitHub. Try again in a moment.')
-      setState((s) => ({ ...s, syncError: message }))
-      return
-    }
-    const d = res.data
-    setState((s) => {
-      const updated: SdkUpgradeState = {
-        ...s,
-        syncError: undefined,
-        releaseStatus: d.releaseStatus,
-        prState: d.prState,
-        checkRunStatus: d.checkRunStatus ?? undefined,
-        checkRunConclusion: d.checkRunConclusion ?? undefined,
-        deployStatus: d.deployStatus ?? undefined,
-        deployUrl: d.deployUrl ?? undefined,
-        workflowUrl: d.workflowUrl ?? undefined,
-      }
-      // Persist cockpit fields so a hot-reload restores the freshest sync result
-      if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
-        persistTerminal(projectId, updated)
-      }
-      return updated
-    })
-  }, [projectId])
 
   const mergePr = useCallback(async (jobId: string, method: 'squash' | 'merge' | 'rebase' = 'squash') => {
     setState((s) => ({ ...s, releaseStatus: 'merging' }))

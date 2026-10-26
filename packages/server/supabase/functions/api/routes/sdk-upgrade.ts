@@ -50,12 +50,9 @@ import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
 import {
   resolveProjectGithubToken,
   type GithubRepoRef,
-  fetchPullRequestDetails,
-  fetchLatestCheckRun,
-  fetchLatestWorkflowRunForSha,
-  fetchLatestDeploymentStatusForSha,
   normalizeDeployStatus,
 } from '../../_shared/github.ts'
+import { fetchUpgradeCiOnHead } from '../../_shared/sdk-upgrade-ci.ts'
 
 function scheduleSdkUpgradeRun(jobId: string): void {
   const run = runSdkUpgradeJob(jobId).catch((err) => {
@@ -571,15 +568,15 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const prNumber = parseInt(prNumberStr, 10)
     const ref: GithubRepoRef = { owner, repo }
 
-    const pr = await fetchPullRequestDetails(token, ref, prNumber).catch(() => null)
+    // Same head read as sdk-release-sync. The page-open refresh posts here;
+    // reading checks on the stored bump commit would save "CI failing" again.
+    const snap = await fetchUpgradeCiOnHead(token, ref, prNumber, existingCommitSha, { workflow: true })
+    const pr = snap.pr
     const prState = pr?.state ?? existingPrState ?? null
-    const commitSha = pr?.headSha ?? existingCommitSha ?? null
-
-    const [checks, workflow, deploy] = await Promise.all([
-      commitSha ? fetchLatestCheckRun(token, ref, commitSha).catch(() => null) : Promise.resolve(null),
-      commitSha ? fetchLatestWorkflowRunForSha(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null) : Promise.resolve(null),
-      commitSha ? fetchLatestDeploymentStatusForSha(token, ref, commitSha).catch(() => null) : Promise.resolve(null),
-    ])
+    const commitSha = snap.commitSha
+    const checks = snap.checks
+    const workflow = snap.workflow
+    const deploy = snap.deploy
 
     // A PR merged directly on GitHub reports state='closed' + merged=true — the
     // `merged` flag is authoritative (GitHub never returns state='merged').

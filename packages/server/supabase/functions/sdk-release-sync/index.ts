@@ -3,8 +3,9 @@
  * PURPOSE: Periodic CI/deploy status sync for active SDK upgrade jobs.
  *
  * Called by pg_cron every 5 minutes. Finds jobs in `pr_opened | ready_to_merge |
- * blocked | merged | deploying` states, polls GitHub for current check-run +
- * deployment status, and upserts results into sdk_upgrade_jobs.
+ * blocked | merged | deploying` states, polls GitHub for the PR head's
+ * check-run + deployment status (not the stored bump commit), and upserts
+ * results into sdk_upgrade_jobs.
  *
  * Before that, jobs in status `awaiting_lockfile` (ADR 0019) get their PR
  * opened once the host's lockfile workflow pushed, or after 30 minutes.
@@ -21,11 +22,9 @@ import { logDbFailure } from '../_shared/error-codes.ts'
 import {
   resolveProjectGithubToken,
   type GithubRepoRef,
-  fetchPullRequestDetails,
-  fetchLatestCheckRun,
-  fetchLatestDeploymentStatusForSha,
   normalizeDeployStatus,
 } from '../_shared/github.ts'
+import { fetchUpgradeCiOnHead } from '../_shared/sdk-upgrade-ci.ts'
 import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
 
 const log = rootLog.child('sdk-release-sync')
@@ -89,18 +88,16 @@ app.post('/sdk-release-sync', async (c) => {
       const prNumber = parseInt(prNumberStr, 10)
       const ref: GithubRepoRef = { owner, repo }
 
-      const [pr, checks, deploy] = await Promise.all([
-        fetchPullRequestDetails(token, ref, prNumber).catch(() => null),
-        rawJob.commit_sha
-          ? fetchLatestCheckRun(token, ref, rawJob.commit_sha).catch(() => null)
-          : Promise.resolve(null),
-        rawJob.commit_sha
-          ? fetchLatestDeploymentStatusForSha(token, ref, rawJob.commit_sha).catch(() => null)
-          : Promise.resolve(null),
-      ])
+      // Checks follow the live head. Reading them on the stored bump commit
+      // (in parallel with the pull request) kept a red conclusion after a
+      // later commit had turned the required check green.
+      const snap = await fetchUpgradeCiOnHead(token, ref, prNumber, rawJob.commit_sha)
+      const pr = snap.pr
+      const checks = snap.checks
+      const deploy = snap.deploy
 
       const prState = pr?.state ?? rawJob.pr_state
-      const commitSha = pr?.headSha ?? rawJob.commit_sha
+      const commitSha = snap.commitSha
       // A PR merged directly on GitHub reports state='closed' + merged=true — the
       // `merged` flag is authoritative (GitHub never returns state='merged').
       const isMerged = pr?.merged === true || prState === 'merged' || Boolean(rawJob.merged_at)
