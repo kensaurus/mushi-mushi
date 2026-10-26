@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import type { Command } from 'commander'
 import { apiCall, requireConfig, requireUuid } from '../cli-shared.js'
 import type { CliConfig } from '../config.js'
@@ -814,10 +815,60 @@ async function commitWithHooks(wt: string, args: string[], log: (line: string) =
   }
 }
 
-async function preflight(repoDir: string): Promise<void> {
-  const status = await runProc('cursor-agent', ['status'], { timeoutMs: 60_000 })
-  if (status.code !== 0 || !/logged in/i.test(status.stdout + status.stderr)) {
+type CursorSignIn = 'signed_in' | 'signed_out' | 'unknown' | 'missing'
+
+/**
+ * @internal Exported for tests only. What one `cursor-agent status` run says.
+ * Only a clear answer counts: a timeout, a crash or an unclear exit under
+ * load is `unknown`, never "signed out". "Not logged in" is checked before
+ * "logged in", which it contains.
+ */
+export function cursorSignInState(p: Proc): CursorSignIn {
+  if (p.code === null && /\bENOENT\b/.test(p.stderr)) return 'missing'
+  if (p.timedOut || p.code === null) return 'unknown'
+  const out = stripVTControlCharacters(`${p.stdout}\n${p.stderr}`)
+  if (/\bnot\s+(?:logged|signed)\s+in\b|\blogged\s+out\b/i.test(out)) return 'signed_out'
+  if (p.code === 0 && /\b(?:logged|signed)\s+in\b/i.test(out)) return 'signed_in'
+  return 'unknown'
+}
+
+const CURSOR_STATUS_TIMEOUT_MS = 90_000
+const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
+
+/**
+ * @internal Exported for tests only. Ask `cursor-agent status` once more when
+ * the first answer is not "signed in". With 7 lanes at once on one machine
+ * the old single 60 s check reported "not signed in" 5 times in one lane
+ * while `cursor-agent status` said "Logged in" (Mushi report 7880503f).
+ */
+export async function checkCursorSignIn(
+  run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<{ state: CursorSignIn; detail: string }> {
+  let last: { state: CursorSignIn; detail: string } = { state: 'unknown', detail: 'not checked' }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await wait(CURSOR_STATUS_RETRY_DELAY_MS)
+    const p = await run('cursor-agent', ['status'], { timeoutMs: CURSOR_STATUS_TIMEOUT_MS })
+    const state = cursorSignInState(p)
+    const detail = p.timedOut
+      ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
+      : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
+    last = { state, detail }
+    if (state === 'signed_in' || state === 'missing') break
+  }
+  return last
+}
+
+async function preflight(repoDir: string, warn: (line: string) => void): Promise<void> {
+  const signIn = await checkCursorSignIn()
+  if (signIn.state === 'missing') {
+    throw new MushiCliError('E_FILE_NOT_FOUND', 'The Cursor CLI (cursor-agent) is not installed or not on PATH.', 'Install it: https://cursor.com/cli')
+  }
+  if (signIn.state === 'signed_out') {
     throw new MushiCliError('E_AUTH_MISSING', 'The Cursor CLI is not signed in.', 'Run: cursor-agent login')
+  }
+  if (signIn.state === 'unknown') {
+    warn(`Could not confirm the Cursor CLI sign-in (${signIn.detail}); continuing. If it is signed out, the agent stops at once: run cursor-agent login.`)
   }
   const gh = await runProc('gh', ['auth', 'status'], { timeoutMs: 30_000 })
   if (gh.code !== 0) throw new MushiCliError('E_AUTH_MISSING', 'gh is not signed in.', 'Run: gh auth login')
@@ -866,6 +917,7 @@ export function registerWorkCommands(program: Command): void {
       const log = (l: string) => {
         if (!opts.json) process.stdout.write(`${l}\n`)
       }
+      const warn = (l: string) => process.stderr.write(`${l}\n`)
       if (opts.followups) {
         const listed = await api<{ fixes: LocalFollowupCandidate[] }>(`/v1/admin/projects/${cfg.projectId}/local-followups`)
         const due = listed.fixes.slice(0, max)
@@ -875,7 +927,7 @@ export function registerWorkCommands(program: Command): void {
           if (!due.length) log('No pull request is waiting for a follow-up.')
           return
         }
-        await preflight(opts.repoDir)
+        await preflight(opts.repoDir, warn)
         await requireWriteScope(cfg)
         const results = []
         for (const f of due) {
@@ -900,7 +952,7 @@ export function registerWorkCommands(program: Command): void {
         if (!plan.length) log('Nothing to work on.')
         return
       }
-      await preflight(opts.repoDir)
+      await preflight(opts.repoDir, warn)
       await requireWriteScope(cfg)
       const results = []
       for (const d of picked) {
