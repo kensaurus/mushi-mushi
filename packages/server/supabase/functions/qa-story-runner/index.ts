@@ -350,6 +350,9 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
             waitFor?: number
             htmlOnly?: boolean
           }
+          // Only these keys are copied. test-gen-from-story also stores
+          // `playwrightSource` here so the spec survives when no PR is opened.
+          // Do not spread unknown keys into the Firecrawl body.
           if (Array.isArray(spec.actions)) actions = spec.actions
           if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
           if (typeof spec.waitFor === 'number') waitFor = spec.waitFor
