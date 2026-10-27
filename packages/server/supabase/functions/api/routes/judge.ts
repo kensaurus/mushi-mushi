@@ -12,6 +12,51 @@ function isoOrNull(raw: string | undefined): string | null {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+/** Weeks of agreement history the stats return (the console's trend line). */
+const AGREEMENT_WEEKS = 12;
+/** "Recent" on /judge means this many days, and the sentence says so. */
+const RECENT_DAYS = 14;
+/** Rows read for the trend; a project grading more than this in 12 weeks gets its newest rows only. */
+const AGREEMENT_ROW_CAP = 5000;
+
+/** Monday 00:00 UTC of the week holding `ms` (the same week date_trunc('week') uses). */
+function weekStartUtc(ms: number): string {
+  const d = new Date(ms);
+  const day = (d.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+}
+
+/**
+ * Agreement per week (oldest first) and over the last RECENT_DAYS, from
+ * (created_at, classification_agreed) rows. `capped` is true when the read
+ * hit AGREEMENT_ROW_CAP, so the oldest weeks may be partial.
+ */
+function agreementSummary(rows: Array<{ created_at: string; classification_agreed: boolean | null }>, now: number) {
+  const weeks = new Map<string, { weekStart: string; graded: number; agreed: number }>();
+  const recentFrom = now - RECENT_DAYS * 86_400_000;
+  let recentGraded = 0;
+  let recentDisagreed = 0;
+  for (const r of rows) {
+    const t = Date.parse(r.created_at);
+    if (!Number.isFinite(t)) continue;
+    const key = weekStartUtc(t);
+    const w = weeks.get(key) ?? { weekStart: key, graded: 0, agreed: 0 };
+    w.graded += 1;
+    if (r.classification_agreed !== false) w.agreed += 1;
+    weeks.set(key, w);
+    if (t >= recentFrom) {
+      recentGraded += 1;
+      if (r.classification_agreed === false) recentDisagreed += 1;
+    }
+  }
+  return {
+    agreementWeeks: [...weeks.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)),
+    recentEvaluations: recentGraded,
+    recentDisagreements: recentDisagreed,
+    capped: rows.length >= AGREEMENT_ROW_CAP,
+  };
+}
+
 export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
   app.get('/v1/admin/judge/stats', jwtAuth, async (c) => {
@@ -30,6 +75,14 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       weekOverWeekDriftPct: null as number | null,
       disagreementCount: 0,
       disagreementRatePct: null as number | null,
+      /** Days that "recent" covers in the fields below. */
+      recentWindowDays: RECENT_DAYS,
+      /** Grades in the last recentWindowDays; null when that read failed. */
+      recentEvaluations: null as number | null,
+      recentDisagreements: null as number | null,
+      /** Share of grades per week where the grader agreed with the diagnosis, oldest first. */
+      agreementWeeks: [] as Array<{ weekStart: string; graded: number; agreed: number }>,
+      agreementCapped: false,
       classifiedReports: 0,
       ungradedReports: 0,
       promptVersionCount: 0,
@@ -64,7 +117,8 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const activeProject = resolvedProject.project;
     const pid = activeProject.id;
 
-    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptCountRes, activePromptRes, ungradedRes] =
+    const agreementSince = new Date(Date.now() - AGREEMENT_WEEKS * 7 * 86_400_000).toISOString();
+    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptCountRes, activePromptRes, ungradedRes, agreementRes] =
       await Promise.all([
         db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 2 }),
         db
@@ -108,7 +162,22 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
             .in('status', [...JUDGE_ELIGIBLE_STATUSES])
             .is('judge_evaluated_at', null),
         ),
+        // Two narrow columns over 12 weeks: the agreement trend and the
+        // recent window, so "recent" on the page is really recent (64c2b3df).
+        db
+          .from('classification_evaluations')
+          .select('created_at, classification_agreed')
+          .eq('project_id', pid)
+          .gte('created_at', agreementSince)
+          .order('created_at', { ascending: false })
+          .limit(AGREEMENT_ROW_CAP),
       ]);
+    const agreement = agreementRes.error
+      ? null
+      : agreementSummary(
+          (agreementRes.data ?? []) as Array<{ created_at: string; classification_agreed: boolean | null }>,
+          Date.now(),
+        );
 
     const weeks = (weekRes.data ?? []) as Array<{
       week_start: string;
@@ -172,9 +241,18 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'drifting';
       topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
-    } else if (disagreementRatePct != null && disagreementRatePct >= 20) {
+    } else if (
+      agreement && agreement.recentEvaluations >= 5
+        ? (agreement.recentDisagreements / agreement.recentEvaluations) * 100 >= 20
+        : disagreementRatePct != null && disagreementRatePct >= 20
+    ) {
       topPriority = 'disagreements';
-      topPriorityLabel = `The judge disagreed with the classifier on ${disagreementRatePct}% of recent grades. Review mismatches before merging fixes.`;
+      // Say which window the share covers: the old label said "recent" over
+      // an all-time count (64c2b3df).
+      topPriorityLabel =
+        agreement && agreement.recentEvaluations >= 5
+          ? `The grader disagreed with the diagnosis on ${Math.round((agreement.recentDisagreements / agreement.recentEvaluations) * 100)}% of the ${agreement.recentEvaluations} grades in the last ${RECENT_DAYS} days. Review them before merging their fixes.`
+          : `The grader disagreed with the diagnosis on ${disagreementRatePct}% of all ${totalEvaluations} grades so far. Review them before merging their fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
     } else if (staleHours != null && staleHours > 72 && ungradedReports > 0) {
       topPriority = 'stale';
@@ -203,6 +281,11 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         weekOverWeekDriftPct,
         disagreementCount,
         disagreementRatePct,
+        recentWindowDays: RECENT_DAYS,
+        recentEvaluations: agreement?.recentEvaluations ?? null,
+        recentDisagreements: agreement?.recentDisagreements ?? null,
+        agreementWeeks: agreement?.agreementWeeks ?? [],
+        agreementCapped: agreement?.capped ?? false,
         classifiedReports,
         ungradedReports,
         promptVersionCount,

@@ -1301,7 +1301,7 @@ const COPY: CopyRegistry = {
     '/judge': {
       title: 'Triage grading',
       description:
-        'Banner + JUDGE SNAPSHOT first — then Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
+        'Whether you can trust Mushi’s diagnoses: how often a second AI agrees with them, and the worst recent disagreements.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         week: 'This week',
@@ -1329,11 +1329,11 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About triage grading',
         whatIsIt:
-          "A second LLM independently grades the classifier's output on every report — was the category right, was the severity right, was the affected component right, and were the repro steps usable. We chart those scores over time so you can tell if the model is improving.",
+          "A second AI grades each diagnosis Mushi makes: was the category right, the severity, the part of the app, and were the steps to reproduce usable. The chart shows how often it agrees, week by week, so you can tell whether to trust a diagnosis before you merge its fix.",
         useCases: [
-          'See whether judge scores are improving week-over-week',
-          'Find classifier prompts that produce consistently low scores so you can rewrite them',
-          'Catch a regression in the classifier before bad review decisions ship',
+          'See whether the diagnoses are getting better or worse week by week',
+          'Read the worst recent disagreements before merging their fixes',
+          'Find the AI prompts that keep scoring low so they can be rewritten',
         ],
         howToUse:
           'Click any prompt row in the leaderboard to filter Recent evaluations to just that version. Click any low-score row to inspect the original report and the judge\u2019s reasoning.',

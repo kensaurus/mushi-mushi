@@ -19,6 +19,7 @@ import {
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { JudgeStatusBanner, isJudgeStatusBannerCritical } from '../components/judge/JudgeStatusBanner'
+import { JudgeAgreementOverview } from '../components/judge/JudgeAgreementOverview'
 import { JudgeSnapshotStrip } from '../components/judge/JudgeSnapshotStrip'
 import { JudgePipelineGuide } from '../components/judge/JudgePipelineGuide'
 import {
@@ -309,6 +310,14 @@ export function JudgePage() {
     },
     [setSearchParams],
   )
+  const seeDisagreements = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('tab', 'evaluations')
+      next.set('filter', 'disagreement')
+      return next
+    })
+  }, [setSearchParams])
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -724,7 +733,7 @@ export function JudgePage() {
         </Btn>
         <Btn
           size="sm"
-          variant="primary"
+          variant={stats.totalEvaluations > 0 ? 'ghost' : 'primary'}
           id={JUDGE_RUN_BUTTON_ID}
           onClick={() => setRunConfirmOpen(true)}
           disabled={running}
@@ -742,7 +751,10 @@ export function JudgePage() {
         )}
       </PageHeaderBar>
 
-      {isJudgeStatusBannerCritical(stats) ? (
+      {/* Once grades exist the page leads with one status sentence and its
+          "See disagreements" action; the banner and the pipeline guide are
+          for an empty or broken page only (console journeys 2026-10-27). */}
+      {isJudgeStatusBannerCritical(stats) && stats.totalEvaluations === 0 ? (
         <PagePosture
           slots={[
             {
@@ -778,18 +790,24 @@ export function JudgePage() {
           ]}
         />
       ) : (
-        <>
-          <JudgePipelineGuide topPriority={stats.topPriority} stats={stats} />
-          {!ux.hideJudgeSnapshot && (
-            <JudgeSnapshotStrip
-              stats={stats}
-              statsFetchedAt={statsFetchedAt}
-              statsValidating={statsValidating}
-              statLabels={copy?.statLabels}
-            />
-          )}
-        </>
+        !ux.hideJudgeSnapshot && (
+          <JudgeSnapshotStrip
+            stats={stats}
+            statsFetchedAt={statsFetchedAt}
+            statsValidating={statsValidating}
+            statLabels={copy?.statLabels}
+            onSeeDisagreements={seeDisagreements}
+          />
+        )
       )}
+
+      {activeTab === 'overview' && stats.totalEvaluations > 0 ? (
+        <JudgeAgreementOverview
+          weeks={stats.agreementWeeks ?? []}
+          windowDays={stats.recentWindowDays ?? 14}
+          capped={stats.agreementCapped}
+        />
+      ) : null}
 
       {!ux.hideTabs && (
       <SegmentedControl<JudgeTabId>
