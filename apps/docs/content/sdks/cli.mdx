@@ -317,6 +317,7 @@ Where your tests run and why a fix waits to land. Full guide: [CI runners](/oper
 ```bash
 mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runners, wait times, test machine vs code failures
 mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
+mushi runner bill [--month 2026-10] [--owner login] [--push] [--json]  # what GitHub actually charged, read with your own gh login; --push shows it in the console
 mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services

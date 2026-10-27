@@ -132,6 +132,67 @@ describe('mushi runner compare', () => {
   })
 })
 
+describe('mushi runner bill', () => {
+  const USAGE = {
+    usageItems: [
+      { date: '2026-10-01T00:47:27Z', product: 'actions', sku: 'Actions Linux', quantity: 100, unitType: 'Minutes', grossAmount: 0.6, discountAmount: 0, netAmount: 0.6, repositoryName: 'api' },
+      { date: '2026-10-01T00:00:00Z', product: 'copilot', sku: 'Copilot Premium Request', quantity: 3, unitType: 'requests', grossAmount: 0.12, discountAmount: 0, netAmount: 0.12 },
+    ],
+  }
+  const github = (call: { path: string }) => {
+    if (call.path === 'https://api.github.com/user') return { body: { login: 'acme' } }
+    if (call.path === 'https://api.github.com/users/acme') return { body: { type: 'User' } }
+    if (call.path.startsWith('https://api.github.com/users/acme/settings/billing/usage')) return { body: USAGE }
+    if (call.path === '/v1/admin/ci/bill') return okReply({ owner: 'acme', month: '2026-10', rows: 1, netUsd: 0.6 })
+    return { status: 404, body: {} }
+  }
+
+  it('reads the month with GITHUB_TOKEN, prints net per repo, and never sends the token to Mushi', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'ghp_fake_bill_token')
+    const run = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '2026-10'], github)
+    expect(run.error).toBeNull()
+    expect(run.calls.map((c) => c.path)).toEqual([
+      'https://api.github.com/user',
+      'https://api.github.com/users/acme',
+      'https://api.github.com/users/acme/settings/billing/usage?year=2026&month=10',
+    ])
+    expect(run.calls[0]!.headers.Authorization).toBe('Bearer ghp_fake_bill_token')
+    expect(run.stdout).toContain('GitHub Actions bill for acme, 2026-10')
+    expect(run.stdout).toMatch(/acme\/api\s+\$0\.60 net/)
+    expect(run.stdout).not.toContain('ghp_fake_bill_token')
+    expect(run.stdout).toContain('--push')
+  })
+
+  it('--push uploads only the Actions items to the configured project; gh auth token is the fallback', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '')
+    const { gh, calls } = fakeGh({ 'auth token': 'gho_from_gh\n' })
+    restore?.()
+    restore = __setRunnerDeps({ host: fakeHost(), gh })
+    const run = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '2026-10', '--push', '--json'], github)
+    expect(calls).toEqual([['auth', 'token']])
+    const push = run.calls.find((c) => c.path === '/v1/admin/ci/bill')!
+    expect(push.method).toBe('POST')
+    expect(push.body).toMatchObject({ projectId: TEST_PROJECT_ID, owner: 'acme', ownerType: 'User', year: 2026, month: 10 })
+    expect((push.body as { items: unknown[] }).items).toEqual([expect.objectContaining({ product: 'actions', sku: 'Actions Linux', repositoryName: 'api' })])
+    expect(JSON.stringify(push.body)).not.toContain('gho_from_gh')
+    expect(JSON.parse(run.stdout)).toMatchObject({ owner: 'acme', netUsd: 0.6, pushed: { rows: 1 } })
+  })
+
+  it('refuses a bad month or owner before any call, and says how to sign in without a GitHub login', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '')
+    const bad = await runCli(registerRunnerCommands, ['runner', 'bill', '--month', '10-2026'])
+    expect(bad.error?.message).toMatch(/2026-10/)
+    expect(bad.calls).toEqual([])
+    const owner = await runCli(registerRunnerCommands, ['runner', 'bill', '--owner', '-x'])
+    expect(owner.error?.message).toMatch(/GitHub user or organization/)
+    restore?.()
+    restore = __setRunnerDeps({ host: fakeHost(), gh: fakeGh({}).gh })
+    const none = await runCli(registerRunnerCommands, ['runner', 'bill'])
+    expect(none.error?.message).toMatch(/No GitHub login/)
+    expect(none.calls).toEqual([])
+  })
+})
+
 describe('mushi runner placement', () => {
   const REQ = '33333333-4444-4555-8666-777777777777'
 
