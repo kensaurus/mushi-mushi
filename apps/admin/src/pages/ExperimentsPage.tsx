@@ -3,6 +3,7 @@
  * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
  *          Experiments | New, readout at the foot. Below sm, each experiment
  *          row stacks so Launch and its icon button stay fully visible at 390px.
+ *          Variant count and mode stay on that row's meta line until md.
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -402,8 +403,9 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
     )}
     <Card className="min-w-0 overflow-hidden">
       {/* Six columns overflow a 390px card and clip Launch down to "L", plus
-          the trailing icon. Below sm the row is a stack: the name truncates
-          and the actions sit on a full-width line. */}
+          the trailing icon. Below sm the row is a stack: the name wraps
+          and the actions sit on a full-width line. Variants and Mode stay
+          in the meta line until md, where those columns take over. */}
       <table className="block w-full text-sm sm:table">
         <thead className="hidden sm:table-header-group">
           <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
@@ -421,13 +423,13 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
               <td className="block min-w-0 px-3 pt-2 sm:table-cell sm:py-2">
                 <div className="font-medium text-fg wrap-break-word">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
-                  {statusBadge(e.status)}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
+                  <span className="sm:hidden">{statusBadge(e.status)}</span>
                   <span className="text-xs tabular-nums text-fg-muted">{e.experiment_variants?.length ?? 0} variants</span>
                   {e.bandit_enabled
                     ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
                     : <span className="text-xs text-fg-muted">Static</span>}
-                  <span className="text-xs text-fg-muted"><RelativeTime value={e.created_at} /></span>
+                  <span className="text-xs text-fg-muted sm:hidden"><RelativeTime value={e.created_at} /></span>
                 </div>
               </td>
               <td className="hidden px-3 py-2 sm:table-cell">{statusBadge(e.status)}</td>
@@ -439,7 +441,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
               </td>
               <td className="hidden px-3 py-2 text-xs text-fg-muted sm:table-cell"><RelativeTime value={e.created_at} /></td>
               <td className="block px-3 pt-1 pb-2 sm:table-cell sm:py-2">
-                <div className="flex w-full shrink-0 gap-1 justify-end sm:w-auto">
+                <div className="flex w-full gap-1 justify-end sm:w-auto">
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
                     // A row action, not the page's main action: one primary per view (Carbon), green for "start".
                     <Btn size="sm" variant="success" className="shrink-0 whitespace-nowrap" onClick={() => onLaunch(e.id)}>Launch</Btn>

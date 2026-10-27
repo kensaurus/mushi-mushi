@@ -1,14 +1,17 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.test.tsx
- * PURPOSE: The experiment list keeps Launch and the trailing icon on screen
- *          at phone width. Below sm the row stacks; the action label does
- *          not shrink (report fbea6eb6).
+ * PURPOSE: Class-contract for the experiment list row (jsdom has no layout).
+ *          Below sm the row stacks and Launch does not shrink. From sm to md
+ *          the variant count and mode stay on the meta line (report fbea6eb6).
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import type * as ExperimentsModeUx from '../lib/experimentsModeUx'
 import { EMPTY_EXPERIMENTS_STATS } from '../components/experiments/ExperimentsStatsTypes'
 
 vi.mock('../lib/usePageData', () => ({
@@ -72,7 +75,7 @@ vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/experimentsModeUx', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/experimentsModeUx')>()
+  const actual = await importOriginal<typeof ExperimentsModeUx>()
   return {
     ...actual,
     useExperimentsUx: () => ({
@@ -115,6 +118,10 @@ function render() {
   })
 }
 
+function classTokens(className: string | undefined): string[] {
+  return (className ?? '').split(/\s+/).filter(Boolean)
+}
+
 describe('Experiments list at phone width', () => {
   it('stacks the row below sm and keeps Launch plus the view icon from shrinking', () => {
     render()
@@ -134,13 +141,54 @@ describe('Experiments list at phone width', () => {
     const actions = launch?.closest('td')
     expect(actions?.className).toContain('block')
     expect(actions?.className).toContain('sm:table-cell')
-    expect(actions?.querySelector('.shrink-0')).toBeTruthy()
+    // The actions wrapper is a block td's child, so shrink-0 on it does nothing.
+    // Launch and the icon buttons still refuse to shrink.
+    const actionsWrap = actions?.firstElementChild
+    expect(actionsWrap?.tagName).toBe('DIV')
+    expect(classTokens(actionsWrap?.className)).not.toContain('shrink-0')
+    expect(classTokens(actionsWrap?.className)).toContain('w-full')
+    const actionButtons = Array.from(actionsWrap?.querySelectorAll('button') ?? [])
+    expect(actionButtons.length).toBeGreaterThan(0)
+    for (const button of actionButtons) {
+      expect(classTokens(button.className)).toContain('shrink-0')
+    }
 
     const row = launch?.closest('tr')
     expect(row?.className).toContain('block')
     expect(row?.className).toContain('sm:table-row')
-    // Status stays on the narrow row; the extra columns stay off until there is room.
-    expect(row?.textContent).toContain('Draft')
-    expect(row?.querySelector('td.hidden.md\\:table-cell, td.hidden')).toBeTruthy()
+    const name = row?.querySelector('.wrap-break-word')
+    expect(name?.textContent).toContain('Button colour CTA test')
+    expect(classTokens(name?.className)).not.toContain('truncate')
+
+    const cells = Array.from(row?.querySelectorAll(':scope > td') ?? [])
+    // Variants and Mode only. A bare `td.hidden` also matches Status and Created.
+    const hiddenUntilMd = cells.filter((td) => {
+      const tokens = classTokens(td.className)
+      return tokens.includes('hidden') && tokens.includes('md:table-cell') && !tokens.includes('sm:table-cell')
+    })
+    expect(hiddenUntilMd.map((td) => td.textContent?.trim())).toEqual(['2', 'Static'])
+    const anyHidden = cells.filter((td) => classTokens(td.className).includes('hidden'))
+    expect(anyHidden.length).toBeGreaterThan(hiddenUntilMd.length)
+
+    const meta = row?.querySelector(':scope > td div.md\\:hidden')
+    expect(meta).toBeTruthy()
+    expect(classTokens(meta?.className)).not.toContain('sm:hidden')
+    const variant = Array.from(meta?.querySelectorAll('span') ?? []).find((el) => el.textContent === '2 variants')
+    const mode = Array.from(meta?.querySelectorAll('span') ?? []).find((el) => el.textContent === 'Static')
+    expect(variant).toBeTruthy()
+    expect(mode).toBeTruthy()
+    expect(variant?.closest('.sm\\:hidden')).toBeNull()
+    expect(mode?.closest('.sm\\:hidden')).toBeNull()
+    const hiddenFromSm = Array.from(meta?.querySelectorAll(':scope > .sm\\:hidden') ?? [])
+    expect(hiddenFromSm).toHaveLength(2)
+    expect(hiddenFromSm[0]?.textContent).toContain('Draft')
+    expect(hiddenFromSm[1]?.textContent).not.toContain('variants')
+    expect(hiddenFromSm[1]?.textContent?.trim().length).toBeGreaterThan(0)
+  })
+
+  it('says the experiment name wraps', () => {
+    const source = readFileSync(join(__dirname, 'ExperimentsPage.tsx'), 'utf8')
+    expect(source).toContain('the name wraps')
+    expect(source).not.toContain('the name truncates')
   })
 })
