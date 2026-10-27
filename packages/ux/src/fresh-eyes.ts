@@ -93,13 +93,22 @@ export function fillValue(value: string, identity: Identity | null): string | nu
 /** @internal Exported for tests only. Pure: the text with every identity value replaced by its placeholder. */
 export function redact<T>(value: T, identity: Identity | null): T {
   if (!identity) return value
-  let s = JSON.stringify(value)
+  // Each value as it can appear: as typed, quoted in an accessibility snapshot or JSON (\" and \\), and URL-encoded.
+  const forms: Array<[string, string]> = []
   for (const [k, v] of Object.entries(identity) as Array<[string, string | undefined]>) {
     if (!v || v.length < 3) continue
-    const escaped = JSON.stringify(v).slice(1, -1)
-    s = s.split(escaped).join(`{{${k}}}`)
+    for (const f of new Set([v, v.replace(/\\/g, '\\\\').replace(/"/g, '\\"'), encodeURIComponent(v)])) forms.push([f, `{{${k}}}`])
   }
-  return JSON.parse(s) as T
+  // Longest first, so a form is never cut by a shorter one inside it.
+  forms.sort((a, b) => b[0].length - a[0].length)
+  const text = (s: string) => forms.reduce((out, [f, ph]) => out.split(f).join(ph), s)
+  const walk = (x: unknown): unknown => {
+    if (typeof x === 'string') return text(x)
+    if (Array.isArray(x)) return x.map(walk)
+    if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x as Record<string, unknown>).map(([k, v]) => [k, walk(v)]))
+    return x
+  }
+  return walk(value) as T
 }
 
 // ── Page facts (measured, model-free) ───────────────────────────────────────
@@ -594,8 +603,8 @@ export interface FreshEyesOptions {
   model?: string
   /** Hosts that are the app's own (e.g. its Supabase project); writes may reach them. */
   appHosts?: string[]
-  /** A synthetic identity per session (minted by the caller); null = no account. */
-  identity?: (session: number) => Promise<Identity | null>
+  /** A synthetic identity per session (minted by the caller). Without it the run has no account and stays read-only. */
+  identity?: (session: number) => Promise<Identity>
   /** Read-only and no account, whatever else is set. */
   dryRun?: boolean
   allow?: readonly AllowRule[]
@@ -894,10 +903,11 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         .slice(blockedBefore)
         .map((r) => requestRefusal(r.method, r.url, true))
         .filter((r): r is string => !!r)
-      if (refusal && !refusedRequests.length) {
+      // A label the run refused never ran, whatever else the page requested; a click that failed after the guard refused its navigation was blocked.
+      if (refusal && (refusal.startsWith('refused') || !refusedRequests.length)) {
         step.outcome = refusal.startsWith('refused') ? 'refused' : 'failed'
         step.note = refusal
-        if (refusal.startsWith('refused')) x.refused.push(refusal)
+        if (refusal.startsWith('refused')) x.refused.push(redact(refusal, identity))
         await record(step)
         if (refusal === REFUSED_VALUE && !identity) {
           stall(n, 'signup_wall', 'The visitor reached a form that needs an account and the run has none.')

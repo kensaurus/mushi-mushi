@@ -195,16 +195,58 @@ async function target(page: Page, role: string, name: string) {
 /** What perform returns when fillValue refuses a value. */
 export const REFUSED_VALUE = 'refused: a test run types only its own test account'
 
-/** The accessible label an element reads as, best effort: aria-label, its text, its value or title. */
-async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise<string> {
-  return loc
-    .evaluate((el) => {
-      const h = el as HTMLElement
-      const labelled = h.getAttribute('aria-labelledby')
-      const byId = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' ') : ''
-      return (h.getAttribute('aria-label') || byId || h.innerText || h.getAttribute('value') || h.getAttribute('title') || '').trim().slice(0, 200)
-    }, undefined, { timeout: 3000 })
-    .catch(() => '')
+/**
+ * What an element reads as: its aria-label, aria-labelledby text, text, value
+ * and title, the labels inside it (an icon's aria-label), and the first line
+ * of Playwright's accessibility snapshot (its computed name). Null when it
+ * cannot be read: the caller refuses then, since an unread label is not a
+ * safe one.
+ */
+async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise<string | null> {
+  try {
+    const own = await loc.evaluate(
+      (el) => {
+        const h = el as HTMLElement
+        const labelled = h.getAttribute('aria-labelledby')
+        const byId = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' ') : ''
+        const inner = [...h.querySelectorAll('[aria-label], [title]')].map((c) => c.getAttribute('aria-label') ?? c.getAttribute('title') ?? '').join(' ')
+        return [h.getAttribute('aria-label'), byId, h.innerText, h.getAttribute('value'), h.getAttribute('title'), inner].filter(Boolean).join(' ').trim().slice(0, 400)
+      },
+      undefined,
+      { timeout: 5000 },
+    )
+    const snap = await loc.ariaSnapshot({ timeout: 5000 })
+    return `${own} ${snap.split(/\r?\n/)[0] ?? ''}`.trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What Enter or Space on the focused element acts on: the element and, inside
+ * a form, the form's label and its submit buttons (Enter in a field submits
+ * through them). Null when it cannot be read.
+ */
+async function focusedLabels(page: Page): Promise<string[] | null> {
+  try {
+    return await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null
+      if (!el || el === document.body) return []
+      const read = (h: Element) => [h.getAttribute('aria-label'), (h as HTMLElement).innerText, h.getAttribute('value'), h.getAttribute('title')].filter(Boolean).join(' ').trim()
+      const out = [read(el)]
+      const form = (el as HTMLInputElement).form ?? el.closest('form')
+      if (form) {
+        out.push(form.getAttribute('aria-label') ?? '')
+        for (const b of form.querySelectorAll('button, input[type=submit], input[type=image]')) {
+          const type = (b.getAttribute('type') ?? 'submit').toLowerCase()
+          if (type === 'submit' || type === 'image') out.push(read(b))
+        }
+      }
+      return out.filter(Boolean).map((x) => x.slice(0, 200))
+    })
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -229,8 +271,10 @@ export async function perform(
       case 'click': {
         if (refuse(a.name)) return `refused: "${a.name}" reads as destructive`
         const loc = await target(page, a.role, a.name)
+        if ((await loc.count().catch(() => 0)) === 0) return `could not run: no ${a.role} "${a.name.slice(0, 80)}" on the page`
         const resolved = await accessibleLabel(loc)
-        if (resolved && refuse(resolved)) return `refused: "${resolved.slice(0, 80)}" reads as destructive`
+        if (resolved === null) return `refused: could not read what "${a.name.slice(0, 80)}" is`
+        if (refuse(resolved)) return `refused: "${resolved.slice(0, 80)}" reads as destructive`
         await loc.click({ timeout: 5000 })
         break
       }
@@ -245,14 +289,10 @@ export async function perform(
         break
       case 'press': {
         if (a.key === 'Enter' || a.key === 'Space') {
-          const focused = await page
-            .evaluate(() => {
-              const el = document.activeElement as HTMLElement | null
-              if (!el || el === document.body) return ''
-              return (el.getAttribute('aria-label') || el.innerText || el.getAttribute('value') || el.getAttribute('title') || '').trim().slice(0, 200)
-            })
-            .catch(() => '')
-          if (focused && refuse(focused)) return `refused: "${focused.slice(0, 80)}" reads as destructive`
+          const labels = await focusedLabels(page)
+          if (labels === null) return `refused: could not read what ${a.key} would press`
+          const bad = labels.find((l) => refuse(l))
+          if (bad) return `refused: "${bad.slice(0, 80)}" reads as destructive`
         }
         await page.keyboard.press(a.key === 'Space' ? ' ' : a.key)
         break

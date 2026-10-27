@@ -57,7 +57,7 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
       res.end(page)
     }
     if (path === '/') {
-      return send(200, html('Acme', `<h1>Acme explains your bugs</h1><p>Sign in to see why your app broke, in plain words, with a fix ready for your editor. It takes about a minute.</p><a href="/login">Get started</a> <a href="/pricing">Pricing</a> <button id="copy">Copy the install line</button>`, "document.getElementById('copy').onclick = () => navigator.clipboard.writeText('npm i acme')"))
+      return send(200, html('Acme', `<h1>Acme explains your bugs</h1><p>Sign in to see why your app broke, in plain words, with a fix ready for your editor. It takes about a minute.</p><a href="/login">Get started</a> <a href="/pricing">Pricing</a> <button id="copy">Copy the install line</button> <label>Your name <input name="who"></label> <button id="join">Join the waitlist</button>`, "document.getElementById('copy').onclick = () => navigator.clipboard.writeText('npm i acme'); document.getElementById('join').onclick = () => fetch('/api/waitlist', { method: 'POST', body: 'x' }).catch(() => {})"))
     }
     if (path === '/pricing') return send(200, html('Pricing', `<h1>Pricing</h1><p>Free for one app, more when you grow.</p><a href="https://checkout.stripe.com/c/pay/cs_test_1">Upgrade</a> <a href="https://checkout.stripe.com/c/pay/cs_test_2">See plans</a> <a href="/">Home</a>`))
     if (path === '/login' && method === 'GET') {
@@ -69,7 +69,7 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
       return send(303, '', ok ? { location: '/dashboard', 'set-cookie': 'sid=1; Path=/' } : { location: '/login' })
     }
     if (path === '/dashboard') {
-      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
+      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button> <form action="/api/projects/1/delete" method="post"><label>Type the project name <input name="confirm"></label> <button type="submit">Delete project</button></form>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
 document.getElementById('create').onclick = async () => { await fetch('/api/apps', { method: 'POST', body: '{}' }); location.href = '/reports/1' }`))
     }
     if (path === '/api/apps' && method === 'POST') {
@@ -95,6 +95,9 @@ function scriptedAsk(feelingOnLanding: (session: number) => boolean, prompts: st
     if (snap.includes('Create app')) {
       // "project" resolves to "Delete project": the resolved label is checked, not only the words the model used.
       if (!did.includes('Click the button "project"')) return j({ action: 'click', role: 'button', name: 'project' })
+      // Enter in a field submits its form through "Delete project": checked on the form's submit buttons.
+      if (!did.includes('Type the project name')) return j({ action: 'fill', role: 'textbox', name: 'Type the project name', value: 'acme' })
+      if (!did.includes('Press Enter')) return j({ action: 'press', key: 'Enter' })
       return j({ action: 'click', role: 'button', name: 'Create app' })
     }
     if (snap.includes('Sign in to Acme')) {
@@ -113,6 +116,9 @@ function scriptedAsk(feelingOnLanding: (session: number) => boolean, prompts: st
     if (snap.includes('Acme explains your bugs')) {
       const feeling = feelingOnLanding(session) ? { feeling: 'unclear_copy', why: 'What is a diagnosis?' } : {}
       if (!did.includes('Copy the install line')) return j({ action: 'click', role: 'button', name: 'Copy the install line', ...feeling })
+      // With no account, try the one write that needs none: it must not reach the app.
+      if (noAccount && !did.includes('Your name')) return j({ action: 'fill', role: 'textbox', name: 'Your name', value: 'Sam' })
+      if (noAccount && !did.includes('Join the waitlist')) return j({ action: 'click', role: 'button', name: 'Join the waitlist' })
       if (!noAccount && !did.includes('Pricing')) return j({ action: 'click', role: 'link', name: 'Pricing' })
       return j({ action: 'click', role: 'link', name: 'Get started' })
     }
@@ -154,7 +160,7 @@ describe('fresh-eyes on a local app', () => {
       goal: 'see why my app broke',
       success: { url: '/reports/*', text: 'Why it broke' },
       sessions: 2,
-      steps: 15,
+      steps: 20,
       identity: async () => IDENTITY,
       ask: scriptedAsk(() => true, prompts),
       outDir: dir,
@@ -180,6 +186,10 @@ describe('fresh-eyes on a local app', () => {
     expect(steps.filter((s) => s.action.includes('See plans')).every((s) => s.outcome === 'blocked')).toBe(true)
     expect(steps.filter((s) => s.action.includes('More ways in')).every((s) => s.outcome === 'blocked' && s.requirements?.includes('third_party_account'))).toBe(true)
     expect(steps.some((s) => s.action.includes('See plans'))).toBe(true)
+    expect(steps.some((s) => s.action.includes('More ways in'))).toBe(true)
+    // Enter in the confirm field would submit "Delete project": refused, and nothing reached /api/projects.
+    expect(steps.some((s) => s.action === 'Press Enter' && s.outcome === 'refused')).toBe(true)
+    expect(app.writes.some((w) => w.path.startsWith('/api/projects'))).toBe(false)
     // "project" resolved to "Delete project" and was refused; the delete never reached the app.
     expect(steps.some((s) => s.action === 'Click the button "project"' && s.outcome === 'refused')).toBe(true)
     expect(app.writes.some((w) => w.method === 'DELETE')).toBe(false)
@@ -204,6 +214,9 @@ describe('fresh-eyes on a local app', () => {
       outDir: out(),
     })
     expect(result.hasAccount).toBe(false)
+    // The visitor did try a write (the waitlist): the guard stopped it, the app saw nothing.
+    expect(result.sessions[0]!.steps.some((s) => s.action.includes('Join the waitlist') && s.outcome === 'ok')).toBe(true)
+    expect(result.blocked).toBeGreaterThan(0)
     expect(app.writes.length).toBe(before)
     expect(result.stalledAt?.reason).toBe('signup_wall')
   })

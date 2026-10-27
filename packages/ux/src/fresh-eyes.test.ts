@@ -75,6 +75,11 @@ describe('synthetic identity', () => {
     expect(out).toContain('{{email}}')
     expect(out).toContain('{{password}}')
     expect(redact(leaked, null)).toBe(leaked)
+    // An accessibility snapshot escapes " and \ in a quoted value; a link URL-encodes an email.
+    const odd = { email: 'fe+1@synthetic.example', password: 'pa"ss\\word-123' }
+    const snap = ['- textbox "Password": "pa\\"ss\\\\word-123"', '- link "/u?e=fe%2B1%40synthetic.example"', `- text: ${odd.password} ${odd.email}`].join('\n')
+    const out2 = redact(snap, odd)
+    expect(out2).toBe('- textbox "Password": "{{password}}"\n- link "/u?e={{email}}"\n- text: {{password}} {{email}}')
   })
 
   it('tells the model to type placeholders, and with no account to say stuck', () => {

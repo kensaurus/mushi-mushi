@@ -528,9 +528,17 @@ program
       console.log(`${result.findings.length} finding(s), ${result.blocked} request(s) blocked. Timeline: ${timeline}`)
       for (const w of result.warnings) console.warn(w)
       // Findings are filed against the synced run, so --file syncs it too.
+      let syncError: string | null = null
       if ((o.sync || o.file) && cfg && !o.dryRun) {
-        const err = await syncFreshEyes(cfg, result, null)
-        console.log(err ? `Console sync failed: ${err}` : 'Synced to the console (UX runs → Fresh eyes).')
+        syncError = await syncFreshEyes(cfg, result, null)
+        console.log(syncError ? `Console sync failed: ${syncError}` : 'Synced to the console (UX runs → Fresh eyes).')
+      }
+      if (o.file && syncError) {
+        // Every finding would be refused without its run: keep them to file later instead.
+        const path = join(result.dir, 'to-file.json')
+        writeFileSync(path, JSON.stringify(result.findings, null, 2))
+        console.log(`Nothing filed because the run did not sync. ${result.findings.length} finding(s) kept in ${path}`)
+        return
       }
       if (!o.file) {
         for (const f of result.findings) console.log(`- ${f.severity} (${f.basis}) ${f.screen}: ${f.summary}`)
