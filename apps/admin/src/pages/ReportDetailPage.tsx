@@ -85,6 +85,7 @@ import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFo
 import { RegressionChain } from '../components/report-detail/RegressionChain'
 import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
+import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
@@ -621,6 +622,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />
+        {/* Hidden unless you have a local worker lane for this app (ADR 0048). */}
+        <SendToWorkerButton projectId={report.project_id} reportIds={[report.id]} data-testid="report-send-to-worker" />
       </div>
 
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the

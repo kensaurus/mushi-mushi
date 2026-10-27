@@ -8,6 +8,7 @@
  *            re_review, rerun_ci, queue_merge → the existing fix and merge-queue routes
  *            dismiss                          → the report's own close route (PATCH /v1/admin/reports/:id)
  *            everything else                  → POST /v1/admin/pipeline/actions
+ *                                               (requeue sends local worker run ids as claimIds)
  */
 
 import { apiFetch } from './supabase'
@@ -26,6 +27,7 @@ export type PipelineAction =
   | 'close'
   | 'followup'
   | 'dismiss'
+  | 'requeue'
 
 export interface PipelineItem {
   id: string
@@ -90,7 +92,15 @@ export interface DispatcherStatus {
   autofixOn: boolean
   opener: 'server' | 'local' | 'both' | 'nobody'
   server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
-  local: { runs24h: number; running: number; lastAt: string | null }
+  local: {
+    runs24h: number
+    running: number
+    lastAt: string | null
+    /** Registered local worker lanes (ADR 0048), those taking new reports, and their models. */
+    lanes?: number
+    lanesActive?: number
+    models?: string[]
+  }
   problem: string | null
 }
 
@@ -209,6 +219,13 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     needsReason: false,
     variant: 'ghost',
   },
+  requeue: {
+    label: 'Requeue',
+    confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
+    needsConfirm: true,
+    needsReason: false,
+    variant: 'success',
+  },
   close: {
     label: 'Close PR',
     confirm: 'Closes each pull request on GitHub without merging and takes it out of the queue.',
@@ -234,7 +251,8 @@ async function viaPipelineRoute(action: PipelineAction, ids: string[], reason?: 
     const res = await apiFetch<{ results: ActionOutcome[] }>(ACTIONS_PATH, {
       method: 'POST',
       scope: 'enumeration',
-      body: JSON.stringify({ action, fixIds: chunk, reason }),
+      // Requeue items are local worker runs, not fixes.
+      body: JSON.stringify(action === 'requeue' ? { action, claimIds: chunk } : { action, fixIds: chunk, reason }),
     })
     if (!res.ok || !res.data) {
       const message = res.error?.message ?? 'The request failed.'
@@ -282,7 +300,7 @@ async function dismissReports(fixIds: string[], reportIds: Array<string | null>,
  * already refuse. A bulk button runs on these only and says how many.
  */
 export function actionableIds(items: readonly Pick<PipelineItem, 'id' | 'prUrl' | 'reportId' | 'blocked'>[], action: PipelineAction): string[] {
-  return items.filter((i) => (action === 'dismiss' ? !!i.reportId : !!i.prUrl) && !i.blocked?.[action]).map((i) => i.id)
+  return items.filter((i) => (action === 'dismiss' || action === 'requeue' ? !!i.reportId : !!i.prUrl) && !i.blocked?.[action]).map((i) => i.id)
 }
 
 /** The one reason every item gives for an action, or null when they differ or some can run. */

@@ -36,7 +36,7 @@ export function PipelineActionDialog({ pending, busy, onConfirm, onCancel }: Pro
   const tooShort = meta.needsReason && reason.trim().length < 3
   return (
     <ConfirmDialog
-      title={`${meta.label}${n > 1 ? ` · ${n} ${isDismiss ? 'reports' : 'PRs'}` : ''}`}
+      title={`${meta.label}${n > 1 ? ` · ${n} ${isDismiss || pending.action === 'requeue' ? 'reports' : 'PRs'}` : ''}`}
       body={meta.confirm}
       details={<span className="font-medium text-fg">{pending.target}</span>}
       confirmLabel={meta.label}

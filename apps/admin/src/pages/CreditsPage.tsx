@@ -5,6 +5,8 @@
  *          with a switch. Cursor: spend-down (ADR 0028) and review
  *          follow-ups (ADR 0032). Firecrawl: the live-site watch of every
  *          app (ADR 0024), with what it will use before the balance resets.
+ *          Local workers: the model each `mushi work --daemon` lane runs on
+ *          your own Cursor account (ADR 0048).
  *          Detailed forms stay where they were (Settings, Inventory); this
  *          page answers "is anything spending them, and on what?".
  */
@@ -18,6 +20,7 @@ import { IconCost } from '../components/icons'
 import { CursorLevers } from '../components/credits/CursorLevers'
 import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/FirecrawlLevers'
 import { SkillRunsCard } from '../components/credits/SkillRunsCard'
+import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -113,6 +116,10 @@ export function CreditsPage() {
             followups.reload()
           }}
         />
+      </Section>
+
+      <Section title="Local workers: models" id="local-worker-models">
+        <LocalWorkerModels />
       </Section>
 
       <Section title="Cursor: improve your apps with skills">

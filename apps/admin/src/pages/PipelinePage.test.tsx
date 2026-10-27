@@ -372,6 +372,48 @@ describe('PipelinePage', () => {
     expect(q('pipeline-intake')!.textContent).toContain('no deploy recorded in 14 days')
   })
 
+  it('the Workers tab reads the local workers instead of the pipeline', async () => {
+    await render('/pipeline?tab=workers')
+    const paths = state.paths.map((p) => p.path)
+    expect(paths).toContain('/v1/admin/work/lanes?projectId=p1')
+    expect(paths).not.toContain('/v1/admin/pipeline?projectId=p1')
+    expect(q('pipeline-stage-ci')).toBeNull()
+  })
+
+  it('shows registered local worker lanes per app, linked to the Workers tab', async () => {
+    ;(state.data as PipelineData).dispatchers![0]!.local = { runs24h: 6, running: 2, lastAt: '2026-10-26T11:00:00Z', lanes: 2, lanesActive: 1, models: ['grok-4.7-xhigh-fast'] }
+    await render()
+    const link = q('pipeline-opener-p1-lanes')!
+    expect(link.textContent).toBe('2 lanes (1 taking reports) · grok-4.7-xhigh-fast')
+    expect(link.getAttribute('href')).toBe('/pipeline?tab=workers')
+  })
+
+  it('Requeue on a local worker group asks first and posts the run ids as claimIds', async () => {
+    const data = state.data as PipelineData
+    data.stages[2]!.groups = [
+      {
+        id: 'local_infra',
+        stage: 'pr',
+        tone: 'stuck',
+        label: "1 report: a local worker's machine stopped the run again (not the code); requeue to try once more",
+        count: 1,
+        oldestAt: '2026-10-26T10:00:00Z',
+        actions: ['requeue'],
+        settings: { label: 'Local workers', to: '/pipeline?tab=workers' },
+        items: [item('c7', { reportId: 'r7', prUrl: null, prNumber: null, repo: null, lastError: 'permission denied' })],
+      },
+    ]
+    data.stages[2]!.count = 1
+    data.stages[2]!.stuck = 1
+    state.respond = () => ({ ok: true, data: { results: [{ id: 'c7', ok: true, message: 'Back at the front of its lane; the worker takes it next.' }] } })
+    await render()
+    await click(q('pipeline-group-local_infra-requeue'))
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Requeue' && b.hasAttribute('data-primary'))!
+    await click(confirm)
+    await flush()
+    expect(state.posts.find((p) => p.path === '/v1/admin/pipeline/actions')).toEqual({ path: '/v1/admin/pipeline/actions', body: { action: 'requeue', claimIds: ['c7'] } })
+  })
+
   it('All apps reads every app without a project id', async () => {
     await render('/pipeline?apps=all')
     expect(state.paths[0]).toEqual({ path: '/v1/admin/pipeline', scope: 'enumeration' })

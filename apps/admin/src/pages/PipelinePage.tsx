@@ -15,13 +15,17 @@
  * apps". Every action asks first, shows its busy state and each PR's
  * result, then the page reads again.
  *
+ * The Workers tab (`?tab=workers`, ADR 0048) shows the local workers
+ * (`mushi work --daemon`) and their lanes, queues and runs: WorkersPanel.
+ *
  * Data: GET /v1/admin/pipeline?projectId= → PipelineData (api-ext)
+ *       GET /v1/admin/work/lanes (your lanes, for "Send to my local worker")
  *       POST /v1/admin/pipeline/actions, /v1/admin/fixes/:id/review,
  *       /v1/admin/fixes/:id/ci/rerun, /v1/admin/merge-queue (lib/pipeline.ts)
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -39,6 +43,8 @@ import { PipelineGroups } from '../components/pipeline/PipelineGroups'
 import { PipelineActionDialog, type PendingAction } from '../components/pipeline/PipelineActionDialog'
 import { TrainHistory } from '../components/pipeline/TrainHistory'
 import { FixOpeners } from '../components/pipeline/FixOpeners'
+import { WorkersPanel } from '../components/pipeline/WorkersPanel'
+import { LANES_PATH, type WorkLanesData } from '../lib/workers'
 import {
   ACTION_META,
   actionableIds,
@@ -61,14 +67,39 @@ const SCOPE_OPTIONS = [
   { id: 'all', label: 'All apps' },
 ] as const
 
+type Tab = 'pipeline' | 'workers'
+const TAB_OPTIONS = [
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'workers', label: 'Workers' },
+] as const
+
 export function PipelinePage() {
   const projectId = useActiveProjectId()
   const scopeChoice: Scope = useProjectScope().mode
   const setScopeChoice = useSetProjectScopeMode()
   const scope: Scope = projectId ? scopeChoice : 'all'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: Tab = searchParams.get('tab') === 'workers' ? 'workers' : 'pipeline'
+  const setTab = useCallback(
+    (next: Tab) => {
+      const params = new URLSearchParams(searchParams)
+      if (next === 'pipeline') params.delete('tab')
+      else params.set('tab', next)
+      setSearchParams(params, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
   const path = scope === 'project' && projectId ? `/v1/admin/pipeline?projectId=${encodeURIComponent(projectId)}` : '/v1/admin/pipeline'
-  const page = usePageData<PipelineData>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
+  const page = usePageData<PipelineData>(tab === 'pipeline' ? path : null, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const { data, reload } = page
+  // Your own worker lanes, for "Send to my local worker" on report groups.
+  const lanesPage = usePageData<WorkLanesData>(tab === 'pipeline' ? LANES_PATH : null, { scope: 'enumeration' })
+  const workerLanes = useMemo(() => {
+    const d = lanesPage.data
+    if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
+    const mine = new Set(d.hosts.filter((h) => h.mine && !h.revoked).map((h) => h.id))
+    return d.lanes.filter((l) => mine.has(l.hostId))
+  }, [lanesPage.data])
   const now = useNow(30_000)
   const toast = useToast()
 
@@ -152,21 +183,27 @@ export function PipelinePage() {
         helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
         helpHowToUse="Start with the red stages. Open a stuck group to see its PRs with the failing checks or review findings, then fix them in one click: CI repair, update branch, re-run review, or close with a reason. Every action asks first."
       >
-        {page.isValidating && !page.loading ? (
+        {tab === 'workers' ? null : page.isValidating && !page.loading ? (
           <span className="text-2xs text-fg-muted">Updating…</span>
         ) : data ? (
           <span className="text-2xs tabular-nums text-fg-muted" data-testid="pipeline-updated">Updated {ageLabel(data.generatedAt, now)} ago</span>
         ) : null}
-        <Btn size="sm" variant="ghost" onClick={reload} disabled={page.isValidating} data-testid="pipeline-refresh">
-          Refresh
-        </Btn>
+        {tab === 'pipeline' && (
+          <Btn size="sm" variant="ghost" onClick={reload} disabled={page.isValidating} data-testid="pipeline-refresh">
+            Refresh
+          </Btn>
+        )}
         {projectId && <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />}
       </PageHeaderBar>
 
-      {page.error && <PageLoadError error={page.error} resource="the pipeline" endpoint={path} onRetry={reload} />}
-      {page.loading && !data && <Loading text="Reading the pipeline…" />}
+      <SegmentedControl<Tab> value={tab} options={TAB_OPTIONS} onChange={setTab} ariaLabel="Pipeline or local workers" size="md" />
 
-      {data && (
+      {tab === 'workers' && <WorkersPanel projectId={scope === 'project' ? projectId : null} now={now} />}
+
+      {tab === 'pipeline' && page.error && <PageLoadError error={page.error} resource="the pipeline" endpoint={path} onRetry={reload} />}
+      {tab === 'pipeline' && page.loading && !data && <Loading text="Reading the pipeline…" />}
+
+      {tab === 'pipeline' && data && (
         <>
           <PageStatus
             ariaLabel="Pipeline status"
@@ -244,6 +281,7 @@ export function PipelinePage() {
                 busyKey={busyKey}
                 results={results}
                 onAction={(action, key) => setPending({ action, key })}
+                workerLanes={workerLanes}
               />
             )}
           </Section>
@@ -274,7 +312,11 @@ export function PipelinePage() {
               </summary>
               <div className="border-t border-edge-subtle px-3 py-2">
                 <p className="mb-2 text-xs text-fg-muted">
-                  The server opens fixes on its own only with an active Cursor key that has spend-down on. Local lanes are your own <code>mushi work</code> runs.
+                  The server opens fixes on its own only with an active Cursor key that has spend-down on. Local lanes are your own <code>mushi work</code> runs; set them up on the{' '}
+                  <Link to="/pipeline?tab=workers" className="text-brand hover:underline">
+                    Workers
+                  </Link>{' '}
+                  tab.
                 </p>
                 <FixOpeners dispatchers={data.dispatchers} now={now} />
               </div>

@@ -5,7 +5,9 @@
  *          link to the setting that blocks it. Opening a group lists its
  *          items: the report, the PR, how long it has waited, and the latest
  *          evidence (failing checks, the Opus verdict and its findings, the
- *          merge queue's last word), each with its own actions.
+ *          merge queue's last word), each with its own actions. A group of
+ *          reports not fixed yet also offers "Send to my local worker" when
+ *          you have a worker lane for its app (ADR 0048).
  */
 
 import { useState } from 'react'
@@ -14,6 +16,8 @@ import { Badge, Btn } from '../ui'
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
 import type { PendingAction } from './PipelineActionDialog'
+import { SendToWorkerButton } from './SendToWorkerButton'
+import type { WorkerLane } from '../../lib/workers'
 
 interface Props {
   groups: PipelineGroup[]
@@ -24,7 +28,12 @@ interface Props {
   busyKey: string | null
   results: Map<string, ActionOutcome>
   onAction: (pending: PendingAction, key: string) => void
+  /** Your own local worker lanes (every app); empty hides "Send to my local worker". */
+  workerLanes?: WorkerLane[]
 }
+
+/** Stages whose reports have no fix to keep yet: a local worker may take them. */
+const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
 
 const TONE_ICON = {
   stuck: <span className="text-danger-foreground"><IconAlertTriangle size={14} /></span>,
@@ -70,7 +79,7 @@ export function ActionButtons({
   onAction: Props['onAction']
   testIdPrefix: string
 }) {
-  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' ? i.reportId : i.prUrl)))
+  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'requeue' ? i.reportId : i.prUrl)))
   if (shown.length === 0) return null
   return (
     <span className="flex flex-wrap gap-1">
@@ -218,6 +227,10 @@ const ITEMS_STEP = 20
 function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState(ITEMS_STEP)
+  const apps = new Set(group.items.map((i) => i.projectId))
+  const appId = apps.size === 1 ? [...apps][0]! : null
+  const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
+  const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
     <li className={`rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5">
@@ -255,6 +268,9 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
             onAction={props.onAction}
             testIdPrefix={`pipeline-group-${group.id}`}
           />
+          {appId && lanes.length > 0 && sendIds.length > 0 && (
+            <SendToWorkerButton projectId={appId} reportIds={sendIds} lanes={lanes} data-testid={`pipeline-group-${group.id}-send-to-worker`} />
+          )}
         </span>
       </div>
       {group.settings?.hint && (
