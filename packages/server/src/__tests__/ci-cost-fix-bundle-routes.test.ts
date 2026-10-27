@@ -188,10 +188,10 @@ beforeEach(() => {
   seed()
 })
 
-describe('GET /v1/admin/ci/cost-fix-bundles/preview', () => {
+describe('GET /v1/admin/ci/cost-fix-rollout', () => {
   it('lists every autofix item of the apps the caller may change, grouped per repo', async () => {
     ability = 'no'
-    const res = await call('GET', '/v1/admin/ci/cost-fix-bundles/preview')
+    const res = await call('GET', '/v1/admin/ci/cost-fix-rollout')
     expect(res.status).toBe(200)
     // The viewer's app is never read.
     expect(calls.loadAdvice.mock.calls[0][1].sort()).toEqual([A, B])
@@ -203,35 +203,35 @@ describe('GET /v1/admin/ci/cost-fix-bundles/preview', () => {
   })
 
   it('reads one app with ?project_id, and refuses one the caller cannot read', async () => {
-    const res = await call('GET', `/v1/admin/ci/cost-fix-bundles/preview?project_id=${B}`)
+    const res = await call('GET', `/v1/admin/ci/cost-fix-rollout?project_id=${B}`)
     expect(res.json.data.repos.map((r: { repo: string }) => r.repo)).toEqual(['acme/web'])
-    expect((await call('GET', '/v1/admin/ci/cost-fix-bundles/preview?project_id=1000000f-0000-4000-8000-000000000000')).status).toBe(403)
-    expect((await call('GET', '/v1/admin/ci/cost-fix-bundles/preview?project_id=nope')).status).toBe(400)
+    expect((await call('GET', '/v1/admin/ci/cost-fix-rollout?project_id=1000000f-0000-4000-8000-000000000000')).status).toBe(403)
+    expect((await call('GET', '/v1/admin/ci/cost-fix-rollout?project_id=nope')).status).toBe(400)
   })
 
   it('an all-viewer caller gets an empty preview without reading advice', async () => {
     roles = { [V]: 'viewer' }
-    const res = await call('GET', '/v1/admin/ci/cost-fix-bundles/preview')
+    const res = await call('GET', '/v1/admin/ci/cost-fix-rollout')
     expect(res.json.data.repos).toEqual([])
     expect(calls.loadAdvice).not.toHaveBeenCalled()
   })
 
   it('says when the advice could not be read', async () => {
     calls.loadAdvice.mockRejectedValue(new Error('db down'))
-    const res = await call('GET', '/v1/admin/ci/cost-fix-bundles/preview')
+    const res = await call('GET', '/v1/admin/ci/cost-fix-rollout')
     expect(res.status).toBe(500)
     expect(res.json.error?.code).toBe('CI_ADVICE_FAILED')
   })
 })
 
-describe('POST /v1/admin/ci/cost-fix-bundles', () => {
+describe('POST /v1/admin/ci/cost-fix-rollout', () => {
   const both = { repos: [
     { projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'skip_drafts' }, { workflowPath: NIGHTLY, kind: 'weekly_cron' }] },
     { projectId: B, repo: 'acme/web', items: [{ workflowPath: CI, kind: 'add_concurrency' }] },
   ] }
 
   it('queues one bundle per repo with the server\'s evidence and saving, one rate token and one worker call each', async () => {
-    const res = await call('POST', '/v1/admin/ci/cost-fix-bundles', both)
+    const res = await call('POST', '/v1/admin/ci/cost-fix-rollout', both)
     expect(res.status).toBe(202)
     expect(res.json.data.queued).toBe(2)
     const [app1, web] = res.json.data.results
@@ -250,15 +250,15 @@ describe('POST /v1/admin/ci/cost-fix-bundles', () => {
 
   it('caps repos per request and items per repo, and refuses a repo listed twice', async () => {
     const tooManyRepos = { repos: Array.from({ length: 11 }, () => ({ projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'skip_drafts' }] })) }
-    expect((await call('POST', '/v1/admin/ci/cost-fix-bundles', tooManyRepos)).status).toBe(400)
+    expect((await call('POST', '/v1/admin/ci/cost-fix-rollout', tooManyRepos)).status).toBe(400)
     const tooManyItems = { repos: [{ projectId: A, repo: 'acme/app', items: Array.from({ length: 21 }, (_, i) => ({ workflowPath: `.github/workflows/w${i}.yml`, kind: 'skip_drafts' })) }] }
-    const items = await call('POST', '/v1/admin/ci/cost-fix-bundles', tooManyItems)
+    const items = await call('POST', '/v1/admin/ci/cost-fix-rollout', tooManyItems)
     expect(items.status).toBe(400)
     expect(items.json.error?.message).toContain('at most 20 fixes per repo')
     const twice = { repos: [both.repos[0], { ...both.repos[0], repo: 'ACME/app' }] }
-    expect((await call('POST', '/v1/admin/ci/cost-fix-bundles', twice)).status).toBe(400)
+    expect((await call('POST', '/v1/admin/ci/cost-fix-rollout', twice)).status).toBe(400)
     for (const bad of [{ repos: [] }, { repos: [{ projectId: A, repo: 'acme/app', items: [{ workflowPath: 'x.yml', kind: 'skip_drafts' }] }] }, { repos: [{ projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'rm_rf' }] }] }]) {
-      expect((await call('POST', '/v1/admin/ci/cost-fix-bundles', bad)).status, JSON.stringify(bad)).toBe(400)
+      expect((await call('POST', '/v1/admin/ci/cost-fix-rollout', bad)).status, JSON.stringify(bad)).toBe(400)
     }
     expect(db.tables.ci_cost_fix_jobs).toHaveLength(0)
     expect(calls.invoke).not.toHaveBeenCalled()
@@ -269,7 +269,7 @@ describe('POST /v1/admin/ci/cost-fix-bundles', () => {
       job({ status: 'pr_opened', pr_url: 'https://github.com/Acme/App/pull/9', repo: 'Acme/App' }),
       job({ id: '4000000b-0000-4000-8000-000000000000', project_id: B, repo: 'acme/web', kind: 'add_concurrency', status: 'running' }),
     ])
-    const res = await call('POST', '/v1/admin/ci/cost-fix-bundles', { repos: [
+    const res = await call('POST', '/v1/admin/ci/cost-fix-rollout', { repos: [
       { projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'skip_drafts' }, { workflowPath: CI, kind: 'add_concurrency' }, { workflowPath: NIGHTLY, kind: 'weekly_cron' }] },
       { projectId: B, repo: 'acme/web', items: [{ workflowPath: CI, kind: 'add_concurrency' }] },
     ] })
@@ -288,7 +288,7 @@ describe('POST /v1/admin/ci/cost-fix-bundles', () => {
 
   it('a viewer, another project, an unconnected repo and the rate limit each fail their repo only', async () => {
     calls.rate.mockImplementation(async (_db: unknown, key: string) => ({ allowed: !key.includes(B) }))
-    const res = await call('POST', '/v1/admin/ci/cost-fix-bundles', { repos: [
+    const res = await call('POST', '/v1/admin/ci/cost-fix-rollout', { repos: [
       { projectId: V, repo: 'acme/viewed', items: [{ workflowPath: CI, kind: 'skip_drafts' }] },
       { projectId: '1000000f-0000-4000-8000-000000000000', repo: 'acme/x', items: [{ workflowPath: CI, kind: 'skip_drafts' }] },
       { projectId: A, repo: 'acme/other', items: [{ workflowPath: CI, kind: 'skip_drafts' }] },
@@ -309,7 +309,7 @@ describe('POST /v1/admin/ci/cost-fix-bundles', () => {
 
   it('a racing duplicate (the one-active-edit index) fails that repo as in progress, never silently', async () => {
     seed([job({ status: 'failed' })], { autoId: true, partialUniques: { ci_cost_fix_jobs: { keys: ['project_id', 'workflow_path', 'kind'], where: () => true } } })
-    const res = await call('POST', '/v1/admin/ci/cost-fix-bundles', { repos: [{ projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'skip_drafts' }] }] })
+    const res = await call('POST', '/v1/admin/ci/cost-fix-rollout', { repos: [{ projectId: A, repo: 'acme/app', items: [{ workflowPath: CI, kind: 'skip_drafts' }] }] })
     expect(res.status).toBe(200)
     expect(res.json.data.results[0]).toMatchObject({ status: 'error', error: { code: 'COST_FIX_IN_PROGRESS' } })
     expect(calls.invoke).not.toHaveBeenCalled()
@@ -317,7 +317,7 @@ describe('POST /v1/admin/ci/cost-fix-bundles', () => {
 
   it('opens nothing when the advice cannot be read', async () => {
     calls.loadAdvice.mockRejectedValue(new Error('down'))
-    const res = await call('POST', '/v1/admin/ci/cost-fix-bundles', both)
+    const res = await call('POST', '/v1/admin/ci/cost-fix-rollout', both)
     expect(res.status).toBe(500)
     expect(db.tables.ci_cost_fix_jobs).toHaveLength(0)
   })

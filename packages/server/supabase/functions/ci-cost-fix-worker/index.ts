@@ -10,7 +10,7 @@
  *
  * With `{ bundleId }` it runs a bundle instead: several fixes for one repo in
  * ONE draft PR (`_shared/ci-cost-fix-bundle.ts`, POST
- * /v1/admin/ci/cost-fix-bundles, "Apply to every app"). A job that belongs to
+ * /v1/admin/ci/cost-fix-rollout, "Apply to every app"). A job that belongs to
  * a bundle is never run on its own.
  *
  * Auth: `requireServiceRoleAuth`.

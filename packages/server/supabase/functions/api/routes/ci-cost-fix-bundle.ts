@@ -3,14 +3,14 @@
  * amendment 2026-10-27). Served by `api-ext` (`/v1/admin/ci/*` is forwarded
  * there). One reviewed draft PR per repo, with a preview first.
  *
- *   GET  /v1/admin/ci/cost-fix-bundles/preview   adminOrApiKey(mcp:read)
+ *   GET  /v1/admin/ci/cost-fix-rollout       adminOrApiKey(mcp:read)
  *        ?project_id= one app, else every app the caller may change (viewers'
  *        apps are left out). Every advice item with an `autofix`, grouped per
  *        app and repo, with the estimated saving per item and per repo, its
  *        state (ready, PR still open, in progress) and, per repo, the reason
  *        its GitHub access cannot edit workflows when Mushi already knows it
  *        (rollout preview: _shared/ci-cost-fix-rollout.ts). Read-only.
- *   POST /v1/admin/ci/cost-fix-bundles           adminOrApiKey(mcp:write), non-viewers
+ *   POST /v1/admin/ci/cost-fix-rollout       adminOrApiKey(mcp:write), non-viewers
  *        { repos: [{ projectId, repo, items: [{ workflowPath, kind }] }] }
  *        ≤ 10 repos, ≤ 20 items each. Rebuilds the advice server-side and
  *        queues only items still advised (evidence and saving come from it,
@@ -121,8 +121,8 @@ export const defaultCiCostFixBundleRouteDeps: CiCostFixBundleRouteDeps = {
 }
 
 export function registerCiCostFixBundleRoutes(app: Hono<{ Variables: Variables }>, deps: CiCostFixBundleRouteDeps = defaultCiCostFixBundleRouteDeps): void {
-  app.get('/v1/admin/ci/cost-fix-bundles/preview', deps.adminOrApiKeyRead, (c) => previewRollout(c, deps))
-  app.post('/v1/admin/ci/cost-fix-bundles', deps.adminOrApiKeyWrite, (c) => openBundles(c, deps))
+  app.get('/v1/admin/ci/cost-fix-rollout', deps.adminOrApiKeyRead, (c) => previewRollout(c, deps))
+  app.post('/v1/admin/ci/cost-fix-rollout', deps.adminOrApiKeyWrite, (c) => openBundles(c, deps))
   app.get('/v1/admin/ci/cost-fix-bundles/:id', deps.adminOrApiKeyRead, (c) => getBundle(c, deps))
 }
 

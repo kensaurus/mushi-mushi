@@ -15,6 +15,9 @@
  *                       runs it in the console)
  *          - fix        open a draft PR that applies one CI cost fix to a
  *                       workflow (POST /v1/admin/ci/cost-fixes, ADR 0047);
+ *                       `--all` previews every fix Mushi can open across your
+ *                       apps and `--all --apply` opens one draft PR per repo
+ *                       (/v1/admin/ci/cost-fix-rollout, ADR 0047 amendment);
  *                       fix-status shows it and, after the merge, the saving
  *          - heartbeat  this machine's memory, swap, load and runner services
  *                       (POST /v1/ingest/runner, kind heartbeat)
@@ -62,6 +65,16 @@ import { renderCompare, type CiCompare } from '../runner/compare.js'
 import { fetchActionsUsage, isGithubLogin, lookupOwner, parseMonth, renderBill, summarizeBill } from '../runner/bill.js'
 import { renderPlacement, renderPreview, type PlacementPreviewView, type PlacementView } from '../runner/placement.js'
 import { COST_FIX_KINDS, renderCostFix, waitForCostFix, type CostFixJob } from '../runner/cost-fix.js'
+import {
+  pickRolloutRequest,
+  renderBundle,
+  renderBundleResults,
+  renderRolloutPreview,
+  waitForBundles,
+  type BundleResult,
+  type CostFixBundle,
+  type RolloutPreview,
+} from '../runner/cost-fix-rollout.js'
 import { assertNotCliKey, defaultRunnerKeyLabel, resolveRunnerKey, RUNNER_KEY_CREDENTIAL, RUNNER_KEY_PATH } from '../runner/key.js'
 
 const HEARTBEAT_INTERVAL_MS = 120_000
@@ -462,22 +475,34 @@ owner must own one of the project's repositories.`)
 
   runner
     .command('fix')
-    .description('Open a draft PR that applies one CI cost fix to a workflow (ADR 0047): add_concurrency, skip_drafts, weekly_cron or ignore_docs_paths')
-    .requiredOption('--repo <owner/repo>', 'Repository connected to the project')
-    .requiredOption('--workflow <path>', 'Workflow file, e.g. .github/workflows/ci.yml')
-    .requiredOption('--kind <kind>', `The fix: ${COST_FIX_KINDS.join(', ')}`)
-    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .description('Open a draft PR that applies one CI cost fix to a workflow (ADR 0047): add_concurrency, skip_drafts, weekly_cron or ignore_docs_paths. With --all: every fix Mushi can open across your apps, one draft PR per repo')
+    .option('--repo <owner/repo>', 'Repository connected to the project (with --all: only these repos, comma-separated)')
+    .option('--workflow <path>', 'Workflow file, e.g. .github/workflows/ci.yml')
+    .option('--kind <kind>', `The fix: ${COST_FIX_KINDS.join(', ')}`)
+    .option('--all', 'Every fix Mushi can open across the apps you may change, grouped per repo (a preview unless --apply)')
+    .option('--preview', 'With --all: list the fixes and their saving per repo; changes nothing (the default)')
+    .option('--apply', 'With --all: open one draft PR per repo (at most 10 repos and 20 fixes each per run)')
+    .option('--include-blocked', 'With --all --apply: also try repos whose GitHub access Mushi knows cannot edit workflow files')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project; with --all, limits it to that app)')
     .option('--project <id>', 'Same as --project-id')
-    .option('--wait', 'Wait (up to 2 minutes) until the pull request is open, and print its link')
+    .option('--wait', "Wait until the pull request is open (with --all: every repo's), and print its link")
     .option('--json', 'Machine-readable JSON output')
     .addHelpText('after', `
 The PR is a draft: nothing changes until you review it, mark it ready and merge
 it. After the merge, \`mushi runner fix-status <jobId>\` (or the console's CI
 page) shows the billed minutes per day saved, measured against the 14 days
 before. Writing a workflow file needs the GitHub App's "Workflows: Read and
-write" permission (or a token with the workflow scope).`)
-    .action(async (opts: { repo: string; workflow: string; kind: string; projectId?: string; project?: string; wait?: boolean; json?: boolean }) => {
+write" permission (or a token with the workflow scope).
+
+Every app at once (one PR per repo, so each repo runs CI once for all its fixes):
+  mushi runner fix --all              preview: the fixes and estimated saving per repo
+  mushi runner fix --all --apply      open them (refused edits are listed, never dropped)
+  mushi runner fix-status --bundle <id>`)
+    .action(async (opts: FixOpts) => {
       const config = requireConfig()
+      if (opts.all) return fixAll(config, opts)
+      if (opts.preview || opts.apply || opts.includeBlocked) throw new MushiCliError('E_INVALID_INPUT', '--preview, --apply and --include-blocked go with --all.')
+      if (!opts.repo || !opts.workflow || !opts.kind) throw new MushiCliError('E_INVALID_INPUT', 'Pass --repo, --workflow and --kind (or --all for every app).')
       if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(opts.repo)) throw new MushiCliError('E_INVALID_INPUT', '--repo must be owner/repo.')
       if (!/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/.test(opts.workflow) || opts.workflow.includes('..')) {
         throw new MushiCliError('E_INVALID_INPUT', '--workflow must be a file under .github/workflows/, e.g. .github/workflows/ci.yml.')
@@ -501,12 +526,23 @@ write" permission (or a token with the workflow scope).`)
 
   runner
     .command('fix-status [jobId]')
-    .description('CI cost fixes: one by id (its state, its PR, and after the merge the measured saving), or the project\'s recent ones')
+    .description('CI cost fixes: one by id (its state, its PR, and after the merge the measured saving), a bundle (one PR for several fixes), or the project\'s recent ones')
+    .option('--bundle <id>', "A bundle from `mushi runner fix --all --apply`: its PR and each fix's state")
     .option('--project-id <id>', 'Project ID for the list (defaults to the configured project)')
     .option('--project <id>', 'Same as --project-id')
     .option('--json', 'Machine-readable JSON output')
-    .action(async (jobId: string | undefined, opts: { projectId?: string; project?: string; json?: boolean }) => {
+    .action(async (jobId: string | undefined, opts: { bundle?: string; projectId?: string; project?: string; json?: boolean }) => {
       const config = requireConfig()
+      if (opts.bundle) {
+        const result = await apiCall<{ bundle: CostFixBundle }>(`/v1/admin/ci/cost-fix-bundles/${requireUuid(opts.bundle, 'bundle id')}`, config)
+        if (!result.ok) die(result)
+        if (outputIsJson(opts.json)) {
+          console.log(JSON.stringify(result.data.bundle, null, 2))
+          return
+        }
+        for (const line of renderBundle(result.data.bundle)) console.log(line)
+        return
+      }
       if (jobId) {
         const result = await apiCall<{ job: CostFixJob }>(`/v1/admin/ci/cost-fixes/${requireUuid(jobId, 'job id')}`, config)
         if (!result.ok) die(result)
@@ -906,4 +942,71 @@ Docs: https://kensaur.us/mushi-mushi/docs/operating/ci-runners`)
       }
       if (audits.some((a) => a.findings.some((f) => f.severity === 'critical'))) process.exitCode = 1
     })
+}
+
+interface FixOpts {
+  repo?: string
+  workflow?: string
+  kind?: string
+  all?: boolean
+  preview?: boolean
+  apply?: boolean
+  includeBlocked?: boolean
+  projectId?: string
+  project?: string
+  wait?: boolean
+  json?: boolean
+}
+
+const sameRepo = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+/** `mushi runner fix --all [--apply]`: preview every app's fixes, or open one draft PR per repo. */
+async function fixAll(config: ReturnType<typeof requireConfig>, opts: FixOpts): Promise<void> {
+  if (opts.workflow || opts.kind) throw new MushiCliError('E_INVALID_INPUT', '--all opens every advised fix: drop --workflow and --kind (or drop --all for one fix).')
+  if (opts.preview && opts.apply) throw new MushiCliError('E_INVALID_INPUT', 'Pick --preview or --apply, not both.')
+  const raw = opts.projectId ?? opts.project
+  const query = raw ? `?project_id=${encodeURIComponent(requireUuid(raw, 'project id'))}` : ''
+  const preview = await apiCall<RolloutPreview>(`/v1/admin/ci/cost-fix-rollout${query}`, config)
+  if (!preview.ok) die(preview)
+  const repos = opts.repo?.split(',').map((r) => r.trim()).filter(Boolean)
+  if (!opts.apply) {
+    const shown = repos ? { ...preview.data, repos: preview.data.repos.filter((r) => repos.some((x) => sameRepo(x, r.repo))) } : preview.data
+    if (outputIsJson(opts.json)) {
+      console.log(JSON.stringify(shown, null, 2))
+      return
+    }
+    for (const line of renderRolloutPreview(shown)) console.log(line)
+    return
+  }
+  const pick = pickRolloutRequest(preview.data, { repos, includeBlocked: opts.includeBlocked })
+  if (pick.repos.length === 0) {
+    if (outputIsJson(opts.json)) {
+      console.log(JSON.stringify({ results: [], queued: 0, leftOut: pick.leftOut }, null, 2))
+      return
+    }
+    console.log('Nothing to open: no repo has a fix ready.')
+    for (const l of pick.leftOut) console.log(`  ${l}`)
+    return
+  }
+  const result = await apiCall<{ results: BundleResult[]; queued: number }>('/v1/admin/ci/cost-fix-rollout', config, {
+    method: 'POST',
+    body: JSON.stringify({ repos: pick.repos }),
+  })
+  if (!result.ok) die(result)
+  const ids = result.data.results.flatMap((r) => (r.bundleId ? [r.bundleId] : []))
+  const bundles = opts.wait && ids.length > 0 ? await waitForBundles(ids, config) : null
+  if (outputIsJson(opts.json)) {
+    console.log(JSON.stringify({ ...result.data, leftOut: pick.leftOut, ...(bundles ? { bundles } : {}) }, null, 2))
+    return
+  }
+  if (bundles) {
+    for (const b of bundles) for (const line of renderBundle(b)) console.log(line)
+    for (const line of renderBundleResults(result.data.results.filter((r) => !r.bundleId))) console.log(line)
+  } else {
+    for (const line of renderBundleResults(result.data.results)) console.log(line)
+  }
+  if (pick.leftOut.length > 0) {
+    console.log('Not sent this time:')
+    for (const l of pick.leftOut) console.log(`  ${l}`)
+  }
 }

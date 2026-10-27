@@ -9,8 +9,9 @@
 -- in one PR, only one of the rows stores baseline / measured (the workflow's
 -- minutes once), and the other says it is measured together with it.
 --
--- Additive: a nullable column and a partial index. The single "Open fix PR"
--- path never reads the column, so it works before and after this migration.
+-- Additive: a nullable column and a partial index. Apply it BEFORE deploying
+-- api-ext and ci-cost-fix-worker: their job reads now select bundle_id, and
+-- the single "Open fix PR" claim skips rows that have one.
 -- RLS is already on (service role only, no anon / authenticated grants).
 
 ALTER TABLE public.ci_cost_fix_jobs
@@ -21,6 +22,6 @@ CREATE INDEX IF NOT EXISTS ci_cost_fix_jobs_bundle_idx
   WHERE bundle_id IS NOT NULL;
 
 COMMENT ON COLUMN public.ci_cost_fix_jobs.bundle_id IS
-  'Set when the fix was opened together with others for the same repo in one draft PR (POST /v1/admin/ci/cost-fix-bundles). Rows sharing it are claimed and finished together by ci-cost-fix-worker.';
+  'Set when the fix was opened together with others for the same repo in one draft PR (POST /v1/admin/ci/cost-fix-rollout). Rows sharing it are claimed and finished together by ci-cost-fix-worker.';
 
 NOTIFY pgrst, 'reload schema';

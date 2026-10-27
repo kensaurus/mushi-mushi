@@ -2,18 +2,18 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **773** routes.
+> Generated: 2026-10-27 · **775** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 202 |
+| `adminOrApiKey` | 205 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 397 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
-| `unknown` | 51 |
+| `unknown` | 50 |
 
 ## Routes by path
 
@@ -92,6 +92,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | POST | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/cost-fix-bundles/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
+| GET | `/v1/admin/ci/cost-fix-rollout` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
+| POST | `/v1/admin/ci/cost-fix-rollout` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix-bundle.ts` |
 | GET | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | POST | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | GET | `/v1/admin/ci/cost-fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
@@ -788,7 +791,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/webhooks/tremendous` | `public` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/worker/claim` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
-| POST | `/v1/worker/claims/:id/findings` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
