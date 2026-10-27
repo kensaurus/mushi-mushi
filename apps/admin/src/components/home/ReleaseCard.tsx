@@ -80,7 +80,13 @@ function Stations({ stations, href }: { stations: HomeRelease['stations']; href:
               to={href}
               aria-label={`${s.label}: ${s.count}${s.stuck ? `, ${s.stuck} stuck` : ''}`}
               className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold tabular-nums ${
-                s.stuck > 0 ? 'border-danger/50 bg-danger-muted text-danger-foreground' : s.count > 0 ? 'border-brand/40 bg-brand-subtle text-brand-foreground' : 'border-edge-subtle bg-surface text-fg-faint'
+                s.stuck > 0
+                  ? 'border-danger/50 bg-danger-muted text-danger-foreground'
+                  : s.count === 0
+                    ? 'border-edge-subtle bg-surface text-fg-faint'
+                    : s.id === 'merged' || s.id === 'deployed'
+                      ? 'border-ok/40 bg-ok-muted text-ok-foreground'
+                      : 'border-edge bg-surface-overlay text-fg'
               }`}
             >
               {s.count}
