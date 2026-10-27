@@ -76,6 +76,7 @@
     "GET /v1/admin/byok/spend-down": {"mcp": ["get_spend_down_status"], "cli": ["keys spend-down"]},
     "GET /v1/admin/ci/overview": {"mcp": ["get_ci_overview"], "cli": ["runner status"]},
     "GET /v1/admin/ci/compare": {"mcp": ["get_ci_costs"], "cli": ["runner compare"]},
+    "GET /v1/admin/ci/bill": {"mcp": ["get_ci_bill"], "cli": ["runner bill"], "note": "The CLI reads the bill straight from GitHub with the user's own gh login; `runner bill --push` uploads it (POST /v1/admin/ci/bill)."},
     "GET /v1/admin/ci/placement": {"cli": ["runner placement show"]},
     "GET /v1/admin/merge-queue": {"allow": "jwt-only"},
     "GET /v1/admin/skill-runs": {"allow": "jwt-only"},

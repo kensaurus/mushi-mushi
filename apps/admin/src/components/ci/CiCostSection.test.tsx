@@ -21,6 +21,8 @@ const state = vi.hoisted(() => ({ data: null as unknown, error: null as string |
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null, opts: { scope?: string } = {}) => {
     state.paths.push({ path, scope: opts.scope })
+    // The bill card (CiBillCard.test.tsx) reads its own route; it renders nothing here.
+    if (path?.startsWith('/v1/admin/ci/bill')) return { data: null, loading: false, error: null, isValidating: false, reload: state.reload, lastFetchedAt: null }
     return { data: state.data, loading: state.loading, error: state.error, isValidating: false, reload: state.reload, lastFetchedAt: null }
   },
 }))
