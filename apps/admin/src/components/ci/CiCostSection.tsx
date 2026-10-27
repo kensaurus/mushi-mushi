@@ -184,16 +184,22 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
   const path = scope === 'project' && projectId ? `/v1/admin/ci/compare?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/compare?days=30'
   const page = usePageData<CiCompare>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const data = page.data
+  // The measured bill reads its own route: it shows while the estimates load or fail.
+  const bill = <CiBillCard projectId={projectId} scope={scope} />
 
   if (!data) {
-    if (page.error) return <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} />
-    return page.loading ? <Loading text="Working out what CI costs…" /> : null
+    return (
+      <div className="flex flex-col gap-4">
+        {bill}
+        {page.error ? <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} /> : page.loading ? <Loading text="Working out what CI costs…" /> : null}
+      </div>
+    )
   }
 
   const exampleFigures = data.settings.every((s) => s.source === 'default')
   return (
     <div className="flex flex-col gap-4" data-testid="ci-cost-section">
-      <CiBillCard projectId={projectId} scope={scope} />
+      {bill}
       <p className="text-xs text-fg-muted">
         GitHub-hosted runners versus your own machines, over the last {data.window.days} days. Wait and run times are measured; minutes billed and money are
         estimated from GitHub’s list prices (read {data.rates.fetchedAt}). GitHub’s bill is the real figure.

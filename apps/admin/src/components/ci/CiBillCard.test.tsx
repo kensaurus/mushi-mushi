@@ -38,6 +38,7 @@ function bill(over: Partial<CiBill> = {}): CiBill {
     provenance: 'measured',
     currency: 'USD',
     available: true,
+    repoScoped: false,
     unavailableReason: null,
     owners: [{ owner: 'acme', ownerType: 'User', lastOkAt: '2026-10-27T02:00:00Z', lastAttemptAt: '2026-10-27T02:00:00Z', lastError: null, lastSource: 'api', coveredFrom: '2026-08-01' }],
     month: { label: '2026-10', from: '2026-10-01', grossUsd: 40, discountUsd: 12.5, netUsd: 27.5 },
@@ -104,6 +105,14 @@ describe('CiBillCard', () => {
     expect(host.querySelector('[aria-label="Net Actions charge per day, last 30 days"]')).not.toBeNull()
     expect(q('ci-bill-agent-share')!.textContent).toContain('25%')
     expect(q('ci-bill-agent-share')!.textContent).toContain('estimated')
+  })
+
+  it("says when only the caller's projects' repositories are shown", async () => {
+    await render()
+    expect(q('ci-bill-repo-scoped')).toBeNull()
+    state.data = bill({ repoScoped: true })
+    await render()
+    expect(q('ci-bill-repo-scoped')!.textContent).toContain('Showing the repositories of your projects only')
   })
 
   it('leaves out the change when the previous period is not fully held', async () => {

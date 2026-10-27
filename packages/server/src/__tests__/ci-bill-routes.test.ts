@@ -100,6 +100,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, opts: 
         { project_id: P2, repo_url: 'https://github.com/other/site' },
         { project_id: P3, repo_url: 'https://github.com/acme/elsewhere' },
       ],
+      organization_members: [{ organization_id: ORG, user_id: 'u1', role: 'owner' }],
       ...seed,
     },
     { failRead: opts.failRead, rpcError: (fn) => (fn === 'ci_cost_facts' ? { code: 'PGRST202', message: 'Could not find the function' } : null) },
@@ -168,6 +169,21 @@ describe('GET /v1/admin/ci/bill', () => {
     expect(bill.agentShare).toMatchObject({ provenance: 'estimated', billedMinutes: 30, agentBilledMinutes: 20 })
   })
 
+  it("shows a caller outside the organization only the rows of its projects' repos", async () => {
+    const s = setup({
+      organization_members: [],
+      ci_billing_sync: [{ organization_id: ORG, owner: 'acme', owner_type: 'User', last_ok_at: '2026-10-27T02:00:00Z', last_attempt_at: null, last_error: null, last_source: 'api', covered_from: '2026-08-01' }],
+      ci_billing_daily: [billRow({}), billRow({ repo: 'acme/docs', net_usd: 9, gross_usd: 9 })],
+    })
+    const res = await s.app.call('GET', '/v1/admin/ci/bill', { query: { project_id: P1 } })
+    expect(res.body.data.byRepo.map((r: { repo: string }) => r.repo)).toEqual(['acme/app'])
+    expect(res.body.data.totals.netUsd).toBe(0.6)
+    expect(res.body.data.repoScoped).toBe(true)
+    const member = await setup({ ci_billing_daily: [billRow({}), billRow({ repo: 'acme/docs', net_usd: 9, gross_usd: 9 })] }).app.call('GET', '/v1/admin/ci/bill', { query: { project_id: P1 } })
+    expect(member.body.data.repoScoped).toBe(false)
+    expect(member.body.data.byRepo).toHaveLength(2)
+  })
+
   it('says how to connect when there is no bill, and that the update is pending before the migration', async () => {
     const empty = await setup().app.call('GET', '/v1/admin/ci/bill', { query: {} })
     expect(empty.status).toBe(200)
@@ -196,15 +212,15 @@ describe('POST /v1/admin/ci/bill', () => {
   const push = (s: Setup, body: Record<string, unknown>, vars: Record<string, unknown> = {}) =>
     s.app.call('POST', '/v1/admin/ci/bill', { body: { projectId: P1, owner: 'acme', ownerType: 'User', year: 2026, month: 10, items, ...body }, vars })
 
-  it('stores the month as source cli under the bound owner spelling and records the sync', async () => {
+  it('stores the month as source cli under the lowercased owner and records the sync', async () => {
     const s = setup()
-    const res = await push(s, {})
+    const res = await push(s, { owner: 'ACME' })
     expect(res.status).toBe(200)
-    expect(res.body.data).toMatchObject({ owner: 'Acme', month: '2026-10', rows: 1, skipped: 1, netUsd: 0.09, coveredFrom: '2026-10-01' })
+    expect(res.body.data).toMatchObject({ owner: 'acme', month: '2026-10', rows: 1, skipped: 1, netUsd: 0.09, coveredFrom: '2026-10-01' })
     expect(s.db.table('ci_billing_daily')).toEqual([
-      expect.objectContaining({ organization_id: ORG, owner: 'Acme', day: '2026-10-01', repo: 'Acme/app', quantity: 15, net_usd: 0.09, source: 'cli' }),
+      expect.objectContaining({ organization_id: ORG, owner: 'acme', day: '2026-10-01', repo: 'acme/app', quantity: 15, net_usd: 0.09, source: 'cli' }),
     ])
-    expect(s.db.table('ci_billing_sync')[0]).toMatchObject({ organization_id: ORG, owner: 'Acme', owner_type: 'User', last_source: 'cli', last_error: null, covered_from: '2026-10-01' })
+    expect(s.db.table('ci_billing_sync')[0]).toMatchObject({ organization_id: ORG, owner: 'acme', owner_type: 'User', last_source: 'cli', last_error: null, covered_from: '2026-10-01' })
     // Pushing again replaces the rows rather than adding to them.
     await push(s, {})
     expect(s.db.table('ci_billing_daily')).toHaveLength(1)

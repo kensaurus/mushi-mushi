@@ -215,10 +215,10 @@ describe('abandoned_pr_minutes', () => {
 
 describe('macos_on_pr', () => {
   it('fires on GitHub-hosted macOS jobs on pull requests, priced at the macOS rate', () => {
-    const f = facts({ events: [ev({ workflow_name: 'iOS', job_name: 'build-ios', os: 'macos', billed_minutes: 397 }), ev({})] })
+    const f = facts({ events: [ev({ workflow_name: 'iOS', job_name: 'build-ios', os: 'macos', billed_minutes: 400 }), ev({})] })
     const [a] = byRule(adviseCiCost(input({ facts: f })), 'macos_on_pr')
     expect(a.title).toBe('iOS runs macOS jobs on pull requests')
-    expect(a.monthSavingUsd).toBe(24.61)
+    expect(a.monthSavingUsd).toBe(24.8)
     expect(a.severity).toBe('high')
   })
 

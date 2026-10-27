@@ -95,12 +95,14 @@ export interface CostFactJobRow {
   runner_labels: string[] | null
   runner_name: string | null
   runner_group_name: string | null
-  steps: Array<{ name?: unknown; seconds?: unknown }> | null
+  /** Absent in the fallback read. */
+  steps?: Array<{ name?: unknown; seconds?: unknown }> | null
   gh_created_at: string
 }
 
+/** The fallback leaves out `steps` (a jsonb per job): duplicate_gate then goes unpriced until ci_cost_facts is applied. */
 export const COST_FACT_JOB_COLUMNS =
-  'id, project_id, repo, workflow_name, job_name, event, head_branch, pr_number, run_id, status, started_at, duration_seconds, runner_kind, runner_labels, runner_name, runner_group_name, steps, gh_created_at'
+  'id, project_id, repo, workflow_name, job_name, event, head_branch, pr_number, run_id, status, started_at, duration_seconds, runner_kind, runner_labels, runner_name, runner_group_name, gh_created_at'
 
 /** Jobs the fallback reads when ci_cost_facts is not applied yet. */
 export const MAX_FACT_JOBS = 10_000

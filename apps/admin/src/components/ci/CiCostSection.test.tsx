@@ -16,13 +16,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ciCompareFixture, costSettingsFixture } from './__fixtures__/ciOverview'
 
-const state = vi.hoisted(() => ({ data: null as unknown, error: null as string | null, loading: false, paths: [] as Array<{ path: string | null; scope?: string }>, reload: vi.fn() }))
+const state = vi.hoisted(() => ({ data: null as unknown, bill: null as unknown, error: null as string | null, loading: false, paths: [] as Array<{ path: string | null; scope?: string }>, reload: vi.fn() }))
 
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null, opts: { scope?: string } = {}) => {
     state.paths.push({ path, scope: opts.scope })
-    // The bill card (CiBillCard.test.tsx) reads its own route; it renders nothing here.
-    if (path?.startsWith('/v1/admin/ci/bill')) return { data: null, loading: false, error: null, isValidating: false, reload: state.reload, lastFetchedAt: null }
+    // The bill card (CiBillCard.test.tsx) reads its own route; by default it renders nothing here.
+    if (path?.startsWith('/v1/admin/ci/bill')) return { data: state.bill, loading: false, error: null, isValidating: false, reload: state.reload, lastFetchedAt: null }
     return { data: state.data, loading: state.loading, error: state.error, isValidating: false, reload: state.reload, lastFetchedAt: null }
   },
 }))
@@ -39,6 +39,7 @@ beforeEach(() => {
   document.body.appendChild(host)
   root = createRoot(host)
   state.data = ciCompareFixture()
+  state.bill = null
   state.error = null
   state.loading = false
   state.paths = []
@@ -143,6 +144,19 @@ describe('CiCostSection', () => {
     expect(details.querySelector('summary')!.textContent).toMatch(/The other \d+ rules GitHub bills by/)
     expect(details.textContent).toContain('2 CPUs and 8 GB on a private repository')
     expect(host.textContent).toContain('kensaurus/yen-yen has no LINUX_RUNNER variable')
+  })
+
+  it('shows the measured bill even when the estimates fail', async () => {
+    state.data = null
+    state.error = 'The CI cost comparison could not be read.'
+    state.bill = {
+      window: { days: 30 }, available: false, unavailableReason: 'No GitHub bill yet.', owners: [], agentShare: null,
+      month: { label: '2026-10', grossUsd: 0, discountUsd: 0, netUsd: 0 }, byRepo: [], byDay: [],
+    }
+    await render()
+    expect(q('ci-bill-card')).not.toBeNull()
+    expect(host.textContent).toContain('No GitHub bill yet.')
+    expect(host.textContent).toContain('The CI cost comparison could not be read.')
   })
 
   it('renders an error with retry, a loading line, and an empty window', async () => {

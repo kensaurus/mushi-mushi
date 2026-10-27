@@ -114,6 +114,11 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
                 {bill.change.netPct != null ? ` (${bill.change.netPct > 0 ? '+' : ''}${formatPercent(bill.change.netPct)})` : ''}.
               </p>
             )}
+            {bill.repoScoped && (
+              <p className="mt-0.5 text-2xs text-fg-muted" data-testid="ci-bill-repo-scoped">
+                Showing the repositories of your projects only: the whole account&apos;s bill is visible to members of the organization.
+              </p>
+            )}
             {!bill.windowComplete && (
               <p className="mt-0.5 text-2xs text-fg-muted">Mushi holds part of this window so far; the totals grow as earlier days are read.</p>
             )}

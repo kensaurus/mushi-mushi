@@ -63,6 +63,11 @@ describe('billingRowsFromUsage', () => {
     expect(rows.map((r) => r.day)).toEqual([...rows.map((r) => r.day)].sort())
   })
 
+  it('lowercases owner and repo, so two spellings of one owner are one bill', () => {
+    const { rows } = billingRowsFromUsage('Acme', [item({ repositoryName: 'App' }), item({ repositoryName: 'acme/app', date: '2026-10-01T09:00:00Z' })])
+    expect(rows).toEqual([expect.objectContaining({ owner: 'acme', repo: 'acme/app', quantity: 20 })])
+  })
+
   it('keeps an organization endpoint repo name as it is and refuses malformed ones', () => {
     expect(normalizeBillingRepo('acme', 'acme/app')).toBe('acme/app')
     expect(normalizeBillingRepo('acme', 'other/app')).toBe('other/app')

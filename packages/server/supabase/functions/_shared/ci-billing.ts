@@ -94,10 +94,13 @@ export function normalizeBillingRepo(owner: string, name: unknown): string {
 
 /**
  * Usage items → one row per (day, repo, SKU), Actions only, amounts summed.
+ * Owner and repo are lowercased (GitHub names are case-insensitive), so two
+ * spellings of one owner never become two bills.
  * Items without a readable date, or of another product (Copilot), are left out
  * and counted in `skipped` (other products) and `invalid` (unreadable).
  */
-export function billingRowsFromUsage(owner: string, items: readonly unknown[]): { rows: BillingDayRow[]; skipped: number; invalid: number } {
+export function billingRowsFromUsage(ownerLogin: string, items: readonly unknown[]): { rows: BillingDayRow[]; skipped: number; invalid: number } {
+  const owner = ownerLogin.toLowerCase()
   const out = new Map<string, BillingDayRow>()
   let skipped = 0
   let invalid = 0
@@ -117,9 +120,9 @@ export function billingRowsFromUsage(owner: string, items: readonly unknown[]): 
       invalid++
       continue
     }
-    const repo = normalizeBillingRepo(owner, it.repositoryName)
+    const repo = normalizeBillingRepo(owner, it.repositoryName).toLowerCase()
     const unit = typeof it.unitType === 'string' && it.unitType.trim() ? it.unitType.trim().slice(0, 40) : 'unknown'
-    const key = `${day}|${repo.toLowerCase()}|${sku}`
+    const key = `${day}|${repo}|${sku}`
     const row = out.get(key) ?? { owner, day, repo, sku, unit, quantity: 0, gross_usd: 0, discount_usd: 0, net_usd: 0 }
     row.quantity += num(it.quantity)
     row.gross_usd += num(it.grossAmount)
@@ -374,6 +377,7 @@ export function buildCiBill(input: BuildCiBillInput): CiBill {
     provenance: 'measured',
     currency: 'USD',
     available,
+    repoScoped: false,
     unavailableReason: available ? null : (owners.find((o) => o.lastError)?.lastError ?? NO_BILL_REASON),
     owners,
     month: { label: today.slice(0, 7), from: monthFrom, ...round(month) },

@@ -9,7 +9,10 @@
  *        bill is missing, and the agent PR share (estimated from ci_jobs).
  *        Scope as the overview: the project, or every project the caller
  *        can read; the bill shown is every GitHub owner those projects'
- *        repos belong to, within their organizations.
+ *        repos belong to, within their organizations. Bill rows are
+ *        organization data: a caller who is not a member of the
+ *        organization sees only the rows of its projects' repos
+ *        (`repoScoped`).
  *   POST /v1/admin/ci/bill    adminOrApiKey(mcp:write), non-viewers, 30/h
  *        `mushi runner bill --push`: one month of usage items the user read
  *        with their own gh login. The owner must own a repo the project is
@@ -84,9 +87,16 @@ function ownerOfRepoUrl(url: unknown): string | null {
   return m && isGithubLogin(m[1]) ? m[1] : null
 }
 
-/** The organizations of the projects, and the GitHub owners of their bound repos per organization (first spelling wins). */
-async function scopeOwners(db: Db, projectIds: string[]): Promise<Map<string, Map<string, string>>> {
-  const out = new Map<string, Map<string, string>>()
+interface ScopeOwners {
+  /** organization → lowercased owner → the owner as first spelled in a bound repo URL */
+  owners: Map<string, Map<string, string>>
+  /** organization → the lowercased owner/repo names bound to the scoped projects */
+  repos: Map<string, Set<string>>
+}
+
+/** The organizations of the projects, the GitHub owners of their bound repos, and those repos. */
+async function scopeOwners(db: Db, projectIds: string[]): Promise<ScopeOwners> {
+  const out: ScopeOwners = { owners: new Map(), repos: new Map() }
   if (projectIds.length === 0) return out
   const [projects, repos] = await Promise.all([
     db.from('projects').select('id, organization_id').in('id', projectIds),
@@ -99,11 +109,25 @@ async function scopeOwners(db: Db, projectIds: string[]): Promise<Map<string, Ma
     const org = orgOf.get(r.project_id)
     const owner = ownerOfRepoUrl(r.repo_url)
     if (!org || !owner) continue
-    const owners = out.get(org) ?? new Map<string, string>()
+    const owners = out.owners.get(org) ?? new Map<string, string>()
     if (!owners.has(owner.toLowerCase())) owners.set(owner.toLowerCase(), owner)
-    out.set(org, owners)
+    out.owners.set(org, owners)
+    const repo = /^(?:https?:\/\/(?:www\.)?github\.com\/)?([^/\s]+\/[^/\s#?]+?)(?:\.git)?\/?$/i.exec(String(r.repo_url).trim())?.[1]
+    if (repo) out.repos.set(org, (out.repos.get(org) ?? new Set<string>()).add(repo.toLowerCase()))
   }
   return out
+}
+
+/**
+ * The organizations the caller is a member of. Bill rows are organization
+ * data (RLS: is_org_member); a caller who only belongs to some projects sees
+ * the rows of those projects' repos, never the rest of the owner's bill.
+ */
+async function memberOrgs(db: Db, userId: string, orgIds: string[]): Promise<Set<string>> {
+  if (orgIds.length === 0 || !userId) return new Set()
+  const { data, error } = await db.from('organization_members').select('organization_id').eq('user_id', userId).in('organization_id', orgIds)
+  if (error) throw new Error(`organization_members read failed: ${error.message}`)
+  return new Set(((data ?? []) as Array<{ organization_id: string }>).map((m) => m.organization_id))
 }
 
 async function getBill(c: Context, deps: CiBillRouteDeps): Promise<Response> {
@@ -119,9 +143,11 @@ async function getBill(c: Context, deps: CiBillRouteDeps): Promise<Response> {
   const now = deps.now()
 
   try {
-    const byOrg = await scopeOwners(db, scope)
-    const orgIds = [...byOrg.keys()]
-    const wanted = (org: string, owner: string) => byOrg.get(org)?.has(owner.toLowerCase()) ?? false
+    const scoped = await scopeOwners(db, scope)
+    const orgIds = [...scoped.owners.keys()]
+    const members = await memberOrgs(db, userId, orgIds)
+    const wanted = (org: string, owner: string) => scoped.owners.get(org)?.has(owner.toLowerCase()) ?? false
+    const visible = (org: string, repo: string) => members.has(org) || (scoped.repos.get(org)?.has(repo.toLowerCase()) ?? false)
     let sync: BillSyncRow[] = []
     let rows: StoredBillRow[] = []
     let pending = false
@@ -150,7 +176,7 @@ async function getBill(c: Context, deps: CiBillRouteDeps): Promise<Response> {
               .range(lo, hi),
           { what: 'ci_billing_daily', maxRows: MAX_BILL_ROWS },
         )
-        rows = read.rows.filter((r) => wanted(r.organization_id, r.owner))
+        rows = read.rows.filter((r) => wanted(r.organization_id, r.owner) && visible(r.organization_id, r.repo))
       }
     }
 
@@ -168,6 +194,7 @@ async function getBill(c: Context, deps: CiBillRouteDeps): Promise<Response> {
     }
 
     const bill = buildCiBill({ now, days, rows, sync, agent })
+    bill.repoScoped = orgIds.some((o) => !members.has(o))
     if (pending && !bill.available) bill.unavailableReason = MIGRATION_PENDING
     return c.json({ ok: true, data: bill })
   } catch (err) {
@@ -231,15 +258,15 @@ async function pushBill(c: Context, deps: CiBillRouteDeps): Promise<Response> {
   let orgId: string
   let owner: string
   try {
-    const byOrg = await scopeOwners(db, [projectId])
-    const entry = [...byOrg.entries()][0]
+    const entry = [...(await scopeOwners(db, [projectId])).owners.entries()][0]
     if (!entry) return jsonError(c, 'NO_REPO', 'Bind a GitHub repository to this project first (Projects → Repository).', 409)
     const bound = entry[1].get(body.owner.toLowerCase())
     if (!bound) {
       return jsonError(c, 'OWNER_NOT_BOUND', `${body.owner} owns none of this project's repositories (${[...entry[1].values()].join(', ')}). Push the bill of a repo owner the project uses.`, 400)
     }
     orgId = entry[0]
-    owner = bound
+    // Stored lowercase, as the collector does: one owner, one bill.
+    owner = bound.toLowerCase()
   } catch (err) {
     blog.error('ci bill push scope failed', { projectId, err: err instanceof Error ? err.message : String(err) })
     return jsonError(c, 'DB_ERROR', 'Could not read the project.', 500)

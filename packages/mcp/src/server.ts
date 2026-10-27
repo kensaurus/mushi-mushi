@@ -1815,6 +1815,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         provenance: z.string().optional().describe('measured: from GitHub\'s bill'),
         currency: z.string().optional(),
         available: z.boolean().optional(),
+        repoScoped: z.boolean().optional().describe('Only your projects\' repos: you are not a member of the organization'),
         unavailableReason: z.string().nullable().optional().describe('Why there is no bill, and how to connect one'),
         owners: z.array(z.looseObject({})).optional(),
         month: z.looseObject({}).optional().describe('This calendar month so far: grossUsd, discountUsd, netUsd'),

@@ -34,6 +34,11 @@ export interface CiBill {
   currency: 'USD'
   /** True when at least one owner's bill has been read. */
   available: boolean
+  /**
+   * True when the caller is not a member of an organization in scope: its
+   * rows then cover only the repos of the projects the caller can read.
+   */
+  repoScoped: boolean
   /** Why there is no bill yet, and how to connect one. Null when available. */
   unavailableReason: string | null
   owners: CiBillOwner[]

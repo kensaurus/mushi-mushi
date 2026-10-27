@@ -534,7 +534,8 @@ export async function syncBilling(
     const months = monthsToSync(now, p?.covered_from ?? null)
     if (remaining < months.length) break
     out.owners++
-    const owner = p?.owner ?? t.owner
+    // Stored lowercase: the keys are case-sensitive, GitHub logins are not.
+    const owner = (p?.owner ?? t.owner).toLowerCase()
     let token: string | null = null
     for (const pid of t.projectIds) {
       token = await resolveBillingToken(db, pid).catch(() => null)
