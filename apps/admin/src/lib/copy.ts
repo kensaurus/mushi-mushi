@@ -273,7 +273,7 @@ const COPY: CopyRegistry = {
     '/inventory': {
       title: 'User stories',
       description:
-        'Banner + INVENTORY SNAPSHOT first — Summary for posture, User stories, Gates, Discovery, or Yaml tabs.',
+        'Every page of your app and what users do on it, with broken actions in red.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         verified: 'Verified',
@@ -286,31 +286,31 @@ const COPY: CopyRegistry = {
         discovery: 'Open Discovery',
         proposal: 'Review proposal',
         stories: 'View stories',
-        gates: 'Open Gates',
-        tree: 'Open Tree',
+        gates: 'Show code checks',
+        tree: 'Show all actions',
         refresh: 'Refresh',
       },
       tabLabels: {
         overview: 'Summary',
         stories: 'User stories',
-        tree: 'Tree',
-        gates: 'Gates',
-        synthetic: 'Synthetic',
-        drift: 'Drift',
+        tree: 'All actions',
+        gates: 'Code checks',
+        synthetic: 'Live probes',
+        drift: 'Out of sync',
         discovery: 'Discovery',
-        yaml: 'Yaml',
+        yaml: 'Map file',
       },
       help: {
         title: 'About user stories',
         whatIsIt:
-          "Your app's user-story map — pages, actions, and verification status derived from gates, crawler, and synthetic probes.",
+          "Your app's map: each page, what users do on it, and whether each action still works, from code checks, the crawler and live probes.",
         useCases: [
-          'Brand banner = no inventory yet — start on Discovery or paste YAML',
-          'Red banner = regressed actions — fix on User stories tab',
-          'Amber banner = open gate findings — review on Gates tab',
+          'No map yet: click Turn on discovery',
+          'Red actions: they stopped working or have no code behind them yet',
+          'Open code findings: review them on the Code checks tab',
         ],
         howToUse:
-          'Overview for posture. User stories for the card map. Gates for findings. Discovery for SDK observe → propose → accept.',
+          'User stories leads with each page and its actions. Code checks lists findings. Discovery drafts the map from what the SDK sees.',
       },
     },
     '/query': {
