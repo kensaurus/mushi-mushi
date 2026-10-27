@@ -53,9 +53,15 @@ interface Props {
    * floor; when these are given they are shown instead, with no "at least".
    */
   totals?: { errors: number; warnings: number } | null
+  /**
+   * Checks whose findings another card on the same page lists in full (the
+   * audit's Known holes card): shown here as one line with the open count
+   * and a link, so the same findings are never listed twice.
+   */
+  shownElsewhere?: Partial<Record<string, { label: string; to: string }>>
 }
 
-export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null }: Props) {
+export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null, shownElsewhere = {} }: Props) {
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
   const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? '', refreshKey] })
 
@@ -114,9 +120,23 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
           {floor ? ' (only the newest 500 findings were read, so there may be more)' : ''}
         </p>
       )}
-      {open.map((g) => (
-        <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
-      ))}
+      {open.map((g) => {
+        const elsewhere = shownElsewhere[g.gate]
+        if (elsewhere) {
+          return (
+            <Card key={g.gate} className="flex flex-wrap items-center justify-between gap-2 p-3" data-check={g.gate} data-testid="gate-shown-elsewhere">
+              <span className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</span>
+              <span className="text-xs text-fg-secondary">
+                {g.open.toLocaleString()} open ·{' '}
+                <Link to={elsewhere.to} className={LINK_ACCENT}>
+                  {elsewhere.label} →
+                </Link>
+              </span>
+            </Card>
+          )
+        }
+        return <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
+      })}
       {quiet.length > 0 && (
         <details className="rounded-md border border-edge-subtle px-3 py-2" data-testid="gate-checks-passing">
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">

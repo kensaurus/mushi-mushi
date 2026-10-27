@@ -265,6 +265,7 @@ export function FullStackAuditPage() {
             neverRunText="No check has run for this project yet."
             refreshKey={findingsKey}
             totals={auditStatsData && auditStats.topPriority !== 'unknown' ? { errors: auditStats.errorCount, warnings: auditStats.warnCount } : null}
+            shownElsewhere={{ portfolio_radar_vulns: { label: 'listed under Known holes below', to: '#dependency-holes' } }}
           />
         </Section>
       )}

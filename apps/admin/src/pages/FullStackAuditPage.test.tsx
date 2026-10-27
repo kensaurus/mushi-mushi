@@ -123,4 +123,21 @@ describe('FullStackAuditPage', () => {
     // Every finding in the list can be copied too.
     expect(host.querySelectorAll('[data-testid="copy-fix-prompt"]').length).toBe(3)
   })
+
+  it('lists dependency holes once: the check row points to the Known holes card instead of repeating them', async () => {
+    mocks.stats = STATS
+    mocks.findings = {
+      runs: [...FINDINGS.runs, { id: 'r2', gate: 'portfolio_radar_vulns', status: 'fail', started_at: now, completed_at: now }],
+      findings: [
+        ...FINDINGS.findings,
+        { id: 'v1', gate_run_id: 'r2', severity: 'error', message: 'next 16.3.8 has 3 known security holes', file_path: 'pnpm-lock.yaml', line: null, rule_id: 'known_vulnerable_dependency' },
+      ],
+    }
+    await render()
+    const row = host.querySelector('[data-testid="gate-shown-elsewhere"]')!
+    expect(row.textContent).toContain('1 open')
+    expect(row.querySelector('a')?.getAttribute('href')).toBe('/#dependency-holes')
+    // The hole itself is not listed as a finding card a second time.
+    expect(host.textContent).not.toContain('next 16.3.8 has 3 known security holes')
+  })
 })
