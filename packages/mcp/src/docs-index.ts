@@ -417,7 +417,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/pipeline",
     markdown: "admin/pipeline.md",
     keywords: ["admin", "pipeline"],
-    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys", "Workers", "Send to my local worker", "Create a worker key"],
     excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {

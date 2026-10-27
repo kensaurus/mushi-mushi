@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **771** routes.
+> Generated: 2026-10-27 · **772** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 202 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 396 |
+| `jwtAuth` | 397 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 50 |
@@ -314,6 +314,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | GET | `/v1/admin/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | POST | `/v1/admin/pipeline/actions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
+| GET | `/v1/admin/pipeline/fix/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
