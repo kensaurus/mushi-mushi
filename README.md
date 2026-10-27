@@ -22,10 +22,10 @@ npx mushi-mushi
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
-  <img alt="Report detail: plain-English root cause, confidence chip and a paste-ready fix prompt." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+  <img alt="The Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
 </a>
 
-<sub>↑ a diagnosis in the Mushi console: the root cause in plain English and a paste-ready fix prompt. Click for a sample you can read without signing up.</sub>
+<sub>↑ reports in the Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
 
 </div>
 

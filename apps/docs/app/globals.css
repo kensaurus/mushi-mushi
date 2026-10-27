@@ -2276,9 +2276,9 @@ main .sample-dx .sample-dx__label {
   opacity: 0.55;
 }
 
-.sample-dx__phone-tap--1 { top: 0.2rem; left: 30%; }
-.sample-dx__phone-tap--2 { top: 0.55rem; left: 48%; }
-.sample-dx__phone-tap--3 { top: 0.3rem; left: 64%; }
+.sample-dx__phone-tap--1 { top: 0.15rem; left: 6%; }
+.sample-dx__phone-tap--2 { top: 0.6rem; left: 78%; }
+.sample-dx__phone-tap--3 { top: 0.2rem; left: 86%; }
 
 .sample-dx__trail {
   min-width: 0;
@@ -2361,6 +2361,14 @@ main .sample-dx__trail h3:first-child {
   gap: 0.25rem;
 }
 
+.sample-dx__lines {
+  list-style: disc;
+}
+
+.sample-dx__repro {
+  list-style: decimal;
+}
+
 .sample-dx code {
   font-family: var(--mushi-font-mono);
   font-size: 0.82em;
@@ -2391,6 +2399,7 @@ main .sample-dx__trail h3:first-child {
 }
 
 .sample-dx__claude {
+  list-style: decimal;
   margin: 0;
   padding: 0.75rem 0.9rem 0.75rem 2rem;
   border: 1px solid var(--mushi-rule);
