@@ -46,6 +46,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { fetchWithTimeout } from '../../_shared/http.ts';
 import { runInBackground } from '../../_shared/background.ts';
 import {
+  fetchFailingCheckNames,
   fetchPullRequest,
   installationIdForAttempt,
   markPullRequestReady,
@@ -121,6 +122,8 @@ export interface PipelineRouteDeps {
   closePull: (token: string, ref: GithubRepoRef, n: number) => Promise<boolean>;
   runQueue: (projectId: string) => Promise<boolean>;
   now: () => Date;
+  /** Live names of the checks that failed on a head. Null when the list cannot be read. */
+  failingCheckNames: (token: string, ref: GithubRepoRef, sha: string) => Promise<Set<string> | null>;
 }
 
 export const defaultPipelineDeps: PipelineRouteDeps = {
@@ -132,6 +135,7 @@ export const defaultPipelineDeps: PipelineRouteDeps = {
   updateBranch: updatePullRequestBranch,
   markReady: markPullRequestReady,
   closePull: closePullRequest,
+  failingCheckNames: fetchFailingCheckNames,
   runQueue: async (projectId) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -476,6 +480,37 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
   }
 }
 
+/** Conclusions whose failing check names fetchFailingCheckNames can name. */
+const LIVE_FAILING_CONCLUSIONS = new Set(['failure', 'timed_out']);
+
+/**
+ * Replace ci_jobs names with the live GitHub list for a red head. A failed
+ * read leaves the stored names. An empty list is the live answer (nothing
+ * on this head is failing now).
+ */
+async function overlayLiveFailingChecks(
+  db: Db,
+  attempt: { id: string; project_id: string; pr_url?: string | null; commit_sha?: string | null; check_run_conclusion?: string | null; repo_id?: string | null },
+  item: PipelineItem | null,
+  deps: PipelineRouteDeps,
+): Promise<void> {
+  if (!item) return;
+  const conclusion = (attempt.check_run_conclusion ?? '').toLowerCase();
+  if (!LIVE_FAILING_CONCLUSIONS.has(conclusion)) return;
+  const sha = attempt.commit_sha?.trim() ?? '';
+  const ref = parseGithubRepoUrl((attempt.pr_url ?? '').split('/pull/')[0]);
+  if (!sha || !ref) return;
+  try {
+    const token = await deps.token(db, attempt);
+    if (!token) return;
+    const names = await (deps.failingCheckNames ?? fetchFailingCheckNames)(token, ref, sha);
+    if (!names) return;
+    item.failingChecks = [...names].sort((a, b) => a.localeCompare(b));
+  } catch (err) {
+    plog.warn('live failing checks unread', { fixId: attempt.id, err: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 /** Where one fix sits: null fields when it is in no group (merged long ago, or not in the 7-day window). */
 function findPipelineFix(stages: PipelineStage[], fixId: string): {
   stage: PipelineStage['id'] | null;
@@ -674,21 +709,28 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
 
   // One fix's place in the pipeline: its group, the group's actions and the
   // ones the server would refuse (with why), and its failing checks, so the
-  // report page offers what /pipeline offers (9e2ec6f0, 69fcafcb).
+  // report page offers what /pipeline offers (9e2ec6f0, 69fcafcb). A red
+  // head's check names are the live GitHub list (fetchFailingCheckNames).
   app.get('/v1/admin/pipeline/fix/:id', jwtAuth, async (c: Ctx) => {
     const userId = c.get('userId') as string;
     const fixId = c.req.param('id') ?? '';
     if (!UUID_RE.test(fixId)) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'id must be a uuid.' } }, 400);
     const db = getServiceClient();
-    const { data: attempt, error } = await db.from('fix_attempts').select('id, project_id').eq('id', fixId).maybeSingle();
+    const { data: attempt, error } = await db
+      .from('fix_attempts')
+      .select('id, project_id, pr_url, commit_sha, check_run_conclusion, repo_id')
+      .eq('id', fixId)
+      .maybeSingle();
     if (error) return dbError(c, error);
     if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
-    const projectId = (attempt as { project_id: string }).project_id;
-    const access = await userCanAccessProject(db, userId, projectId);
+    const row = attempt as { id: string; project_id: string; pr_url?: string | null; commit_sha?: string | null; check_run_conclusion?: string | null; repo_id?: string | null };
+    const access = await userCanAccessProject(db, userId, row.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
     try {
-      const view = await readPipeline(db, [projectId], deps.now());
-      return c.json({ ok: true, data: { generatedAt: view.generatedAt, ...findPipelineFix(view.stages, fixId) } });
+      const view = await readPipeline(db, [row.project_id], deps.now());
+      const found = findPipelineFix(view.stages, fixId);
+      await overlayLiveFailingChecks(db, row, found.item, deps);
+      return c.json({ ok: true, data: { generatedAt: view.generatedAt, ...found } });
     } catch (err) {
       return dbError(c, { message: err instanceof Error ? err.message : String(err) });
     }

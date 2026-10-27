@@ -6,6 +6,11 @@
  * as a warning ("your fix was not tested") with a Re-run, never as a failed
  * fix. A job still waiting shows its place in the queue when the CI overview
  * can tell it, and links to /ci focused on that job.
+ *
+ * A genuinely red head (the code failed) names those checks and offers
+ * Re-run and Send to CI repair, the same actions /pipeline offers
+ * (report 9e2ec6f0). The names are the live GitHub list from
+ * GET /v1/admin/pipeline/fix/:id.
  */
 
 import { useEffect, useState } from 'react'
@@ -16,6 +21,8 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { readFixCi, rerunErrorText, type CiTone } from '../../lib/ciInfra'
 import type { CiInfraVerdict, CiOverview, CiRerunResult } from '../../lib/ciTypes'
 import { queuePositionForPr, queuePositionLine, repoFromPrUrl, type CiQueuePosition } from '../../lib/ciView'
+import { loadPipelineFix, runPipelineAction } from '../../lib/pipeline'
+import { PipelineActionDialog } from '../pipeline/PipelineActionDialog'
 
 interface Props {
   fixId: string
@@ -64,10 +71,14 @@ export function FixCiFeedback({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [queue, setQueue] = useState<CiQueuePosition | null>(null)
+  const [failingChecks, setFailingChecks] = useState<string[]>([])
+  const [repairing, setRepairing] = useState(false)
+  const [confirmRepair, setConfirmRepair] = useState(false)
 
   const reading = readFixCi({ check_run_conclusion: conclusion, check_run_status: status, ci_infra: infra })
   const repo = repoFromPrUrl(prUrl)
   const waiting = reading.state === 'waiting_for_runner' || status?.toLowerCase() === 'queued'
+  const ciRed = reading.state === 'code_failure' || reading.state === 'timed_out'
 
   // Place in the queue, read once from the CI overview while the PR waits.
   useEffect(() => {
@@ -81,6 +92,25 @@ export function FixCiFeedback({
       cancelled = true
     }
   }, [waiting, projectId, prNumber, repo])
+
+  // Live failing-check names for a red head. The report page's chip is
+  // compact, so the names have to sit on the chip itself.
+  useEffect(() => {
+    if (!ciRed) {
+      setFailingChecks([])
+      return
+    }
+    let cancelled = false
+    void loadPipelineFix(fixId).then((view) => {
+      if (cancelled) return
+      setFailingChecks(view?.item?.failingChecks ?? [])
+    }).catch(() => {
+      if (!cancelled) setFailingChecks([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [ciRed, fixId, updatedAt])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -127,10 +157,27 @@ export function FixCiFeedback({
     setNotice('Tests started again. This page shows the result once GitHub reports it.')
   }
 
+  const handleRepair = async () => {
+    setRepairing(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const out = await runPipelineAction('ci_repair', [fixId])
+      const first = out[0]
+      if (first?.ok) setNotice(first.message)
+      else setError(first?.message ?? 'Could not send this to CI repair')
+    } finally {
+      setRepairing(false)
+      setConfirmRepair(false)
+    }
+  }
+
   const ghChecks = checksUrl(prUrl)
   const ciLink = queue ? `/ci?job=${encodeURIComponent(queue.jobId)}` : '/ci'
-  const showRerun = reading.canRerun || reading.infra
+  const showRerun = reading.canRerun || reading.infra || ciRed
+  const showRepair = ciRed
   const rerunBlocked = reading.state === 'waiting_for_runner' || reading.state === 'running'
+  const failingLabel = failingChecks.length > 0 ? ` · ${failingChecks.slice(0, 8).join(', ')}` : ''
 
   return (
     <div
@@ -149,6 +196,7 @@ export function FixCiFeedback({
           {reading.infra && <span aria-hidden="true">⚠</span>}
           {reading.label}
           {prNumber ? ` · PR #${prNumber}` : ''}
+          {failingLabel}
         </span>
         {updatedAt && (
           <span className="text-2xs text-fg-faint">
@@ -177,6 +225,19 @@ export function FixCiFeedback({
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {rerunning ? 'Re-running tests…' : 'Re-run tests'}
+            </button>
+            <span aria-hidden="true" className="text-fg-faint select-none">·</span>
+          </>
+        )}
+        {showRepair && (
+          <>
+            <button
+              type="button"
+              onClick={() => setConfirmRepair(true)}
+              disabled={repairing}
+              className="font-medium text-accent hover:underline disabled:opacity-50"
+            >
+              {repairing ? 'Sending to CI repair…' : 'Send to CI repair'}
             </button>
             <span aria-hidden="true" className="text-fg-faint select-none">·</span>
           </>
@@ -210,6 +271,14 @@ export function FixCiFeedback({
 
       {notice && <p className="text-2xs text-fg-secondary" role="status">{notice}</p>}
       {error && <p className="text-2xs text-danger" role="alert">{error}</p>}
+      {confirmRepair && (
+        <PipelineActionDialog
+          pending={{ action: 'ci_repair', fixIds: [fixId], target: prNumber ? `PR #${prNumber}` : 'this pull request' }}
+          busy={repairing}
+          onConfirm={() => void handleRepair()}
+          onCancel={() => setConfirmRepair(false)}
+        />
+      )}
     </div>
   )
 }
