@@ -135,7 +135,7 @@ function AuditResultCard({ result }: { result: AuditResult }) {
 }
 
 /**
- * Exported for tests (page modules are knip entries, so no @internal tag). The status sentence, from the server's
+ * Exported for tests; page modules are knip entries, so it carries no tag. The status sentence, from the server's
  * exact counts (fullstack-audit/stats), never from the capped findings list.
  */
 export function auditStatus(stats: FullstackAuditStats): { tone: PageStatusTone; sentence: string } {

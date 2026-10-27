@@ -88,7 +88,7 @@ interface CheckCard {
   view: CheckCardView | null
 }
 
-/** Exported for tests (page modules are knip entries, so no @internal tag). Cards worst first; a card still loading keeps its place at the end. */
+/** Exported for tests; page modules are knip entries, so it carries no tag. Cards worst first; a card still loading keeps its place at the end. */
 export function sortCheckCards(cards: readonly CheckCard[]): CheckCard[] {
   return cards
     .map((card, index) => ({ card, index }))
@@ -100,7 +100,7 @@ export function sortCheckCards(cards: readonly CheckCard[]): CheckCard[] {
     .map((x) => x.card)
 }
 
-/** Exported for tests (page modules are knip entries, so no @internal tag). One sentence: what needs you first, then what is fine. */
+/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence: what needs you first, then what is fine. */
 export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTone; sentence: string } {
   const ready = cards.filter((c) => c.view)
   const failed = ready.filter((c) => c.view!.state === 'failed')

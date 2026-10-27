@@ -108,7 +108,7 @@ function TrendArrow({ delta, higherIsBad }: { delta: number; higherIsBad: boolea
 
 // ── Status sentence ──────────────────────────────────────────────────────────
 
-/** Exported for tests (page modules are knip entries, so no @internal tag). One sentence on file and bundle size, worst first. */
+/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence on file and bundle size, worst first. */
 export function codeSizeStatus(summary: CodeHealthSummary): { tone: PageStatusTone; sentence: string } {
   const { error_count: errors, warn_count: warnings, max_loc: maxLoc, latest_bundle_kb: kb } = summary
   const bundle = kb != null ? ` Your latest bundle is ${kb.toFixed(1)} KB gzipped.` : ''

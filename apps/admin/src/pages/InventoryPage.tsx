@@ -673,7 +673,7 @@ export function InventoryPage() {
   )
 }
 
-/** Exported for tests (page modules are knip entries, so no @internal tag). The status line: what is broken first, then how much is proven. */
+/** Exported for tests; page modules are knip entries, so it carries no tag. The status line: what is broken first, then how much is proven. */
 export function inventorySentence({
   total,
   verified,
