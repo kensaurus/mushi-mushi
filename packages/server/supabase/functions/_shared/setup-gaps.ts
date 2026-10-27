@@ -161,6 +161,11 @@ function sourceWords(s: TokenSource): string {
   }
 }
 
+/** "a", "a or b", "a, b or c". */
+function orList(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`
+}
+
 /** No repo connected at all: nothing else about GitHub can be checked. */
 export function noRepoGap(projectId: string): SetupGap {
   return {
@@ -199,7 +204,7 @@ export function githubAccessGap(input: RepoAccessInput): SetupGap {
     return { ...base, status: 'gap', summary: `${who} in ${input.repo} can't ${list}. Those steps fail until you add it.${secretsLine}` }
   }
   if (unproven.length) {
-    const list = unproven.map((k) => ABILITY_WORDS[k].verb).join(', ')
+    const list = orList(unproven.map((k) => ABILITY_WORDS[k].verb))
     return {
       ...base,
       status: 'unknown',

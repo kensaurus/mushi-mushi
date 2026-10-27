@@ -61,7 +61,7 @@ function MemberLine({ m }: { m: BatchMember }) {
         <span className="min-w-0 flex-1 basis-48 text-sm text-fg break-words">{m.title ?? 'Untitled fix'}</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Chip tone={m.rides ? 'ok' : 'neutral'}>{m.rides ? 'Rides' : 'Waits'}</Chip>
+        {m.express && !m.rides ? null : <Chip tone={m.rides ? 'ok' : 'neutral'}>{m.rides ? 'Rides' : 'Waits'}</Chip>}
         <Chip tone={verdict.tone}>{verdict.label}</Chip>
         <Chip tone={ci.tone}>{ci.label}</Chip>
         {m.draft ? <Chip tone="neutral">Draft</Chip> : null}
