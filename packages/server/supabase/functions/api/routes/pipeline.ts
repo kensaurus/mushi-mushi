@@ -4,6 +4,7 @@
  *          (deploy size limit; `api` forwards these paths).
  *
  *   GET  /v1/admin/pipeline          ?projectId= one app, or every app the caller can open
+ *   GET  /v1/admin/pipeline/fix/:id  one fix's group, actions and refused actions (report page)
  *   POST /v1/admin/pipeline/actions  { action, fixIds?, projectId?, reason? } one-click fixes
  *
  * The read returns every stage with its stuck groups (_shared/pipeline-view.ts),
@@ -24,6 +25,10 @@
  *   remove          take the PR out of the merge queue, with a reason
  *   close           close the PR without merging, with a reason
  *   train_retry     run the merge queue for the app now
+ *
+ * Every item carries `blocked`: the group's actions this file would refuse
+ * for it, with the same words (readActionFacts → pipeline-view
+ * blockedActions), so the console disables them instead of failing on click.
  *
  * A reason is kept as a team note on the report (postTeamNote), so it is read
  * where the console's other triage decisions are. Re-review, CI re-run and
@@ -51,8 +56,9 @@ import {
 import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } from '../../_shared/review-followup-db.ts';
 import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
 import { roundHeadsFor } from './local-followups.ts';
-import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair } from '../../_shared/review-followup.ts';
+import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
+import { RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
 import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
 import {
   buildDispatchers,
@@ -63,7 +69,11 @@ import {
   keyServes,
   summarizeIntake,
   withDispatcherGroup,
+  type ActionFacts,
   type AgentKeyRow,
+  type PipelineGroup,
+  type PipelineItem,
+  type PipelineStage,
   summarizeTrains,
   type AttemptRow,
   type DeployRow,
@@ -95,7 +105,7 @@ export const PIPELINE_ACTIONS = ['ci_repair', 'followup', 'update_branch', 'conf
 export type PipelineActionId = (typeof PIPELINE_ACTIONS)[number];
 
 const ATTEMPT_COLUMNS =
-  'id, project_id, report_id, status, agent, branch, branch_name, pr_url, pr_number, pr_state, commit_sha, check_run_conclusion, error, summary, created_at, completed_at, merged_at, repo_id';
+  'id, project_id, report_id, status, agent, branch, branch_name, pr_url, pr_number, pr_state, commit_sha, check_run_conclusion, error, summary, created_at, completed_at, merged_at, repo_id, failure_category';
 
 export interface PipelineRouteDeps {
   token: (db: Db, attempt: { project_id: string; repo_id?: string | null; pr_url?: string | null }) => Promise<string | null>;
@@ -218,10 +228,11 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const [fixReports, reviews, followups, events] = await Promise.all([
     inChunks<ReportRow>(missing, (ids) => db.from('reports').select('id, project_id, status, title, summary, description, created_at, processing_error').in('id', ids) as never),
     inChunks<ReviewRow>(attemptIds, (ids) =>
-      db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at').in('fix_attempt_id', ids) as never,
+      db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at, queued_at, head_sha').in('fix_attempt_id', ids) as never,
     ),
+    // Every follow-up row: the active ones move a PR, all of them are the cloud trigger's history.
     inChunks<FollowupRow>(attemptIds, (ids) =>
-      db.from('fix_review_followups').select('fix_attempt_id, status, kind').in('fix_attempt_id', ids).in('status', ['queued', 'dispatched', 'running']) as never,
+      db.from('fix_review_followups').select('id, fix_attempt_id, status, kind, head_sha_before, cursor_agent_id').in('fix_attempt_id', ids) as never,
     ),
     // The latest event per attempt: small chunks, since CI writes many events per PR.
     inChunks<EventRow>(attemptIds, (ids) => db.from('fix_events').select('fix_attempt_id, at, label').in('fix_attempt_id', ids).gte('at', since3).order('at', { ascending: false }).limit(1000) as never, 20).catch(
@@ -231,7 +242,11 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       },
     ),
   ]);
-  const heads = attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? '');
+  // Reviewed heads too: a CI repair is judged on the commit Opus reviewed.
+  const heads = [
+    ...attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? ''),
+    ...reviews.map((r) => r.head_sha ?? ''),
+  ];
   let ciJobs = new Map<string, CiJobForRepair[]>();
   let ciReadable = true;
   try {
@@ -249,17 +264,20 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     }),
   );
   const dispatchers = await readDispatchers(db, projectIds, (projectsRes.data ?? []) as DispatcherProject[], now);
+  const actionFacts = await readActionFacts(db, projectIds, attempts, followups, now);
   const stages = buildPipeline({
     now,
     reports: [...reports, ...fixReports],
     attempts,
     reviews,
     queue: (queueRes.data ?? []) as QueueRow[],
-    followups,
+    followups: followups.filter((f) => ACTIVE_FOLLOWUP_STATUSES.has(f.status)),
     ciJobs,
     deploys: deploysRes.error ? [] : ((deploysRes.data ?? []) as DeployRow[]),
     events,
     followupsOn,
+    ciReadable,
+    actionFacts: actionFacts ?? undefined,
   });
   const intake = await readIntake(db, projectIds, now);
   const names = new Map(((projectsRes.data ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]));
@@ -282,6 +300,63 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     intake,
     ciReadable,
   };
+}
+
+const ACTIVE_FOLLOWUP_STATUSES = new Set(['queued', 'dispatched', 'running']);
+
+/** A remembered refusal stops counting after this, in case the token changed somewhere Mushi does not see. */
+const RERUN_REFUSED_TTL_MS = 7 * DAY;
+
+/**
+ * What the action routes check before they act (pipeline-view ActionFacts),
+ * read once: cloud follow-up readiness per app, earlier follow-up rounds per
+ * PR, and apps whose GitHub token GitHub refused a re-run since the app's
+ * settings last changed. null when any read fails: then every action stays
+ * offered, as before.
+ */
+async function readActionFacts(db: Db, projectIds: string[], attempts: AttemptRow[], followups: FollowupRow[], now: Date): Promise<ActionFacts | null> {
+  try {
+    const prIds = attempts.filter((a) => a.pr_url && (a.pr_state === 'open' || a.pr_state === 'draft')).map((a) => a.id);
+    const prProjects = [...new Set(attempts.filter((a) => prIds.includes(a.id)).map((a) => a.project_id))];
+    const cache: CloudReadyCache = new Map();
+    const since = new Date(now.getTime() - RERUN_REFUSED_TTL_MS).toISOString();
+    const [cloudRows, heads, refusals, settings] = await Promise.all([
+      Promise.all(prProjects.map(async (id) => [id, await cloudReady(db, id, cache)] as const)),
+      roundHeadsFor(db, prIds),
+      db
+        .from('fix_events')
+        .select('project_id, at')
+        .in('project_id', projectIds)
+        .eq('kind', 'ci_started')
+        .eq('status', 'fail')
+        .like('dedupe_key', `${RERUN_REFUSED_DEDUPE_PREFIX}%`)
+        .gte('at', since)
+        .limit(500),
+      db.from('project_settings').select('project_id, updated_at').in('project_id', projectIds),
+    ]);
+    if ('error' in heads) throw new Error(heads.error);
+    if (refusals.error) throw new Error(refusals.error.message);
+    if (settings.error) throw new Error(settings.error.message);
+    const changedAt = new Map(((settings.data ?? []) as Array<{ project_id: string; updated_at: string | null }>).map((r) => [r.project_id, r.updated_at ?? '']));
+    const rerunRefused = new Set<string>();
+    for (const r of (refusals.data ?? []) as Array<{ project_id: string; at: string }>) {
+      if (Date.parse(r.at) > Date.parse(changedAt.get(r.project_id) || '1970-01-01T00:00:00Z')) rerunRefused.add(r.project_id);
+    }
+    const prior = new Map<string, PriorFollowup[]>();
+    for (const f of followups) {
+      if (!f.head_sha_before) continue;
+      prior.set(f.fix_attempt_id, [...(prior.get(f.fix_attempt_id) ?? []), { id: f.id, head_sha_before: f.head_sha_before, status: f.status, cursor_agent_id: f.cursor_agent_id ?? null }]);
+    }
+    return {
+      cloud: new Map(cloudRows.map(([id, c]) => [id, { ready: c.ready, enabled: c.enabled, why: c.why }])),
+      prior,
+      roundHeads: heads,
+      rerunRefused,
+    };
+  } catch (err) {
+    plog.warn('action facts read failed', { err: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
 }
 
 /**
@@ -348,6 +423,24 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
     plog.warn('dispatcher read failed', { err: err instanceof Error ? err.message : String(err) });
     return null;
   }
+}
+
+/** Where one fix sits: null fields when it is in no group (merged long ago, or not in the 7-day window). */
+function findPipelineFix(stages: PipelineStage[], fixId: string): {
+  stage: PipelineStage['id'] | null;
+  groupId: string | null;
+  groupLabel: string | null;
+  tone: PipelineGroup['tone'] | null;
+  actions: PipelineGroup['actions'];
+  item: PipelineItem | null;
+} {
+  for (const s of stages) {
+    for (const g of s.groups) {
+      const item = g.items.find((i) => i.id === fixId);
+      if (item) return { stage: s.id, groupId: g.id, groupLabel: g.label, tone: g.tone, actions: g.actions, item };
+    }
+  }
+  return { stage: null, groupId: null, groupLabel: null, tone: null, actions: [], item: null };
 }
 
 interface ActionResult {
@@ -505,6 +598,28 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
     if (scope.ids.length === 0) return c.json({ ok: true, data: { generatedAt: deps.now().toISOString(), projects: [], stages: [], dispatchers: [], trains: [], intake: null, ciReadable: true } });
     try {
       return c.json({ ok: true, data: await readPipeline(db, scope.ids, deps.now()) });
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // One fix's place in the pipeline: its group, the group's actions and the
+  // ones the server would refuse (with why), and its failing checks, so the
+  // report page offers what /pipeline offers (9e2ec6f0, 69fcafcb).
+  app.get('/v1/admin/pipeline/fix/:id', jwtAuth, async (c: Ctx) => {
+    const userId = c.get('userId') as string;
+    const fixId = c.req.param('id') ?? '';
+    if (!UUID_RE.test(fixId)) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'id must be a uuid.' } }, 400);
+    const db = getServiceClient();
+    const { data: attempt, error } = await db.from('fix_attempts').select('id, project_id').eq('id', fixId).maybeSingle();
+    if (error) return dbError(c, error);
+    if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+    const projectId = (attempt as { project_id: string }).project_id;
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+    try {
+      const view = await readPipeline(db, [projectId], deps.now());
+      return c.json({ ok: true, data: { generatedAt: view.generatedAt, ...findPipelineFix(view.stages, fixId) } });
     } catch (err) {
       return dbError(c, { message: err instanceof Error ? err.message : String(err) });
     }

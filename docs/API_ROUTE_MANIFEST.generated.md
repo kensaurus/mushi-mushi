@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **760** routes.
+> Generated: 2026-10-27 · **756** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 200 |
+| `adminOrApiKey` | 197 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 392 |
+| `jwtAuth` | 391 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -92,9 +92,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | POST | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
-| GET | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
-| POST | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
-| GET | `/v1/admin/ci/cost-fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
@@ -314,6 +311,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/orgs/:orgId/spend/imports/:importId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/spend-ledger.ts` |
 | GET | `/v1/admin/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | POST | `/v1/admin/pipeline/actions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
+| GET | `/v1/admin/pipeline/fix/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pipeline.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -506,7 +504,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/queue/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/queue.ts` |
 | GET | `/v1/admin/queue/summary` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/queue/throughput` | `jwtAuth` | `packages/server/supabase/functions/api/routes/queue.ts` |
-| GET | `/v1/admin/release-batch` | `jwtAuth` | `packages/server/supabase/functions/api/routes/release-batch.ts` |
 | GET | `/v1/admin/releases` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | DELETE | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
 | GET | `/v1/admin/releases/:id` | `unknown` | `packages/server/supabase/functions/api/routes/releases.ts` |
@@ -588,7 +585,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/settings/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/settings/test-slack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/onboarding-setup.ts` |
-| GET | `/v1/admin/setup-gaps` | `jwtAuth` | `packages/server/supabase/functions/api/routes/setup-gaps.ts` |
 | GET | `/v1/admin/skill-runs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/skill-runs.ts` |
 | GET | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |
 | POST | `/v1/admin/sso` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sso-audit.ts` |

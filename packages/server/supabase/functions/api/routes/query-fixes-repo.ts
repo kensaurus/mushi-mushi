@@ -670,7 +670,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .select(
         // cursor_* / claude_workflow_run_url / check_run_updated_at feed the
         // agent badges, links, artifacts gallery and "CI synced" (QA #89).
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, review_reasoning, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
