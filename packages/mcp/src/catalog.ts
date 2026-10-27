@@ -404,6 +404,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
   },
   {
+    name: 'get_ci_bill',
+    title: 'Real GitHub Actions bill',
+    description:
+      'Return what GitHub actually charged for Actions, read from GitHub\'s billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns { window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects\' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api | cli), coveredFrom }], month { label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals { grossUsd, discountUsd, netUsd, minutes }, previousTotals and change { netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare { share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What did GitHub Actions actually cost me this month, and which repo or agent drove it?',
+  },
+  {
     name: 'request_ci_placement_change',
     title: 'Ask to change where CI runs (needs approval)',
     description:
@@ -412,6 +422,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
+  },
+  {
+    name: 'open_ci_cost_fix',
+    title: 'Open a CI cost fix PR (draft)',
+    description:
+      'Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix { kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow\'s billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App\'s Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns { job: { id, status (queued | running | pr_opened | no_change | refused | failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Stop glot.it\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
   },
   {
     name: 'explain_finding',

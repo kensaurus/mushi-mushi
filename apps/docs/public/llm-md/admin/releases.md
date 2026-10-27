@@ -106,6 +106,34 @@ answer gives that version in `autoReleaseVersion` and lists any others in
 
 ---
 
+## Batch tab: what ships next
+
+The **Batch** tab shows, for each repo, the release train that is running now or
+leaves next. A release train collects your approved fix pull requests and merges
+them together, so they ship as one deploy. The tab only reads: re-run, merge and
+remove fixes from [Pipeline](/admin/pipeline).
+
+- **Each fix** shows whether it rides or waits, Opus's verdict at its current commit,
+  its CI, and why it waits.
+- **Rules to ride** count how many fixes pass each rule: Opus said merge at the
+  current commit, not a draft, its own CI is green, it did not keep failing trains
+  at that commit, and it is not urgent (urgent fixes merge on their own).
+- **Database migrations** lists migration files in the fixes' changes. Mushi looks
+  in the folder your app recipe names (`data.migrationsDir` in
+  `mushi.recipe.json`), or else in `supabase/migrations`, `prisma/migrations` and
+  `migrations`. Mushi never runs them; apply them when you deploy. If a change could
+  not be read, the list says it may be incomplete.
+- **Deploy after the last train** says whether the merge commit was seen running, or
+  a deploy was seen after the merge. With no deploy in 14 days it links to the
+  [setup gap](/admin/onboarding#setup-gaps) that explains why reporters are not
+  told.
+
+```bash
+GET /v1/admin/release-batch?projectId=   # one app, or every app you can open
+```
+
+---
+
 ## Release entry fields
 
 | Field | Description |

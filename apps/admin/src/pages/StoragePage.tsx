@@ -18,15 +18,15 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { StorageStatusBanner, isStorageStatusBannerCritical } from '../components/storage/StorageStatusBanner'
 import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { storageVerdict } from '../components/storage/storageVerdict'
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
 import { Card, Btn, Badge, ErrorAlert, Input, SecretInput, SelectField, SegmentedControl } from '../components/ui'
 import { SettingDefaultActions } from '../components/settings/SettingDefaultActions'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   ContainedBlock,
   InlineProof,
@@ -155,6 +155,13 @@ function validateProvider(m: StorageSetting & StorageSecretDraft): ValidationHin
   }
   return hints
 }
+
+const STORAGE_CHIP_TONE = {
+  ok: CHIP_TONE.okSubtle,
+  info: CHIP_TONE.neutral,
+  warn: CHIP_TONE.warnSubtle,
+  danger: CHIP_TONE.dangerSubtle,
+} as const
 
 const STORAGE_TABS: Array<{ id: StorageTabId; label: string; description: string }> = [
   {
@@ -705,47 +712,22 @@ export function StoragePage() {
       >
         {/* Scoped to the active project in words: next to the team-wide
             "Healthy buckets" count, a bare "UNKNOWN" read as a contradiction. */}
-        <Badge
-          className={
-            stats.activeProjectHealthStatus === 'healthy'
-              ? CHIP_TONE.okSubtle
-              : stats.activeProjectHealthStatus === 'failing'
-                ? CHIP_TONE.dangerSubtle
-                : stats.activeProjectHealthStatus === 'degraded'
-                  ? CHIP_TONE.warnSubtle
-                  : CHIP_TONE.neutral
-          }
-        >
-          {stats.activeProjectHealthStatus === 'unknown'
-            ? 'This project: not checked yet'
-            : `This project: ${stats.activeProjectHealthStatus}`}
-        </Badge>
+        <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
       </PageHeaderBar>
 
       <PagePosture
         slots={[
           {
+            id: 'storage-status',
             priority: POSTURE_PRIORITY.status,
-            show: isStorageStatusBannerCritical(stats),
-            children: (
-              <StorageStatusBanner
-                stats={stats}
-                onTab={setActiveTab}
-                onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
-                checking={checkingId === activeProjectId}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <StorageSnapshotStrip
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'Storage snapshot'}
-                hint={activeTabMeta.description}
-                statLabels={copy?.statLabels}
+                onTab={setActiveTab}
+                onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
+                checking={checkingId === activeProjectId}
               />
             ),
           },

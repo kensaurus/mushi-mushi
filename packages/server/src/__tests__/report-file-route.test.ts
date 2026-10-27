@@ -259,4 +259,19 @@ describe('POST /v1/admin/projects/:id/reports', () => {
     expect(rows(db, 'reports')).toHaveLength(0)
     expect(state.classified).toHaveLength(0)
   })
+
+  it("queue.laneId puts the filed report at the end of the caller's lane; a lane of another app files nothing", async () => {
+    const { db, app } = setup()
+    const LANE = '7000000a-0000-4000-8000-000000000000'
+    const OTHER = '7000000b-0000-4000-8000-000000000000'
+    db.table('work_lanes').push({ id: LANE, project_id: P1, host_id: 'h1' }, { id: OTHER, project_id: '1000000b-0000-4000-8000-000000000000', host_id: 'h1' })
+    db.table('work_hosts').push({ id: 'h1', owner_user_id: 'u1', revoked_at: null })
+    const wrong = await app.call(P1, { title: 'Checkout total wrong', description: 'Adds tax twice.', queue: { laneId: OTHER } })
+    expect(wrong.status).toBe(404)
+    expect(rows(db, 'reports')).toHaveLength(0)
+    const res = await app.call(P1, { title: 'Checkout total wrong', description: 'Adds tax twice.', queue: { laneId: LANE } })
+    expect(res.status).toBe(201)
+    expect(res.body.data?.queued).toEqual({ laneId: LANE })
+    expect(db.table('work_queue')).toEqual([expect.objectContaining({ lane_id: LANE, project_id: P1, report_id: res.body.data?.reportId, source: 'report_file', added_by: 'u1' })])
+  })
 })

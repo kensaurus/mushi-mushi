@@ -11,6 +11,10 @@
  */
 
 import type { RowStatusValue } from './SettingsRow'
+import { connectionFromProbe, type ProbeLike } from '../../lib/integrationConnection'
+
+/** Slack is only verified by a test send, so a check stays good for 30 days (as on Integrations). */
+export const SLACK_VERIFIED_FRESH_MS = 30 * 24 * 60 * 60 * 1000
 
 export interface SlackAlertInput {
   channelId?: string | null
@@ -23,6 +27,12 @@ export interface SlackAlertInput {
    */
   canPost?: boolean
   tested?: { ok: boolean } | null
+  /**
+   * The newest `slack` row of GET /v1/admin/health/history: the same probe the
+   * Integrations card reads, so a test sent there counts here too.
+   */
+  probe?: ProbeLike
+  now?: number
 }
 
 export interface SlackAlertFlags {
@@ -95,6 +105,10 @@ export function slackAlertStatus(input: SlackAlertInput): RowStatusValue {
   }
   if (!canPost) {
     return { state: 'attention', detail: 'Slack is only partly set up, so alerts cannot be sent yet.' }
+  }
+  if (input.probe) {
+    const view = connectionFromProbe({ configured: true, probe: input.probe, now: input.now, staleAfterMs: SLACK_VERIFIED_FRESH_MS })
+    if (view.state === 'working' || view.state === 'attention') return { state: view.state, detail: view.detail }
   }
   return { state: 'checking', detail: 'Saved. Send a test message to check it.' }
 }

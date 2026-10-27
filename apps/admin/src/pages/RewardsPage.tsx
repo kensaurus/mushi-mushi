@@ -22,8 +22,9 @@ import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../co
 import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
-import { Badge, Card } from '../components/ui'
-import { runStatusChipTone } from '../lib/chipTone'
+import { Badge, Btn, Card } from '../components/ui'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { rewardsHeaderChip } from '../components/rewards/overviewHelpers'
 import { IconRewards } from '../components/icons'
 import {
   OverviewTab,
@@ -82,6 +83,21 @@ export function RewardsPage() {
     filters: { tab: active },
   })
 
+  const headerChip = rewardsHeaderChip({
+    entitled: rewardsEnabled,
+    projectEnabled: rewardsStats.projectRewardsEnabled,
+    hasProject: rewardsStats.projectId != null,
+  })
+  const enableRewards =
+    canEdit && rewardsStats.projectId
+      ? () => void projectRewards.toggle(rewardsStats.projectId!, rewardsStats.projectName, true)
+      : undefined
+  // "Off" is the page status's own sentence; its button rides there instead of a second banner.
+  const offInStatus = rewardsEnabled && rewardsStats.topPriority === 'project_disabled' && enableRewards != null
+  // A healthy program is said by the status line; the banner is for what needs you.
+  const showStatus = !ux.hideRewardsSnapshot || offInStatus
+  const showBanner = !offInStatus && !(showStatus && rewardsEnabled && rewardsStats.topPriority === 'healthy')
+
   const showHobbyInline =
     !rewardsEnabled && rewardsStats.organizationId != null && rewardsStats.topPriority !== 'no_org'
 
@@ -107,15 +123,16 @@ export function RewardsPage() {
         ]}
         helpHowToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
       >
-        {rewardsEnabled
-          ? <Badge className={runStatusChipTone('active')}>Active</Badge>
-          : <Badge tone="neutral">Hobby — read-only</Badge>}
+        {/* The open app's switch, not the plan: a green "Active" sat over
+            "Rewards are off" when the plan allowed rewards but the app had them off (5f2ab6c5). */}
+        <Badge className={headerChip.tone === 'active' ? runStatusChipTone('active') : CHIP_TONE.neutral}>{headerChip.label}</Badge>
       </PageHeaderBar>
 
       <PagePosture
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: showBanner,
             children: (
               <RewardsStatusBanner
                 stats={rewardsStats}
@@ -123,26 +140,26 @@ export function RewardsPage() {
                 onTab={setActive}
                 onRefresh={reloadRewardsStats}
                 refreshing={rewardsStatsValidating}
-                onEnableRewards={
-                  canEdit && rewardsStats.projectId
-                    ? () => void projectRewards.toggle(rewardsStats.projectId!, rewardsStats.projectName, true)
-                    : undefined
-                }
+                onEnableRewards={enableRewards}
                 enabling={projectRewards.busy}
               />
             ),
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideRewardsSnapshot,
+            show: showStatus,
             children: (
               <RewardsSnapshotStrip
                 stats={rewardsStats}
                 statsFetchedAt={rewardsStatsFetchedAt}
                 statsValidating={rewardsStatsValidating}
-                description={activeMeta.description}
-                compact={ux.compactSnapshot}
-                hideLinks={ux.hideSnapshotLinks}
+                action={
+                  offInStatus ? (
+                    <Btn size="sm" variant="primary" loading={projectRewards.busy} onClick={enableRewards}>
+                      Turn on rewards
+                    </Btn>
+                  ) : null
+                }
               />
             ),
           },

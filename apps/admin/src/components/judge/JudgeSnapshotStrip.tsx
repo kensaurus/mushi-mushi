@@ -1,107 +1,98 @@
 /**
  * FILE: JudgeSnapshotStrip.tsx
- * PURPOSE: Dedicated judge KPI strip — replaces hand-rolled grid on JudgePage.
+ * PURPOSE: Triage grading status: one sentence and the three numbers that say
+ *          whether Mushi's diagnoses can be trusted (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { Btn, PageStatus, type PageStatusMetric, type PageStatusTone } from '../ui'
 import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
-import {
-  classifiedDetail,
-  classifiedTooltip,
-  disagreeDetail,
-  disagreeTooltip,
-  driftDetail,
-  driftTooltip,
-  promptsDetail,
-  promptsTooltip,
-  totalDetail,
-  totalTooltip,
-  weekDetail,
-  weekTooltip,
-} from '../../lib/statTooltips/judge'
 import { judgeLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: JudgeStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
+  /** Opens the disagreements list: the page's one action while any exist. */
+  onSeeDisagreements?: () => void
 }
 
-export function JudgeSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'JUDGE SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function scoreTone(score: number | null): PageStatusTone {
+  if (score == null) return 'neutral'
+  if (score >= 0.8) return 'ok'
+  if (score >= 0.6) return 'warn'
+  return 'danger'
+}
+
+/** The recent window when the server sent it, else all time; the words say which (64c2b3df). */
+function disagreementWindow(stats: JudgeStats): { disagreed: number; graded: number; words: string; recent: boolean } {
+  if (stats.recentEvaluations != null && stats.recentDisagreements != null) {
+    const days = stats.recentWindowDays ?? 14
+    return { disagreed: stats.recentDisagreements, graded: stats.recentEvaluations, words: `in the last ${days} days`, recent: true }
+  }
+  return { disagreed: stats.disagreementCount, graded: stats.totalEvaluations, words: 'so far', recent: false }
+}
+
+/** @internal Exported for tests only. */
+export function judgeStatusSentence(stats: JudgeStats): string {
+  if (stats.totalEvaluations === 0) {
+    return stats.ungradedReports > 0
+      ? `Nothing graded yet; ${stats.ungradedReports} diagnosed report${stats.ungradedReports === 1 ? ' is' : 's are'} ready.`
+      : 'Nothing graded yet. Grades start once reports are diagnosed.'
+  }
+  const week = judgeWeekTitle(stats.latestWeekLabel).toLowerCase()
+  const score = stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : null
+  const scored = score
+    ? `Diagnoses scored ${score} ${week} across ${stats.latestWeekEvalCount} grade${stats.latestWeekEvalCount === 1 ? '' : 's'}`
+    : `No grades ${week}`
+  const w = disagreementWindow(stats)
+  const disagree =
+    w.graded === 0
+      ? `. Nothing was graded ${w.words}.`
+      : w.disagreed > 0
+        ? `. ${w.recent ? 'In the last' : 'So far'}${w.recent ? ` ${stats.recentWindowDays ?? 14} days` : ''} the grader disagreed with ${w.disagreed} of ${w.graded} diagnoses (${Math.round((w.disagreed / w.graded) * 100)}%).`
+        : `. The grader agreed with all ${w.graded} diagnoses ${w.words}.`
+  return scored + disagree
+}
+
+export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements }: Props) {
+  const w = disagreementWindow(stats)
+  const disagreements: PageStatusMetric = {
+    label: w.recent ? `Disagreed, last ${stats.recentWindowDays ?? 14} days` : (statLabels?.disagree ?? 'Disagreements, all time'),
+    value: w.disagreed,
+    tone: w.disagreed > 0 ? 'warn' : 'neutral',
+    hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
+    to: judgeLinks.disagree,
+  }
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="Judge snapshot">
-        <StatCard
-          label={statLabels?.week ?? judgeWeekTitle(stats.latestWeekLabel)}
-          value={stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—'}
-          accent={
-            stats.latestWeekScore != null && stats.latestWeekScore >= 0.8
-              ? 'text-ok'
-              : stats.latestWeekScore != null && stats.latestWeekScore >= 0.6
-                ? 'text-warn'
-                : stats.latestWeekScore != null
-                  ? 'text-danger'
-                  : undefined
-          }
-          tooltip={weekTooltip(stats)}
-          detail={weekDetail(stats)}
-          to={judgeLinks.week}
-        />
-        <StatCard
-          label={statLabels?.total ?? 'Total evals'}
-          value={stats.totalEvaluations}
-          tooltip={totalTooltip(stats)}
-          detail={totalDetail()}
-          to={judgeLinks.total}
-        />
-        <StatCard
-          label={statLabels?.disagree ?? 'Disagreements'}
-          value={stats.disagreementCount}
-          accent={stats.disagreementCount > 0 ? 'text-warn' : 'text-ok'}
-          tooltip={disagreeTooltip(stats)}
-          detail={disagreeDetail(stats)}
-          to={judgeLinks.disagree}
-        />
-        <StatCard
-          label={statLabels?.drift ?? 'WoW drift'}
-          value={stats.weekOverWeekDriftPct != null ? `${stats.weekOverWeekDriftPct}%` : '—'}
-          accent={
-            stats.weekOverWeekDriftPct != null && stats.weekOverWeekDriftPct >= 5
-              ? 'text-danger'
-              : undefined
-          }
-          tooltip={driftTooltip(stats)}
-          detail={driftDetail()}
-          to={judgeLinks.drift}
-        />
-        <StatCard
-          label={statLabels?.classified ?? 'Classified'}
-          value={stats.classifiedReports}
-          tooltip={classifiedTooltip(stats)}
-          detail={classifiedDetail()}
-          to={judgeLinks.classified}
-        />
-        <StatCard
-          label={statLabels?.prompts ?? 'Prompts'}
-          value={stats.promptVersionCount}
-          accent={stats.activePromptCount > 0 ? 'text-ok' : undefined}
-          tooltip={promptsTooltip(stats)}
-          detail={promptsDetail(stats)}
-          to={judgeLinks.prompts}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Triage grading status"
+      tone={scoreTone(stats.latestWeekScore)}
+      sentence={judgeStatusSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      action={
+        onSeeDisagreements && w.disagreed > 0 ? (
+          <Btn size="sm" variant="primary" onClick={onSeeDisagreements}>
+            See disagreements
+          </Btn>
+        ) : undefined
+      }
+      metrics={[
+        {
+          label: statLabels?.week ?? judgeWeekTitle(stats.latestWeekLabel),
+          value: stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—',
+          tone: scoreTone(stats.latestWeekScore),
+          hint: 'Average grade for the latest week with grades: was the category, severity and component right.',
+          to: judgeLinks.week,
+        },
+        disagreements,
+        {
+          label: statLabels?.classified ?? 'Ready to grade',
+          value: stats.ungradedReports,
+          hint: 'Diagnosed reports the grader has not scored yet.',
+          to: judgeLinks.classified,
+        },
+      ]}
+    />
   )
 }

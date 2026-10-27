@@ -11,6 +11,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { stoppedTitle } from './countDefinitions'
 import { IntegrationHealthDot } from '../components/IntegrationHealthDot'
 import { SidebarBudgetIndicator } from '../components/SidebarBudgetIndicator'
 import { SidebarHealthDot } from '../components/SidebarHealthDot'
@@ -330,7 +331,7 @@ export function resolveNavBadge(
           navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight,
         label:
           navCounts.fixesFailed > 0
-            ? `Auto-fix stopped on ${navCounts.fixesFailed} ${navCounts.fixesFailed === 1 ? 'report' : 'reports'}`
+            ? stoppedTitle(navCounts.fixesFailed)
             : navCounts.fixesInFlight > 0
               ? `${navCounts.fixesInFlight} fixes in flight`
               : 'No active fixes',

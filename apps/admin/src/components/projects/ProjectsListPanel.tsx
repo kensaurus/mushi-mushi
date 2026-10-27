@@ -328,7 +328,7 @@ export function ProjectsListPanel({
                 </Btn>
               </Tooltip>
               {canManageProject(project) && (
-              <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
+              <div id={`mint-key-${project.id}`} className="flex scroll-mt-chrome items-center gap-1" data-testid={`mint-key-${project.id}`}>
                 <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                   API key scope for {project.name}
                 </label>

@@ -25,9 +25,16 @@ interface Props {
   projectName?: string | null
   /** Last-report timestamp (ISO) \u2014 powers the live pulse. */
   lastReportAt?: string | null
+  /**
+   * The first required setup step still open. While there is one the hero
+   * names it with its fix: an app whose SDK never checked in once read
+   * "healthy, nothing waiting on you" (mushi-demo, 2026-10-26).
+   */
+  setupStep?: { label: string; description: string; ctaLabel: string; ctaTo: string; done: number; total: number } | null
 }
 
-export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Props) {
+export function HeroIntro({ stages, focusStage, projectName, lastReportAt, setupStep }: Props) {
+  if (setupStep) return <SetupHero step={setupStep} projectName={projectName} />
   if (stages.length === 0) return null
 
   const focus = pickFocus(stages, focusStage)
@@ -77,6 +84,41 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
             </Btn>
           <InlineProof className="text-center md:text-right border-0 bg-transparent px-0 py-0">
             {countCopy(focus)}
+          </InlineProof>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SetupHero({ step, projectName }: { step: NonNullable<Props['setupStep']>; projectName?: string | null }) {
+  return (
+    <section aria-label="Dashboard hero" data-testid="dashboard-hero-setup" className="relative mb-3 overflow-hidden rounded-lg border border-warn/30 bg-warn/5">
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
+      <div className="relative grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-2xs font-medium text-fg-muted uppercase tracking-wider">
+            <span className="inline-flex h-5 items-center rounded-sm border border-warn/30 px-1.5 text-warn-foreground">
+              Setup {step.done} of {step.total} done
+            </span>
+            {projectName && (
+              <span className="text-3xs text-fg-faint normal-case tracking-normal">
+                on <span className="font-mono text-fg-secondary">{projectName}</span>
+              </span>
+            )}
+          </div>
+          <h1 className="mt-1.5 text-lg font-semibold text-fg leading-tight">{step.label}</h1>
+          <ContainedBlock tone="muted" className="mt-1.5 max-w-xl">
+            <p className="text-xs text-fg-secondary leading-relaxed">{step.description}</p>
+          </ContainedBlock>
+        </div>
+        <div className="flex flex-col items-stretch gap-1.5 md:items-end shrink-0">
+          <Btn to={step.ctaTo} size="md">
+            {step.ctaLabel}
+            <span aria-hidden="true"> →</span>
+          </Btn>
+          <InlineProof className="text-center md:text-right border-0 bg-transparent px-0 py-0">
+            Nothing reaches the loop until this is done.
           </InlineProof>
         </div>
       </div>

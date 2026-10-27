@@ -23,7 +23,8 @@ interface Props {
   onChanged: () => void
 }
 
-function canChange(k: SpendDownKeyStatus, canManageOrg: boolean): boolean {
+/** Who may flip a key's spend-down: its owner (universal), an org admin (shared), anyone on the app (app key). */
+export function canChangeSpendDown(k: Pick<SpendDownKeyStatus, 'scope' | 'ownedByMe'>, canManageOrg: boolean): boolean {
   if (k.scope === 'universal') return k.ownedByMe === true
   if (k.scope === 'organization') return canManageOrg
   return true
@@ -67,7 +68,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           const line = spendDownLine(k)
           const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
           const expiry = expiryLabel(k.creditsExpireAt, now)
-          const editable = canChange(k, canManageOrg)
+          const editable = canChangeSpendDown(k, canManageOrg)
           return (
             <li key={k.id} className="space-y-1 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">

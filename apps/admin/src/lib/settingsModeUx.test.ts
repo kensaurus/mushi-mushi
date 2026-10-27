@@ -24,7 +24,7 @@ describe('resolveQuickSettingsTab', () => {
     byokAnthropicConfigured: true,
   };
   const summary = (over: Partial<KeySummary>): KeySummary =>
-    ({ working: 1, attention: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
+    ({ working: 1, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 1, ...over });
 
   it('opens AI keys when a key is failing (from the saved-keys list)', () => {
     expect(resolveQuickSettingsTab(ready, summary({ attention: 1 }), true, true)).toBe('byok');

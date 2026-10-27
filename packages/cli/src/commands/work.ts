@@ -11,6 +11,10 @@
  * The agent runs with every credential stripped from its environment and
  * with git and `gh` unable to reach the remote, so a report (end-user text)
  * cannot make it push or open anything on its own.
+ *
+ * `mushi work --daemon` (ADR 0048) runs the same work for registered lanes:
+ * worker/daemon.ts claims reports through the server lease and reports each
+ * outcome back; set it up with `mushi worker install`.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -18,6 +22,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import type { Command } from 'commander'
 import { apiCall, requireConfig, requireUuid } from '../cli-shared.js'
 import type { CliConfig } from '../config.js'
@@ -69,18 +74,25 @@ const LOCAL_RETRY_COOLDOWN_MS = 7 * 86_400_000
 export const WORK_STOPPED_PREFIX = 'mushi work stopped'
 /** The error fix_attempts_stuck_reaper writes when a run's process died without a word. */
 const REAPED_PREFIX = 'Reaped:'
+/**
+ * @internal Exported for tests only. The error a run is closed with when the
+ * machine failed, not the code (a clone permission, a hook refusing under
+ * load, the network): it starts no cooldown and never counts against the
+ * report (ADR 0048, as ADR 0033 splits CI).
+ */
+export const WORK_INFRA_PREFIX = 'mushi work infra:'
 
 /**
  * @internal Exported for tests only. A local run in the last 7 days ended
  * without a PR (timed out, no change, a verdict): the same agent on the same
  * report would most likely end the same way. `--report` still runs it. A run
- * that was stopped (a signal, the lane stopped) or reaped says nothing about
- * the report, so it starts no cooldown.
+ * that was stopped (a signal, the lane stopped), reaped, or failed on the
+ * machine (infra) says nothing about the report, so it starts no cooldown.
  */
 export function inLocalCooldown(attempts: readonly AttemptSummary[], nowMs = Date.now()): boolean {
   return attempts.some((a) => {
     if (a.agent !== WORK_AGENT_KIND || a.status !== 'failed' || a.pr_url || !a.created_at) return false
-    if (a.error?.startsWith(WORK_STOPPED_PREFIX) || a.error?.startsWith(REAPED_PREFIX)) return false
+    if (a.error?.startsWith(WORK_STOPPED_PREFIX) || a.error?.startsWith(REAPED_PREFIX) || a.error?.startsWith(WORK_INFRA_PREFIX)) return false
     const at = Date.parse(a.created_at)
     return Number.isFinite(at) && nowMs - at < LOCAL_RETRY_COOLDOWN_MS
   })
@@ -144,6 +156,23 @@ export function failureTail(r: { stdout: string; stderr: string }, max = 600): s
   }
   if (!kept.length && lines.length) return `[…] ${lines[lines.length - 1]!.slice(-max)}`
   return kept.length < lines.length ? `[…] ${kept.join(' / ')}` : kept.join(' / ')
+}
+
+/** Where a run was when it failed. Before the agent starts, every failure is the machine's. */
+export type WorkStage = 'prepare' | 'agent' | 'commit' | 'push' | 'pr'
+
+const INFRA_FAILURE =
+  /\b(?:EACCES|EPERM|ENOSPC|ENOMEM|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|E_NETWORK|E_AUTH_MISSING)\b|permission denied|could not resolve host|unable to access|connection (?:lost|reset|refused|timed out)|rate limit|index\.lock|cannot lock ref|unable to create .*\.lock|no space left|out of memory|cannot allocate memory|killed|signal 9|timed out|resource temporarily unavailable/i
+
+/**
+ * Infra or code, as ADR 0033 splits CI: a
+ * failure before the agent started, or one that names the machine (a
+ * permission, the network, a lock, memory, a timeout), is infra; anything
+ * else (a hook rejecting the change, a test the change broke) is code.
+ */
+export function classifyFailure(message: string, stage: WorkStage): 'infra' | 'code' {
+  if (stage === 'prepare') return 'infra'
+  return INFRA_FAILURE.test(message) ? 'infra' : 'code'
 }
 
 /** Untrusted text must not close or open one of the prompt's data blocks. */
@@ -301,6 +330,49 @@ export function prTitle(summary: string | null, reportId: string): string {
 
 const SUBJECT_MAX = 72
 
+/** commitlint config-conventional: body-max-line-length 100. */
+const BODY_LINE_MAX = 100
+/** A line commitlint's parser reads as a footer ("token: …", "BREAKING CHANGE …"); a URL at a line start counts too. */
+const FOOTER_LIKE = /^(?:[\w-]+(?:\([^)]*\))?!?:|BREAKING[ -]CHANGE\b)/i
+
+/**
+ * A commit body config-conventional accepts: each paragraph wrapped at 100
+ * characters (a word longer than that is split), and no line that starts
+ * like a footer, which commitlint would read as one (such a line is indented
+ * two spaces). glot.it lost a review follow-up to an unwrapped agent summary
+ * ("body's lines must not be longer than 100 characters", 2026-10-26).
+ * @internal Exported for tests only.
+ */
+export function commitBody(...paragraphs: string[]): string {
+  // Room for the two-space indent a footer-like line gets.
+  const width = BODY_LINE_MAX - 2
+  return paragraphs
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((p) => {
+      const lines: string[] = []
+      let line = ''
+      for (let word of p.split(' ')) {
+        while (word.length > width) {
+          if (line) lines.push(line)
+          line = ''
+          lines.push(word.slice(0, width))
+          word = word.slice(width)
+        }
+        if (!word) continue
+        if (!line) line = word
+        else if (line.length + 1 + word.length <= width) line += ` ${word}`
+        else {
+          lines.push(line)
+          line = word
+        }
+      }
+      if (line) lines.push(line)
+      return lines.map((l) => (FOOTER_LIKE.test(l) ? `  ${l}` : l)).join('\n')
+    })
+    .join('\n\n')
+}
+
 /**
  * The agent's environment: no Mushi, GitHub, cloud or model keys, and git /
  * gh unable to reach the remote. Cursor's own sign-in lives in ~/.cursor.
@@ -322,7 +394,8 @@ export function agentEnv(base: NodeJS.ProcessEnv, emptyDir: string): NodeJS.Proc
 
 // ─── process helpers ──────────────────────────────────────────────────────
 
-interface Proc {
+/** Used by the local worker (worker/daemon.ts). */
+export interface Proc {
   code: number | null
   stdout: string
   stderr: string
@@ -336,9 +409,10 @@ function stopChildren(): void {
   for (const child of liveChildren) child.kill('SIGTERM')
 }
 
-function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number } = {}): Promise<Proc> {
+/** Used by the local worker (worker/daemon.ts). */
+export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal } = {}): Promise<Proc> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(opts.signal ? { signal: opts.signal } : {}) })
     liveChildren.add(child)
     child.on('exit', () => liveChildren.delete(child))
     let stdout = ''
@@ -407,9 +481,11 @@ async function defaultBranch(repoDir: string): Promise<string> {
 
 // ─── API ──────────────────────────────────────────────────────────────────
 
-type Api = <T>(path: string, init?: RequestInit) => Promise<T>
+/** Used by the local worker (worker/daemon.ts). */
+export type Api = <T>(path: string, init?: RequestInit) => Promise<T>
 
-function apiFor(cfg: CliConfig): Api {
+/** @internal Exported for the daemon. */
+export function apiFor(cfg: CliConfig): Api {
   return async <T>(path: string, init: RequestInit = {}) => {
     const res = await apiCall<T>(path, cfg, init)
     if (!res.ok) throw new MushiCliError('E_API_ERROR', `${path}: ${res.error.code} ${res.error.message}`)
@@ -417,7 +493,8 @@ function apiFor(cfg: CliConfig): Api {
   }
 }
 
-interface ReportDetail {
+/** Used by the local worker (worker/daemon.ts). */
+export interface ReportDetail {
   id: string
   project_id?: string | null
   summary: string | null
@@ -495,15 +572,34 @@ async function earlierFor(api: Api, detail: ReportDetail): Promise<EarlierAttemp
 
 // ─── one report ───────────────────────────────────────────────────────────
 
-interface WorkOptions {
+/** Used by the local worker (worker/daemon.ts). */
+export interface WorkOptions {
   repoDir: string
   agent: 'cursor'
   model?: string
   keep?: boolean
   log: (line: string) => void
+  /** What earlier attempts did, when the caller already has it (the daemon's claim carries it): no timeline reads. */
+  earlier?: EarlierAttempt[]
+  /** Stops the agent when the daemon loses the report's lease. */
+  signal?: AbortSignal
 }
 
-async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<{ reportId: string; outcome: string; prUrl?: string; fixId?: string }> {
+/** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
+type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed'
+
+/** Used by the local worker (worker/daemon.ts). */
+export interface WorkOutcome {
+  reportId: string
+  outcome: string
+  result: WorkResult
+  failureKind?: 'infra' | 'code'
+  prUrl?: string
+  fixId?: string
+}
+
+/** One report, start to end: the run `mushi work` and the local worker (worker/daemon.ts) both make. */
+export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<WorkOutcome> {
   const base = await defaultBranch(o.repoDir)
   await git(o.repoDir, ['fetch', '--quiet', 'origin', base])
   const firstBranch = branchNameFor(detail.id, detail.category, o.agent)
@@ -517,7 +613,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
       const prs = await runProc('gh', ['pr', 'list', '--head', b, '--state', 'all', '--json', 'state', '--limit', '5'], { cwd: o.repoDir })
       const states = prs.code === 0 ? ((JSON.parse(prs.stdout || '[]') as Array<{ state: string }>).map((p) => p.state)) : ['UNKNOWN']
       const blocking = states.find((st) => st !== 'CLOSED')
-      if (blocking) return { reportId: detail.id, outcome: `skipped: ${b} already exists on origin (${blocking === 'UNKNOWN' ? 'its pull request could not be read' : `its pull request is ${blocking.toLowerCase()}`})` }
+      if (blocking) return { reportId: detail.id, result: 'skipped', outcome: `skipped: ${b} already exists on origin (${blocking === 'UNKNOWN' ? 'its pull request could not be read' : `its pull request is ${blocking.toLowerCase()}`})` }
     }
     branch = freeBranchName(firstBranch, onOrigin)
     o.log(`  branch: ${firstBranch} belongs to a closed pull request; this attempt uses ${branch}`)
@@ -531,6 +627,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
   await installDeps(wt, o.log)
   let keep = o.keep ?? false
   let fixId: string | null = null
+  let stage: WorkStage = 'prepare'
   // The fix row is closed exactly once: by the run's own outcome, or by a stop.
   let closed = false
   const close = async (payload: Record<string, unknown>): Promise<void> => {
@@ -550,7 +647,7 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
       description: detail.description ?? null,
       rootCause: detail.stage2_analysis?.rootCause ?? null,
       reproductionSteps: detail.reproduction_steps ?? [],
-      earlier: earlierAttemptsBlock(await earlierFor(api, detail)),
+      earlier: earlierAttemptsBlock(o.earlier ?? (await earlierFor(api, detail))),
       baseRef: `origin/${base}`,
     })
     const empty = join(tmpdir(), `mushi-work-${process.pid}`)
@@ -573,16 +670,18 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
     )
 
     o.log(`  agent: cursor-agent in ${wt} (up to ${WORK_AGENT_TIMEOUT_MS / 60_000} min); fix ${fixId} shows as running in the console`)
+    stage = 'agent'
     const run = await runProc(
       'cursor-agent',
       ['-p', '--force', '--trust', '--output-format', 'text', '--workspace', wt, ...(o.model ? ['--model', o.model] : []), prompt],
-      { cwd: wt, env: agentEnv(process.env, empty), timeoutMs: WORK_AGENT_TIMEOUT_MS },
+      { cwd: wt, env: agentEnv(process.env, empty), timeoutMs: WORK_AGENT_TIMEOUT_MS, signal: o.signal },
     )
     // Stopped mid-run: the stop closes the row; never commit or push a half-done change.
-    const stoppedBy = interruptedBy()
+    const stoppedBy = interruptedBy() ?? (o.signal?.aborted ? 'lost lease' : null)
     if (stoppedBy) {
       keep = true
-      return { reportId: detail.id, outcome: `stopped by ${stoppedBy}; the change so far is kept in ${wt}`, fixId }
+      if (!interruptedBy()) await close(stoppedPayload(branch, stoppedBy)).catch(() => undefined)
+      return { reportId: detail.id, result: 'stopped', outcome: `stopped by ${stoppedBy}; the change so far is kept in ${wt}`, fixId }
     }
     if (run.timedOut) o.log('  agent: timed out; keeping what it changed')
     const status = await git(wt, ['status', '--porcelain'])
@@ -594,12 +693,13 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
           ? parseVerdict(run.stdout)
           : { verdict: null, reason: failureTail(run, 300) || `cursor-agent exited ${run.code}` }
       await close(submitPayload({ branch, prUrl: null, commitSha: null, filesChanged: [], linesChanged: 0, summary: '', noPr }))
-      return { reportId: detail.id, outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId }
+      return { reportId: detail.id, result: run.timedOut ? 'timeout' : noPr.verdict ? 'verdict' : 'no_change', outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId }
     }
 
+    stage = 'commit'
     await git(wt, ['add', '-A'])
     const last = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-6).join(' ')
-    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', `Mushi report: ${detail.id}\n\nMade by a local Cursor agent through \`mushi work\`.`], o.log)
+    await commitWithHooks(wt, ['--quiet', '-m', prTitle(detail.summary, detail.id), '-m', commitBody(`Mushi report: ${detail.id}`, 'Made by a local Cursor agent through `mushi work`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     const numstat = await git(wt, ['diff', '--numstat', `origin/${base}`, 'HEAD'])
     const files: string[] = []
@@ -609,7 +709,9 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
       if (path) files.push(path)
       lines += (Number(add) || 0) + (Number(del) || 0)
     }
+    stage = 'push'
     await git(wt, ['push', '--quiet', '-u', 'origin', branch])
+    stage = 'pr'
     const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local Cursor agent; Mushi's Opus review decides whether it merges.`
     const pr = await runProc('gh', ['pr', 'create', '--draft', '--base', base, '--head', branch, '--title', prTitle(detail.summary, detail.id), '--body', body], { cwd: wt })
     const prUrl = pr.stdout.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null
@@ -619,23 +721,26 @@ async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<
     await api(`/v1/admin/fixes/${fixId}/review`, { method: 'POST', body: '{}' }).catch((err: unknown) =>
       o.log(`  review: not queued (${err instanceof Error ? err.message : String(err)})`),
     )
-    return { reportId: detail.id, outcome: 'pull request opened', prUrl, ...(fixId ? { fixId } : {}) }
+    return { reportId: detail.id, result: 'pr_opened', outcome: 'pull request opened', prUrl, ...(fixId ? { fixId } : {}) }
   } catch (err) {
     // The agent's change is in the worktree: keep it, and close the fix row
-    // with the reason instead of leaving it running.
+    // with the reason instead of leaving it running. A failure of the
+    // machine (infra) is closed so that it starts no cooldown.
     const reason = err instanceof Error ? err.message : String(err)
+    const failureKind = classifyFailure(reason, stage)
     keep = true
-    await close({ status: 'failed', branch, error: `mushi work: ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }).catch((patchErr: unknown) =>
+    await close({ status: 'failed', branch, error: `${failureKind === 'infra' ? WORK_INFRA_PREFIX : 'mushi work:'} ${reason}`.slice(0, 1000), completed_at: new Date().toISOString() }).catch((patchErr: unknown) =>
       o.log(`  fix ${fixId}: not marked failed (${patchErr instanceof Error ? patchErr.message : String(patchErr)})`),
     )
-    return { reportId: detail.id, outcome: `failed: ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }
+    return { reportId: detail.id, result: 'failed', failureKind, outcome: `failed (${failureKind}): ${reason} (the change is kept in ${wt})`, ...(fixId ? { fixId } : {}) }
   } finally {
     unregister()
     if (!keep) await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: o.repoDir })
   }
 }
 
-interface LocalFollowupCandidate {
+/** Used by the local worker (worker/daemon.ts). */
+export interface LocalFollowupCandidate {
   fixId: string
   prUrl: string | null
   prNumber: number | null
@@ -659,7 +764,8 @@ interface LocalFollowupClaim {
  * prompt, the local agent changes the PR branch's working tree, and the CLI
  * commits and pushes, which re-queues the Opus review.
  */
-async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions): Promise<{ fixId: string; outcome: string; prUrl?: string }> {
+/** Used by the local worker (worker/daemon.ts). */
+export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions): Promise<{ fixId: string; outcome: string; prUrl?: string }> {
   const claim = await api<LocalFollowupClaim>(`/v1/admin/fixes/${f.fixId}/local-followup`, { method: 'POST', body: '{}' })
   // The round's outcome is recorded exactly once: by the run, or by a stop.
   let recorded = false
@@ -709,7 +815,7 @@ async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions):
       return { fixId: f.fixId, outcome: `no change: ${why || `cursor-agent exited ${run.code}`}` }
     }
     await git(wt, ['add', '-A'])
-    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', `${cap(last, 1500) || 'See the diff.'}\n\nMade by a local Cursor agent through \`mushi work --followups\`.`], o.log)
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', 'Made by a local Cursor agent through `mushi work --followups`.')], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     await git(wt, ['push', '--quiet', 'origin', `HEAD:refs/heads/${claim.branch}`])
@@ -771,10 +877,61 @@ async function commitWithHooks(wt: string, args: string[], log: (line: string) =
   }
 }
 
-async function preflight(repoDir: string): Promise<void> {
-  const status = await runProc('cursor-agent', ['status'], { timeoutMs: 60_000 })
-  if (status.code !== 0 || !/logged in/i.test(status.stdout + status.stderr)) {
+export type CursorSignIn = 'signed_in' | 'signed_out' | 'unknown' | 'missing'
+
+/**
+ * @internal Exported for tests only. What one `cursor-agent status` run says.
+ * Only a clear answer counts: a timeout, a crash or an unclear exit under
+ * load is `unknown`, never "signed out". "Not logged in" is checked before
+ * "logged in", which it contains.
+ */
+export function cursorSignInState(p: Proc): CursorSignIn {
+  if (p.code === null && /\bENOENT\b/.test(p.stderr)) return 'missing'
+  if (p.timedOut || p.code === null) return 'unknown'
+  const out = stripVTControlCharacters(`${p.stdout}\n${p.stderr}`)
+  if (/\bnot\s+(?:logged|signed)\s+in\b|\blogged\s+out\b/i.test(out)) return 'signed_out'
+  if (p.code === 0 && /\b(?:logged|signed)\s+in\b/i.test(out)) return 'signed_in'
+  return 'unknown'
+}
+
+const CURSOR_STATUS_TIMEOUT_MS = 90_000
+const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
+
+/**
+ * Ask `cursor-agent status` once more when
+ * the first answer is not "signed in". With 7 lanes at once on one machine
+ * the old single 60 s check reported "not signed in" 5 times in one lane
+ * while `cursor-agent status` said "Logged in" (Mushi report 7880503f).
+ */
+export async function checkCursorSignIn(
+  run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<{ state: CursorSignIn; detail: string; output: string }> {
+  let last: { state: CursorSignIn; detail: string; output: string } = { state: 'unknown', detail: 'not checked', output: '' }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await wait(CURSOR_STATUS_RETRY_DELAY_MS)
+    const p = await run('cursor-agent', ['status'], { timeoutMs: CURSOR_STATUS_TIMEOUT_MS })
+    const state = cursorSignInState(p)
+    const detail = p.timedOut
+      ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
+      : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
+    last = { state, detail, output: stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).slice(0, 2000) }
+    if (state === 'signed_in' || state === 'missing') break
+  }
+  return last
+}
+
+/** @internal Exported for the daemon. */
+export async function preflight(repoDir: string, warn: (line: string) => void): Promise<void> {
+  const signIn = await checkCursorSignIn()
+  if (signIn.state === 'missing') {
+    throw new MushiCliError('E_FILE_NOT_FOUND', 'The Cursor CLI (cursor-agent) is not installed or not on PATH.', 'Install it: https://cursor.com/cli')
+  }
+  if (signIn.state === 'signed_out') {
     throw new MushiCliError('E_AUTH_MISSING', 'The Cursor CLI is not signed in.', 'Run: cursor-agent login')
+  }
+  if (signIn.state === 'unknown') {
+    warn(`Could not confirm the Cursor CLI sign-in (${signIn.detail}); continuing. If it is signed out, the agent stops at once: run cursor-agent login.`)
   }
   const gh = await runProc('gh', ['auth', 'status'], { timeoutMs: 30_000 })
   if (gh.code !== 0) throw new MushiCliError('E_AUTH_MISSING', 'gh is not signed in.', 'Run: gh auth login')
@@ -803,7 +960,7 @@ export function registerWorkCommands(program: Command): void {
   program
     .command('work')
     .description('Fix reports with a coding agent on this machine (local Cursor CLI); pushes and opens the draft PR with your git and gh')
-    .requiredOption('--repo-dir <path>', 'A clone of the app repo (only worktrees are created in it)')
+    .option('--repo-dir <path>', 'A clone of the app repo (only worktrees are created in it); not with --daemon')
     .option('--project <id>', 'Project id (overrides MUSHI_PROJECT_ID)')
     .option('--agent <name>', 'Local agent: cursor', 'cursor')
     .option('--model <id>', 'Model for the agent (cursor-agent --list-models)')
@@ -813,8 +970,20 @@ export function registerWorkCommands(program: Command): void {
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--json', 'Machine-readable JSON output')
-    .action(async (opts: { repoDir: string; project?: string; agent: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; json?: boolean }) => {
+    .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
+    .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
+    .action(async (opts: { repoDir?: string; project?: string; agent: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       if (opts.agent !== 'cursor') throw new MushiCliError('E_INVALID_INPUT', `Unknown agent "${opts.agent}".`, 'Only --agent cursor is supported.')
+      if (opts.daemon) {
+        if (opts.repoDir || opts.report || opts.followups) {
+          throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
+        }
+        const { runDaemon } = await import('../worker/daemon.js')
+        await runDaemon({ configPath: opts.workerConfig })
+        return
+      }
+      if (!opts.repoDir) throw new MushiCliError('E_INVALID_INPUT', 'mushi work needs --repo-dir <clone>.', 'mushi work --repo-dir ~/src/my-app')
+      const repoDir = opts.repoDir
       const max = Math.max(1, Math.min(10, Number.parseInt(opts.max, 10) || 3))
       const cfg = requireConfig({ needsProject: !opts.project })
       if (opts.project) cfg.projectId = requireUuid(opts.project, '--project')
@@ -823,6 +992,7 @@ export function registerWorkCommands(program: Command): void {
       const log = (l: string) => {
         if (!opts.json) process.stdout.write(`${l}\n`)
       }
+      const warn = (l: string) => process.stderr.write(`${l}\n`)
       if (opts.followups) {
         const listed = await api<{ fixes: LocalFollowupCandidate[] }>(`/v1/admin/projects/${cfg.projectId}/local-followups`)
         const due = listed.fixes.slice(0, max)
@@ -832,13 +1002,13 @@ export function registerWorkCommands(program: Command): void {
           if (!due.length) log('No pull request is waiting for a follow-up.')
           return
         }
-        await preflight(opts.repoDir)
+        await preflight(repoDir, warn)
         await requireWriteScope(cfg)
         const results = []
         for (const f of due) {
           if (interruptedBy()) break
           log(`follow-up ${f.prUrl ?? f.fixId}`)
-          const r = await followUpOne(api, f, { repoDir: opts.repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log }).catch((err: unknown) => ({
+          const r = await followUpOne(api, f, { repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log }).catch((err: unknown) => ({
             fixId: f.fixId,
             outcome: `failed: ${err instanceof Error ? err.message : String(err)}`,
           }))
@@ -857,22 +1027,23 @@ export function registerWorkCommands(program: Command): void {
         if (!plan.length) log('Nothing to work on.')
         return
       }
-      await preflight(opts.repoDir)
+      await preflight(repoDir, warn)
       await requireWriteScope(cfg)
       const results = []
       for (const d of picked) {
         if (interruptedBy()) break
         log(`report ${d.id}: ${cap(d.summary, 80)}`)
         // One report's failure (a fetch, a worktree) does not stop the batch.
-        const r = await workOne(api, d, { repoDir: opts.repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log }).catch((err: unknown) => ({
+        const r = await workOne(api, d, { repoDir, agent: 'cursor', model: opts.model, keep: opts.keep, log }).catch((err: unknown): WorkOutcome => ({
           reportId: d.id,
+          result: 'failed',
+          failureKind: 'infra',
           outcome: `failed: ${err instanceof Error ? err.message : String(err)}`,
-          prUrl: undefined as string | undefined,
         }))
         log(`  → ${r.outcome}${r.prUrl ? ` ${r.prUrl}` : ''}`)
         results.push(r)
       }
-      if (results.some((r) => r.outcome.startsWith('failed:'))) process.exitCode = 1
+      if (results.some((r) => r.result === 'failed')) process.exitCode = 1
       if (opts.json) process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`)
       else if (!picked.length) log('Nothing to work on.')
     })

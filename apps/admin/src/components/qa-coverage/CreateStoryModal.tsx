@@ -20,8 +20,8 @@ const SCHEDULE_PRESETS = [
 ]
 
 const PROVIDER_EXPLAINERS: Record<string, string> = {
-  firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl API key under Settings → API Keys.',
-  browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase API key under Settings → API Keys.',
+  firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl key under Settings → Web tools.',
+  browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase key under Settings → Web tools.',
   local: 'Runs on your machine via the Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
 }
 

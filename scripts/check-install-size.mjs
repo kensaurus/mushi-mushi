@@ -62,9 +62,22 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 // (onInterrupt), so a local run shows in flight on the console and a stop
 // never leaves it hanging. No new dependencies; the growth is that code and
 // the mushi work changes since 2026-10-22, measured at cli 220.5/837.4 kB.
+//
+// Raised 2026-10-26 (npm listing housekeep): the docs index the MCP server
+// ships (`search_mushi_docs`, one excerpt per docs page) gained the
+// @mushi-mushi/ux page and rewritten descriptions for the SDK and plugin
+// pages. No code or dependency change; measured at mcp 232.6/921.8 kB, where
+// 0.29.1 already published at 920.0 kB unpacked.
+//
+// Raised 2026-10-27 (ADR 0047, ADR 0048): `mushi runner bill` and `mushi
+// runner fix` give the real CI bill and the one-click cost fixes their
+// terminal path, and `mushi work --daemon` with `mushi worker install/status/
+// revoke` is the local worker the console steers (heartbeat, claims, guards,
+// systemd unit and Windows task writers). No new dependencies, 32 files, no
+// source maps; the growth is that code, measured at cli 235.5/902.7 kB.
 export const BUDGETS = [
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 235_000, unpacked: 920_000 },
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 228_000, unpacked: 870_000 },
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 240_000, unpacked: 940_000 },
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 245_000, unpacked: 935_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

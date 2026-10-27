@@ -38,9 +38,10 @@ describe('bulkClosedReason', () => {
     expect(bulkClosedReason(undefined, 'spam')).toEqual({ ok: true, value: undefined })
   })
 
-  it('rejects duplicate and unknown reasons', () => {
+  it('rejects duplicate, a false alarm and unknown reasons', () => {
     expect(BULK_CLOSED_REASONS.has('duplicate')).toBe(false)
-    for (const r of ['duplicate', 'nope', 42]) expect(bulkClosedReason('dismissed', r).ok).toBe(false)
+    expect(BULK_CLOSED_REASONS.has('false_alarm')).toBe(false)
+    for (const r of ['duplicate', 'false_alarm', 'nope', 42]) expect(bulkClosedReason('dismissed', r).ok).toBe(false)
   })
 })
 

@@ -82,6 +82,29 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
     )
   }
 
+  if (priority === 'sdk_missing') {
+    const missing = stats.sdkMissingProjects ?? []
+    const count = stats.sdkMissingCount ?? missing.length
+    return (
+      <StatusBannerShell
+        tone="warn"
+        title={
+          missing.length === 1 && count === 1
+            ? `${missing[0]!.name} has no SDK heartbeat`
+            : `${count} projects have no SDK heartbeat`
+        }
+        subtitle={label}
+        action={
+          stats.topPriorityTo ? (
+            <Btn to={stats.topPriorityTo} size="sm" variant="primary" data-testid="projects-sdk-fix">
+              {missing.length > 0 ? `Fix ${missing[0]!.name}` : 'Fix it'}
+            </Btn>
+          ) : null
+        }
+      />
+    )
+  }
+
   if (priority === 'partial_ingest') {
     return (
       <StatusBannerShell
