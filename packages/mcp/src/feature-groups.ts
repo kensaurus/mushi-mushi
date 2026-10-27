@@ -123,6 +123,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_ci_costs: 'fixes',
   get_ci_bill: 'fixes',
   request_ci_placement_change: 'fixes',
+  open_ci_cost_fix: 'fixes',
   get_fix_verification: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',

@@ -319,6 +319,8 @@ mushi runner status [--days 7] [--refresh] [--all] [--json]   # machines, runner
 mushi runner compare [--days 30] [--all] [--json]             # what CI costs and how fast it runs: GitHub-hosted vs your machines (estimated)
 mushi runner bill [--month 2026-10] [--owner login] [--push] [--json]  # what GitHub actually charged, read with your own gh login; --push shows it in the console
 mushi runner placement show|preview|request|revert          # where each repo's CI runs; change one runner variable with approval (ADR 0037)
+mushi runner fix --repo <owner/repo> --workflow <path> --kind <kind>  # draft PR with one CI cost fix (ADR 0047)
+mushi runner fix-status [jobId]                              # the fix, its PR, and after the merge the measured saving
 mushi runner key                                  # a runner key (can only report runner health), saved, never printed
 mushi runner heartbeat [--once] [--dry-run]       # send this machine's memory, swap, load and runner services
 mushi runner hooks install --dir <runner folder>  # per-job memory peak and out-of-memory kills

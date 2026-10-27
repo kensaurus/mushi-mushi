@@ -1860,6 +1860,30 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'open_ci_cost_fix',
+    {
+      title: titleOf('open_ci_cost_fix'),
+      description: descOf('open_ci_cost_fix'),
+      annotations: annotationsFor('open_ci_cost_fix'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        workflowPath: z
+          .string()
+          .max(200)
+          .regex(/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/)
+          .describe('The workflow file, e.g. .github/workflows/ci.yml'),
+        kind: z.enum(['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths']).describe('The fix (advice[].autofix.kind)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, workflowPath: args.workflowPath, kind: args.kind };
+      return jsonText(await apiCall('/v1/admin/ci/cost-fixes', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
     'explain_finding',
     {
       title: titleOf('explain_finding'),

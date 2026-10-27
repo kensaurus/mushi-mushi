@@ -92,6 +92,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | POST | `/v1/admin/ci/bill` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-bill.ts` |
 | GET | `/v1/admin/ci/compare` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| GET | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
+| POST | `/v1/admin/ci/cost-fixes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
+| GET | `/v1/admin/ci/cost-fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |

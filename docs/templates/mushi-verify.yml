@@ -8,7 +8,8 @@ name: Mushi verify
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # A draft runs nothing; marking it ready runs the check.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -22,11 +23,16 @@ jobs:
   verify:
     # Agent branches only (cursor/**, mushi/**, copilot/**), and never a fork:
     # `on.pull_request.branches` filters the base branch, so the head is checked here.
+    # Never a draft (it runs once the PR is marked ready), a Mushi release train
+    # (mushi/train/*, its fixes were proven on their own PRs) or a revert (mushi/revert-*).
     if: >-
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (startsWith(github.head_ref, 'cursor/') ||
        startsWith(github.head_ref, 'mushi/') ||
-       startsWith(github.head_ref, 'copilot/'))
+       startsWith(github.head_ref, 'copilot/')) &&
+      !startsWith(github.head_ref, 'mushi/train/') &&
+      !startsWith(github.head_ref, 'mushi/revert-')
     # Not "Mushi verify": that name belongs to the check run the action posts.
     name: Mushi verify run
     runs-on: [ubuntu-latest]
