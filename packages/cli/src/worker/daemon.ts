@@ -57,16 +57,17 @@ import {
 } from './protocol.js'
 
 /** Heartbeat period; the server's lease (45 min) outlives many missed beats. */
-export const HEARTBEAT_MS = 60_000
+const HEARTBEAT_MS = 60_000
 /** A lane with nothing to take asks again after this long (lane-v4 slept 900 s). */
-export const IDLE_MS = 15 * 60_000
+const IDLE_MS = 15 * 60_000
 /** After a transient error (network, a 5xx). */
-export const BACKOFF_MS = 2 * 60_000
+const BACKOFF_MS = 2 * 60_000
 const GH_CHECK_MS = 5 * 60_000
 const CURSOR_CHECK_MS = 20 * 60_000
 
 type Call = <T>(path: string, init?: RequestInit) => Promise<ApiResult<T>>
 
+/** @internal Exported for tests only. */
 export interface DaemonDeps {
   call: Call
   workOne: typeof workOne
@@ -100,7 +101,7 @@ interface LaneRuntime {
   last: string
 }
 
-/** The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
+/** @internal Exported for tests only. The local worker's state machine; `tick()` is one heartbeat and one pass over the lanes. */
 export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   const lanes: LaneRuntime[] = cfg.lanes.map((local) => ({
     local,
@@ -417,7 +418,7 @@ export function assertWorkerKey(key: string, cliKey: string | undefined): string
 }
 
 /**
- * The sign-in, narrowed to one account when the worker config names it: a
+ * @internal Exported for tests only. The sign-in, narrowed to one account when the worker config names it: a
  * clear "signed in" as anyone else counts as signed out (lane-v4 spent only
  * suzu's credits this way). An unclear answer stays unclear.
  */

@@ -19,9 +19,9 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
 
-export const LANE_MODES = ['fix', 'followups'] as const
-export type LaneMode = (typeof LANE_MODES)[number]
-export const LANE_VERBS = ['paused', 'concurrency', 'model', 'mode', 'stop_at', 'drain', 'prune_own'] as const
+const LANE_MODES = ['fix', 'followups'] as const
+type LaneMode = (typeof LANE_MODES)[number]
+const LANE_VERBS = ['paused', 'concurrency', 'model', 'mode', 'stop_at', 'drain', 'prune_own'] as const
 
 export interface LaneConfig {
   paused: boolean

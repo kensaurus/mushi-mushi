@@ -12,7 +12,7 @@ import { apiFetch } from './supabase'
 export const LANES_PATH = '/v1/admin/work/lanes'
 const KEY_PATH = '/v1/admin/work/key'
 
-export type LaneMode = 'fix' | 'followups'
+type LaneMode = 'fix' | 'followups'
 
 export interface LaneConfig {
   paused: boolean

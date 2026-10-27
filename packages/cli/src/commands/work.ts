@@ -586,7 +586,7 @@ export interface WorkOptions {
 }
 
 /** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
-export type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed'
+type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed'
 
 /** Used by the local worker (worker/daemon.ts). */
 export interface WorkOutcome {
