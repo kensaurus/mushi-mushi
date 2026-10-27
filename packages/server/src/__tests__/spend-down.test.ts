@@ -465,6 +465,17 @@ describe('runSpendDownForKey', () => {
     expect(await run(seed({ work_claims: [claim('stale', '2026-10-20T08:00:00Z')] }))).toEqual(['r1', 'r2'])
   })
 
+  it('leaves a report waiting in a local lane\'s queue to that lane (a person sent it, or a skill run runs there; P3)', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const db = seed({ work_queue: [{ id: 'w1', lane_id: 'lane-1', project_id: P1, report_id: 'r1', position: 0, source: 'skill_run' }] })
+    await worker.runSpendDownForKey(db as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (calls.push(i as never), { ok: true }) })
+    expect(calls.map((c) => c.reportId)).toEqual(['r2'])
+    // An unreadable queue skips the app this tick instead of dispatching blind.
+    const blind: Array<Record<string, unknown>> = []
+    await worker.runSpendDownForKey(seed({}, { failRead: (t: string) => (t === 'work_queue' ? 'connection reset' : null) }) as never, key(), { now: NOW, checkBudget: allowAll, dispatch: async (i) => (blind.push(i as never), { ok: true }) })
+    expect(blind).toEqual([])
+  })
+
   it('skips the app for the tick when the leases cannot be read, and goes on when the table is not there yet', async () => {
     const run = async (failRead: (t: string) => string | { code: string; message: string } | null) => {
       const calls: Array<Record<string, unknown>> = []

@@ -381,6 +381,8 @@ async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
         .from('work_claims')
         .select('id, project_id, report_id, lane_id, outcome, detail, claimed_at, finished_at, auto_requeued')
         .in('project_id', ids)
+        // Conflict and audit runs (P3) hold no report: nothing to requeue.
+        .not('report_id', 'is', null)
         .eq('failure_kind', 'infra')
         .in('status', ['done', 'expired'])
         .gte('claimed_at', since7)
@@ -812,7 +814,7 @@ async function requeueClaims(c: Ctx, db: Db, userId: string, raw: unknown, now: 
   if (claimIds.length === 0 || claimIds.length > MAX_ACTION_ITEMS) {
     return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: `Send 1 to ${MAX_ACTION_ITEMS} claim ids.` } }, 400);
   }
-  const { data, error } = await db.from('work_claims').select('id, project_id, report_id, lane_id, host_id, status').in('id', claimIds);
+  const { data, error } = await db.from('work_claims').select('id, project_id, report_id, lane_id, host_id, status').in('id', claimIds).not('report_id', 'is', null);
   if (error) return dbError(c, error);
   const rows = (data ?? []) as Array<{ id: string; project_id: string; report_id: string; lane_id: string; host_id: string; status: string }>;
   const held = await activeWorkClaims(db, rows.map((r) => r.report_id), now);
@@ -881,13 +883,13 @@ async function runAction(
   if (action === 'remove' || action === 'conflict_agent') {
     const { data: row, error } = await db
       .from('fix_merge_queue')
-      .select('id, state, conflict_agents, detail')
+      .select('id, state, conflict_agents, detail, local_claim_id')
       .eq('fix_attempt_id', a.id)
       .in('state', ['queued', 'waiting', 'resolving', 'blocked'])
       .maybeSingle();
     if (error) return { id: a.id, ok: false, message: 'Could not read the merge queue.', url };
     if (!row) return { id: a.id, ok: false, message: 'Not in the merge queue.', url };
-    const q = row as { id: string; state: string; conflict_agents: number | null; detail: string | null };
+    const q = row as { id: string; state: string; conflict_agents: number | null; detail: string | null; local_claim_id?: string | null };
     if (action === 'remove') {
       const { error: upErr } = await db
         .from('fix_merge_queue')
@@ -901,16 +903,28 @@ async function runAction(
       return { id: a.id, ok: false, message: `Both conflict agents (${CONFLICT_AGENT_CAP} of ${CONFLICT_AGENT_CAP}) were used on this PR. Update the branch, or resolve it on GitHub.`, url };
     }
     if (q.state !== 'resolving' && q.state !== 'blocked') return { id: a.id, ok: false, message: 'Only a conflicted PR gets a conflict agent.', url };
-    // Conflict agents are cloud agents; the local lanes push only commits that change files, not a merge.
+    if (q.local_claim_id) return { id: a.id, ok: false, message: 'A local worker is resolving this conflict right now.', url };
     const cloud = await cloudReady(db, a.project_id, cloudCache);
     if (!cloud.ready) {
+      // No cloud agent can run; a local worker lane in conflicts mode (ADR 0049) can.
+      const { data: lanes } = await db.from('work_lanes').select('id').eq('project_id', a.project_id).eq('mode', 'conflicts').eq('paused', false).limit(1);
+      if (((lanes ?? []) as unknown[]).length > 0) {
+        const { error: upErr } = await db
+          .from('fix_merge_queue')
+          .update({ state: 'blocked', cursor_agent_id: null, claimed_until: null, detail: 'Merge conflict: waits for a local worker lane in conflicts mode.', updated_at: now.toISOString() })
+          .eq('id', q.id)
+          .is('local_claim_id', null);
+        if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
+        return { id: a.id, ok: true, message: 'A local worker lane in conflicts mode takes it at its next claim.', url };
+      }
       return { id: a.id, ok: false, message: `Needs a person: resolve the conflict on GitHub (${url ?? 'the pull request'}). ${cloud.why}, so no conflict agent can run.`, url };
     }
     // The worker starts a new agent for a `resolving` row with no agent when the PR still conflicts.
     const { error: upErr } = await db
       .from('fix_merge_queue')
       .update({ state: 'resolving', cursor_agent_id: null, agent_head_sha: null, claimed_until: null, detail: 'Sent to a conflict agent again from the console.', updated_at: now.toISOString() })
-      .eq('id', q.id);
+      .eq('id', q.id)
+      .is('local_claim_id', null);
     if (upErr) return { id: a.id, ok: false, message: 'Could not hand it back to the merge queue.', url };
     runInBackground(deps.runQueue(a.project_id), 'pipeline-conflict-agent');
     return { id: a.id, ok: true, message: 'Handed back to the merge queue; it starts a conflict agent if the PR still conflicts (it needs review follow-ups on).', url };

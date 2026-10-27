@@ -74,6 +74,26 @@ export async function activeWorkClaims(db: Db, reportIds: readonly string[], now
   return { ids }
 }
 
+/**
+ * Report ids among `reportIds` that wait in a local worker lane's queue (other
+ * than `exceptLaneId`). A queued report is reserved for its lane: a person (or
+ * a skill run, ADR 0042 amendment) chose the machine, so spend-down and other
+ * lanes leave it. `{ error }` on a failed read, as activeWorkClaims.
+ */
+export async function queuedForLocalLanes(db: Db, reportIds: readonly string[], exceptLaneId?: string): Promise<{ ids: Set<string> } | { error: string }> {
+  const ids = new Set<string>()
+  const unique = [...new Set(reportIds)]
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const { data, error } = await db.from('work_queue').select('report_id, lane_id').in('report_id', unique.slice(i, i + IN_CHUNK))
+    if (error) {
+      if (missingTable(error)) return { ids }
+      return { error: error.message }
+    }
+    for (const row of (data ?? []) as Array<{ report_id: string; lane_id: string }>) if (row.lane_id !== exceptLaneId) ids.add(row.report_id)
+  }
+  return { ids }
+}
+
 /** One report: held by a local worker right now? `null` on a failed read (treat as held). */
 export async function reportHasActiveWorkClaim(db: Db, reportId: string, now: Date = new Date()): Promise<boolean | null> {
   const res = await activeWorkClaims(db, [reportId], now)
@@ -162,7 +182,7 @@ export async function enqueueReports(
   db: Db,
   lane: QueueLane,
   reportIds: readonly string[],
-  opts: { source: 'console' | 'report_file' | 'requeue' | 'lease_expired'; addedBy?: string | null; front?: boolean; now?: Date },
+  opts: { source: 'console' | 'report_file' | 'requeue' | 'lease_expired' | 'skill_run'; addedBy?: string | null; front?: boolean; now?: Date },
 ): Promise<{ queued: number } | { error: string }> {
   const now = opts.now ?? new Date()
   const base = queuePosition(now, opts.front)
