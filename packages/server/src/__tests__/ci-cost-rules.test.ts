@@ -117,6 +117,12 @@ describe('missing_path_filter', () => {
     expect(a.autofix).toMatchObject({ kind: 'ignore_docs_paths', workflowPath: 'ci.yml' })
   })
 
+  it('offers no autofix when push already filters paths (GitHub refuses both on one event)', () => {
+    const withPush = yaml.replace('on:\n', "on:\n  push:\n    paths: ['src/**']\n")
+    const [a] = byRule(adviseCiCost(input({ workflows: [wf('ci.yml', withPush)], facts: prFacts, pullRequests: [pr(1, true)] })), 'missing_path_filter')
+    expect(a.autofix).toBeNull()
+  })
+
   it('stays silent with a paths filter, without docs-only pull requests, or without pull request states', () => {
     const filtered = yaml.replace('    branches: [main]\n', "    paths-ignore: ['**/*.md']\n")
     expect(byRule(adviseCiCost(input({ workflows: [wf('ci.yml', filtered)], facts: prFacts, pullRequests: [pr(1, true)] })), 'missing_path_filter')).toEqual([])
