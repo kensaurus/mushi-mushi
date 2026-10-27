@@ -105,7 +105,9 @@ interface Gh {
   branches: Record<string, { sha: string; protected: boolean }>
   pulls: RawPull[]
   commitDates: Record<number, string>
-  cas: 'ok' | 'unavailable' | 'refused'
+  cas: 'ok' | 'unavailable' | 'refused' | 'unknown-deleted' | 'unknown-kept'
+  /** Every open-PR page comes back full (more than Mushi reads). */
+  endlessOpen?: boolean
   perms: { push: boolean; admin: boolean }
   deleteBranchOnMerge: boolean
   remaining: number
@@ -165,6 +167,11 @@ function githubFetch(gh: Gh) {
         const upd = body.variables.input.refUpdates[0] as { name: string; beforeOid: string }
         const name = upd.name.replace('refs/heads/', '')
         gh.beforeDelete?.[name]?.()
+        if (gh.cas === 'unknown-deleted') {
+          delete gh.branches[name]
+          return json(502, null)
+        }
+        if (gh.cas === 'unknown-kept') return json(502, null)
         if (gh.cas === 'unavailable') return json(200, { errors: [{ message: "Field 'updateRefs' doesn't exist on type 'Mutation'" }] })
         if (gh.cas === 'refused' || gh.branches[name]?.sha !== upd.beforeOid) return json(200, { errors: [{ message: 'Expected ref to point at the old oid' }] })
         delete gh.branches[name]
@@ -190,6 +197,7 @@ function githubFetch(gh: Gh) {
     }
     if (path === `${base}/pulls`) {
       const state = u.searchParams.get('state')
+      if (gh.endlessOpen && state === 'open') return json(200, Array.from({ length: 100 }, (_, i) => openPull(1000 + i, `other-${i}`, sha('e'))))
       return json(200, Number(u.searchParams.get('page') ?? '1') > 1 ? [] : gh.pulls.filter((p) => p.state === state))
     }
     const pm = /^\/repos\/kensaurus\/app\/pulls\/(\d+)$/.exec(path)
@@ -219,7 +227,7 @@ function githubFetch(gh: Gh) {
   }
 }
 
-interface SetupOpts { orgRole?: string | null; projectRole?: string | null; rate?: boolean; token?: boolean; itemsMissing?: boolean; extra?: Record<string, unknown[]>; uniques?: Record<string, string[]> }
+interface SetupOpts { orgRole?: string | null; projectRole?: string | null; rate?: boolean; token?: boolean; itemsMissing?: boolean; extra?: Record<string, unknown[]>; uniques?: Record<string, string[]>; runDeadlineMs?: number }
 
 function setup(opts: SetupOpts = {}) {
   const db: FakeDb = makeFakeDb(
@@ -249,6 +257,7 @@ function setup(opts: SetupOpts = {}) {
     },
   )
   const gh = freshGh()
+  const claims = { n: 0 }
   let clock = NOW
   const app = new FakeApp()
   routes.registerRepoHousekeepingRoutes(app as never, {
@@ -260,10 +269,14 @@ function setup(opts: SetupOpts = {}) {
     fetch: githubFetch(gh),
     now: () => clock,
     token: async () => (opts.token === false ? null : 'ghp_stored'),
-    claimRateLimit: (async () => ({ allowed: opts.rate !== false, retryAfterSec: 60 })) as never,
+    claimRateLimit: (async () => {
+      claims.n++
+      return { allowed: opts.rate !== false, retryAfterSec: 60 }
+    }) as never,
     sleep: async () => {},
+    runDeadlineMs: opts.runDeadlineMs,
   })
-  return { db, gh, app, tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } }
+  return { db, gh, app, claims, tick: (ms: number) => { clock = new Date(clock.getTime() + ms) } }
 }
 
 const URL_BASE = `/v1/admin/projects/${P1}/repo-cleanup`
@@ -437,6 +450,7 @@ describe('execute: delete_branches', () => {
     const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
     expect(res.body.error?.code).toBe('MIGRATION_PENDING')
     expect(s.gh.calls.slice(before)).toEqual([])
+    expect(s.db.table('connector_actions')[0].status).toBe('approved')
 
     const t = setup()
     const run = await requestAndApprove(t, { action: 'delete_branches' })
@@ -482,7 +496,94 @@ describe('execute: delete_branches', () => {
   })
 })
 
+describe('execute: more refusals, each on its own', () => {
+  it('refuses a branch a Mushi run started on after the approval', async () => {
+    const s = setup()
+    const { actionId } = await requestAndApprove(s, { action: 'delete_branches', keys: ['branch:mushi/fix-1'] })
+    s.db.table('fix_attempts').push({ id: id(8), project_id: P1, report_id: 'r8', status: 'running', branch: 'mushi/fix-1', pr_url: null, pr_number: null, created_at: '2026-10-27T00:00:00Z' })
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(items(res)[0]).toMatchObject({ outcome: 'refused', detail: 'A Mushi run on this branch is still going.' })
+    expect(s.gh.branches['mushi/fix-1']).toBeDefined()
+  })
+
+  it('refuses before the claim when the token cannot write; the approval stays usable', async () => {
+    const s = setup()
+    const { actionId } = await requestAndApprove(s, { action: 'delete_branches' })
+    s.gh.perms.push = false
+    s.gh.perms.admin = false
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(res.status).toBe(403)
+    expect(res.body.error?.code).toBe('TOKEN_CANNOT_WRITE')
+    expect(s.db.table('connector_actions')[0].status).toBe('approved')
+  })
+
+  it('deletes nothing when GitHub lists more open pull requests than Mushi reads', async () => {
+    const s = setup()
+    const { actionId } = await requestAndApprove(s, { action: 'delete_branches' })
+    s.gh.endlessOpen = true
+    const before = s.gh.calls.length
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(res.body.error?.code).toBe('GITHUB_UNREADABLE')
+    expect(s.gh.calls.slice(before).filter((c) => c === 'POST /graphql' || c.startsWith('DELETE'))).toEqual([])
+    expect(s.gh.branches['mushi/fix-1']).toBeDefined()
+  })
+
+  it('items past the deadline or under the GitHub floor are not run, and still get a row and an audit entry', async () => {
+    const s = setup({ runDeadlineMs: -1 })
+    const { actionId } = await requestAndApprove(s, { action: 'delete_branches' })
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(items(res).map((i) => i.outcome)).toEqual(['not_run', 'not_run', 'not_run'])
+    expect(items(res)[0].detail).toMatch(/ran out of time/)
+    expect(s.db.table('repo_housekeeping_items').map((r) => r.outcome)).toEqual(['skipped', 'skipped', 'skipped'])
+    expect(s.db.table('org_audit_events').filter((e) => e.action === 'repo_cleanup.delete_branches.not_run')).toHaveLength(3)
+    expect(Object.keys(s.gh.branches)).toContain('mushi/fix-1')
+
+    const t = setup()
+    const run = await requestAndApprove(t, { action: 'delete_branches', keys: ['branch:mushi/fix-1'] })
+    t.gh.remaining = 200
+    const low = await t.app.call('POST', `${URL_BASE}/requests/${run.actionId}/execute`)
+    expect(items(low)[0]).toMatchObject({ outcome: 'not_run', detail: expect.stringMatching(/fewer than 300 GitHub API calls/) })
+  })
+
+  it('when GitHub does not answer the delete, reads the branch: gone counts as deleted (Restore kept), there means not deleted', async () => {
+    const s = setup()
+    s.gh.cas = 'unknown-deleted'
+    const { actionId } = await requestAndApprove(s, { action: 'delete_branches', keys: ['branch:mushi/fix-1'] })
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(items(res)[0]).toMatchObject({ outcome: 'done', detail: expect.stringMatching(/did not answer/) })
+    expect(s.db.table('repo_housekeeping_items')[0]).toMatchObject({ outcome: 'done', deleted_sha: sha('a') })
+    expect((await s.app.call('GET', URL_BASE)).body.data.restorable).toHaveLength(1)
+
+    const t = setup()
+    t.gh.cas = 'unknown-kept'
+    const run = await requestAndApprove(t, { action: 'delete_branches', keys: ['branch:mushi/fix-1'] })
+    const kept = await t.app.call('POST', `${URL_BASE}/requests/${run.actionId}/execute`)
+    expect(items(kept)[0]).toMatchObject({ outcome: 'failed', detail: expect.stringMatching(/still there; not deleted/) })
+    expect(t.gh.calls.filter((c) => c.startsWith('DELETE'))).toEqual([])
+    expect(t.db.table('repo_housekeeping_items')[0].deleted_sha).toBeNull()
+  })
+
+  it('a refused request does not use one of the five hourly slots', async () => {
+    const s = setup()
+    await s.app.call('POST', `${URL_BASE}/requests`, { body: { action: 'delete_branches', repo: REPO, keys: ['branch:someone-else'] } })
+    await s.app.call('POST', `${URL_BASE}/requests`, { body: { action: 'set_delete_branch_on_merge', repo: 'kensaurus/other' } })
+    expect(s.claims.n).toBe(0)
+    await s.app.call('POST', `${URL_BASE}/requests`, { body: { action: 'delete_branches', repo: REPO } })
+    expect(s.claims.n).toBe(1)
+  })
+})
+
 describe('execute: close_prs', () => {
+  it('closes a fix whose PR number is only in its URL', async () => {
+    const s = setup()
+    s.db.table('fix_attempts').find((f) => f.id === F.f7)!.pr_number = null
+    const { actionId, payload } = await requestAndApprove(s, { action: 'close_prs', keys: ['pr:7'] })
+    expect(payload.items[0].prNumber).toBe(7)
+    const res = await s.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(items(res)[0]).toMatchObject({ key: 'pr:7', outcome: 'done' })
+    expect(s.gh.pulls.find((p) => p.number === 7)?.state).toBe('closed')
+  })
+
   it('closes through the pipeline close: the reason becomes a team note on the report', async () => {
     const s = setup()
     const { actionId, payload } = await requestAndApprove(s, { action: 'close_prs' })
@@ -567,8 +668,10 @@ describe('restore and the repo setting', () => {
     t.gh.perms.admin = false
     const run = await requestAndApprove(t, { action: 'set_delete_branch_on_merge' })
     const no = await t.app.call('POST', `${URL_BASE}/requests/${run.actionId}/execute`)
-    expect(no.status).toBe(409)
+    expect(no.status).toBe(403)
+    expect(no.body.error?.code).toBe('TOKEN_CANNOT_ADMIN')
     expect(no.body.error?.message).toMatch(/Administration: Read and write/)
+    expect(t.db.table('connector_actions')[0].status).toBe('approved')
     expect(t.gh.deleteBranchOnMerge).toBe(false)
   })
 })

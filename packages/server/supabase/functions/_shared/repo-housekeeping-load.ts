@@ -285,7 +285,7 @@ export async function previewRepo(
   if (gh.remaining < PREVIEW_GITHUB_FLOOR) return { ...empty, defaultBranch: info.info.defaultBranch, deleteBranchOnMerge: info.info.deleteBranchOnMerge, error: `Fewer than ${PREVIEW_GITHUB_FLOOR} GitHub API calls are left this hour for this token. Try again later.` }
   const openFixNumbers = input.recorded.attempts.filter((a) => a.repo === repo && openList.pulls.some((p) => p.number === a.prNumber)).map((a) => a.prNumber)
   const headCommitAt = await headCommitDates(gh, repo, openFixNumbers)
-  const facts: RepoFacts = { repo, defaultBranch: info.info.defaultBranch, branches: branchList.branches, openPulls: openList.pulls, closedPulls, headCommitAt, truncated: branchList.truncated || openList.truncated || closedTruncated }
+  const facts: RepoFacts = { repo, defaultBranch: info.info.defaultBranch, branches: branchList.branches, openPulls: openList.pulls, closedPulls, headCommitAt, truncated: branchList.truncated || openList.truncated || closedTruncated || openFixNumbers.length > 50 }
   const pending = new Set([...input.pending].filter((k) => k.startsWith(`${repo}|`)).map((k) => k.slice(repo.length + 1)))
   const b = branchCandidates(facts, recordedHere, pending)
   const p = prCandidates(facts, input.recorded.attempts, input.reviews, { staleDays: input.staleDays, now: deps.now(), riding: input.riding, pending, activeBranches: input.recorded.activeBranches })

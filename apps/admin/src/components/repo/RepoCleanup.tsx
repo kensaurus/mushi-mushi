@@ -60,8 +60,8 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
     post(`${base}/requests`, { action, repo, ...(keys ? { keys } : {}) }, () => 'Asked. An owner or admin approves it under "Waiting for a decision" before anything changes on GitHub.')
 
   const waiting = useMemo(() => (data?.actions ?? []).filter((a) => a.status === 'pending_approval' || a.status === 'approved' || a.status === 'executing'), [data])
-  // A long run answers 202 and goes on: read again every 5 s until no clean-up is running.
-  const running = (data?.actions ?? []).some((a) => a.status === 'executing')
+  // A long run answers 202 and goes on: read again every 5 s while one started in the last 10 minutes is running.
+  const running = (data?.actions ?? []).some((a) => a.status === 'executing' && !!a.executedAt && Date.now() - Date.parse(a.executedAt) < 10 * 60_000)
   useEffect(() => {
     if (!running) return
     const t = setInterval(reload, 5000)

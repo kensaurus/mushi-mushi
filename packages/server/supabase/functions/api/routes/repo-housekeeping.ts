@@ -63,7 +63,7 @@ import {
   type HousekeepingActionRow,
   type RepoPreview,
 } from '../../_shared/repo-housekeeping-load.ts'
-import { runHousekeepingAction, type HousekeepingRunDeps } from '../../_shared/repo-housekeeping-run.ts'
+import { housekeepingPreflight, runHousekeepingAction, type HousekeepingRunDeps } from '../../_shared/repo-housekeeping-run.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
@@ -93,6 +93,8 @@ export interface RepoHousekeepingRouteDeps {
   claimRateLimit: typeof claimTenantRateLimit
   sleep: (ms: number) => Promise<void>
   executeWaitMs?: number
+  /** Wall time for one run (tests); default RUN_DEADLINE_MS. */
+  runDeadlineMs?: number
 }
 
 export const defaultRepoHousekeepingDeps: RepoHousekeepingRouteDeps = {
@@ -115,6 +117,7 @@ function runDeps(deps: RepoHousekeepingRouteDeps): HousekeepingRunDeps {
     sleep: deps.sleep,
     token: deps.token,
     closePull: (token, repo, n) => closePull(ghClient(deps.fetch, token), repo, n),
+    ...(deps.runDeadlineMs !== undefined ? { deadlineMs: deps.runDeadlineMs } : {}),
   }
 }
 
@@ -214,7 +217,7 @@ async function loadItems(db: Db, projectId: string): Promise<ItemRow[] | null> {
   return (data ?? []) as ItemRow[]
 }
 
-const restorable = (r: ItemRow) => r.action === 'delete_branches' && !!r.deleted_sha && !!r.branch && !r.restored_at && (r.outcome === 'done' || r.outcome === 'pending')
+const restorable = (r: ItemRow) => r.action === 'delete_branches' && !!r.deleted_sha && !!r.branch && !r.restored_at && (r.outcome === 'done' || r.outcome === 'pending' || r.outcome === 'skipped')
 
 /** The full preview: every bound repo. */
 async function buildPreview(db: Db, deps: RepoHousekeepingRouteDeps, projectId: string, staleDays: number, actions: HousekeepingActionRow[], onlyRepo?: string): Promise<RepoPreview[]> {
@@ -275,18 +278,18 @@ const requestSchema = z
   })
   .strict()
 
-/** Clean-ups (restores excepted) run for this app in the last hour; null when unreadable. */
-async function runsLastHour(db: Db, projectId: string, now: Date): Promise<number | null> {
-  const { data, error } = await db
-    .from('connector_actions')
-    .select('id')
-    .eq('project_id', projectId)
-    .in('action', ['delete_branches', 'close_prs', 'set_delete_branch_on_merge'])
-    .gt('executed_at', new Date(now.getTime() - 3600_000).toISOString())
-  return error ? null : ((data ?? []) as unknown[]).length
-}
-
-async function store(c: Context, db: Db, a: Access, action: string, payload: Record<string, unknown>, reason: string | null): Promise<Response> {
+/**
+ * Store the request. A clean-up (not a restore) takes one of the app's 5 hourly
+ * slots here, after every check passed, so a refused request costs nothing.
+ */
+async function store(c: Context, deps: RepoHousekeepingRouteDeps, db: Db, a: Access, action: string, payload: Record<string, unknown>, reason: string | null): Promise<Response> {
+  if (action !== 'restore_branches') {
+    const rate = await deps.claimRateLimit(db as never, `project:${a.projectId}:repo_cleanup_request`, HOUSEKEEPING_ACTIONS_PER_HOUR, 3600)
+    if (!rate.allowed) {
+      c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
+      return jsonError(c, 'RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups an hour per app.`, 429)
+    }
+  }
   const r = await requestLegacyConnectorAction(db as never, { organizationId: a.orgId, projectId: a.projectId, kind: 'github', action, payload, requestedBy: requester(c), reason })
   if (!r.ok) return jsonError(c, r.code, r.message, r.status)
   return c.json({ ok: true, data: { id: r.value.id, status: 'pending_approval', payloadSha256: r.value.payloadSha256, payload, next: 'A team owner or admin approves it in the console (Repo → Clean up), then runs it within an hour.' } }, 201)
@@ -302,11 +305,6 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
   if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
   const body = parsed.data
   const repo = body.repo.toLowerCase()
-  const rate = await deps.claimRateLimit(db as never, `project:${a.projectId}:repo_cleanup_request`, HOUSEKEEPING_ACTIONS_PER_HOUR, 3600)
-  if (!rate.allowed) {
-    c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
-    return jsonError(c, 'RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups an hour per app.`, 429)
-  }
   const staleDays = clampStaleDays(body.staleDays)
   let preview: RepoPreview | undefined
   try {
@@ -324,7 +322,7 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
     if (preview.deleteBranchOnMerge) return jsonError(c, 'ALREADY_ON', '"Automatically delete head branches" is already on for this repository.', 409)
     if (preview.settingPending) return jsonError(c, 'ALREADY_ASKED', 'Turning this on is already waiting for a decision.', 409)
     const payload: SettingPayload = { repo, setting: 'delete_branch_on_merge', value: true, expected: false }
-    return store(c, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
+    return store(c, deps, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
   }
 
   const pool: Array<{ key: string }> = body.action === 'delete_branches' ? preview.branches : preview.prs
@@ -345,14 +343,14 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
       defaultBranch: preview.defaultBranch ?? '',
       items: preview.branches.filter((b) => chosen.has(b.key)).map((b) => ({ key: b.key, branch: b.branch, headSha: b.headSha, prNumber: b.prNumber, prState: b.prState, reason: b.reason })),
     }
-    return store(c, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
+    return store(c, deps, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
   }
   const payload: ClosePrsPayload = {
     repo,
     staleDays,
     items: preview.prs.filter((p) => chosen.has(p.key)).map((p) => ({ key: p.key, prNumber: p.prNumber, headSha: p.headSha, branch: p.branch, fixAttemptId: p.fixAttemptId, reason: p.reason })),
   }
-  return store(c, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
+  return store(c, deps, db, a, body.action, payload as unknown as Record<string, unknown>, reason)
 }
 
 const restoreSchema = z
@@ -401,7 +399,7 @@ async function restoreRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
       return { key: `branch:${r.branch}`, itemId: r.id, branch: r.branch as string, sha: r.deleted_sha as string }
     }),
   }
-  return store(c, db, a, 'restore_branches', payload as unknown as Record<string, unknown>, parsed.data.reason ?? 'Restore branches Mushi deleted')
+  return store(c, deps, db, a, 'restore_branches', payload as unknown as Record<string, unknown>, parsed.data.reason ?? 'Restore branches Mushi deleted')
 }
 
 async function decideRoute(c: Context, deps: RepoHousekeepingRouteDeps, verb: 'approve' | 'reject' | 'execute'): Promise<Response> {
@@ -426,11 +424,11 @@ async function decideRoute(c: Context, deps: RepoHousekeepingRouteDeps, verb: 'a
     const r = await rejectConnectorAction(db as never, row.id, row.organization_id, userId)
     return r.ok ? c.json({ ok: true, data: null }) : jsonError(c, r.code, r.message, r.status)
   }
-  // The hourly cap is checked before the run claims the approval, so a refusal here leaves it usable.
-  if (row.action !== 'restore_branches') {
-    const ran = await runsLastHour(db, projectId, deps.now())
-    if (ran === null) return jsonError(c, 'DB_ERROR', 'Mushi could not count this app’s clean-ups. Try again in a minute.', 500)
-    if (ran >= HOUSEKEEPING_ACTIONS_PER_HOUR) return jsonError(c, 'RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups run an hour per app. It stays approved until its approval ends; run it after the hour.`, 429)
+  // Everything that needs no item (hourly cap, log table, repo bound, token and what it may do)
+  // is checked before the run claims the approval, so a refusal here leaves it usable.
+  if (row.status === 'approved') {
+    const pre = await housekeepingPreflight(db, { projectId, action: { id: row.id, action: row.action, payload: row.payload } }, { fetch: deps.fetch, now: deps.now, token: deps.token })
+    if ('refusal' in pre) return jsonError(c, pre.refusal.code, pre.refusal.message, pre.refusal.status)
   }
   const run = executeConnectorAction(db as never, row.id, row.organization_id, userId, executeDeps(deps))
   let timer: ReturnType<typeof setTimeout> | undefined

@@ -80,10 +80,14 @@ or that someone pushed to a second ago, is lost or closes other work.
 7. **The one repo setting.** Mushi may turn on "Automatically delete head
    branches" (`delete_branch_on_merge`), never off, when the token can.
 8. **Caps.** ≤ 50 items per action; ≤ 5 clean-ups an hour per app, counted
-   when asked (an atomic claim) and when run (checked before the approval is
-   used); restores are not counted. Each item writes one audit entry naming the
-   person who ran it. The preview and the run stop under a GitHub API floor
-   (300 calls left).
+   when a request is stored (an atomic claim; a refused request costs nothing)
+   and when run (runs that touched GitHub, checked before the approval is
+   used); restores are not counted. Everything a run can check without an item
+   (the cap, the item log table, the repo still bound, a token and what it may
+   do) is checked before the approval is claimed, so those refusals leave the
+   approval usable. Each item, including one the run did not reach, writes one
+   audit entry naming the person who ran it. The preview and the run stop
+   under a GitHub API floor (300 calls left).
 9. **The project's stored token, not the App.** Clean-up uses the project's
    (or its organization's) stored GitHub token, as ADR 0037's legacy path does;
    never the GitHub App installation or the platform token. It needs Contents
@@ -107,6 +111,7 @@ or that someone pushed to a second ago, is lost or closes other work.
 - A fine-grained token without Contents write sees the list and a plain
   refusal at run time; one without Administration write cannot turn the
   setting on, and the console says so before asking.
+- A run the platform kills mid-flight (past the edge function's wall clock) stays `executing`; its unreached items have no row. Nothing sweeps it yet (BACKLOG BL-139); a new request for the same items is refused as "already waiting" until it is cleared.
 - The local worker's `prune_own` setting (ADR 0048) still only covers the
   worker's own clones and worktrees; the daemon does not act on it yet
   (BACKLOG BL-138).

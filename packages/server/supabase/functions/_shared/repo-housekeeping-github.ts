@@ -185,6 +185,8 @@ export type CasDelete =
   | { kind: 'refused'; message: string }
   /** The mutation is not available to this token or host: fall back to read-then-delete. */
   | { kind: 'unavailable'; message: string }
+  /** No answer, or a 5xx: GitHub may or may not have deleted it. The caller reads the branch to find out. */
+  | { kind: 'unknown'; message: string }
 
 /**
  * Delete refs/heads/<branch> only if it points at `beforeOid`, in one
@@ -199,7 +201,8 @@ export async function deleteRefIfAt(gh: Gh, repoNodeId: string, branch: string, 
     }),
   })
   if (r.status === 401 || r.status === 403) return { kind: 'refused', message: 'GitHub refused the token for this change.' }
-  if (r.status !== 200) return { kind: 'unavailable', message: `GitHub answered ${r.status || 'nothing'} to the checked delete.` }
+  if (r.status === 0 || r.status >= 500) return { kind: 'unknown', message: `GitHub answered ${r.status || 'nothing'} to the checked delete.` }
+  if (r.status !== 200) return { kind: 'unavailable', message: `GitHub answered ${r.status} to the checked delete.` }
   const errors = Array.isArray(r.body?.errors) ? (r.body.errors as Array<{ message?: string; type?: string }>) : []
   if (errors.length === 0) return { kind: 'deleted' }
   const text = errors.map((e) => e.message ?? '').join('; ').slice(0, 300)

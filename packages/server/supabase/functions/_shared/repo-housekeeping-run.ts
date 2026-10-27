@@ -116,8 +116,17 @@ async function writeItem(ctx: RunCtx, repo: string, row: Record<string, unknown>
   return error || !data ? null : (data as { id: string }).id
 }
 
-async function updateItem(ctx: RunCtx, id: string, patch: Record<string, unknown>): Promise<void> {
-  await ctx.db.from('repo_housekeeping_items').update({ ...patch, updated_at: ctx.deps.now().toISOString() }).eq('id', id)
+/** True when the row was written. */
+async function updateItem(ctx: RunCtx, id: string, patch: Record<string, unknown>): Promise<boolean> {
+  const { error } = await ctx.db.from('repo_housekeeping_items').update({ ...patch, updated_at: ctx.deps.now().toISOString() }).eq('id', id)
+  return !error
+}
+
+/** An item the run did not reach still gets its row and its audit entry. */
+async function notRun(ctx: RunCtx, repo: string, outcomes: ItemOutcome[], o: ItemOutcome, row: Record<string, unknown>): Promise<void> {
+  outcomes.push(o)
+  await writeItem(ctx, repo, { ...row, outcome: 'skipped', detail: o.detail.slice(0, 500) })
+  await auditItem(ctx, repo, o)
 }
 
 async function auditItem(ctx: RunCtx, repo: string, o: ItemOutcome): Promise<void> {
@@ -145,6 +154,8 @@ async function runsLastHour(db: Db, projectId: string, selfId: string, now: Date
     .select('id, action, executed_at')
     .eq('project_id', projectId)
     .in('action', HOUSEKEEPING_ACTIONS.filter((a) => a !== 'restore_branches'))
+    // A run refused before it touched GitHub ends 'failed' and does not count.
+    .in('status', ['executing', 'executed'])
     .gt('executed_at', new Date(now.getTime() - 3600_000).toISOString())
   if (error) return null
   return ((data ?? []) as Array<{ id: string }>).filter((r) => r.id !== selfId).length
@@ -160,38 +171,68 @@ function summarize(verb: string, outcomes: ItemOutcome[]): string {
   return `${parts.join(', ')}.`
 }
 
+export interface Refusal {
+  code: string
+  message: string
+  status: 400 | 403 | 409 | 429 | 500
+}
+
+/**
+ * The run's checks that need no item: payload, the hourly cap, the item log
+ * table, the repo still bound, a token, and what the token may do. The execute
+ * route calls this BEFORE the approval is claimed (a refusal leaves it usable);
+ * the run calls it again as a backstop.
+ */
+export async function housekeepingPreflight(
+  db: Db,
+  input: { projectId: string; action: Pick<ApprovedConnectorAction, 'id' | 'action' | 'payload'> },
+  deps: Pick<HousekeepingRunDeps, 'fetch' | 'now' | 'token'>,
+): Promise<{ refusal: Refusal } | { token: string; repo: string }> {
+  const name = input.action.action
+  const no = (code: string, message: string, status: Refusal['status']) => ({ refusal: { code, message, status } })
+  if (!(HOUSEKEEPING_ACTIONS as readonly string[]).includes(name)) return no('ACTION_NOT_SUPPORTED', `"${name}" is not a repo clean-up action.`, 403)
+  const problem = housekeepingPayloadProblem(name, input.action.payload)
+  if (problem) return no('PAYLOAD_INVALID', problem, 403)
+  const repo = String(input.action.payload.repo).toLowerCase()
+  if (name !== 'restore_branches') {
+    const ran = await runsLastHour(db, input.projectId, input.action.id, deps.now())
+    if (ran === null) return no('DB_ERROR', 'Mushi could not count this app’s clean-ups in the last hour, so nothing ran. Try again in a minute.', 500)
+    if (ran >= HOUSEKEEPING_ACTIONS_PER_HOUR) return no('RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups run an hour per app. It stays approved until its approval ends; run it after the hour.`, 429)
+  }
+  const probe = await db.from('repo_housekeeping_items').select('id').limit(1)
+  if (probe.error) {
+    return isMissingTable(probe.error)
+      ? no('MIGRATION_PENDING', 'Repo clean-up needs the database update 20261027183000_repo_housekeeping_items first. Nothing ran.', 409)
+      : no('DB_ERROR', 'Mushi could not read its clean-up log, so nothing ran.', 500)
+  }
+  let bound: string[]
+  try {
+    bound = await boundRepos(db, input.projectId)
+  } catch {
+    return no('DB_ERROR', 'Mushi could not read this app’s repositories, so nothing ran.', 500)
+  }
+  if (!bound.includes(repo)) return no('REPO_NOT_IN_PROJECT', `${repo} is no longer connected to this app. Nothing ran.`, 403)
+  const token = await deps.token(db, input.projectId)
+  if (!token) return no('NO_GITHUB_TOKEN', `${NO_TOKEN} Nothing ran.`, 409)
+  const info = await readRepo(ghClient(deps.fetch, token), repo)
+  if (!info.info) return no('GITHUB_UNREADABLE', `GitHub answered ${info.status || 'nothing'} when Mushi read ${repo}. Nothing ran.`, 409)
+  if (name === 'set_delete_branch_on_merge') {
+    if (!info.info.canAdmin && !info.info.deleteBranchOnMerge) return no('TOKEN_CANNOT_ADMIN', 'The stored token cannot change repository settings. Store a fine-grained token with "Administration: Read and write" on this repository. Nothing ran.', 403)
+  } else if (!info.info.canPush) {
+    return no('TOKEN_CANNOT_WRITE', 'The GitHub token Mushi uses for this repository cannot change branches or pull requests (it needs Contents and Pull requests: Read and write). Nothing ran.', 403)
+  }
+  return { token, repo }
+}
+
 export async function runHousekeepingAction(
   input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction },
   deps: HousekeepingRunDeps,
 ): Promise<ConnectorActionResult> {
-  const name = input.action.action
-  if (!(HOUSEKEEPING_ACTIONS as readonly string[]).includes(name)) return refuse(`"${name}" is not a repo clean-up action.`, 'ACTION_NOT_SUPPORTED', 403)
-  const problem = housekeepingPayloadProblem(name, input.action.payload)
-  if (problem) return refuse(problem, 'PAYLOAD_INVALID', 403)
+  const pre = await housekeepingPreflight(input.db, { projectId: input.projectId, action: input.action }, deps)
+  if ('refusal' in pre) return refuse(pre.refusal.message, pre.refusal.code, pre.refusal.status === 403 ? 403 : 409)
+  const { token, repo } = pre
   const ctx: RunCtx = { db: input.db, organizationId: input.organizationId, projectId: input.projectId, userId: input.userId, action: input.action as RunCtx['action'], deps, started: deps.now().getTime() }
-  const repo = String(input.action.payload.repo).toLowerCase()
-
-  if (name !== 'restore_branches') {
-    const ran = await runsLastHour(ctx.db, ctx.projectId, ctx.action.id, deps.now())
-    if (ran === null) return refuse('Mushi could not count this app\'s clean-ups in the last hour, so nothing ran. Try again in a minute.', 'DB_ERROR')
-    if (ran >= HOUSEKEEPING_ACTIONS_PER_HOUR) return refuse(`At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups run an hour per app. Approve it again after the hour.`, 'RATE_LIMITED')
-  }
-  const probe = await ctx.db.from('repo_housekeeping_items').select('id').limit(1)
-  if (probe.error) {
-    return isMissingTable(probe.error)
-      ? refuse('Repo clean-up needs the database update 20261027183000_repo_housekeeping_items first. Nothing ran.', 'MIGRATION_PENDING')
-      : refuse('Mushi could not read its clean-up log, so nothing ran.', 'DB_ERROR')
-  }
-  let bound: string[]
-  try {
-    bound = await boundRepos(ctx.db, ctx.projectId)
-  } catch {
-    return refuse('Mushi could not read this app\'s repositories, so nothing ran.', 'DB_ERROR')
-  }
-  if (!bound.includes(repo)) return refuse(`${repo} is no longer connected to this app. Nothing ran.`, 'REPO_NOT_IN_PROJECT', 403)
-
-  const token = await deps.token(ctx.db, ctx.projectId)
-  if (!token) return refuse(`${NO_TOKEN} Nothing ran.`, 'NO_GITHUB_TOKEN')
+  const name = input.action.action
   if (name === 'set_delete_branch_on_merge') return runSetting(ctx, token, repo)
   const gh = ghClient(deps.fetch, token)
   if (name === 'delete_branches') return runDeletes(ctx, gh, repo, input.action.payload as unknown as DeleteBranchesPayload)
@@ -219,12 +260,13 @@ async function runDeletes(ctx: RunCtx, gh: Gh, repo: string, p: DeleteBranchesPa
     const base = { key: item.key, branch: item.branch }
     const stop = outOfTime(ctx, gh)
     if (stop) {
-      outcomes.push({ ...base, outcome: 'not_run', detail: stop })
+      await notRun(ctx, repo, outcomes, { ...base, outcome: 'not_run', detail: stop }, { item_key: item.key, branch: item.branch, pr_number: item.prNumber, expected_sha: item.headSha })
       continue
     }
+    // The commit stays on the row when the branch is gone (done, or gone on its own after Mushi recorded it), so Restore works.
     const finish = async (o: ItemOutcome, rowId: string | null) => {
       outcomes.push(o)
-      if (rowId) await updateItem(ctx, rowId, { outcome: o.outcome === 'not_run' ? 'skipped' : o.outcome, detail: o.detail.slice(0, 500), method: o.method ?? null, ...(o.outcome === 'done' ? {} : { deleted_sha: null }) })
+      if (rowId) await updateItem(ctx, rowId, { outcome: o.outcome === 'not_run' ? 'skipped' : o.outcome, detail: o.detail.slice(0, 500), method: o.method ?? null, ...(o.outcome === 'done' || o.outcome === 'skipped' ? {} : { deleted_sha: null }) })
       await auditItem(ctx, repo, o)
     }
     const rowId = await writeItem(ctx, repo, { item_key: item.key, branch: item.branch, pr_number: item.prNumber, expected_sha: item.headSha })
@@ -248,8 +290,11 @@ async function runDeletes(ctx: RunCtx, gh: Gh, repo: string, p: DeleteBranchesPa
       await finish({ ...base, outcome: 'refused', detail: refused, sha: now.branch.sha }, rowId)
       continue
     }
-    // The commit Restore recreates is on the row before the branch is gone.
-    await updateItem(ctx, rowId, { deleted_sha: item.headSha })
+    // The commit Restore recreates is on the row before the branch is gone; no commit on the row, no delete.
+    if (!(await updateItem(ctx, rowId, { deleted_sha: item.headSha }))) {
+      await finish({ ...base, outcome: 'failed', detail: 'Mushi could not record the commit before deleting the branch, so it was not deleted.' }, rowId)
+      continue
+    }
     if (wrote) await ctx.deps.sleep(ctx.deps.spacingMs ?? WRITE_SPACING_MS)
     wrote = true
     let method: 'cas' | 'reread' = 'cas'
@@ -262,6 +307,14 @@ async function runDeletes(ctx: RunCtx, gh: Gh, repo: string, p: DeleteBranchesPa
       const after = await readRefSha(gh, repo, item.branch)
       const detail = after.sha && after.sha !== item.headSha ? `It moved to ${after.sha.slice(0, 7)} just before the delete; not deleted.` : `GitHub refused the delete: ${cas.message}`
       await finish({ ...base, outcome: 'refused', detail, sha: after.sha }, rowId)
+      continue
+    }
+    if (cas.kind === 'unknown') {
+      // GitHub did not answer: it may have deleted it. Read it to find out; never delete twice.
+      const after = await readRefSha(gh, repo, item.branch)
+      if (after.status === 404) await finish({ ...base, outcome: 'done', detail: `GitHub did not answer the delete, but the branch is gone; Restore brings back ${item.headSha.slice(0, 7)}.`, sha: item.headSha, method }, rowId)
+      else if (after.sha && after.sha !== item.headSha) await finish({ ...base, outcome: 'refused', detail: `It moved to ${after.sha.slice(0, 7)} just before the delete; not deleted.`, sha: after.sha }, rowId)
+      else await finish({ ...base, outcome: 'failed', detail: `${cas.message} The branch is still there; not deleted. Ask again later.` }, rowId)
       continue
     }
     // No checked delete for this token: read the branch again, then delete.
@@ -303,7 +356,7 @@ async function runCloses(ctx: RunCtx, gh: Gh, token: string, repo: string, p: Cl
     const base = { key: item.key, prNumber: item.prNumber, branch: item.branch }
     const stop = outOfTime(ctx, gh)
     if (stop) {
-      outcomes.push({ ...base, outcome: 'not_run', detail: stop })
+      await notRun(ctx, repo, outcomes, { ...base, outcome: 'not_run', detail: stop }, { item_key: item.key, pr_number: item.prNumber, branch: item.branch, fix_attempt_id: item.fixAttemptId, expected_sha: item.headSha })
       continue
     }
     const rowId = await writeItem(ctx, repo, { item_key: item.key, pr_number: item.prNumber, branch: item.branch, fix_attempt_id: item.fixAttemptId, expected_sha: item.headSha })
@@ -314,7 +367,7 @@ async function runCloses(ctx: RunCtx, gh: Gh, token: string, repo: string, p: Cl
     }
     const fix = fixes.get(item.fixAttemptId)
     const attempt = recorded.attempts.find((a) => a.id === item.fixAttemptId)
-    if (!fix || fix.project_id !== ctx.projectId || fix.pr_number !== item.prNumber || !attempt || attempt.repo !== repo) {
+    if (!fix || fix.project_id !== ctx.projectId || !attempt || attempt.prNumber !== item.prNumber || attempt.repo !== repo) {
       await finish({ ...base, outcome: 'refused', detail: 'This pull request is no longer recorded as this app\'s fix.' })
       continue
     }
@@ -352,7 +405,7 @@ async function runCloses(ctx: RunCtx, gh: Gh, token: string, repo: string, p: Cl
     const reason = `${item.reason} (Repo clean-up)`.slice(0, 1000)
     const closed = await closeFixPullRequest(
       ctx.db,
-      { fix, prNumber: item.prNumber, reason, author: 'Mushi repo clean-up', now: ctx.deps.now(), source: 'console' },
+      { fix: { ...fix, pr_number: fix.pr_number ?? item.prNumber }, prNumber: item.prNumber, reason, author: 'Mushi repo clean-up', now: ctx.deps.now(), source: 'console' },
       () => ctx.deps.closePull(token, repo, item.prNumber),
     )
     await finish({ ...base, outcome: closed.ok ? 'done' : 'failed', detail: closed.message, sha: item.headSha })
@@ -374,7 +427,7 @@ async function runRestores(ctx: RunCtx, gh: Gh, repo: string, p: RestorePayload)
     const base = { key: item.key, branch: item.branch }
     const stop = outOfTime(ctx, gh)
     if (stop) {
-      outcomes.push({ ...base, outcome: 'not_run', detail: stop })
+      await notRun(ctx, repo, outcomes, { ...base, outcome: 'not_run', detail: stop }, { item_key: item.key, branch: item.branch, expected_sha: item.sha })
       continue
     }
     const rowId = await writeItem(ctx, repo, { item_key: item.key, branch: item.branch, expected_sha: item.sha })

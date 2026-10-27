@@ -166,7 +166,7 @@ describe('RepoCleanup', () => {
   it('reads again while a clean-up is running', () => {
     vi.useFakeTimers()
     try {
-      const { reload } = render(view({ actions: [pending('executing')] }))
+      const { reload } = render(view({ actions: [pending('executing', { executedAt: new Date().toISOString() })] }))
       act(() => { vi.advanceTimersByTime(5000) })
       expect(reload).toHaveBeenCalled()
     } finally {
