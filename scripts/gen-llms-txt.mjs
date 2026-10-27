@@ -91,6 +91,7 @@ const lines = [
   "",
   curated("Incident loop", "/quickstart/incident-loop"),
   curated("MCP server", "/quickstart/mcp"),
+  curated("Ask Lovable why it broke", "/quickstart/lovable-mcp"),
   curated(
     "Connect your AI client",
     "/connect",

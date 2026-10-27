@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 220 pages, generated from llms.txt. */
+/** 221 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -1454,6 +1454,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "ios", "swift"],
     headings: ["Install (Swift Package Manager)", "Initialize", "Open the widget or submit a report", "Sentry"],
     excerpt: "Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.",
+  },
+  {
+    title: "Ask Lovable why it broke",
+    url: docUrl("/quickstart/lovable-mcp"),
+    route: "/quickstart/lovable-mcp",
+    markdown: "quickstart/lovable-mcp.md",
+    keywords: ["quickstart", "lovable-mcp", "lovable", "mcp", "ask", "broke"],
+    headings: ["Add Mushi to Lovable", "Open the custom MCP form", "Fill in the form", "Sign in and approve", "Ask Lovable", "Claude Code: one paste", "Cursor: one click", "Bolt"],
+    excerpt: "Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it…",
   },
   {
     title: "MCP server for bug fixing in Cursor & Claude Code",
