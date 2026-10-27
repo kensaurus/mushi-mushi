@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["What happens to a bug", "The problem it solves", "A real example from our own sites", "What this is (and is not)", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
+    headings: ["What happens to a bug", "The problem it solves", "A real example from our own sites", "What this is (and is not)", "This is what a diagnosis looks like", "See it in action", "Spend less on CI", "Get started"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {

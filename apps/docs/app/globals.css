@@ -1208,11 +1208,6 @@ main :not(pre) > code {
   color: var(--mushi-dark-ink-muted);
 }
 
-/* "Start in three steps" + one-click installs, under the pipeline. */
-.landing-install {
-  margin: 2.25rem 0 2.5rem;
-}
-
 .landing-oneclick__buttons {
   display: flex;
   flex-wrap: wrap;
@@ -1411,18 +1406,6 @@ html:has(.landing-cinematic-hero) {
   margin-right: 0.45rem;
 }
 
-/* Hero one-click start: two buttons, then the command to copy. */
-.landing-hero-start {
-  display: grid;
-  gap: 0.85rem;
-  max-width: 34rem;
-  margin-top: 1.35rem;
-}
-
-.landing-hero-start .landing-hero-ctas {
-  margin-top: 0;
-}
-
 .landing-oneclick__prompt {
   flex-shrink: 0;
   font-family: var(--mushi-font-mono);
@@ -1430,102 +1413,141 @@ html:has(.landing-cinematic-hero) {
   color: var(--mushi-vermillion);
 }
 
-/* "Start in three steps": numbered, each with its action and a check. */
-.landing-start__extra {
-  display: grid;
-  gap: 0.4rem;
-  /* Wide enough for the whole `claude mcp add …` command at desktop; it still scrolls on a phone. */
-  max-width: 48rem;
-  margin-top: 0.9rem;
+/* Hero install box: pick your editor, then three numbered steps. */
+.landing-install-box {
+  max-width: 44rem;
+  margin-top: 1.35rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.75rem;
+  background: var(--mushi-paper);
+  overflow: hidden;
 }
 
-.landing-start {
+.landing-install-box__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper-wash);
+}
+
+.landing-install-box__tabs-label {
+  margin-right: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-install-box__tab {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--mushi-ink-muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.landing-install-box__tab:hover {
+  color: var(--mushi-ink);
+}
+
+.landing-install-box__tab[aria-selected='true'] {
+  border-color: var(--mushi-rule);
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+}
+
+.landing-install-box__tab:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 1px;
+}
+
+.landing-install-box__steps {
   display: grid;
-  gap: 0.75rem;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-@media (min-width: 1024px) {
-  .landing-start {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.landing-start__step {
+.landing-install-box__step {
   display: flex;
-  gap: 0.85rem;
+  gap: 0.8rem;
   margin: 0 !important;
-  padding: 1rem 1.05rem 1.05rem;
-  border: 1px solid var(--mushi-rule);
-  border-radius: 0.6rem;
-  background: var(--mushi-paper-wash);
+  padding: 0.9rem 1rem;
 }
 
-.landing-start__num {
+.landing-install-box__step + .landing-install-box__step {
+  border-top: 1px dashed var(--mushi-rule);
+}
+
+.landing-install-box__num {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.6rem;
+  height: 1.6rem;
   border-radius: 999px;
   /* Darkened: white on plain vermillion is 4.3:1, under AA for small text. */
   background: color-mix(in oklch, var(--mushi-vermillion) 78%, black);
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
-.landing-start__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+.landing-install-box__body {
+  display: grid;
+  gap: 0.45rem;
   min-width: 0;
   flex: 1;
 }
 
-.landing-start__title {
+.landing-install-box__title {
   margin: 0 !important;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--mushi-ink);
 }
 
-.landing-start__desc {
+.landing-install-box__desc {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  line-height: 1.45;
   color: var(--mushi-ink-muted);
 }
 
-.landing-start__action {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.landing-start__check {
+.landing-install-box__check {
   display: flex;
-  gap: 0.45rem;
-  margin: auto 0 0;
-  padding-top: 0.55rem;
-  border-top: 1px dashed var(--mushi-rule);
-  font-size: 0.86rem;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
   line-height: 1.45;
-  color: var(--mushi-ink);
+  color: var(--mushi-ink-muted);
 }
 
-.landing-start__check-mark {
+.landing-install-box__check > span:first-child {
   color: var(--mushi-vermillion);
   font-weight: 700;
 }
 
-.landing-start__pricing {
-  margin: 0.9rem 0 0;
-  font-size: 0.9rem;
-  color: var(--mushi-ink-muted);
+.landing-install-box__no-editor {
+  padding: 0.75rem 1rem 0.9rem;
+  border-top: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper-wash);
 }
+
+/* A prompt for an AI editor wraps; a shell command scrolls. */
+.landing-oneclick__cmd-row--prompt code {
+  white-space: normal;
+  overflow-x: visible;
+  line-height: 1.5;
+}
+
 
 .landing-trust {
   margin: 2rem 0 0.5rem;
