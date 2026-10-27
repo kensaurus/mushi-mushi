@@ -937,7 +937,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
           (await heldSubmits(page)) > submitsBefore)
       if (!refusedRequests.length && heldWrite) {
         step.outcome = 'blocked'
-        step.note = 'write held back: this run has no account, so it writes nothing'
+        step.note = 'held back: this run has no account, so it sends no form or write to the app'
       }
       if (refusedRequests.length) {
         step.outcome = 'blocked'

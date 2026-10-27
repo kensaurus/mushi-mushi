@@ -69,7 +69,7 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
       return send(303, '', ok ? { location: '/dashboard', 'set-cookie': 'sid=1; Path=/' } : { location: '/login' })
     }
     if (path === '/dashboard') {
-      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button> <form action="/api/projects/1/delete" method="post"><label>Type the project name <input name="confirm"></label> <button type="submit">Delete project</button></form> <div role="dialog" aria-label="Delete project"><button onclick="fetch('/api/projects/1', { method: 'DELETE' })">Confirm</button></div> <div role="alertdialog" aria-labelledby="dels-title t2"><h2 id="dels-title">Delete project</h2><p id="t2">This cannot be undone.</p><button onclick="fetch('/api/projects/1', { method: 'DELETE' })">Yes, go ahead</button></div>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
+      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button> <form action="/api/projects/1/delete" method="post"><label>Type the project name <input name="confirm"></label> <button type="submit">Delete project</button></form> <div role="dialog" aria-label="Delete project"><button onclick="fetch('/api/projects/1', { method: 'DELETE' })">Confirm</button></div> <div role="alertdialog" aria-labelledby="dels-title t2"><h2 id="dels-title">Delete project</h2><p id="t2">This cannot be undone.</p><button id="yes" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Yes, go ahead</button></div> <button onclick="document.getElementById('yes').focus()">Review the deletion</button>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
 document.getElementById('create').onclick = async () => { await fetch('/api/apps', { method: 'POST', body: '{}' }); location.href = '/reports/1' }`))
     }
     if (path === '/api/apps' && method === 'POST') {
@@ -102,6 +102,9 @@ function scriptedAsk(feelingOnLanding: (session: number) => boolean, prompts: st
       if (!did.includes('Click the button "Confirm"')) return j({ action: 'click', role: 'button', name: 'Confirm' })
       // Same, with the dialog named through aria-labelledby (an id with an "s", and two ids).
       if (!did.includes('Yes, go ahead')) return j({ action: 'click', role: 'button', name: 'Yes, go ahead' })
+      // The keyboard twin: a harmless button moves focus onto it, then Space.
+      if (!did.includes('Review the deletion')) return j({ action: 'click', role: 'button', name: 'Review the deletion' })
+      if (!did.includes('Press Space')) return j({ action: 'press', key: 'Space' })
       return j({ action: 'click', role: 'button', name: 'Create app' })
     }
     if (snap.includes('Sign in to Acme')) {
@@ -198,6 +201,7 @@ describe('fresh-eyes on a local app', () => {
     expect(steps.some((s) => s.action === 'Press Enter' && s.outcome === 'refused')).toBe(true)
     expect(steps.some((s) => s.action === 'Click the button "Confirm"' && s.outcome === 'refused')).toBe(true)
     expect(steps.some((s) => s.action === 'Click the button "Yes, go ahead"' && s.outcome === 'refused')).toBe(true)
+    expect(steps.some((s) => s.action === 'Press Space' && s.outcome === 'refused')).toBe(true)
     expect(app.writes.some((w) => w.path.startsWith('/api/projects'))).toBe(false)
     // "project" resolved to "Delete project" and was refused; the delete never reached the app.
     expect(steps.some((s) => s.action === 'Click the button "project"' && s.outcome === 'refused')).toBe(true)

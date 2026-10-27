@@ -238,7 +238,11 @@ async function focusedLabels(page: Page): Promise<string[] | null> {
       const el = document.activeElement as HTMLElement | null
       if (!el || el === document.body) return []
       const read = (h: Element) => [h.getAttribute('aria-label'), (h as HTMLElement).innerText, h.getAttribute('value'), h.getAttribute('title')].filter(Boolean).join(' ').trim()
-      const out = [read(el)]
+      const byIds = (h: Element) => (h.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')
+      const out = [read(el), ...byIds(el)]
+      // A button in a dialog acts for the dialog, as on click.
+      const dialog = el.closest('[role=dialog], [role=alertdialog], dialog')
+      if (dialog) out.push(dialog.getAttribute('aria-label') ?? '', ...byIds(dialog))
       const form = (el as HTMLInputElement).form ?? el.closest('form')
       if (form) {
         out.push(form.getAttribute('aria-label') ?? '')
