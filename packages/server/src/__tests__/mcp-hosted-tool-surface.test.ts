@@ -25,6 +25,7 @@ import {
   toolMatchesFeatures,
 } from '../../supabase/functions/mcp/feature-groups.ts'
 import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from '../../supabase/functions/mcp/hosted-resources.ts'
+import { toolEnabledForConnection } from '../../supabase/functions/_shared/mcp-connection-scope.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
 const SOURCE = readFileSync(resolve(FUNCTIONS, 'mcp/index.ts'), 'utf8')
@@ -95,6 +96,18 @@ describe('hosted MCP tool surface', () => {
     ) as { tools: Record<string, { annotations?: { readOnlyHint?: boolean }; scope?: string }> }
     const readTools = vibe.filter((n) => discovery.tools[n]?.annotations?.readOnlyHint === true)
     expect(readTools).toEqual(expect.arrayContaining(['get_recent_reports', 'get_report_detail', 'get_fix_context', 'diagnose_setup']))
+  })
+
+  // Lovable's sign-in defaults to "All my projects": an account key with no
+  // project of its own. The agent then needs list_projects to pick one,
+  // and that tool is outside the preset, so the connection rule has to add it.
+  it('adds list_projects to ?features=vibe on an account connection, not on a pinned one', () => {
+    const vibe = parseFeaturesParam('vibe')
+    const listed = (scope: Parameters<typeof toolEnabledForConnection>[1]) =>
+      names.filter((n) => !isAlias(n) && toolEnabledForConnection(n, scope, (t) => toolMatchesFeatures(t, vibe)))
+    expect(listed({ accountMode: true })).toEqual(expect.arrayContaining(['list_projects', ...(PRESET_TOOLS.vibe ?? [])]))
+    expect(listed({ accountMode: false })).not.toContain('list_projects')
+    expect(listed({ accountMode: true, pinnedProjectId: '11111111-1111-4111-8111-111111111111' })).not.toContain('list_projects')
   })
 
   it('no longer carries the unreachable linear_* tools', () => {
