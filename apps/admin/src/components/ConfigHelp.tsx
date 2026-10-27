@@ -46,9 +46,8 @@
  *          resolves before anything ships.
  */
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { DetailRows, type DetailRowItem } from './ui'
+import { AnchoredPopoverPanel, useAnchoredPopover } from './ui/anchored-popover'
 import { getConfigDoc } from '../lib/configDocs'
 import { CONFIG_HELP_POPOVER_SHELL } from '../lib/pageHelpSurfaces'
 
@@ -68,166 +67,12 @@ interface ConfigHelpProps {
  *  classes — the popover has its own visual contract (slightly wider radius,
  *  shadow-overlay, etc.) and we want one place to tune it. */
 const POPOVER_WIDTH = 320
-const POPOVER_GUTTER = 12 // px breathing room between popover and viewport edge
-const POPOVER_OFFSET = 6 // px gap between trigger and popover
-
-interface PopoverPosition {
-  top: number
-  left: number
-  side: 'top' | 'bottom'
-  /** Maximum height the popover is allowed to occupy. When the natural
-   *  height of the body exceeds this, the body becomes vertically
-   *  scrollable instead of overflowing the viewport / sidebar bottom. */
-  maxHeight: number
-}
 
 export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
   const doc = getConfigDoc(helpId)
-  const [open, setOpen] = useState(false)
-  // Computed coordinates for fixed-positioned popover. `null` until the first
-  // layout pass; we render with visibility:hidden during that pass so the
-  // measurement is accurate but the user never sees the popover at (0, 0).
-  const [pos, setPos] = useState<PopoverPosition | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const popoverRef = useRef<HTMLDivElement | null>(null)
-  // useId gives a stable, SSR-safe id we can hang aria-controls / aria-labelledby
-  // off without colliding when the same help id appears twice on a page.
-  const reactId = useId()
-  const popoverId = `confighelp-${reactId}`
-  const titleId = `${popoverId}-title`
-
-  // Close on Escape (only when open) + restore focus to the trigger so the
-  // user lands back where they were in the form. Restore happens on the
-  // next tick because `setOpen(false)` re-enables the (now-no-longer-rendered)
-  // popover focus loop on this same tick.
-  useEffect(() => {
-    if (!open) return
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-        // Re-focus on next tick so React has unmounted the popover.
-        requestAnimationFrame(() => triggerRef.current?.focus())
-      }
-    }
-    function onClickAway(e: MouseEvent) {
-      const target = e.target as Node | null
-      if (!target) return
-      if (popoverRef.current?.contains(target)) return
-      if (triggerRef.current?.contains(target)) return
-      setOpen(false)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    document.addEventListener('mousedown', onClickAway)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      document.removeEventListener('mousedown', onClickAway)
-    }
-  }, [open])
-
-  /**
-   * Compute the popover's `top` / `left` against the viewport (fixed
-   * positioning) so it can never be clipped by an ancestor's `overflow:
-   * hidden` (Cards, Settings panels, Sidebar). Auto-flips top/bottom and
-   * keeps the popover horizontally inside the viewport with a small gutter.
-   *
-   * Why fixed instead of absolute: the trigger commonly sits inside a Card
-   * whose `overflow-hidden` (or whose parent `<main>`'s scroll container)
-   * would crop a `position:absolute` popover that extends past the card's
-   * edge. Fixed positioning lifts it out of every ancestor's flow at the
-   * cost of needing to recompute on scroll/resize.
-   */
-  const recompute = useCallback(() => {
-    const trigger = triggerRef.current
-    if (!trigger) return
-    const rect = trigger.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    // Use the natural (unconstrained) height when measuring so the
-    // flip decision is based on what the popover *wants* to be, not the
-    // height it had on a previous (possibly clamped) frame.
-    const naturalHeight = popoverRef.current?.scrollHeight ?? popoverRef.current?.offsetHeight ?? 280
-
-    const spaceBelow = vh - rect.bottom - POPOVER_OFFSET - POPOVER_GUTTER
-    const spaceAbove = rect.top - POPOVER_OFFSET - POPOVER_GUTTER
-
-    // Pick whichever side has more room when neither side fits the
-    // natural height. This prevents the "always-bottom" failure where the
-    // popover hangs off the bottom of the viewport from a low trigger.
-    let side: 'top' | 'bottom'
-    if (spaceBelow >= naturalHeight) {
-      side = 'bottom'
-    } else if (spaceAbove >= naturalHeight) {
-      side = 'top'
-    } else {
-      side = spaceAbove > spaceBelow ? 'top' : 'bottom'
-    }
-
-    // Cap the popover's rendered height to the available room on that
-    // side. The body has `overflow-y: auto`, so the user can scroll the
-    // help content rather than seeing it disappear past a viewport edge.
-    // Floor at 160px so we never collapse the popover to nothing on a
-    // tiny window — partial visibility is better than zero.
-    const maxHeight = Math.max(160, side === 'bottom' ? spaceBelow : spaceAbove)
-    const renderedHeight = Math.min(naturalHeight, maxHeight)
-
-    const top = side === 'bottom'
-      ? rect.bottom + POPOVER_OFFSET
-      : Math.max(POPOVER_GUTTER, rect.top - POPOVER_OFFSET - renderedHeight)
-
-    // Horizontal: align popover's left edge to the trigger's left edge by
-    // default, but clamp into the viewport so we never bleed off either side.
-    // When the trigger sits in a narrow sidebar near the right edge, the
-    // clamp pushes the popover leftward into the main content area — better
-    // than overflow.
-    const popoverActualWidth = Math.min(POPOVER_WIDTH, vw - POPOVER_GUTTER * 2)
-    const maxLeft = vw - popoverActualWidth - POPOVER_GUTTER
-    const desiredLeft = rect.left
-    const left = Math.max(POPOVER_GUTTER, Math.min(desiredLeft, maxLeft))
-
-    setPos({ top, left, side, maxHeight })
-  }, [])
-
-  // First-pass placement on open + focus the popover so screen readers
-  // announce the heading and keyboard users can Tab through the body.
-  // We run TWO passes intentionally:
-  //   1. Synchronous: positions the popover with the 280px height fallback
-  //      so it doesn't render at (0,0) on the first paint.
-  //   2. After the popover mounts, rAF re-measures with the real height
-  //      (`offsetHeight`) and re-flips top/bottom if needed. Avoids the
-  //      "popover renders below, then jumps above" flicker on tall content.
-  useLayoutEffect(() => {
-    if (!open) {
-      setPos(null)
-      return
-    }
-    recompute()
-    const raf = requestAnimationFrame(() => {
-      // Guard against the popover being unmounted between the sync recompute
-      // and this rAF (rapid open/close, navigation away, etc.). Without this
-      // guard React warns about setState on an unmounted component because
-      // recompute() ends in `setPos(...)`.
-      if (!triggerRef.current || !popoverRef.current) return
-      recompute()
-      popoverRef.current.focus()
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [open, recompute])
-
-  // Keep the popover anchored to the trigger when the user scrolls or
-  // resizes the viewport with it open. Use capture phase so we catch
-  // scroll on any ancestor scroll container (the admin panel scrolls
-  // independently from <body>).
-  useEffect(() => {
-    if (!open) return
-    const onChange = () => recompute()
-    window.addEventListener('scroll', onChange, true)
-    window.addEventListener('resize', onChange)
-    return () => {
-      window.removeEventListener('scroll', onChange, true)
-      window.removeEventListener('resize', onChange)
-    }
-  }, [open, recompute])
+  // Placement, Escape / click-away and focus handling: ui/anchored-popover.
+  const popover = useAnchoredPopover({ width: POPOVER_WIDTH })
+  const { open, setOpen, close, triggerRef, popoverId, titleId } = popover
 
   if (!doc) {
     // Dev-mode warning so a broken helpId surfaces while you're working on
@@ -277,44 +122,10 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
           i
         </span>
       </button>
-      {open && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={popoverRef}
-          id={popoverId}
-          role="dialog"
-          // aria-modal=false: the popover doesn't trap the page; users can
-          // still Tab back into the form. WAI-ARIA APG "tooltip"-style
-          // dialog pattern.
-          aria-modal="false"
-          aria-labelledby={titleId}
-          // tabIndex=-1 lets us programmatically focus the popover container
-          // without making it part of the natural tab order.
-          tabIndex={-1}
-          // Fixed positioning + portal escapes any ancestor `overflow:hidden`
-          // (Card, Settings panel, sidebar) that would otherwise clip the
-          // popover. Coordinates are computed in `recompute()` against the
-          // viewport. While `pos` is still null (first paint), keep the
-          // popover invisible so the user never sees it flash at (0,0).
-          style={{
-            position: 'fixed',
-            top: pos?.top ?? 0,
-            left: pos?.left ?? 0,
-            width: POPOVER_WIDTH,
-            maxWidth: `calc(100vw - ${POPOVER_GUTTER * 2}px)`,
-            // Cap the popover's height to the available viewport room on
-            // the chosen side. The body inside scrolls when content
-            // exceeds this — never a clipped popover spilling off-screen.
-            maxHeight: pos?.maxHeight ?? undefined,
-            visibility: pos ? 'visible' : 'hidden',
-            // Use flex column so the header stays put and the body can
-            // independently scroll within `maxHeight`.
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-          className={`z-(--z-top) rounded-md border text-2xs text-fg-secondary text-pretty tooltip-enter outline-none ${CONFIG_HELP_POPOVER_SHELL}`}
-          onClick={(e) => e.stopPropagation()}
-          data-side={pos?.side ?? 'bottom'}
-        >
+      <AnchoredPopoverPanel
+        state={popover}
+        className={`text-2xs text-fg-secondary text-pretty ${CONFIG_HELP_POPOVER_SHELL}`}
+      >
           <header className="flex items-start justify-between gap-2 border-b border-edge-subtle px-3.5 py-2.5 shrink-0">
             <div className="min-w-0 flex-1">
               <p className="text-2xs font-medium uppercase tracking-widest text-brand/80 leading-none mb-1">
@@ -327,10 +138,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
             <button
               type="button"
               aria-label="Close help"
-              onClick={() => {
-                setOpen(false)
-                requestAnimationFrame(() => triggerRef.current?.focus())
-              }}
+              onClick={close}
               className="-mr-1 -mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
             >
               <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -395,9 +203,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
               </div>
             )}
           </div>
-        </div>,
-        document.body,
-      )}
+      </AnchoredPopoverPanel>
     </span>
   )
 }

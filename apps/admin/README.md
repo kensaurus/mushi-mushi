@@ -345,7 +345,7 @@ The sidebar (`src/components/Layout.tsx`) follows the order a builder works in (
 
 The sidebar is the same for every account (console audit 2026-10-20): nine pages in one flat list, then a **Labs** group with whatever the user switched on in Settings › Labs.
 
-- **Pages** — Home, Bugs, Fixes, Apps, Connect, Integrations, Checks, Team, Settings (`CORE_NAV_PATHS` in `navRegistry.ts`). "Checks" (`/checks`) is a launcher for every automatic check: Scheduled tests, App health, Full-stack audit, User stories, App blueprint, Design system, Content checks, Triage grading, Lessons, AI prompts.
+- **Pages** — Home, Bugs, Fixes, Apps, Connect, Integrations, Checks, Team, Settings (`CORE_NAV_PATHS` in `navRegistry.ts`). "Checks" (`/checks`) is a launcher for every automatic check: Scheduled tests, Mushi health, Full-stack audit, User stories, App blueprint, Design system, Content checks, Triage grading, Lessons, AI prompts.
 - **Labs** — per-feature opt-in (`src/lib/labs.ts`, `LAB_FEATURES`): To-do list, Bug clusters, Voice reports, Spam & abuse, Pull requests, Code map, UX runs, Improvement runs, Editor agents, Agent skills, AI prompts, Experiments, Research, Releases, Reporter updates, Plugins, Processing jobs, Tester rewards, SQL query. Stored in `localStorage:'mushi:labs'`. Every page stays reachable by URL and from ⌘K whether or not its Lab is on; a page reached that way shows a one-line "Add it in Settings › Labs" pointer in the sidebar.
 - **Footer** — "Set up · n/m" while required setup is incomplete, Help & support, privacy posture, density / theme / focus, the user card.
 

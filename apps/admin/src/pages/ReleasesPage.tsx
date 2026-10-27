@@ -578,7 +578,6 @@ export function ReleasesPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickReleasesTab(stats)
   const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
     ? `/v1/admin/releases?limit=100`
@@ -697,6 +696,8 @@ export function ReleasesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'no_releases' && stats.topPriority !== 'no_fixes',
             children: (
               <ReleasesStatusBanner
                 stats={stats}
@@ -715,9 +716,8 @@ export function ReleasesPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onDraft={() => setActiveTab('draft')}
               />
             ),
           },

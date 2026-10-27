@@ -197,16 +197,38 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
-    {visibleLinks.length > 0 && (
-      <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
-        <span>Related:</span>
-        {visibleLinks.map((l) => (
-          <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-    )}
+    <RelatedLinksRow links={visibleLinks} />
+    </div>
+  )
+}
+
+function RelatedLinksRow({ links }: { links: PageFlowLink[] }) {
+  if (links.length === 0) return null
+  return (
+    <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
+      <span>Related:</span>
+      {links.map((l) => (
+        <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
+          {l.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+/**
+ * The "Related:" row on its own, for a page whose help sits in the header
+ * popover. It stays visible under the content: the owner could not find the
+ * cross-links while they sat inside the closed help (2026-10-08).
+ */
+export function PageRelatedRow({ relatedLinks, flowPath }: { relatedLinks?: PageFlowLink[]; flowPath?: string }) {
+  const { pathname } = useLocation()
+  const routeKey = resolveFlowPath(flowPath ?? pathname)
+  const links = (relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []).filter((l) => l.to.split('#')[0] !== pathname)
+  if (links.length === 0) return null
+  return (
+    <div className="mb-3 w-full min-w-0">
+      <RelatedLinksRow links={links} />
     </div>
   )
 }

@@ -280,7 +280,6 @@ export function JudgePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveJudgeTab(tabParam)
-  const activeTabMeta = JUDGE_TABS.find((t) => t.id === activeTab) ?? JUDGE_TABS[0]
   const disagreementOnly = searchParams.get('filter') === 'disagreement'
   // Trend brush range (QA 107) and sort live in the URL so a banner or tile
   // link can open the exact view it names (QA 248: "Review evaluations").
@@ -772,8 +771,6 @@ export function JudgePage() {
                   stats={stats}
                   statsFetchedAt={statsFetchedAt}
                   statsValidating={statsValidating}
-                  sectionTitle={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'}
-                  hint={activeTabMeta.description}
                   statLabels={copy?.statLabels}
                 />
               ),
@@ -788,8 +785,6 @@ export function JudgePage() {
               stats={stats}
               statsFetchedAt={statsFetchedAt}
               statsValidating={statsValidating}
-              sectionTitle={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'}
-              hint={activeTabMeta.description}
               statLabels={copy?.statLabels}
             />
           )}
