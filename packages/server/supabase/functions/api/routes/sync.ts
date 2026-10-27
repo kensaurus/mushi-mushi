@@ -623,17 +623,12 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       last_seen_endpoint_host?: string | null
     } | undefined
 
-    let reportCount = 0
-    let sdkReportSignal = false
-    for (const r of reportsRes.data ?? []) {
-      reportCount += 1
-      const env = (r.environment ?? {}) as Record<string, unknown>
-      const platform = typeof env.platform === 'string' ? env.platform : ''
-      if (platform && platform !== 'mushi-admin') sdkReportSignal = true
-    }
+    const reportCount = (reportsRes.data ?? []).length
 
     const hasKey = (keysRes.data?.length ?? 0) > 0
-    const hasSdk = Boolean(heartbeat?.last_seen_at) || sdkReportSignal
+    // Only an SDK-key check-in installs the SDK: test reports, site audits and
+    // repo scans also carry a platform, and counted apps that never checked in.
+    const hasSdk = Boolean(heartbeat?.last_seen_at)
     const hasReport = reportCount > 0
 
     type Step = {
@@ -667,7 +662,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         complete: hasSdk,
         required: true,
         hint: hasSdk
-          ? 'SDK reached this backend (heartbeat or real report).'
+          ? 'An SDK key from the app checked in with this backend.'
           : 'Install the snippet, set env vars, restart your dev server.',
       },
       {

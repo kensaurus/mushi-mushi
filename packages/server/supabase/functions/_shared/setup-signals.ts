@@ -411,9 +411,7 @@ export async function loadProjectSetupSignals(
 
   const [
     keysRes,
-    recentReportsRes,
     qaRes,
-    observationsRes,
     integrationSignals,
     counts,
   ] = await Promise.all([
@@ -422,21 +420,11 @@ export async function loadProjectSetupSignals(
       .select('project_id, scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
-    // Recent reports feed only the "a real SDK sent this" platform signal.
-    db
-      .from('reports')
-      .select('project_id, environment')
-      .in('project_id', projectIds)
-      .order('created_at', { ascending: false })
-      .limit(500),
     db
       .from('qa_stories')
       .select('project_id')
       .in('project_id', projectIds)
       .eq('last_run_status', 'passed'),
-    // The curated SDK observation (heartbeat / report / repo scan): the same
-    // source the Connect page's SDK version reads.
-    db.from('project_sdk_observations').select('project_id').in('project_id', projectIds),
     loadIntegrationSignals(db, projectIds),
     loadProjectCounts(db, projectIds),
   ])
@@ -455,14 +443,7 @@ export async function loadProjectSetupSignals(
     list.push(k)
     keysBy.set(k.project_id, list)
   }
-  const sdkReportSignal = new Set<string>()
-  for (const r of (recentReportsRes.data ?? []) as Array<{ project_id: string; environment: unknown }>) {
-    const env = (r.environment ?? {}) as Record<string, unknown>
-    const platform = typeof env.platform === 'string' ? env.platform : ''
-    if (platform && platform !== 'mushi-admin') sdkReportSignal.add(r.project_id)
-  }
   const qaPassing = new Set((qaRes.data ?? []).map((q: { project_id: string }) => q.project_id))
-  const observed = new Set((observationsRes.data ?? []).map((o: { project_id: string }) => o.project_id))
 
   for (const pid of projectIds) {
     const keys = keysBy.get(pid) ?? []
@@ -472,7 +453,10 @@ export async function loadProjectSetupSignals(
       ...(integrationSignals.get(pid) ?? { hasGithub: false, hasSentry: false, hasByok: false, hasSlack: false }),
       hasKey: keys.length > 0,
       heartbeat,
-      hasSdk: Boolean(heartbeat) || sdkReportSignal.has(pid) || observed.has(pid),
+      // Only an SDK-key check-in. A report with a platform (test reports,
+      // site audits) or a repo-scan observation marked apps that had never
+      // checked in as set up (lets-talk, mushi-demo: "4/4 setup", 2026-10-26).
+      hasSdk: Boolean(heartbeat),
       reportCount: count?.reports ?? 0,
       fixCount: count?.fixes ?? 0,
       mergedFixCount: count?.mergedFixes ?? 0,

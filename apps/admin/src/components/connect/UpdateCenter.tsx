@@ -15,7 +15,7 @@ import { useSdkUpgrade } from '../../lib/useSdkUpgrade'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { CodeInline } from '../CodePanel'
 import { LockfileHelperDisclosure } from '../SdkUpgradeCTA'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
 import { deriveUpdateCenterView, type UpdateCenterView } from '../../lib/updateCenterView'
 import type { SdkStatus } from '../SdkVersionBadge'
 import {
@@ -88,6 +88,11 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
       </tbody>
     </table>
   )
+}
+
+function checkedAgo(at: number): string {
+  const s = Math.max(0, Math.round((Date.now() - at) / 1000))
+  return s < 60 ? 'just now' : `${Math.round(s / 60)} min ago`
 }
 
 const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; tone: string }> = {
@@ -198,6 +203,19 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       {state.syncError && (
         <p className="text-xs text-danger-foreground" role="status">{state.syncError}</p>
       )}
+      {!state.syncError && state.checkedAt && !state.syncing ? (
+        <p className="text-xs text-fg-muted" role="status" data-testid="update-center-ci-checked">
+          Checked {checkedAgo(state.checkedAt)}: {ci.label}.
+          {view.ci === 'failing' && state.workflowUrl ? (
+            <>
+              {' '}
+              <a href={state.workflowUrl} target="_blank" rel="noopener noreferrer" className={LINK_ACCENT}>
+                See the failing run
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {view.mode === 'failed' && state.error && (
         <p className="text-xs text-danger-foreground">{state.error}</p>
       )}
@@ -234,9 +252,11 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
               <Btn
                 size="md"
                 variant="ghost"
-                disabled={isInFlight}
+                disabled={isInFlight || state.syncing}
+                loading={state.syncing}
                 onClick={() => void syncStatus(state.jobId!)}
                 className="gap-2"
+                data-testid="update-center-check-ci"
               >
                 Check CI status
               </Btn>

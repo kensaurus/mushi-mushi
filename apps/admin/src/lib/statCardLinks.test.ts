@@ -12,7 +12,7 @@ import { connectLinks, fixesLinks, judgeLinks, mcpLinks, onboardingLinks, repoLi
 
 import { resolveMcpTab } from './mcpPageHelpers'
 import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'
-import { MINT_MCP_KEY_HREF } from '../components/mcp/McpStatusBanner'
+import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { isScopePresetId, SCOPE_PRESETS } from '../components/projects/project-models'
 
 // QA bugs 130, 131: the onboarding "SDK" card linked to /sdk (a 404), the
@@ -53,8 +53,11 @@ describe('stat card links land on real tabs and anchors', () => {
 
 // QA bug 132: "Mint MCP key" opened /projects on Overview with "SDK ingest" preselected.
 describe('MCP banner mint link', () => {
-  it('opens Your projects with an MCP key preset chosen', () => {
-    const url = new URL(MINT_MCP_KEY_HREF, 'https://console.example')
+  it('opens Your projects at the mint control with the mcp:read preset the copy names', () => {
+    const url = new URL(mintMcpKeyHref('p1'), 'https://console.example')
+    expect(url.hash).toBe('#mint-key-p1')
+    expect(url.searchParams.get('project')).toBe('p1')
+    expect(SCOPE_PRESETS.find((p) => p.id === url.searchParams.get('keyScope'))!.scopes).toEqual(['mcp:read'])
     expect(url.pathname).toBe('/projects')
     expect(url.searchParams.get('tab')).toBe('list')
     const preset = url.searchParams.get('keyScope')

@@ -56,8 +56,18 @@ const TONE: Record<'muted' | 'ok' | 'warn', string> = {
   warn: 'text-warn',
 };
 
-export function SpendDownSection({ canManageShared }: { canManageShared: boolean }) {
-  const status = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down');
+interface Props {
+  canManageShared: boolean;
+  /**
+   * The Cursor keys this panel belongs to, as one string. Spend-down is read
+   * from its own endpoint, so without this a key removed (or added) in the key
+   * list above would stay listed here until the page reloaded.
+   */
+  keysToken: string;
+}
+
+export function SpendDownSection({ canManageShared, keysToken }: Props) {
+  const status = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down', { deps: [keysToken] });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);

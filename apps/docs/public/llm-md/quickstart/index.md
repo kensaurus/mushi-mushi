@@ -9,53 +9,60 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-## What you need
+- One command, `npx mushi-mushi`, adds a report button to your app.
+- When a user reports a bug, Mushi writes a plain-English diagnosis.
+- Your AI editor reads it and writes the fix.
+
+### Install
+
+Run this in your app's folder. It finds your framework, signs you in through
+your browser, installs the SDK and writes your settings to `.env.local`.
+
+```bash
+npx mushi-mushi
+```
+
+**You'll see:** a report button in your app, and a new project in the [console](https://kensaur.us/mushi-mushi/admin).
+
+### Send your first report
+
+Tap the report button in your app and write one sentence. Or say yes when the
+wizard offers to send a test report.
+
+**You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
+
+### Get your first fix
+
+Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or:
+
+```bash
+npx mushi-mushi setup --ide cursor
+```
+
+Then ask your editor: *"Get the latest Mushi report and fix it."*
+
+**You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Pick your framework
+
+The wizard detects your framework for you. Pick yours to see what it installs
+and the one line it adds to your code.
+
+- **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
+- **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
+
+What you need first
 
 - An app you are building, for the web or for phones.
-- A Mushi account. The free plan is enough, and the setup wizard signs you in through your browser.
-- Optional: an AI code editor such as Cursor or Claude Code, so it can read bug reports and fix them for you.
-
-## The fastest way: one command
-
-Run this in your app's folder:
-
-```bash
-npx mushi-mushi
-```
+- A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
+- Optional: an AI code editor such as Cursor or Claude Code.
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
-installing it for good. This one is the Mushi setup wizard: it works out which
-framework your app uses, signs you in through your browser, installs the SDK
-(the small library that adds the report button), saves your settings and can
-send a test report.
+installing it for good. Here it runs the Mushi setup wizard.
 
-## Start here (editor first)
+## Keys and settings
 
-1. [Incident loop](/quickstart/incident-loop): a bug in your live app → a plain-English diagnosis → a fix in your editor
-2. [MCP server](/quickstart/mcp): connect Cursor, VS Code or Claude to Mushi
-
-## Pick your stack
-
-**Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
-
-**Mobile:** [React Native](/quickstart/react-native) · [Capacitor](/quickstart/capacitor) · native previews, installed from the GitHub repo: [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter)
-
-**CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
-
-## How do I install the SDK?
-
-**Option A — wizard (recommended):**
-
-```bash
-npx mushi-mushi
-```
-
-The wizard opens your browser so you can click **Approve**. It then picks or
-creates a project, installs the SDK and writes your settings to `.env.local`.
-
-**Option B — manual:**
-
-See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
+Setting it up yourself? See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
 
   The SDK needs only two settings: your project ID and API key, named with the
   prefix your framework expects (see

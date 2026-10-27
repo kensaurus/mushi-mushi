@@ -48,15 +48,15 @@ export function ProjectsSnapshotStrip({
         />
         <StatCard
           label="SDK connected"
-          value={stats.sdkConnectedCount}
+          value={stats.projectCount > 0 ? `${stats.sdkConnectedCount}/${stats.projectCount}` : stats.sdkConnectedCount}
           accent={
-            stats.sdkConnectedCount > 0
+            stats.sdkConnectedCount > 0 && stats.sdkConnectedCount === stats.projectCount
               ? 'text-ok'
-              : stats.projectsWithReports > 0
+              : stats.sdkConnectedCount > 0 || stats.projectsWithReports > 0
                 ? 'text-warn'
                 : undefined
           }
-          hint="Projects with key heartbeat"
+          hint="Projects whose SDK key checked in"
         />
       </MetricStrip>
       <MetricStrip cols={3} ariaLabel="Projects snapshot secondary">

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 218 pages, generated from llms.txt. */
+/** 220 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["The problem it solves", "A real example from our own sites", "What this is (and is not)", "Where it stands today", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
+    headings: ["What happens to a bug", "The problem it solves", "A real example from our own sites", "What this is (and is not)", "This is what a diagnosis looks like", "See it in action", "Get started", "Install it in your app"],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -410,6 +410,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "overview", "portfolio"],
     headings: ["What you see", "Data source", "Related"],
     excerpt: "The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.",
+  },
+  {
+    title: "Pipeline",
+    url: docUrl("/admin/pipeline"),
+    route: "/admin/pipeline",
+    markdown: "admin/pipeline.md",
+    keywords: ["admin", "pipeline"],
+    headings: ["Stages", "Who opens fixes", "Stuck groups", "Release trains", "Intake and deploys"],
+    excerpt: "The console Pipeline page shows every bug from report to deploy, where it is stuck and why, with one-click fixes.",
   },
   {
     title: "Portfolio",
@@ -1236,8 +1245,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/bugsnag",
     markdown: "plugins/bugsnag.md",
     keywords: ["plugins", "bugsnag"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Mirror Mushi bug reports into Bugsnag and close the Bugsnag error when the fix PR merges — install from the marketplace and map release stages.",
+    headings: ["Setup (self-hosted Mushi)", "Package", "Events"],
+    excerpt: "Copy triaged Mushi bug reports into Bugsnag and mark the error fixed when Mushi applies a fix — a self-hosted plugin with a Data API token.",
   },
   {
     title: "Building a plugin",
@@ -1254,8 +1263,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/crashlytics",
     markdown: "plugins/crashlytics.md",
     keywords: ["plugins", "crashlytics"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Push Mushi mobile bug reports into Firebase Crashlytics issues and close them when fixes merge — service account setup and app ID mapping.",
+    headings: ["Setup (self-hosted Mushi)", "Package", "Events"],
+    excerpt: "Flag fixed Mushi reports in Firebase Remote Config so your mobile app can hide stale crash notices — a self-hosted plugin with a Google access token.",
   },
   {
     title: "Cursor Cloud Agent",
@@ -1263,7 +1272,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/cursor-cloud",
     markdown: "plugins/cursor-cloud.md",
     keywords: ["plugins", "cursor-cloud", "cursor", "cloud", "agent"],
-    headings: ["Prerequisites", "Setup", "Behaviour", "Fixes view integration", "Common tasks", "Limiting dispatch to critical reports only", "Triggering manually", "Reviewing what the agent did"],
+    headings: ["Prerequisites", "Setup", "Behaviour", "Fixes view integration", "Common tasks", "Which reports start an agent", "Triggering manually", "Reviewing what the agent did"],
     excerpt: "Dispatch a Cursor Cloud Agent automatically when a Mushi report qualifies — it investigates, drafts a fix and opens a PR that links back to Mushi.",
   },
   {
@@ -1272,8 +1281,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/discord",
     markdown: "plugins/discord.md",
     keywords: ["plugins", "discord"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Post Mushi report and fix events to a Discord channel through a webhook — create the webhook, install the plugin, and choose which events to send.",
+    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    excerpt: "Post Mushi report and fix events to a Discord channel — paste a channel webhook on the Integrations page, or run the self-hosted Discord plugin.",
   },
   {
     title: "Webhook events",
@@ -1290,8 +1299,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/github-issues",
     markdown: "plugins/github-issues.md",
     keywords: ["plugins", "github-issues", "github", "issues"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Open a labelled GitHub issue for every classified Mushi report, with a link back to the report — target repo, default labels and assignee settings.",
+    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    excerpt: "Open a GitHub issue for every triaged Mushi report and close it when the fix lands — set it up on the Integrations page, or self-host the plugin.",
   },
   {
     title: "Jira Cloud",
@@ -1299,8 +1308,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/jira",
     markdown: "plugins/jira.md",
     keywords: ["plugins", "jira", "cloud"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Two-way sync between Mushi reports and Jira Cloud issues — create issues on classification, sync status, and comment fix summaries when fixes land.",
+    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    excerpt: "Open Jira Cloud issues from Mushi bug reports and keep their status in step — set it up on the Integrations page, or self-host the Jira plugin.",
   },
   {
     title: "Linear",
@@ -1308,8 +1317,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/linear",
     markdown: "plugins/linear.md",
     keywords: ["plugins", "linear"],
-    headings: ["Setup", "Behaviour", "Label mapping example", "Troubleshooting"],
-    excerpt: "File a Linear issue automatically when Mushi classifies a bug report — create a Linear API key, install the plugin, and choose the team and filters.",
+    headings: ["Setup (self-run plugin)", "Behaviour", "Troubleshooting"],
+    excerpt: "File Linear issues from Mushi bug reports — connect Linear on the Integrations page, or run the self-hosted Linear plugin with an API key and team id.",
   },
   {
     title: "Microsoft Teams",
@@ -1317,8 +1326,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/msteams",
     markdown: "plugins/msteams.md",
     keywords: ["plugins", "msteams", "microsoft", "teams"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Send Adaptive Cards to a Microsoft Teams channel when Mushi classifies a report or a fix lands — incoming webhook setup and severity filters.",
+    headings: ["Setup (Mushi Cloud, no code)", "Self-hosted plugin"],
+    excerpt: "Send cards to a Microsoft Teams channel when Mushi triages a report or a fix lands — paste a webhook on the Integrations page, or self-host the plugin.",
   },
   {
     title: "PagerDuty",
@@ -1326,8 +1335,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/pagerduty",
     markdown: "plugins/pagerduty.md",
     keywords: ["plugins", "pagerduty"],
-    headings: ["Setup", "Behaviour", "Troubleshooting"],
-    excerpt: "Page your on-call rotation through PagerDuty when a P0 or P1 bug report lands in Mushi — Events API v2 integration key setup and filters.",
+    headings: ["Setup (self-run plugin)", "Behaviour", "Troubleshooting"],
+    excerpt: "Page your on-call rotation through PagerDuty when Mushi triages a bug as critical, and resolve it when the fix lands — Events API v2 routing key setup.",
   },
   {
     title: "Rollbar",
@@ -1335,8 +1344,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/rollbar",
     markdown: "plugins/rollbar.md",
     keywords: ["plugins", "rollbar"],
-    headings: ["Setup", "Package", "Events"],
-    excerpt: "Mirror Mushi bug reports into Rollbar items and resolve them when fixes ship — access token, environment name, and dedup key mapping.",
+    headings: ["Setup (self-hosted Mushi)", "Package", "Events"],
+    excerpt: "Copy triaged Mushi bug reports into Rollbar items and resolve them when fixes ship — a self-hosted plugin with an access token and project id.",
   },
   {
     title: "Sentry",
@@ -1344,7 +1353,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/sentry",
     markdown: "plugins/sentry.md",
     keywords: ["plugins", "sentry"],
-    headings: ["Route Sentry errors into Mushi (inbound)", "Setup (outbound plugin)", "Package", "Events"],
+    headings: ["Route Sentry errors into Mushi (inbound)", "Copy Mushi reports into Sentry (outbound plugin)", "Package", "Events"],
     excerpt: "Two-way Sentry integration — Sentry errors flow into Mushi's queue, merging a Mushi fix resolves the Sentry issue, and critical reports mirror back.",
   },
   {
@@ -1353,8 +1362,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/slack",
     markdown: "plugins/slack.md",
     keywords: ["plugins", "slack", "app"],
-    headings: ["Setup", "What's on the card", "Acting from the channel", "Slash commands", "Package", "Events", "Troubleshooting"],
-    excerpt: "Triage Mushi bug reports from Slack — each classified report posts as a card with its root cause and buttons to dispatch a fix, resolve or dismiss.",
+    headings: ["Setup", "What's on the card", "Acting from the channel", "Slash commands", "Package", "What gets posted", "Troubleshooting"],
+    excerpt: "Triage Mushi bug reports from Slack — add the app from the Integrations page, and each report posts as a card with buttons to fix, resolve or dismiss.",
   },
   {
     title: "Zapier",
@@ -1362,7 +1371,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/plugins/zapier",
     markdown: "plugins/zapier.md",
     keywords: ["plugins", "zapier"],
-    headings: ["Setup", "Signature verification in Zapier", "Common Zaps", "Troubleshooting"],
+    headings: ["Setup (no server)", "Setup (with the relay package)", "Common Zaps", "Troubleshooting"],
     excerpt: "Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.",
   },
   {
@@ -1380,7 +1389,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "fix", "first", "bug", "60", "seconds", "choose", "stack"],
-    headings: ["What you need", "The fastest way: one command", "Start here (editor first)", "Pick your stack", "How do I install the SDK?", "Troubleshooting"],
+    headings: ["Install", "Send your first report", "Get your first fix", "Pick your framework", "Keys and settings", "Troubleshooting"],
     excerpt: "Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
@@ -1399,7 +1408,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/angular.md",
     keywords: ["quickstart", "angular"],
     headings: [],
-    excerpt: "Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.",
+    excerpt: "Add Mushi to an Angular 17+ app: one provideMushi() call registers the Mushi service and error handler, so uncaught errors and bug reports reach your queue.",
   },
   {
     title: "Capacitor quickstart",
@@ -1416,7 +1425,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/cli-console-loop",
     markdown: "quickstart/cli-console-loop.md",
     keywords: ["quickstart", "cli-console-loop", "cli", "console", "loop", "setup"],
-    headings: ["Which CLI command?", "Browser sign-in flow (recommended)", "What happens in the terminal", "What happens in the browser", "How sign-in reliability works", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project"],
+    headings: ["Set up in five steps", "1. Run the wizard", "2. Approve in the browser", "3. Pick or create a project", "4. SDK installed", "5. Wire Cursor MCP (optional but recommended)", "Which CLI command?", "Browser sign-in flow (recommended)"],
     excerpt: "How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.",
   },
   {
@@ -1434,7 +1443,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/incident-loop",
     markdown: "quickstart/incident-loop.md",
     keywords: ["quickstart", "incident-loop", "incident", "loop", "bug", "fix", "prompt"],
-    headings: ["No MCP? Copy the fix prompt", "Prerequisites", "Step 1 — Capture or pick a report", "Step 2 — Pull fix context", "Step 3 — Generate the fix prompt", "Step 4 — Paste and ship", "Troubleshooting", "See also"],
+    headings: ["No MCP? Copy the fix prompt", "Before you start", "The loop", "Capture or pick a report", "Pull the fix context", "Get a deeper fix plan (optional)", "Paste and ship", "Troubleshooting"],
     excerpt: "Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.",
   },
   {
@@ -1452,7 +1461,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/mcp",
     markdown: "quickstart/mcp.md",
     keywords: ["quickstart", "mcp", "server", "bug", "fixing", "cursor", "claude", "code"],
-    headings: ["OAuth login (recommended — no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)", "Manual setup: Cursor", "Manual setup: Claude Desktop", "Hosted Streamable HTTP transport (no subprocess)", "Available tools"],
+    headings: ["Connect in three steps", "Add the Mushi server", "Sign in", "Ask your editor", "How sign-in works (OAuth, no keys to copy)", "One-liner setup (recommended)", "Claude Code plugin", "Smithery (hosted MCP)"],
     excerpt: "Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.",
   },
   {
@@ -1561,7 +1570,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/angular.md",
     keywords: ["sdks", "angular", "@mushi-mushi/angular"],
     headings: ["API surface", "Setup (standalone bootstrap)", "Submitting a report", "Identifying users"],
-    excerpt: "API reference for @mushi-mushi/angular — MushiService, MushiErrorHandler and the MUSHI_CONFIG token, wired with factory providers in an Angular 17+ app.",
+    excerpt: "API reference for @mushi-mushi/angular — provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in an Angular 17+ app.",
   },
   {
     title: "In-SDK Ask assistant",
@@ -1605,7 +1614,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/core",
     markdown: "sdks/core.md",
     keywords: ["sdks", "core", "@mushi-mushi/core"],
-    headings: ["Install", "API", "Mushi.init(config) (web) / MushiProvider (React Native)", "MushiWidgetConfig (selected keys)", "submitReport(input)", "flushOfflineQueueNow()", "PII scrubbing utilities (1.27+)", "Region resolution"],
+    headings: ["Install", "API", "Mushi.init(config) (web) / MushiProvider (React Native)", "MushiWidgetConfig (selected keys)", "captureEvent(input)", "Offline queue", "PII scrubbing utilities (1.27+)", "Region resolution"],
     excerpt: "Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.",
   },
   {
@@ -1614,7 +1623,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/eslint-plugin",
     markdown: "sdks/eslint-plugin.md",
     keywords: ["sdks", "eslint-plugin", "eslint", "plugin", "eslint-plugin-mushi-mushi"],
-    headings: ["Install", "Recommended preset", "Rules", "mushi-mushi/no-dead-handler", "mushi-mushi/no-mock-leak", "Combining with the gates action"],
+    headings: ["Install", "Turn on the two rules", "The recommended preset", "Rules", "mushi-mushi/no-dead-handler", "mushi-mushi/no-mock-leak", "In CI"],
     excerpt: "eslint-plugin-mushi-mushi flags empty event handlers and leftover mock data in production code — the no-dead-handler and no-mock-leak rules and preset.",
   },
   {
@@ -1651,7 +1660,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/inventory-schema.md",
     keywords: ["sdks", "inventory-schema", "inventory", "schema", "@mushi-mushi/inventory-schema"],
     headings: ["Install", "What inventory.yaml looks like", "Programmatic use", "JSON Schema"],
-    excerpt: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml — the contract that Mushi's gates, crawler, ESLint plugin and CLI all read.",
+    excerpt: "The Zod schema, JSON Schema and TypeScript types for inventory.yaml: your app's pages, the buttons and forms on each, what they do, and the tests that prove it.",
   },
   {
     title: "MushiMushi (iOS)",
@@ -1677,7 +1686,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/mcp",
     markdown: "sdks/mcp.md",
     keywords: ["sdks", "mcp", "bug", "report", "server", "cursor", "claude", "code", "@mushi-mushi/mcp"],
-    headings: ["Two transports", "Spec traceability for dispatchfix"],
+    headings: ["Quick start", "Two transports", "Spec traceability for dispatchfix"],
     excerpt: "Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.",
   },
   {
@@ -1686,8 +1695,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/mcp-ci",
     markdown: "sdks/mcp-ci.md",
     keywords: ["sdks", "mcp-ci", "mcp", "@mushi-mushi/mcp-ci"],
-    headings: ["Quick start", "Commands", "In your IDE", "Inputs"],
-    excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action — run the five-gate composite check on pull requests, draft inventory entries, and bootstrap crawler auth.",
+    headings: ["Quick start", "Gates on every PR", "Commands", "In your IDE", "Inputs", "Outputs"],
+    excerpt: "@mushi-mushi/mcp-ci is Mushi's GitHub Action: fail a PR while reports wait for triage, dispatch a fix, run the pre-release gates and refresh crawler sign-in.",
   },
   {
     title: "MCP tools reference",
@@ -1722,7 +1731,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/node",
     markdown: "sdks/node.md",
     keywords: ["sdks", "node", "node.js", "server", "error", "reporting", "sdk", "@mushi-mushi/node"],
-    headings: ["Install", "Express", "Fastify", "Hono", "Process-level fallbacks", "Programmatic submit", "PII and credential scrubbing"],
+    headings: ["Install", "Create a client", "Express", "Fastify", "Hono", "Process-level fallbacks", "Programmatic submit", "PII and credential scrubbing"],
     excerpt: "Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.",
   },
   {
@@ -1732,7 +1741,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "sdks/plugin-sdk.md",
     keywords: ["sdks", "plugin-sdk", "plugin", "sdk", "@mushi-mushi/plugin-sdk"],
     headings: ["Install", "Express adapter", "Hono adapter", "Verify a signature manually", "Wire format", "See also"],
-    excerpt: "Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.",
+    excerpt: "Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express or Hono.",
   },
   {
     title: "SDK presets",
@@ -1789,6 +1798,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Reference for @mushi-mushi/svelte — initMushi, getMushi and the SvelteKit error hooks that forward client and server errors to your Mushi queue.",
   },
   {
+    title: "@mushi-mushi/ux",
+    url: docUrl("/sdks/ux"),
+    route: "/sdks/ux",
+    markdown: "sdks/ux.md",
+    keywords: ["sdks", "ux", "@mushi-mushi/ux"],
+    headings: ["Quick start", "From studio to merge", "What a run does", "Safety", "Agents", "Commands", "Audit and explore signed-in screens", "On GitHub Actions"],
+    excerpt: "@mushi-mushi/ux runs your coding agent over each screen of your app, measures every change and keeps only the ones that help, on a branch you review.",
+  },
+  {
     title: "@mushi-mushi/vue",
     url: docUrl("/sdks/vue"),
     route: "/sdks/vue",
@@ -1803,8 +1821,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/wasm-classifier",
     markdown: "sdks/wasm-classifier.md",
     keywords: ["sdks", "wasm-classifier", "wasm", "classifier", "@mushi-mushi/wasm-classifier"],
-    headings: [],
-    excerpt: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost.",
+    headings: ["Use it with the web SDK", "Call it directly", "ONNX backend (experimental)"],
+    excerpt: "@mushi-mushi/wasm-classifier filters junk bug reports in the browser, before they reach the server or your LLM.",
   },
   {
     title: "JavaScript bug reporting SDK for the browser",

@@ -7,6 +7,7 @@ import { coerceApiResult } from './apiEnvelope'
 import {
   alreadyInProgressJobId,
   applyUpgradeCi,
+  describeSyncFailure,
   markUpgradeCiRefresh,
   mergeLoadedUpgradeJob,
   readUpgradeCiRefreshAt,
@@ -111,5 +112,22 @@ describe('mergeLoadedUpgradeJob', () => {
 
   it('keeps the saved snapshot when no sync has landed', () => {
     expect(mergeLoadedUpgradeJob({ status: 'idle' }, stale, null, null).checkRunConclusion).toBe('failure')
+  })
+})
+
+// Mushi report 6449a621: a GitHub 403 on "Check CI status" used to wipe the
+// CI chips to "not checked yet". The server now answers 502 and stores
+// nothing; the console says so and keeps the last known state.
+describe('describeSyncFailure', () => {
+  it('names the GitHub failure and says the last known state is shown', () => {
+    expect(describeSyncFailure({
+      code: 'GITHUB_UNAVAILABLE',
+      message: "GitHub did not answer (HTTP 403, likely GitHub's rate limit)",
+    })).toBe("Couldn't check: GitHub did not answer (HTTP 403, likely GitHub's rate limit); showing the last known state.")
+  })
+
+  it('falls back to a plain reason for a bare code', () => {
+    expect(describeSyncFailure({ code: 'SYNC_PERSIST_FAILED', message: 'SYNC_PERSIST_FAILED' }))
+      .toBe("Couldn't check: the CI status could not be read; showing the last known state.")
   })
 })

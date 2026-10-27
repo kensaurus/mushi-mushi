@@ -46,6 +46,8 @@ export const zh: MushiLocale = {
     screenshotCapturing: '正在截图…',
     screenshotRetry: '再试一次',
     screenshotShareTab: '共享此标签页来截图',
+    notSentBlocked: '未发送。该反馈在发送前被过滤。你的文字仍保留在这里，请补充一些细节后重试。',
+    notSentThrottled: '未发送。短时间内提交过多。你的文字仍保留在这里，请等待一分钟后重试。',
     screenshotErrors: {
       permission: '截图被拦截了。请允许后再试。',
       unsupported: '此浏览器无法截图。请用文字描述。',

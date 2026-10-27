@@ -1,5 +1,6 @@
 import { useMDXComponents as getDocsComponents } from 'nextra-theme-docs'
 import { Steps } from 'nextra/components'
+import { LoopPipeline } from '@mushi-mushi/marketing-ui'
 import { Playground } from './components/Playground'
 import { MigrationHub } from './components/MigrationHub'
 import { MigrationChecklist } from './components/MigrationChecklist'
@@ -23,9 +24,10 @@ import { EvolutionDiagram } from './components/EvolutionDiagram'
 import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
 import { OpenMetrics } from './components/OpenMetrics'
+import { InThirtySeconds, YouWillSee } from './components/OnboardingBoxes'
+import { FrameworkPicker } from './components/FrameworkPicker'
 import {
   CinematicEditorialHero,
-  ProofPinSection,
   DiagnosisScrollStage,
   ScrollReveal,
   ClosingCta,
@@ -41,6 +43,7 @@ import {
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
   Steps,
+  LoopPipeline,
   Playground,
   MigrationHub,
   MigrationChecklist,
@@ -68,9 +71,11 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   LoopComparison,
   PricingEstimator,
   OpenMetrics,
+  InThirtySeconds,
+  YouWillSee,
+  FrameworkPicker,
   CinematicEditorialHero,
   LandingInstallStrip,
-  ProofPinSection,
   DiagnosisScrollStage,
   ScrollReveal,
   ClosingCta,

@@ -712,3 +712,185 @@
   font-weight: 700;
   color: var(--mushi-vermillion-ink);
 }
+
+/* =============================================================================
+   <LoopPipeline /> — the bug loop in one row (src/pipeline/LoopPipeline.tsx).
+   One cycle: the runner crosses the rail in the first 5/6, and stage i lights
+   at i/6 of the cycle, which is when the dot reaches it. Transform + opacity
+   only (docs/MOTION.md); static under prefers-reduced-motion.
+============================================================================= */
+
+.mushi-loop {
+  --mushi-loop-cycle: 9s;
+  margin: 0;
+}
+
+.mushi-loop__track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .mushi-loop__track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .mushi-loop__track {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.mushi-loop__stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'icon num'
+    'icon label'
+    'icon line';
+  column-gap: 0.75rem;
+  align-content: start;
+  margin: 0 !important;
+  padding: 0.8rem 0.85rem 0.9rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  background: var(--mushi-paper);
+}
+
+@media (min-width: 640px) {
+  .mushi-loop__stage {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'icon'
+      'num'
+      'label'
+      'line';
+    row-gap: 0.2rem;
+  }
+}
+
+/* The highlight ring: lit while the dot passes this stage. */
+.mushi-loop__stage::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1.5px solid var(--mushi-vermillion);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: mushi-loop-glow var(--mushi-loop-cycle) ease-in-out infinite;
+  animation-delay: calc(var(--mushi-loop-i) * var(--mushi-loop-cycle) / 6);
+}
+
+.mushi-loop__icon {
+  grid-area: icon;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-bottom: 0.35rem;
+  border-radius: 999px;
+  background: var(--mushi-vermillion-wash);
+  color: var(--mushi-vermillion);
+  animation: mushi-loop-pop var(--mushi-loop-cycle) ease-in-out infinite;
+  animation-delay: calc(var(--mushi-loop-i) * var(--mushi-loop-cycle) / 6);
+}
+
+.mushi-loop__num {
+  grid-area: num;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  color: var(--mushi-ink-muted);
+}
+
+.mushi-loop__label {
+  grid-area: label;
+  font-family: var(--mushi-font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--mushi-ink);
+}
+
+.mushi-loop__line {
+  grid-area: line;
+  margin-top: 0.15rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+/* The rail spans first-column centre to last-column centre, so it only
+   lines up with the stages in the single six-column row. */
+.mushi-loop__rail {
+  display: none;
+  position: relative;
+  height: 2px;
+  margin: 0.9rem calc(100% / 12) 0;
+  background: var(--mushi-rule);
+}
+
+@media (min-width: 1100px) {
+  .mushi-loop__rail {
+    display: block;
+  }
+}
+
+.mushi-loop__runner {
+  position: absolute;
+  inset: 0;
+  animation: mushi-loop-run var(--mushi-loop-cycle) linear infinite;
+}
+
+.mushi-loop__dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--mushi-vermillion);
+  transform: translate(-50%, -50%);
+}
+
+.mushi-loop__caption {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+@keyframes mushi-loop-glow {
+  0% { opacity: 0; }
+  3%, 15% { opacity: 1; }
+  22%, 100% { opacity: 0; }
+}
+
+@keyframes mushi-loop-pop {
+  0%, 22%, 100% { transform: scale(1); }
+  6% { transform: scale(1.12); }
+}
+
+@keyframes mushi-loop-run {
+  0% { transform: translateX(0); opacity: 1; }
+  83.3% { transform: translateX(100%); opacity: 1; }
+  90%, 100% { transform: translateX(100%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushi-loop__stage::before,
+  .mushi-loop__icon,
+  .mushi-loop__runner {
+    animation: none !important;
+  }
+  .mushi-loop__rail {
+    display: none;
+  }
+}

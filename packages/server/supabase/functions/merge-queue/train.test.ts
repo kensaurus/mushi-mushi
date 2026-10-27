@@ -83,6 +83,7 @@ function deps(over: Partial<TrainDeps> = {}): TrainDeps & { calls: string[] } {
     pull: (_t, _r, n) => Promise.resolve(pull(n)),
     checks: () => Promise.resolve({ pending: 0, failed: [] }),
     updateBranch: () => Promise.resolve({ ok: true, conflict: false }),
+    ready: (_t, _r, n) => (calls.push(`ready ${n}`), Promise.resolve({ ok: true })),
     branchSha: () => Promise.resolve('base1'),
     createBranch: (_t, _r, b) => (calls.push(`branch ${b}`), Promise.resolve(true)),
     mergeInto: (_t, _r, _b, head) => (calls.push(`merge ${head}`), Promise.resolve({ outcome: 'merged', sha: `t-${head}` })),
@@ -158,7 +159,7 @@ test('a red train is bisected: its first half rides again, the rest waits', asyn
   assertEquals(out, 'started')
   assertEquals(d.calls.slice(0, 2), ['close 900', 'delete mushi/train/20261024-0000'])
   assertEquals(d.calls.filter((c) => c.startsWith('merge ')), ['merge h1', 'merge h2'])
-  assertEquals(tables.release_trains[0].state, 'failed')
+  assertEquals([tables.release_trains[0].state, tables.release_trains[0].detail], ['failed', 'Members failed CI: gate.'])
   const retry = tables.release_trains[1]
   assertEquals([retry.attempt, (retry.members as Row[]).length], [2, 2])
   assertEquals(tables.fix_merge_queue.find((r) => r.id === 'c')?.state, 'queued')
@@ -252,3 +253,108 @@ test('a train whose failing checks also fail on main is not bisected: nobody is 
   assertEquals(tables.release_trains.length, 1)
 })
 
+
+// ADR 0044 amendment 2026-10-26: only a PR whose own head CI is green rides.
+
+test('a PR red on its own head stays out of the train and is sent to CI repair; the green ones ride', async () => {
+  const rows = [qrow('a', 1), qrow('b', 2), qrow('c', 3)]
+  const { db, tables } = setup(rows)
+  const d = deps({ checks: (_t, _r, sha) => Promise.resolve(sha === 'h2' ? { pending: 0, failed: ['Lint & Build', 'gate'], ran: ['Lint & Build', 'gate'] } : { pending: 0, failed: [], ran: ['Lint & Build', 'gate'] }) })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'started')
+  assertEquals((tables.release_trains[0].members as Row[]).map((m) => m.prNumber), [1, 3])
+  const b = tables.fix_merge_queue.find((r) => r.id === 'b')!
+  assertEquals([b.state, String(b.detail).startsWith('CI fails on its own commit (Lint & Build, gate). With review follow-ups on')], ['blocked', true])
+})
+
+test('when both follow-up rounds are used, a red PR says a person must fix it', async () => {
+  const rows = [qrow('a', 1)]
+  const { db, tables } = setup(rows, { fix_review_followups: [{ fix_attempt_id: 'fa-a', cursor_agent_id: 'c1' }, { fix_attempt_id: 'fa-a', cursor_agent_id: 'c2' }] })
+  const d = deps({ checks: (_t, _r, sha) => Promise.resolve(sha === 'h1' ? { pending: 0, failed: ['required'], ran: ['required'] } : { pending: 0, failed: [], ran: ['required'] }) })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'nothing_ready')
+  assertEquals(String(tables.fix_merge_queue[0].detail).includes('both follow-up rounds are used'), true)
+})
+
+test('a PR whose only failures are red on main too (an aggregator skipped there) waits for main, unblamed', async () => {
+  const rows = [qrow('a', 1)]
+  const { db, tables } = setup(rows)
+  const d = deps({
+    branchSha: () => Promise.resolve('mainhead'),
+    checks: (_t, _r, sha) => Promise.resolve(sha === 'mainhead'
+      ? { pending: 0, failed: ['Checks (security)'], ran: ['Checks (security)'] }
+      : { pending: 0, failed: ['gate', 'Checks (security)'], ran: ['gate', 'Checks (security)'] }),
+  })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'nothing_ready')
+  assertEquals([tables.fix_merge_queue[0].state, tables.fix_merge_queue[0].detail], ['queued', 'main is red too (Checks (security)); it rides a release train once main passes.'])
+})
+
+test('CI still running, or not started while main has checks, keeps a PR out of the train', async () => {
+  const rows = [qrow('a', 1), qrow('b', 2)]
+  const { db, tables } = setup(rows)
+  const d = deps({
+    branchSha: () => Promise.resolve('mainhead'),
+    checks: (_t, _r, sha) => Promise.resolve(sha === 'h1' ? { pending: 2, failed: [], ran: [] } : sha === 'h2' ? { pending: 0, failed: [], ran: [] } : { pending: 0, failed: [], ran: ['build'] }),
+  })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'nothing_ready')
+  const running = 'CI is running on its latest commit; it rides a release train once CI is green.'
+  assertEquals(tables.fix_merge_queue.map((r) => [r.state, r.detail]), [['queued', running], ['queued', running]])
+})
+
+test('an approved draft is marked ready, one per tick, and rides only after its CI is green', async () => {
+  const rows = [qrow('a', 1), qrow('b', 2)]
+  const { db, tables } = setup(rows)
+  const d = deps({ pull: (_t, _r, n) => Promise.resolve(pull(n, { draft: true })) })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d)
+  assertEquals(out, 'nothing_ready')
+  assertEquals(d.calls, ['ready 1'])
+  const [a, b] = tables.fix_merge_queue.map((r) => String(r.detail))
+  assertEquals([a.startsWith('Marked ready for review so its CI runs'), b.startsWith('A draft runs no CI.')], [true, true])
+})
+
+test('a member that failed alone at its head is not put back into the next train; a new commit lets it ride', async () => {
+  const failedAlone = { id: 'old', repo: 'o/r', state: 'failed', pr_number: 800, detail: 'Members failed CI: Lint & Build.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }] }
+  const soon = { ...settings, intervalMinutes: 30 }
+  const rows = [qrow('a', 1, { state: 'blocked' }), qrow('b', 2)]
+  const { db, tables } = setup(rows, { release_trains: [failedAlone] })
+  const out = await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings: soon }, deps())
+  assertEquals(out, 'started')
+  assertEquals((tables.release_trains[1].members as Row[]).map((m) => m.prNumber), [2])
+  const a = tables.fix_merge_queue.find((r) => r.id === 'a')!
+  assertEquals([a.state, String(a.detail).startsWith('It failed CI alone in release train #800 at this commit (Lint & Build)')], ['blocked', true])
+
+  // A CI-repair agent pushed h1b and Opus approved it: it rides again.
+  const again = setup([qrow('a', 1, { state: 'blocked' })], {
+    release_trains: [{ ...failedAlone }],
+    fix_reviews: [{ fix_attempt_id: 'fa-a', verdict: 'merge', head_sha: 'h1b', status: 'completed' }],
+  })
+  const d2 = deps({ pull: (_t, _r, n) => Promise.resolve(pull(n, { headSha: 'h1b' })) })
+  assertEquals(await runTrainTick(again.db, { repo: 'o/r', projectId: 'p1', token: 't', rows: [qrow('a', 1, { state: 'blocked' })], settings: soon }, d2), 'started')
+})
+
+test('a member that keeps riding red trains at one head stops after five', async () => {
+  const red = (i: number) => ({ id: `t${i}`, repo: 'o/r', state: 'failed', pr_number: 800 + i, detail: 'Members failed CI: e2e.', created_at: '2026-10-24T05:00:00Z', members: [{ rowId: 'a', headSha: 'h1' }, { rowId: `x${i}`, headSha: 'hx' }] })
+  const soon = { ...settings, intervalMinutes: 30 }
+  const rows = [qrow('a', 1)]
+  const four = setup(rows, { release_trains: [1, 2, 3, 4].map(red) })
+  assertEquals(await runTrainTick(four.db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings: soon }, deps()), 'started')
+  const five = setup(rows, { release_trains: [1, 2, 3, 4, 5].map(red) })
+  assertEquals(await runTrainTick(five.db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings: soon }, deps()), 'nothing_ready')
+  assertEquals(String(five.tables.fix_merge_queue[0].detail), 'It rode 5 release trains that failed CI at this commit. It rides again after a new commit.')
+})
+
+test('a red train whose failures are main\'s own, behind an aggregator skipped on main, is not bisected', async () => {
+  const rows = [1, 2].map((n) => qrow(String.fromCharCode(96 + n), n, { state: 'waiting', train_id: 'tr1' }))
+  const { db, tables } = setup(rows, { release_trains: [activeTrain([1, 2])] })
+  const d = deps({
+    pull: (_t, _r, n) => Promise.resolve(n === 900 ? pull(900, { headSha: 'th' }) : pull(n)),
+    branchSha: () => Promise.resolve('mainhead'),
+    checks: (_t, _r, sha) => Promise.resolve(sha === 'mainhead'
+      ? { pending: 0, failed: ['npm audit'], ran: ['npm audit'] }
+      : { pending: 0, failed: ['gate', 'npm audit'], ran: ['gate', 'npm audit'] }),
+  })
+  assertEquals(await runTrainTick(db, { repo: 'o/r', projectId: 'p1', token: 't', rows, settings }, d), 'base_red')
+  assertEquals(tables.fix_merge_queue.map((r) => r.state), ['queued', 'queued'])
+})

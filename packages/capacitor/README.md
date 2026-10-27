@@ -2,29 +2,14 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Capacitor plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
-LLM-driven bug intake, classification, and autofix platform.
-
-> **One-command setup:** `npx mushi-mushi` auto-detects Capacitor and installs this package.
->
-> **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
-
-> **Status**: v0.8.x surface stable; API may evolve before a coordinated 1.0 across all packages.
-
-The Capacitor plugin uses the same project API key as the web SDK (`mushi_…`), minted in the console under **Projects → API Keys**. See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials).
-
-The npm package vendors the standalone iOS and Android SDK sources for the
-native side, so Capacitor apps do not need a separate Maven or SwiftPM Mushi
-dependency at build time.
-
-## Install
-
-```bash
-npm install @mushi-mushi/capacitor
-npx cap sync
-```
+The Capacitor and Ionic plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi). Users shake the phone or tap a button to report a bug. Mushi gets a screenshot and their note, explains the cause in plain English, and hands your editor a fix to start from.
 
 ## Quickstart
+
+```bash
+npm install @mushi-mushi/capacitor   # or: npx mushi-mushi (detects Capacitor)
+npx cap sync
+```
 
 ```ts
 import { Mushi } from '@mushi-mushi/capacitor';
@@ -32,11 +17,21 @@ import { Mushi } from '@mushi-mushi/capacitor';
 await Mushi.configure({
   projectId: 'proj_...',
   apiKey: 'mushi_...',
-  triggerMode: 'both',
-  captureScreenshot: true,
-  minDescriptionLength: 20,
+  // Native builds default to Mushi Cloud. The browser preview (ionic serve) needs it set:
+  endpoint: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  triggerMode: 'both', // shake + floating button
 });
+```
 
+Docs: [Capacitor SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/capacitor) · [Project ID and API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials)
+
+The plugin uses the same project API key as the web SDK (`mushi_…`), minted in the console under **Projects → API Keys**. The npm package vendors the standalone iOS and Android SDK sources, so you do not need a separate Maven or SwiftPM Mushi dependency.
+
+Other frameworks: [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
+
+## More calls
+
+```ts
 // Programmatic report:
 await Mushi.report({
   description: 'Profile photo upload spinner never stops on tablets',
@@ -77,7 +72,8 @@ const { breadcrumbs } = await Mushi.getBreadcrumbs();
 
 When the app runs in a browser preview (`ionic serve`), the plugin falls back
 to a pure-TS implementation that calls the same `@mushi-mushi/core` API
-client used by the standalone web SDK. Behaviour matches production exactly.
+client used by the standalone web SDK. One difference: the fallback has no
+default `endpoint`, so `report()` throws until you pass one to `configure()`.
 
 ## Permissions
 
@@ -91,20 +87,21 @@ bottom sheet from the standalone SDKs.
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID |
 | `apiKey`               | _required_                           | Project API key (`mushi_...`) |
-| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
+| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` on iOS and Android; none in the browser fallback | Override for self-hosting. Required in the browser fallback |
 | `triggerMode`          | `'shake'`                            | `'shake'` / `'button'` / `'both'` / `'none'` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |
 | `minDescriptionLength` | `20`                                 | Matches the web/native SDK contracts |
 | `useNativeWidget`      | `false`                              | When `true`, uses the bottom-sheet from the native SDK |
-| `triggerInset`         | `{ right: 24, bottom: 32 }`          | Per-edge offset (in points / dp) forwarded to the iOS `MushiConfig.TriggerInset` and Android `MushiConfig.TriggerInset` so the native FAB clears tab bars and primary CTAs |
-| `triggerInsetPreset`   | _none_                               | `'tabBarSafe'` (≈72 pt bottom — apps with a bottom tab bar) or `'dockSafe'` (≈96 pt bottom — apps with a tall iOS-style dock or mini-player). Only fills in fields you didn't already set on `triggerInset`, so you can override per-edge while keeping the safe baseline |
+| `theme`                | _none_                               | `{ accentColor?, dark? }` for the native bottom sheet |
+| `triggerInset`         | `{ bottom: 96, trailing: 20 }` (iOS) / `{ bottom: 96, end: 20 }` (Android) | Per-edge offset in points / dp so the native button clears tab bars and primary buttons. Keys: `bottom`, `leading` / `trailing` (iOS), `start` / `end` (Android) |
+| `triggerInsetPreset`   | _none_                               | `'tabBarSafe'` (72 bottom — apps with a bottom tab bar) or `'dockSafe'` (96 bottom — apps with a tall dock or mini-player). Only fills in fields you didn't already set on `triggerInset`, so you can override per-edge while keeping the safe baseline |
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE) at the repo root.
+MIT — see [LICENSE](./LICENSE).
 
 
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 507 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
