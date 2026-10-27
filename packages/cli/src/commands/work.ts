@@ -409,16 +409,43 @@ function stopChildren(): void {
   for (const child of liveChildren) child.kill('SIGTERM')
 }
 
+/**
+ * How long `runProc` waits for the output pipes to close after the process
+ * itself exited. A child the process started can keep them open (a language
+ * server, a watcher): Node then never fires 'close', and the audit loop of
+ * 2026-10-26 hung 51 minutes on one call until it was wrapped in
+ * `timeout -k 30 900`.
+ */
+const CLOSE_GRACE_MS = 30_000
+
 /** Used by the local worker (worker/daemon.ts). */
-export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal } = {}): Promise<Proc> {
+export function runProc(cmd: string, args: readonly string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBytes?: number; signal?: AbortSignal; closeGraceMs?: number } = {}): Promise<Proc> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(opts.signal ? { signal: opts.signal } : {}) })
     liveChildren.add(child)
-    child.on('exit', () => liveChildren.delete(child))
     let stdout = ''
     let stderr = ''
     const max = opts.maxBytes ?? 2_000_000
     let timedOut = false
+    let settled = false
+    let graceTimer: NodeJS.Timeout | null = null
+    const finish = (p: Proc) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      if (graceTimer) clearTimeout(graceTimer)
+      resolve(p)
+    }
+    child.on('exit', (code) => {
+      liveChildren.delete(child)
+      // Exited, but something it started still holds the pipes: answer anyway.
+      graceTimer = setTimeout(() => {
+        child.stdout.destroy()
+        child.stderr.destroy()
+        finish({ code, stdout, stderr: `${stderr}\n[output pipes still open ${Math.round((opts.closeGraceMs ?? CLOSE_GRACE_MS) / 1000)} s after the process exited; stopped reading]`, timedOut })
+      }, opts.closeGraceMs ?? CLOSE_GRACE_MS)
+      graceTimer.unref()
+    })
     const timer = opts.timeoutMs
       ? setTimeout(() => {
           timedOut = true
@@ -433,12 +460,10 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
       if (stderr.length < max) stderr += d.toString()
     })
     child.on('error', (err) => {
-      if (timer) clearTimeout(timer)
-      resolve({ code: null, stdout, stderr: `${stderr}${err.message}`, timedOut })
+      finish({ code: null, stdout, stderr: `${stderr}${err.message}`, timedOut })
     })
     child.on('close', (code) => {
-      if (timer) clearTimeout(timer)
-      resolve({ code, stdout, stderr, timedOut })
+      finish({ code, stdout, stderr, timedOut })
     })
   })
 }
@@ -448,14 +473,16 @@ export function runProc(cmd: string, args: readonly string[], opts: { cwd?: stri
  * knows it as a worktree (a killed run): otherwise `worktree add` fails on the
  * existing folder on every run. The folder is Mushi's own cache.
  */
-async function clearWorktree(repoDir: string, wt: string): Promise<void> {
+/** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
+export async function clearWorktree(repoDir: string, wt: string): Promise<void> {
   if (!existsSync(wt)) return
   await runProc('git', ['worktree', 'remove', '--force', wt], { cwd: repoDir })
   if (existsSync(wt)) rmSync(wt, { recursive: true, force: true })
   await runProc('git', ['worktree', 'prune'], { cwd: repoDir })
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
+/** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
+export async function git(cwd: string, args: string[]): Promise<string> {
   const r = await runProc('git', args, { cwd })
   if (r.code !== 0) throw new MushiCliError('E_INTERNAL', `git ${args[0]} failed: ${failureTail(r)}`)
   return r.stdout.trim()
@@ -467,7 +494,8 @@ async function git(cwd: string, args: string[]): Promise<string> {
  * points it at whatever was checked out): PR #646 was opened against a
  * feature branch, and GitHub closed it when that branch was deleted.
  */
-async function defaultBranch(repoDir: string): Promise<string> {
+/** Used by the local worker (worker/audit.ts). */
+export async function defaultBranch(repoDir: string): Promise<string> {
   const gh = await runProc('gh', ['repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name'], { cwd: repoDir, timeoutMs: 30_000 })
   if (gh.code === 0 && gh.stdout.trim()) return gh.stdout.trim()
   const r = await runProc('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: repoDir })
@@ -851,7 +879,8 @@ export function installCommand(has: (file: string) => boolean): [string, string[
  * second worktree installing at the same moment can lose a store lock). A
  * failed install is logged and the run goes on.
  */
-async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
+/** Used by the local worker (worker/conflicts.ts, worker/audit.ts). */
+export async function installDeps(wt: string, log: (line: string) => void): Promise<void> {
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
@@ -865,8 +894,8 @@ export function isMissingModuleFailure(message: string): boolean {
   return /ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(message)
 }
 
-/** Commit; when a hook failed only because dependencies are missing, install them and commit once more. */
-async function commitWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
+/** Commit; when a hook failed only because dependencies are missing, install them and commit once more. Used by worker/conflicts.ts too. */
+export async function commitWithHooks(wt: string, args: string[], log: (line: string) => void): Promise<void> {
   try {
     await git(wt, ['commit', ...args])
   } catch (err) {

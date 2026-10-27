@@ -6,9 +6,13 @@
  *   The daemon (`mushi work --daemon`), with a worker:run key only:
  *     POST /v1/worker/heartbeat            register the host and its lanes, renew leases;
  *                                          answers each lane's closed settings and the host guards
- *     POST /v1/worker/claim                { laneId } the lane's queue first, then ranked reports
+ *     POST /v1/worker/claim                { laneId } by the lane's mode (P3): fix and skill take a
+ *                                          report (the queue first, then ranked ones for fix);
+ *                                          conflicts a merge-queue conflict (ADR 0049); audit
+ *                                          one audit pass (ADR 0050)
  *     POST /v1/worker/claims/:id/renew     extend the lease
- *     POST /v1/worker/claims/:id/done      { outcome, failureKind?, fixId?, prUrl?, detail? }
+ *     POST /v1/worker/claims/:id/done      { outcome, failureKind?, fixId?, prUrl?, detail?, headAfter? }
+ *     POST /v1/worker/claims/:id/findings  an audit claim files one reproduced finding (code_audit)
  *     POST /v1/worker/revoke               the key revokes itself (`mushi worker revoke`)
  *
  *   The console and the CLI:
@@ -34,7 +38,10 @@ import { logAudit } from '../../_shared/audit.ts'
 import { hashApiKey } from '../../_shared/api-key-mint.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-packet.ts'
-import { activeWorkClaims, enqueueReports, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
+import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
+import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
+import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
+import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
 import {
   claimFirstFree,
   hasLiveAttempt,
@@ -47,7 +54,7 @@ import {
   parseClaimDone,
   parseHeartbeat,
   parseHostGuards,
-  parseLaneVerbs,
+  parseLaneSettings,
   rankWorkCandidates,
   type AttemptLite,
   type LaneConfig,
@@ -89,6 +96,8 @@ export interface WorkRouteDeps {
   projectIds: (c: Ctx, db: Db, userId: string) => Promise<string[]>
   claimRateLimit: (db: Db, key: string, limit: number, windowSec: number) => Promise<{ allowed: boolean; retryAfterSec?: number }>
   logAudit: typeof logAudit
+  /** Files a reproduced audit finding (work-modes.ts); injectable for tests. */
+  fileFinding: typeof fileAuditFinding
   now: () => Date
 }
 
@@ -102,6 +111,7 @@ export const defaultWorkRouteDeps: WorkRouteDeps = {
   projectIds: (c, db, userId) => callerProjectIds(c, db, userId),
   claimRateLimit: (db, key, limit, windowSec) => claimTenantRateLimit(db, key, limit, windowSec),
   logAudit,
+  fileFinding: fileAuditFinding,
   now: () => new Date(),
 }
 
@@ -155,6 +165,8 @@ interface LaneRow {
   stop_at: string | null
   drain: boolean
   prune_own: boolean
+  review_model: string | null
+  repo: string | null
   status: Record<string, unknown> | null
   last_seen_at: string
 }
@@ -164,7 +176,11 @@ interface ClaimRow {
   lane_id: string
   host_id: string
   project_id: string
-  report_id: string
+  /** Null for conflict and audit claims (P3). */
+  report_id: string | null
+  kind: 'fix' | 'conflict' | 'audit'
+  merge_queue_id: string | null
+  head_after: string | null
   status: string
   from_queue: boolean
   claimed_at: string
@@ -179,8 +195,8 @@ interface ClaimRow {
 }
 
 const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at'
-const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, status, last_seen_at'
-const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
+const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, repo, status, last_seen_at'
+const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
 const REPORT_DETAIL_COLUMNS =
   'id, project_id, summary, description, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
 const ATTEMPT_COLUMNS = 'id, report_id, status, agent, pr_url, pr_state, merged_at, error, created_at'
@@ -227,6 +243,8 @@ async function ownClaim(db: Db, c: Ctx, claimId: string): Promise<ClaimRow | Ref
  * decides, with /pipeline's "Requeue".
  */
 async function autoRequeue(db: Db, claim: ClaimRow, failureKind: string | null, source: 'requeue' | 'lease_expired', now: Date): Promise<boolean> {
+  // Conflict and audit claims hold no report: there is nothing to put back.
+  if (!claim.report_id) return false
   const since = new Date(now.getTime() - 7 * 86_400_000).toISOString()
   const { data: earlier, error } = await db
     .from('work_claims')
@@ -240,7 +258,7 @@ async function autoRequeue(db: Db, claim: ClaimRow, failureKind: string | null, 
   }
   if (!mayAutoRequeue({ failureKind: failureKind as 'infra' | 'code' | null }, (earlier ?? []) as Array<{ claimed_at: string }>, now)) return false
   const lane: QueueLane = { id: claim.lane_id, projectId: claim.project_id, hostId: claim.host_id }
-  const q = await enqueueReports(db, lane, [claim.report_id], { source, front: true, now })
+  const q = await enqueueReports(db, lane, [claim.report_id!], { source, front: true, now })
   if ('error' in q) {
     wlog.warn('auto requeue failed', { claimId: claim.id, err: q.error })
     return false
@@ -249,7 +267,10 @@ async function autoRequeue(db: Db, claim: ClaimRow, failureKind: string | null, 
   return true
 }
 
-/** End leases that ran out in this app: expired, counted as infra, and put back once. */
+/**
+ * End leases that ran out in this app: expired, counted as infra. A report is
+ * put back once; a conflict's queue row is freed and its cap slot given back.
+ */
 export async function expireLeases(db: Db, projectId: string, now: Date): Promise<number> {
   const { data, error } = await db
     .from('work_claims')
@@ -272,7 +293,12 @@ export async function expireLeases(db: Db, projectId: string, now: Date): Promis
       .select('id')
     if (!ended || (ended as unknown[]).length === 0) continue
     n++
-    await autoRequeue(db, claim, 'infra', 'lease_expired', now)
+    if (claim.kind === 'conflict') {
+      const { data: lane } = await db.from('work_lanes').select('name').eq('id', claim.lane_id).maybeSingle()
+      await endConflictClaim(db, claim, { outcome: 'lease_expired', failureKind: 'infra', detail: 'its lease ran out', headAfter: null }, (lane as { name?: string } | null)?.name ?? 'a lane', now)
+    } else {
+      await autoRequeue(db, claim, 'infra', 'lease_expired', now)
+    }
   }
   return n
 }
@@ -282,6 +308,7 @@ interface CandidateReport {
   project_id: string
   severity: string | null
   status: string
+  source: string | null
   created_at: string
 }
 
@@ -290,9 +317,12 @@ interface CandidateReport {
  * the 7-day cooldown does not apply, as `mushi work --report` never did), then
  * classified and reopened reports ranked worst first, newest first. Never a
  * report with an active claim, an in-flight cloud dispatch, a live run or an
- * open PR; a ranked one also never in a local cooldown.
+ * open PR; a ranked one also never in a local cooldown, nor one waiting in
+ * another lane's queue. A `skill` lane takes only skill-run rounds from its
+ * own queue (ADR 0042 amendment), never ranked bug reports.
  */
 export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise<Array<CandidateReport & { fromQueue: boolean }>> {
+  const skillOnly = lane.mode === 'skill'
   const { data: queueRows, error: qErr } = await db
     .from('work_queue')
     .select('report_id, position, created_at')
@@ -304,10 +334,10 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   const queued = ((queueRows ?? []) as Array<{ report_id: string }>).map((r) => r.report_id)
 
   const lists = await Promise.all(
-    ['classified', 'reopened'].map((status) =>
+    (skillOnly ? [] : ['classified', 'reopened']).map((status) =>
       db
         .from('reports')
-        .select('id, project_id, severity, status, created_at')
+        .select('id, project_id, severity, status, source, created_at')
         .eq('project_id', lane.project_id)
         .eq('status', status)
         .order('created_at', { ascending: false })
@@ -319,14 +349,15 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
 
   let queuedReports: CandidateReport[] = []
   if (queued.length) {
-    const { data, error } = await db.from('reports').select('id, project_id, severity, status, created_at').in('id', queued)
+    const { data, error } = await db.from('reports').select('id, project_id, severity, status, source, created_at').in('id', queued)
     if (error) throw new Error(`queued reports read failed: ${error.message}`)
     const byId = new Map(((data ?? []) as CandidateReport[]).map((r) => [r.id, r]))
     const stale: string[] = []
     for (const id of queued) {
       const r = byId.get(id)
       if (!r || r.project_id !== lane.project_id || CLOSED_STATUSES.has(r.status)) stale.push(id)
-      else queuedReports.push(r)
+      // A skill lane leaves a bug report someone queued in it where it is.
+      else if (!skillOnly || r.source === 'skill_run') queuedReports.push(r)
     }
     // A queued report that was fixed, dismissed or deleted meanwhile leaves the queue.
     if (stale.length) await db.from('work_queue').delete().eq('lane_id', lane.id).in('report_id', stale)
@@ -336,6 +367,8 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   if (ids.length === 0) return []
   const claimed = await activeWorkClaims(db, ids, now)
   if ('error' in claimed) throw new Error(`work claims read failed: ${claimed.error}`)
+  const elsewhere = ranked.length ? await queuedForLocalLanes(db, ranked.map((r) => r.id), lane.id, now) : { ids: new Set<string>() }
+  if ('error' in elsewhere) throw new Error(`work queues read failed: ${elsewhere.error}`)
   const inflight = new Set<string>()
   const attempts = new Map<string, AttemptLite[]>()
   for (const part of chunks(ids)) {
@@ -354,7 +387,7 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   // does not apply to it: a person put it there.
   queuedReports = queuedReports.filter((r) => free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []))
   const queuedIds = new Set(queuedReports.map((r) => r.id))
-  const rest = ranked.filter((r) => !queuedIds.has(r.id) && free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []) && !inLocalCooldown(attempts.get(r.id) ?? [], now))
+  const rest = ranked.filter((r) => !queuedIds.has(r.id) && !elsewhere.ids.has(r.id) && free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []) && !inLocalCooldown(attempts.get(r.id) ?? [], now))
   return [...queuedReports.map((r) => ({ ...r, fromQueue: true })), ...rest.map((r) => ({ ...r, fromQueue: false }))]
 }
 
@@ -470,12 +503,17 @@ async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     }
     let row: LaneRow | null = prev ?? null
     if (prev) {
-      const { data } = await db.from('work_lanes').update({ status: l.status, last_seen_at: now.toISOString() }).eq('id', prev.id).select(LANE_COLUMNS).single()
+      const { data } = await db
+        .from('work_lanes')
+        .update({ status: l.status, last_seen_at: now.toISOString(), ...(l.repo ? { repo: l.repo } : {}) })
+        .eq('id', prev.id)
+        .select(LANE_COLUMNS)
+        .single()
       row = (data as LaneRow | null) ?? prev
     } else {
       const { data, error } = await db
         .from('work_lanes')
-        .insert({ ...NEW_LANE_DEFAULTS, ...l.initial, host_id: host.id, project_id: l.projectId, name: l.name, status: l.status, last_seen_at: now.toISOString() })
+        .insert({ ...NEW_LANE_DEFAULTS, ...l.initial, host_id: host.id, project_id: l.projectId, name: l.name, repo: l.repo, status: l.status, last_seen_at: now.toISOString() })
         .select(LANE_COLUMNS)
         .single()
       if (error || !data) {
@@ -534,6 +572,9 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   if (activeErr) return err(c, 'DB_ERROR', 'Could not read the lane\'s claims.', 500)
   const block = laneClaimBlock(cfg, ((active ?? []) as unknown[]).length, now)
   if (block) return c.json({ ok: true, data: { claim: null, reason: block } })
+  const leaseUntil = new Date(now.getTime() + WORK_LEASE_MS).toISOString()
+  if (cfg.mode === 'conflicts') return claimConflictMode(c, db, lane, now, leaseUntil, cfg)
+  if (cfg.mode === 'audit') return claimAuditMode(c, db, lane, host, now, leaseUntil, cfg)
 
   let candidates
   try {
@@ -542,11 +583,10 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     wlog.warn('claim candidates unreadable', { laneId: lane.id, err: e instanceof Error ? e.message : String(e) })
     return err(c, 'DB_ERROR', 'Could not read what the lane may take. Try again in a minute.', 503)
   }
-  const leaseUntil = new Date(now.getTime() + WORK_LEASE_MS).toISOString()
   const won = await claimFirstFree(candidates, async (r) => {
     const { data, error } = await db
       .from('work_claims')
-      .insert({ lane_id: lane.id, host_id: host.id, project_id: lane.project_id, report_id: r.id, status: 'active', from_queue: r.fromQueue, lease_until: leaseUntil, claimed_at: now.toISOString() })
+      .insert({ kind: 'fix', lane_id: lane.id, host_id: host.id, project_id: lane.project_id, report_id: r.id, status: 'active', from_queue: r.fromQueue, lease_until: leaseUntil, claimed_at: now.toISOString() })
       .select('id')
       .single()
     if (error?.code === '23505') return { won: false as const }
@@ -557,7 +597,10 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     wlog.error('claim failed', { laneId: lane.id, err: won.message })
     return err(c, 'DB_ERROR', 'The claim could not be stored. Try again in a minute.', 500)
   }
-  if (!won) return c.json({ ok: true, data: { claim: null, reason: 'Nothing to work on: no queued or open report is free.' } })
+  if (!won) {
+    const reason = cfg.mode === 'skill' ? "Nothing to work on: no skill-run round waits in this lane's queue." : 'Nothing to work on: no queued or open report is free.'
+    return c.json({ ok: true, data: { claim: null, reason } })
+  }
   if (won.candidate.fromQueue) await db.from('work_queue').delete().eq('lane_id', lane.id).eq('report_id', won.candidate.id)
 
   let payload
@@ -572,7 +615,75 @@ async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   return c.json({
     ok: true,
     data: {
-      claim: { id: won.claimId, laneId: lane.id, projectId: lane.project_id, leaseUntil, fromQueue: won.candidate.fromQueue, model: cfg.model, ...payload },
+      claim: { id: won.claimId, kind: 'fix', laneId: lane.id, projectId: lane.project_id, leaseUntil, fromQueue: won.candidate.fromQueue, model: cfg.model, ...payload },
+    },
+  })
+}
+
+/** A `conflicts` lane (ADR 0049): one merge-queue conflict of its clone's repository, under the cap of 2 agents per PR. */
+async function claimConflictMode(c: Ctx, db: Db, lane: LaneRow, now: Date, leaseUntil: string, cfg: LaneConfig): Promise<Response> {
+  let res
+  try {
+    res = await claimConflict(db, lane, now, leaseUntil)
+  } catch (e) {
+    wlog.warn('conflict claim failed', { laneId: lane.id, err: e instanceof Error ? e.message : String(e) })
+    return err(c, 'DB_ERROR', 'Could not read the merge queue. Try again in a minute.', 503)
+  }
+  if ('reason' in res) return c.json({ ok: true, data: { claim: null, reason: res.reason } })
+  const k = res.claim
+  return c.json({
+    ok: true,
+    data: {
+      claim: {
+        id: k.claimId,
+        kind: 'conflict',
+        laneId: lane.id,
+        projectId: lane.project_id,
+        leaseUntil,
+        model: cfg.model,
+        conflict: { queueId: k.queueId, repo: k.repo, prNumber: k.prNumber, headRef: k.headRef, headSha: k.headSha, prUrl: k.prUrl },
+      },
+    },
+  })
+}
+
+/** An `audit` lane (ADR 0050): one audit pass, while the app's hourly audit cap has room. The worker picks the screen itself. */
+async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now: Date, leaseUntil: string, cfg: LaneConfig): Promise<Response> {
+  // One pass per lane at a time, whatever its concurrency: a pass owns the
+  // lane's audit worktree and its list of screens done on the machine.
+  const { data: running, error: runErr } = await db
+    .from('work_claims')
+    .select('id')
+    .eq('lane_id', lane.id)
+    .eq('kind', 'audit')
+    .eq('status', 'active')
+    .gt('lease_until', now.toISOString())
+    .limit(1)
+  if (runErr) return err(c, 'DB_ERROR', "Could not read the lane's claims.", 500)
+  if (((running ?? []) as unknown[]).length > 0) return c.json({ ok: true, data: { claim: null, reason: 'An audit lane runs one pass at a time.' } })
+  const filed = await auditFiledLastHour(db, lane.project_id, now)
+  if (filed === null) return err(c, 'DB_ERROR', "Could not read the audit's hourly count. Try again in a minute.", 503)
+  if (filed >= AUDIT_FINDINGS_PER_HOUR) {
+    return c.json({ ok: true, data: { claim: null, reason: `This app already filed ${AUDIT_FINDINGS_PER_HOUR} code-audit findings in the last hour.` } })
+  }
+  const { data, error } = await db
+    .from('work_claims')
+    .insert({ kind: 'audit', report_id: null, lane_id: lane.id, host_id: host.id, project_id: lane.project_id, status: 'active', lease_until: leaseUntil, claimed_at: now.toISOString() })
+    .select('id')
+    .single()
+  if (error || !data) return err(c, 'DB_ERROR', 'The claim could not be stored. Try again in a minute.', 500)
+  return c.json({
+    ok: true,
+    data: {
+      claim: {
+        id: (data as { id: string }).id,
+        kind: 'audit',
+        laneId: lane.id,
+        projectId: lane.project_id,
+        leaseUntil,
+        model: cfg.model,
+        audit: { reviewModel: lane.review_model, findingsLeft: AUDIT_FINDINGS_PER_HOUR - filed },
+      },
     },
   })
 }
@@ -609,6 +720,8 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
   const d = parsed.value
   if (own.status !== 'active') return err(c, 'CLAIM_ENDED', `This claim already ended (${own.outcome ?? own.status}).`, 409)
+  const wrongKind = outcomeKindRefusal(d.outcome, own.kind)
+  if (wrongKind) return err(c, 'VALIDATION_ERROR', wrongKind, 400)
   let fixId: string | null = null
   if (d.fixId) {
     const { data: fix } = await db.from('fix_attempts').select('id, report_id').eq('id', d.fixId).maybeSingle()
@@ -623,6 +736,7 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
       fix_attempt_id: fixId,
       pr_url: d.prUrl,
       detail: d.detail,
+      head_after: own.kind === 'conflict' ? d.headAfter : null,
       finished_at: now.toISOString(),
       updated_at: now.toISOString(),
     })
@@ -630,8 +744,39 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     .eq('status', 'active')
     .select('id')
   if (!ended || (ended as unknown[]).length === 0) return err(c, 'CLAIM_ENDED', 'This claim already ended.', 409)
+  if (own.kind === 'conflict') {
+    const { data: laneRow } = await db.from('work_lanes').select('name').eq('id', own.lane_id).maybeSingle()
+    await endConflictClaim(db, own, d, (laneRow as { name?: string } | null)?.name ?? 'a lane', now)
+    return c.json({ ok: true, data: { requeued: false } })
+  }
   const requeued = d.failureKind === 'infra' ? await autoRequeue(db, own, d.failureKind, 'requeue', now) : false
   return c.json({ ok: true, data: { requeued } })
+}
+
+/** An audit claim files one finding its worker reproduced with a deterministic check (ADR 0050). */
+async function finding(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const denied = workerOnly(c)
+  if (denied) return denied
+  const db = deps.getServiceClient()
+  const now = deps.now()
+  const own = await ownClaim(db, c, c.req.param('id') ?? '')
+  if (own instanceof Refusal) return own.response
+  if (own.kind !== 'audit') return err(c, 'VALIDATION_ERROR', 'Only an audit claim files findings.', 400)
+  if (own.status !== 'active' || Date.parse(own.lease_until) <= now.getTime()) return err(c, 'CLAIM_ENDED', 'This audit claim already ended; claim again.', 409)
+  const parsed = parseAuditFinding(await c.req.json().catch(() => null))
+  if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
+  const userId = c.get('userId') as string
+  const access = await deps.access(c, db, userId, own.project_id)
+  if (!access.allowed || access.role === 'viewer') return err(c, 'FORBIDDEN', 'This key can no longer file reports for that app.', 403)
+  const { data: laneData, error } = await db.from('work_lanes').select('id, host_id, project_id, name, repo, review_model').eq('id', own.lane_id).maybeSingle()
+  if (error || !laneData) return err(c, 'DB_ERROR', 'Could not read the lane.', 500)
+  const lane = laneData as ModeLane
+  const res = await deps.fileFinding(db, parsed.value, { lane, ownerUserId: userId, now })
+  if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message, ...(res.reportId ? { reportId: res.reportId } : {}) } }, res.status)
+  await deps
+    .logAudit(db, own.project_id, userId, 'report.created', 'report', res.reportId, { source: 'code_audit', lane: lane.name, file: parsed.value.file, rule: parsed.value.rule }, { actorType: 'api_key' })
+    .catch(() => {})
+  return c.json({ ok: true, data: { reportId: res.reportId, queuedLaneId: res.queuedLaneId } }, 201)
 }
 
 async function revokeSelf(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -696,7 +841,13 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     queue.push(...((q.data ?? []) as typeof queue))
     claims.push(...((cl.data ?? []) as ClaimRow[]))
   }
-  const reportIds = [...new Set([...queue.map((q) => q.report_id), ...claims.map((x) => x.report_id)])]
+  const reportIds = [...new Set([...queue.map((q) => q.report_id), ...claims.map((x) => x.report_id).filter((x): x is string => !!x)])]
+  const queueRowIds = [...new Set(claims.map((x) => x.merge_queue_id).filter((x): x is string => !!x))]
+  const prs = new Map<string, { repo: string; pr_number: number }>()
+  for (const part of chunks(queueRowIds)) {
+    const { data } = await db.from('fix_merge_queue').select('id, repo, pr_number').in('id', part)
+    for (const r of (data ?? []) as Array<{ id: string; repo: string; pr_number: number }>) prs.set(r.id, r)
+  }
   const reports = new Map<string, { summary: string | null; severity: string | null; status: string }>()
   for (const part of chunks(reportIds)) {
     const { data } = await db.from('reports').select('id, summary, severity, status').in('id', part)
@@ -705,6 +856,14 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const { data: projectRows } = await db.from('projects').select('id, name').in('id', projectIds)
   const names = new Map(((projectRows ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]))
   const title = (id: string) => reports.get(id)?.summary ?? `Report ${id.slice(0, 8)}`
+  const claimTitle = (x: ClaimRow) => {
+    if (x.kind === 'conflict') {
+      const pr = x.merge_queue_id ? prs.get(x.merge_queue_id) : undefined
+      return pr ? `Merge conflict on ${pr.repo}#${pr.pr_number}` : 'Merge conflict'
+    }
+    if (x.kind === 'audit') return 'Code-read audit pass'
+    return title(x.report_id ?? '')
+  }
   const isActive = (x: ClaimRow) => x.status === 'active' && Date.parse(x.lease_until) > now.getTime()
 
   return c.json({
@@ -735,16 +894,19 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
             projectName: names.get(l.project_id) ?? l.project_id.slice(0, 8),
             name: l.name,
             config: laneConfigFromRow(l),
+            reviewModel: l.review_model,
+            repo: l.repo,
             status: l.status ?? {},
             lastSeenAt: l.last_seen_at,
-            active: mineClaims.filter(isActive).map((x) => ({ claimId: x.id, reportId: x.report_id, title: title(x.report_id), since: x.claimed_at, leaseUntil: x.lease_until, fromQueue: x.from_queue })),
+            active: mineClaims.filter(isActive).map((x) => ({ claimId: x.id, kind: x.kind, reportId: x.report_id, title: claimTitle(x), since: x.claimed_at, leaseUntil: x.lease_until, fromQueue: x.from_queue })),
             queue: queue
               .filter((q) => q.lane_id === l.id)
               .map((q) => ({ reportId: q.report_id, title: title(q.report_id), severity: reports.get(q.report_id)?.severity ?? null, status: reports.get(q.report_id)?.status ?? null, source: q.source, position: q.position })),
             recent: finished.slice(0, 20).map((x) => ({
               claimId: x.id,
+              kind: x.kind,
               reportId: x.report_id,
-              title: title(x.report_id),
+              title: claimTitle(x),
               outcome: x.outcome,
               failureKind: x.failure_kind,
               prUrl: x.pr_url,
@@ -756,7 +918,9 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
             counts7d: {
               runs: finished.length,
               prs: finished.filter((x) => x.outcome === 'pr_opened').length,
-              noChange: finished.filter((x) => x.outcome === 'no_change' || x.outcome === 'verdict').length,
+              merges: finished.filter((x) => x.outcome === 'pushed').length,
+              filed: finished.filter((x) => x.outcome === 'filed').length,
+              noChange: finished.filter((x) => x.outcome === 'no_change' || x.outcome === 'verdict' || x.outcome === 'refused').length,
               timeouts: finished.filter((x) => x.outcome === 'timeout').length,
               errors: finished.filter((x) => x.outcome === 'failed' || x.outcome === 'lease_expired').length,
               infra: finished.filter((x) => x.failure_kind === 'infra').length,
@@ -784,7 +948,7 @@ async function writableLane(c: Ctx, deps: WorkRouteDeps, db: Db, laneId: string,
 async function patchLane(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const db = deps.getServiceClient()
   const now = deps.now()
-  const parsed = parseLaneVerbs(await c.req.json().catch(() => null), { partial: true })
+  const parsed = parseLaneSettings(await c.req.json().catch(() => null))
   if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
   const lane = await writableLane(c, deps, db, c.req.param('id') ?? '', 'change a lane')
   if (lane instanceof Refusal) return lane.response
@@ -797,7 +961,7 @@ async function patchLane(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     .single()
   if (error || !data) return err(c, 'DB_ERROR', 'The lane could not be changed.', 500)
   await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_lane', lane.id, { lane: lane.name, ...parsed.value }).catch(() => {})
-  return c.json({ ok: true, data: { id: lane.id, config: laneConfigFromRow(data as LaneRow) } })
+  return c.json({ ok: true, data: { id: lane.id, config: laneConfigFromRow(data as LaneRow), reviewModel: (data as LaneRow).review_model } })
 }
 
 async function putQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -810,6 +974,9 @@ async function putQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   }
   const lane = await writableLane(c, deps, db, c.req.param('id') ?? '', 'change a queue')
   if (lane instanceof Refusal) return lane.response
+  if (reportIds.length && !QUEUE_MODES.includes(lane.mode)) {
+    return err(c, 'LANE_MODE', `This lane is in ${lane.mode} mode and takes no reports from a queue. Switch its mode, or send the reports to a fix lane.`, 409)
+  }
   const userId = c.get('userId') as string
   if (reportIds.length) {
     const { data, error } = await db.from('reports').select('id, project_id').in('id', reportIds)
@@ -930,6 +1097,7 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.post('/v1/worker/claim', deps.workerAuth, (c) => claim(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/renew', deps.workerAuth, (c) => renew(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/done', deps.workerAuth, (c) => done(c as Ctx, deps))
+  app.post('/v1/worker/claims/:id/findings', deps.workerAuth, (c) => finding(c as Ctx, deps))
   app.post('/v1/worker/revoke', deps.workerAuth, (c) => revokeSelf(c as Ctx, deps))
 
   app.get('/v1/admin/work/lanes', deps.adminOrApiKeyRead, (c) => listLanes(c as Ctx, deps))

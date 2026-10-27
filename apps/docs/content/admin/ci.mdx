@@ -113,6 +113,20 @@ Writing a workflow file needs the GitHub App's **Workflows: Read and write** per
 
 From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
 
+## Apply to every app
+
+Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
+
+1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
+2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
+3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
+
+Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
+
+After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
+
+From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle <id>`. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
+
 ## When nothing has reported in
 
 The page stays empty until GitHub reports a job for this app's repositories, or a machine that runs your tests reports in. On that machine, run:

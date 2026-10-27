@@ -1883,6 +1883,65 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  const COST_FIX_KIND = z.enum(['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths']);
+  const WORKFLOW_PATH = z.string().max(200).regex(/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/);
+  server.registerTool(
+    'preview_ci_cost_fix_rollout',
+    {
+      title: titleOf('preview_ci_cost_fix_rollout'),
+      description: descOf('preview_ci_cost_fix_rollout'),
+      annotations: annotationsFor('preview_ci_cost_fix_rollout'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Limit it to one app; omitted with an account-level key, every app you may change'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : '';
+      return jsonText(await apiCall(`/v1/admin/ci/cost-fix-rollout${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'apply_ci_cost_fix_rollout',
+    {
+      title: titleOf('apply_ci_cost_fix_rollout'),
+      description: descOf('apply_ci_cost_fix_rollout'),
+      annotations: annotationsFor('apply_ci_cost_fix_rollout'),
+      inputSchema: z.object({
+        repos: z
+          .array(
+            z.object({
+              projectId: z.string().describe('The app the repo is connected to (preview repos[].projectId)'),
+              repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo'),
+              items: z.array(z.object({ workflowPath: WORKFLOW_PATH, kind: COST_FIX_KIND })).min(1).max(20),
+            }),
+          )
+          .min(1)
+          .max(10)
+          .describe('One entry per repo: the ready items from preview_ci_cost_fix_rollout'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall('/v1/admin/ci/cost-fix-rollout', { method: 'POST', body: JSON.stringify({ repos: args.repos }) }, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'get_ci_cost_fix_bundle',
+    {
+      title: titleOf('get_ci_cost_fix_bundle'),
+      description: descOf('get_ci_cost_fix_bundle'),
+      annotations: annotationsFor('get_ci_cost_fix_bundle'),
+      inputSchema: z.object({
+        bundleId: z.string().uuid().describe('results[].bundleId from apply_ci_cost_fix_rollout'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall(`/v1/admin/ci/cost-fix-bundles/${encodeURIComponent(args.bundleId)}`));
+    },
+  );
+
   server.registerTool(
     'explain_finding',
     {

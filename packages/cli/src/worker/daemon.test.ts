@@ -14,7 +14,7 @@ const CONFIG: WorkerConfig = { version: 1, lanes: [{ name: 'glot', projectId: P1
 type Reply = ApiResult<unknown>
 const ok = (data: unknown): Reply => ({ ok: true, data })
 
-function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne'] } = {}) {
+function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined); claim?: Reply[]; readings?: Partial<Awaited<ReturnType<DaemonDeps['readings']>>>; lane?: Record<string, unknown>; workOne?: DaemonDeps['workOne']; resolveConflict?: DaemonDeps['resolveConflict']; auditPass?: DaemonDeps['auditPass'] } = {}) {
   const calls: Array<{ path: string; body: unknown }> = []
   const claims = [...(opts.claim ?? [ok({ claim: null, reason: 'Nothing to work on.' })])]
   const runs: Array<Parameters<DaemonDeps['workOne']>> = []
@@ -41,6 +41,9 @@ function harness(opts: { heartbeat?: Reply | ((n: number) => Reply | undefined);
     now: () => Date.parse('2026-10-27T12:00:00Z'),
     log: () => {},
     host: { hostId: 'a'.repeat(64), hostname: 'alienware', platform: 'wsl2', version: '0.31.0' },
+    repos: new Map([['glot', 'kensaurus/glot.it']]),
+    resolveConflict: opts.resolveConflict ?? (async () => { throw new Error('unexpected conflict run') }),
+    auditPass: opts.auditPass ?? (async () => { throw new Error('unexpected audit run') }),
   }
   return { daemon: createDaemon(CONFIG, deps), calls, runs }
 }
@@ -129,6 +132,66 @@ describe('mushi work --daemon', () => {
     await daemon.tick()
     expect(daemon.stopped).toBeNull()
     expect(daemon.hostState).toBe('backoff')
+  })
+})
+
+describe('lane modes (P3)', () => {
+  const Q = '9000000a-0000-4000-8000-000000000000'
+  const conflictReply = ok({
+    claim: { id: CLAIM, kind: 'conflict', laneId: LANE, model: 'grok-4.7-xhigh-fast', conflict: { queueId: Q, repo: 'kensaurus/glot.it', prNumber: 7, headRef: 'cursor/mushi-fix-7', headSha: 'c'.repeat(40), prUrl: null } },
+  })
+
+  it("tells the server which repository each lane's clone is, never its path", async () => {
+    const { daemon, calls } = harness()
+    await daemon.tick()
+    const hb = calls.find((c) => c.path === '/v1/worker/heartbeat')!.body as { lanes: Array<{ repo?: string }> }
+    expect(hb.lanes[0]!.repo).toBe('kensaurus/glot.it')
+  })
+
+  it('a conflicts lane runs the conflict in its clone and reports the pushed merge; it takes no follow-ups', async () => {
+    const seen: unknown[] = []
+    const { daemon, calls } = harness({
+      lane: { mode: 'conflicts' },
+      claim: [conflictReply],
+      resolveConflict: async (t, o) => (seen.push([t.prNumber, o.repoDir, o.model]), { result: 'pushed', headAfter: 'd'.repeat(40), detail: 'merged main' }),
+    })
+    await daemon.tick()
+    await daemon.settle()
+    expect(seen).toEqual([[7, '/home/u/glot', 'grok-4.7-xhigh-fast']])
+    expect(calls.some((c) => c.path.endsWith('/local-followups'))).toBe(false)
+    const done = calls.find((c) => c.path === `/v1/worker/claims/${CLAIM}/done`)!
+    expect(done.body).toEqual({ outcome: 'pushed', failureKind: null, detail: 'merged main', headAfter: 'd'.repeat(40) })
+  })
+
+  it('an audit lane passes the veto model and reports what it filed', async () => {
+    const seen: unknown[] = []
+    const { daemon, calls } = harness({
+      lane: { mode: 'audit' },
+      claim: [ok({ claim: { id: CLAIM, kind: 'audit', laneId: LANE, model: 'grok-4.7-xhigh-fast', audit: { reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 } } })],
+      auditPass: async (_api, id, o) => (seen.push([id, o.laneName, o.reviewModel]), { result: 'filed', detail: 'src/a.tsx: 1 filed' }),
+    })
+    await daemon.tick()
+    await daemon.settle()
+    expect(seen).toEqual([[CLAIM, 'glot', 'claude-opus-5-5-medium']])
+    expect(calls.find((c) => c.path === `/v1/worker/claims/${CLAIM}/done`)!.body).toMatchObject({ outcome: 'filed', failureKind: null })
+  })
+
+  it('gives back a claim of the wrong kind, or one it cannot read, and runs nothing', async () => {
+    const unreadable = ok({ claim: { id: CLAIM, kind: 'conflict', model: null, conflict: { queueId: Q, repo: 'kensaurus/glot.it', prNumber: 7, headRef: '--upload-pack=sh', headSha: 'c'.repeat(40) } } })
+    for (const reply of [conflictReply, unreadable]) {
+      const { daemon, calls, runs } = harness({ claim: [reply] })
+      await daemon.tick()
+      await daemon.settle()
+      expect(runs).toHaveLength(0)
+      expect(calls.find((c) => c.path === `/v1/worker/claims/${CLAIM}/done`)!.body).toMatchObject({ outcome: 'skipped' })
+    }
+  })
+
+  it('a skill lane runs its claim like a fix', async () => {
+    const { daemon, runs } = harness({ lane: { mode: 'skill' }, claim: [claimReply] })
+    await daemon.tick()
+    await daemon.settle()
+    expect(runs).toHaveLength(1)
   })
 })
 
