@@ -8,9 +8,10 @@
  * is green, and the Update center then shows "CI failing" on a clean PR.
  *
  * USAGE:
- * POST /sdk-upgrade/:id/sync and the sdk-release-sync cron both call
- * `fetchUpgradeCiOnHead`, so a page-open refresh and the 5-minute sweep
- * store the same commit's conclusion.
+ * `syncSdkReleaseJob` calls `fetchUpgradeCiOnHead`. The on-demand sync
+ * route and the sdk-release-sync cron both call `syncSdkReleaseJob`, so a
+ * page-open refresh and the 5-minute sweep store the same commit's conclusion.
+ * A failed pull-request, check, or deploy read throws. Callers store nothing.
  *
  * DEPENDENCIES: `_shared/github.ts` (pull request, check runs, deployments).
  */
@@ -28,8 +29,9 @@ import {
 } from './github.ts'
 
 /**
- * Head SHA when GitHub returned one. The stored bump SHA is only the
- * fallback when the pull request could not be read.
+ * Head SHA when GitHub returned one. The stored bump SHA is the fallback
+ * only when the pull request was read and has no head. A failed read throws
+ * from `fetchUpgradeCiOnHead`; callers then store nothing.
  */
 export function upgradeCheckCommitSha(
   headSha: string | null | undefined,
@@ -51,7 +53,9 @@ export interface UpgradeCiSnapshot {
 /**
  * Load the pull request, then its checks and deployment on that head.
  * Checks are never read on the stored bump SHA when the head is known.
- * The workflow run is optional: the on-demand sync wants it, the cron does not.
+ * A failed pull-request, check, or deploy read throws so the caller stores
+ * nothing. The workflow run is optional and display-only: a failed workflow
+ * read becomes null. The on-demand sync asks for it; the cron does not.
  */
 export async function fetchUpgradeCiOnHead(
   token: string,
@@ -60,15 +64,15 @@ export async function fetchUpgradeCiOnHead(
   storedSha: string | null | undefined,
   opts?: { workflow?: boolean },
 ): Promise<UpgradeCiSnapshot> {
-  const pr = await fetchPullRequestDetails(token, ref, prNumber).catch(() => null)
+  const pr = await fetchPullRequestDetails(token, ref, prNumber)
   const commitSha = upgradeCheckCommitSha(pr?.headSha, storedSha)
   if (!commitSha) return { pr, commitSha, checks: null, workflow: null, deploy: null }
   const [checks, workflow, deploy] = await Promise.all([
-    fetchLatestCheckRun(token, ref, commitSha).catch(() => null),
+    fetchLatestCheckRun(token, ref, commitSha),
     opts?.workflow
       ? fetchLatestWorkflowRunForSha(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null)
       : Promise.resolve(null),
-    fetchLatestDeploymentStatusForSha(token, ref, commitSha).catch(() => null),
+    fetchLatestDeploymentStatusForSha(token, ref, commitSha),
   ])
   return { pr, commitSha, checks, workflow, deploy }
 }

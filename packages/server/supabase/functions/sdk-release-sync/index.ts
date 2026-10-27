@@ -3,10 +3,9 @@
  * PURPOSE: Periodic CI/deploy status sync for active SDK upgrade jobs.
  *
  * Called by pg_cron every 5 minutes. Finds jobs in `pr_opened | ready_to_merge |
- * blocked | merged | deploying` states, polls GitHub for the PR head's
- * check-run + deployment status (not the stored bump commit), and upserts
- * results into sdk_upgrade_jobs (_shared/sdk-release-sync.ts). A failed
- * GitHub read writes nothing.
+ * blocked | merged | deploying` states and calls `syncSdkReleaseJob`, which
+ * reads checks on the PR head (not the stored bump commit) and upserts
+ * sdk_upgrade_jobs. A failed GitHub read writes nothing.
  *
  * Before that, jobs in status `awaiting_lockfile` (ADR 0019) get their PR
  * opened once the host's lockfile workflow pushed, or after 30 minutes.
@@ -20,53 +19,18 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { logDbFailure } from '../_shared/error-codes.ts'
+import { resolveProjectGithubToken } from '../_shared/github.ts'
 import {
-  resolveProjectGithubToken,
-  fetchPullRequestDetails as readPullRequest,
-  fetchLatestCheckRun as readLatestCheckRun,
-  fetchLatestDeploymentStatusForSha as readLatestDeployment,
-  fetchLatestWorkflowRunForSha as readLatestWorkflow,
-  type GithubRepoRef,
-} from '../_shared/github.ts'
-import { upgradeCheckCommitSha } from '../_shared/sdk-upgrade-ci.ts'
-import {
-  deriveSdkReleaseUpdate,
-  describeGithubReadFailure,
-  type SdkReleaseGithubState,
+  syncSdkReleaseJob,
   type SdkReleaseJob,
 } from '../_shared/sdk-release-sync.ts'
 import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
-
-/**
- * Pull request first, then checks and deploy on that head (stored bump SHA
- * only when GitHub did not return a head). A failed check or deploy read
- * throws so the tick stores nothing and keeps the last known CI state.
- */
-async function fetchUpgradeCiOnHead(
-  token: string,
-  ref: GithubRepoRef,
-  prNumber: number,
-  storedSha: string | null | undefined,
-  opts?: { workflow?: boolean },
-): Promise<SdkReleaseGithubState> {
-  const pr = await readPullRequest(token, ref, prNumber)
-  const commitSha = upgradeCheckCommitSha(pr?.headSha, storedSha)
-  if (!commitSha) return { pr, commitSha, checks: null, deploy: null, workflow: null }
-  const [checks, deploy, workflow] = await Promise.all([
-    readLatestCheckRun(token, ref, commitSha),
-    readLatestDeployment(token, ref, commitSha),
-    opts?.workflow
-      ? readLatestWorkflow(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null)
-      : Promise.resolve(null),
-  ])
-  return { pr, commitSha, checks, deploy, workflow }
-}
 
 const log = rootLog.child('sdk-release-sync')
 
 const SYNC_STATUSES = ['pr_opened', 'ready_to_merge', 'blocked', 'merged', 'deploying']
 
-const app = new Hono()
+export const app = new Hono()
 
 app.get('/sdk-release-sync/health', (c) => c.json({ ok: true }))
 
@@ -108,29 +72,17 @@ app.post('/sdk-release-sync', async (c) => {
       // Checks follow the live head, so a later commit cannot keep the bump
       // commit's red result. A failed GitHub read (403 rate limit, 5xx,
       // timeout) stores nothing: the job keeps its last known CI state.
-      const prUrlMatch = rawJob.pr_url?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/)
-      if (!prUrlMatch) {
-        results.push({ jobId: rawJob.id, releaseStatus: rawJob.release_status ?? 'pr_opened', error: 'Could not parse PR URL' })
+      const result = await syncSdkReleaseJob(db, token, rawJob)
+      if (!result.ok) {
+        if (result.code === 'GITHUB_UNAVAILABLE') {
+          log.warn('sync skipped', { jobId: rawJob.id, code: 'GITHUB_UNAVAILABLE', err: result.message })
+        } else if (result.code === 'SYNC_PERSIST_FAILED') {
+          log.error('failed to persist sync', { jobId: rawJob.id, err: result.message })
+        }
+        results.push({ jobId: rawJob.id, releaseStatus: rawJob.release_status ?? 'pr_opened', error: result.message })
         continue
       }
-      const ref: GithubRepoRef = { owner: prUrlMatch[1], repo: prUrlMatch[2] }
-      let snap: SdkReleaseGithubState
-      try {
-        snap = await fetchUpgradeCiOnHead(token, ref, parseInt(prUrlMatch[3], 10), rawJob.commit_sha)
-      } catch (err) {
-        const message = `GitHub did not answer (${describeGithubReadFailure(err)})`
-        log.warn('sync skipped', { jobId: rawJob.id, code: 'GITHUB_UNAVAILABLE', err: message })
-        results.push({ jobId: rawJob.id, releaseStatus: rawJob.release_status ?? 'pr_opened', error: message })
-        continue
-      }
-      const derived = deriveSdkReleaseUpdate(rawJob, snap, new Date().toISOString())
-      const { error: updErr } = await db.from('sdk_upgrade_jobs').update(derived.update).eq('id', rawJob.id)
-      if (updErr) {
-        log.error('failed to persist sync', { jobId: rawJob.id, err: updErr.message })
-        results.push({ jobId: rawJob.id, releaseStatus: rawJob.release_status ?? 'pr_opened', error: updErr.message })
-        continue
-      }
-      const { releaseStatus, prState } = derived
+      const { releaseStatus, prState } = result
 
       results.push({ jobId: rawJob.id, releaseStatus })
       log.info('synced job', { jobId: rawJob.id, releaseStatus, prState })
@@ -145,4 +97,6 @@ app.post('/sdk-release-sync', async (c) => {
   return c.json({ ok: true, data: { synced: results.length, results, awaiting } })
 })
 
-Deno.serve(withSentry('sdk-release-sync', app.fetch))
+if (typeof Deno !== 'undefined' && typeof Deno.serve === 'function') {
+  Deno.serve(withSentry('sdk-release-sync', app.fetch))
+}

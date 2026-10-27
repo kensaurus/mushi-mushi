@@ -15,16 +15,13 @@
 
 import type { getServiceClient } from './db.ts'
 import {
-  fetchLatestCheckRun,
-  fetchLatestDeploymentStatusForSha,
-  fetchLatestWorkflowRunForSha,
-  fetchPullRequestDetails,
   normalizeDeployStatus,
   type CheckRunSnapshot,
   type DeploymentStatusSnapshot,
   type PullRequestDetails,
   type WorkflowRunSnapshot,
 } from './github.ts'
+import { fetchUpgradeCiOnHead } from './sdk-upgrade-ci.ts'
 
 /** The stored job columns a sync reads. */
 export interface SdkReleaseJob {
@@ -104,8 +101,9 @@ export function deriveSdkReleaseUpdate(job: SdkReleaseJob, github: SdkReleaseGit
 }
 
 /**
- * Read the PR, its checks and its deployment from GitHub and store the
- * result. Any of the three reads failing stores nothing (GITHUB_UNAVAILABLE).
+ * Read the PR, then its checks and deployment on that head, and store the
+ * result. Any of those reads failing stores nothing (GITHUB_UNAVAILABLE).
+ * The workflow run is display-only and does not fail the sync.
  */
 export async function syncSdkReleaseJob(
   db: ReturnType<typeof getServiceClient>,
@@ -122,16 +120,7 @@ export async function syncSdkReleaseJob(
 
   let github: SdkReleaseGithubState
   try {
-    const pr = await fetchPullRequestDetails(token, ref, parseInt(m[3], 10))
-    const commitSha = pr?.headSha ?? job.commit_sha ?? null
-    const [checks, deploy, workflow] = commitSha
-      ? await Promise.all([
-          fetchLatestCheckRun(token, ref, commitSha),
-          fetchLatestDeploymentStatusForSha(token, ref, commitSha),
-          opts.workflow ? fetchLatestWorkflowRunForSha(token, ref, pr?.baseRef ?? null, commitSha).catch(() => null) : null,
-        ])
-      : [null, null, null]
-    github = { pr, commitSha, checks, deploy, workflow }
+    github = await fetchUpgradeCiOnHead(token, ref, parseInt(m[3], 10), job.commit_sha, opts)
   } catch (err) {
     return { ok: false, code: 'GITHUB_UNAVAILABLE', message: `GitHub did not answer (${describeGithubReadFailure(err)})` }
   }
