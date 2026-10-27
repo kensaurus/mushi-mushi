@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: MIT
+/**
+ * Runs only with MUSHI_UX_BROWSER_TESTS=1 (launches Chromium).
+ *
+ * A fresh-eyes run (ADR 0051) against a tiny local app with a landing page, a
+ * sign-in form, a dashboard and a report page, driven by a scripted "model":
+ *
+ * - with a synthetic identity it signs in (the real values reach the app, the
+ *   placeholders reach the record), creates an app with a same-origin write,
+ *   reaches the goal and gets a time to first value;
+ * - a write to another origin, a third-party sign-in and a payment page are
+ *   refused, whatever the model asks;
+ * - with no account (dry run) nothing is written, the run stops at the
+ *   sign-in wall, and the wall is a confirmed finding;
+ * - an opinion two sessions share is filed once, one session's is not.
+ */
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { runFreshEyes, type FreshAsk } from './fresh-eyes.js'
+
+const IDENTITY = { email: 'fe-test@synthetic.example', password: 'Pw-0123456789-xyz' }
+
+interface Fixture {
+  url: string
+  writes: Array<{ method: string; path: string; body: string }>
+  close(): Promise<void>
+}
+
+const body = (req: IncomingMessage) => new Promise<string>((r) => {
+  let b = ''
+  req.on('data', (c) => (b += c))
+  req.on('end', () => r(b))
+})
+
+async function listen(handler: Parameters<typeof createServer>[1]): Promise<{ server: Server; url: string }> {
+  const server = createServer(handler)
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` }
+}
+
+const html = (title: string, main: string, script = '') =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><main>${main}</main>${script ? `<script>${script}</script>` : ''}</body></html>`
+
+async function startFixture(otherOrigin: string): Promise<Fixture> {
+  const writes: Fixture['writes'] = []
+  const { server, url } = await listen(async (req, res) => {
+    const method = req.method ?? 'GET'
+    const path = (req.url ?? '/').split('?')[0]!
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) writes.push({ method, path, body: await body(req) })
+    const send = (status: number, page: string, headers: Record<string, string> = {}) => {
+      res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', ...headers })
+      res.end(page)
+    }
+    if (path === '/') {
+      return send(200, html('Acme', `<h1>Acme explains your bugs</h1><p>Sign in to see why your app broke, in plain words, with a fix ready for your editor. It takes about a minute.</p><a href="/login">Get started</a> <a href="/pricing">Pricing</a> <button id="copy">Copy the install line</button>`, "document.getElementById('copy').onclick = () => navigator.clipboard.writeText('npm i acme')"))
+    }
+    if (path === '/pricing') return send(200, html('Pricing', `<h1>Pricing</h1><p>Free for one app, more when you grow.</p><a href="https://checkout.stripe.com/c/pay/cs_test_1">Upgrade</a> <a href="/">Home</a>`))
+    if (path === '/login' && method === 'GET') {
+      return send(200, html('Sign in', `<h1>Sign in to Acme</h1><a href="https://github.com/login/oauth/authorize?client_id=1">Continue with GitHub</a><form method="post" action="/api/session"><label>Email <input type="email" name="email"></label><label>Password <input type="password" name="password"></label><button type="submit">Sign in</button></form>`))
+    }
+    if (path === '/api/session' && method === 'POST') {
+      const w = writes.at(-1)!
+      const ok = w.body.includes(encodeURIComponent(IDENTITY.email)) && w.body.includes(encodeURIComponent(IDENTITY.password))
+      return send(303, '', ok ? { location: '/dashboard', 'set-cookie': 'sid=1; Path=/' } : { location: '/login' })
+    }
+    if (path === '/dashboard') {
+      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
+document.getElementById('create').onclick = async () => { await fetch('/api/apps', { method: 'POST', body: '{}' }); location.href = '/reports/1' }`))
+    }
+    if (path === '/api/apps' && method === 'POST') {
+      res.writeHead(201, { 'content-type': 'application/json' })
+      return res.end('{"ok":true}')
+    }
+    if (path === '/reports/1') return send(200, html('Report', `<h1>Save does nothing</h1><h2>Why it broke</h2><p>The Save handler never awaited the request, so the page moved on before it finished.</p><a href="/dashboard">Back to dashboard</a>`))
+    send(404, 'not found')
+  })
+  return { url, writes, close: () => new Promise<void>((r) => server.close(() => r())) }
+}
+
+/** A scripted visitor: reads the snapshot and the steps so far, like the model would. */
+function scriptedAsk(feelingOnLanding: (session: number) => boolean): FreshAsk {
+  return async (prompt, dir) => {
+    const snap = prompt.split('<snapshot>')[1]?.split('</snapshot>')[0] ?? ''
+    const did = prompt.split('<snapshot>')[0] ?? ''
+    const session = Number(/[\\/]s(\d+)-\d+$/.exec(dir)?.[1] ?? '1')
+    const noAccount = prompt.includes('You have no account yet')
+    const j = (o: object) => ({ text: JSON.stringify(o) })
+    if (snap.includes('Why it broke')) return j({ action: 'done' })
+    if (snap.includes('Create app')) return j({ action: 'click', role: 'button', name: 'Create app' })
+    if (snap.includes('Sign in to Acme')) {
+      if (noAccount) return j({ action: 'stuck', reason: 'needs an account' })
+      if (!did.includes('Continue with GitHub')) return j({ action: 'click', role: 'link', name: 'Continue with GitHub' })
+      if (!did.includes('{{email}}')) return j({ action: 'fill', role: 'textbox', name: 'Email', value: '{{email}}' })
+      if (!did.includes('{{password}}')) return j({ action: 'fill', role: 'textbox', name: 'Password', value: '{{password}}' })
+      return j({ action: 'click', role: 'button', name: 'Sign in' })
+    }
+    if (snap.includes('Pricing') && snap.includes('Upgrade')) {
+      return did.includes('Upgrade') ? j({ action: 'click', role: 'link', name: 'Home' }) : j({ action: 'click', role: 'link', name: 'Upgrade' })
+    }
+    if (snap.includes('Acme explains your bugs')) {
+      const feeling = feelingOnLanding(session) ? { feeling: 'unclear_copy', why: 'What is a diagnosis?' } : {}
+      if (!did.includes('Copy the install line')) return j({ action: 'click', role: 'button', name: 'Copy the install line', ...feeling })
+      if (!noAccount && !did.includes('Pricing')) return j({ action: 'click', role: 'link', name: 'Pricing' })
+      return j({ action: 'click', role: 'link', name: 'Get started' })
+    }
+    return j({ action: 'back' })
+  }
+}
+
+let app: Fixture
+let other: { server: Server; url: string; writes: number }
+const dirs: string[] = []
+const out = () => {
+  const d = mkdtempSync(join(tmpdir(), 'fresh-eyes-browser-'))
+  dirs.push(d)
+  return d
+}
+
+beforeAll(async () => {
+  let writes = 0
+  const o = await listen((req, res) => {
+    if (req.method !== 'GET' && req.method !== 'OPTIONS') writes++
+    res.writeHead(204, { 'access-control-allow-origin': '*' })
+    res.end()
+  })
+  other = { ...o, get writes() { return writes } } as typeof other
+  app = await startFixture(o.url)
+})
+afterAll(async () => {
+  await app?.close()
+  await new Promise<void>((r) => other?.server.close(() => r()))
+  for (const d of dirs) rmSync(d, { recursive: true, force: true })
+})
+
+describe('fresh-eyes on a local app', () => {
+  it('signs in with the synthetic identity, writes only to the app, and reaches the goal', async () => {
+    const dir = out()
+    const result = await runFreshEyes({
+      url: `${app.url}/`,
+      goal: 'see why my app broke',
+      success: { url: '/reports/*', text: 'Why it broke' },
+      sessions: 2,
+      steps: 15,
+      identity: async () => IDENTITY,
+      ask: scriptedAsk(() => true),
+      outDir: dir,
+    })
+    expect(result.reached).toBe(2)
+    expect(result.ttfvSeconds).toBeGreaterThan(0)
+    // The app got the real values; the record keeps only placeholders.
+    expect(app.writes.some((w) => w.path === '/api/session' && w.body.includes(encodeURIComponent(IDENTITY.password)))).toBe(true)
+    expect(app.writes.some((w) => w.path === '/api/apps')).toBe(true)
+    const saved = readFileSync(join(dir, 'result.json'), 'utf8')
+    expect(saved).not.toContain(IDENTITY.password)
+    expect(saved).not.toContain(IDENTITY.email)
+    expect(saved).toContain('{{password}}')
+    // Another origin, a third-party sign-in and a payment page never got a request through.
+    expect(other.writes).toBe(0)
+    const steps = result.sessions.flatMap((s) => s.steps)
+    expect(steps.some((s) => s.action.includes('Continue with GitHub') && (s.outcome === 'refused' || s.outcome === 'blocked'))).toBe(true)
+    expect(steps.some((s) => s.action.includes('Upgrade') && s.outcome === 'refused')).toBe(true)
+    expect(result.sessions.every((s) => s.steps.every((st) => st.modelMs >= 0 && st.appMs >= 0))).toBe(true)
+    // The copy button works in a browser that grants the clipboard, as a person's does.
+    expect(result.findings.some((f) => /clipboard/i.test(f.summary))).toBe(false)
+    // Both sessions found the landing copy unclear: filed once, as an opinion.
+    const opinions = result.findings.filter((f) => f.basis === 'opinion')
+    expect(opinions).toHaveLength(1)
+    expect(opinions[0]!.sessions).toEqual([1, 2])
+  })
+
+  it('with no account writes nothing and stops at the sign-in wall, a confirmed finding', async () => {
+    const before = app.writes.length
+    const result = await runFreshEyes({
+      url: `${app.url}/`,
+      goal: 'see why my app broke',
+      success: { url: '/reports/*', text: 'Why it broke' },
+      sessions: 2,
+      steps: 10,
+      dryRun: true,
+      identity: async () => IDENTITY,
+      ask: scriptedAsk((s) => s === 1),
+      outDir: out(),
+    })
+    expect(app.writes.length).toBe(before)
+    expect(result.hasAccount).toBe(false)
+    expect(result.reached).toBe(0)
+    expect(result.stalledAt).toEqual({ screen: '/login', reason: 'signup_wall', sessions: 2 })
+    const wall = result.findings.find((f) => f.rule === 'fresh-eyes-signup-wall')
+    expect(wall?.basis).toBe('measured')
+    expect(wall?.sessions).toEqual([1, 2])
+    // One session's opinion is not filed.
+    expect(result.findings.filter((f) => f.basis === 'opinion')).toEqual([])
+  })
+})

@@ -602,6 +602,15 @@ export interface FreshEyesOptions {
 }
 
 const VIEWPORT = { width: 1280, height: 800 }
+
+/**
+ * A real browser lets a click copy to the clipboard; headless Chromium denies
+ * it, and a page's unguarded writeText then throws (the first dry run filed
+ * that, 2026-10-27). Grant what a person's browser grants.
+ */
+async function likeARealBrowser(ctx: Awaited<ReturnType<BrowserSession['freshContext']>>, origin: string): Promise<void> {
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin }).catch(() => {})
+}
 const NAV_TIMEOUT = 60_000
 
 async function pageFacts(page: Page): Promise<PageFacts> {
@@ -738,6 +747,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   const { index, identity, browser, opts, base } = x
   const session: FreshEyesSession = { index, outcome: 'stalled', stall: null, ttfvSeconds: null, appSeconds: 0, readSeconds: 0, modelSeconds: 0, backtracks: 0, steps: [], opinions: [] }
   const ctx = await browser.freshContext()
+  await likeARealBrowser(ctx, base.origin)
   const page = await ctx.newPage()
   await page.setViewportSize(VIEWPORT)
   const watcher = watch(page, base.origin, x.apiHosts)
@@ -971,6 +981,7 @@ export function isMeasuredStall(reason: StallReason): boolean {
 /** Replay a candidate's steps from a fresh, signed-out page, no model, and look for the same fact. */
 async function replayCandidate(browser: BrowserSession, base: URL, c: Candidate, identity: Identity | null): Promise<boolean> {
   const ctx = await browser.freshContext()
+  await likeARealBrowser(ctx, base.origin)
   const page = await ctx.newPage()
   await page.setViewportSize(VIEWPORT)
   const watcher = watch(page, base.origin, [])
