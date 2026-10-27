@@ -20,7 +20,8 @@
  *          the tester marketplace (tester portal, public marketplace and
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
- *          plan P1), local workers (`mushi work --daemon`, ADR 0048) and repo clean-up (ADR 0051).
+ *          plan P1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
+ *          and fresh-eyes runs (ADR 0053).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -57,6 +58,7 @@ import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
+import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
 
 ensureSentry('api-ext')
 
@@ -95,6 +97,7 @@ registerSetupGapsRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)
+registerFreshEyesRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

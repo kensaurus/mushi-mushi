@@ -781,6 +781,14 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report',
   '/v1/admin/projects/:pid/ux-runs/:runId/uploads',
 ]);
+// Fresh-eyes runs (fresh-eyes.ts, ADR 0051).
+forwardToApiExt([
+  '/v1/admin/fresh-eyes/test-account',
+  '/v1/admin/projects/:pid/fresh-eyes',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/uploads',
+  '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);

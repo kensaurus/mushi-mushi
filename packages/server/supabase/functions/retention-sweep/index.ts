@@ -28,7 +28,10 @@
 //      them manually. On free plans (no explicit override) the project's
 //      first real report is kept, so a returning new user still sees
 //      their first diagnosis (keepsFirstReport / firstRealReportId).
-//   3. Writes ONE audit_logs row per project per sweep with
+//   3. Deletes synthetic fresh-eyes accounts past their 24 h, with the
+//      projects and organizations they alone own (ADR 0051,
+//      _shared/fresh-eyes-cleanup.ts).
+//   4. Writes ONE audit_logs row per project per sweep with
 //      { deleted_count, retention_days, plan_id, source }, so the
 //      operator UI can render "last sweep on X projects, deleted N rows".
 //
@@ -51,6 +54,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { listPlans, type PricingPlan } from '../_shared/plans.ts'
 import { resolveProjectRetention } from '../_shared/retention-policy.ts'
 import { firstRealReportId, type OldestReportRow } from '../_shared/first-report.ts'
+import { sweepSyntheticAccounts, type CleanupDb } from '../_shared/fresh-eyes-cleanup.ts'
 
 // Ambient `Deno` so the file type-checks under both Deno (real Edge Function
 // runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
@@ -97,9 +101,11 @@ const handler = async (req: Request): Promise<Response> => {
     const voice = await sweepVoiceIntake(db)
     const traces = await sweepLlmTraces(db)
     const uxCaptures = await sweepUxCaptures(db)
+    // Fresh-eyes test accounts past their 24 h (ADR 0051).
+    const synthetic = await sweepSyntheticAccounts(db as unknown as CleanupDb, new Date(), (msg, ctx) => rlog.warn(msg, ctx))
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + synthetic.accounts_deleted,
       metadata: {
         llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
@@ -108,6 +114,8 @@ const handler = async (req: Request): Promise<Response> => {
         voice_audio_deleted: voice.audio_deleted,
         voice_sessions_expired: voice.sessions_expired,
         ux_captures_deleted: uxCaptures.deleted,
+        synthetic_accounts_deleted: synthetic.accounts_deleted,
+        synthetic_cleanup_failed: synthetic.failed,
       },
     })
 
@@ -121,6 +129,7 @@ const handler = async (req: Request): Promise<Response> => {
         voice,
         llm_traces: traces,
         ux_captures: uxCaptures,
+        synthetic_accounts: synthetic,
       },
     })
   } catch (err) {

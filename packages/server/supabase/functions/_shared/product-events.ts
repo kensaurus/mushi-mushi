@@ -145,6 +145,28 @@ async function isDemoProject(db: SupabaseClient, projectId: unknown): Promise<bo
   return _demoProjectId !== null && projectId === _demoProjectId
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * True when the console user, or the owner of the project the event is
+ * about, is a synthetic fresh-eyes account (synthetic_accounts, ADR 0051).
+ * A failed check records the event (losing real funnel rows is worse) and
+ * says so; the retention sweep deletes a synthetic account's rows anyway.
+ */
+export async function isSyntheticSubject(db: SupabaseClient, userId: string | null | undefined, projectId: unknown): Promise<boolean> {
+  const user = typeof userId === 'string' && UUID_RE.test(userId) ? userId : null
+  const project = typeof projectId === 'string' && UUID_RE.test(projectId) ? projectId : null
+  if (!user && !project) return false
+  try {
+    const { data, error } = await db.rpc('is_synthetic_subject', { p_user_id: user, p_project_id: project })
+    if (error) throw new Error(error.message)
+    return data === true
+  } catch (err) {
+    log.warn('product-events: synthetic check failed, event recorded', { error: err instanceof Error ? err.message : String(err) })
+    return false
+  }
+}
+
 /** True when the mushi-self project is configured (company funnel enabled). */
 export function isSelfFunnelConfigured(): boolean {
   return Boolean(SELF_PROJECT_ID)
@@ -172,6 +194,8 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       log.warn('product-events: properties too large', { event: payload.eventName })
       return false
     }
+    // Fresh-eyes test accounts and their projects are not people (ADR 0051).
+    if (await isSyntheticSubject(db, payload.userId, properties.project_id)) return false
     // The /connect demo runs on one shared read-only key, so a stranger's
     // tool call would otherwise land on the demo project owner's person row
     // and count as their habit. Tag it and attribute it to nobody.

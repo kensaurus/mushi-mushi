@@ -61,8 +61,9 @@ and model-free replay.
   on a reserved domain and returns the password once. The user is recorded in
   `synthetic_accounts` and in `operator_users`, the list every company count
   and lifecycle email already excludes; server product events for it are not
-  written. `retention-sweep` deletes it after 24 h, with the projects and
-  organizations it alone owns. Other apps can pass their own test account; a
+  written. The daily `retention-sweep` deletes it once it is 24 h old, with
+  the projects and organizations it alone owns (an organization someone else
+  joined keeps its account, and the sweep says so). Other apps can pass their own test account; a
   hosted "test sign-up hook" for them is not built.
 - **Time is the app's time.** Each step records the model's think time and the
   app's time (action, navigation, settle) apart. Time to first value is the
