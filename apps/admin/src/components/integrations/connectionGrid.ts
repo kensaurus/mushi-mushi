@@ -4,7 +4,8 @@
  *          2026-10-27): "Which tools are connected? What's broken?"
  *
  *          One tile per tool a solo builder wires up (Sentry, GitHub, Slack,
- *          Langfuse, Cursor, Linear), each with the SAME verdict its card
+ *          Langfuse, Cursor, Linear, and Claude Code once it is set up), each
+ *          with the SAME verdict its card
  *          below shows: Sentry through the shared sentryConnectionFromPageData
  *          (also read by Settings → General), Slack through the Slack card's
  *          own slackCardConnection, the rest through connectionFromProbe on
@@ -20,7 +21,7 @@ import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import { slackCardConnection } from './slackConnection'
 import { PLATFORM_DEFS, type HealthRow, type Kind, type PlatformResponse } from './types'
 
-export type GridToolId = 'sentry' | 'github' | 'slack' | 'langfuse' | 'cursor_cloud' | 'linear'
+type GridToolId = 'sentry' | 'github' | 'slack' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
 export interface GridTile {
   id: GridToolId
@@ -133,12 +134,17 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
     lastLabel: input.linearConnected && linearProbe ? 'Checked' : null,
   }
 
+  // Claude Code is the other fix agent. The integrations stats (and so the
+  // sidebar badge) count it when it is set up, so the grid shows it then too.
+  const claude = platformTile(input, 'claude_code_agent', 'claude_code_agent', 'Claude Code', 'claude')
+
   return [
     sentry,
     platformTile(input, 'github', 'github', 'GitHub', 'github'),
     slack,
     platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'),
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
+    ...(claude.view.state === 'not_connected' ? [] : [claude]),
     linear,
   ]
 }

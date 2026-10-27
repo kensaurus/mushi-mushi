@@ -48,6 +48,13 @@ describe('buildConnectionGrid', () => {
     expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['sentry', 'github', 'slack', 'langfuse', 'cursor_cloud', 'linear'])
   })
 
+  it('shows Claude Code only once it is set up, so a failing agent is never hidden from the grid', () => {
+    const withClaude: PlatformResponse = { ...platform, platform: { ...platform.platform, claude_code_agent: { claude_api_key_ref: 'ref' } } }
+    const tiles = buildConnectionGrid(input({ platform: withClaude, history: [probe('sentry'), probe('github'), probe('claude_code_agent', 'down', 'HTTP 401')] }))
+    expect(tiles.map((t) => t.id)).toContain('claude_code_agent')
+    expect(brokenConnections(tiles).map((t) => t.id)).toEqual(['claude_code_agent'])
+  })
+
   it("Sentry's tile is the verdict Settings → General reads, from the same inputs (e469ff36)", () => {
     const tile = buildConnectionGrid(input()).find((t) => t.id === 'sentry')!
     const shared = sentryConnectionFromPageData({ platform, history: [probe('sentry'), probe('github')], deliveries: [], now: NOW })
