@@ -17,6 +17,7 @@ import {
   LANDING_FIX_PROMPT,
   LANDING_PILLARS,
   LANDING_OPERATOR,
+  LANDING_PRICING_STRIP,
   LANDING_WHERE_TO_START,
   LANDING_QUICKSTART_PLATFORMS,
   LANDING_COMPARISON_ROWS,
@@ -59,7 +60,15 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.soloCta).toBe('Start free →')
     expect(LANDING_OPERATOR.soloHref).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-closing`)
     expect(LANDING_OPERATOR.soloCtaId).toBe('landing-closing')
-    expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
+  })
+
+  it('keeps enterprise plumbing off the landing: no SSO, audit logs or operator docs (ADR 0052)', () => {
+    const closing = read('components', 'landing', 'ClosingCta.tsx')
+    const landing = read('content', 'index.mdx')
+    for (const text of [JSON.stringify(LANDING_OPERATOR), closing, landing]) {
+      expect(text).not.toMatch(/single sign-on|SSO|audit log|docs\/operators/)
+    }
+    expect(LANDING_PRICING_STRIP.tierIds).toEqual(['free', 'indie', 'pro'])
   })
 
   it('keeps the funnel ids on the hero links: console signup, Cursor, npx and other editors', () => {

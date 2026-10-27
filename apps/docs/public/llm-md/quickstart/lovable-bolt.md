@@ -22,8 +22,9 @@ prompt. It takes about five minutes.
 [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-lovable-bolt)
 and create a project. On the setup page, in **Configure & install the SDK**,
 pick the **Script tag** tab. Your project ID is already in the tag. If the
-key still reads `mushi_xxx`, click **Mint SDK key** above it and the real
-key fills in. Then copy the tag.
+key still reads `mushi_xxx`, click **Generate API key** in the box above it
+(elsewhere in the console the button reads **Mint SDK key**) and the real key
+fills in. Then copy the tag.
 
 **You'll see:** a tag that starts with `
 

@@ -171,7 +171,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
-    a: 'Connect your editor to Mushi with the command npx mushi-mushi setup --ide cursor (it uses MCP, the standard way AI editors connect to outside tools). Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
+    a: 'Connect your editor to Mushi with the install box at the top of this page: one command for Claude Code, one click for Cursor. It uses MCP, the standard way AI editors connect to outside tools. Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
   },
   {
     q: 'Is it open source? Can I self-host?',
@@ -475,7 +475,8 @@ export const LANDING_MEDIATOR = {
 export const LANDING_PRICING_STRIP = {
   heading: 'What it costs',
   lead: 'You pay per diagnosis (one bug that Mushi explains), not for every error it sees. Duplicate reports and noise are filtered out for free. Every paid plan has a spending cap, so the bill cannot run away.',
-  tierIds: ['free', 'indie', 'pro', 'self-host'] as const,
+  // The solo builder's tiers only (ADR 0052); self-hosting is one click away on /pricing.
+  tierIds: ['free', 'indie', 'pro'] as const,
   cta: 'Full pricing and the estimator →',
   href: '/pricing',
   ctaId: 'landing-pricing',
@@ -493,10 +494,6 @@ export const LANDING_OPERATOR = {
   soloCta: 'Start free →',
   soloHref: `${ADMIN_DEMO_BASE}/signup?src=landing-closing`,
   soloCtaId: 'landing-closing',
-  teamLead:
-    'Setting it up for a team, with single sign-on (SSO) or audit logs? The operator notes on GitHub cover that.',
-  teamCta: 'Operators docs →',
-  teamHref: `${MUSHI_CANONICAL_URLS.repo}/tree/master/docs/operators`,
 } as const
 
 export const LANDING_MEDIA_CAPTIONS = {
