@@ -5,6 +5,8 @@
  *          release.published recipe event drafts and publishes a Mushi
  *          release, which messages each reporter. Default OFF; never an empty
  *          release; never twice for one version; one automatic draft at a time.
+ *          A finished production deployment_status is also stored as a
+ *          deploy observation, including when auto-release stays off.
  */
 
 import { describe, expect, it, vi } from 'vitest'
@@ -325,6 +327,71 @@ describe('routeGithubShipEvent (GitHub App release / deployment_status)', () => 
     expect(await routeGithubShipEvent(db as never, 'release', release(), schedule)).toEqual({
       status: 202, body: { ok: true, ignored: 'no_project_for_repo', repoFullName: 'acme/web' }, projectIds: [],
     })
+    expect(schedule).not.toHaveBeenCalled()
+    expect(db.table('deploy_observations')).toEqual([])
+  })
+
+  it('records a production deployment for each bound project and still schedules auto-release', async () => {
+    const db = makeFakeDb({
+      project_repos: [
+        { project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 },
+        { project_id: 'p-b', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 },
+      ],
+    })
+    const schedule = vi.fn()
+    const payload = {
+      deployment_status: { state: 'success', environment: 'Production', updated_at: '2026-10-27T01:00:00Z' },
+      deployment: { sha: 'a1b2c3d4e5f6a7b8', ref: 'v1.4.0', environment: 'Production', production_environment: true },
+      repository: { full_name: 'acme/web' },
+      installation: { id: 42 },
+    }
+    const out = await routeGithubShipEvent(db as never, 'deployment_status', payload, schedule)
+    expect(out).toEqual({
+      status: 202,
+      body: { ok: true, autoRelease: { queued: 2, version: 'v1.4.0' }, deployRecorded: 2 },
+      projectIds: ['p-a', 'p-b'],
+    })
+    expect(schedule).toHaveBeenCalledTimes(2)
+    expect(db.table('deploy_observations')).toEqual([
+      expect.objectContaining({ project_id: 'p-a', target_id: 'gh-production', source: 'github_deployment', ok: true, observed_commit: 'a1b2c3d4e5f6a7b8', observed_version: 'v1.4.0', observed_at: '2026-10-27T01:00:00.000Z' }),
+      expect.objectContaining({ project_id: 'p-b', source: 'github_deployment', ok: true }),
+    ])
+    await routeGithubShipEvent(db as never, 'deployment_status', payload, schedule)
+    expect(db.table('deploy_observations')).toHaveLength(2)
+  })
+
+  it('records a failed production deployment and does not schedule auto-release', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 }],
+    })
+    const schedule = vi.fn()
+    const out = await routeGithubShipEvent(db as never, 'deployment_status', {
+      deployment_status: { state: 'failure', environment: 'Production', updated_at: '2026-10-27T02:00:00Z' },
+      deployment: { sha: 'a1b2c3d4e5f6a7b8', environment: 'Production' },
+      repository: { full_name: 'acme/web' },
+      installation: { id: 42 },
+    }, schedule)
+    expect(out.status).toBe(202)
+    expect(out.body).toEqual({ ok: true, deployRecorded: 1 })
+    expect(schedule).not.toHaveBeenCalled()
+    expect(db.table('deploy_observations')[0]).toMatchObject({ ok: false, source: 'github_deployment', error: 'GitHub deployment failure' })
+  })
+
+  it('a failed deploy-observation write is a 500 before auto-release is scheduled', async () => {
+    const { db } = createFakeDb((q) => {
+      if (q.table === 'project_repos') return { data: [{ project_id: 'p-a' }] }
+      if (q.table === 'deploy_observations' && q.op === 'insert') return { error: { message: 'unavailable' } }
+      return { data: [] }
+    })
+    const schedule = vi.fn()
+    const out = await routeGithubShipEvent(db, 'deployment_status', {
+      deployment_status: { state: 'success', environment: 'Production', updated_at: '2026-10-27T01:00:00Z' },
+      deployment: { sha: 'a1b2c3d4e5f6a7b8', ref: 'v1.4.0', production_environment: true },
+      repository: { full_name: 'acme/web' },
+      installation: { id: 42 },
+    }, schedule)
+    expect(out.status).toBe(500)
+    expect(out.body).toMatchObject({ ok: false })
     expect(schedule).not.toHaveBeenCalled()
   })
 

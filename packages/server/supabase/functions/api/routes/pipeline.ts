@@ -210,7 +210,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
       .gte('created_at', since7)
       .order('created_at', { ascending: false })
       .limit(1000),
-    db.from('deploy_observations').select('project_id, observed_version, ok, observed_at').in('project_id', projectIds).gte('observed_at', since14).limit(500),
+    db.from('deploy_observations').select('project_id, observed_version, ok, observed_at').in('project_id', projectIds).gte('observed_at', since14).order('observed_at', { ascending: false }).limit(500),
   ]);
   for (const r of [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes]) if (r.error) throw new Error(r.error.message);
 
