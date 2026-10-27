@@ -3,6 +3,8 @@
  * dashboard shows the PDCA flow.
  */
 
+import { stoppedTitle } from './countDefinitions'
+
 // ---------------------------------------------------------------------------
 // Plain-language insight derivation — condensed 1-2 sentence verdict.
 // ---------------------------------------------------------------------------
@@ -44,14 +46,14 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
   if (s.fixesFailed > 0 && s.openBacklog > 0) {
     return {
       tone: 'danger',
-      sentence: `Auto-fix stopped on ${s.fixesFailed} ${plural(s.fixesFailed, 'report', 'reports')} and ${s.openBacklog} ${plural(s.openBacklog, 'report is', 'reports are')} waiting to triage — the loop is stalled at two points.`,
+      sentence: `${stoppedTitle(s.fixesFailed)} and ${s.openBacklog} ${plural(s.openBacklog, 'report is', 'reports are')} waiting to triage — the loop is stalled at two points.`,
       action: stoppedAction,
     }
   }
   if (s.fixesFailed > 0) {
     return {
       tone: 'danger',
-      sentence: `Auto-fix stopped on ${s.fixesFailed} ${plural(s.fixesFailed, 'report', 'reports')}${s.fixesInProgress > 0 ? ` (${s.fixesInProgress} more in progress)` : ''}. Read why the last attempt stopped, then retry or close.`,
+      sentence: `${stoppedTitle(s.fixesFailed)}${s.fixesInProgress > 0 ? ` (${s.fixesInProgress} more in progress)` : ''}. Read why the last attempt stopped, then retry or close.`,
       action: stoppedAction,
     }
   }

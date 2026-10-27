@@ -46,6 +46,8 @@ export interface RepoBranchRowLike {
   pr_state?: string | null
   merged_at?: string | null
   check_run_conclusion?: string | null
+  /** The head's CI verdict (Plan 022): `{ infra: true }` when the test machine stopped. */
+  ci_infra?: unknown
 }
 
 /** Mutually exclusive filter bucket for one fix attempt on /repo. */
@@ -61,11 +63,19 @@ export function classifyRepoBranch(row: RepoBranchRowLike): RepoBranchBucket {
   if (!row.pr_url) return status === 'failed' && !row.superseded ? 'failed' : 'other'
   if ((row.pr_state ?? '').toLowerCase() === 'closed') return 'closed'
   // A PR exists and is open: what matters now is its CI, whatever the
-  // attempt's own status says.
+  // attempt's own status says. "Failing CI" means the code failed
+  // (apps/admin/src/lib/countDefinitions.ts): a draft runs no CI, and a test
+  // machine that stopped did not test the code (ADR 0033), so neither counts.
+  if ((row.pr_state ?? '').toLowerCase() === 'draft') return 'open'
   const conclusion = (row.check_run_conclusion ?? '').toLowerCase()
-  if (FAILING_CONCLUSIONS.has(conclusion)) return 'ci_failed'
+  if (FAILING_CONCLUSIONS.has(conclusion)) return isInfraStop(row.ci_infra) ? 'open' : 'ci_failed'
   if (conclusion === 'success') return 'ci_passing'
   return 'open'
+}
+
+/** Same rule as ci-infra.ts readFixCiInfra (this file imports nothing). */
+function isInfraStop(value: unknown): boolean {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && (value as { infra?: unknown }).infra === true
 }
 
 export interface RepoBranchCounts {

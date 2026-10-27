@@ -13,6 +13,7 @@
 import { RecommendedAction } from '../ui'
 import { credentialAdvice, failureCause, failureHeadline, fixCauseLabel, needsAttention, openPrReports } from '../../lib/fixReportTruth'
 import { pluralizeWithCount } from '../../lib/format'
+import { stoppedTitle } from '../../lib/countDefinitions'
 import type { DispatchJob, FixAttempt } from './types'
 
 interface Props {
@@ -56,7 +57,7 @@ export function FixRecommendation({ fixes, dispatches }: Props) {
     return (
       <RecommendedAction
         tone="urgent"
-        title={`Auto-fix stopped on ${pluralizeWithCount(stopped, 'report')}`}
+        title={stoppedTitle(stopped)}
         description={`Most common cause: ${top.label}${top.count > 1 ? ` (${top.count})` : ''}. ${top.advice}${others.length ? ` Also: ${others.join(', ')}.` : ''}`}
         meta={groups.slice(0, 4).map((g) => ({ label: g.label, value: String(g.count), tone: 'danger' as const }))}
       />
