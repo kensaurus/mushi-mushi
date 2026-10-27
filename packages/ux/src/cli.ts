@@ -538,6 +538,7 @@ program
         const path = join(result.dir, 'to-file.json')
         writeFileSync(path, JSON.stringify(result.findings, null, 2))
         console.log(`Nothing filed because the run did not sync. ${result.findings.length} finding(s) kept in ${path}`)
+        process.exitCode = 1
         return
       }
       if (!o.file) {

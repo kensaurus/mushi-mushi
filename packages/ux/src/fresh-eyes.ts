@@ -667,6 +667,14 @@ async function pageFacts(page: Page): Promise<PageFacts> {
     .catch(() => ({ url: page.url(), text: '', hasPassword: false, emailFields: 0, forwardControls: 1, captcha: false }))
 }
 
+const safeHost = (url: string) => {
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
+}
+
 const pathOf = (url: string) => {
   try {
     const u = new URL(url)
@@ -689,6 +697,7 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
   const appOrigins = [base.origin, ...(opts.appHosts ?? []).map((h) => (/^https?:\/\//.test(h) ? new URL(h).origin : `https://${h}`))]
   const apiHosts = appOrigins.map((o) => new URL(o).host)
   const dryRun = !!opts.dryRun
+  const readOnly = dryRun || !opts.identity
   const browser = await (opts.session?.() ??
     // Writes only with a synthetic identity to write as: a run with no account stays read-only.
     openSession({ headless: true, allow: opts.allow, policy: !dryRun && opts.identity ? { writes: 'same-origin', appOrigins } : { writes: 'read-only' } }))
@@ -728,7 +737,7 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
       identities.set(index, identity)
       if (identity) result.hasAccount = true
       progress(`session ${index} of ${sessions}${identity ? ' (synthetic account)' : ' (no account)'}`)
-      const s = await runSession({ index, identity, browser, opts, ask, base, apiHosts, maxSteps, dir, addCandidate, progress, refused: result.refused })
+      const s = await runSession({ readOnly, index, identity, browser, opts, ask, base, apiHosts, maxSteps, dir, addCandidate, progress, refused: result.refused })
       result.sessions.push(redact(s, identity))
     }
 
@@ -750,6 +759,8 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
 }
 
 interface SessionCtx {
+  /** The run may not write (a dry run, or no account): a blocked app write is the run's limit, not the app's fault. */
+  readOnly: boolean
   index: number
   identity: Identity | null
   browser: BrowserSession
@@ -917,6 +928,12 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         }
         continue
       }
+      // A write to the app itself that this read-only run held back: the visitor's step did not happen as the app intended.
+      const heldWrite = x.readOnly && browser.guard.blocked.slice(blockedBefore).some((r) => !['GET', 'HEAD', 'OPTIONS'].includes(r.method.toUpperCase()) && x.apiHosts.includes(safeHost(r.url)))
+      if (!refusedRequests.length && heldWrite) {
+        step.outcome = 'blocked'
+        step.note = 'write held back: this run has no account, so it writes nothing'
+      }
       if (refusedRequests.length) {
         step.outcome = 'blocked'
         step.note = `refused: ${refusedRequests[0]}`
@@ -940,6 +957,13 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       if (isBacktrack(history, path, action)) {
         step.backtrack = true
         session.backtracks++
+      }
+      // After a held-back write the screen is the harness's doing: no error, dead end or requirement from it is the app's.
+      if (heldWrite) {
+        watcher.take()
+        say(`  step ${n}: ${step.action} (${step.note}) [app ${(appMs / 1000).toFixed(1)} s, model ${(modelMs / 1000).toFixed(0)} s]`)
+        await record(step)
+        continue
       }
       const signals = [...watcher.take(), ...((await blank(page)) ? [{ kind: 'blank-screen' as const, message: 'The page went blank', url: page.url() }] : [])]
       if (signals.length) step.signals = signals.map((s) => s.kind)

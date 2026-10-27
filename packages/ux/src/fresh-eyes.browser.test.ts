@@ -69,7 +69,7 @@ async function startFixture(otherOrigin: string): Promise<Fixture> {
       return send(303, '', ok ? { location: '/dashboard', 'set-cookie': 'sid=1; Path=/' } : { location: '/login' })
     }
     if (path === '/dashboard') {
-      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button> <form action="/api/projects/1/delete" method="post"><label>Type the project name <input name="confirm"></label> <button type="submit">Delete project</button></form>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
+      return send(200, html('Dashboard', `<h1>Welcome to your dashboard</h1><p>Create your first app to get a report and its diagnosis.</p><button id="create">Create app</button> <button id="del" onclick="fetch('/api/projects/1', { method: 'DELETE' })">Delete project</button> <form action="/api/projects/1/delete" method="post"><label>Type the project name <input name="confirm"></label> <button type="submit">Delete project</button></form> <div role="dialog" aria-label="Delete project"><button onclick="fetch('/api/projects/1', { method: 'DELETE' })">Confirm</button></div>`, `fetch('${otherOrigin}/collect', { method: 'POST', body: 'x' }).catch(() => {})
 document.getElementById('create').onclick = async () => { await fetch('/api/apps', { method: 'POST', body: '{}' }); location.href = '/reports/1' }`))
     }
     if (path === '/api/apps' && method === 'POST') {
@@ -98,6 +98,8 @@ function scriptedAsk(feelingOnLanding: (session: number) => boolean, prompts: st
       // Enter in a field submits its form through "Delete project": checked on the form's submit buttons.
       if (!did.includes('Type the project name')) return j({ action: 'fill', role: 'textbox', name: 'Type the project name', value: 'acme' })
       if (!did.includes('Press Enter')) return j({ action: 'press', key: 'Enter' })
+      // A neutral button inside a dialog labelled 'Delete project' acts for the dialog.
+      if (!did.includes('Click the button "Confirm"')) return j({ action: 'click', role: 'button', name: 'Confirm' })
       return j({ action: 'click', role: 'button', name: 'Create app' })
     }
     if (snap.includes('Sign in to Acme')) {
@@ -189,6 +191,7 @@ describe('fresh-eyes on a local app', () => {
     expect(steps.some((s) => s.action.includes('More ways in'))).toBe(true)
     // Enter in the confirm field would submit "Delete project": refused, and nothing reached /api/projects.
     expect(steps.some((s) => s.action === 'Press Enter' && s.outcome === 'refused')).toBe(true)
+    expect(steps.some((s) => s.action === 'Click the button "Confirm"' && s.outcome === 'refused')).toBe(true)
     expect(app.writes.some((w) => w.path.startsWith('/api/projects'))).toBe(false)
     // "project" resolved to "Delete project" and was refused; the delete never reached the app.
     expect(steps.some((s) => s.action === 'Click the button "project"' && s.outcome === 'refused')).toBe(true)
@@ -215,7 +218,7 @@ describe('fresh-eyes on a local app', () => {
     })
     expect(result.hasAccount).toBe(false)
     // The visitor did try a write (the waitlist): the guard stopped it, the app saw nothing.
-    expect(result.sessions[0]!.steps.some((s) => s.action.includes('Join the waitlist') && s.outcome === 'ok')).toBe(true)
+    expect(result.sessions[0]!.steps.some((s) => s.action.includes('Join the waitlist') && s.outcome === 'blocked' && /no account/.test(s.note ?? ''))).toBe(true)
     expect(result.blocked).toBeGreaterThan(0)
     expect(app.writes.length).toBe(before)
     expect(result.stalledAt?.reason).toBe('signup_wall')

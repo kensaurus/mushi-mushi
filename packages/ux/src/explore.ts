@@ -210,7 +210,11 @@ async function accessibleLabel(loc: Awaited<ReturnType<typeof target>>): Promise
         const labelled = h.getAttribute('aria-labelledby')
         const byId = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' ') : ''
         const inner = [...h.querySelectorAll('[aria-label], [title]')].map((c) => c.getAttribute('aria-label') ?? c.getAttribute('title') ?? '').join(' ')
-        return [h.getAttribute('aria-label'), byId, h.innerText, h.getAttribute('value'), h.getAttribute('title'), inner].filter(Boolean).join(' ').trim().slice(0, 400)
+        // A submit button acts for its form or dialog: "Confirm" in a dialog labelled "Delete project".
+        const type = (h.getAttribute('type') ?? (h.tagName === 'BUTTON' ? 'submit' : '')).toLowerCase()
+        const box = type === 'submit' ? ((h as HTMLButtonElement).form ?? h.closest('form, [role=dialog], [role=alertdialog], dialog')) : h.closest('[role=dialog], [role=alertdialog], dialog')
+        const boxLabel = box ? [box.getAttribute('aria-label'), ...(box.getAttribute('aria-labelledby') ?? '').split(/s+/).filter(Boolean).map((id) => document.getElementById(id)?.innerText ?? '')].filter(Boolean).join(' ') : ''
+        return [h.getAttribute('aria-label'), byId, h.innerText, h.getAttribute('value'), h.getAttribute('title'), inner, boxLabel].filter(Boolean).join(' ').trim().slice(0, 400)
       },
       undefined,
       { timeout: 5000 },
@@ -237,7 +241,9 @@ async function focusedLabels(page: Page): Promise<string[] | null> {
       const form = (el as HTMLInputElement).form ?? el.closest('form')
       if (form) {
         out.push(form.getAttribute('aria-label') ?? '')
-        for (const b of form.querySelectorAll('button, input[type=submit], input[type=image]')) {
+        for (const id of (form.getAttribute('aria-labelledby') ?? '').split(/s+/).filter(Boolean)) out.push(document.getElementById(id)?.innerText ?? '')
+        // form.elements includes buttons outside the <form> tied to it with form="id".
+        for (const b of [...form.elements].filter((x) => x.matches('button, input[type=submit], input[type=image]'))) {
           const type = (b.getAttribute('type') ?? 'submit').toLowerCase()
           if (type === 'submit' || type === 'image') out.push(read(b))
         }
@@ -285,6 +291,7 @@ export async function perform(
         break
       }
       case 'select':
+        if (refuse(a.value)) return `refused: "${a.value.slice(0, 80)}" reads as destructive`
         await (await target(page, a.role, a.name)).selectOption({ label: a.value }, { timeout: 5000 })
         break
       case 'press': {
