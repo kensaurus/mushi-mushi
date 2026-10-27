@@ -111,10 +111,10 @@ or that someone pushed to a second ago, is lost or closes other work.
 - A fine-grained token without Contents write sees the list and a plain
   refusal at run time; one without Administration write cannot turn the
   setting on, and the console says so before asking.
-- A run the platform kills mid-flight (past the edge function's wall clock) stays `executing`; its unreached items have no row. Nothing sweeps it yet (BACKLOG BL-139); a new request for the same items is refused as "already waiting" until it is cleared.
+- A run the platform kills mid-flight (past the edge function's wall clock) stays `executing`; its unreached items have no row. Nothing sweeps it yet (BACKLOG BL-141); a new request for the same items is refused as "already waiting" until it is cleared.
 - The local worker's `prune_own` setting (ADR 0048) still only covers the
   worker's own clones and worktrees; the daemon does not act on it yet
-  (BACKLOG BL-138).
+  (BACKLOG BL-140).
 
 ## Rejected
 
