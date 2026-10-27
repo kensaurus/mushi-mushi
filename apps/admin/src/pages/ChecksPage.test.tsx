@@ -159,6 +159,9 @@ describe('ChecksPage', () => {
     expect(qa.getAttribute('data-state')).toBe('unavailable')
     expect(qa.textContent).toContain('Status unavailable')
     expect(container.querySelector('[data-state="pass"]')).toBeNull()
+    // Never "nothing needs you" over checks that could not be read.
+    expect(container.querySelector('[data-testid="checks-status"]')?.textContent).not.toContain('No check needs you')
+    expect(container.querySelector('[data-testid="checks-status"]')?.textContent).toContain('could not read')
   })
 })
 

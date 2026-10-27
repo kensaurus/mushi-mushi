@@ -113,7 +113,15 @@ export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTon
     notSetUp > 0 ? `${notSetUp} not set up` : null,
   ].filter(Boolean)
   const restText = rest.length > 0 ? ` ${rest.join(', ')}.` : ''
+  const unread = ready.filter((c) => c.view!.state === 'unavailable').length
   if (red.length === 0) {
+    // A check Mushi could not read is not a pass: never "nothing needs you" over it.
+    if (unread > 0) {
+      return {
+        tone: 'warn',
+        sentence: `Mushi could not read ${unread === cards.length ? 'your checks' : pluralizeWithCount(unread, 'check')} right now, so ${unread === 1 ? 'its' : 'their'} state is unknown. Reload in a minute.${restText}`,
+      }
+    }
     if (ready.length < cards.length) return { tone: 'neutral', sentence: 'Reading your checks…' }
     return { tone: pass > 0 ? 'ok' : 'neutral', sentence: `No check needs you right now.${restText}` }
   }
