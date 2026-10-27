@@ -27,6 +27,20 @@ export interface TimeToFirstDiagnosis {
   testDiagnosisAt?: string | null
 }
 
+/**
+ * What the Verify card shows. A diagnosed test report is not the 2-minute
+ * clock (`ms` stays null — it is not a report from the app), and it is not
+ * the waiting state either (report 9b7624e6).
+ */
+export function firstDiagnosisCardModel(data: TimeToFirstDiagnosis | null | undefined):
+  | { kind: 'measured'; ms: number }
+  | { kind: 'test_only' }
+  | { kind: 'waiting' } {
+  if (data?.ms != null) return { kind: 'measured', ms: data.ms }
+  if (data?.testDiagnosisAt) return { kind: 'test_only' }
+  return { kind: 'waiting' }
+}
+
 type SetupRailStepId = 'project' | 'key' | 'sdk' | 'report'
 type SetupRailState = 'done' | 'current' | 'todo'
 

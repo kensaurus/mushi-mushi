@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buildSetupRail, heartbeatSentence } from './setupRail'
+import { buildSetupRail, firstDiagnosisCardModel, heartbeatSentence } from './setupRail'
 import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'
 import type { SetupProject } from './useSetupStatus'
 
@@ -91,6 +91,26 @@ describe('buildSetupRail', () => {
   it('every step opens a real Set up tab', () => {
     const rail = buildSetupRail({ project: project(), ttfd: null, now: NOW })
     for (const step of rail.steps) expect(ONBOARDING_TAB_IDS as readonly string[]).toContain(step.tab)
+  })
+
+  it('a diagnosed test report is not the waiting card (9b7624e6)', () => {
+    expect(firstDiagnosisCardModel({
+      keyMintedAt: '2026-10-27T11:30:00Z',
+      firstDiagnosisAt: null,
+      ms: null,
+      testDiagnosisAt: '2026-10-27T11:31:00Z',
+    })).toEqual({ kind: 'test_only' })
+    expect(firstDiagnosisCardModel({
+      keyMintedAt: '2026-10-27T11:30:00Z',
+      firstDiagnosisAt: null,
+      ms: null,
+    })).toEqual({ kind: 'waiting' })
+    expect(firstDiagnosisCardModel({
+      keyMintedAt: '2026-10-27T11:30:00Z',
+      firstDiagnosisAt: '2026-10-27T11:40:00Z',
+      ms: 600_000,
+      testDiagnosisAt: '2026-10-27T11:31:00Z',
+    })).toEqual({ kind: 'measured', ms: 600_000 })
   })
 
   it('with no heartbeat says so plainly, without blaming a deploy', () => {
