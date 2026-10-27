@@ -25,7 +25,7 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 
 A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
 
-- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code, unit tests and the parked-work register (BACKLOG.md, measured by what it adds and closes). Under the picker, the page says what each round measures.
 - **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
 - **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
 - **Run on**, when you have a [local worker](pipeline#workers) lane for the app in fix or skill mode: Cursor in the cloud, or that lane on your machine. A round for a lane waits in its queue and never goes to the cloud.
