@@ -387,7 +387,7 @@ export function IteratePage() {
           {activeTab === 'runs' && (
             <>
               {runsLoading && (
-                <TableSkeleton rows={5} showFilters={false} label="Loading PDCA runs" />
+                <TableSkeleton rows={5} showFilters={false} label="Loading improvement runs" />
               )}
               {runsError && (
                 <PageLoadError error={runsError} resource="the run list" onRetry={reloadRuns} />
@@ -449,7 +449,7 @@ export function IteratePage() {
 
       {abortTarget && (
         <ConfirmDialog
-          title="Abort this PDCA run?"
+          title="Stop this improvement run?"
           body={`Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
           confirmLabel="Abort run"
           cancelLabel="Keep running"

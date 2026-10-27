@@ -103,10 +103,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 }
 
 const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how contract drift detection works.' },
-  { id: 'findings', label: 'Findings', description: 'Open gaps between OpenAPI spec, inventory nodes, and DB schema.' },
-  { id: 'snapshots', label: 'Snapshots', description: 'Contract snapshot history and edge-count trend.' },
-  { id: 'scanner', label: 'Scanner', description: 'Trigger a manual drift-walker scan on demand.' },
+  { id: 'overview', label: 'Overview', description: 'Status and how schema scans work.' },
+  { id: 'findings', label: 'Changes', description: 'Routes and tables that changed since the baseline, worst first.' },
+  { id: 'snapshots', label: 'Scans', description: 'Every scan so far and how many routes and tables each one saw.' },
+  { id: 'scanner', label: 'Run a scan', description: 'Scan your API and database now.' },
 ]
 
 function resolveDriftTab(value: string | null): DriftTabId {
@@ -316,7 +316,7 @@ export function DriftPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-drift">
       <PageHeaderBar
-        title={copy?.title ?? 'Drift'}
+        title={copy?.title ?? 'Schema changes'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
@@ -369,7 +369,7 @@ export function DriftPage() {
       {!ux.hideOverviewChrome ? (
         <PageHero
           scope="drift"
-          title={copy?.title ?? 'Drift'}
+          title={copy?.title ?? 'Schema changes'}
           kicker="Contract sync"
           decide={{
             label:
@@ -496,15 +496,15 @@ export function DriftPage() {
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
-              title="Contracts are in sync"
-              description={`${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked · 0 open findings.`}
+              title="No schema changes"
+              description={`${stats.snapshotCount} scan${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} routes and tables tracked · nothing changed.`}
             />
           )}
           {stats.topPriority === 'never_scanned' && (
             <RecommendedAction
               tone="info"
-              title="Build your first contract baseline"
-              description="The drift-walker compares OpenAPI, inventory nodes, and Postgres schema. Run a scan to capture edges and detect gaps."
+              title="Run your first schema scan"
+              description="A scan reads your API routes and database tables. Later scans tell you what changed since. (The scanner compares your OpenAPI spec, user-story map and Postgres schema.)"
               cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
             />
           )}

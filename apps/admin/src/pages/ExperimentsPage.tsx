@@ -551,7 +551,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
-          Enable Thompson Sampling bandit (auto-shifts traffic to winning variant)
+          Send more users to the version that is winning (Thompson sampling)
         </label>
       </div>
 

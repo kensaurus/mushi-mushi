@@ -197,7 +197,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
         <EmptyState
           icon={<IconIntelligence className="w-8 h-8" />}
           title="No lessons yet"
-          description="Lessons are promoted automatically when a mistake cluster reaches coherence ≥ 0.75 and has ≥ 3 reports. Run the mistake-clusterer function or submit more reports."
+          description="A lesson is made when 3 or more reports share one cause and read alike (a similarity, or coherence, of 75% or more). More reports bring the first one."
         />
       )}
 
