@@ -127,9 +127,9 @@ export function registerRepoHousekeepingRoutes(app: Hono<{ Variables: Variables 
   app.get('/v1/admin/projects/:id/repo-cleanup', deps.adminOrApiKeyRead, (c) => previewRoute(c, deps))
   app.post('/v1/admin/projects/:id/repo-cleanup/requests', deps.adminOrApiKeyWrite, (c) => requestRoute(c, deps))
   app.post('/v1/admin/projects/:id/repo-cleanup/restore', deps.adminOrApiKeyWrite, (c) => restoreRoute(c, deps))
-  for (const verb of ['approve', 'reject', 'execute'] as const) {
-    app.post(`/v1/admin/projects/:id/repo-cleanup/requests/:actionId/${verb}`, deps.jwtAuth, (c) => decideRoute(c, deps, verb))
-  }
+  app.post('/v1/admin/projects/:id/repo-cleanup/requests/:actionId/approve', deps.jwtAuth, (c) => decideRoute(c, deps, 'approve'))
+  app.post('/v1/admin/projects/:id/repo-cleanup/requests/:actionId/reject', deps.jwtAuth, (c) => decideRoute(c, deps, 'reject'))
+  app.post('/v1/admin/projects/:id/repo-cleanup/requests/:actionId/execute', deps.jwtAuth, (c) => decideRoute(c, deps, 'execute'))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
