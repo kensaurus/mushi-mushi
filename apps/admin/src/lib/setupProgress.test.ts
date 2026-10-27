@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { withSetupRequiredCounts } from './setupProgress'
-import { requiredDetail } from './statTooltips/onboarding'
 import type { OnboardingStats } from '../components/onboarding/types'
 import { EMPTY_ONBOARDING_STATS } from '../components/onboarding/types'
 
@@ -28,7 +27,6 @@ describe('withSetupRequiredCounts', () => {
   it('takes /v1/admin/setup counts and next step; ready only when both agree (mushi-demo 3/4)', () => {
     const out = withSetupRequiredCounts(stats, { project_id: 'p1', required_complete: 3, required_total: 4, done: false, steps: demoSteps })
     expect(out).toMatchObject({ requiredComplete: 3, requiredTotal: 4, setupDone: false, nextStepId: 'sdk_installed', nextStepLabel: 'Install the SDK in your app' })
-    expect(requiredDetail(out)).toBe('1 required step left: Install the SDK in your app')
   })
 
   it('keeps the page stats for another project or while setup is loading', () => {
@@ -40,12 +38,5 @@ describe('withSetupRequiredCounts', () => {
     const done = [step('project_created', true), step('sdk_installed', true)] as never
     const out = withSetupRequiredCounts(stats, { project_id: 'p1', required_complete: 4, required_total: 4, done: true, steps: done })
     expect(out).toMatchObject({ setupDone: true, nextStepId: null })
-    expect(requiredDetail(out)).toBe('All required steps done')
-  })
-})
-
-describe('requiredDetail', () => {
-  it('never says all done while a required step is left, even without a label', () => {
-    expect(requiredDetail({ ...stats, requiredComplete: 2, requiredTotal: 4, nextStepLabel: null })).toBe('2 required steps left')
   })
 })

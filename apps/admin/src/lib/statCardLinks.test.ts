@@ -8,10 +8,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { connectLinks, fixesLinks, judgeLinks, mcpLinks, onboardingLinks, repoLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
+import { connectLinks, fixesLinks, judgeLinks, mcpLinks, repoLinks, researchLinks, settingsLinks, ssoLinks } from './statCardLinks'
 
 import { resolveMcpTab } from './mcpPageHelpers'
-import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'
 import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { isScopePresetId, SCOPE_PRESETS } from '../components/projects/project-models'
 
@@ -27,15 +26,6 @@ function parse(href: string) {
 }
 
 describe('stat card links land on real tabs and anchors', () => {
-  it('onboarding cards open a real onboarding tab', () => {
-    for (const href of [onboardingLinks.required, onboardingLinks.sdk, onboardingLinks.optional]) {
-      const { path, tab } = parse(href)
-      expect(path).toBe('/onboarding')
-      expect(ONBOARDING_TAB_IDS as readonly string[]).toContain(tab)
-    }
-    expect(parse(onboardingLinks.sdk).tab).toBe('sdk')
-  })
-
   it('MCP tool cards open the catalog, not Overview', () => {
     for (const href of [mcpLinks.tools, connectLinks.tools]) {
       const { path, tab } = parse(href)

@@ -97,13 +97,6 @@ export const settingsLinks = {
 
 // Every target below must be a real route / tab / element id:
 // statCardLinks.test.ts checks them (QA bugs 130, 131).
-export const onboardingLinks = {
-  required: '/onboarding?tab=steps',
-  sdk: '/onboarding?tab=sdk',
-  reports: '/reports',
-  optional: '/onboarding?tab=steps',
-} as const
-
 export const billingLinks = {
   plan: '/billing?tab=plans',
   reportsPeriod: '/billing?tab=overview',
