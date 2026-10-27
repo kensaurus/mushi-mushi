@@ -38,7 +38,7 @@ import { logAudit } from '../../_shared/audit.ts'
 import { hashApiKey } from '../../_shared/api-key-mint.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-packet.ts'
-import { activeWorkClaims, enqueueReports, queuedForLocalLanes, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
+import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
 import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
 import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
@@ -367,7 +367,7 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
   if (ids.length === 0) return []
   const claimed = await activeWorkClaims(db, ids, now)
   if ('error' in claimed) throw new Error(`work claims read failed: ${claimed.error}`)
-  const elsewhere = ranked.length ? await queuedForLocalLanes(db, ranked.map((r) => r.id), lane.id) : { ids: new Set<string>() }
+  const elsewhere = ranked.length ? await queuedForLocalLanes(db, ranked.map((r) => r.id), lane.id, now) : { ids: new Set<string>() }
   if ('error' in elsewhere) throw new Error(`work queues read failed: ${elsewhere.error}`)
   const inflight = new Set<string>()
   const attempts = new Map<string, AttemptLite[]>()
@@ -974,6 +974,9 @@ async function putQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   }
   const lane = await writableLane(c, deps, db, c.req.param('id') ?? '', 'change a queue')
   if (lane instanceof Refusal) return lane.response
+  if (reportIds.length && !QUEUE_MODES.includes(lane.mode)) {
+    return err(c, 'LANE_MODE', `This lane is in ${lane.mode} mode and takes no reports from a queue. Switch its mode, or send the reports to a fix lane.`, 409)
+  }
   const userId = c.get('userId') as string
   if (reportIds.length) {
     const { data, error } = await db.from('reports').select('id, project_id').in('id', reportIds)

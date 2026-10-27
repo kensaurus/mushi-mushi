@@ -221,8 +221,9 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
   }
   // A report waiting in a local lane's queue is reserved for that machine (a
   // person sent it there, or a skill run's round runs locally, ADR 0042
-  // amendment): a cloud agent would race the lane for it.
-  const queued = await queuedForLocalLanes(db, rows.map((r) => r.id))
+  // amendment) while the lane will take it and the machine is alive: a cloud
+  // agent would race the lane for it. A dead machine reserves nothing.
+  const queued = await queuedForLocalLanes(db, rows.map((r) => r.id), undefined, now)
   if ('error' in queued) {
     log.warn('spend-down: local worker queues unreadable; skipping the app this tick', { projectId, err: queued.error })
     return []

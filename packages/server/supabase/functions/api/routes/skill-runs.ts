@@ -105,7 +105,7 @@ export function registerSkillRunRoutes(app: Hono<{ Variables: Variables }>): voi
         return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'laneId must be a lane id, or left out to run in the cloud.' } }, 400);
       }
       const found = await laneForQueue(db, body.laneId, { projectId: a.projectId, userId: c.get('userId') as string });
-      if ('error' in found) return c.json({ ok: false, error: { code: 'LANE_NOT_FOUND', message: found.error } }, found.status);
+      if ('error' in found) return c.json({ ok: false, error: { code: found.status === 409 ? 'LANE_MODE' : 'LANE_NOT_FOUND', message: found.error } }, found.status);
       const { data: laneRow, error: laneErr } = await db.from('work_lanes').select('mode').eq('id', found.lane.id).maybeSingle();
       if (laneErr) return dbError(c, laneErr);
       const mode = (laneRow as { mode?: string } | null)?.mode;

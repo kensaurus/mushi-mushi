@@ -136,9 +136,11 @@ audit lane runs one pass at a time.
 ### Skill runs
 
 On /credits, **Run on** offers your fix and skill lanes for the app. Each round
-of that run is put into the lane's queue as it is filed, and never goes to
-a cloud agent: spend-down leaves any report waiting in a local lane's queue.
-A `skill` lane takes nothing else; a `fix` lane takes the rounds too.
+of that run is put into the lane's queue as it is filed. Spend-down leaves a
+report in a local lane's queue alone while that lane will take it and its
+machine is alive (not revoked, a heartbeat in the last 24 hours); after that
+the report is free for a cloud agent again. A `skill` lane takes nothing else;
+a `fix` lane takes the rounds too. Conflicts and audit lanes have no queue.
 
 ## Guards
 

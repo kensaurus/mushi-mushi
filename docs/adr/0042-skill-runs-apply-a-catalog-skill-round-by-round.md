@@ -78,12 +78,20 @@ spend-down would race a lane for any classified report.
   checks the lane is the caller's and serves the app).
 - **Each round of a local run goes into that lane's queue** when it is filed
   (`work_queue.source = 'skill_run'`). If it cannot be queued the round is
-  taken back and filed again next tick: a local run never falls through to a
-  cloud agent.
-- **Spend-down leaves any report waiting in a local lane's queue**
+  taken back and filed again next tick.
+- **Spend-down leaves a report waiting in a local lane's queue**
   (`queuedForLocalLanes`), not only a claimed one: a person (or a local skill
   run) chose that machine. A fix lane also leaves a report queued for another
-  lane.
+  lane. The queue holds a report only while that lane will take it (a `fix`
+  lane any report, a `skill` lane a skill-run round) and its machine is
+  alive: not revoked, a heartbeat within 24 hours (`QUEUE_HOLD_MS`). After
+  that the round is an ordinary classified report again and spend-down may
+  send it to the cloud, so a machine that is gone never strands a run (ADR
+  0048: a dead daemon blocks nobody).
+- **Only `fix` and `skill` lanes (and `followups`, which may switch back)
+  take queue writes**; a `conflicts` or `audit` lane refuses them with 409
+  `LANE_MODE` (the Workers tab's queue box, `mushi reports file --lane`, and
+  "Run on").
 - **A lane mode `skill`** takes only skill-run rounds from its own queue and
   never a ranked bug report, so a machine can spend its credits on planned
   improvement work only. A `fix` lane takes queued rounds too.

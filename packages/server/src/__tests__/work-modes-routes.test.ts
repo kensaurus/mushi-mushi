@@ -388,11 +388,33 @@ describe('skill mode (ADR 0042 amendment) and reserved queues', () => {
     expect(s.db.table('work_queue').map((q) => q.report_id)).toEqual([R(1)])
   })
 
-  it('a fix lane leaves a report queued for another lane', async () => {
-    const s = await lanes({ reports: [rep(1), rep(2, { severity: 'low' })] }, [{ name: 'a', mode: 'fix' }, { name: 'b', mode: 'fix' }])
-    s.db.table('work_queue').push({ id: 'w1', lane_id: s.ids.b, project_id: P1, report_id: R(1), position: 0, source: 'console', created_at: '2026-10-27T00:00:00Z' })
-    const res = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids.a } })
-    expect(res.body.data.claim.report.id).toBe(R(2))
+  it('a fix lane leaves a report queued for another live fix lane, but not for a dead machine or a lane in another mode', async () => {
+    const setupQueued = async () => {
+      const s = await lanes({ reports: [rep(1), rep(2, { severity: 'low' })] }, [{ name: 'a', mode: 'fix' }, { name: 'b', mode: 'fix' }])
+      s.db.table('work_queue').push({ id: 'w1', lane_id: s.ids.b, project_id: P1, report_id: R(1), position: 0, source: 'console', created_at: '2026-10-27T00:00:00Z' })
+      return s
+    }
+    const live = await setupQueued()
+    expect((await live.app.call('POST', '/v1/worker/claim', { body: { laneId: live.ids.a } })).body.data.claim.report.id).toBe(R(2))
+    // Lane b on a machine silent for over a day (26 h) holds nothing.
+    const silent = await setupQueued()
+    silent.db.table('work_lanes').find((l) => l.id === silent.ids.b)!.host_id = 'other-host'
+    silent.db.table('work_hosts').push({ id: 'other-host', owner_user_id: 'u1', api_key_id: KEY, host_id: 'b'.repeat(64), hostname: 'old', platform: 'linux', revoked_at: null, last_heartbeat_at: '2026-10-26T10:00:00Z', guards: {}, status: {} })
+    expect((await silent.app.call('POST', '/v1/worker/claim', { body: { laneId: silent.ids.a } })).body.data.claim.report.id).toBe(R(1))
+    const audit = await setupQueued()
+    audit.db.table('work_lanes').find((l) => l.id === audit.ids.b)!.mode = 'audit'
+    expect((await audit.app.call('POST', '/v1/worker/claim', { body: { laneId: audit.ids.a } })).body.data.claim.report.id).toBe(R(1))
+  })
+
+  it('a conflicts or audit lane refuses queue writes; it can still be emptied', async () => {
+    const s = await lanes({ reports: [rep(1)] }, [{ name: 'c', mode: 'conflicts' }, { name: 'a', mode: 'audit' }])
+    for (const name of ['c', 'a']) {
+      const put = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.ids[name]! }, body: { reportIds: [R(1)], append: true }, vars: { authMethod: 'jwt' } })
+      expect([put.status, put.body.error?.code]).toEqual([409, 'LANE_MODE'])
+      const clear = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.ids[name]! }, body: { reportIds: [] }, vars: { authMethod: 'jwt' } })
+      expect(clear.status).toBe(200)
+    }
+    expect(s.db.table('work_queue')).toHaveLength(0)
   })
 })
 

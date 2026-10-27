@@ -98,7 +98,8 @@ export function PipelinePage() {
     const d = lanesPage.data
     if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
     const mine = new Set(d.hosts.filter((h) => h.mine && !h.revoked).map((h) => h.id))
-    return d.lanes.filter((l) => mine.has(l.hostId))
+    // Only lanes that fix reports take a sent report (a conflicts, audit or skill lane would not).
+    return d.lanes.filter((l) => mine.has(l.hostId) && l.config.mode === 'fix')
   }, [lanesPage.data])
   const now = useNow(30_000)
   const toast = useToast()

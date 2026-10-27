@@ -72,6 +72,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
     setBusy(null)
   }
   const ids = lane.queue.map((q) => q.reportId)
+  // Conflicts and audit lanes find their own work; they read no queue (the server refuses one).
+  const takesQueue = c.mode === 'fix' || c.mode === 'followups' || c.mode === 'skill'
 
   return (
     <li data-testid={testId}>
@@ -199,10 +201,15 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
         </div>
       )}
 
+      {takesQueue && (
       <div className="space-y-1">
         <p className="text-2xs font-medium text-fg-secondary">Queue ({lane.queue.length}): taken first, top to bottom</p>
         {lane.queue.length === 0 ? (
-          <p className="text-2xs text-fg-muted">Empty: the lane takes the worst open reports first. Send reports here from a report or a pipeline group.</p>
+          <p className="text-2xs text-fg-muted">
+            {c.mode === 'skill'
+              ? 'Empty: start a skill run on Spend credits with Run on set to this lane.'
+              : 'Empty: the lane takes the worst open reports first. Send reports here from a report or a pipeline group.'}
+          </p>
         ) : (
           <ol className="divide-y divide-edge-subtle rounded-sm border border-edge-subtle" data-testid={`${testId}-queue`}>
             {lane.queue.map((q, i) => (
@@ -250,6 +257,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue }: P
           </Btn>
         </div>
       </div>
+      )}
 
       {lane.recent.length > 0 && (
         <div className="space-y-1">

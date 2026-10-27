@@ -206,6 +206,9 @@ describe('lane modes (P3)', () => {
     expect(card.querySelector('a[href="/reports/null"]')).toBeNull()
     expect(card.textContent).toContain('Merge conflict on kensaurus/glot.it#7')
     expect(q('worker-lane-l1-recent')!.textContent).toContain('Filed findings')
+    // An audit lane finds its own work: no queue to fill.
+    expect(q('worker-lane-l1-queue')).toBeNull()
+    expect(q('worker-lane-l1-add')).toBeNull()
 
     const input = q('worker-lane-l1-review-model') as HTMLInputElement
     await act(async () => {
