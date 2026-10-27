@@ -153,3 +153,53 @@ export function syncKeychainAfterKeyChange(apiKey: string, profile = 'default'):
   tryDeleteKeyFromKeychain(profile)
   return 'removed'
 }
+
+/**
+ * The local worker's key (`mushi work --daemon`, scope worker:run, ADR 0048)
+ * under its own account, so it never takes the place of a profile's CLI key
+ * (account `api-key:<profile>`). Same fallbacks: null / false when the
+ * keychain is unavailable, and the caller uses its 0600 file instead.
+ */
+const WORKER_KEY_ACCOUNT = 'worker-key'
+
+export function trySaveWorkerKey(key: string): boolean {
+  if (!key) return false
+  const EntryClass = getEntryClass()
+  if (!EntryClass) return false
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+    const entry = new EntryClass(KEYCHAIN_SERVICE, WORKER_KEY_ACCOUNT)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    entry.setPassword(key)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function tryLoadWorkerKey(): string | null {
+  const EntryClass = getEntryClass()
+  if (!EntryClass) return null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+    const entry = new EntryClass(KEYCHAIN_SERVICE, WORKER_KEY_ACCOUNT)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    const key = entry.getPassword() as string | null
+    return key && key.length > 0 ? key : null
+  } catch {
+    return null
+  }
+}
+
+export function tryDeleteWorkerKey(): void {
+  const EntryClass = getEntryClass()
+  if (!EntryClass) return
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+    const entry = new EntryClass(KEYCHAIN_SERVICE, WORKER_KEY_ACCOUNT)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+    entry.deletePassword()
+  } catch {
+    // not present
+  }
+}
