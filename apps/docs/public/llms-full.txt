@@ -4710,8 +4710,8 @@ uses to read the repo).
 
 ## Where to see it
 
-- **Console:** Mushi health → Code size → *Known holes in your dependencies*, and the
-  filed reports in the normal queue.
+- **Console:** Full-stack audit → *Known holes in your dependencies* (Mushi health → Code
+  size links there), and the filed reports in the normal queue.
 - **Editor (MCP):** `get_radar` (rules `known_vulnerable_dependency` and
   `runtime_end_of_life`), `list_gate_findings` with gate
   `portfolio_radar_vulns`, `run_radar` to check again.
@@ -16759,6 +16759,13 @@ description: The Anomaly detection page runs statistical detectors over the metr
 
 **Route:** `/anomalies`
 
+**First on the page:** one sentence on the spikes to confirm or dismiss. Once metrics
+arrive, **Your metrics, with releases and spikes** draws each metric over time (those
+with an open spike first, up to three) with a dashed line per release and a dot per
+spike, and **Confirm** / **Dismiss** under the chart. With no metrics yet the page is
+one **Add metrics** step. The detectors read **Sudden jump** (z-score), **Slow drift**
+(Page-Hinkley) and **Started with a release**.
+
 The Anomaly detection page applies statistical detectors to time-series metrics you
 feed in. When a metric behaves unexpectedly, it surfaces as an anomaly — optionally
 auto-filing a report in your project's queue.
@@ -17201,16 +17208,29 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/checks
 
 ---
 title: Checks
-description: The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.
+description: The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.
 ---
 
 # Checks
 
 **Route:** `/checks`
 
-Every automatic check on this app, in one place. This page is a launcher: open a card to see that check's findings. A chip on the card is the sidebar's live count or status for it. A Pro pill means the check needs a plan upgrade.
+Is my app OK, and which check is red? Every automatic check on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
-## App checks
+Each card has a dot and a state:
+
+| Dot | State | Meaning |
+| --- | --- | --- |
+| Red | Failed | The last run failed or could not finish. |
+| Amber | N findings | The check ran and found something to fix. |
+| Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
+| Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
+
+A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you turn them on in Settings → Labs.
+
+## The checks
+
+### App checks
 
 Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, plus Mushi’s own health.
 
@@ -17225,7 +17245,7 @@ Is the app itself sound: scheduled tests, user stories, audits, its blueprint, d
 | Design system | `/design` | Design tokens, contrast pairs, type scale and off-token code. Token and rule edits open a draft pull request. |
 | [Content checks](/admin/content) | `/content` | AI-generated and user-submitted content flagged as wrong or low quality. |
 
-## AI quality
+### AI quality
 
 How good the AI's triage is: grading, lessons learned and the prompts behind it.
 
@@ -17434,9 +17454,13 @@ This page **reads only** — it never triggers a scan. Data arrives via
 
 | Section | Source |
 |---------|--------|
-| **Summary scorecard** | Error/warn finding count, max LOC, latest bundle KB |
-| **Bundle-size trends** | Sparkline per `bundle.*` metric from `metric_series` |
-| **God-file findings** | Files over the LOC budget (`code_health.*` gate) |
+| **Status sentence** | How many files are over or close to the 2,000-line budget, the largest file, and the latest bundle KB |
+| **Oversized files** | A bar per large file, longest first, against the budget line (`code_health.*` gate) |
+| **Bundle size over time** | Sparkline per `bundle.*` metric from `metric_series` |
+| **How to split each file** | Each oversized file with its split hint |
+
+Known security holes in your dependencies are not repeated here: one line links to
+[Full-stack audit](/admin/fullstack-audit), where they are listed and managed.
 
 ---
 
@@ -17808,6 +17832,9 @@ description: The Content quality page queues AI-generated copy, release notes an
 
 **Route:** `/content`
 
+With nothing open and no filter from a link, the page is its empty state with
+**Show past issues**; the filter row appears once there is something to filter.
+
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
 > poorly or got user flags — you need a queue of fixable assets.
 
@@ -18123,22 +18150,26 @@ The Design system page reads the token files `mushi.recipe.json` points at and s
 
 **App blueprint** in the header opens `/recipe`. **Tokens** and **Directions** switch the view. Directions is `?view=directions`.
 
+With no token files read yet, the page is one step: point Mushi at the files where your colours, spacing and fonts live (**Show me how** opens the recipe-file guide).
+
 ## Tokens
 
 A status chip (OK, Needs attention, Not checked yet, Not set up, or Check failed) sits with the reason and where the snapshot came from: repo files, a CI push, derived data, or a connector, plus the short commit when one is recorded. When the scan is OK but the token files have issues, the chip reads Needs attention and the reason counts those issues. A failed refresh or scan is printed under the chip.
+
+Under it, **Your colours** shows the colour tokens as swatches and **Drift from your design** draws the deviance score over time (lower is better; unscored checks are left out).
 
 When the project has more than one token set, a switch lists them and marks the active set from `mushi.recipe.json`. The view then shows:
 
 | Section | What you see |
 | --- | --- |
 | **Token issues** | Severity, message, and file or token path. Empty: "No token issues in this set." |
-| **Deviance** | The score, a per-rule breakdown, a trend, the top findings, and **Run deviance check**. |
+| **Drift from your design** | The deviance score, a per-rule breakdown, a trend, the top findings, and **Check for drift**. |
 | **Contrast** | An "Aa" sample for each declared pair, the ratio, the minimum it needs, and Pass, Fail, or Not judged. |
 | **When the score is too high** | A 0–100 threshold and two switches, off until an owner or admin turns them on. |
 | **Token catalogue** | Closed until the edit queue has an edit. Swatches, Latin and Thai type samples, spacing bars, radius boxes, motion values, and other tokens. Filter by name. The first 12 tokens in a section, then **View all**. **Edit** queues a new value. |
 | **CSS variables by scope** | One column per `:root`, `@theme`, or declared selector, when the API sends scopes. |
 | **Components** | Name and file for each primitive matched from the recipe's component globs. |
-| **Deviance rules** | Enabled, severity (`info`, `warn`, `error`), allowed values, skipped-file globs, and whether the rule is from `mushi.recipe.json` or a Mushi default. |
+| **Drift rules** | Enabled, severity (`info`, `warn`, `error`), allowed values, skipped-file globs, and whether the rule is from `mushi.recipe.json` or a Mushi default. |
 
 If editing is off, the page says so and gives the reason. The two switches under **When the score is too high** are **Fail mushi recipe check --push above the threshold** and **Dispatch a fix for new drift above the threshold**. When dispatch is on and Autofix is off for the project, a warning says nothing will be dispatched until Autofix is on. Its spend and per-day caps apply.
 
@@ -18148,7 +18179,7 @@ The score is a whole number from 0 to 100. **0** means the scanned code follows 
 
 **Not scored** means no scan has run, the scan is still running, the scan matched no files, or no enabled rule had anything to judge. The trend chart leaves unscored runs out. Density in the breakdown is findings per 1,000 scanned lines. For contrast, density is the failing share of pairs. Each finding names the rule, file, line, the value, and a suggested token when the scan has one.
 
-**Run deviance check** refreshes the tokens, then scans the repo in the background. The page polls until the scan finishes and reloads.
+**Check for drift** refreshes the tokens, then scans the repo in the background. The page polls until the scan finishes and reloads.
 
 ## How an edit becomes a draft PR
 
@@ -18246,6 +18277,12 @@ description: The Drift scanner compares your live routes and components against 
 # Drift scanner
 
 **Route:** `/drift`
+
+**First on the page:** one sentence on what changed since the baseline, with
+**Review changes** when any wait. Once scanned, **Changes found per day** draws the
+changes over time with a dashed line per release and a dot on each day with a serious
+change (red while one is open). Never scanned: one **Run first scan** step and nothing
+else.
 
 > **Scenario:** You shipped a refactor last Friday. It's Monday and two users have
 > reported the Settings page is blank. You suspect a route or component broke silently.
@@ -19299,6 +19336,17 @@ description: The Full-stack audit runs one health check across RLS gaps, recent 
 
 **Route:** `/fullstack-audit`
 
+**First on the page:** one sentence with the exact number of open errors and
+warnings (counted on the server, not from the capped list) and **Copy fix prompt
+for the top finding**: the check, the file and line, the rule and what to do, ready
+to paste into your editor. Every finding in the list has its own **Copy fix
+prompt**. The list says "at least" only when it could not get an exact count, and
+then says why (only the newest 500 findings were read).
+
+**Known holes in your dependencies** (vuln-watch, [known holes](/concepts/known-holes))
+are listed and managed at the end of this page (`#dependency-holes`). Mushi health →
+Code size links here instead of repeating them.
+
 > **Scenario:** It's Monday standup. You need a PM-readable health scorecard —
 > RLS gaps, recent backend errors, API contract drift — without opening five
 > different tabs.
@@ -20017,26 +20065,38 @@ two diverge.
 
 ## What you see
 
-Three nested layers:
+With no map yet, the page is one step: **Turn on discovery** (it opens the
+Discovery tab with the SDK snippet). Writing the map file by hand is the
+other way in.
 
-1. **Truth-layer summary** across the top — verified / unwired /
-   regressed counts rolled up across every story in the project.
-2. **Story cards** — one per top-level user story (`signup`, `pricing`,
-   `dashboard`, …) with per-story counts and a **⋯** menu for runs scoped
-   to that story.
-3. **Action drawer** — click any element / action to inspect the
-   `expected_outcome` block, the last walk, and the raw YAML.
+Once the map exists:
 
-## Run gates / Run crawler
+1. **Status sentence** across the top: how many actions are broken (stopped
+   working, or no code behind them yet) and how many a test proves, with
+   **Check every action** and **Crawl the app**.
+2. **Your app, page by page**: one card per page with what a user can do
+   on it. Broken actions are red and sort first; pages with a broken
+   action come first.
+3. **Story cards**: one per user story (`signup`, `pricing`, …) with
+   per-story counts and a **⋯** menu for runs scoped to that story.
+4. **Action drawer**: click any action to inspect its `expected_outcome`,
+   the last walk and its history.
 
-The action row under the page header has one **Run gates** and one
-**Run crawler** for the whole project. Both short-circuit to the same code
-path the GitHub Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+The tabs are **User stories**, **All actions** (the page × element table),
+**Code checks** (open findings, `?tab=gates`), **Live probes**
+(`?tab=synthetic`), **Out of sync** (`?tab=drift`), **Discovery** and
+**Map file** (`?tab=yaml`). The `?tab=` ids are unchanged, so old links work.
 
-- **Run gates** — runs all five gates against the current branch and
-  posts the composite check back to your most recent open PR.
-- **Run crawler** — crawls every page in the inventory and reconciles it
-  with `inventory.yaml`. Differences land in the *Drift* tab.
+## Check every action / Crawl the app
+
+The status line has one **Check every action** and one **Crawl the app**
+for the whole project. Both short-circuit to the same code path the GitHub
+Action uses ([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+
+- **Check every action** runs all five code checks against the current
+  branch and posts the composite check back to your most recent open PR.
+- **Crawl the app** crawls every page in the map and reconciles it with
+  `inventory.yaml`. Differences land in the *Out of sync* tab.
 
 To run just one story, open the **⋯** menu on its card:
 
@@ -20326,9 +20386,19 @@ description: The Judge page scores how well Mushi's plain-English reads match re
 
 # Fix quality scores
 
+**Route:** `/judge` (sidebar: Triage grading)
+
 The Judge page shows how well Mushi's plain-English reads match reality over time.
 If classification quality is slipping — or a new prompt is ready to promote — you'll
 see it here before bad reads reach your queue.
+
+**First on the page:** one sentence with this week's score and how often the grader
+disagreed **in the last 14 days** (the window is named; an older server without it
+gets "so far", all time), with **See disagreements**. Under it, **How often the grader
+agrees** draws the weekly agreement share for 12 weeks, and **Worst disagreements,
+last 14 days** lists the 3 lowest-scored disagreements with the grader's reason and a
+link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
+`recentEvaluations`, `recentDisagreements` and `agreementWeeks` for this.
 
 ---
 
@@ -20437,10 +20507,11 @@ that historically caused real user pain.
 1. **Reports arrive** — users submit feedback via the SDK.
 2. **Embeddings cluster** — reports with similar semantics are grouped into a
    **mistake cluster** automatically.
-3. **Coherence gate** — when a cluster reaches coherence ≥ 0.75 and at least 3 reports,
-   it becomes a **candidate** — eligible for promotion but not yet active.
-4. **You promote** — open the Clusters tab, review the suggested rule, and click
-   **Promote**. The cluster becomes a lesson.
+3. **Ready to promote** — once at least 3 reports share one cause and Mushi has
+   suggested a rule, the pattern is ready. (Behind the scenes a pattern whose reports
+   read very alike, coherence 0.75 or more, is promoted for you every 6 hours.)
+4. **You promote** — open **Recurring patterns**, read the suggested rule, and click
+   **Promote**. The pattern becomes a rule in use.
 5. **Injection** — the lesson is packed into every fix-worker and PR review context
    (up to 3,000 tokens), ranked by severity × relevance.
 
@@ -20450,18 +20521,37 @@ read this file automatically — no extra setup required.
 
 ---
 
-## Tab: Lessons
+## Tab: Recurring patterns (`?tab=clusters`)
 
-Your active coding rules. Each row shows the severity, how many reports have matched
-this lesson, the cluster it came from, and the first two lines of the rule text.
+The page opens here when a pattern is ready. Bugs that keep coming back with the same
+cause, most reports first. Each card shows the report count, the suggested rule and
+when it was last seen. **Promote** appears only where it can succeed (3 or more
+reports and a suggested rule); the first one is the primary button.
+
+**Filter to `Not a rule yet`** to see only patterns that are not rules.
+
+For each pattern, check:
+1. **Report count** — 3 or more reports describing the same cause.
+2. **Suggested rule** — does it make sense as a coding instruction?
+3. **Last seen** — is this still happening? If it's months old and you've shipped a fix, leave it.
+
+A pattern of 2 reports isn't reliable enough to write a codebase rule: it reads
+**Still growing** until more reports arrive.
+
+---
+
+## Tab: Rules in use (`?tab=lessons`)
+
+Your active coding rules. Each row shows the severity, how many times it was seen,
+the pattern it came from, and the first two lines of the rule text.
 
 **Click any row** to open the detail drawer with the full content:
 
 - **Rule** — the positive instruction (e.g. *"Always await the form submit handler
   before accessing `event.target` values in Safari"*)
-- **Anti-pattern** — the specific code pattern to avoid
-- **Cluster summary** — what the original reports described
-- **Coherence score and report count** — how strong the underlying signal is
+- **What to avoid** — the specific code pattern to avoid
+- **Summary** — what the original reports described
+- **Learned from** — the pattern's name and report count
 
 ### When to retire a lesson
 
@@ -20475,28 +20565,7 @@ toggle to review them and restore if needed.
 
 ---
 
-## Tab: Clusters
-
-Candidate clusters waiting for your review. This is where you decide what rises to the
-level of a codebase rule.
-
-**Filter to `Candidate`** to see only clusters that are new and eligible.
-
-For each cluster, check:
-1. **Coherence %** — above 80%? The reports really are describing the same root cause.
-2. **Suggested rule** — does it make sense as a coding instruction?
-3. **Last seen** — is this still happening? If it's months old and you've shipped a fix, dismiss instead of promoting.
-
-Click **Promote** to create the lesson. The cluster becomes `promoted` and the rule
-starts being injected immediately.
-
-The **Promote** button is only enabled when `cluster_size ≥ 3`. A cluster of 2 reports
-isn't statistically reliable enough to write a codebase rule — wait for more signal or
-review manually.
-
----
-
-## Tab: Query Sim
+## Tab: Try a change (`?tab=query`)
 
 > **Use this when:** You've just promoted a new lesson and want to confirm it will be
 > retrieved when the fix-worker handles a related bug. Or you want to check that a
@@ -20516,18 +20585,18 @@ fix-worker would receive — with rank, similarity score, and the full rule text
 
 ## Common tasks
 
-### Reviewing new candidates (weekly)
-1. Open the **Clusters** tab, filter to `Candidate`.
-2. For each cluster with coherence > 0.75: read the suggested rule. Sensible? Click **Promote**.
-3. For clusters with coherence < 0.75 or only 1–2 reports: leave them to accumulate more signal.
+### Reviewing new patterns (weekly)
+1. Open **Recurring patterns**, filter to `Not a rule yet`.
+2. For each pattern marked **Ready to promote**: read the suggested rule. Sensible? Click **Promote**.
+3. Patterns marked **Still growing** have only 1–2 reports: leave them to collect more.
 
 ### After fixing a recurring bug
-1. Open the **Clusters** tab, find the cluster for this bug pattern.
-2. If coherence ≥ 0.75 and size ≥ 3, promote it.
-3. Verify with **Query Sim** that your next fix-worker run will see the lesson.
+1. Open **Recurring patterns** and find the pattern for this bug.
+2. If it is ready to promote, promote it.
+3. Check with **Try a change** that your next fix-worker run will see the rule.
 
 ### Cleaning up stale lessons
-1. Open the **Lessons** tab, toggle to **Active**.
+1. Open the **Rules in use** tab, toggle to **Active**.
 2. Sort by frequency — lessons with frequency 0 in the last 30 days may be stale.
 3. Click each → review the rule → **Retire** if the underlying code has changed.
 
@@ -21613,6 +21682,14 @@ description: The Prompt lab lets you edit, test and A/B compare the classificati
 
 **Route:** `/prompt-lab`
 
+AI prompts is a Lab: turn it on in Settings → Labs to list it in the sidebar. The page
+works by URL either way.
+
+**First on the page:** **Versions and their grades**, one row per AI step (Fast
+filter, Diagnosis, Grading, Fix writer, …) with the version in use, the best version
+being tested, their grades, and a verdict: ahead (consider promoting), behind, or
+waiting for grades. A row opens that step's editing table.
+
 > **Scenario:** Your fix-worker has been generating patches that touch the wrong file
 > 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
 > field — so the fix agent is looking at the wrong area of the codebase. You want to
@@ -21829,6 +21906,10 @@ with `local` provider and a weekly cron.
 The main grid shows one card per story with:
 - **Provider badge** — Local / Browserbase / Firecrawl
 - **24h pass rate** — colour-coded bar and percentage
+- **7 days** — one square per UTC day: red when a run failed that day, green when
+  every finished run passed, grey with none. Skipped runs never count as failures.
+  From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
+  could not be read).
 - **Run count** and **last run** time
 - **Disabled / Queued** chip when applicable
 - Link to last failure Browserbase replay session
@@ -22249,6 +22330,11 @@ description: The App blueprint page shows what this app is built from, the state
 # App blueprint
 
 **Route:** `/recipe`
+
+**First on the page:** the overall state and **Next step**: the first box in the worst
+state, its reason, a button to the page that fixes it and **Show how to fix** for its
+side panel. Boxes have a red (check failed), amber (needs attention) or green (OK)
+edge; grey dashed boxes are not checked or not set up, never a pass.
 
 > **Scenario:** A fix should follow this app's own tokens and tables, and you are not sure what is connected. Open App blueprint and start with the card marked **Needs attention** or **Check failed**.
 

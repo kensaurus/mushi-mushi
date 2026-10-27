@@ -103,8 +103,8 @@ uses to read the repo).
 
 ## Where to see it
 
-- **Console:** Mushi health → Code size → *Known holes in your dependencies*, and the
-  filed reports in the normal queue.
+- **Console:** Full-stack audit → *Known holes in your dependencies* (Mushi health → Code
+  size links there), and the filed reports in the normal queue.
 - **Editor (MCP):** `get_radar` (rules `known_vulnerable_dependency` and
   `runtime_end_of_life`), `list_gate_findings` with gate
   `portfolio_radar_vulns`, `run_radar` to check again.

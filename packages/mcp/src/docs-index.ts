@@ -102,8 +102,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/checks",
     markdown: "admin/checks.md",
     keywords: ["admin", "checks"],
-    headings: ["App checks", "AI quality"],
-    excerpt: "The Checks page lists every automatic check on this app. Each card opens that check, with the same live count the sidebar shows.",
+    headings: ["The checks", "App checks", "AI quality"],
+    excerpt: "The Checks page shows every automatic check on this app with its state, when it last ran and its open count, failing checks first.",
   },
   {
     title: "CI runners",
@@ -327,7 +327,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/inventory",
     markdown: "admin/inventory.md",
     keywords: ["admin", "inventory", "user", "stories"],
-    headings: ["What you see", "Run gates / Run crawler", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Watch your live site", "Synthetic monitor", "Spec traceability — every fix carries the originating Action"],
+    headings: ["What you see", "Check every action / Crawl the app", "SDK-driven discovery", "Surface mode in the graph", "Five gates", "Watch your live site", "Synthetic monitor", "Spec traceability — every fix carries the originating Action"],
     excerpt: "The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.",
   },
   {
@@ -354,7 +354,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/lessons",
     markdown: "admin/lessons.md",
     keywords: ["admin", "lessons"],
-    headings: ["The lifecycle: how a report becomes a rule", "Tab: Lessons", "When to retire a lesson", "Tab: Clusters", "Tab: Query Sim", "Common tasks", "Reviewing new candidates (weekly)", "After fixing a recurring bug"],
+    headings: ["The lifecycle: how a report becomes a rule", "Tab: Recurring patterns (?tab=clusters)", "Tab: Rules in use (?tab=lessons)", "When to retire a lesson", "Tab: Try a change (?tab=query)", "Common tasks", "Reviewing new patterns (weekly)", "After fixing a recurring bug"],
     excerpt: "The Lessons page turns repeat fixes into rules — when the same root cause keeps returning, Mushi records it so your editor sees it on the next PR.",
   },
   {
