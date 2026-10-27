@@ -163,8 +163,9 @@ export interface CreatePrOptions {
   commitTrailers?: string[]
   /**
    * Lift the draft gate after opening the PR (default true, which is what
-   * fix-worker and sdk-upgrade-worker rely on). Recipe PRs pass false so the
-   * PR stays a draft and the host's CI does not run until the owner chooses.
+   * sdk-upgrade-worker relies on). fix-worker (ADR 0047), CI cost fixes and
+   * recipe PRs pass false so the PR stays a draft and the host's CI does not
+   * run until a review or the owner readies it.
    */
   markReady?: boolean
   /**

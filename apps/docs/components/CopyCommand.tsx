@@ -14,9 +14,11 @@ interface CopyCommandProps {
   /** `cta_click.cta_id` for <MushiSiteAnalytics />. */
   ctaId?: string
   location?: string
+  /** A prompt for an AI editor, not a shell command: wraps, no `$`. */
+  prompt?: boolean
 }
 
-export function CopyCommand({ cmd, label, ctaId, location }: CopyCommandProps) {
+export function CopyCommand({ cmd, label, ctaId, location, prompt = false }: CopyCommandProps) {
   const [copied, setCopied] = useState(false)
   function copy() {
     void navigator.clipboard?.writeText(cmd).then(() => {
@@ -28,16 +30,18 @@ export function CopyCommand({ cmd, label, ctaId, location }: CopyCommandProps) {
   return (
     <div className="landing-oneclick__cmd">
       {label ? <span className="landing-oneclick__cmd-label">{label}</span> : null}
-      <div className="landing-oneclick__cmd-row">
-        <span className="landing-oneclick__prompt" aria-hidden="true">
-          $
-        </span>
+      <div className={prompt ? 'landing-oneclick__cmd-row landing-oneclick__cmd-row--prompt' : 'landing-oneclick__cmd-row'}>
+        {prompt ? null : (
+          <span className="landing-oneclick__prompt" aria-hidden="true">
+            $
+          </span>
+        )}
         <code>{cmd}</code>
         <button
           type="button"
           onClick={copy}
           className="landing-oneclick__copy"
-          aria-label={copied ? 'Copied to clipboard' : `Copy: ${cmd}`}
+          aria-label={copied ? 'Copied to clipboard' : prompt ? 'Copy this prompt' : `Copy: ${cmd}`}
           {...tracking}
         >
           {copied ? 'Copied' : 'Copy'}

@@ -420,7 +420,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     samples: scopedSamples
       .filter((s) => s.phase === 'completed')
       .map((s) => ({ hostId: s.host_id, runnerName: s.runner_name, repo: s.repo, at: s.at, memPeakMb: s.mem_peak_mb, memMaxMb: s.mem_max_mb, oomKills: s.oom_kills })),
-    workflows: rows.workflows.map((w) => ({ repo: w.repo, path: w.path, text: w.text })),
+    workflows: rows.workflows.map((w) => ({ projectId: w.projectId, repo: w.repo, path: w.path, text: w.text })),
     repoWatchedSince: watched,
   })
 

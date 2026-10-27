@@ -98,10 +98,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 }
 
 const TABS: Array<{ id: AnomaliesTabId; label: string; description: string }> = [
-  { id: 'overview', label: 'Overview', description: 'Posture banner and how metric ingestion feeds detection.' },
-  { id: 'anomalies', label: 'Anomalies', description: 'Open statistical findings — confirm, dismiss, or follow auto-reports.' },
-  { id: 'metrics', label: 'Metrics', description: 'Ingest data points and preview timeseries sparklines.' },
-  { id: 'detect', label: 'Detect', description: 'Trigger Page-Hinkley, Z-score, and release-regression analysis.' },
+  { id: 'overview', label: 'Overview', description: 'Status and how your metrics feed spike detection.' },
+  { id: 'anomalies', label: 'Spikes', description: 'Spikes to confirm or dismiss, and the reports filed for them.' },
+  { id: 'metrics', label: 'Metrics', description: 'Send metric values and see each metric over time.' },
+  { id: 'detect', label: 'Check now', description: 'Look for spikes now, including ones that started with a release.' },
 ]
 
 function resolveAnomaliesTab(value: string | null): AnomaliesTabId {
@@ -118,7 +118,6 @@ export function AnomaliesPage() {
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveAnomaliesTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: statsData,
@@ -274,7 +273,7 @@ export function AnomaliesPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anomalies">
       <PageHeaderBar
-        title={copy?.title ?? 'Anomalies'}
+        title={copy?.title ?? 'Unusual spikes'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         contextChip={<PdcaContextHint stage="check" />}
@@ -325,7 +324,8 @@ export function AnomaliesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isAnomaliesStatusBannerCritical(stats),
+            // No metrics: the snapshot below is the page's one first step (P3).
+            show: isAnomaliesStatusBannerCritical(stats) && stats.topPriority !== 'no_metrics',
             children: (
               <AnomaliesStatusBanner
                 stats={stats}
@@ -344,9 +344,8 @@ export function AnomaliesPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onAddMetrics={() => setActiveTab('metrics')}
               />
             ),
           },
@@ -393,7 +392,7 @@ export function AnomaliesPage() {
             <RecommendedAction
               tone="info"
               title="Seed metric data first"
-              description="Page-Hinkley and Z-score detectors need a timeseries baseline — ingest points before running detection."
+              description="Spike detection needs a normal range to compare with: send some metric values first."
               cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
             />
           )}

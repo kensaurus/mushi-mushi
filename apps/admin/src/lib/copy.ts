@@ -60,7 +60,7 @@ const COPY: CopyRegistry = {
   quickstart: {
     '/dashboard': {
       title: 'Home',
-      description: 'What needs your attention right now — waiting bugs, fixes in progress, and setup steps left.',
+      description: 'How your app is doing: is it up, what needs you, and what is shipping.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Waiting',
@@ -81,14 +81,14 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About your home screen',
         whatIsIt:
-          'A single place to see whether bugs are waiting, fixes are running, or setup still needs a step — before opening Reports or Fixes.',
+          'One page per app: whether it is up, what needs you, what is shipping, and which pages have bugs.',
         useCases: [
           'Start every session here to see what actually needs you',
-          'Jump straight to the worst backlog or failed fix',
-          'Finish setup when charts are still empty',
+          'Check the site is up and CI on main is green',
+          'Finish setup while the grey lights say what to connect',
         ],
         howToUse:
-          'Read the colored banner at the top — yellow means unread help, green means you have opened it. Click the action button to continue.',
+          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it.',
       },
     },
     '/inbox': {
@@ -449,9 +449,9 @@ const COPY: CopyRegistry = {
       },
     },
     '/intelligence': {
-      title: 'Your weekly bug summary',
+      title: 'Weekly insights',
       description:
-        'Status banner first — Summary for posture, Reports for digests, Jobs for background runs and findings.',
+        'A plain-English summary of each week: bugs in, fixes out, and what changed.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         digests: 'Digests',
@@ -773,16 +773,16 @@ const COPY: CopyRegistry = {
       },
     },
     '/drift': {
-      title: 'Catch contract drift',
+      title: 'Schema changes',
       description:
-        'Status banner first — Summary for posture, Findings to review, Snapshots for history, Scanner to run a walk.',
+        'Whether your API routes or database tables changed since the last scan, and which change can break a caller.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         openFindings: 'Open findings',
         critical: 'Critical',
         warnings: 'Warnings',
         snapshots: 'Snapshots',
-        contractEdges: 'Contract edges',
+        contractEdges: 'Routes and tables tracked',
         surfaces: 'Surfaces',
       },
       actionLabels: {
@@ -840,19 +840,19 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About experiments',
-        whatIsIt: 'A/B testing with SDK assignment — compare UI variants with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks.',
+        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi assigns users through the SDK and tells you when a winner is clear (statistically: CUPED variance reduction, mSPRT always-valid p-values and SRM checks).',
         useCases: [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on conversion rate',
           'Use bandit mode for fast exploration with small samples',
         ],
-        howToUse: 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.',
+        howToUse: 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: the test (mSPRT) does not cry wolf when you peek.',
       },
     },
     '/anomalies': {
-      title: 'Catch metric spikes',
+      title: 'Unusual spikes',
       description:
-        'Status banner first — Summary for posture, Anomalies to review, Metrics to add data, Detect to run analysis.',
+        'Metrics that jumped far outside their normal range, and whether the jump started with a release.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         open: 'Open',
@@ -928,7 +928,7 @@ const COPY: CopyRegistry = {
     '/notifications': {
       title: 'Reporter updates',
       description:
-        'Status banner first — Summary for posture, Inbox to debug payloads, Setup for a wiring checklist.',
+        'Whether the people who report bugs hear back when their bug is diagnosed, fixed and shipped, and whether they opened it.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         total: 'Total',
@@ -947,7 +947,7 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        inbox: 'Inbox',
+        inbox: 'Sent',
         setup: 'Setup',
       },
       help: {
@@ -1071,7 +1071,7 @@ const COPY: CopyRegistry = {
       },
     },
     '/code-health': {
-      title: 'Code health',
+      title: 'Code size',
       description: 'Bundle-size trends and oversized-file warnings from your app\'s CI.',
       help: {
         title: 'About code health',
@@ -1146,7 +1146,7 @@ const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'Home',
-      description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
+      description: 'How your app is doing right now: health, what needs you, the next release, and your busiest pages.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Backlog',
@@ -1172,15 +1172,15 @@ const COPY: CopyRegistry = {
       help: {
         title: 'About your home screen',
         whatIsIt:
-          'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.',
+          'One page per app: is it up, erroring or slow; what needs you; what is shipping and what is waiting; which pages have bugs; and who can reach it.',
         useCases: [
-          'Glance at the status banner to see backlog, failures, or integration issues',
-          'Use Loop tab for the interactive flow canvas with live counts',
-          'Use Metrics for 14-day charts and the inbox queue',
-          'Use Health for connection checks and automated test coverage on the active project',
+          'Check the four lights: site up, errors today, SDK sending, CI on main',
+          'Clear the few things that need you, most costly first',
+          'See how far fixes have got toward a release, and how many bugs wait by severity',
+          'Compare this week with last week',
         ],
         howToUse:
-          'Plan = review new reports. Do = fix drafts and PRs. Check = quality scores before merge. Act = merged fixes and lessons. The canvas shows counts and where things are stuck — expand “About this page” for details.',
+          'Every number opens the list it counts. A grey light is not connected yet; its button says how to connect it. "How this works" at the bottom explains what Mushi does with a bug.',
       },
     },
     '/reports': {
@@ -1340,9 +1340,9 @@ const COPY: CopyRegistry = {
       },
     },
     '/health': {
-      title: 'App health',
+      title: 'Mushi health',
       description:
-        'Banner + HEALTH SNAPSHOT first — then Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
+        'Whether Mushi itself is working: the AI calls behind your diagnoses and fixes, and its background jobs.',
       sections: { snapshot: 'Summary' },
       statLabels: {
         calls: 'AI calls',
@@ -1367,7 +1367,7 @@ const COPY: CopyRegistry = {
         activity: 'Recent traces',
       },
       help: {
-        title: 'About App health',
+        title: 'About Mushi health',
         whatIsIt:
           'Real-time vitals for every LLM call Mushi makes — how fast it responds, how often it fails, and how much each call costs you.',
         useCases: [
@@ -1533,7 +1533,7 @@ const COPY: CopyRegistry = {
       description: 'GitHub OAuth, default branch, fix-worker target repo health.',
     },
     '/sso': {
-      title: 'SSO',
+      title: 'Single sign-on',
       description: 'SAML GoTrue registration, domain routing, and provider health per project.',
     },
     '/audit': {
@@ -1545,7 +1545,7 @@ const COPY: CopyRegistry = {
       description: 'Versioned classifier/fix prompts with shadow tests on live reports.',
     },
     '/intelligence': {
-      title: 'Intelligence',
+      title: 'Weekly insights',
       description: 'Weekly digests of what changed in your bug and fix numbers, and why.',
     },
     '/compliance': {
@@ -1586,10 +1586,10 @@ const COPY: CopyRegistry = {
     },
     '/iterate': {
       title: 'Improvement runs',
-      description: 'PDCA producer/critic loops on target URLs — queue, trigger, inspect critiques.',
+      description: 'One AI drafts a change to a page of your app and a second AI critiques it until it passes.',
     },
     '/drift': {
-      title: 'Drift',
+      title: 'Schema changes',
       description: 'Where the live app no longer matches its declared routes and API.',
     },
     '/experiments': {
@@ -1597,12 +1597,12 @@ const COPY: CopyRegistry = {
       description: 'A/B tests of a change, and which variant won.',
     },
     '/anomalies': {
-      title: 'Anomalies',
+      title: 'Unusual spikes',
       description: 'Unusual spikes in reports, errors or AI spend, and what caused them.',
     },
     '/cost': {
-      title: 'LLM Cost',
-      description: 'Per-project llm_invocations telemetry — spend rollups, breakdown, and raw log.',
+      title: 'AI spend',
+      description: 'What the AI behind diagnoses and fixes costs, by step and by day.',
     },
     '/notifications': {
       title: 'Reporter updates',
@@ -1630,7 +1630,7 @@ const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'Home',
-      description: 'Where your bug-fix loop is stuck today, and the next thing to do.',
+      description: 'Your app at a glance: health, what needs you, the release, pages and access.',
     },
     '/reports': {
       title: 'Bugs',
@@ -1649,8 +1649,8 @@ const COPY: CopyRegistry = {
       description: 'How well the AI triages bugs (severity, category, diagnosis), graded over time.',
     },
     '/health': {
-      title: 'App health',
-      description: 'Whether the AI calls and scheduled jobs this app relies on are working.',
+      title: 'Mushi health',
+      description: 'Whether Mushi itself is working: its AI calls and background jobs. Your app’s uptime and errors are on Home.',
     },
     '/integrations': {
       title: 'Integrations',

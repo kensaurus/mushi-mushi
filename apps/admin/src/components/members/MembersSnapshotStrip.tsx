@@ -1,73 +1,53 @@
 /**
  * FILE: MembersSnapshotStrip.tsx
- * PURPOSE: Team roster KPI strip — MetricStrip layout for OrganizationSettingsPage.
- *
- * OVERVIEW:
- * - Four StatCards for member count, invites, inactive seats, and seat usage
- *
- * DEPENDENCIES:
- * - MetricStrip, Section, StatCard, SnapshotSectionHint
- * - MembersStats from ./types
- *
- * USAGE:
- * - Mount via PagePosture on OrganizationSettingsPage with stats from members API
+ * PURPOSE: Team status: who is on the team, open invites and seats left
+ *          (PageStatus, P1). Mounted via PagePosture on OrganizationSettingsPage.
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { MembersStats } from './types'
+import { pluralizeWithCount } from '../../lib/format'
 
 interface Props {
   stats: MembersStats
   fetchedAt: string | null
   isValidating?: boolean
-  sectionTitle?: string
-  hint?: string
 }
 
-export function MembersSnapshotStrip({
-  stats,
-  fetchedAt,
-  isValidating,
-  sectionTitle = 'Team snapshot',
-  hint,
-}: Props) {
+function membersSentence(stats: MembersStats): string {
+  const members = `${pluralizeWithCount(stats.memberCount, 'member')}`
+  const invites = stats.pendingInvites > 0 ? `, ${pluralizeWithCount(stats.pendingInvites, 'invite')} not accepted yet` : ''
+  const seats =
+    stats.seatLimit === null
+      ? '; no seat limit on your plan'
+      : stats.atSeatCap
+        ? `; all ${stats.seatLimit} seats are used`
+        : `; ${stats.seatsUsed} of ${stats.seatLimit} seats used`
+  return `${members}${invites}${seats}.`
+}
+
+export function MembersSnapshotStrip({ stats, fetchedAt, isValidating }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Team snapshot">
-        <StatCard
-          label="Members"
-          value={stats.memberCount}
-          hint={`${stats.activeLast7d} active in the last 7 days`}
-        />
-        <StatCard
-          label="Pending invites"
-          value={stats.pendingInvites}
-          accent={stats.pendingInvites > 0 ? 'text-warn' : undefined}
-          hint={
-            stats.expiringSoonInvites > 0
-              ? `${stats.expiringSoonInvites} expiring within 24h`
-              : 'Open invites not yet accepted'
-          }
-        />
-        <StatCard
-          label="Inactive seats"
-          value={stats.inactiveCount}
-          accent={stats.inactiveCount > 0 && stats.memberCount >= 3 ? 'text-warn' : undefined}
-          hint="No activity in 30d or never seen"
-        />
-        <StatCard
-          label={stats.seatLimit !== null ? 'Seats used' : 'Plan seats'}
-          value={stats.seatLimit !== null ? `${stats.seatsUsed}/${stats.seatLimit}` : 'Unlimited'}
-          accent={stats.atSeatCap ? 'text-danger' : stats.seatLimit !== null ? 'text-ok' : undefined}
-          hint={
-            stats.seatLimit !== null
-              ? `${stats.seatsRemaining ?? 0} remaining on ${stats.planDisplayName ?? stats.planId ?? 'plan'}`
-              : `${stats.planDisplayName ?? stats.planId ?? 'Pro'} — no seat cap`
-          }
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Team status"
+      tone={stats.atSeatCap ? 'warn' : stats.expiringSoonInvites > 0 ? 'info' : 'ok'}
+      sentence={membersSentence(stats)}
+      freshness={{ at: fetchedAt, isValidating }}
+      metrics={[
+        { label: 'Members', value: stats.memberCount, hint: 'People with access to this team’s apps.' },
+        {
+          label: 'Invites waiting',
+          value: stats.pendingInvites,
+          tone: stats.expiringSoonInvites > 0 ? 'warn' : 'neutral',
+          hint: stats.expiringSoonInvites > 0 ? `${stats.expiringSoonInvites} expire soon.` : 'Invites sent but not accepted yet.',
+        },
+        {
+          label: stats.seatLimit !== null ? 'Seats used' : 'Seats',
+          value: stats.seatLimit !== null ? `${stats.seatsUsed}/${stats.seatLimit}` : 'Unlimited',
+          tone: stats.atSeatCap ? 'warn' : 'neutral',
+          hint: 'Seats your plan includes and how many are taken.',
+        },
+      ]}
+    />
   )
 }

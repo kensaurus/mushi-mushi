@@ -285,7 +285,7 @@ function recommendationFor(
         tone: 'urgent',
         meta: lastAttemptMeta,
         actions: [
-          { label: 'Check BYOK keys \u2192', to: '/settings?tab=byok', tone: 'primary' },
+          { label: 'Check AI keys \u2192', to: '/settings?tab=byok', tone: 'primary' },
           { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
           { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],

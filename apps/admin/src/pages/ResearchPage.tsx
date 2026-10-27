@@ -113,7 +113,6 @@ export function ResearchPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickResearchTab(stats)
   const activeTab: ResearchTabId = explicitResearchTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'search' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
@@ -346,6 +345,8 @@ export function ResearchPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'ready_no_sessions',
             children: (
               <ResearchStatusBanner
                 stats={stats}
@@ -365,9 +366,8 @@ export function ResearchPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onSearch={() => setActiveTab('search')}
               />
             ),
           },

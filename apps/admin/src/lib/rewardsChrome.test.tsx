@@ -24,17 +24,28 @@ describe('Rewards responsive chrome', () => {
     expect(html).toBe('')
   })
 
-  it('RewardsSnapshotStrip compact uses 4-column metric strip', () => {
+  // Page status (P1, console journeys 2026-10-27): a sentence and at most
+  // three numbers; a program with nothing to count shows no wall of zeros.
+  it('RewardsSnapshotStrip says the program is off instead of six zero tiles', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <RewardsSnapshotStrip stats={EMPTY_REWARDS_STATS} statsFetchedAt={null} />
+      </MemoryRouter>,
+    )
+    expect(html).toContain('Rewards are off for this app.')
+    expect(html).not.toContain('<dl')
+  })
+
+  it('RewardsSnapshotStrip shows three linked numbers once testers earn points', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <RewardsSnapshotStrip
-          stats={EMPTY_REWARDS_STATS}
+          stats={{ ...EMPTY_REWARDS_STATS, projectRewardsEnabled: true, activeContributors30d: 56, pointsAwarded30d: 981 }}
           statsFetchedAt={null}
-          compact
         />
       </MemoryRouter>,
     )
-    expect(html).toContain('REWARDS SNAPSHOT')
-    expect(html).toContain('Active contributors')
+    expect(html).toContain('56 testers earned 981 points in the last 30 days')
+    expect(html.match(/<dd/g)).toHaveLength(3)
   })
 })

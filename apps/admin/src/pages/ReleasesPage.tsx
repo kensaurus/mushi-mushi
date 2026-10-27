@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/pages/ReleasesPage.tsx
  * PURPOSE: Release management — banner + RELEASES SNAPSHOT + tabs:
- *          Drafts | Published | New draft | App stores, readout at the foot.
+ *          Drafts | Published | New draft | Batch | App stores, readout at the foot.
  */
 
 import { useState, useCallback, useMemo } from 'react'
@@ -36,6 +36,7 @@ import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanne
 import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
 import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
+import { ReleaseBatchTab } from '../components/releases/ReleaseBatchTab'
 import {
   InlineProof,
   SignalChip,
@@ -106,12 +107,13 @@ const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
   { id: 'drafts', label: 'Drafts', description: 'Edit changelog Markdown, link feedback tickets, then publish to notify credited reporters.' },
   { id: 'published', label: 'Published', description: 'Shipped changelogs with fix counts, contributor credits, and notification stamps.' },
   { id: 'draft', label: 'Draft', description: 'Generate a new AI changelog from fixed reports in a time window.' },
+  { id: 'batch', label: 'Batch', description: 'The release train running now or leaving next: its fixes, their review and CI, database migrations, and the deploy after it.' },
   { id: 'store', label: 'App stores', description: 'Store listing checks, the pre-submission checklist, and store reviews filed as reports.' },
 ]
 
 /** The tab named in the URL, or null so the posture picks one. */
 function explicitReleasesTab(value: string | null): ReleasesTabId | null {
-  if (value === 'drafts' || value === 'published' || value === 'draft' || value === 'store') return value
+  if (value === 'drafts' || value === 'published' || value === 'draft' || value === 'batch' || value === 'store') return value
   return null
 }
 
@@ -578,7 +580,6 @@ export function ReleasesPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickReleasesTab(stats)
   const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
     ? `/v1/admin/releases?limit=100`
@@ -624,7 +625,7 @@ export function ReleasesPage() {
       TABS.map((t) => ({
         id: t.id,
         label:
-          t.id === 'store'
+          t.id === 'store' || t.id === 'batch'
             ? t.label
             : t.id === 'drafts'
               ? copy?.tabLabels?.drafts ?? t.label
@@ -697,6 +698,8 @@ export function ReleasesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'no_releases' && stats.topPriority !== 'no_fixes',
             children: (
               <ReleasesStatusBanner
                 stats={stats}
@@ -715,9 +718,8 @@ export function ReleasesPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onDraft={() => setActiveTab('draft')}
               />
             ),
           },
@@ -770,6 +772,8 @@ export function ReleasesPage() {
       )}
 
       {activeTab === 'drafts' && activeProjectId ? <AutoReleaseCard projectId={activeProjectId} /> : null}
+
+      {activeTab === 'batch' ? <ReleaseBatchTab projectId={activeProjectId ?? null} /> : null}
 
       {activeTab === 'store' && (
         !activeProjectId ? (

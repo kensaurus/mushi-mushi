@@ -20,6 +20,7 @@
  *          `skipped` is not green.
  */
 
+import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, type CiJobForRepair } from './review-followup.ts'
 
 export const PIPELINE_STAGES = [
@@ -365,6 +366,15 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       .map((a) => a.report_id as string),
   )
 
+  // The newest attempt per report: an older failed run on a report that was
+  // retried is history, not a second stuck item (report f5575c9e).
+  const newestAttempt = new Map<string, AttemptRow>()
+  for (const a of input.attempts) {
+    if (!a.report_id) continue
+    const cur = newestAttempt.get(a.report_id)
+    if (!cur || a.created_at > cur.created_at) newestAttempt.set(a.report_id, a)
+  }
+
   const itemOf = (a: AttemptRow, since: string, extra: Partial<PipelineItem> = {}): PipelineItem => {
     const q = queueByAttempt.get(a.id) ?? null
     const rv = reviews.get(a.id) ?? null
@@ -390,6 +400,17 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     }
   }
 
+  // "Agent failed" counts REPORTS (apps/admin/src/lib/countDefinitions.ts):
+  // once per report, from its newest attempt, and never a report that is
+  // fixed, resolved or dismissed or that has a fix in flight (f5575c9e).
+  const isAgentFailedReport = (a: AttemptRow): boolean => {
+    if (!a.report_id) return true
+    if (liveReports.has(a.report_id)) return false
+    if (newestAttempt.get(a.report_id)?.id !== a.id) return false
+    const status = reportsById.get(a.report_id)?.status
+    return !(status && RESOLVED_REPORT_STATUSES.has(status))
+  }
+
   for (const a of input.attempts) {
     // Merged (last 7 days): Merged, or Deployed when a deploy was seen after it.
     if (a.merged_at || a.pr_state === 'merged') {
@@ -412,8 +433,8 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
       if (a.status === 'running' || a.status === 'pending') {
         const stuck = age(now, a.created_at) > AGENT_STUCK_MS
         groups.add(stuck ? 'agent_slow' : 'agent_running', { stage: 'pr', tone: stuck ? 'stuck' : 'moving', noun: ['fix', 'fixes'], text: stuck ? 'agent still running after 6 hours' : 'agent writing the fix', actions: [] }, itemOf(a, a.created_at))
-      } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && !(a.report_id && liveReports.has(a.report_id))) {
-        groups.add('agent_failed', { stage: 'pr', tone: 'stuck', noun: ['fix', 'fixes'], text: 'agent failed, no PR opened', actions: [] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
+      } else if (a.status === 'failed' && age(now, a.created_at) <= RECENT_MS && isAgentFailedReport(a)) {
+        groups.add('agent_failed', { stage: 'pr', tone: 'stuck', noun: REPORT, text: 'the agent failed, no PR opened', actions: [] }, itemOf(a, a.completed_at ?? a.created_at, { lastError: clip(a.error) }))
       }
       continue
     }

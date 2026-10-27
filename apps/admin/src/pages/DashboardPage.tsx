@@ -1,14 +1,17 @@
 /**
  * FILE: apps/admin/src/pages/DashboardPage.tsx
- * PURPOSE: 14-day operational view of bug intake, LLM cost, auto-fix
- *          pipeline, integration health, and the triage queue. Page-level
- *          orchestration only — data load + composition. Each row is a
- *          dedicated subcomponent in components/dashboard/* so they can
- *          evolve independently and stay below the 30-line-function limit.
+ * PURPOSE: Home → Today: what the app's owner wants to know on opening it.
+ *          Is the app up, erroring, slow? What needs me? What is shipping
+ *          and what is waiting? Which pages hurt? Who can reach it?
+ *
+ *          One call (GET /v1/admin/projects/:id/home) feeds every section;
+ *          a section whose read failed says so on its own, and one that is
+ *          not connected says how to connect it. Page-level orchestration
+ *          only; each section is a component in components/home/*.
  */
 
-import { useCallback, useMemo, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { useCallback, useMemo } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -16,261 +19,103 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
+import { useEntitlements } from '../lib/useEntitlements'
 import { Confetti } from '../components/Confetti'
-import { Btn, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
+import { EmptySectionMessage, FreshnessPill, RefreshIconButton } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
-import { NextStep } from '../components/NextStep'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { sdkHealthHref } from '../lib/sdkHealth'
-import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
 import { HeroIntro } from '../components/dashboard/HeroIntro'
-import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
-import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
-import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
-import { KpiRow } from '../components/dashboard/KpiRow'
-import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
-import { TeamActivityTile } from '../components/dashboard/TeamActivityTile'
-import { InsightsRow } from '../components/dashboard/InsightsRow'
-import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
-import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
-import { DashboardLoopReadout } from '../components/dashboard/DashboardLoopReadout'
-import { SdkUpgradeBanner } from '../components/dashboard/SdkUpgradeBanner'
-import type { DashboardData } from '../components/dashboard/types'
-import type { PdcaStageId } from '../lib/pdca'
+import { AppCard, AppCardSkeleton } from '../components/home/AppCard'
+import { HealthStrip, HealthStripSkeleton } from '../components/home/HealthStrip'
+import { NeedsYouCard, NeedsYouSkeleton } from '../components/home/NeedsYouCard'
+import { ReleaseCard, ReleaseSkeleton } from '../components/home/ReleaseCard'
+import { SitemapCard, SitemapSkeleton } from '../components/home/SitemapCard'
+import { WeekCard, WeekSkeleton } from '../components/home/WeekCard'
+import { ActivityCard, ActivitySkeleton } from '../components/home/ActivityCard'
+import { AccessCard, AccessSkeleton } from '../components/home/AccessCard'
+import { HowThisWorks } from '../components/home/HowThisWorks'
+import type { ProjectHome } from '../lib/projectHome'
 import { usePageCopy } from '../lib/copy'
-import { useDashboardUx } from '../lib/dashboardModeUx'
-import { deriveDashboardInsight, shouldShowPdcaFlow } from '../lib/dashboardExplainer'
-import { PLATFORM_DEFS } from '../components/integrations/types'
-import { semanticBannerTone } from '../lib/tokens'
 import { IconDashboard } from '../components/icons'
 
-function inferRunningStage(data: DashboardData): PdcaStageId | null {
-  const activity = data.activity ?? []
-  const recent = activity[0]
-  if (!recent) return null
-  const ageMs = Date.now() - new Date(recent.at).getTime()
-  if (ageMs > 60_000) return null
-  if (recent.kind === 'report') return 'plan'
-  if (recent.kind === 'fix') return 'do'
-  return null
-}
-
-/** Plain name for an integration health kind ("sentry" → "Sentry"). */
-function integrationLabel(kind: string): string {
-  const def = PLATFORM_DEFS.find((d) => d.kind === kind)
-  if (def) return def.label
-  return kind.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
-}
-
 export function DashboardPage() {
-  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<ProjectHome>(
+    activeProjectId ? `/v1/admin/projects/${activeProjectId}/home` : null,
+  )
+  const ent = useEntitlements()
   const toast = useToast()
   const navigate = useNavigate()
-  const [showFullDashboard, setShowFullDashboard] = useState(false)
   const copy = usePageCopy('/dashboard')
-  const { isAdvanced, hideOverviewChrome, hideLoopSnapshot } = useDashboardUx()
 
-  // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
-  // fire a confetti burst + a toast with a CTA to the merged PR. This is the
-  // single most important peak-end moment in the whole loop — it's the proof
-  // that Mushi closed a PDCA cycle on the user's project. (Round 2 polish.)
-  // SPA-route via `navigate` rather than `window.location.assign` — the
-  // latter discards in-memory state (toast queue, scroll, focus) on what
-  // should be a celebratory in-app jump.
-  // Live-pulse the dashboard via Supabase Realtime. Previously a 15s poll,
-  // now event-driven: when a report lands the queue ticks immediately and
-  // the PDCA pipeline can pulse the right stage. A 1s debounce avoids
-  // thrashing when a burst of webhooks (push + pr + check_run) for the
-  // same fix land in the same second. Dashboard reloads are cheap because
-  // the backend caches the aggregate for 10s server-side.
-  const realtimeEnabled = !loading && !error && !!data && !data.empty
+  // A report, fix or deploy changes Home at once; 1 s debounce for bursts.
   const { channelState } = useRealtimeReload(
     ['reports', 'fix_attempts', 'fix_events', 'fix_dispatch_jobs'],
     reload,
-    { debounceMs: 1000, enabled: realtimeEnabled },
+    { debounceMs: 1000, enabled: !loading && !error && !!data },
   )
 
+  // The first merged fix is the proof the loop closed on this app.
   const onFirstMergedFix = useCallback(() => {
-    toast.success(
-      'Your first auto-fix was merged 🎉',
-      'Mushi just closed a full PDCA loop end-to-end. Want to see the merged PR?',
-      { label: 'View merged fixes', onClick: () => navigate('/fixes') },
-    )
+    toast.success('Your first auto-fix was merged 🎉', 'Mushi fixed a bug end to end. Want to see the merged PR?', {
+      label: 'View merged fixes',
+      onClick: () => navigate('/fixes'),
+    })
   }, [toast, navigate])
-  const { triggerKey: confettiKey } = useMilestoneCelebration(
-    'first-merged-fix',
-    setup.activeProject?.merged_fix_count ?? null,
-    { onFire: onFirstMergedFix },
-  )
-
-  // Publish context so the browser tab title + favicon badge track the
-  // dashboard's live state (backlog / in-flight fixes / LLM failures).
-  // Called unconditionally — hooks rules — so we compute defensively.
-  const dashProjectName = setup.activeProject?.project_name ?? null
-  const dashCounts = data?.counts
-  const dashFix = data?.fixSummary
-  const dashboardHeroStats = useMemo(() => {
-    if (!dashCounts || !dashFix) return null
-    const failing = (data?.integrations ?? []).filter(
-      (i) => i.lastStatus != null && i.lastStatus !== 'ok',
-    )
-    const degraded = failing.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded')
-    return {
-      openBacklog: dashCounts.openBacklog,
-      openCritical14d: dashCounts.openCritical14d ?? 0,
-      fixesInProgress: dashFix.inProgress,
-      fixesFailed: dashFix.failed,
-      openPrs: dashFix.openPrs ?? dashCounts.openPrs,
-      integrationIssues: failing.length,
-      degradedIntegrations: degraded.length,
-      failingIntegrations: failing.map((i) => ({ kind: i.kind, label: integrationLabel(i.kind) })),
-    }
-  }, [dashCounts, dashFix, data?.integrations])
-  const dashSummary = loading
-    ? 'Loading dashboard…'
-    : !data || data.empty
-      ? 'Waiting for first report'
-      : dashCounts
-        ? `${dashCounts.openCritical14d ?? 0} critical to decide · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
-        : undefined
-  usePublishPageContext({
-    route: '/dashboard',
-    title: dashProjectName ? `Home · ${dashProjectName}` : 'Home',
-    summary: dashSummary,
-    // `openBacklog` is the queue of reports the user still needs to
-    // action — treat every untriaged report as deserving the favicon
-    // red dot so the operator sees the nudge even from another tab.
-    criticalCount: dashCounts?.openBacklog ?? 0,
-    questions: [
-      (dashCounts?.openBacklog ?? 0) > 0
-        ? `What\u2019s in my backlog of ${dashCounts!.openBacklog} reports right now?`
-        : 'Is the PDCA loop healthy this week?',
-      'Where is the bottleneck in the PDCA loop?',
-      'What changed in the last 24 hours I should know about?',
-    ],
-    actions: [
-      {
-        id: 'reload-dashboard',
-        label: 'Refresh dashboard',
-        hint: 'Re-fetch the dashboard payload',
-        run: () => { void reload() },
-      },
-    ],
+  const { triggerKey: confettiKey } = useMilestoneCelebration('first-merged-fix', setup.activeProject?.merged_fix_count ?? null, {
+    onFire: onFirstMergedFix,
   })
 
-  // Collapse the old maze: `/` → `/dashboard` → <GettingStartedEmpty/> (its own
-  // skeleton) → redirect to `/onboarding`. A brand-new user with no project at
-  // all belongs on the wizard immediately, so once the (cached, fast) setup
-  // status resolves with no project we redirect here — skipping the dashboard
-  // skeleton + empty-state bounce and the second loading flicker. We gate on
-  // `!setup.loading` so a user whose projects simply haven't loaded yet is not
-  // redirected prematurely.
-  // Only a resolved "no projects" answer sends anyone to the wizard. A failed
-  // or pending setup fetch keeps the remembered answer (B1, 2026-10-20).
+  const projectName = setup.activeProject?.project_name ?? data?.app.data?.name ?? null
+  const needs = data?.needsYou.data ?? []
+  const summary = useMemo(() => {
+    if (!data) return loading ? 'Loading Home…' : undefined
+    const bad = (data.health.data ?? []).filter((h) => h.light === 'bad').map((h) => h.label)
+    return [needs.length ? `${needs.length} need${needs.length === 1 ? 's' : ''} you` : 'Nothing needs you', bad.length ? `problem: ${bad.join(', ')}` : null].filter(Boolean).join(' · ')
+  }, [data, loading, needs.length])
+  usePublishPageContext({
+    route: '/dashboard',
+    title: projectName ? `Home · ${projectName}` : 'Home',
+    summary,
+    criticalCount: needs.length,
+    questions: [
+      needs[0] ? `Help me with: ${needs[0].text}` : 'Is my app healthy this week?',
+      'What changed in the last 24 hours I should know about?',
+      'Which page of my app has the most bugs?',
+    ],
+    actions: [{ id: 'reload-home', label: 'Refresh Home', hint: 'Re-read every Home section', run: () => void reload() }],
+  })
+
+  // A resolved "no projects" answer goes to the wizard; a failed setup read keeps the page.
   if (setup.resolved && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
   if (!setup.resolved && setup.error && !setup.loading) {
     return <PageLoadError error={setup.error} onRetry={setup.reload} resource="your setup status" endpoint="/v1/admin/setup" />
   }
-  if (loading || setup.loading) return <DashboardSkeleton />
-  if (error) return <PageLoadError error={error} onRetry={reload} resource="the dashboard" endpoint="/v1/admin/dashboard" />
-  if (!data || data.empty) return <GettingStartedEmpty />
 
-  const counts = data.counts!
-  const fixSummary = data.fixSummary!
-  const reportsByDay = data.reportsByDay ?? []
-  const llmByDay = data.llmByDay ?? []
-  const activity = data.activity ?? []
-  const lastReportAt = activity.find(a => a.kind === 'report')?.at ?? null
-  const projectName = setup.activeProject?.project_name ?? null
-  const sdkInstalled = setup.activeProject ? !setup.isStepIncomplete('sdk_installed') : false
-  const showFirstReportHero =
-    !!setup.activeProject &&
-    sdkInstalled &&
-    setup.activeProject.report_count === 0
-  // First-action clarity: when required setup steps are
-  // missing, hide the wall of KPIs/charts/cockpit by default. Show only the
-  // checklist + hero intro so the user has exactly one thing to do.
-  const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
-  const renderFullDashboard = !setupIncomplete || showFullDashboard
-  // While a required step is open the hero says so, with its fix, never "healthy".
-  const openSetupStep = setupIncomplete ? (setup.activeProject?.steps.find((s) => s.required && !s.complete) ?? null) : null
+  const project = setup.activeProject
+  const sdkInstalled = project ? !setup.isStepIncomplete('sdk_installed') : false
+  const showFirstReportHero = !!project && sdkInstalled && project.report_count === 0
+  const setupIncomplete = !!project && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
+  // While a required step is open the hero names it with its fix, never "healthy".
+  const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
   const heroSetupStep =
-    openSetupStep && setup.activeProject
+    openStep && project
       ? {
-          label: openSetupStep.label,
-          description: openSetupStep.description,
-          ctaLabel: openSetupStep.id === 'sdk_installed' ? 'Fix it' : openSetupStep.cta_label,
-          ctaTo: openSetupStep.id === 'sdk_installed' ? sdkHealthHref(setup.activeProject.project_id) : openSetupStep.cta_to,
+          label: openStep.label,
+          description: openStep.description,
+          ctaLabel: openStep.id === 'sdk_installed' ? 'Fix it' : openStep.cta_label,
+          ctaTo: openStep.id === 'sdk_installed' ? sdkHealthHref(project.project_id) : openStep.cta_to,
           done: setup.selectors.required_complete,
           total: setup.selectors.required_total,
         }
       : null
-  const hasPdcaStages = !!(data.pdcaStages && data.pdcaStages.length > 0)
-
-  const dashboardInsight =
-    renderFullDashboard && dashboardHeroStats
-      ? deriveDashboardInsight({
-          openBacklog: dashboardHeroStats.openBacklog,
-          openCritical14d: dashboardHeroStats.openCritical14d,
-          fixesInProgress: dashboardHeroStats.fixesInProgress,
-          fixesFailed: dashboardHeroStats.fixesFailed,
-          integrationIssues: dashboardHeroStats.integrationIssues,
-          degradedIntegrations: dashboardHeroStats.degradedIntegrations,
-          failingIntegrations: dashboardHeroStats.failingIntegrations,
-          reports14d: counts.reports14d ?? 0,
-        })
-      : null
-
-  // The one-line insight banner sits above the canvas and must not hide it
-  // (QA 169: the explainer always returns a verdict, so the canvas never rendered).
-  // Advanced opens on the "do this next" line instead of the four stage
-  // cards (owner, 2026-10-16: the stage visuals did not say what to do), so
-  // neither the canvas nor the stage hero draws them here.
-  const loopVisualsHidden = isAdvanced
-  const showPdcaFlow = shouldShowPdcaFlow({
-    isAdvanced,
-    renderFullDashboard,
-    hasPdcaStages,
-    showFirstReportHero,
-    loopVisualsHidden,
-  })
-  const showHeroIntro =
-    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow && !loopVisualsHidden
-
-  const pdcaFlowBlock = showPdcaFlow ? (
-    <>
-      <div className="hidden sm:block">
-        <PdcaFlow
-          variant="live"
-          stages={data.pdcaStages!}
-          focusStage={data.focusStage}
-          runningStage={inferRunningStage(data)}
-          activity={activity}
-          integrations={data.integrations ?? []}
-          interactive
-          showActionPanel
-          ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
-        />
-      </div>
-      <div className="sm:hidden">
-        <PdcaCockpit stages={data.pdcaStages!} focusStage={data.focusStage} />
-      </div>
-    </>
-  ) : null
-
-  const insightToneClasses: Record<string, string> = {
-    ok: semanticBannerTone('ok'),
-    warn: semanticBannerTone('warn'),
-    danger: semanticBannerTone('danger'),
-  }
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
@@ -278,189 +123,119 @@ export function DashboardPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Home'}
         icon={<IconDashboard />}
-        description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
-        helpTitle={copy?.help?.title ?? 'About your home screen'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.'}
-        helpUseCases={copy?.help?.useCases ?? [
-          'See whether report intake is rising or falling vs the prior week',
-          'Catch a backlog of un-triaged reports before users complain',
-          'Spot a regression in LLM cost or failure rate after a prompt change',
-          'Jump into the highest-priority report that needs review',
-        ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
+        description={copy?.description ?? (projectName ? `How ${projectName} is doing right now` : undefined)}
+        helpTitle={copy?.help?.title ?? 'About Home'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'One page per app: is it up and healthy, what needs you, what is shipping, which pages have bugs, and who can reach it.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Check the site is up and CI on main is green before you start the day',
+            'Clear the few things that need you, most costly first',
+            'See how many bugs wait for a fix and how far the next release has got',
+            'Compare this week with last week',
+          ]
+        }
+        helpHowToUse={copy?.help?.howToUse ?? 'Every number opens the list it counts. Grey lights are not connected yet; their button says how to connect them.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <RefreshIconButton
-          onClick={() => { void reload() }}
-          loading={isValidating}
-          label="Refresh dashboard"
-        />
-        <Link to="/reports" className="hidden sm:inline text-xs text-link whitespace-nowrap">
-          View all reports →
-        </Link>
+        <RefreshIconButton onClick={() => void reload()} loading={isValidating} label="Refresh Home" />
       </PageHeaderBar>
 
       <PagePosture
         slots={[
           {
+            id: 'setup-hero',
             priority: POSTURE_PRIORITY.status,
-            show: Boolean(dashboardInsight),
-            children: dashboardInsight ? (
-              <div
-                className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${insightToneClasses[dashboardInsight.tone] ?? insightToneClasses.ok}`}
-                role="status"
-                aria-live="polite"
-              >
-                <span
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    dashboardInsight.tone === 'danger'
-                      ? 'bg-danger'
-                      : dashboardInsight.tone === 'warn'
-                        ? 'bg-warn'
-                        : 'bg-ok'
-                  }`}
-                  aria-hidden="true"
-                />
-                <span>
-                  <span className="sr-only">
-                    {dashboardInsight.tone === 'danger'
-                      ? 'Critical: '
-                      : dashboardInsight.tone === 'warn'
-                        ? 'Warning: '
-                        : 'OK: '}
-                  </span>
-                  {dashboardInsight.sentence}
-                  {dashboardInsight.action ? (
-                    <>
-                      {' '}
-                      <Link to={dashboardInsight.action.to} className="font-medium underline underline-offset-2 hover:no-underline">
-                        {dashboardInsight.action.label} →
-                      </Link>
-                    </>
-                  ) : null}
-                </span>
-              </div>
+            show: !!heroSetupStep,
+            children: heroSetupStep ? <HeroIntro stages={[]} focusStage={null} projectName={projectName} setupStep={heroSetupStep} /> : null,
+          },
+          { id: 'quota', priority: POSTURE_PRIORITY.nudge, children: <QuotaBanner /> },
+          {
+            id: 'first-report',
+            priority: POSTURE_PRIORITY.recommended,
+            show: showFirstReportHero,
+            children: project ? (
+              <FirstReportHero
+                projectId={project.project_id}
+                projectName={project.project_name}
+                onReportSent={() => {
+                  setup.reload()
+                  void reload()
+                }}
+              />
             ) : null,
-          },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: renderFullDashboard && !hideLoopSnapshot,
-            children: (
-              <KpiRow
-                counts={counts}
-                fixSummary={fixSummary}
-                reportsByDay={reportsByDay}
-                llmByDay={llmByDay}
-                pdcaStages={data.pdcaStages}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: showHeroIntro,
-            children: (
-              <HeroIntro
-                stages={data.pdcaStages!}
-                focusStage={data.focusStage}
-                projectName={projectName}
-                lastReportAt={lastReportAt}
-                setupStep={heroSetupStep}
-              />
-            ),
           },
         ]}
       />
 
-      <div className="space-y-4 border-b border-edge-subtle pb-4">
-      {/* The dashboard's one next step. While setup is open the checklist
-          below lists the setup steps, so this names real work only. */}
-      <NextStep variant="card" />
-
-      {setup.activeProject && (
-        <SdkUpgradeBanner projectId={setup.activeProject.project_id} />
+      {/* The setup steps, with Fix it on the SDK step. */}
+      {heroSetupStep && project && (
+        <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} adminEndpointHost={setup.data?.admin_endpoint_host} />
       )}
 
-      {setupIncomplete && !showFullDashboard && setup.activeProject && (
-        // The setup steps, with Fix it on the SDK step. The docked guide this
-        // used to open was removed, so its button did nothing (2026-10-26).
-        <SetupChecklist
-          project={setup.activeProject}
-          mode="banner"
-          onRefresh={setup.reload}
-          adminEndpointHost={setup.data?.admin_endpoint_host}
-        />
-      )}
-
-      {setupIncomplete && !showFullDashboard && (
-        <Card  className="flex items-center justify-between px-3 py-2.5">
-          <p className="text-xs text-fg-muted">
-            Finish setup to unlock the full dashboard. You can peek now if you like.
-          </p>
-          <div className="flex shrink-0 items-center gap-2">
-            <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
-              Show full dashboard
-            </Btn>
-          </div>
-        </Card>
-      )}
-      </div>
-
-      <div className="space-y-4 pt-1">
-      {pdcaFlowBlock}
-
-      <LivePdcaPipeline
-        projectId={setup.activeProject?.project_id}
-        pdcaStages={data.pdcaStages}
-        onDemoReportSent={() => {
-          setup.reload()
-          reload()
-        }}
-      />
-
-      {showFirstReportHero && setup.activeProject && (
-        <FirstReportHero
-          projectId={setup.activeProject.project_id}
-          projectName={setup.activeProject.project_name}
-          onReportSent={() => {
-            setup.reload()
-            reload()
-          }}
-        />
-      )}
-
-      {renderFullDashboard && (
+      {error && !data ? (
+        <PageLoadError error={error} onRetry={reload} resource="Home" endpoint="/v1/admin/projects/:id/home" />
+      ) : !activeProjectId && setup.resolved && !setup.loading ? (
+        <EmptySectionMessage text="Pick an app in the switcher at the top to see how it is doing." />
+      ) : !data || !activeProjectId ? (
+        <HomeSkeleton />
+      ) : (
         <>
-          <DashboardLoopReadout
-            projectId={setup.activeProject?.project_id ?? null}
-            projectName={projectName}
-            openBacklog={counts.openBacklog ?? 0}
-            fixesInProgress={fixSummary.inProgress}
-            fixesFailed={fixSummary.failed}
-            openPrs={fixSummary.openPrs ?? counts.openPrs ?? 0}
-            fetchedAt={lastFetchedAt}
-            isValidating={isValidating}
-          />
-
-          <QuotaBanner />
-
-          <TriageAndFixRow triageQueue={data.triageQueue ?? []} />
-
-          <TeamActivityTile projectId={activeProjectId} />
-
-          <InsightsRow
-            topComponents={data.topComponents ?? []}
-            integrations={data.integrations ?? []}
-            activity={activity}
-          />
-
-          {activeProjectId && (
-            <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
-              <PlatformHealthTile projectId={activeProjectId} />
-              <QaCoverageTile projectId={activeProjectId} />
+          <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
+            <div className="lg:col-span-5">
+              <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
             </div>
-          )}
+            <div className="lg:col-span-7">
+              <HealthStrip section={data.health} />
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+            <NeedsYouCard section={data.needsYou} partial={data.partial} />
+            <ReleaseCard section={data.release} projectId={activeProjectId} />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+            <SitemapCard section={data.sitemap} />
+            <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+            <WeekCard section={data.week} />
+            <ActivityCard section={data.activity} />
+          </div>
+
+          <HowThisWorks defaultOpen={!!project && project.report_count === 0} />
         </>
       )}
+    </div>
+  )
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading Home">
+      <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
+        <div className="lg:col-span-5">
+          <AppCardSkeleton />
+        </div>
+        <div className="lg:col-span-7">
+          <HealthStripSkeleton />
+        </div>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+        <NeedsYouSkeleton />
+        <ReleaseSkeleton />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+        <SitemapSkeleton />
+        <AccessSkeleton />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+        <WeekSkeleton />
+        <ActivitySkeleton />
       </div>
     </div>
   )
