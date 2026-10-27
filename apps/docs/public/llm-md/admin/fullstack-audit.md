@@ -11,6 +11,17 @@ description: The Full-stack audit runs one health check across RLS gaps, recent 
 
 **Route:** `/fullstack-audit`
 
+**First on the page:** one sentence with the exact number of open errors and
+warnings (counted on the server, not from the capped list) and **Copy fix prompt
+for the top finding**: the check, the file and line, the rule and what to do, ready
+to paste into your editor. Every finding in the list has its own **Copy fix
+prompt**. The list says "at least" only when it could not get an exact count, and
+then says why (only the newest 500 findings were read).
+
+**Known holes in your dependencies** (vuln-watch, [known holes](/concepts/known-holes))
+are listed and managed at the end of this page (`#dependency-holes`). Mushi health →
+Code size links here instead of repeating them.
+
 > **Scenario:** It's Monday standup. You need a PM-readable health scorecard —
 > RLS gaps, recent backend errors, API contract drift — without opening five
 > different tabs.

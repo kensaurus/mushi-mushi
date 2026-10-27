@@ -32,6 +32,7 @@ import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
+import { BugClusterList } from '../components/graph/BugClusterList'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { readVizToken } from '../lib/vizTokens'
 import { useTheme } from '../lib/useTheme'
@@ -98,7 +99,7 @@ const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> 
   {
     id: 'explore',
     label: 'Explore',
-    description: 'Interactive canvas, table, or inventory surface — click nodes for blast radius.',
+    description: 'The map as a canvas, a table or by page: click a bug group to see what else it touches.',
   },
   {
     id: 'backend',
@@ -168,7 +169,12 @@ export function GraphPage() {
   const nodesQuery = usePageData<{ nodes: GraphNode[]; total?: number }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[]; total?: number }>('/v1/admin/graph/edges')
 
-  const rawNodes = nodesQuery.data?.nodes ?? []
+  // Bug groups are labelled with their id on the server, which dedupes on it;
+  // display_label is the name a person reads and searches (report 4659acc8).
+  const rawNodes = useMemo(
+    () => (nodesQuery.data?.nodes ?? []).map((n) => (n.display_label ? { ...n, label: n.display_label } : n)),
+    [nodesQuery.data],
+  )
   const rawEdges = edgesQuery.data?.edges ?? []
   const loading = nodesQuery.loading || edgesQuery.loading
   const error = nodesQuery.error ?? edgesQuery.error
@@ -681,6 +687,9 @@ export function GraphPage() {
         ]}
       />
 
+      {/* The clusters as a named list first; the map below is the second view (journeys 2026-10-27). */}
+      {activeTab !== 'backend' && <BugClusterList />}
+
       {!ux.hideTabs && (
         <SegmentedControl<GraphTabId>
           size="sm"
@@ -707,7 +716,7 @@ export function GraphPage() {
             to={graphLinks.nodes}
           />
           <StatCard
-            label={copy?.statLabels?.edges ?? 'Edges'}
+            label={copy?.statLabels?.edges ?? 'Links'}
             value={stats.edgeCount}
             accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
             tooltip={edgesTooltip(stats)}

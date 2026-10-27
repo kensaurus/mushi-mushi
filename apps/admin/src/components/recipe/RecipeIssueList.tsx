@@ -2,6 +2,8 @@
  * FILE: apps/admin/src/components/recipe/RecipeIssueList.tsx
  * PURPOSE: info / warn / error list for manifest validation errors and design
  *          token issues. Severity is a labelled badge (text, not colour only).
+ *          File paths sit on their own line and wrap: a long path used to
+ *          overflow and get clipped on a phone-width page (390px).
  */
 
 import { useState } from 'react'
@@ -37,20 +39,19 @@ export function RecipeIssueList({ issues, empty }: { issues: RecipeIssue[]; empt
               </p>
             ) : null}
             <ul className="flex flex-col gap-1.5">
-              {shown.map((issue, i) => (
-                <li key={`${issue.code}:${i}`} className="flex flex-wrap items-start gap-2 text-xs">
-                  <FindingSeverityBadge severity={issue.severity} />
-                  <span className="min-w-0 flex-1 text-fg-secondary">
-                    {issue.message}
-                    {(issue.file || issue.path) && (
-                      <span className="ml-1 font-mono text-2xs text-fg-faint">
-                        {[issue.file, issue.path].filter(Boolean).join(' · ')}
-                      </span>
+              {shown.map((issue, i) => {
+                const where = [issue.file, issue.path].filter(Boolean).join(' · ')
+                return (
+                  <li key={`${issue.code}:${i}`} className="flex flex-wrap items-start gap-x-2 gap-y-0.5 text-xs">
+                    <FindingSeverityBadge severity={issue.severity} />
+                    <span className="min-w-0 flex-1 wrap-break-word text-fg-secondary">{issue.message}</span>
+                    <span className="shrink-0 font-mono text-2xs text-fg-faint">{issue.code}</span>
+                    {where && (
+                      <span className="min-w-0 basis-full wrap-break-word font-mono text-2xs text-fg-faint">{where}</span>
                     )}
-                  </span>
-                  <span className="font-mono text-2xs text-fg-faint">{issue.code}</span>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
             {list.length > PER_CODE && (
               <button

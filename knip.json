@@ -37,6 +37,7 @@
         "rg",
         "netstat",
         "findstr",
+        "schtasks",
         "ffmpeg"
       ]
     },

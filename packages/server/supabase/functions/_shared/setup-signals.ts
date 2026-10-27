@@ -342,6 +342,8 @@ export interface SdkHeartbeat {
   last_seen_origin: string | null
   last_seen_user_agent: string | null
   last_seen_endpoint_host: string | null
+  /** The checked-in key's label, so the console can say which key the app uses. */
+  key_label?: string | null
 }
 
 /** Every signal a setup / onboarding step reads, for one project. */
@@ -377,6 +379,7 @@ export function freshestHeartbeat(
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
     last_seen_endpoint_host?: string | null
+    label?: string | null
   }>,
 ): SdkHeartbeat | null {
   let best: SdkHeartbeat | null = null
@@ -391,6 +394,7 @@ export function freshestHeartbeat(
       last_seen_origin: k.last_seen_origin ?? null,
       last_seen_user_agent: k.last_seen_user_agent ?? null,
       last_seen_endpoint_host: k.last_seen_endpoint_host ?? null,
+      key_label: k.label ?? null,
     }
   }
   return best
@@ -417,7 +421,7 @@ export async function loadProjectSetupSignals(
   ] = await Promise.all([
     db
       .from('project_api_keys')
-      .select('project_id, scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+      .select('project_id, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
     db
@@ -432,6 +436,7 @@ export async function loadProjectSetupSignals(
   type KeyRow = {
     project_id: string
     scopes?: string[] | null
+    label?: string | null
     last_seen_at?: string | null
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
@@ -470,6 +475,21 @@ export async function loadProjectSetupSignals(
 /** A probe older than this no longer proves a connection works (matches the console card). */
 export const CONNECTION_VERIFIED_FRESH_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * sentry-seer-poll runs every 15 minutes (`8-53/15`). Three intervals without
+ * a finished auto-import means the job stalled. Must match
+ * SENTRY_AUTO_IMPORT_STALE_MS in apps/admin/src/lib/integrationConnection.ts.
+ */
+const SENTRY_AUTO_IMPORT_STALE_MS = 3 * 15 * 60 * 1000
+
+/** True when the last auto-import finished within SENTRY_AUTO_IMPORT_STALE_MS. */
+function sentryAutoImportRunFresh(lastRunAt: string | null | undefined, now: number): boolean {
+  if (!lastRunAt) return false
+  const at = Date.parse(lastRunAt)
+  if (!Number.isFinite(at)) return false
+  return now - at <= SENTRY_AUTO_IMPORT_STALE_MS
+}
+
 export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
 
 /**
@@ -478,14 +498,25 @@ export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
  * say "healthy" next to a card that says "Needs attention":
  *   - a failing probe is down;
  *   - no probe, or a probe older than 7 days, needs attention (not checked);
- *   - a connection that receives events (Sentry alerts) needs at least one
- *     accepted delivery — a passing API probe alone is only half the loop.
+ *   - a connection that receives events (Sentry alerts) needs an accepted
+ *     delivery, unless it imports by polling. Polling plus a fresh passing
+ *     probe is working only when a poll finished within the last three
+ *     15-minute intervals. No run yet, or an older run, is attention: the
+ *     token probe does not prove the import is running. The latest delivery
+ *     being rejected is still attention: a bad webhook secret is a real
+ *     misconfiguration. Same rule as the console's sentryConnection.
  */
 export function classifyPlatformConnection(input: {
   probeStatus: string | null | undefined
   probeCheckedAt: string | null | undefined
   needsInbound?: boolean
   inboundAccepted?: boolean
+  /** Latest inbound delivery exists and was not accepted. */
+  inboundRejected?: boolean
+  /** Issues are imported on a poll, so a webhook delivery is optional. */
+  inboundPolling?: boolean
+  /** When the poll last finished. Ignored unless inboundPolling and there is no accepted delivery. */
+  inboundPolledAt?: string | null
   now?: number
 }): PlatformConnectionVerdict {
   const now = input.now ?? Date.now()
@@ -494,6 +525,15 @@ export function classifyPlatformConnection(input: {
   if (input.probeStatus !== 'ok' || !Number.isFinite(at) || now - at > CONNECTION_VERIFIED_FRESH_MS) {
     return 'attention'
   }
-  if (input.needsInbound && !input.inboundAccepted) return 'attention'
+  if (input.needsInbound && input.inboundRejected) return 'attention'
+  if (input.needsInbound && !input.inboundAccepted && !input.inboundPolling) return 'attention'
+  if (
+    input.needsInbound &&
+    input.inboundPolling &&
+    !input.inboundAccepted &&
+    !sentryAutoImportRunFresh(input.inboundPolledAt, now)
+  ) {
+    return 'attention'
+  }
   return 'working'
 }

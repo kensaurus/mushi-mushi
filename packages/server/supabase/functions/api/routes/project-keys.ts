@@ -20,8 +20,9 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // `voice:write` is the phone-resident scope for POST /v1/intake/voice
   // (migration 20260912001000). It unlocks that route only. `runner:write`
   // is the same for POST /v1/ingest/runner, the key that lives on a CI runner
-  // host (migration 20261021111344, Plan 022).
-  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write'] as const;
+  // host (migration 20261021111344, Plan 022). `worker:run` is a local
+  // worker's key (`mushi work --daemon`, migration 20261027150000, ADR 0048).
+  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write', 'worker:run'] as const;
   type AllowedScope = (typeof ALLOWED_KEY_SCOPES)[number];
 
   function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {
