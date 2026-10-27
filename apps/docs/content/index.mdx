@@ -3,19 +3,14 @@ title: Mushi Mushi — know why your AI-built app broke, with the fix ready
 description: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
 ---
 
-import {
-  LANDING_HERO,
-  LANDING_MEDIA_INTRO,
-  LANDING_WHAT_THIS_IS,
-  LANDING_WHERE_TO_START_INTRO,
-  LANDING_QUICKSTART_INTRO,
-  LANDING_COMPARISON_ROWS,
-} from '@/lib/landing-copy'
+import { LANDING_HERO, LANDING_WHAT_THIS_IS } from '@/lib/landing-copy'
 
-{/* Native scroll + component-scoped Motion reveals (docs/MOTION.md).
-    No Lenis / ScrollTrigger — sticky nav, anchors, and nested code scroll stay intact.
-    House rule for this page: no block longer than about three short lines.
-    Detail goes in a <details> or a deeper docs page. */}
+{/* One job (ADR 0052, owner 2026-10-27): a user says the app is broken,
+    Mushi says why and hands the AI the fix. One primary action (the install
+    box in the hero), one secondary link (the sample diagnosis), how it works,
+    proof, FAQ. Everything else lives on docs pages linked from "More".
+    Native scroll + component-scoped Motion reveals (docs/MOTION.md).
+    House rule: no block longer than about three short lines. */}
 
 <LandingJsonLd />
 
@@ -25,31 +20,24 @@ import {
   lead={LANDING_HERO.lead}
 />
 
-## What happens to a bug
+<DiagnosisScrollStage />
 
-Every bug moves through six steps: reported, triaged, fix PR, reviewed and CI,
-merged and deployed, and the person who reported it is told.
+<DocScreenshot
+  src="report-detail-dark.png"
+  alt="A report in the Mushi console: the plain-English cause, the confidence and the fix prompt"
+  caption="One report in the Mushi console: the cause in plain English and the fix prompt, ready to copy."
+  variant="showcase"
+/>
 
-<LoopPipeline caption="Steps 3 to 5 are optional. You can also copy the fix prompt into your own editor and fix it yourself." />
+## What it takes
 
-## The problem it solves
-
-- A user hits a broken button. Nothing crashed, so error monitoring (such as Sentry) stays quiet.
-- They give up, or write "it's broken" with no detail.
-- You lose an afternoon reading code your AI wrote, not you.
-
-Mushi turns that report into a plain-English cause and a fix your AI can start from.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 <OssTrustStrip />
 
-## A real example from our own sites
-
-Mushi's weekly site audit found two bugs on our own websites that no error alert had caught:
-
-- an "Edit this page" link that led nowhere;
-- Japanese text on English pages.
-
-Within the hour, an AI agent in Cursor opened a fix for each, and a second AI (Claude Opus) reviewed them before merge.
+<PricingStrip />
 
 ## What this is (and is not)
 
@@ -66,75 +54,24 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 <details>
 <summary>Words you will see on this page</summary>
 
-- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
+- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
-- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
-- **CI**: the automatic tests that run on every pull request.
-- **Self-host**: run Mushi on your own server instead of using the hosted service.
 
 </details>
 
-## This is what a diagnosis looks like
-
-A user writes a sentence or two. Mushi reads it with the screenshot and the browser log, and writes back a title, severity, likely cause and fix. This one is real:
-
-<ScrollReveal>
-  <RealDiagnosisCard />
-</ScrollReveal>
-
-<DiagnosisScrollStage />
-
-## See it in action
-
-{LANDING_MEDIA_INTRO}
-
-<ScrollReveal>
-  <DocsMediaShowcase />
-</ScrollReveal>
-
-## Spend less on CI
-
-AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. Mushi keeps that bill small:
-
-- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
-- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
-- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
-
-Mushi's own fix pull requests run your tests only after a review says they are worth merging. [How the CI page works →](/admin/ci)
-
-## Get started
-
-{LANDING_WHERE_TO_START_INTRO}
-
-<WhereToStartGrid />
-
-## Install it in your app
-
-{LANDING_QUICKSTART_INTRO}
-
-<QuickstartGrid />
-
-## Works with Sentry, or without it
-
-You don't need Sentry. If you already use it, keep it: its errors land in the same list as user reports, each explained in plain English.
-
-Bugs come in from users, monitoring tools and even your voice. Fixes and updates go out to your editor, coding agents, tracker and team chat.
-
-<MediatorMap />
-
-<ComparisonScrub>
-  <ComparisonTable
-    foil="Sentry alone"
-    rows={LANDING_COMPARISON_ROWS}
-  />
-</ComparisonScrub>
-
-For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
-the full sequence diagram and a component-by-component spec.
-
-<PricingStrip />
-
 <LandingFaq />
+
+<div className="landing-more">
+
+More: [How a bug moves, step by step](/concepts/closed-loop) ·
+[Sentry, Linear, Slack and other tools](/plugins) ·
+[Compared with Sentry](/compare/sentry-vs-mushi) ·
+[More ways to install](/quickstart) ·
+[A tour of the console](/admin) ·
+[Self-host](/self-hosting)
+
+</div>
 
 <ClosingCta />

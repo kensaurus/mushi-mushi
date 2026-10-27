@@ -9,9 +9,10 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## Start here (MCP-first)
 
+- [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis): A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
 - [Incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+- [Lovable or Bolt (no terminal)](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 - [MCP server](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
-- [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it. One-paste installs for Claude Code and Cursor too.
 - [Connect your AI client](https://kensaur.us/mushi-mushi/docs/connect): One-click MCP setup for Cursor, VS Code, Windsurf, Cline, Claude and Zed, with a keyless demo.
 - [Choose your stack](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
 - [Pricing](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
@@ -141,6 +142,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config): How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.
 - [One login and one purchase across your apps](https://kensaur.us/mushi-mushi/docs/concepts/shared-login): How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes): Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.
+- [Sample diagnosis: Pay now does nothing on a phone](https://kensaur.us/mushi-mushi/docs/demo/diagnosis): A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor): Wire Mushi's evolution loop into Cursor with one command — get fix context, lessons, and dispatch right from the editor.
 - [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake): Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week): How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
@@ -194,7 +196,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter): Add Mushi's Flutter SDK as a git dependency — shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Preview, not on pub.dev yet.
 - [Incident loop — bug to fix prompt](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
 - [iOS (Swift) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios): Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.
-- [Ask Lovable why it broke](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp): Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it. One-paste installs for Claude Code and Cursor too.
+- [Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt): Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 - [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
 - [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Shake-to-report bug capture for mobile apps — React Native and Capacitor from npm with npx mushi-mushi, plus preview native SDKs for iOS, Android and Flutter.
 - [React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.

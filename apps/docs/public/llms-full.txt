@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 221
+Pages: 222
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -27,27 +27,11 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
-## What happens to a bug
+## What it takes
 
-Every bug moves through six steps: reported, triaged, fix PR, reviewed and CI,
-merged and deployed, and the person who reported it is told.
-
-## The problem it solves
-
-- A user hits a broken button. Nothing crashed, so error monitoring (such as Sentry) stays quiet.
-- They give up, or write "it's broken" with no detail.
-- You lose an afternoon reading code your AI wrote, not you.
-
-Mushi turns that report into a plain-English cause and a fix your AI can start from.
-
-## A real example from our own sites
-
-Mushi's weekly site audit found two bugs on our own websites that no error alert had caught:
-
-- an "Edit this page" link that led nowhere;
-- Japanese text on English pages.
-
-Within the hour, an AI agent in Cursor opened a fix for each, and a second AI (Claude Opus) reviewed them before merge.
+- **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi's AI writes the diagnosis.
+- **Free to start.** 50 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Your AI does the fix, you approve it.** Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so.
 
 ## What this is (and is not)
 
@@ -59,47 +43,17 @@ Mushi Mushi is the bug mediator for AI-built apps, an open-source tool that give
 
 Words you will see on this page
 
-- **SDK**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **Diagnosis**: Mushi's written explanation of one bug, with how serious it is, the likely cause and a suggested fix.
+- **Fix prompt**: the diagnosis plus the evidence, written as instructions you paste into your AI editor.
+- **SDK** or **script tag**: the small piece of code you add to your app. It shows the report button and sends reports to Mushi.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi's reports.
-- **Pull request (PR)**: a proposed change to your code that waits for you to approve and merge it.
-- **CI**: the automatic tests that run on every pull request.
-- **Self-host**: run Mushi on your own server instead of using the hosted service.
 
-## This is what a diagnosis looks like
-
-A user writes a sentence or two. Mushi reads it with the screenshot and the browser log, and writes back a title, severity, likely cause and fix. This one is real:
-
-  
-
-## See it in action
-
-  
-
-## Spend less on CI
-
-AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. Mushi keeps that bill small:
-
-- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
-- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
-- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
-
-Mushi's own fix pull requests run your tests only after a review says they are worth merging. [How the CI page works →](/admin/ci)
-
-## Get started
-
-## Install it in your app
-
-## Works with Sentry, or without it
-
-You don't need Sentry. If you already use it, keep it: its errors land in the same list as user reports, each explained in plain English.
-
-Bugs come in from users, monitoring tools and even your voice. Fixes and updates go out to your editor, coding agents, tracker and team chat.
-
-  
-
-For the technical detail, see **[Concepts &rarr; Architecture](/concepts/architecture)**:
-the full sequence diagram and a component-by-component spec.
+More: [How a bug moves, step by step](/concepts/closed-loop) ·
+[Sentry, Linear, Slack and other tools](/plugins) ·
+[Compared with Sentry](/compare/sentry-vs-mushi) ·
+[More ways to install](/quickstart) ·
+[A tour of the console](/admin) ·
+[Self-host](/self-hosting)
 
 ---
 
@@ -488,6 +442,7 @@ Then ask your editor: *"Get the latest Mushi report and fix it."*
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
+- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
@@ -499,6 +454,8 @@ What you need first
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
 installing it for good. Here it runs the Mushi setup wizard.
+
+## Where to start
 
 ## Keys and settings
 
@@ -1221,162 +1178,100 @@ Full API: [`MushiMushi` (iOS)](/sdks/ios).
 
 ---
 
-## Ask Lovable why it broke
+## Mushi in Lovable or Bolt
 
-Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt
 
 ---
-title: Ask Lovable why it broke
-description: Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it. One-paste installs for Claude Code and Cursor too.
+title: Mushi in Lovable or Bolt
+description: Add Mushi to a Lovable or Bolt app without a terminal. Paste one script tag through your prompt, then read each bug's plain-English cause and fix prompt.
 ---
 
-# Ask Lovable why it broke
+# Mushi in Lovable or Bolt
 
-A user says your app is broken. Ask Lovable *"what did my users report?"* and it
-reads Mushi's diagnosis of each report, gets the fix prompt and fixes the code.
-The same connection works in Claude Code and Cursor.
+Lovable and Bolt build your app from a chat, with no terminal, so `npx` is
+not an option. You add Mushi the way you change anything else there: with a
+prompt. It takes about five minutes.
 
-- Add Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
-- Ask in the Lovable chat: "what did my users report?"
-- Lovable gets the report, the plain-English cause and a fix prompt, then fixes it.
+- Sign up free and copy your script tag.
+- Ask Lovable or Bolt to add it to your app.
+- When a user reports a bug, Mushi tells you why and gives you a prompt that fixes it.
 
-You need a Mushi project that receives reports. A Lovable app gets the
-reporting widget from one [script tag](/quickstart/web#no-bundler-script-tag).
-No real report yet? Step 4 files a test one.
+### Get your script tag
 
-## Add Mushi to Lovable
+[Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-lovable-bolt)
+and create a project. On the setup page, in **Configure & install the SDK**,
+pick the **Script tag** tab. Your project ID is already in the tag. If the
+key still reads `mushi_xxx`, click **Mint SDK key** above it and the real
+key fills in. Then copy the tag.
 
-Custom MCP servers are available on every Lovable plan
-([Lovable docs](https://docs.lovable.dev/integrations/custom-mcp)).
+**You'll see:** a tag that starts with `
 
-### Open the custom MCP form
+### Paste it into Lovable or Bolt
 
-In Lovable, open [Connectors](https://lovable.dev/dashboard?connectors), select
-**Add custom** at the top right, and choose **MCP server**.
-
-If **MCP server** is greyed out, a workspace admin has turned off custom MCP
-servers. Ask them to turn on **Custom MCP** under **Connectors → Admin settings**.
-
-### Fill in the form
-
-| Field | Value |
-| --- | --- |
-| **Server name** | `Mushi` |
-| **Connection** (shown only on some workspaces) | **Direct connection** |
-| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
-| **Authentication** | **OAuth** (the default) |
-
-Click **Add & authorize**.
-
-### Sign in and approve
-
-A Mushi page opens. Sign in, choose which projects Lovable may see, and click
-**Approve**. You never copy a key: the sign-in creates one for this connection,
-and you can revoke it from the Mushi console at any time.
-
-**You'll see:** Mushi in your list of chat connectors in Lovable.
-
-### Ask Lovable
-
-In a project chat, try:
+Send this prompt in your project's chat, with your tag from the step above in
+place of the example tag:
 
 ```text
-Using the Mushi connector, what did my users report this week?
+Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_API_KEY"></script>
 ```
 
-```text
-Get the Mushi fix context for the checkout report and fix it.
-```
+If your project has no `index.html` (a Next.js app, for example), ask it to
+add the same tag to the page `` of the root layout instead.
 
-```text
-That's deployed. Mark the report fixed in Mushi and tell the reporter.
-```
+**You'll see:** a small report button in the corner of your app after it rebuilds.
 
-No reports yet? Ask for a test one. Mushi diagnoses it like a real user report:
+### Publish and send a test report
 
-```text
-Using Mushi, file a test report: "The Save button on the settings page does nothing."
-```
+Publish the app, open the live site, tap the report button and write one
+sentence, for example "Testing Mushi".
 
-**You'll see:** the report, the likely cause in plain English and the files to change, then Lovable's edit.
+**You'll see:** the report in your [Mushi console](https://kensaur.us/mushi-mushi/admin/reports) within seconds, with a title, how serious it is and the likely cause.
 
-Lovable runs read-only tools without asking. Before a tool that changes
-something (mark fixed, reply to the reporter, file a report) it shows an
-approval card; choose **Always allow** to skip it next time.
+### Fix a real bug
 
-## Claude Code: one paste
+When a user reports something, open the report in the console and click
+**Copy fix prompt**. Paste it into Lovable or Bolt. The prompt says what
+broke, why, where, and how to check the fix.
 
-```bash
-claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
-```
+**You'll see:** Lovable or Bolt make a change aimed at the cause. Check it in the preview before you publish.
 
-Then run `/mcp` in a session, pick `mushi` and sign in in your browser. Ask:
-*"What did my users report in Mushi? Fix the top one."*
+Not sure what a diagnosis looks like? [Read a sample](/demo/diagnosis): a
+user's complaint, what the widget captured, the cause and the fix prompt.
 
-## Cursor: one click
+## Read reports inside Lovable
 
-[Add Mushi to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8%2FZmVhdHVyZXM9dmliZSJ9)
-(opens Cursor), or paste this into `.cursor/mcp.json`:
+You can also connect Mushi to Lovable's chat, so you can ask "what did users
+report today?" and get the diagnosis without opening the console. See
+[Mushi as a Lovable connector](/quickstart/lovable-mcp).
 
-```json filename=".cursor/mcp.json"
-{
-  "mcpServers": {
-    "mushi": {
-      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
-    }
-  }
-}
-```
+## Where the key goes, and is it safe?
 
-Cursor asks you to sign in the first time the agent calls Mushi. Leave out any
-`headers` block: a static `Authorization` header turns the sign-in off.
+The key in the tag is an SDK key. It can only send reports to your project
+(`report:write`); it cannot read reports, change settings or see other
+projects. That is why it can sit in your page's HTML, like any analytics or
+chat-widget key.
 
-## Bolt
+  Paste only the tag from the **Script tag** tab. Every Mushi key starts with
+  `mushi_`, so the prefix does not tell them apart: never put a key you made
+  for an editor or the MCP server into your app, because those keys can read
+  your reports.
 
-Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
-server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
-URL. We have not tested Mushi in Bolt yet.
+## Change how the button looks
 
-## What `?features=vibe` gives you
+The tag takes a few `data-*` settings, such as `data-position` and
+`data-theme`. The full list is on the
+[script-tag reference](/quickstart/web#no-bundler-script-tag).
 
-`?features=vibe` keeps the connection to the 12 tools this loop needs. Without
-it the connection lists about 80. A chat assistant picks the right tool more
-often from a short list, and some clients, Cursor among them, warn once all
-their servers together pass about 40 tools.
+## If nothing shows up
 
-| Tool | What it does | Changes anything? |
-| --- | --- | --- |
-| `triage_next_steps` | What to fix first | No |
-| `get_recent_reports` | The latest reports from your users | No |
-| `search_reports` | Find reports by words ("checkout") | No |
-| `get_report_detail` | One report: what the user saw, logs, screenshot, diagnosis | No |
-| `get_fix_context` | The cause, the files to change and a ready fix prompt | No |
-| `transition_status` | Mark a report fixed, or dismiss a duplicate | Yes |
-| `reply_to_reporter` | Tell the user in your app that it's fixed | Yes |
-| `file_report` | File a report yourself (or a test one) | Yes |
-| `diagnose_setup` | Why reports aren't arriving, and the next step | No |
-| `use_mushi` | Which tool to use for a task | No |
-| `search_mushi_docs` / `get_mushi_doc` | Answers from these docs | No |
-
-If you approved more than one app, the connection also lists `list_projects`
-and `get_account_overview`, so Lovable can find the app you mean.
-
-Want more? Drop `?features=vibe` for the default set (reports, fixes, app
-inventory, setup, docs), or use `?features=all` for every tool. You can also
-combine them, for example `?features=vibe,qa`.
-
-## Troubleshooting
-
-| Problem | Fix |
-| --- | --- |
-| Sign-in fails with "404" | Use the `kensaur.us` URL above. Sign-in does not work on a `supabase.co` URL. |
-| "tool … is not enabled for this connection" | The tool is outside `vibe`. Ask `use_mushi` which group it needs and add that group to `?features=`, or use `?features=all`. |
-| Answers mix up your apps | Pin the connection to one app: add `&project=<project-id>` to the URL. |
-| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted in the Mushi console. Sign-in is safer: its key is made for this one connection. |
-| You want to disconnect | Remove the connector in Lovable, and revoke its key under **MCP → Account keys** in the Mushi console. |
-
-  More on the sign-in, project scopes and other clients: [MCP server](/quickstart/mcp).
-  The full fix loop from your editor: [Incident loop](/quickstart/incident-loop).
+- **No button:** ask Lovable or Bolt to show you the `` of
+  `index.html` and check the tag is there, unchanged. Then publish again.
+- **Button, but no report in the console:** check that `data-project` and
+  `data-key` match the Script tag tab exactly, with no spaces.
+- **Still stuck:** the [troubleshooting list](/quickstart#troubleshooting)
+  covers the other cases.
 
 ---
 
@@ -2589,8 +2484,16 @@ Steps 1 to 3 are the expensive part, and a user cannot do them for you. An
 in-app bug reporter can: [Mushi Mushi](/) is an open-source SDK that lets the
 user report from a widget or a phone shake, attaches the screenshot and the
 console/network tail, writes a plain-English diagnosis of what broke and
-why, and hands the fix prompt to Cursor or Claude Code over MCP. One command
-installs it:
+why, and gives you a fix prompt to paste back into Lovable, Bolt, Cursor or
+Claude Code. [Here is a sample diagnosis](/demo/diagnosis).
+
+In Lovable or Bolt there is no terminal, so you install it with a prompt:
+sign up, copy your script tag from the console, and ask the builder to add
+it to the `` of `index.html`. The
+[Lovable or Bolt quickstart](/quickstart/lovable-bolt) walks through it, and
+[Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
+from Lovable's chat. With a terminal (Cursor, Claude Code), one command does
+it:
 
 ```bash
 npx mushi-mushi
@@ -2702,6 +2605,8 @@ merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
 asks you to rip anything out.
 
 ## Side by side
+
+  
 
 ## What "diagnosis" means here
 
@@ -3950,6 +3855,11 @@ The vibe-coding era — AI-assisted development where you build and ship in hour
 
 For a shorter version see [The evolution loop](/concepts/evolution-loop). For the manifesto see the [EVOLUTION-LOOP.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/EVOLUTION-LOOP.md) doc.
 
+## What happens to a bug
+
+Every bug moves through six steps: reported, triaged, fix PR, reviewed and CI,
+merged and deployed, and the person who reported it is told.
+
 ---
 
 ## The NTSB moment software is missing
@@ -5141,7 +5051,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>129 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>126 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -5189,7 +5099,7 @@ your client:
 }
 ```
 
-The full tool catalog (129 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (126 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -5365,7 +5275,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 129 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 126 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -7206,17 +7116,9 @@ every lane on the machine. A lane is one app and one clone of its repo.
 Every minute it sends a heartbeat. The answer holds each lane's settings, set
 in the console: its model, mode, how many reports at once, paused, drain and a
 stop date, plus the machine's guards (agents at once, a free-memory floor, a
-GitHub API floor). The daemon then works by each lane's mode:
-
-| Mode | What the lane does |
-| --- | --- |
-| `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
-| `followups` | Review follow-ups only |
-| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
-| `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
-| `skill` | Only the rounds of skill runs started with this lane on Spend credits |
-
-While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
+GitHub API floor). The daemon then runs review follow-ups first, and claims
+reports: the lane's queue first, then the worst open reports. While a lane
+holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
@@ -7247,11 +7149,8 @@ stay on your machine), stores a worker key in the OS keychain (or
 `~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
 service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
 scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
-`fix` become `fix`, `followups`, `conflicts`, `audit` and `skill` stay as they
-are, `off` becomes a paused lane, and the profile column is dropped: one worker
-key serves every app. The heartbeat names each lane's repository (`owner/name`
-from its `origin` remote) so a conflicts lane takes only that repository's
-PRs; the clone's path never leaves the machine.
+`fix` become `fix`, `off` becomes a paused lane, and the profile column is
+dropped: one worker key serves every app.
 
 The worker key has the scope `worker:run`: it can take reports for its lanes,
 record their fixes and file reports, and nothing else. It cannot merge, change
@@ -7391,23 +7290,6 @@ mushi repo diagram unpublish --yes
 `publish` shows where the page will go before it publishes. It sends the hash
 of exactly what the preview showed, so a diagram that changed in between is
 refused. A private repo can only be published from the console.
-
-### Clean up branches and pull requests
-
-```bash
-mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
-mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
-mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
-mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
-mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
-```
-
-Only branches and pull requests Mushi itself opened are listed: a branch whose
-pull request merged or closed and that still points at that pull request's last
-commit, or an open fix PR that a newer fix replaced, that the Opus review held,
-or that got no new commit for 14 days. The CLI only asks. A team owner or admin
-approves the exact list in the console (Repo → Clean up) within an hour, and
-Mushi checks every item again before it deletes or closes anything.
 
 ---
 
@@ -8583,7 +8465,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **129-tool** catalog and
+on npm for the full **126-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -12873,6 +12755,12 @@ description: Send Mushi events to the tools you already use through HMAC-signed 
 
 Mushi events flow out as **HMAC-signed JSON webhooks** with [Standard Webhooks](https://www.standardwebhooks.com/) headers (`webhook-id` / `webhook-timestamp` / `webhook-signature: v1,…`) to any tool you wire up. The marketplace ships **12 first-party plugins** and lets you build your own with `@mushi-mushi/plugin-sdk` (retry helpers, signature verification, REST callback in one tiny package).
 
+## Works with Sentry, or without it
+
+You don't need Sentry. If you already use it, keep it: its errors land in the same list as user reports, each explained in plain English.
+
+Bugs come in from users, monitoring tools and even your voice. Fixes and updates go out to your editor, coding agents, tracker and team chat.
+
 ## Available plugins
 
 | Plugin              | Triggers                                                           | Doc |
@@ -16859,6 +16747,40 @@ For security incidents, use `kensaurus@gmail.com` instead (see
 
 ---
 
+## Sample diagnosis: Pay now does nothing on a phone
+
+Source: https://kensaur.us/mushi-mushi/docs/demo/diagnosis
+
+---
+title: "Sample diagnosis: Pay now does nothing on a phone"
+description: A sample Mushi diagnosis you can read without signing up. A user's complaint, what the widget captured, the plain-English cause and the fix prompt.
+---
+
+# Sample diagnosis
+
+A user writes one line: the checkout button does nothing on their phone.
+This is what you get back from Mushi, from their words to a prompt your AI
+can fix it from.
+
+## Get this for your own app
+
+When a real user reports a bug, Mushi writes a diagnosis like this one. It
+needs no Sentry and no AI key of yours: the free plan covers 50 diagnoses a
+month.
+
+- **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
+  "Get the latest Mushi report and fix it."
+- **Lovable or Bolt:** paste one script tag through your prompt.
+  [Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+
+## One the model wrote
+
+We wrote the sample above so this page never changes. Here is a diagnosis
+the model wrote on a report in our public demo project, trimmed only where
+an ellipsis marks it:
+
+---
+
 ## Open metrics
 
 Source: https://kensaur.us/mushi-mushi/docs/open
@@ -16907,6 +16829,8 @@ description: Guide to the Mushi admin console — the reports inbox, fix drafts 
 ---
 
 # Admin console
+
+## See it
 
 ## Day-to-day
 
@@ -17522,6 +17446,18 @@ Every fix Mushi opens is tested by your CI before it can merge. This page shows 
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
 
+## Spend less on CI
+
+AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. This page keeps that bill small:
+
+- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
+- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
+- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
+
+Mushi's own fix pull requests run your tests only after a review says they are worth merging.
+
+## How it reads your runs
+
 A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
 
 ## Test machine or your code
@@ -17623,20 +17559,6 @@ After the merge, the card shows the saving Mushi measured. That is the workflow'
 Writing a workflow file needs the GitHub App's **Workflows: Read and write** permission, or a token with the `workflow` scope. Without it, the card says so. You can still copy the fix and commit it yourself.
 
 From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
-
-## Apply to every app
-
-Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
-
-1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
-2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
-3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
-
-Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
-
-After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
-
-From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle `. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
 
 ## When nothing has reported in
 
@@ -18224,10 +18146,9 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 
 A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
 
-- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code, unit tests and the parked-work register (BACKLOG.md, measured by what it adds and closes). Under the picker, the page says what each round measures.
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
 - **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
 - **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
-- **Run on**, when you have a [local worker](pipeline#workers) lane for the app in fix or skill mode: Cursor in the cloud, or that lane on your machine. A round for a lane waits in its queue and never goes to the cloud.
 
 Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
@@ -21040,7 +20961,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**129 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**126 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -21100,9 +21021,6 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
 ```
 
 Full catalog: append `?features=all` (or set `MUSHI_FEATURES=all` for stdio).
-Smallest set: `?features=vibe` lists a dozen tools for the reported-bug loop (reports,
-diagnosis, fix context, mark fixed, reply, setup, docs); chat connectors such as
-Lovable use it ([guide](/quickstart/lovable-mcp)).
 
 ---
 
@@ -21634,19 +21552,9 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 | Part | What it shows |
 | --- | --- |
 | **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
-| **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
+| **Lanes** | One app on one machine: its model, mode (fix reports, or review follow-ups only), how many reports it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
-
-A lane's **mode** says what it does:
-
-| Mode | What the lane does |
-| --- | --- |
-| Fix reports and follow-ups | Its queue first, then the worst open reports; a draft PR for each |
-| Review follow-ups only | Fixes what Opus asked for on PRs a local agent opened |
-| Resolve merge conflicts | Merges the base branch into this repository's PRs that wait in the merge queue for a conflict agent. The agent may change only the conflicted files; anything else is refused. It counts toward the 2 conflict agents a PR may have, cloud and local together |
-| Audit the code, screen by screen | A model proposes bugs; the machine files only those its own check reproduces, at most 12 an hour per app, into a fix lane for the same app on that machine |
-| Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
 
