@@ -61,7 +61,7 @@ import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
 import { RERUN_REFUSED_DEDUPE_PREFIX } from '../../_shared/ci-jobs.ts';
-import { finalizeFixClosedUnmerged } from '../../_shared/fix-merge.ts';
+import { closeFixPullRequest, closePullRequest } from '../../_shared/fix-close.ts';
 import {
   buildDispatchers,
   buildPipeline,
@@ -131,14 +131,7 @@ export const defaultPipelineDeps: PipelineRouteDeps = {
   },
   updateBranch: updatePullRequestBranch,
   markReady: markPullRequestReady,
-  closePull: async (token, ref, n) => {
-    const res = await fetchWithTimeout(`https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${n}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: 'closed' }),
-    }).catch(() => null);
-    return res?.ok === true;
-  },
+  closePull: closePullRequest,
   runQueue: async (projectId) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -950,21 +943,7 @@ async function runAction(
     if (!res.ok) return { id: a.id, ok: false, message: res.message ?? 'GitHub did not take it out of draft.', url };
     return { id: a.id, ok: true, message: res.alreadyReady ? 'It was already ready for review.' : 'Ready for review; CI runs now.', url };
   }
-  // close
-  const closed = await deps.closePull(token, pr.ref, pr.n);
-  if (!closed) return { id: a.id, ok: false, message: 'GitHub did not close the pull request.', url };
-  await db
-    .from('fix_merge_queue')
-    .update({ state: 'removed', detail: `Closed from the console: ${reason}`.slice(0, 500), updated_at: now.toISOString(), claimed_until: null })
-    .eq('fix_attempt_id', a.id)
-    .in('state', ['queued', 'waiting', 'resolving', 'blocked']);
-  if (a.report_id) {
-    await finalizeFixClosedUnmerged(
-      db,
-      { id: a.id, project_id: a.project_id, report_id: a.report_id, agent: a.agent, branch: a.branch, commit_sha: a.commit_sha, pr_url: a.pr_url, pr_number: a.pr_number },
-      { prNumber: pr.n, closedAt: now.toISOString(), source: 'console' },
-    ).catch((err) => plog.warn('finalize after a console close failed', { fixId: a.id, err: String(err).slice(0, 200) }));
-  }
-  const noteErr = await note(db, a, `Pull request #${pr.n} closed without merging: ${reason}`, author);
-  return { id: a.id, ok: true, message: noteErr ? `Closed. ${noteErr}` : 'Closed; the reason is a note on the report.', url };
+  // close (the repo clean-up's close_prs runs the same helper, ADR 0051)
+  const closed = await closeFixPullRequest(db, { fix: a, prNumber: pr.n, reason, author, now, source: 'console' }, () => deps.closePull(token, pr.ref, pr.n));
+  return { id: a.id, ...closed, url };
 }
