@@ -95,6 +95,7 @@ export function ciOverviewFixture(over: Partial<CiOverview> = {}): CiOverview {
     stats: {
       jobs: 420,
       passRate: 0.86,
+      passed: 92,
       queueP50s: 90,
       queueP95s: 1500,
       durationP50s: 400,
@@ -137,7 +138,7 @@ export function emptyCiOverview(): CiOverview {
     repos: [],
     jobs: [],
     advice: [],
-    stats: { jobs: 0, passRate: null, queueP50s: null, queueP95s: null, durationP50s: null, durationP95s: null, infraFailures: 0, codeFailures: 0, byRunner: [], byWorkflow: [], slowSteps: [] },
+    stats: { jobs: 0, passRate: null, passed: 0, queueP50s: null, queueP95s: null, durationP50s: null, durationP95s: null, infraFailures: 0, codeFailures: 0, byRunner: [], byWorkflow: [], slowSteps: [] },
   })
 }
 

@@ -305,8 +305,33 @@ describe('buildCiOverview', () => {
     expect(o.hosts[0]).toMatchObject({ hostname: 'nuc', stale: true, metrics: { load1: 1.5, swapUsedMb: 100, swapTotalMb: 4096 } })
     expect(o.runners[0]).toMatchObject({ name: 'kensaurus-local-glot-1', hostId: 'a'.repeat(64), infraFailures7d: 1 })
     expect(o.jobs.find((x) => x.runId === 77)?.memPeakMb).toBe(3500)
-    expect(o.stats).toMatchObject({ jobs: 3, infraFailures: 1, codeFailures: 1, passRate: 0.333 })
+    expect(o.stats).toMatchObject({ jobs: 3, passed: 1, infraFailures: 1, codeFailures: 1, passRate: 0.5 })
     expect(o.advice.map((a) => a.id)).toContain(`host_stale:${'a'.repeat(64)}`)
+  })
+
+  it('counts the pass rate only over jobs that finished testing', () => {
+    const o = buildCiOverview(rows({
+      finished: [
+        row({ ci_kind: 'passed' }),
+        row({ ci_kind: 'passed' }),
+        row({ ci_kind: 'code_failure', conclusion: 'failure' }),
+        row({ ci_kind: 'runner_lost', infra: true, conclusion: 'cancelled' }),
+        row({ ci_kind: 'queue_expired', infra: true, conclusion: 'cancelled' }),
+        row({ ci_kind: 'cancelled', conclusion: 'cancelled' }),
+        row({ ci_kind: 'skipped', conclusion: 'skipped' }),
+      ],
+    }), opts)
+    // 2 passed of the 3 that finished. Machine stops, the cancel and the skip never finished testing.
+    expect(o.stats).toMatchObject({ jobs: 7, passed: 2, codeFailures: 1, infraFailures: 2, passRate: 0.667 })
+    expect(o.stats.byWorkflow[0].failRate).toBe(0.333)
+    expect(o.repos[0].passRate).toBe(0.667)
+
+    const stopsOnly = buildCiOverview(rows({
+      finished: [row({ ci_kind: 'runner_lost', infra: true, conclusion: 'cancelled' })],
+    }), opts)
+    expect(stopsOnly.stats.passRate).toBeNull()
+    expect(stopsOnly.stats.passed).toBe(0)
+    expect(stopsOnly.stats.infraFailures).toBe(1)
   })
 
   it('folds one-job runners (<label>-<unix seconds>) into one runner linked to the heartbeat label', () => {

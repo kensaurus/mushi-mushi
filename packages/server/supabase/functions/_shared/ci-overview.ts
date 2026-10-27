@@ -10,7 +10,8 @@
  *
  * Jobs: every queued / running job in the window first, never cut off, then
  * the newest finished jobs, up to 200 in total. Stats read at most 1,000
- * finished jobs (PostgREST max_rows), newest first.
+ * finished jobs (PostgREST max_rows), newest first. The pass rate is
+ * passed ÷ jobs that finished testing; a machine stop is not in it.
  */
 
 import { adviseCi, percentile, slowSteps, STALE_HEARTBEAT_MS, type AdvisorJob } from './ci-advisor.ts'
@@ -201,13 +202,18 @@ export function healRunnerKinds(jobs: JobRow[], runners: RunnerRow[]): void {
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
 const UNFINISHED_QUEUED = new Set(['queued', 'waiting', 'requested', 'pending'])
-const COUNTED = new Set(['passed', 'code_failure', 'runner_lost', 'queue_expired'])
+/**
+ * Jobs that finished testing. A machine stop (`runner_lost`, `queue_expired`)
+ * never ran the tests, and a cancel or skip did not finish them, so none of
+ * those count as a pass or a fail.
+ */
+const FINISHED_TESTING = new Set<CiJobKind>(['passed', 'code_failure'])
 
-/** Pass rate over jobs that ran to a verdict: superseded cancels and skips do not count either way. */
+/** Pass rate of jobs that finished testing. Null when none did. */
 function passRate(jobs: readonly JobRow[]): number | null {
-  const counted = jobs.filter((j) => COUNTED.has(j.ci_kind))
-  if (counted.length === 0) return null
-  return Math.round((counted.filter((j) => j.ci_kind === 'passed').length / counted.length) * 1000) / 1000
+  const tested = jobs.filter((j) => FINISHED_TESTING.has(j.ci_kind))
+  if (tested.length === 0) return null
+  return Math.round((tested.filter((j) => j.ci_kind === 'passed').length / tested.length) * 1000) / 1000
 }
 
 function nums(jobs: readonly JobRow[], key: 'queue_seconds' | 'duration_seconds'): number[] {
@@ -376,14 +382,14 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
   for (const j of finished) wfKeys.set(`${j.repo}|${j.workflow_name ?? '(unnamed)'}`, { repo: j.repo, workflow: j.workflow_name ?? '(unnamed)' })
   const byWorkflow = [...wfKeys.values()].map(({ repo, workflow }) => {
     const mine = finished.filter((j) => j.repo === repo && (j.workflow_name ?? '(unnamed)') === workflow)
-    const counted = mine.filter((j) => COUNTED.has(j.ci_kind))
+    const tested = mine.filter((j) => FINISHED_TESTING.has(j.ci_kind))
     return {
       repo,
       workflow,
       jobs: mine.length,
       durationP50s: percentile(nums(mine, 'duration_seconds'), 50),
       durationP95s: percentile(nums(mine, 'duration_seconds'), 95),
-      failRate: counted.length ? Math.round((counted.filter((j) => j.ci_kind === 'code_failure').length / counted.length) * 1000) / 1000 : null,
+      failRate: tested.length ? Math.round((tested.filter((j) => j.ci_kind === 'code_failure').length / tested.length) * 1000) / 1000 : null,
     }
   }).sort((a, b) => b.jobs - a.jobs)
 
@@ -440,6 +446,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     stats: {
       jobs: all.length,
       passRate: passRate(all),
+      passed: all.filter((j) => j.ci_kind === 'passed').length,
       queueP50s: percentile(nums(all, 'queue_seconds'), 50),
       queueP95s: percentile(nums(all, 'queue_seconds'), 95),
       durationP50s: percentile(nums(finished, 'duration_seconds'), 50),
