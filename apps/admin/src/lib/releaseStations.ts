@@ -9,7 +9,7 @@
 
 import type { PipelineStage, TrainSummary } from './pipeline'
 
-export type ReleaseStationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
+type ReleaseStationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
 
 export interface ReleaseStation {
   id: ReleaseStationId

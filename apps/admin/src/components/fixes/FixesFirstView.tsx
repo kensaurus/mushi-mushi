@@ -34,7 +34,7 @@ function causeFix(cause: string): { label: string; to: string } | null {
   return null
 }
 
-export interface StoppedReason {
+interface StoppedReason {
   cause: string
   label: string
   /** Reports stopped for this reason (their latest attempt). */
@@ -47,7 +47,7 @@ export interface StoppedReason {
 }
 
 /** Stopped reports grouped by why, biggest first. */
-export function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
+function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
   const byCause = new Map<string, FixAttempt[]>()
   for (const f of fixes) {
     if (!needsAttention(f)) continue
@@ -72,7 +72,7 @@ export function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
 }
 
 /** Ready to merge, one row per PR. */
-export function readyFixes(fixes: FixAttempt[]): FixAttempt[] {
+function readyFixes(fixes: FixAttempt[]): FixAttempt[] {
   const seen = new Set<string>()
   return fixes.filter((f) => {
     if (!readyToMerge(f) || !f.pr_url || seen.has(f.pr_url)) return false
@@ -82,7 +82,7 @@ export function readyFixes(fixes: FixAttempt[]): FixAttempt[] {
 }
 
 /** Fix attempts already in the merge queue, from the pipeline read (its items carry the queue row). */
-export function queuedFixIds(pipeline: PipelineData | null): Set<string> {
+function queuedFixIds(pipeline: PipelineData | null): Set<string> {
   const out = new Set<string>()
   for (const stage of pipeline?.stages ?? []) for (const g of stage.groups) for (const i of g.items) if (i.queueId) out.add(i.id)
   return out

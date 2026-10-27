@@ -248,9 +248,9 @@ export function FixGitGraph({
   const mergeY = completedIdx >= 0 ? completedIdx * ROW_H + 12 : null
 
   return (
-    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     // Below sm the rail is hidden and rows wrap, so a phone reads the whole
     // review and branch name instead of a clipped line (report 2375c9c5).
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <div className={`grid grid-cols-1 gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 sm:grid-cols-[7.5rem_minmax(0,1fr)] ${className}`}>
       <svg
         className="hidden sm:block"

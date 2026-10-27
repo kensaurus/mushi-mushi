@@ -20,7 +20,7 @@ export type InboxOverviewMode = 'setup' | 'actions' | 'clear'
 /** Cards that keep things tidy rather than decide anything. */
 const CHORE_SCOPES: ReadonlySet<string> = new Set(['judge'])
 /** Ranked decision cards shown; the rest wait for these. */
-export const MAX_DECISIONS = 5
+const MAX_DECISIONS = 5
 
 /** @internal Exported for tests only. Decisions in order (at most five) and the chores. */
 export function splitInboxCards(cards: InboxCard[]): { decisions: InboxCard[]; more: number; chores: InboxCard[] } {

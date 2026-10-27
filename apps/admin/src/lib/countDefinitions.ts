@@ -32,7 +32,7 @@
  *     never count. Server: _shared/pipeline-view.ts, groups `agent_failed`,
  *     `agent_failed_person` (the agent says a person must decide) and
  *     `agent_failed_nothing` (nothing to change in the code); together they
- *     are the one count (AGENT_FAILED_GROUP_IDS).
+ *     are the one count.
  *     It is a part of Stopped, over a shorter window.
  *
  *   Failing CI — "N fix PRs failing CI". Unit: an open fix PULL REQUEST, as
@@ -52,10 +52,11 @@
  *
  *   Ready to merge — Unit: an open fix PULL REQUEST. Not a draft, its
  *     latest Opus review says "merge" about its current commit, and its own
- *     CI passed on the code (a stopped test machine is not a pass). The same
- *     rule (readyToMerge) picks /fixes "Ready to merge" and /repo "Mergeable
- *     now". /pipeline's "approved and green, not queued to merge" is the part
- *     of it not in the merge queue yet.
+ *     CI passed on the code (a stopped test machine is not a pass).
+ *     readyToMerge picks /fixes "Ready to merge" from the fix list; /repo
+ *     "Mergeable now" applies the same rule to GitHub's live checks
+ *     (OpenPullRequests openPrGroup). /pipeline's "approved and green, not
+ *     queued to merge" is the part of it not in the merge queue yet.
  *
  *   In flight — reports with a fix attempt queued or running.
  *   PR open   — reports whose fix PR is open and not blocked.
@@ -73,9 +74,6 @@ export function stoppedTitle(reports: number): string {
 export function failingCiTitle(prs: number): string {
   return `${prs} fix ${pluralize(prs, 'PR')} failing CI`
 }
-
-/** The /pipeline groups that make up "Agent failed" (one count, split by why). */
-export const AGENT_FAILED_GROUP_IDS: ReadonlySet<string> = new Set(['agent_failed', 'agent_failed_person', 'agent_failed_nothing'])
 
 /** The fields "Ready to merge" reads; a fix attempt (GET /v1/admin/fixes) has them all. */
 export interface ReadyToMergeSignals {

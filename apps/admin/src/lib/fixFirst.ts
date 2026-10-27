@@ -24,7 +24,7 @@ export function peopleHit(r: Pick<FixFirstInput, 'unique_users' | 'dedup_count'>
 }
 
 /** Higher first: severity weight times how many people it reached (log scale, so 100 users do not drown a critical). */
-export function fixFirstScore(r: FixFirstInput): number {
+function fixFirstScore(r: FixFirstInput): number {
   const weight = SEVERITY_WEIGHT[(r.severity ?? '').toLowerCase()] ?? 1
   return weight * (1 + Math.log2(peopleHit(r)))
 }
