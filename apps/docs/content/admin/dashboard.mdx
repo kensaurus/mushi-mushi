@@ -1,140 +1,131 @@
 ---
 title: Dashboard
-description: The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.
+description: Home in the Mushi console shows how one app is doing — is it up, what needs you, what is shipping, which pages have bugs and who can reach it.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Dashboard
 
-**Route:** `/dashboard`
+**Route:** `/dashboard` (Home → Today)
 
-> **Scenario:** You've just pushed a release and want to know in 30 seconds whether
-> anything broke, whether the overnight fix runs succeeded, and what your users
-> reported since you last logged in.
+> **Scenario:** You open Mushi in the morning and want to know in 30 seconds whether
+> your app is up, whether anything broke overnight, and what needs you today.
 
 <AdminDocHero page="dashboard" />
 
-The dashboard answers those questions without clicking into any sub-page. It's your
-morning starting point — a live snapshot of what users reported, what's getting fixed,
-and what still needs you.
+Home is one page per app. It answers five questions without opening any other page:
+is the app up, what needs me, what is shipping, which pages have bugs, and who can
+reach it. Every number links to the list it counts. A part that is not connected yet
+is grey and its button says how to connect it; a part whose read failed says
+"Could not read" instead of showing a 0.
+
+All of it comes from one call, `GET /v1/admin/projects/:id/home`.
 
 ---
 
-## What to look for first
+## App card
 
-When you land on the dashboard, scan these three things in order:
+A screenshot of your live site, the app's name and address, its platforms (Web, iOS,
+Android) and the version Mushi last saw deployed.
 
-1. **The "do this next" line** (top of every page) — one sentence and one button for
-   the most important thing right now: unfixed critical or high bugs, new bugs waiting
-   for a look (Sentry imports land here), stopped fixes, or fix PRs to review.
+- The screenshot is taken with **your own Firecrawl key** (Settings → Web tools);
+  Mushi never uses its own key for it. It is stored privately and shown through a
+  link that expires after an hour.
+- While the [live-site watch](/admin/credits) is on, Home takes a new screenshot
+  once a week when you open it. **Refresh picture** takes one now (once every
+  10 minutes per app; viewers do not see the button).
+- Without a screenshot the card shows the app's store icon, then its site icon, then
+  its initials, and says what is missing ("Add a Firecrawl key…").
 
-2. **KPI tiles** — if "Fixes failed" is non-zero, open
-   [Fix drafts & PRs](/admin/fixes) immediately. If "LLM cost" spiked overnight, check
-   the cost chart for the culprit pipeline.
+## Health lights
 
-3. **Inbox queue** (bottom-left) — reports waiting for your decision. This is your
-   to-do list for the day.
+Four lights, each with a word beside its colour:
 
----
+| Light | Green | Amber | Red | Not connected |
+|-------|-------|-------|-----|---------------|
+| **Site up** | No broken pages | Last check failed, not checked for 3 days, or pages answer slower than 3 s | Pages the watch confirmed broken | Turn on the live-site watch |
+| **Errors (24 h)** | New reports, none critical | At least 5 new and double the day before | Any critical report | Install the SDK |
+| **SDK sending** | Your app checked in today | Quiet for 1–7 days | Silent for over a week | Create a key and add the SDK |
+| **CI on main** | The latest run on your default branch passed | The test machine stopped (not a code failure) | A check failed | Connect your repo |
 
-## Flow canvas
+Click a light to open where its number came from (broken pages, the report list,
+[SDK health](/admin/sdk-health), [CI](/admin/ci)).
 
-An animated graph shows live report counts at each stage, under the "do this next" line:
+## Needs you
 
-| Stage | What it counts |
-|-------|---------------|
-| **Plan** | Reports that have been classified and are awaiting triage |
-| **Do** | Fix-worker runs currently in progress |
-| **Check** | Fixes awaiting verification |
-| **Act** | Merged PRs pending attribution / lesson promotion |
+At most five things, most costly first, each one sentence and one button: a broken
+live site, critical bugs waiting for a fix, fixes Opus put on hold, CI failing on main,
+an app that stopped sending, stuck fixes in the [pipeline](/admin/pipeline) (agent
+failed, approved but not queued, red release train), and an SDK update. Pipeline
+items use the same groups and counts the Pipeline page shows, so the click lands on
+the same number. When nothing needs you, it says so.
 
-The stage with the most activity glows with an animated gradient edge. **Click any
-stage card** to jump to its page.
+While a setup step is still open, the setup card above Home names the step and its fix.
 
-On mobile the canvas becomes a compact **PDCA Cockpit** — same counts, same links.
+## Release
 
----
+- **Stations:** fix ready → CI → in train → merged → deployed, with the number of
+  fixes at each and how many are stuck. Same stages as [Pipeline](/admin/pipeline).
+- **Train and deploy:** the release train on the tracks (or the last one) and the
+  version last seen live ([Releases](/admin/releases)).
+- **Bugs waiting:** one bar split by severity (critical, high, medium, low, not
+  rated yet). Each colour opens the open bugs of that severity.
 
-## KPI tiles (14-day window)
+## Pages
 
-| Tile | What it measures | Why it matters |
-|------|-----------------|----------------|
-| **Open backlog** | Reports not yet dispatched to a fix | Rising number = triage falling behind |
-| **Fixes in flight** | Fix-worker runs currently running | Healthy baseline is 0–3 at any moment |
-| **Fixes failed** | Failed runs in the last 14 days | Non-zero means check [Integration health](/admin/health) |
-| **LLM calls** | Total calls to your BYOK providers | Baseline for cost budgeting |
-| **LLM cost** | Estimated USD spend | Spike after a deploy = PDCA run triggered |
+A small map of your busiest pages: visits in the last 7 days (from the SDK's session
+tracker), bug reports in the last 14 days, and pages the live-site watch found broken.
+Page ids (`/lessons/42`) are grouped as `/lessons/:id`. With no visits, reports or
+site checks yet, it says what fills it.
 
----
+## Access and details
 
-## Charts row (14 days)
+Your repo and default branch, the people on the app, the SDK version you run against
+the latest one, your keys (label and last use only, never the key itself), and links
+to Fix history, User activity and, on plans that include it, the [Audit log](/admin/audit).
 
-Two bar charts sit side by side. Both include **event annotation markers** — thin
-vertical lines for deploys, cron runs, and BYOK key changes — so you can answer
-questions like *"why did cost jump on Tuesday?"* without digging through logs.
+## This week vs last week
 
-- **Reports by day** — inbound volume. A sudden drop may mean the SDK stopped sending (check [SDK health](/admin/sdk-health)).
-- **LLM cost by day** — AI spend. A spike after a quiet period usually means a PDCA run or a fine-tuning job fired.
+Bug reports, critical bugs, fixes merged and (with session tracking) user visits, this
+week against last week. The change is green when it moved the right way for that row
+(fewer bugs, more fixes).
 
----
+## Recent activity
 
-## Triage queue
+What happened, grouped into plain sentences: "3 fixes merged today", "12 bug reports
+came in this week", "2 deploys seen this week, latest v1.4.0".
 
-The most recent un-triaged reports, ordered by severity. Click any row to open the
-report detail and triage it. **"View all reports →"** goes to the full queue with
-all filters.
+## How this works
 
-If the queue is empty, that's a good sign — but if the "Open backlog" KPI is high
-while the queue looks empty, check the [Processing queue](/admin/queue) for stuck items.
-
----
-
-## Insights row
-
-- **Top error-generating components** — shows which parts of the codebase generate the
-  most reports. If `CheckoutButton` is top of the list for three weeks running, it's
-  time to look at the [Lessons](/admin/lessons) page and see if a recurring pattern
-  has been promoted.
-- **Integration health** — a compact status badge for each BYOK provider. A red badge
-  here means fix-worker and PDCA runs will fail until it's fixed.
-- **Activity feed** — recent system events: fix dispatched, PR opened, tier-up, PDCA
-  run completed.
+What Mushi does with a bug in four steps. Open by default only on a new app with no
+reports yet.
 
 ---
 
 ## Common tasks
 
-### Morning check (2 minutes)
-1. Glance at the PDCA canvas — no pile-up at a single stage? Good.
-2. Check "Fixes failed" — zero? Move on. Non-zero? Open Fix orchestrator.
-3. Scan the bug queue — review the top 2–3 reports before standups.
-4. Check integration health badge — all green? You're done.
+### Morning check (1 minute)
+1. All four lights green? Move on.
+2. Clear **Needs you** from the top.
+3. Glance at **Bugs waiting**: any red (critical)?
 
 ### After a deploy
-1. Open the **Reports by day** chart and look at today's bar.
-2. Check if a new deploy annotation appears. If report volume spikes right after
-   the annotation, a regression likely shipped.
-3. Click the spike bars to drill into the individual reports.
-
-### Investigating a cost spike
-1. Find the spike on **LLM cost by day**.
-2. Hover the event annotation on that date — was it a PDCA run? A fine-tuning job?
-3. If unexplained, open [Integration health](/admin/health) → Recent LLM calls log.
+1. Check the version on the app card and under **Release** matches what you shipped.
+2. Watch **Errors (24 h)** and **CI on main** for the next hour.
 
 ---
 
 <Callout type="info">
 A confetti burst and toast appear the first time a fix-worker PR is merged for your
-project — the "first merged fix" milestone. After that, the dashboard switches from
-the onboarding state to the full production view.
+project — the "first merged fix" milestone.
 </Callout>
 
 ---
 
 ## Related pages
 
-- [Inbox](/admin/inbox) — all open actions prioritised in one list
+- [Inbox](/admin/inbox) — all open actions in one list
 - [Reports](/admin/reports) — the full bug queue
-- [Fix orchestrator](/admin/fixes) — fix-worker run detail
-- [Integration health](/admin/health) — full LLM health and cron monitoring
+- [Pipeline](/admin/pipeline) — every fix from report to deploy
+- [Integration health](/admin/health) — AI and background job health
