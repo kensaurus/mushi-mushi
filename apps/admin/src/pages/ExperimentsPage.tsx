@@ -18,6 +18,7 @@ import { describeApiError } from '../lib/humanizeApiError'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useToast } from '../lib/toast'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
@@ -258,13 +259,13 @@ export function ExperimentsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'A/B experiments'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Compare two or more versions of a screen and see which one more users finish. The SDK splits your users between the versions, and Mushi tells you when one is clearly ahead.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on report rate',
-          'Use bandit mode for fast exploration with small samples',
+          'Send more users to the winning version while the test runs, when you have few users',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: looking early does not fake a winner.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -400,13 +401,14 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
       </div>
     )}
     <Card className="overflow-hidden">
+      <ResponsiveTable ariaLabel="Experiments">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
             <th className="px-3 py-2 text-left">Name</th>
             <th className="px-3 py-2 text-left">Status</th>
             <th className="px-3 py-2 text-left">Variants</th>
-            <th className="px-3 py-2 text-left">Mode</th>
+            <th className="px-3 py-2 text-left">Split</th>
             <th className="px-3 py-2 text-left">Created</th>
             <th className="px-3 py-2" />
           </tr>
@@ -422,8 +424,8 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
               <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
               <td className="px-3 py-2">
                 {e.bandit_enabled
-                  ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
-                  : <span className="text-xs text-fg-muted">Static</span>}
+                  ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                  : <span className="text-xs text-fg-muted">Even split</span>}
               </td>
               <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
               <td className="px-3 py-2">
@@ -462,6 +464,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
           ))}
         </tbody>
       </table>
+      </ResponsiveTable>
     </Card>
     </div>
   )
@@ -551,7 +554,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
-          Send more users to the version that is winning (Thompson sampling)
+          Send more users to the version that is winning
         </label>
       </div>
 
@@ -675,7 +678,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         <div className="flex flex-wrap gap-2 items-center">
           {statusBadge(experiment.status)}
           {experiment.bandit_enabled && (
-            <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
+            <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
           )}
           {experiment.winner_variant_id && (
             <Badge className={CHIP_TONE.okSubtle}>Winner found</Badge>
@@ -734,9 +737,11 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
               <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
                 <div className="flex-1">
                   <div className="font-medium text-sm text-fg">{v.name}</div>
-                  <div className="text-xs text-fg-muted">
-                    Weight: {(v.traffic_weight * 100).toFixed(0)}%
-                    {experiment.bandit_enabled && ` · α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}`}
+                  <div
+                    className="text-xs text-fg-muted"
+                    title={experiment.bandit_enabled ? `Bandit state α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}` : undefined}
+                  >
+                    Gets {(v.traffic_weight * 100).toFixed(0)}% of users
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
@@ -752,14 +757,16 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
-              <div className="font-medium text-fg">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
-              <div className="text-xs mt-0.5 text-fg-muted">chi-square p = {analysis.srm_p.toFixed(4)}</div>
+              <div className="font-medium text-fg">
+                {analysis.srm_ok ? 'Users split as planned' : 'Users did not split as planned: check how the SDK assigns them before trusting this result'}
+              </div>
+              <div className="text-xs mt-0.5 text-fg-muted" title="Sample ratio check (chi-square)">Split check p = {analysis.srm_p.toFixed(4)}</div>
             </div>
 
             <Card className="p-4 space-y-2">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-fg-muted text-xs">p-value</span><div className="font-mono font-medium">{analysis.p_value.toFixed(4)}</div></div>
-                <div><span className="text-fg-muted text-xs">mSPRT log-LR</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
+                <div><span className="text-fg-muted text-xs" title="mSPRT log-likelihood ratio">Strength of evidence</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
                 <div><span className="text-fg-muted text-xs">Relative lift</span><div className="font-mono font-medium">{(analysis.relative_lift * 100).toFixed(1)}%</div></div>
               </div>
               <p className="text-sm mt-2 border-t border-edge-subtle pt-2 text-fg">{analysis.recommendation}</p>
