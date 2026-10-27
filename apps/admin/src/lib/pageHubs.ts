@@ -89,6 +89,18 @@ export function resolveHubView(hub: PageHub, raw: string | null, viewer: HubView
   return views.find((v) => v.id === raw)?.id ?? views[0]?.id ?? hub.views[0].id
 }
 
+/**
+ * A view the URL asks for that the viewer's plan does not include. The hub
+ * shows it as "Available on <plan>" instead of quietly opening its first
+ * view: `?view=sso` used to render Members (console journeys 2026-10-27).
+ * Operator-only views still fall back, since they are not for sale.
+ */
+export function lockedHubView(hub: PageHub, raw: string | null, viewer: HubViewer): HubView | null {
+  const view = hub.views.find((v) => v.id === raw)
+  if (!view?.requiresFeature || view.operatorOnly) return null
+  return visibleViews(hub, viewer).some((v) => v.id === view.id) ? null : view
+}
+
 /** `/activity?project=x` → `/dashboard?project=x&view=users`, keeping every other param. */
 export function hubRedirectTarget(hub: PageHub, viewId: string, search: string): string {
   const params = new URLSearchParams(search)
