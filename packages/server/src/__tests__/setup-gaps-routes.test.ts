@@ -62,6 +62,7 @@ const gh = {
   status: {} as Record<string, number>,
   mint: null as null | { token: string; permissions: Record<string, string> | null },
   pat: 'pat-token' as string | null,
+  platform: null as string | null,
 }
 let dispatcher: Array<{ projectId: string; autofixOn: boolean; server: { agentKeys: number; offKeys: number } }> | null = []
 
@@ -74,7 +75,7 @@ function deps(): Parameters<Routes['registerSetupGapsRoutes']>[1] {
       return gh.mint
     },
     resolvePat: async () => gh.pat,
-    platformToken: () => null,
+    platformToken: () => gh.platform,
     githubGet: async (_token: string, path: string) => {
       calls.github.push(path)
       const key = Object.keys(gh.status).find((k) => path.endsWith(k))
@@ -122,6 +123,7 @@ beforeEach(() => {
   gh.status = {}
   gh.mint = { token: 'app-token', permissions: { contents: 'write', pull_requests: 'write', metadata: 'read' } }
   gh.pat = 'pat-token'
+  gh.platform = null
   dispatcher = [{ projectId: P1, autofixOn: true, server: { agentKeys: 0, offKeys: 1 } }]
   routes.clearSetupGapsCache()
   app = new Hono()
@@ -195,6 +197,15 @@ describe('GET /v1/admin/setup-gaps', () => {
     expect(m.get('github_access:kensaurus/glot.it')).toMatchObject({ status: 'unknown', summary: expect.stringContaining('it never writes to check') })
     expect(calls.github.every((p) => !/merges|dispatches|rerun/.test(p))).toBe(true)
     expect(calls.github).toContain('/repos/kensaurus/glot.it/actions/secrets/public-key')
+  })
+
+  it("never probes a tenant's repo with Mushi's own fallback token", async () => {
+    gh.mint = null
+    gh.pat = null
+    gh.platform = 'platform-token'
+    const m = byId((await get(`/v1/admin/setup-gaps?projectId=${P1}`)).json.data.projects[0].gaps)
+    expect(m.get('github_access:kensaurus/glot.it')).toMatchObject({ status: 'unknown', summary: expect.stringContaining('no GitHub token of its own') })
+    expect(calls.github).toEqual([])
   })
 
   it('a read that fails is an unknown line, never a missing one', async () => {

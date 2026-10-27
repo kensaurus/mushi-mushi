@@ -89,8 +89,11 @@ describe('githubAccessGap', () => {
     expect(g.summary).toContain('it never writes to check')
   })
 
-  it("Mushi's fallback token is labelled as Mushi's, never the owner's", () => {
-    expect(line({ source: 'platform' }).summary).toContain("Mushi's own fallback token (not yours)")
+  it("Mushi's own fallback token is never reported on: it says the app has no token of its own", () => {
+    const g = line({ source: 'platform', abilities: null })
+    expect(g.status).toBe('unknown')
+    expect(g.summary).toContain('no GitHub token of its own')
+    expect(g.summary).not.toMatch(/can (push|open|re-run)/)
   })
 
   it('no token, no repo and an unreadable probe each get a line', () => {

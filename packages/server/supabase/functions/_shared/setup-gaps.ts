@@ -154,8 +154,6 @@ function sourceWords(s: TokenSource): string {
       return 'Your GitHub token'
     case 'pat_fine_grained':
       return 'Your fine-grained GitHub token'
-    case 'platform':
-      return "Mushi's own fallback token (not yours)"
     default:
       return 'GitHub'
   }
@@ -184,6 +182,13 @@ export function githubAccessGap(input: RepoAccessInput): SetupGap {
   const base = { id: `github_access:${input.repo}`, projectId: input.projectId, audience: 'app_owner' as const, title: `GitHub access: ${input.repo}`, fixHref: FIX_HREFS.github }
   if (input.source === 'none') {
     return { ...base, status: 'gap', summary: `No GitHub connection for ${input.repo}: Mushi cannot open fix pull requests or read CI there.` }
+  }
+  if (input.source === 'platform') {
+    return {
+      ...base,
+      status: 'unknown',
+      summary: `This app has no GitHub token of its own for ${input.repo}; Mushi uses its own fallback token, so what your access can do is not checked. Connect GitHub.`,
+    }
   }
   if (input.readError || !input.abilities) {
     return { ...base, status: 'unknown', summary: `Mushi could not check what its GitHub access can do in ${input.repo} (${input.readError ?? 'no answer'}).` }

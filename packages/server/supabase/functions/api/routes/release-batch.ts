@@ -70,7 +70,9 @@ export interface ReleaseBatchDeps {
 
 export const defaultReleaseBatchDeps: ReleaseBatchDeps = {
   now: () => new Date(),
-  token: (db, projectId, installationId) => resolveProjectGithubToken(db, projectId, installationId),
+  // Never Mushi's own fallback token: this route hands file paths to the caller,
+  // and the repo URL is the tenant's choice (github.ts allowEnvFallback).
+  token: (db, projectId, installationId) => resolveProjectGithubToken(db, projectId, installationId, { allowEnvFallback: false }),
   pullFiles: async (token, ref, pr) => {
     const got = await fetchPullRequestFiles(token, ref, pr, { maxPages: 3 })
     return got ? { files: got.files.map((f) => ({ filename: f.filename, previousFilename: f.previousFilename ?? null })), complete: got.complete } : null

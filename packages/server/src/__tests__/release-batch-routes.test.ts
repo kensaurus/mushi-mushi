@@ -14,7 +14,7 @@ const P1 = '1000000a-0000-4000-8000-000000000000'
 const NOW = new Date('2026-10-27T12:00:00Z')
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString()
 
-const state = vi.hoisted(() => ({ db: null as unknown, accessible: [] as string[] }))
+const state = vi.hoisted(() => ({ db: null as unknown, accessible: [] as string[], tokenCalls: [] as unknown[][] }))
 const fakeLog = vi.hoisted(() => {
   const logger: Record<string, unknown> = {}
   for (const level of ['debug', 'info', 'warn', 'error', 'fatal', 'audit']) logger[level] = () => {}
@@ -28,6 +28,13 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   jwtAuth: async (c: { set: (k: string, v: string) => void }, next: () => Promise<void>) => {
     c.set('userId', 'u1')
     await next()
+  },
+}))
+vi.mock('../../supabase/functions/_shared/github.ts', async (orig) => ({
+  ...((await orig()) as Record<string, unknown>),
+  resolveProjectGithubToken: async (...args: unknown[]) => {
+    state.tokenCalls.push(args)
+    return null
   },
 }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
@@ -125,6 +132,12 @@ describe('GET /v1/admin/release-batch', () => {
     files[102] = 'fail'
     const [b] = (await get(`/v1/admin/release-batch?projectId=${P1}`)).json.data.repos
     expect(b.migrations).toMatchObject({ complete: false, unread: [102] })
+  })
+
+  it("the default token never falls back to Mushi's own GitHub token", async () => {
+    state.tokenCalls = []
+    await routes.defaultReleaseBatchDeps.token(state.db as never, P1, 7)
+    expect(state.tokenCalls).toEqual([[state.db, P1, 7, { allowEnvFallback: false }]])
   })
 
   it('an app the caller cannot open is a 404; no apps is an empty list', async () => {

@@ -11,7 +11,9 @@
  * reads and the GitHub probes. The probes are harmless reads (the App's
  * token mint, GET on the repo, its pulls, Actions runs and the secrets
  * public key); Mushi never writes to find out whether it may write. Tokens
- * are never logged or returned.
+ * are never logged or returned. Mushi's own fallback token (GITHUB_TOKEN)
+ * is never probed: the repo URL is the tenant's, so the answer would say
+ * what Mushi's token can reach.
  *
  * Every check reads on its own with a deadline: a slow or failing read makes
  * that line `unknown`, never a missing line. Results are cached for
@@ -144,18 +146,22 @@ async function probeRepo(db: Db, projectId: string, repo: GithubRepoRef, install
       return { projectId, repo: name, source: 'app', abilities: abilitiesFromInstallation(minted.permissions, reach), readError: null }
     }
   }
-  // 2. A stored token (the app's, then its team's); 3. Mushi's own fallback.
+  // 2. A stored token (the app's, then its team's).
   const pat = await deps.resolvePat(db, projectId)
-  const platform = pat ? null : deps.platformToken()
-  const token = pat ?? platform
-  if (!token) return { projectId, repo: name, source: 'none', abilities: null, readError: null }
+  if (!pat) {
+    // 3. Mushi's own fallback token is never probed: the repo URL is the
+    // tenant's choice, so the answer would tell any app owner what Mushi's
+    // token can reach.
+    return { projectId, repo: name, source: deps.platformToken() ? 'platform' : 'none', abilities: null, readError: null }
+  }
+  const token = pat
   const head = await deps.githubGet(token, path)
   if (!head || (head.status >= 500 && head.status < 600)) {
-    return { projectId, repo: name, source: platform ? 'platform' : 'pat_fine_grained', abilities: null, readError: head ? `GitHub answered ${head.status}` : 'GitHub did not answer' }
+    return { projectId, repo: name, source: 'pat_fine_grained', abilities: null, readError: head ? `GitHub answered ${head.status}` : 'GitHub did not answer' }
   }
   // A classic token states its scopes on every answer; a fine-grained one does not.
   if (head.scopes !== null) {
-    return { projectId, repo: name, source: platform ? 'platform' : 'pat_classic', abilities: abilitiesFromClassicScopes(head.scopes, head.status === 200), readError: null }
+    return { projectId, repo: name, source: 'pat_classic', abilities: abilitiesFromClassicScopes(head.scopes, head.status === 200), readError: null }
   }
   let abilities: TokenAbilities
   if (reachable(head.status) === false) {
@@ -174,7 +180,7 @@ async function probeRepo(db: Db, projectId: string, repo: GithubRepoRef, install
       secrets: secrets?.status ?? null,
     })
   }
-  return { projectId, repo: name, source: platform ? 'platform' : 'pat_fine_grained', abilities, readError: null }
+  return { projectId, repo: name, source: 'pat_fine_grained', abilities, readError: null }
 }
 
 async function githubGaps(db: Db, projectId: string, deps: SetupGapsDeps): Promise<SetupGap[]> {
