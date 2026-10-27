@@ -22,7 +22,7 @@ const UUID_LABEL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /**
  * A bug group's name on the map (report 4659acc8): its title, else its first
  * report's title or the start of its summary, with how many reports it holds.
- * The node's `label` stays the group id, which knowledge-graph.ts dedupes on.
+ * The node's `label` stays the id the graph dedupes on.
  * @internal Exported for tests.
  */
 export function reportGroupDisplayLabel(input: {
@@ -38,37 +38,136 @@ export function reportGroupDisplayLabel(input: {
   return n > 1 ? `${short} (${n} reports)` : short;
 }
 
-/** Names for the report_group nodes among `nodes`, keyed by node id. */
-async function reportGroupNames(
+interface GroupNameRow {
+  id: string;
+  title: string | null;
+  report_count: number | null;
+  canonical_report_id: string | null;
+}
+
+interface ReportNameRow {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  description: string | null;
+  report_group_id: string | null;
+}
+
+/** `buildReportGraph` stores `reportId`; `linkReportToAction` stores `report_id`. */
+function metaReportId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const meta = metadata as Record<string, unknown>;
+  for (const key of ['reportId', 'report_id']) {
+    const value = meta[key];
+    if (typeof value === 'string' && UUID_LABEL.test(value)) return value;
+  }
+  return null;
+}
+
+async function loadNameRows<T extends { id: string }>(
+  db: ReturnType<typeof getServiceClient>,
+  table: 'report_groups' | 'reports',
+  columns: string,
+  ids: string[],
+): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await db.from(table).select(columns).in('id', ids);
+  if (error) {
+    log.warn('graph node names read failed', { table, err: error.message });
+    return [];
+  }
+  return (data ?? []) as T[];
+}
+
+/**
+ * Names for the report_group nodes among `nodes`, keyed by node id.
+ * The stored label is a UUID either way: the group id (`buildReportGraph`)
+ * or the report id (`linkReportToAction`). A person reads the group title,
+ * else that report's title, summary, or description.
+ * @internal Exported for tests.
+ */
+export async function reportGroupNames(
   db: ReturnType<typeof getServiceClient>,
   nodes: Array<{ id: string; node_type: string; label: string; metadata: unknown }>,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  const groups = nodes.filter((n) => n.node_type === 'report_group' && UUID_LABEL.test(n.label));
-  if (groups.length === 0) return out;
-  const { data: groupRows, error } = await db
-    .from('report_groups')
-    .select('id, title, report_count, canonical_report_id')
-    .in('id', groups.map((g) => g.label));
-  if (error) {
-    log.warn('report group names read failed', { err: error.message });
-    return out;
+  const targets = nodes.filter((n) => n.node_type === 'report_group' && UUID_LABEL.test(n.label));
+  if (targets.length === 0) return out;
+
+  const groupIds = [...new Set(targets.map((n) => n.label))];
+  const reportIds = new Set<string>(groupIds);
+  for (const n of targets) {
+    const fromMeta = metaReportId(n.metadata);
+    if (fromMeta) reportIds.add(fromMeta);
   }
-  const byId = new Map(((groupRows ?? []) as Array<{ id: string; title: string | null; report_count: number | null; canonical_report_id: string | null }>).map((g) => [g.id, g]));
-  const reportIdOf = (n: (typeof groups)[number]) => {
-    const meta = n.metadata && typeof n.metadata === 'object' ? (n.metadata as { reportId?: unknown }) : {};
-    return byId.get(n.label)?.canonical_report_id ?? (typeof meta.reportId === 'string' ? meta.reportId : null);
-  };
-  const reportIds = [...new Set(groups.map(reportIdOf).filter((id): id is string => !!id))];
-  const reports = new Map<string, { title: string | null; summary: string | null; description: string | null }>();
-  if (reportIds.length > 0) {
-    const { data } = await db.from('reports').select('id, title, summary, description').in('id', reportIds);
-    for (const r of (data ?? []) as Array<{ id: string; title: string | null; summary: string | null; description: string | null }>) reports.set(r.id, r);
+
+  const [groupRows, reportRows] = await Promise.all([
+    loadNameRows<GroupNameRow>(
+      db,
+      'report_groups',
+      'id, title, report_count, canonical_report_id',
+      groupIds,
+    ),
+    loadNameRows<ReportNameRow>(db, 'reports', 'id, title, summary, description, report_group_id', [
+      ...reportIds,
+    ]),
+  ]);
+  const groups = new Map(groupRows.map((g) => [g.id, g]));
+  const reports = new Map(reportRows.map((r) => [r.id, r]));
+
+  const missingGroupIds = [
+    ...new Set(
+      reportRows
+        .map((r) => r.report_group_id)
+        .filter((id): id is string => !!id && !groups.has(id)),
+    ),
+  ];
+  if (missingGroupIds.length > 0) {
+    for (const g of await loadNameRows<GroupNameRow>(
+      db,
+      'report_groups',
+      'id, title, report_count, canonical_report_id',
+      missingGroupIds,
+    )) {
+      groups.set(g.id, g);
+    }
   }
-  for (const n of groups) {
-    const g = byId.get(n.label);
-    const rid = reportIdOf(n);
-    const name = reportGroupDisplayLabel({ groupTitle: g?.title, report: rid ? reports.get(rid) : null, reportCount: g?.report_count });
+  const missingReportIds = [
+    ...new Set(
+      [...groups.values()]
+        .map((g) => g.canonical_report_id)
+        .filter((id): id is string => !!id && !reports.has(id)),
+    ),
+  ];
+  if (missingReportIds.length > 0) {
+    for (const r of await loadNameRows<ReportNameRow>(
+      db,
+      'reports',
+      'id, title, summary, description, report_group_id',
+      missingReportIds,
+    )) {
+      reports.set(r.id, r);
+    }
+  }
+
+  for (const n of targets) {
+    const groupFromLabel = groups.get(n.label) ?? null;
+    const fromMeta = metaReportId(n.metadata);
+    const report =
+      (groupFromLabel?.canonical_report_id
+        ? reports.get(groupFromLabel.canonical_report_id)
+        : undefined) ??
+      (fromMeta ? reports.get(fromMeta) : undefined) ??
+      reports.get(n.label) ??
+      null;
+    const group =
+      groupFromLabel ??
+      (report?.report_group_id ? (groups.get(report.report_group_id) ?? null) : null);
+    const name = reportGroupDisplayLabel({
+      groupTitle: group?.title,
+      report,
+      reportCount: group?.report_count,
+    });
     if (name) out.set(n.id, name);
   }
   return out;
@@ -447,7 +546,21 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
     if (!node)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Node not found' } }, 404);
     const affected = await getBlastRadius(db, nodeId);
-    return c.json({ ok: true, data: { affected } });
+    const names = await reportGroupNames(
+      db,
+      affected.map((a) => ({
+        id: a.target_node_id,
+        node_type: a.node_type,
+        label: a.label,
+        metadata: null,
+      })),
+    );
+    return c.json({
+      ok: true,
+      data: {
+        affected: affected.map((a) => ({ ...a, label: names.get(a.target_node_id) ?? a.label })),
+      },
+    });
   });
 
   // ============================================================
