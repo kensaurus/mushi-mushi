@@ -185,3 +185,13 @@ describe('SkillPipelinesPage tab guard (QA 245)', () => {
     expect(host.textContent).toContain('Audit UX')
   })
 })
+
+describe('SkillPipelinesPage bug picker (console journeys 2026-10-27)', () => {
+  it('picks the bug by title, never a pasted id, and takes ?report= from a report page', () => {
+    state.catalog = () => ({ data: { data: SKILLS, grouped: { audit: SKILLS }, total: 1 }, loading: false, error: null, isValidating: false })
+    render('/skills?tab=catalog&skill=audit-ux&report=https://kensaur.us/mushi-mushi/admin/reports/0f7f2b1a-1111-4222-8333-444455556666')
+    // The detail opens in a drawer below lg; it renders into document.body.
+    expect(document.body.querySelector('[data-testid="report-picker-selected"]')?.textContent).toContain('0f7f2b1a')
+    expect(document.body.textContent).not.toMatch(/Paste the report link|copy its ID from the URL/)
+  })
+})

@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/plugin-cursor-cloud",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "license": "MIT",
-  "description": "Mushi Mushi plugin: dispatch a Cursor Cloud Agent when a critical bug is classified or a QA story fails — opens a signed draft PR automatically.",
+  "description": "Mushi Mushi plugin for Cursor — starts a Cursor Cloud Agent that opens a draft PR when a critical bug is triaged. Self-hosted; Mushi Cloud starts Cursor agents natively.",
   "type": "module",
   "exports": {
     ".": {

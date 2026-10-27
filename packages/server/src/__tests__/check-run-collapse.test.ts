@@ -32,6 +32,41 @@ describe('collapseCheckRuns', () => {
     ])).toEqual({ status: 'in_progress', conclusion: null })
   })
 
+  it('a green re-run of a failed check replaces the red run (report 9e2ec6f0)', () => {
+    expect(collapseCheckRuns([
+      { name: 'Lint, typecheck, build, doctor', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:56:41Z' },
+      { name: 'Lint, typecheck, build, doctor', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:58:00Z', completed_at: '2026-10-26T21:03:30Z' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('a re-run attempt of the same Actions run replaces the earlier attempt', () => {
+    expect(collapseCheckRuns([
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:59:00Z', details_url: 'https://github.com/o/r/actions/runs/77/job/1' },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:58:00Z', completed_at: '2026-10-26T21:03:30Z', details_url: 'https://github.com/o/r/actions/runs/77/job/2' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('two workflows with a job of the same name running side by side: red stays red', () => {
+    expect(collapseCheckRuns([
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:56:00Z', details_url: 'https://github.com/o/r/actions/runs/1/job/1' },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:50:05Z', completed_at: '2026-10-26T20:58:00Z', details_url: 'https://github.com/o/r/actions/runs/2/job/2' },
+    ])).toEqual({ status: 'completed', conclusion: 'failure' })
+  })
+
+  it('a later run of a check from another app does not replace it', () => {
+    expect(collapseCheckRuns([
+      { name: 'build', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:51:00Z', app: { id: 1 } },
+      { name: 'build', status: 'completed', conclusion: 'success', started_at: '2026-10-26T21:00:00Z', completed_at: '2026-10-26T21:01:00Z', app: { id: 2 } },
+    ])).toEqual({ status: 'completed', conclusion: 'failure' })
+  })
+
+  it('a re-run still running keeps the head pending', () => {
+    expect(collapseCheckRuns([
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:56:00Z' },
+      { name: 'test', status: 'in_progress', conclusion: null, started_at: '2026-10-26T21:00:00Z' },
+    ])).toEqual({ status: 'in_progress', conclusion: null })
+  })
+
   it('reports nothing when only the review run exists', () => {
     expect(collapseCheckRuns([
       { name: 'copilot-pull-request-reviewer', status: 'completed', conclusion: 'failure' },

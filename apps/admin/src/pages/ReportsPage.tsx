@@ -13,6 +13,7 @@ import { useUndoableBulk } from '../lib/useUndoableBulk'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { combinedFetchScope, useProjectScopeMode } from '../lib/projectScope'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
   EmptyState,
@@ -34,6 +35,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
+import { FixFirstQueue } from '../components/reports/FixFirstQueue'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
@@ -54,6 +56,7 @@ import { DismissReportDialog } from '../components/reports/DismissReportDialog'
 import { CloseReasonSelect } from '../components/reports/CloseReasonSelect'
 import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
 import { humanizeDispatchError } from '../lib/dispatchConfirm'
+import { OTHER_APP_BULK_REASON, otherAppDispatchNote, selectionCrossesPinnedApp } from '../components/reports/allAppsRowActions'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -61,6 +64,10 @@ export function ReportsPage() {
   const toast = useToast()
   const undoable = useUndoableBulk()
   const activeProjectId = useActiveProjectId()
+  const allApps = useProjectScopeMode() === 'all'
+  // enumeration omits X-Mushi-Project-Id so the list and the tiles count
+  // every app, not the last concrete one kept under All apps.
+  const fetchScope = combinedFetchScope(allApps ? 'all' : 'project')
   const setup = useSetupStatus(activeProjectId)
   // One preflight fetch per page — shared by every row's dispatch popover so
   // the missing-prereq checklist appears the moment the user opens it instead
@@ -141,10 +148,12 @@ export function ReportsPage() {
   }, [status, category, userCategory, severity, platform, sdkPackage, origin, component, reporter, endUser, session, area, days, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
-    // Wait for ProjectSwitcher to hydrate active project so the first fetch
-    // carries X-Mushi-Project-Id and doesn't briefly show all-org reports.
-    activeProjectId ? `/v1/admin/reports?${queryString}` : null,
-    { deps: [queryString, activeProjectId] },
+    // One app: wait for the pin so the first fetch doesn't briefly show
+    // every app. All apps is the opposite — fetch with no pin.
+    allApps || activeProjectId ? `/v1/admin/reports?${queryString}` : null,
+    // fetchScope: All apps keeps the last concrete id, so activeProjectId
+    // does not change when the switcher toggles. The list must refetch.
+    { deps: [queryString, activeProjectId, fetchScope], scope: fetchScope },
   )
 
   const {
@@ -152,7 +161,12 @@ export function ReportsPage() {
     loading: reportsStatsLoading,
     reload: reloadReportsStats,
     isValidating: reportsStatsValidating,
-  } = usePageData<ReportsStats>('/v1/admin/reports/stats')
+  } = usePageData<ReportsStats>(
+    // `?apps=all` is the only signal that asks the server for team-wide
+    // totals. Omitting the project pin alone still returns one app.
+    allApps ? '/v1/admin/reports/stats?apps=all' : '/v1/admin/reports/stats',
+    { deps: [fetchScope], scope: fetchScope },
+  )
   const reportsStats = reportsStatsData ?? EMPTY_REPORTS_STATS
 
   const reloadAll = useCallback(() => {
@@ -334,6 +348,10 @@ export function ReportsPage() {
   const runBulk = useCallback(
     async (action: 'set_status' | 'set_severity' | 'dismiss', value?: string, reason?: string) => {
       if (selected.size === 0) return
+      if (allApps && selectionCrossesPinnedApp(reports, selected, activeProjectId)) {
+        toast.error('Bulk actions stay on one app', OTHER_APP_BULK_REASON)
+        return
+      }
       setBulkBusy(true)
       const ids = [...selected]
       const res = await apiFetch<{ updated: number; mutation_id: string | null }>(
@@ -369,7 +387,7 @@ export function ReportsPage() {
       clearSelection()
       reload()
     },
-    [selected, toast, clearSelection, reload, undoable],
+    [selected, toast, clearSelection, reload, undoable, allApps, reports, activeProjectId],
   )
 
   const openCursor = useCallback(() => {
@@ -405,7 +423,7 @@ export function ReportsPage() {
 
   usePublishPageContext({
     route: '/reports',
-    title: projectName ? `Bugs · ${projectName}` : 'Bugs',
+    title: allApps ? 'Bugs · All apps' : projectName ? `Bugs · ${projectName}` : 'Bugs',
     summary: loading
       ? 'Loading reports…'
       : total === 0
@@ -704,6 +722,10 @@ export function ReportsPage() {
       // to /fixes for the dispatch monitor. Subscribing to SSE per-row would
       // be wasteful when the user can already babysit one job at a time on
       // the Fixes page; here we just queue the work and confirm it landed.
+      if (allApps && r.project_id !== activeProjectId) {
+        toast.error('Open this bug to dispatch', otherAppDispatchNote(r.project_name))
+        return
+      }
       setDispatching(prev => new Set(prev).add(r.id))
       const res = await apiFetch<{ dispatchId: string }>(`/v1/admin/fixes/dispatch`, {
         method: 'POST',
@@ -733,7 +755,7 @@ export function ReportsPage() {
       })
       reload()
     },
-    [toast, reload, navigate],
+    [toast, reload, navigate, allApps, activeProjectId],
   )
 
   return (
@@ -741,7 +763,7 @@ export function ReportsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Bugs'}
         icon={<IconReports />}
-        projectScope={projectName}
+        projectScope={allApps ? 'All apps' : projectName}
         description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
         helpTitle={copy?.help?.title ?? 'About bugs'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
@@ -809,6 +831,7 @@ export function ReportsPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <ReportsKpiStrip
+                scope={fetchScope}
                 activeSeverity={severity}
                 onFilter={(sev, windowDays) => {
                   // The tile counts non-dismissed reports of that severity
@@ -827,18 +850,24 @@ export function ReportsPage() {
         ]}
       />
 
+      {/* Which bug to fix first: worst severity, most people hit, no fix on the way (journeys 2026-10-27). */}
+      <FixFirstQueue scope={fetchScope} />
+
       <DogfoodNarrativeBanner />
 
       {recommendation && (
         <RecommendedAction
           title={recommendation.title}
           description={recommendation.description}
-          cta={recommendation.cta}
+          // With bugs listed, "Open the worst" (Fix first) is the page's one
+          // main button and this card's step is a quiet link (journeys 2026-10-27).
+          cta={total > 0 ? undefined : recommendation.cta}
+          actions={total > 0 && recommendation.cta ? [{ ...recommendation.cta, tone: 'ghost' }] : undefined}
           tone={recommendation.tone}
         />
       )}
 
-      <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
+      <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
 
       <ReportsFilterBar
         searchInput={searchInput}
@@ -874,6 +903,11 @@ export function ReportsPage() {
       <BulkBar
         count={selected.size}
         busy={bulkBusy}
+        disabledReason={
+          allApps && selectionCrossesPinnedApp(reports, selected, activeProjectId)
+            ? OTHER_APP_BULK_REASON
+            : null
+        }
         onClear={clearSelection}
         onSetStatus={(v) => requestBulk('set_status', v)}
         onSetSeverity={(v) => requestBulk('set_severity', v)}
@@ -1007,6 +1041,7 @@ export function ReportsPage() {
             onDismiss={handleDismiss}
             onDispatchFix={handleDispatchFix}
             preflight={preflight}
+            preflightProjectId={allApps ? activeProjectId ?? '' : null}
           />
         </div>
       )}

@@ -147,10 +147,10 @@ describe('gates', () => {
   it('drift names each check with open problems in plain words, never a raw gate id', () => {
     const r = deriveElementState({ key: 'gates', runs: [run({ gate: 'radar', openFindings: 1 }), run({ gate: 'code_health', openFindings: 9 }), run({ gate: 'crawl' })], cadenceDays: 7 }, NOW)
     expect(r.state).toBe('drift')
-    expect(r.reason).toBe('10 problems to fix: Mushi setup check (1), Code health (9). Mushi setup checks and their fixes are under Risk checks on the Recipe page; the rest are in Full-stack audit.')
+    expect(r.reason).toBe('10 problems to fix: Mushi setup check (1), Code health (9). Mushi setup checks and their fixes are under Risk checks at the end of the App blueprint page; the rest are in Full-stack audit.')
     // Only Mushi's setup check open (every live app on 2026-10-04): point at where its one-click fix is.
     const setupOnly = deriveElementState({ key: 'gates', runs: [run({ gate: 'radar', openFindings: 1 })], cadenceDays: 7 }, NOW)
-    expect(setupOnly.reason).toBe('1 problem to fix: Mushi setup check (1). They and their fixes are under Risk checks on the Recipe page.')
+    expect(setupOnly.reason).toBe('1 problem to fix: Mushi setup check (1). They and their fixes are under Risk checks at the end of the App blueprint page.')
   })
   it('gateLabel reads the gate catalog and falls back to the id', () => {
     expect(gateLabel('radar')).toBe('Mushi setup check')

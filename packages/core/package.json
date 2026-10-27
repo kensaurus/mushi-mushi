@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/core",
-  "version": "1.33.2",
+  "version": "1.33.3",
   "description": "Types, API client and pre-filter for Mushi SDKs. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",
@@ -108,7 +108,7 @@
     "@size-limit/file": "^12.1.0",
     "eslint": "^10.6.0",
     "fake-indexeddb": "^6.0.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.1.3",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

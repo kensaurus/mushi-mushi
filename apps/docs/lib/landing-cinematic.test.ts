@@ -9,9 +9,10 @@ import { describe, expect, it } from 'vitest'
 import {
   LANDING_WHAT_THIS_IS,
   LANDING_HERO,
-  LANDING_HERO_CTAS,
-  LANDING_SIXTY_SECOND,
-  LANDING_HOW_IT_WORKS,
+  LANDING_HERO_START,
+  LANDING_INSTALL,
+  LANDING_SETUP_PROMPT,
+  LANDING_FIX_PROMPT,
   LANDING_PILLARS,
   LANDING_OPERATOR,
   LANDING_WHERE_TO_START,
@@ -40,8 +41,8 @@ describe('landing cinematic copy SSOT', () => {
     expect(landing).toContain(`\n${definition}\n`)
   })
 
-  it('keeps 60-second proof pricing claim', () => {
-    expect(LANDING_SIXTY_SECOND.pricing).toMatch(/50 diagnoses/i)
+  it('keeps the free-plan pricing claim under the hero install box', () => {
+    expect(LANDING_HERO.reassure).toMatch(/50 diagnoses/i)
   })
 
   it('exposes four diagnosis pillars for the scroll stage', () => {
@@ -62,30 +63,35 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
-  it('ships hero CTAs for signup (same tab), connecting an editor, and the terminal path', () => {
-    expect(LANDING_HERO_CTAS.map((c) => c.id)).toEqual(['landing-hero', 'landing-connect', 'landing-terminal'])
-    expect(LANDING_HERO_CTAS.map((c) => c.kind)).toEqual(['primary', 'secondary', 'ghost'])
-
-    const [signup, connect, terminal] = LANDING_HERO_CTAS
-    expect(signup?.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
-    expect(signup?.external).toBe(true)
-    expect(signup?.sameTab).toBe(true)
-    // /connect is the editor picker, so the button says so (it used to promise a demo).
-    expect(connect?.href).toBe('/connect')
-    expect(connect?.label).not.toMatch(/demo/i)
-    expect(terminal?.href).toBe('/quickstart/incident-loop')
+  it('keeps the funnel ids on the hero links: console signup, Cursor, npx and other editors', () => {
+    const { console: signup, cursor, npx, more } = LANDING_HERO_START
+    // `landing-hero` stays on signup so the funnel keeps its history.
+    expect(signup.id).toBe('landing-hero')
+    expect(signup.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
+    expect(cursor.id).toBe('landing-hero-cursor')
+    expect(npx.cmd).toBe('npx mushi-mushi')
+    expect(more.href).toBe('/connect')
+    expect(new Set([signup.id, cursor.id, npx.id, more.id]).size).toBe(4)
   })
 
-  it('explains the product in three steps that mirror the console cycle', () => {
-    expect(LANDING_HOW_IT_WORKS.steps.map((s) => s.title)).toEqual([
-      'Install in one click',
-      'Your users report bugs',
-      'Mushi diagnoses it and opens a fix you review',
-    ])
+  it('installs from the hero: pick Claude Code, Cursor or another editor, then three steps with one prompt', () => {
+    expect(LANDING_INSTALL.tabs.map((t) => t.id)).toEqual(['claude-code', 'cursor', 'other'])
+    for (const tab of LANDING_INSTALL.tabs) expect(tab.connect.length).toBeGreaterThan(0)
+    // ADR 0027's cycle: connect, a report comes in, a fix you review.
+    expect(Object.values(LANDING_INSTALL.steps)).toEqual(['Connect your editor', 'Paste this prompt', 'Fix a real bug'])
+    expect(LANDING_INSTALL.fixCheck).toMatch(/You review the change/)
+    // The prompt has the AI run the wizard non-interactively (an agent shell
+    // cannot answer prompts) and send a test report it can show.
+    expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi --yes')
+    expect(LANDING_SETUP_PROMPT).toContain('npx mushi-mushi test')
+    expect(LANDING_FIX_PROMPT).toMatch(/latest Mushi report/)
+    const hero = readFileSync(join(__dirname, '..', 'components', 'landing', 'CinematicEditorialHero.tsx'), 'utf8')
+    expect(hero).toContain('<LandingInstallStrip />')
     const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
-    // Right under the hero, before anything else.
-    expect(landing.indexOf('<LandingInstallStrip')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
-    expect(landing.indexOf('<LandingInstallStrip')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
+    // The install lives in the hero only; the pipeline picture comes right after it.
+    expect(landing).not.toContain('<LandingInstallStrip')
+    expect(landing.indexOf('<LoopPipeline')).toBeGreaterThan(landing.indexOf('<CinematicEditorialHero'))
+    expect(landing.indexOf('<LoopPipeline')).toBeLessThan(landing.indexOf('<OssTrustStrip'))
   })
 
   it('keeps the hero lead on the solo-builder positioning against Sentry', () => {

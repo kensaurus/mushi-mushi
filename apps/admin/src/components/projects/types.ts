@@ -8,6 +8,7 @@ export type ProjectsTopPriority =
   | 'no_projects'
   | 'never_ingested'
   | 'no_sdk_heartbeat'
+  | 'sdk_missing'
   | 'partial_ingest'
   | 'healthy'
 
@@ -16,6 +17,9 @@ export interface ProjectsStats {
   activeKeyCount: number
   projectsWithReports: number
   sdkConnectedCount: number
+  /** Apps with no SDK-key heartbeat (first 5 by name); older servers omit it. */
+  sdkMissingProjects?: Array<{ id: string; name: string }>
+  sdkMissingCount?: number
   neverIngestedCount: number
   reportsLast24h: number
   reportsLast30d: number

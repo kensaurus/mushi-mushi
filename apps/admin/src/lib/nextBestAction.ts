@@ -18,6 +18,8 @@
  * There is no demo route in the console, so no demo CTA is offered.
  */
 
+import { stoppedTitle } from './countDefinitions'
+
 export type NbaTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
 
 export interface NbaAction {
@@ -105,7 +107,7 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
       const n = work.fixesFailed
       return {
         tone: 'do',
-        title: `Auto-fix stopped on ${n} ${plural(n, 'report', 'reports')}`,
+        title: stoppedTitle(n),
         why:
           work.fixesRetryable > 0
             ? `${work.fixesRetryable} can be retried now. Open each to read why the last attempt stopped.`

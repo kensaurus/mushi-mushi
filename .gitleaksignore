@@ -100,3 +100,10 @@ c7aabee71020ee3e873370e96a4649610036fef3:packages/core/src/unload-transport.test
 # historical commits so PR-range scans stop flagging the audited fixture.
 51497d71dead5007e69872e7df5bb056d44074ad:packages/server/src/__tests__/byok-universal-routes.test.ts:generic-api-key:138
 a6079623f9b4b675b1a4489b183d23a516ef3d55:packages/server/src/__tests__/byok-universal-routes.test.ts:generic-api-key:150
+
+# adapters Honeycomb test fixture (2026-10-26): `hny-trigger-secret-91c2` is a
+# made-up webhook signing secret the Honeycomb adapter test uses to sign its
+# recorded trigger payload. It never authenticated against Honeycomb. The
+# working tree carries an inline gitleaks:allow marker; this fingerprint pins
+# the commit that added it so PR-range scans stop flagging the audited fixture.
+76497989c82fc2f560a25a2fcd34d230b1754ca0:packages/adapters/src/__tests__/honeycomb.test.ts:generic-api-key:13

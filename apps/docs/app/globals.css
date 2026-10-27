@@ -1120,7 +1120,8 @@ main :not(pre) > code {
      phone that left the H1 and lead in a ~200px column. Clear the float. */
   clear: both;
   padding-block: 2.5rem 3rem;
-  min-height: min(72vh, 40rem);
+  /* Short enough that the bug-loop row starts above the fold at 1440×900. */
+  min-height: min(60vh, 34rem);
   display: flex;
   align-items: center;
 }
@@ -1207,32 +1208,6 @@ main :not(pre) > code {
   color: var(--mushi-dark-ink-muted);
 }
 
-.landing-proof {
-  margin: 2.5rem 0;
-  padding: 0.25rem 0 1.25rem;
-}
-
-/* "How it works" + one-click installs, right under the hero. */
-.landing-install {
-  margin: 2.25rem 0 2.5rem;
-}
-
-.landing-oneclick {
-  margin-top: 1.5rem;
-  padding: 1rem 1.1rem 1.1rem;
-  border: 1px solid var(--mushi-rule);
-  border-radius: 0.6rem;
-  background: var(--mushi-paper-wash);
-}
-
-.landing-oneclick__heading {
-  /* !important: Nextra's prose h3 margin otherwise wins (as on .landing-section-title). */
-  margin: 0 0 0.75rem !important;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--mushi-ink);
-}
-
 .landing-oneclick__buttons {
   display: flex;
   flex-wrap: wrap;
@@ -1266,19 +1241,6 @@ main :not(pre) > code {
   display: block;
 }
 
-.landing-oneclick__cmds {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.6rem;
-  margin-top: 0.9rem;
-}
-
-@media (min-width: 720px) {
-  .landing-oneclick__cmds {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  }
-}
-
 .landing-oneclick__cmd {
   min-width: 0;
 }
@@ -1299,6 +1261,16 @@ main :not(pre) > code {
   border: 1px solid var(--mushi-rule);
   border-radius: 0.4rem;
   background: var(--mushi-paper);
+}
+
+/* Beat Nextra's inline-code chip (`main :not(pre) > code`, and its .dark
+   variant), which otherwise draws a second box inside the command row. */
+main .landing-oneclick__cmd-row code,
+.dark main .landing-oneclick__cmd-row code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .landing-oneclick__cmd-row code {
@@ -1344,16 +1316,6 @@ body:has(.landing-cinematic-hero) {
 
 html:has(.landing-cinematic-hero) {
   overflow-x: clip;
-}
-
-.landing-hero-proof {
-  margin: 0.35rem 0 0;
-  font-size: 0.95rem;
-  color: var(--mushi-ink-muted);
-}
-
-.dark .landing-hero-proof {
-  color: var(--mushi-dark-ink-muted);
 }
 
 .landing-hero-reassure {
@@ -1431,6 +1393,180 @@ html:has(.landing-cinematic-hero) {
 .landing-hero-cta--ghost:hover {
   color: var(--mushi-vermillion);
 }
+
+.landing-hero-cta:focus-visible,
+.landing-oneclick__copy:focus-visible,
+.landing-framework__tab:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.landing-hero-cta__icon {
+  display: inline-flex;
+  margin-right: 0.45rem;
+}
+
+.landing-oneclick__prompt {
+  flex-shrink: 0;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.8rem;
+  color: var(--mushi-vermillion);
+}
+
+/* Hero install box: pick your editor, then three numbered steps. */
+.landing-install-box {
+  max-width: 44rem;
+  margin-top: 1.35rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.75rem;
+  background: var(--mushi-paper);
+  overflow: hidden;
+}
+
+.landing-install-box__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper-wash);
+}
+
+.landing-install-box__tabs-label {
+  margin-right: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-install-box__tab {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--mushi-ink-muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.landing-install-box__tab:hover {
+  color: var(--mushi-ink);
+}
+
+.landing-install-box__tab[aria-selected='true'] {
+  border-color: var(--mushi-rule);
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+}
+
+.landing-install-box__tab:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 1px;
+}
+
+.landing-install-box__steps {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-install-box__step {
+  display: flex;
+  gap: 0.8rem;
+  margin: 0 !important;
+  padding: 0.9rem 1rem;
+}
+
+.landing-install-box__step + .landing-install-box__step {
+  border-top: 1px dashed var(--mushi-rule);
+}
+
+.landing-install-box__num {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  /* Darkened: white on plain vermillion is 4.3:1, under AA for small text. */
+  background: color-mix(in oklch, var(--mushi-vermillion) 78%, black);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.landing-install-box__body {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.landing-install-box__title {
+  margin: 0 !important;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.landing-install-box__desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-install-box__check {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-install-box__check > span:first-child {
+  color: var(--mushi-vermillion);
+  font-weight: 700;
+}
+
+.landing-install-box__no-editor {
+  padding: 0.75rem 1rem 0.9rem;
+  border-top: 1px solid var(--mushi-rule);
+  background: var(--mushi-paper-wash);
+}
+
+/* A prompt for an AI editor wraps and reads as prose; a shell command scrolls. */
+.landing-oneclick__cmd-row--prompt code {
+  white-space: normal;
+  overflow-x: visible;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* The Copy button copies the whole command, so the scroll only needs a hint. */
+.landing-install-box .landing-oneclick__cmd-row code {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 479px) {
+  /* One row of tabs on a phone: the tablist's aria-label already says "Install with". */
+  .landing-install-box__tabs-label {
+    display: none;
+  }
+
+  .landing-install-box__tab {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.88rem;
+  }
+}
+
 
 .landing-trust {
   margin: 2rem 0 0.5rem;
@@ -1591,67 +1727,6 @@ html:has(.landing-cinematic-hero) {
 
 .dark .landing-use-cases__desc {
   color: var(--mushi-dark-ink-muted);
-}
-
-.landing-proof-terminal {
-  position: relative;
-  font-family: var(--mushi-font-mono);
-  font-size: 0.9rem;
-  line-height: 1.7;
-  background: var(--mushi-code-surface);
-  color: var(--mushi-code-surface-fg);
-  border: 1px solid var(--mushi-code-surface-border);
-  border-radius: 0.6rem;
-  padding: 2.1rem 1.5rem 1.4rem;
-  display: grid;
-  gap: 0.65rem;
-  overflow: auto;
-  max-width: 44rem;
-  box-shadow:
-    0 1px 0 0 color-mix(in oklch, white 8%, transparent) inset,
-    0 24px 50px -28px color-mix(in oklch, var(--mushi-ink) 85%, transparent);
-}
-
-/* macOS-style traffic-light dots — reads instantly as "a real terminal". */
-.landing-proof-terminal::before {
-  content: '';
-  position: absolute;
-  top: 0.85rem;
-  left: 1.5rem;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 999px;
-  background: #ff5f56;
-  box-shadow:
-    1rem 0 0 #ffbd2e,
-    2rem 0 0 #27c93f;
-  opacity: 0.9;
-}
-
-.landing-proof-line {
-  display: flex;
-  gap: 0.75rem;
-  align-items: baseline;
-}
-
-.landing-proof-prompt {
-  color: var(--mushi-vermillion);
-  flex-shrink: 0;
-  width: 1ch;
-}
-
-.landing-proof-line code {
-  font: inherit;
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  border: none;
-}
-
-.landing-proof-pricing {
-  margin: 1.25rem 0 0;
-  font-size: 0.95rem;
-  color: var(--mushi-ink-muted);
 }
 
 .landing-diagnosis {
@@ -2235,7 +2310,6 @@ html:has(.landing-cinematic-hero) {
     transform: scaleX(1) !important;
   }
 
-  .landing-proof-line,
   .landing-diagnosis-card,
   .landing-hero-word {
     opacity: 1 !important;
@@ -2334,3 +2408,111 @@ html:has(.landing-cinematic-hero) {
   }
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Onboarding docs path (quickstart, MCP, CLI loop, incident loop):
+ * <InThirtySeconds>, <YouWillSee> and <FrameworkPicker>.
+ * ------------------------------------------------------------------------- */
+.docs-tldr {
+  margin: 1.25rem 0 1.75rem;
+  padding: 0.9rem 1.1rem 0.6rem;
+  border: 1px solid color-mix(in oklch, var(--mushi-vermillion) 30%, var(--mushi-rule));
+  border-left-width: 4px;
+  border-radius: 0.5rem;
+  background: var(--mushi-vermillion-wash);
+}
+
+.docs-tldr__title {
+  margin: 0 0 0.35rem !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mushi-ink);
+}
+
+.docs-tldr__body :is(ul, ol) {
+  margin-top: 0 !important;
+}
+
+.docs-tldr__body li {
+  margin: 0.2rem 0 !important;
+}
+
+.docs-check {
+  display: flex;
+  gap: 0.55rem;
+  margin: 0.9rem 0 0.4rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--mushi-rule);
+  border-radius: 0.45rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.docs-check__mark {
+  color: var(--mushi-vermillion);
+  font-weight: 700;
+}
+
+.docs-check__body > :first-child {
+  margin-top: 0;
+}
+
+.landing-framework {
+  margin: 1rem 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+}
+
+.landing-framework__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.landing-framework__tab {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.4rem;
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--mushi-ink);
+  cursor: pointer;
+}
+
+.landing-framework__tab:hover {
+  border-color: var(--mushi-vermillion);
+}
+
+.landing-framework__tab[aria-pressed='true'] {
+  border-color: var(--mushi-vermillion);
+  background: var(--mushi-vermillion-wash);
+  font-weight: 600;
+}
+
+.landing-framework__panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.landing-framework__setup {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--mushi-ink);
+}
+
+.landing-framework__guide {
+  justify-self: start;
+  font-size: 0.92rem;
+  font-weight: 600;
+  /* Ink text, vermillion underline: vermillion text is under 4.5:1 here. */
+  color: var(--mushi-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--mushi-vermillion);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}

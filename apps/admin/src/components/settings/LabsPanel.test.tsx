@@ -43,7 +43,7 @@ function render(Panel: typeof LabsPanel = LabsPanel): void {
 
 function switchFor(label: string): HTMLButtonElement {
   const el = Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="switch"]')).find(
-    (b) => b.getAttribute('aria-label') === label,
+    (b) => b.getAttribute('aria-label') === `${label} in the sidebar`,
   )
   if (!el) throw new Error(`no switch for "${label}"`)
   return el
@@ -62,6 +62,20 @@ describe('LabsPanel', () => {
       expect(switchFor(f.label).getAttribute('aria-checked')).toBe('false')
     }
     expect(container.querySelectorAll('button[role="switch"]')).toHaveLength(LAB_FEATURES.length)
+  })
+
+  // Console journeys 2026-10-27: To-do, Bug clusters, Pull requests, CI
+  // runners and Code map read "Off" while they still worked. The switch
+  // only decides the sidebar, so that is what it says.
+  it('says where the page is listed, never that the page is off', () => {
+    render()
+    const row = container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]')
+    expect(row?.textContent).toContain('Not in sidebar')
+    expect(row?.textContent).not.toMatch(/Off/)
+    act(() => switchFor('To-do list').click())
+    expect((container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]'))?.textContent).toContain('In sidebar')
+    // labs.ts caches the set in memory: switch it back so the next test starts clean.
+    act(() => switchFor('To-do list').click())
   })
 
   it('links Open to the page whether or not the Lab is on (the switch only pins it to the sidebar)', () => {

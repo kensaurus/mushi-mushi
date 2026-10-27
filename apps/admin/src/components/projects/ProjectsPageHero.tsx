@@ -14,6 +14,7 @@ function heroSeverity(stats: ProjectsStats): PageHeroDecide['severity'] {
       return 'ok'
     case 'never_ingested':
     case 'no_sdk_heartbeat':
+    case 'sdk_missing':
       return 'warn'
     case 'no_projects':
       return 'info'
@@ -30,6 +31,8 @@ function heroDecideLabel(stats: ProjectsStats): string {
       return 'No ingest yet'
     case 'no_sdk_heartbeat':
       return 'No SDK heartbeat'
+    case 'sdk_missing':
+      return `${stats.sdkMissingCount ?? 0} without an SDK heartbeat`
     case 'partial_ingest':
       return `${stats.neverIngestedCount} never ingested`
     case 'no_projects':
@@ -100,8 +103,8 @@ function heroVerify(stats: ProjectsStats): PageHeroVerify {
         },
         {
           label: 'SDK live',
-          value: stats.sdkConnectedCount,
-          tone: stats.sdkConnectedCount > 0 ? 'ok' : 'warn',
+          value: stats.projectCount > 0 ? `${stats.sdkConnectedCount}/${stats.projectCount}` : stats.sdkConnectedCount,
+          tone: stats.sdkConnectedCount > 0 && stats.sdkConnectedCount === stats.projectCount ? 'ok' : 'warn',
         },
         {
           label: 'Reports 24h',

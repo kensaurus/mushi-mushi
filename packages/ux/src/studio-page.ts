@@ -271,6 +271,7 @@ function renderRun() {
     for (const a of probes.axe || []) lines.push(a.help + ' (' + a.count + ')')
     if (probes.overflowX) lines.push('Scrolls sideways')
     if (probes.smallTargets) lines.push(probes.smallTargets + ' tap target(s) under 24 px')
+    for (const l of (probes.layout || []).slice(0, 4)) lines.push((l.kind === 'overlap' ? 'Overlap: ' : 'Too big: ') + l.selector + ' ' + l.detail)
     for (const e of (probes.consoleErrors || []).slice(0, 3)) lines.push('Console: ' + e)
     if (lines.length) problemsHtml = '<h3>Problems measured on ' + (after ? 'attempt ' + chosen.n : 'the baseline') + ' (' + vp + ')</h3><ul class="problems">' + lines.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>'
   } else html += '<p class="empty">No screenshot yet.</p>'

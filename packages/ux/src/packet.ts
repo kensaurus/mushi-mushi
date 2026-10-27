@@ -132,6 +132,7 @@ function describeProbes(viewport: string, p: ProbeResult): string[] {
   }
   if (p.overflowX) lines.push(`- [${viewport}] The page scrolls sideways at this width.`)
   if (p.smallTargets > 0) lines.push(`- [${viewport}] ${p.smallTargets} tap target(s) smaller than 24×24 px.`)
+  for (const i of p.layout ?? []) lines.push(`- [${viewport}] ${i.kind === 'overlap' ? 'Overlap' : 'Too big'}: ${i.selector} ${i.detail}.`)
   for (const e of p.consoleErrors.slice(0, 5)) lines.push(`- [${viewport}] Console error: ${e}`)
   if (p.cls > CLS_GOOD) lines.push(`- [${viewport}] Layout shift ${p.cls} while loading (aim below ${CLS_GOOD}).`)
   return lines

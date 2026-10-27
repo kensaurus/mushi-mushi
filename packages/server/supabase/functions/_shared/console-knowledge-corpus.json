@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-23T03:17:21.481Z",
+  "generatedAt": "2026-10-27T01:41:57.100Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -105,10 +105,10 @@
       "doc_path": "pages/dashboard.md",
       "section": "main",
       "title": "Home",
-      "body": "# Home\n\nSummary for the selected app: open bugs, fixes in progress, setup and recent activity.\n\nRoute: /dashboard\nSection: Plan\n\nKeywords: dashboard, home, overview, kpi, metrics, loop, landing, summary\n\nUse this page when the user asks about: dashboard, home, overview, kpi, metrics, loop",
+      "body": "# Home\n\nSummary for the selected app: open bugs, fixes in progress, setup and recent activity.\n\nRoute: /dashboard\nSection: Plan\n\nKeywords: dashboard, home, overview, kpi, metrics, loop, landing, summary, uptime, is my app up, app status, availability, monitoring, incidents\n\nUse this page when the user asks about: dashboard, home, overview, kpi, metrics, loop",
       "route_path": "/dashboard",
       "kind": "page",
-      "content_hash": "025fd212fe9df356c41fcb8877e79165be2b00375e0f175d96f14c1377f76fd7"
+      "content_hash": "3c957bdbae90500d40497f59d8f8035ce7bc273e8cfc21a87dd567b9269768fc"
     },
     {
       "doc_path": "pages/inbox.md",
@@ -163,6 +163,15 @@
       "route_path": "/fixes",
       "kind": "page",
       "content_hash": "84ac51ce36cd397d4b9240f3e57f95eb468a052b2cb0b8a779ecf336d6a32046"
+    },
+    {
+      "doc_path": "pages/pipeline.md",
+      "section": "main",
+      "title": "Pipeline",
+      "body": "# Pipeline\n\nEvery bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.\n\nRoute: /pipeline\nSection: Do\n\nKeywords: pipeline, stuck, funnel, release train, merge queue, ci red, conflict, triage, retry, blocked\n\nUse this page when the user asks about: pipeline, stuck, funnel, release train, merge queue, ci red",
+      "route_path": "/pipeline",
+      "kind": "page",
+      "content_hash": "c45ffd614e7ba1f003a833ec68f2d420bea388f5e27154745ffa2a093b04b2e4"
     },
     {
       "doc_path": "pages/repo.md",
@@ -222,10 +231,10 @@
       "doc_path": "pages/checks.md",
       "section": "main",
       "title": "Checks",
-      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, app health, audits, user stories, design, content and AI triage quality.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
+      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
       "route_path": "/checks",
       "kind": "page",
-      "content_hash": "7645befc57a0e7cb0720677e82fff54cee2651bc138c5af8b565d9292a40e5bf"
+      "content_hash": "a1ba31267dab23965943097b86efb4c3734ab725d14a74bfe7a497fd708496b2"
     },
     {
       "doc_path": "pages/fullstack-audit.md",
@@ -257,11 +266,11 @@
     {
       "doc_path": "pages/health.md",
       "section": "main",
-      "title": "App health",
-      "body": "# App health\n\nAre your integrations and background jobs working: uptime, errors and failed checks.\n\nRoute: /health\nSection: Check\n\nKeywords: health, status, uptime, availability, sentry, slo, monitoring, incidents, verification hub\n\nUse this page when the user asks about: health, status, uptime, availability, sentry, slo",
+      "title": "Mushi health",
+      "body": "# Mushi health\n\nIs Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.\n\nRoute: /health\nSection: Check\n\nKeywords: app health, health, mushi health, status, ai calls, llm, cron, background jobs, verification hub\n\nUse this page when the user asks about: app health, health, mushi health, status, ai calls, llm",
       "route_path": "/health",
       "kind": "page",
-      "content_hash": "c452db277a3118ed7c4b67710774cf3db930dfd86406918ec90fd23c16864db6"
+      "content_hash": "f64618045404f58ea950471c1678cbb8fbff5890846182797b09e95c364452ee"
     },
     {
       "doc_path": "pages/design.md",

@@ -6,11 +6,11 @@
  *          The filename appears only as the exact next step, never as a heading.
  */
 
-import { Card, formatRelative } from '../ui'
-import type { RecipeElementSummary, RecipeManifestStatus, RecipeResponse } from '../../lib/recipeTypes'
+import { Btn, Card, formatRelative } from '../ui'
+import type { RecipeElementKey, RecipeElementSummary, RecipeManifestStatus, RecipeResponse } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeIssueList } from './RecipeIssueList'
-import { elementStateMeta, elementsBehindWorst, worstState } from './recipeState'
+import { classifyLinkTarget, elementStateMeta, elementsBehindWorst, worstState } from './recipeState'
 
 function relativeOrNull(iso: string | null | undefined): string | null {
   if (!iso) return null
@@ -41,7 +41,41 @@ function ManifestLine({ manifest }: { manifest: RecipeManifestStatus }) {
   )
 }
 
-export function RecipeHeaderSummary({ recipe, elements }: { recipe: RecipeResponse; elements: RecipeElementSummary[] }) {
+/** The one next step: the first box in the worst state, and the page that fixes it when it names one. */
+function NextStep({ element, onSelect }: { element: RecipeElementSummary; onSelect?: (key: RecipeElementKey) => void }) {
+  const fixLink = element.links.find((l) => classifyLinkTarget(l.to) === 'internal')
+  return (
+    <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2 sm:flex-row sm:items-center sm:justify-between" data-testid="recipe-next-step">
+      <p className="min-w-0 text-xs text-fg-secondary">
+        <span className="font-medium text-fg">Next step, {element.label}: </span>
+        {element.reason}
+      </p>
+      <span className="flex shrink-0 flex-wrap gap-2">
+        {fixLink ? (
+          <Btn size="sm" variant="primary" to={fixLink.to}>
+            {fixLink.label}
+          </Btn>
+        ) : null}
+        {onSelect ? (
+          <Btn size="sm" variant={fixLink ? 'ghost' : 'primary'} onClick={() => onSelect(element.key)}>
+            Show how to fix
+          </Btn>
+        ) : null}
+      </span>
+    </div>
+  )
+}
+
+export function RecipeHeaderSummary({
+  recipe,
+  elements,
+  onSelect,
+}: {
+  recipe: RecipeResponse
+  elements: RecipeElementSummary[]
+  /** Opens a box's side panel: the next step's "Show how to fix". */
+  onSelect?: (key: RecipeElementKey) => void
+}) {
   // Never trust `worst` alone: a card the server omitted renders as unknown,
   // and the header must not read OK above it.
   const worstKey = worstState([recipe.worst, ...elements.map((e) => e.state)])
@@ -61,7 +95,6 @@ export function RecipeHeaderSummary({ recipe, elements }: { recipe: RecipeRespon
               {behind.length > 0 ? behind.map((e) => e.label).join(', ') : worst.description}
             </span>
           </span>
-          {behind.length > 0 && <span className="text-xs text-fg-muted">Open a card below for what is wrong and how to fix it.</span>}
         </div>
         <div className="flex min-w-0 flex-col gap-1 sm:max-w-md sm:text-right">
           <span className="text-xs font-medium text-fg-secondary">Recipe file</span>
@@ -69,6 +102,7 @@ export function RecipeHeaderSummary({ recipe, elements }: { recipe: RecipeRespon
           {generated && <span className="text-xs text-fg-faint">Page built {generated}</span>}
         </div>
       </div>
+      {behind[0] ? <NextStep element={behind[0]} onSelect={onSelect} /> : null}
       {manifest.validationErrors.length > 0 && (
         <div className="flex flex-col gap-1.5 border-t border-edge-subtle pt-2">
           <span className="text-xs font-medium text-fg-secondary">

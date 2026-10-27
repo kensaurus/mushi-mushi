@@ -101,6 +101,37 @@ describe('ReportDetailHeader deploy chip', () => {
   })
 })
 
+describe('reporter chip spacing', () => {
+  it('separates the label, the short id and "view all" (read "Signed-in userb850e61a· view all")', () => {
+    const appUserId = 'b850e61a-1d1c-4b2e-9a8e-2f0c5de9d7a1'
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(ReportDetailHeader, {
+            report: report({ reporter_display_name: appUserId, end_user_id: 'eu-1', status: 'classified' }),
+            reporterShort: 'abc123',
+          }),
+        ),
+      ),
+    )
+    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter')
+    const value = label?.nextElementSibling
+    expect(Array.from(value?.children ?? []).map((c) => c.textContent)).toEqual([
+      'Signed-in user',
+      'b850e61a',
+      '· view all',
+    ])
+    // jsdom applies no Tailwind, so the gap is checked on the value row's
+    // classes: a flex row with a gap is what puts space between the spans.
+    expect(value?.className).toContain('inline-flex')
+    expect(value?.className).toMatch(/\bgap-1\b/)
+    // Copied text and screen readers get real spaces, not "userb850e61a·".
+    expect(value?.textContent).toBe('Signed-in user b850e61a · view all')
+  })
+})
+
 describe('deployLiveLabel', () => {
   it('omits the sha when no observation named one', () => {
     expect(deployLiveLabel(live({ state: 'not_live', prod_commit: null }))).toBe('Fixed — not live yet')

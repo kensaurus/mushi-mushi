@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, fixFailureBucket } from './pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, agentFlaggedFix, fixFailureBucket } from './pdcaAct'
 import { STAMP_VISUAL } from './pdcaStamp'
 import { getMergeBlockerReason, pickPrimaryFixAttempt } from './mergeFix'
 
@@ -27,8 +27,17 @@ describe('actBlocker', () => {
   })
 
   it('an agent review flag with green CI asks for review', () => {
-    expect(actBlocker({ ...PR_424, check_run_conclusion: 'success' })).toBe('needs_review')
+    const flagged = { ...PR_424, check_run_conclusion: 'success', review_reasoning: 'Touches the payment path; a person should read it.' }
+    expect(actBlocker(flagged)).toBe('needs_review')
+    expect(actBlocker({ ...PR_424, check_run_conclusion: 'success', error: 'review_failed: the fix model flagged its own change' })).toBe('needs_review')
     expect(ACT_BLOCKER_COPY.needs_review).toMatch(/^Needs review/)
+  })
+
+  it('review_passed false with no reason is the column default, not a flag (report 9831ade8)', () => {
+    const green = { ...PR_424, check_run_conclusion: 'success' }
+    expect(agentFlaggedFix(green)).toBe(false)
+    expect(actBlocker(green)).toBeNull()
+    expect(agentFlaggedFix({ review_passed: null, review_reasoning: 'x' })).toBe(false)
   })
 
   it('a clean open PR, a merged PR, or no PR has no blocker', () => {

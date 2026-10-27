@@ -20,11 +20,26 @@ export interface ActFixSignals {
   status?: string | null
   check_run_conclusion?: string | null
   review_passed?: boolean | null
+  /** Why the agent flagged its own fix; empty when nobody flagged it. */
+  review_reasoning?: string | null
+  error?: string | null
   /** ADR 0033: set when the test machine, not the code, stopped CI. */
   ci_infra?: { infra: boolean; kind?: string } | null
 }
 
 const CI_HARD_FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_required'])
+
+/**
+ * Whether the agent itself flagged this fix for a person. `review_passed`
+ * defaults to false in the database and local or cloud fixes never set it,
+ * so false alone meant nothing: every fix read "flagged", including ones
+ * Opus said to merge (report 9831ade8). A flag is false WITH the agent's
+ * reason, or the fix worker's own `review_failed` stop.
+ */
+export function agentFlaggedFix(fix: Pick<ActFixSignals, 'review_passed' | 'review_reasoning' | 'error'> | null | undefined): boolean {
+  if (fix?.review_passed !== false) return false
+  return !!fix.review_reasoning?.trim() || /^review_failed\b/i.test(fix.error ?? '')
+}
 
 /** Most severe first: a closed PR outranks red CI, which outranks a review flag. */
 export function actBlocker(fix: ActFixSignals | null | undefined): ActBlocker | null {
@@ -34,7 +49,7 @@ export function actBlocker(fix: ActFixSignals | null | undefined): ActBlocker | 
   // The machine stopped or never came: the fix is untested, not failing.
   if (fix.ci_infra?.infra) return 'ci_infra'
   if (CI_HARD_FAIL.has((fix.check_run_conclusion ?? '').toLowerCase())) return 'ci_failed'
-  if (fix.review_passed === false) return 'needs_review'
+  if (agentFlaggedFix(fix)) return 'needs_review'
   return null
 }
 

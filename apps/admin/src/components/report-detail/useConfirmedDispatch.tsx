@@ -32,12 +32,14 @@ export function useConfirmedDispatch(input: {
   preflight?: PreflightState
   repoChoice?: DispatchTargetRepo
   busy: boolean
+  /** The report's fix PR that is still open (dispatchBlock blocks a second fix). */
+  openPr?: { number: number | null } | null
   dispatch: () => void | Promise<void>
 }): ConfirmedDispatch {
-  const { report, preflight, repoChoice, busy, dispatch } = input
+  const { report, preflight, repoChoice, busy, openPr, dispatch } = input
   const toast = useToast()
   const [open, setOpen] = useState(false)
-  const { blocked, reason } = dispatchBlock({ report, preflight, busy })
+  const { blocked, reason } = dispatchBlock({ report, preflight, busy, openPr })
   // Stable identity while the verdict is unchanged, so memoized consumers
   // (the recommendation card) do not recompute every render.
   const block = useMemo(() => ({ blocked, reason }), [blocked, reason])
