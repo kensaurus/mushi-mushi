@@ -1193,6 +1193,8 @@ export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, str
       failingChecks: [],
       review: null,
       queueDetail: null,
+      // Requeue's refusals (a viewer, a revoked lane) come from the route's own checks.
+      blocked: {},
     }))
     .sort((a, b) => a.since.localeCompare(b.since))
   return {
