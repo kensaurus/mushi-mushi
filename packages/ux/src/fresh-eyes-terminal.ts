@@ -23,7 +23,7 @@ import { run, type RunResult } from './proc.js'
 /** `{projectId}` and `{apiKey}` are replaced; each is one whitespace-free word. */
 export const DEFAULT_SETUP_COMMAND = 'npx --yes mushi-mushi@latest --yes --project-id {projectId} --api-key {apiKey}'
 /** Where the hosted widget sends reports when no endpoint is given. */
-export const HOSTED_API_ORIGIN = 'https://dxptnwrhwsqckaftyymj.supabase.co'
+const HOSTED_API_ORIGIN = 'https://dxptnwrhwsqckaftyymj.supabase.co'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const KEY_RE = /^[A-Za-z0-9_-]{16,200}$/
@@ -91,9 +91,9 @@ export interface TerminalOptions {
 }
 
 async function timed<T>(fn: () => Promise<T>): Promise<{ value: T; ms: number }> {
-  const t = Date.now()
+  const t = performance.now()
   const value = await fn()
-  return { value, ms: Date.now() - t }
+  return { value, ms: Math.max(0, Math.round(performance.now() - t)) }
 }
 
 /** Environment for the setup command: no MUSHI_* of this run, no agent keys; CI=1 so it never prompts. */

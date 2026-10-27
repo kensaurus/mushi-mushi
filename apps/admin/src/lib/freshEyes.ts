@@ -37,7 +37,7 @@ export interface FreshEyesSession {
   steps: FreshEyesStep[]
 }
 
-export interface FreshEyesFindingSummary {
+interface FreshEyesFindingSummary {
   fingerprint: string
   severity: 'high' | 'medium' | 'low'
   basis: 'measured' | 'opinion'

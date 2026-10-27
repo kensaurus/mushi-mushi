@@ -38,7 +38,7 @@ export const CHARTERS = {
 
 export type CharterName = keyof typeof CHARTERS
 
-/** @internal Exported for tests only. */
+/** One action from the closed set (explore and fresh-eyes). */
 export type ExploreAction =
   | { action: 'click'; role: string; name: string }
   | { action: 'fill'; role: string; name: string; value: string }
@@ -47,7 +47,7 @@ export type ExploreAction =
   | { action: 'back' | 'forward' | 'reload' | 'scroll' | 'done' }
   | { action: 'resize'; width: number; height: number }
 
-/** @internal Exported for tests only. */
+/** Something the page did that code counts as a bug candidate. */
 export interface Signal {
   kind: 'console-error' | 'page-error' | 'server-error' | 'blank-screen'
   message: string
@@ -59,7 +59,7 @@ const KEYS = new Set(['Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp', 'ArrowLe
 const MAX_SNAPSHOT_CHARS = 8000
 const MAX_VALUE_CHARS = 500
 
-/** @internal Exported for tests only. Pure: the model's next action, or null when it is not one we run. */
+/** Pure: the model's next action, or null when it is not one we run. */
 export function parseAction(text: string | null): ExploreAction | null {
   const j = firstJson(text ?? '')
   if (!j || typeof j.action !== 'string') return null
@@ -95,7 +95,7 @@ export function parseAction(text: string | null): ExploreAction | null {
   }
 }
 
-/** @internal Exported for tests only. Pure: an action a reader can follow, for the report's steps. */
+/** Pure: an action a reader can follow, for the report's steps. */
 export function describeAction(a: ExploreAction): string {
   switch (a.action) {
     case 'click':
@@ -113,7 +113,7 @@ export function describeAction(a: ExploreAction): string {
   }
 }
 
-/** @internal Exported for tests only. Pure: a message with its volatile parts (ids, numbers, hashes) removed, so one bug is one fingerprint. */
+/** Pure: a message with its volatile parts (ids, numbers, hashes) removed, so one bug is one fingerprint. */
 export function normalizeMessage(message: string): string {
   return message
     .replace(/https?:\/\/\S+/g, '<url>')
@@ -125,7 +125,7 @@ export function normalizeMessage(message: string): string {
     .slice(0, 200)
 }
 
-/** @internal Exported for tests only. Pure: one signal's identity: its kind, page and normalized message. */
+/** Pure: one signal's identity: its kind, page and normalized message. */
 export function signalKey(s: Signal): string {
   return `${s.kind}|${pagePath(new URL(s.url).pathname)}|${normalizeMessage(s.message)}`
 }
@@ -275,7 +275,7 @@ export function watch(page: Page, origin: string, apiHosts: readonly string[]): 
   }
 }
 
-/** @internal Exported for tests only. Pure: is the page still on the app's own origin (not about:blank, not another site)? */
+/** Pure: is the page still on the app's own origin (not about:blank, not another site)? */
 export function onSite(url: string, base: URL): boolean {
   try {
     return new URL(url).origin === base.origin

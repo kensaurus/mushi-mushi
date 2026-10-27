@@ -28,8 +28,8 @@ const STALL_TEXT: Record<StallReason, string> = {
 
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`
 
-/** @internal Exported for tests only. Pure: one session as a readable timeline. */
-export function sessionMarkdown(s: FreshEyesSession): string[] {
+/** Pure: one session as a readable timeline. */
+function sessionMarkdown(s: FreshEyesSession): string[] {
   const head =
     s.outcome === 'reached'
       ? `### Session ${s.index}: reached the goal in ${s.steps.length - 1} steps, ${s.ttfvSeconds} s to first value`
@@ -205,7 +205,7 @@ export interface FreshFileOutcome {
 }
 
 /** At most this many reports a run. */
-export const FRESH_EYES_FILE_CAP = 15
+const FRESH_EYES_FILE_CAP = 15
 
 /** File findings through the console (deduped there by fingerprint). With no credentials or `dryRun`, return them as pending. */
 export async function fileFreshEyesFindings(cfg: SyncConfig | null, r: FreshEyesResult, dryRun: boolean): Promise<FreshFileOutcome> {

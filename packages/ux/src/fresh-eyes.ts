@@ -38,7 +38,7 @@ import { newRunId } from './state.js'
 export type FreshAction = Exclude<ExploreAction, { action: 'resize' }> | { action: 'stuck'; reason: string }
 
 /** What a screen made the visitor feel, from a closed list. `gave_up` is added by code when the model stops with no measured cause. */
-export const OPINION_CATEGORIES = ['confusing', 'unclear_copy', 'too_many_choices'] as const
+const OPINION_CATEGORIES = ['confusing', 'unclear_copy', 'too_many_choices'] as const
 export type OpinionCategory = (typeof OPINION_CATEGORIES)[number] | 'gave_up'
 
 export interface Opinion {
@@ -151,7 +151,7 @@ const REQUIREMENT_LABEL: Record<RequirementKind, string> = {
 }
 
 /** Average adult silent reading speed, words a minute (Brysbaert 2019). */
-export const READING_WPM = 238
+const READING_WPM = 238
 /** Nobody reads a long page word for word: one screen's reading time is capped. */
 const MAX_READ_MS = 60_000
 
@@ -309,7 +309,7 @@ export function cursorAskArgs(dir: string, model: string, win: boolean): string[
  * newline and caps a command line near 8 KB); the instruction is one line.
  * Verified with grok-4.7-high-fast, 2026-10-27: about 40 s a step.
  */
-export function cursorFileAsk(model: string, signal?: AbortSignal): FreshAsk {
+function cursorFileAsk(model: string, signal?: AbortSignal): FreshAsk {
   return async (prompt, dir) => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'prompt.md'), prompt)
@@ -445,8 +445,8 @@ function stepsEvidence(start: string, steps: readonly FreshAction[]): string[] {
   return [`Start signed out at ${start}`, ...steps.slice(-8).map((a, i, all) => `Step ${steps.length - all.length + i + 1}: ${describeFresh(a)}`)]
 }
 
-/** @internal Exported for tests only. Pure: an action a reader can follow. */
-export function describeFresh(a: FreshAction): string {
+/** Pure: an action a reader can follow. */
+function describeFresh(a: FreshAction): string {
   return a.action === 'stuck' ? `Stuck: ${a.reason || 'no reason given'}` : describeAction(a)
 }
 
@@ -510,7 +510,7 @@ export function measuredFinding(c: Candidate, ctx: { start: string; goal: string
 }
 
 /** Sessions that must agree before an opinion is filed. */
-export const OPINION_QUORUM = 2
+const OPINION_QUORUM = 2
 
 const OPINION_TEXT: Record<OpinionCategory, string> = {
   confusing: 'first-time visitors did not understand what to do',
@@ -602,6 +602,9 @@ export interface FreshEyesOptions {
 }
 
 const VIEWPORT = { width: 1280, height: 800 }
+
+/** Milliseconds since a performance.now() mark: monotonic, so a clock sync never makes a step negative. */
+const since = (t: number) => Math.max(0, Math.round(performance.now() - t))
 
 /**
  * A real browser lets a click copy to the clipboard; headless Chromium denies
@@ -793,16 +796,16 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   }
 
   try {
-    const t0 = Date.now()
+    const t0 = performance.now()
     try {
       await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT })
       await waitForContent(page).catch(() => {})
     } catch (err) {
-      await record({ n: 0, action: `Open ${opts.url}`, path: '', screen: '', modelMs: 0, appMs: Date.now() - t0, readMs: 0, outcome: 'failed', note: (err as Error).message.split('\n')[0]!.slice(0, 200) })
+      await record({ n: 0, action: `Open ${opts.url}`, path: '', screen: '', modelMs: 0, appMs: since(t0), readMs: 0, outcome: 'failed', note: (err as Error).message.split('\n')[0]!.slice(0, 200) })
       stall(0, 'error', 'The start page did not load.')
       return finish(session)
     }
-    const landing: FreshEyesStep = { n: 0, action: `Open ${opts.url}`, path: '', screen: '', modelMs: 0, appMs: Date.now() - t0, readMs: 0, outcome: 'ok' }
+    const landing: FreshEyesStep = { n: 0, action: `Open ${opts.url}`, path: '', screen: '', modelMs: 0, appMs: since(t0), readMs: 0, outcome: 'ok' }
     const firstSignals = watcher.take()
     if (firstSignals.length) landing.signals = firstSignals.map((s) => s.kind)
     for (const s of firstSignals) x.addCandidate({ kind: 'signal', signal: s, screen: pagePath(new URL(s.url).pathname), steps: [], session: index })
@@ -821,12 +824,12 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         break
       }
       const snapshot = await snapshotOf(page)
-      const tAsk = Date.now()
+      const tAsk = performance.now()
       const answer = await x.ask(
         freshEyesPrompt({ goal: opts.goal, snapshot, done: session.steps.slice(1).map((s) => s.action), step: n, maxSteps: x.maxSteps, hasAccount: !!identity }),
         join(x.dir, 'ask', `s${index}-${String(n).padStart(2, '0')}`),
       )
-      const modelMs = Date.now() - tAsk
+      const modelMs = since(tAsk)
       const parsed = parseFreshAction(answer.text)
       if (!parsed) {
         x.progress(`  step ${n}: no usable action (${(answer.error ?? answer.text ?? '').slice(0, 80)})`)
@@ -870,9 +873,9 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
         continue
       }
       const blockedBefore = browser.guard.blocked.length
-      const tAct = Date.now()
+      const tAct = performance.now()
       const refusal = await perform(page, action, isFreshEyesRefusedLabel, (v) => fillValue(v, identity))
-      const appMs = Date.now() - tAct
+      const appMs = since(tAct)
       const step: FreshEyesStep = { n, action: describeFresh(action), path: '', screen: '', modelMs, appMs, readMs: 0, outcome: 'ok', ...(opinion ? { opinion } : {}) }
       if (refusal) {
         step.outcome = refusal.startsWith('refused') ? 'refused' : 'failed'

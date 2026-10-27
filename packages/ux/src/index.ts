@@ -10,8 +10,27 @@ export { cursorCloudAdapter, cursorModel, httpsRepoUrl, type CursorCloudDeps } f
 export { openSession, captureSurface, settle, type BrowserSession, type Capture } from './capture.js'
 export { startDashboard, safeShotPath, type Dashboard } from './dashboard.js'
 export { discover, normalizeLink, surfaceKey, type DiscoverOptions } from './discover.js'
-export { runFreshEyes, type FreshEyesOptions, type FreshEyesResult, type SuccessCheck } from './fresh-eyes.js'
-export { runTerminalSetup, type TerminalResult } from './fresh-eyes-terminal.js'
+export {
+  runFreshEyes,
+  type Candidate,
+  type FreshAction,
+  type FreshAsk,
+  type FreshEyesFinding,
+  type FreshEyesOptions,
+  type FreshEyesResult,
+  type FreshEyesSession,
+  type FreshEyesStep,
+  type Identity,
+  type Opinion,
+  type OpinionCategory,
+  type PageFacts,
+  type RequirementKind,
+  type StallReason,
+  type StepOutcome,
+  type SuccessCheck,
+  type TerminalHandoff,
+} from './fresh-eyes.js'
+export { DEFAULT_SETUP_COMMAND, runTerminalSetup, type Phase, type PhaseName, type TerminalOptions, type TerminalResult } from './fresh-eyes-terminal.js'
 export { installGuard, isRequestAllowed, isDestructiveLabel, type AllowRule, type GuardPolicy, type WriteMode } from './guard.js'
 export { pixelDiff, dHash, hammingHex, cropTop } from './image.js'
 export {
