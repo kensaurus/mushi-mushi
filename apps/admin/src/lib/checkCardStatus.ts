@@ -289,7 +289,7 @@ function newest(elements: ObservedElement[]): string | null {
 }
 
 /** Recipe, design, or CI: the element's own last check, never a pass without a time. */
-export function statusFromElements(elements: ObservedElement[], fallbackSetup: string, now: number): CheckCardView {
+function statusFromElements(elements: ObservedElement[], fallbackSetup: string, now: number): CheckCardView {
   if (elements.length === 0) return NOT_CHECKED
   if (elements.every((el) => el.state === 'not_connected')) return notSetUp(elements[0]?.setupTo || fallbackSetup)
   let worst = elements[0]!

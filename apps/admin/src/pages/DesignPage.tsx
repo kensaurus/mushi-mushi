@@ -54,7 +54,7 @@ import { PageFirstStep } from '../components/ui/page-first-step'
 import { docsUrl } from '../lib/docsUrl'
 
 /**
- * @internal Exported for tests only. No token was read: the page is one
+ * Exported for tests (page modules are knip entries, so no @internal tag). No token was read: the page is one
  * first step. A set with tokens, or any set at all, is a set-up page.
  */
 export function designNotSetUp(design: Pick<DesignPlaneResponse, 'tokens' | 'sets'>): boolean {
