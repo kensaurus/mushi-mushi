@@ -35,6 +35,10 @@ const MAX_ROWS = 10_000
 const CLOSED_PAGES = 5
 const CLOSED_SINGLE_READS = 20
 const OPEN_PAGES = 5
+/** GitHub API calls left below which the preview stops (other Mushi work shares the token's quota). */
+export const PREVIEW_GITHUB_FLOOR = 300
+export const NO_TOKEN =
+  'No GitHub token is stored for this app. Store a fine-grained token with "Contents: Read and write" and "Pull requests: Read and write" on the repository in the app’s GitHub settings (add "Administration: Read and write" to turn on automatic branch deletion). The Mushi GitHub App is not used for clean-up.'
 /** Kept items returned per repo (the rest are counted). */
 const KEPT_SHOWN = 100
 
@@ -197,18 +201,16 @@ export function pendingKeys(actions: HousekeepingActionRow[]): Set<string> {
   return out
 }
 
-/** Bound GitHub repos of a project, owner/name lower case, with their App installation. */
-export async function boundRepos(db: Db, projectId: string): Promise<Array<{ repo: string; installationId: number | null }>> {
-  const { data, error } = await db.from('project_repos').select('repo_url, github_app_installation_id').eq('project_id', projectId)
+/** Bound GitHub repos of a project, owner/name lower case. */
+export async function boundRepos(db: Db, projectId: string): Promise<string[]> {
+  const { data, error } = await db.from('project_repos').select('repo_url').eq('project_id', projectId)
   if (error) throw new Error(`project_repos read failed: ${error.message}`)
-  const out = new Map<string, number | null>()
-  for (const r of (data ?? []) as Array<{ repo_url: string | null; github_app_installation_id: number | null }>) {
+  const out = new Set<string>()
+  for (const r of (data ?? []) as Array<{ repo_url: string | null }>) {
     const ref = parseGithubRepoUrl(r.repo_url ?? '')
-    if (!ref) continue
-    const k = `${ref.owner}/${ref.repo}`.toLowerCase()
-    if (!out.has(k) || (out.get(k) == null && r.github_app_installation_id)) out.set(k, r.github_app_installation_id ?? null)
+    if (ref) out.add(`${ref.owner}/${ref.repo}`.toLowerCase())
   }
-  return [...out.entries()].map(([repo, installationId]) => ({ repo, installationId }))
+  return [...out]
 }
 
 export interface RepoPreview {
@@ -233,20 +235,20 @@ export interface RepoPreview {
 export interface PreviewDeps {
   fetch: FetchLike
   now: () => Date
-  /** The token clean-up reads and writes branches and PRs with (see the routes' resolver). */
-  token: (db: Db, projectId: string, repo: { repo: string; installationId: number | null }) => Promise<string | null>
+  /** The project's stored GitHub token (ADR 0037's legacy-backed path: never the App installation or the platform token). */
+  token: (db: Db, projectId: string) => Promise<string | null>
 }
 
 /** One repo's preview: fresh GitHub lists against what Mushi recorded. */
 export async function previewRepo(
   db: Db,
   deps: PreviewDeps,
-  input: { projectId: string; repo: { repo: string; installationId: number | null }; recorded: Recorded; reviews: ReviewRow[]; riding: Set<number>; pending: Set<string>; staleDays: number },
+  input: { projectId: string; repo: string; recorded: Recorded; reviews: ReviewRow[]; riding: Set<number>; pending: Set<string>; staleDays: number },
 ): Promise<RepoPreview> {
-  const repo = input.repo.repo
+  const repo = input.repo
   const empty: RepoPreview = { repo, error: null, defaultBranch: null, deleteBranchOnMerge: null, canChangeSetting: false, settingPending: input.pending.has(`${repo}|setting:delete_branch_on_merge`), branches: [], prs: [], kept: [], keptCount: 0, gone: 0, truncated: false }
-  const token = await deps.token(db, input.projectId, input.repo)
-  if (!token) return { ...empty, error: 'No GitHub token can reach this repository. Connect GitHub for this app first.' }
+  const token = await deps.token(db, input.projectId)
+  if (!token) return { ...empty, error: NO_TOKEN }
   const gh = ghClient(deps.fetch, token)
   const info = await readRepo(gh, repo)
   if (!info.info) return { ...empty, error: info.status === 404 ? 'GitHub did not find this repository with the stored token.' : `GitHub answered ${info.status || 'nothing'} when Mushi read the repository.` }
@@ -270,6 +272,7 @@ export async function previewRepo(
       if (one.pull && one.pull.state === 'closed') closedPulls.set(n, one.pull)
     }
   }
+  if (gh.remaining < PREVIEW_GITHUB_FLOOR) return { ...empty, defaultBranch: info.info.defaultBranch, deleteBranchOnMerge: info.info.deleteBranchOnMerge, error: `Fewer than ${PREVIEW_GITHUB_FLOOR} GitHub API calls are left this hour for this token. Try again later.` }
   const openFixNumbers = input.recorded.attempts.filter((a) => a.repo === repo && openList.pulls.some((p) => p.number === a.prNumber)).map((a) => a.prNumber)
   const headCommitAt = await headCommitDates(gh, repo, openFixNumbers)
   const facts: RepoFacts = { repo, defaultBranch: info.info.defaultBranch, branches: branchList.branches, openPulls: openList.pulls, closedPulls, headCommitAt, truncated: branchList.truncated || openList.truncated || closedTruncated }

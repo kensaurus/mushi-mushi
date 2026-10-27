@@ -30,6 +30,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { resolveProjectGithubToken } from '../../_shared/github.ts'
 import { runInBackground } from '../../_shared/background.ts'
+import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { closePullRequest } from '../../_shared/fix-close.ts'
 import {
   approveConnectorAction,
@@ -87,10 +88,9 @@ export interface RepoHousekeepingRouteDeps {
   callerCanAccessProject: typeof callerCanAccessProject
   fetch: FetchLike
   now: () => Date
-  /** Branches and PRs: the repo's App installation first, then the stored token; never the platform token. */
-  token: (db: Db, projectId: string, repo: { repo: string; installationId: number | null }) => Promise<string | null>
-  /** Repo settings: the stored token only. */
-  settingsToken: (db: Db, projectId: string) => Promise<string | null>
+  /** The project's stored GitHub token (ADR 0037's legacy-backed path: never the App installation or the platform token). */
+  token: (db: Db, projectId: string) => Promise<string | null>
+  claimRateLimit: typeof claimTenantRateLimit
   sleep: (ms: number) => Promise<void>
   executeWaitMs?: number
 }
@@ -103,8 +103,8 @@ export const defaultRepoHousekeepingDeps: RepoHousekeepingRouteDeps = {
   callerCanAccessProject,
   fetch: (url, init) => fetch(url, init),
   now: () => new Date(),
-  token: (db, projectId, repo) => resolveProjectGithubToken(db, projectId, repo.installationId, { allowEnvFallback: false }),
-  settingsToken: (db, projectId) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false }),
+  token: (db, projectId) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false }),
+  claimRateLimit: claimTenantRateLimit,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 }
 
@@ -114,7 +114,6 @@ function runDeps(deps: RepoHousekeepingRouteDeps): HousekeepingRunDeps {
     now: deps.now,
     sleep: deps.sleep,
     token: deps.token,
-    settingsToken: deps.settingsToken,
     closePull: (token, repo, n) => {
       const [owner, name] = repo.split('/')
       return closePullRequest(token, { owner, repo: name }, n)
@@ -227,8 +226,8 @@ async function buildPreview(db: Db, deps: RepoHousekeepingRouteDeps, projectId: 
   const pending = pendingKeys(actions)
   const out: RepoPreview[] = []
   for (const repo of repos) {
-    if (onlyRepo && repo.repo !== onlyRepo) continue
-    out.push(await previewRepo(db, { fetch: deps.fetch, now: deps.now, token: deps.token }, { projectId, repo, recorded, reviews, riding: riding.get(repo.repo) ?? new Set(), pending, staleDays }))
+    if (onlyRepo && repo !== onlyRepo) continue
+    out.push(await previewRepo(db, { fetch: deps.fetch, now: deps.now, token: deps.token }, { projectId, repo, recorded, reviews, riding: riding.get(repo) ?? new Set(), pending, staleDays }))
   }
   return out
 }
@@ -279,14 +278,14 @@ const requestSchema = z
   })
   .strict()
 
-/** Clean-ups (restores excepted) asked for in the last hour; null when unreadable. */
-async function requestsLastHour(db: Db, projectId: string, now: Date): Promise<number | null> {
+/** Clean-ups (restores excepted) run for this app in the last hour; null when unreadable. */
+async function runsLastHour(db: Db, projectId: string, now: Date): Promise<number | null> {
   const { data, error } = await db
     .from('connector_actions')
     .select('id')
     .eq('project_id', projectId)
     .in('action', ['delete_branches', 'close_prs', 'set_delete_branch_on_merge'])
-    .gt('requested_at', new Date(now.getTime() - 3600_000).toISOString())
+    .gt('executed_at', new Date(now.getTime() - 3600_000).toISOString())
   return error ? null : ((data ?? []) as unknown[]).length
 }
 
@@ -306,10 +305,9 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
   if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
   const body = parsed.data
   const repo = body.repo.toLowerCase()
-  const asked = await requestsLastHour(db, a.projectId, deps.now())
-  if (asked === null) return jsonError(c, 'DB_ERROR', 'Mushi could not count this app\'s clean-ups. Try again in a minute.', 500)
-  if (asked >= HOUSEKEEPING_ACTIONS_PER_HOUR) {
-    c.header('Retry-After', '3600')
+  const rate = await deps.claimRateLimit(db as never, `project:${a.projectId}:repo_cleanup_request`, HOUSEKEEPING_ACTIONS_PER_HOUR, 3600)
+  if (!rate.allowed) {
+    c.header('Retry-After', String(rate.retryAfterSec ?? 3600))
     return jsonError(c, 'RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups an hour per app.`, 429)
   }
   const staleDays = clampStaleDays(body.staleDays)
@@ -430,6 +428,12 @@ async function decideRoute(c: Context, deps: RepoHousekeepingRouteDeps, verb: 'a
   if (verb === 'reject') {
     const r = await rejectConnectorAction(db as never, row.id, row.organization_id, userId)
     return r.ok ? c.json({ ok: true, data: null }) : jsonError(c, r.code, r.message, r.status)
+  }
+  // The hourly cap is checked before the run claims the approval, so a refusal here leaves it usable.
+  if (row.action !== 'restore_branches') {
+    const ran = await runsLastHour(db, projectId, deps.now())
+    if (ran === null) return jsonError(c, 'DB_ERROR', 'Mushi could not count this app’s clean-ups. Try again in a minute.', 500)
+    if (ran >= HOUSEKEEPING_ACTIONS_PER_HOUR) return jsonError(c, 'RATE_LIMITED', `At most ${HOUSEKEEPING_ACTIONS_PER_HOUR} clean-ups run an hour per app. It stays approved until its approval ends; run it after the hour.`, 429)
   }
   const run = executeConnectorAction(db as never, row.id, row.organization_id, userId, executeDeps(deps))
   let timer: ReturnType<typeof setTimeout> | undefined

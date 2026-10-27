@@ -87,7 +87,7 @@ export const githubConnector: RecipeConnector = {
     act: [
       'variables:write (LINUX_RUNNER and RUNNER_<WORKFLOW> only)',
       'contents:write (repo clean-up: delete or restore branches Mushi recorded)',
-      'pull_requests:write (repo clean-up: close Mushi's own fix PRs)',
+      "pull_requests:write (repo clean-up: close Mushi's own fix PRs)",
       'administration:write (optional: turn on "Automatically delete head branches")',
     ],
   },

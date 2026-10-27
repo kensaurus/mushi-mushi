@@ -179,7 +179,7 @@ export interface ExecuteDeps {
   /** The token a legacy-backed GitHub action runs with (default: the project's stored PAT, no platform fallback). */
   legacyGithubToken?: (db: Db, projectId: string) => Promise<string | null>
   /** The repo clean-up executor (ADR 0051); only api-ext passes it. Without it those actions are refused unclaimed. */
-  housekeepingAct?: (input: { db: Db; organizationId: string; projectId: string; action: ApprovedConnectorAction }) => Promise<ConnectorActionResult>
+  housekeepingAct?: (input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction }) => Promise<ConnectorActionResult>
 }
 
 const defaultLegacyGithubToken = (db: Db, projectId: string) => resolveProjectGithubToken(db, projectId, null, { allowEnvFallback: false })
@@ -222,7 +222,7 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
     let result: ConnectorActionResult
     try {
       if (isHousekeepingAction(row.action) && deps.housekeepingAct) {
-        result = await deps.housekeepingAct({ db, organizationId, projectId: row.project_id, action: { id: row.id, action: row.action, payload: row.payload, payloadSha256: row.payload_sha256 } })
+        result = await deps.housekeepingAct({ db, organizationId, projectId: row.project_id, userId, action: { id: row.id, action: row.action, payload: row.payload, payloadSha256: row.payload_sha256 } })
         await finish(result)
         return result.ok ? { ok: true, value: result } : { ok: false, code: result.code ?? 'ACTION_FAILED', message: result.detail, status: result.status ?? 502 }
       }

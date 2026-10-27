@@ -46,7 +46,7 @@ import {
   type DeleteBranchesPayload,
   type RestorePayload,
 } from './repo-housekeeping.ts'
-import { boundRepos, isMissingTable, loadRecorded, loadRiding } from './repo-housekeeping-load.ts'
+import { boundRepos, isMissingTable, loadRecorded, loadRiding, NO_TOKEN } from './repo-housekeeping-load.ts'
 import {
   createRef,
   deleteRefIfAt,
@@ -76,10 +76,8 @@ export interface HousekeepingRunDeps {
   fetch: FetchLike
   now: () => Date
   sleep: (ms: number) => Promise<void>
-  /** Token for branches and PRs (see the routes' resolver). */
-  token: (db: Db, projectId: string, repo: { repo: string; installationId: number | null }) => Promise<string | null>
-  /** Token for repo settings: the project's stored token only (the App has no Administration permission). */
-  settingsToken: (db: Db, projectId: string) => Promise<string | null>
+  /** The project's stored GitHub token (ADR 0037's legacy-backed path: never the App installation or the platform token). */
+  token: (db: Db, projectId: string) => Promise<string | null>
   /** Close a PR on GitHub (fix-close's closePullRequest with this token). */
   closePull: (token: string, repo: string, n: number) => Promise<boolean>
   deadlineMs?: number
@@ -100,6 +98,8 @@ interface RunCtx {
   db: Db
   organizationId: string
   projectId: string
+  /** The owner or admin who ran it from the console. */
+  userId: string
   action: ApprovedConnectorAction & { action: HousekeepingAction }
   deps: HousekeepingRunDeps
   started: number
@@ -124,7 +124,7 @@ async function auditItem(ctx: RunCtx, repo: string, o: ItemOutcome): Promise<voi
   await ctx.db.from('org_audit_events').insert({
     organization_id: ctx.organizationId,
     project_id: ctx.projectId,
-    actor_id: null,
+    actor_id: ctx.userId,
     action: `repo_cleanup.${ctx.action.action}.${o.outcome}`,
     resource_type: 'connector_action',
     resource_id: ctx.action.id,
@@ -161,14 +161,14 @@ function summarize(verb: string, outcomes: ItemOutcome[]): string {
 }
 
 export async function runHousekeepingAction(
-  input: { db: Db; organizationId: string; projectId: string; action: ApprovedConnectorAction },
+  input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction },
   deps: HousekeepingRunDeps,
 ): Promise<ConnectorActionResult> {
   const name = input.action.action
   if (!(HOUSEKEEPING_ACTIONS as readonly string[]).includes(name)) return refuse(`"${name}" is not a repo clean-up action.`, 'ACTION_NOT_SUPPORTED', 403)
   const problem = housekeepingPayloadProblem(name, input.action.payload)
   if (problem) return refuse(problem, 'PAYLOAD_INVALID', 403)
-  const ctx: RunCtx = { db: input.db, organizationId: input.organizationId, projectId: input.projectId, action: input.action as RunCtx['action'], deps, started: deps.now().getTime() }
+  const ctx: RunCtx = { db: input.db, organizationId: input.organizationId, projectId: input.projectId, userId: input.userId, action: input.action as RunCtx['action'], deps, started: deps.now().getTime() }
   const repo = String(input.action.payload.repo).toLowerCase()
 
   if (name !== 'restore_branches') {
@@ -182,18 +182,17 @@ export async function runHousekeepingAction(
       ? refuse('Repo clean-up needs the database update 20261027183000_repo_housekeeping_items first. Nothing ran.', 'MIGRATION_PENDING')
       : refuse('Mushi could not read its clean-up log, so nothing ran.', 'DB_ERROR')
   }
-  let bound: Array<{ repo: string; installationId: number | null }>
+  let bound: string[]
   try {
     bound = await boundRepos(ctx.db, ctx.projectId)
   } catch {
     return refuse('Mushi could not read this app\'s repositories, so nothing ran.', 'DB_ERROR')
   }
-  const target = bound.find((b) => b.repo === repo)
-  if (!target) return refuse(`${repo} is no longer connected to this app. Nothing ran.`, 'REPO_NOT_IN_PROJECT', 403)
+  if (!bound.includes(repo)) return refuse(`${repo} is no longer connected to this app. Nothing ran.`, 'REPO_NOT_IN_PROJECT', 403)
 
-  if (name === 'set_delete_branch_on_merge') return runSetting(ctx, repo)
-  const token = await deps.token(ctx.db, ctx.projectId, target)
-  if (!token) return refuse('No GitHub token can reach this repository. Nothing ran.', 'NO_GITHUB_TOKEN')
+  const token = await deps.token(ctx.db, ctx.projectId)
+  if (!token) return refuse(`${NO_TOKEN} Nothing ran.`, 'NO_GITHUB_TOKEN')
+  if (name === 'set_delete_branch_on_merge') return runSetting(ctx, token, repo)
   const gh = ghClient(deps.fetch, token)
   if (name === 'delete_branches') return runDeletes(ctx, gh, repo, input.action.payload as unknown as DeleteBranchesPayload)
   if (name === 'close_prs') return runCloses(ctx, gh, token, repo, input.action.payload as unknown as ClosePrsPayload)
@@ -420,10 +419,8 @@ async function runRestores(ctx: RunCtx, gh: Gh, repo: string, p: RestorePayload)
   return { ok: true, detail: summarize('Restored', outcomes), result: { repo, items: outcomes } }
 }
 
-async function runSetting(ctx: RunCtx, repo: string): Promise<ConnectorActionResult> {
+async function runSetting(ctx: RunCtx, token: string, repo: string): Promise<ConnectorActionResult> {
   const key = 'setting:delete_branch_on_merge'
-  const token = await ctx.deps.settingsToken(ctx.db, ctx.projectId)
-  if (!token) return refuse('Turning this on needs a GitHub token stored for this app with "Administration: Read and write" on the repository. The Mushi GitHub App cannot change repository settings.', 'NO_GITHUB_TOKEN')
   const gh = ghClient(ctx.deps.fetch, token)
   const rowId = await writeItem(ctx, repo, { item_key: key })
   const finish = async (o: ItemOutcome, ok = true): Promise<ConnectorActionResult> => {
