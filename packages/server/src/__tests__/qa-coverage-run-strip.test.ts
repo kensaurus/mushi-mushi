@@ -102,3 +102,33 @@ describe('GET /qa-coverage strip', () => {
     expect(total).toBe(1500)
   })
 })
+
+describe('1d625b63 skipped runs are not failures', () => {
+  it('rates a story over finished runs only', () => {
+    expect(mod.finishedPassRate({ runs_24h: 4, passed_24h: 0, failed_24h: 0, error_24h: 0 })).toBeNull()
+    expect(mod.finishedPassRate({ runs_24h: 10, passed_24h: 3, failed_24h: 1, error_24h: 0 })).toBe(75)
+    expect(mod.finishedPassRate(undefined)).toBeNull()
+  })
+
+  it('does not count a story that only skipped as failing in the stats', async () => {
+    db = makeFakeDb(
+      {
+        projects: [{ id: P, name: 'App' }],
+        qa_stories: [
+          { id: 's1', project_id: P, name: 'Checkout', enabled: true },
+          { id: 's2', project_id: P, name: 'Login', enabled: true },
+        ],
+        qa_story_coverage_24h: [
+          { story_id: 's1', project_id: P, runs_24h: 6, passed_24h: 0, failed_24h: 0, error_24h: 0, pass_rate_pct: 0 },
+          { story_id: 's2', project_id: P, runs_24h: 4, passed_24h: 1, failed_24h: 3, error_24h: 0, pass_rate_pct: 25 },
+        ],
+        qa_story_runs: [],
+      },
+      { maxRows: 1000 },
+    )
+    const res = await app.request(`/v1/admin/projects/${P}/qa-coverage/stats`)
+    const d = ((await res.json()) as { data: { failingStories: number; topFailingStoryName: string | null } }).data
+    expect(d.failingStories).toBe(1)
+    expect(d.topFailingStoryName).toBe('Login')
+  })
+})

@@ -66,6 +66,19 @@ export function buildRunStrips(
   return out;
 }
 
+/**
+ * A story's 24h pass rate over runs that finished (passed, failed, error).
+ * The view's pass_rate_pct divides by every run, skipped ones included, so a
+ * story that only skipped read 0% and was counted failing (1d625b63). Null
+ * when nothing finished.
+ */
+export function finishedPassRate(m: Record<string, unknown> | undefined): number | null {
+  const passed = Number(m?.passed_24h ?? 0);
+  const finished = passed + Number(m?.failed_24h ?? 0) + Number(m?.error_24h ?? 0);
+  if (finished === 0) return null;
+  return Math.round((1000 * passed) / finished) / 10;
+}
+
 /** The STRIP_DAYS UTC days ending today, oldest first, with no runs. */
 export function blankRunStrip(now: number): StripDay[] {
   const d = new Date(now);
@@ -278,10 +291,11 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     for (const s of stories) {
       const m = mvMap.get(s.id) as Record<string, unknown> | undefined;
       const runs24h = Number(m?.runs_24h ?? 0);
-      const passRate = m?.pass_rate_pct != null ? Number(m.pass_rate_pct) : null;
+      const passRate = finishedPassRate(m);
       totalRuns24h += runs24h;
 
-      if (runs24h === 0) {
+      // Only skipped (or still running) runs: no result yet, not a failure.
+      if (passRate === null) {
         noDataStories += 1;
       } else if (passRate != null && passRate >= 80) {
         passingStories += 1;
@@ -400,6 +414,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const strips = stripOk ? buildRunStrips(stripRows, now) : null;
     const withStrip = <T extends { story_id: string }>(row: T) => ({
       ...row,
+      // Over finished runs only, like the stats banner: skipped runs are not failures.
+      pass_rate_pct: finishedPassRate(row as unknown as Record<string, unknown>),
       last_7d: strips ? strips.get(row.story_id) ?? blankRunStrip(now) : null,
     });
 
