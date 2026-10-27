@@ -53,3 +53,22 @@ describe('slack alerts labels', () => {
     expect(slackAlertsReadout({ slackConfigured: true })).toBe('Set up')
   })
 })
+
+describe('Slack row reads the same probe as the Integrations card', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00Z')
+  const ready = { channelId: 'C1', botSet: true, canPost: true }
+
+  it('a test sent from Integrations shows as working here, not "not checked yet"', () => {
+    const probe = { status: 'ok' as const, checked_at: '2026-10-27T11:00:00Z', message: null }
+    expect(slackAlertStatus({ ...ready, probe, now: NOW }).state).toBe('working')
+  })
+
+  it('a failing probe asks for attention', () => {
+    const probe = { status: 'down' as const, checked_at: '2026-10-27T11:00:00Z', message: 'channel_not_found' }
+    expect(slackAlertStatus({ ...ready, probe, now: NOW }).state).toBe('attention')
+  })
+
+  it('without a probe it still says to send a test', () => {
+    expect(slackAlertStatus({ ...ready, now: NOW }).state).toBe('checking')
+  })
+})

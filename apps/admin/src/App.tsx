@@ -168,7 +168,7 @@ function NotFoundPage() {
 function SetupCopilotRedirect() {
   const { search } = useLocation()
   const params = new URLSearchParams(search)
-  params.set('tab', 'copilot')
+  params.set('tab', 'diagnose')
   return <Navigate to={`/onboarding?${params.toString()}`} replace />
 }
 
@@ -367,7 +367,7 @@ export function App() {
                 <RouteErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
-                  {/* Plan 021: pages that are views of Home, App health or Team now
+                  {/* Plan 021: pages that are views of Home, Mushi health or Team now
                       (lib/pageHubs.ts) redirect there with the query kept. */}
                   {legacyHubRoutes().map(({ path, hub, viewId }) => (
                     <Route key={path} path={path} element={<HubRedirect hub={hub} viewId={viewId} />} />

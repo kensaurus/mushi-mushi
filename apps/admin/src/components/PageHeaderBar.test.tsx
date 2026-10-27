@@ -82,9 +82,8 @@ describe('PageHeaderBar overview chip', () => {
   it('truncates the chip label rather than widening the header', () => {
     renderDashboardHeader()
     const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
-    const label = Array.from(chip!.querySelectorAll('span')).find((el) =>
-      el.textContent?.includes('Overview — your loop at a glance'),
-    )
+    // The label is the cycle's word now ("Overview"), not "PDCA …" (P5).
+    const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Overview')
     expect(label).toBeDefined()
     expect(label!.className).toContain('truncate')
   })

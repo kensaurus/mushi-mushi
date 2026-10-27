@@ -165,8 +165,8 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
           Author a top-level <code className="font-mono">user_stories:</code> array in your{' '}
           <code className="font-mono">inventory.yaml</code> with{' '}
           <code className="font-mono">id / title / persona / goal / description / tags</code>, then
-          link each element with <code className="font-mono">user_story: &lt;id&gt;</code>. Re-ingest from the
-          Yaml tab.
+          link each element with <code className="font-mono">user_story: &lt;id&gt;</code>. Save it again from the
+          Map file tab.
         </p>
       </div>
     )

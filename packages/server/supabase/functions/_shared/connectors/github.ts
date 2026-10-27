@@ -11,6 +11,11 @@
  *          It is the only connector that proposes file edits; the PR itself
  *          is opened by the recipe-change worker as a draft.
  *
+ *          Repo clean-up acts (ADR 0051: delete_branches, close_prs,
+ *          restore_branches, set_delete_branch_on_merge) are declared here so
+ *          the legacy request path accepts them; they run only through
+ *          _shared/repo-housekeeping-run.ts, injected in api-ext.
+ *
  *          Act (ADR 0037): set_actions_variable / delete_actions_variable,
  *          for the allowlisted runner variables only (LINUX_RUNNER,
  *          RUNNER_<WORKFLOW>). act() checks the approved hash, the allowlist,
@@ -46,6 +51,7 @@ import {
   type RunnerSeen,
   type VariableState,
 } from '../ci-placement.ts'
+import { HOUSEKEEPING_ACTIONS, isHousekeepingAction, USE_REPO_CLEANUP_MESSAGE } from '../repo-housekeeping-acts.ts'
 
 const API = 'https://api.github.com'
 /** Deployment environments read per snapshot (two list calls each). */
@@ -78,9 +84,14 @@ export const githubConnector: RecipeConnector = {
   requiredScopes: {
     snapshot: ['contents:read', 'actions:read', 'secrets:read (names only)', 'metadata:read'],
     propose: ['contents:write', 'pull_requests:write'],
-    act: ['variables:write (LINUX_RUNNER and RUNNER_<WORKFLOW> only)'],
+    act: [
+      'variables:write (LINUX_RUNNER and RUNNER_<WORKFLOW> only)',
+      'contents:write (repo clean-up: delete or restore branches Mushi recorded)',
+      "pull_requests:write (repo clean-up: close Mushi's own fix PRs)",
+      'administration:write (optional: turn on "Automatically delete head branches")',
+    ],
   },
-  actions: PLACEMENT_ACTIONS,
+  actions: [...PLACEMENT_ACTIONS, ...HOUSEKEEPING_ACTIONS],
   credentialNote: 'Uses the GitHub token already connected to this project. Mushi reads files, runs and secret NAMES, never secret values, and writes only draft pull requests.',
   async probe(ctx) {
     const r = repoOf(ctx)
@@ -233,6 +244,8 @@ export const githubConnector: RecipeConnector = {
     return out.map((d) => ({ gate: d.gate, ruleId: d.ruleId, severity: d.severity, message: d.message, filePath: d.filePath ?? null, suggestedFix: d.suggestedFix }))
   },
   async act(ctx, action: ApprovedConnectorAction): Promise<ConnectorActionResult> {
+    // Repo clean-up has its own executor, injected in api-ext (ADR 0051).
+    if (isHousekeepingAction(action.action)) return { ok: false, detail: USE_REPO_CLEANUP_MESSAGE, code: 'USE_REPO_CLEANUP', status: 403 }
     return actOnRunnerVariable(ctx, action)
   },
   async proposeChange(_ctx, change): Promise<FileEdit[]> {

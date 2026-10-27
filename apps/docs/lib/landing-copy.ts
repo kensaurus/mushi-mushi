@@ -53,52 +53,46 @@ export const LANDING_HERO_START = {
   },
 } as const
 
-/** Pricing proof under the three start steps. */
-export const LANDING_SIXTY_SECOND = {
-  pricing:
-    '50 diagnoses a month on the free plan, no card needed. You can also run it on your own server in under five minutes.',
-} as const
+/**
+ * The prompt a newcomer pastes into their AI editor after connecting it. The
+ * AI runs the wizard itself: `--yes` takes the defaults, which an agent's
+ * shell needs (no prompts to answer), and the sign-in opens in the person's
+ * browser. `npx mushi-mushi test` sends a synthetic report through ingest.
+ */
+export const LANDING_SETUP_PROMPT =
+  'Add Mushi Mushi to this app. In the project folder run `npx mushi-mushi --yes` and wait while I finish the sign-in in my browser. Then run `npx mushi-mushi test` and use the Mushi tools to show me that test report and its plain-English diagnosis.'
+
+/** What to ask once a real user reports a bug. */
+export const LANDING_FIX_PROMPT = 'Get the latest Mushi report and fix it.'
 
 /**
- * "Start in three steps" right under the pipeline: the same cycle as the
- * console sidebar (ADR 0027: connect, bugs come in, fix and review), worded
- * as a newcomer's first run and matching the quickstart page (install →
- * first report → first fix). Each step ends in what you should see.
+ * The hero's install box (owner, 2026-10-27: "how to install with Claude or
+ * Cursor, and give the user a simple prompt"). Pick your editor, then the same
+ * three steps for each: the cycle of ADR 0027 (connect, bugs come in, a fix
+ * you review), each step ending in what you should see. Every editor install
+ * is URL-only (`buildOAuthInstall`), so the editor runs the Mushi sign-in on
+ * first use and the page needs no key.
  */
-export const LANDING_HOW_IT_WORKS = {
-  heading: 'Start in three steps',
-  steps: [
-    {
-      title: 'Install',
-      desc: 'Run one command in your app folder. It finds your framework, signs you in through the browser and adds the report button.',
-      check: 'A report button in your app and a new project in the console.',
-    },
-    {
-      title: 'Send a first report',
-      desc: 'Tap the button and write one sentence, or let the wizard send a test report.',
-      check: 'The report in your console with a plain-English diagnosis, in about 10 seconds.',
-    },
-    {
-      title: 'Get your first fix',
-      desc: 'Connect your AI editor in one click, then ask it: "Get the latest Mushi report and fix it."',
-      check: 'A fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.',
-    },
+export const LANDING_INSTALL = {
+  label: 'Install with',
+  tabs: [
+    { id: 'claude-code', label: 'Claude Code', connect: 'Run this in your terminal. It adds Mushi to Claude Code.' },
+    { id: 'cursor', label: 'Cursor', connect: 'Click to add Mushi to Cursor, then open a chat.' },
+    { id: 'other', label: 'Other editors', connect: 'Pick yours: VS Code, Windsurf, Zed, Claude Desktop and more.' },
   ],
-} as const
-
-/**
- * Editor install buttons inside step 3. Every editor button installs the
- * hosted server URL only (`buildOAuthInstall`), so the editor runs the Mushi
- * sign-in on first use; a static key header would switch that sign-in off.
- */
-export const LANDING_ONE_CLICK = {
-  note: 'No key to paste. The first time your editor calls Mushi, your browser opens so you can sign in (or sign up free).',
+  steps: {
+    connect: 'Connect your editor',
+    setup: 'Paste this prompt',
+    fix: 'Fix a real bug',
+  },
+  setupCheck: 'A report button in your app, and its first report with a plain-English diagnosis.',
+  fixLead: 'When someone reports a bug, ask your AI:',
+  fixCheck: 'The cause, the files to change and how to check it. You review the change before it ships.',
   cursorAlt: 'Add Mushi to Cursor',
-  vscodeLabel: 'Install in VS Code',
-  claudeLabel: 'Using Claude Code? Add Mushi with one command',
-  npxCmd: 'npx mushi-mushi',
-  moreLabel: 'Windsurf, Zed and more',
-  moreHref: '/connect',
+  otherLabel: 'Choose your editor',
+  otherHref: '/connect',
+  /** For someone without an AI editor: the same wizard, by hand. */
+  noEditor: 'No AI editor? Run it yourself:',
 } as const
 
 /** Landing FAQ — visible Q&A doubles as FAQPage JSON-LD (answers stay plain text). */

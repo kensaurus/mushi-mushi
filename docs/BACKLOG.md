@@ -7,7 +7,12 @@ regenerating it.** Plans stay the source of truth for their own detail
 (`docs/execplans/PLANS.md` and each plan file); a row here points at them so
 parked work is visible in one place.
 
-- **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
+- **Last regenerated:** 2026-10-27 (fourth run; delta against 2026-10-17 below)
+- **Added 2026-10-27 (per-app Home):** BL-135, parts the Home redesign left out.
+- **Added 2026-10-27 (repo clean-up, ADR 0051):** BL-140, the worker's `prune_own`; BL-141, a clean-up run killed mid-flight.
+- **Added 2026-10-27 (release 2):** BL-136 and BL-137: the Set up rail and the server's first-report step count different reports, and the local-worker claim race ADR 0048 names.
+- **Added 2026-10-27 (worker modes, console ops plan P3):** BL-138 and BL-139: the `ux` lane mode left out of P3, and what the conflicts, audit and skill modes left open.
+- **Delta 2026-10-27:** 12 new (BL-123..BL-130 from the scan; BL-131..BL-134 host-repo follow-ups from the 2026-10-26 CI cost rollout) · 0 closed · 0 newly stale · 0 moved to verify-done (BL-011, BL-013, BL-040, BL-041, BL-068, BL-069, BL-071, BL-079, BL-096, BL-098, BL-099, BL-107, BL-108, BL-115, BL-121 re-checked in code: still open)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
@@ -18,25 +23,34 @@ parked work is visible in one place.
 - **Added 2026-10-22 (known vulnerabilities):** BL-109..BL-115, an owner decision and parked parts of ADR 0038.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
-- **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 57 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
+- **Open items:** 75 · **Recently closed:** 24 (BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
-| deferred-plan-phase | 10 |
-| test-gap | 2 |
-| tech-debt | 12 |
-| known-bug | 1 |
-| decision-needed | 10 |
-| unfinished-feature | 22 |
-| needs-triage | 0 |
+| deferred-plan-phase | 12 |
+| test-gap | 3 |
+| tech-debt | 16 |
+| known-bug | 3 |
+| decision-needed | 12 |
+| unfinished-feature | 26 |
+| dependency | 2 |
+| needs-triage | 1 |
 
 | Status | Open |
 |---|---|
-| relevant | 54 |
+| relevant | 72 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
+> **Scanned 2026-10-27** on `origin/master` `23dd367c` plus the docs commits of the CI cost branch.
+> Code markers: 47 raw `TODO/FIXME/HACK/XXX` lines (apps 4, packages 42, scripts 1), 2 of them parked
+> work (BL-011, BL-069), none added after 2026-10-17. Skipped tests: about 145 matching lines, mostly
+> credential or env guards in `examples/e2e-dogfood`; the runtime skips are BL-123 (BL-064 fixed one file and is closed). Plans:
+> `local-only.md` (BL-125), `ci-runners.md` (BL-126), `verified-fixes.md` (BL-127). ADR headers still
+> `Proposed` with shipped code: BL-124. Audits: BL-128..BL-130. Open PRs: #338 still open (BL-080),
+> 15 Dependabot PRs (BL-081). Nothing was found stale.
+>
 > **Scanned 2026-10-17** on `origin/master` `3fc2476d` (#494, the PR that wrote
 > the last register). Code markers: 24 raw `TODO/FIXME/HACK/XXX` hits outside
 > tests and markdown, 2 of them parked work (BL-011, BL-069); the rest are
@@ -140,6 +154,25 @@ parked work is visible in one place.
 | BL-120 | unfinished-feature | Scheduled UX audits per app from the console: today `mushi-ux audit` runs where a cached signed-in profile lives (a machine timer); the console should schedule it per app (a CI workflow template with a stored session, or the local agent) and show its runs | relevant | medium | ADR 0045 | — |
 | BL-121 | dependency | Edge functions run `npm:ai@4`, `npm:@ai-sdk/anthropic@1` / `openai@1` and `npm:zod@3` (16 / 6 / 75 imports) while the Node packages are on `ai` 6; every production LLM call (triage, reviews, diagnosis) is on AI SDK 4. Plan the move to the current AI SDK + zod 4 as one change with a live triage check (official guide: https://ai-sdk.dev/docs/migration-guides) | relevant | medium | `packages/server/supabase/functions/**` (pnpm outdated + grep, 2026-10-25) | — |
 | BL-122 | dependency | Majors that raise a published package's Node floor or change repo-wide tooling, deferred: `ai` 7 / `@ai-sdk/*` 4 in packages/agents (Node 22), commander 15 in packages/cli and ux (Node 22.12; engines say >=20.19.0), TypeScript 7 (native compiler), vitest 5 (39 packages, Node 22.12), tsup 9 (35 packages, Node 22.18), @changesets/cli 3 (release flow), size-limit 14 | relevant | low | pnpm outdated (2026-10-25); official migration guides read 2026-10-25 | — |
+| BL-123 | test-gap | e2e-dogfood steps skip at runtime when an earlier step failed (`test.skip(cond)` in user-story-triage, full-pdca and inbox-no-unicode-escapes), so a broken step reads as skipped, not failed; same shape as BL-064 | relevant | med | `examples/e2e-dogfood/tests/user-story-triage.spec.ts:135`; `examples/e2e-dogfood/tests/full-pdca.spec.ts:108`; `examples/e2e-dogfood/tests/inbox-no-unicode-escapes.spec.ts:58` | — |
+| BL-124 | decision-needed | Six ADRs are still `Proposed` although their code shipped: 0030 (#534, #536), 0031 (#539), 0033 (#547), 0035 (#552), 0037 (#580, #581), 0038 (#590). Accept each, or reject it and say why | relevant | med | `docs/adr/0030-agent-pr-review-gate.md:3`; `docs/adr/0031-universal-ai-keys-serve-every-app-their-owner-owns.md:3`; `docs/adr/0033-ci-runners-are-visible-and-infra-failures-are-not-code-failures.md:3`; `docs/adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md:3`; `docs/adr/0037-ci-placement-cost-and-repo-variable-writes.md:3`; `docs/adr/0038-known-vulnerability-findings-are-bugs.md:3` | — |
+| BL-125 | deferred-plan-phase | Verifiably local mode (ADR 0034, Proposed), Phases 0–7: nothing built yet (no `egress.ts`, no `egress_denials` migration) | relevant | low | `docs/execplans/local-only.md:99`-`:119` | — |
+| BL-126 | needs-triage | Plan 022 (CI runners) checkboxes are stale: Phases 1–5 and 7a/7b are in code (`_shared/ci-infra.ts`, `_shared/ci-runs-on.ts`, `_shared/ci-cost.ts`, `packages/cli/src/commands/runner.ts`, migration `20261021111344_ci_runner_visibility.sql`). Tick them, and finish Phase 6 (docs) | relevant | low | `docs/execplans/ci-runners.md:136`-`:170` | — |
+| BL-127 | deferred-plan-phase | Verified fixes, Phase 4 "Ship": the live glot.it watch and turning `verified_auto_merge` on are owner steps; Phases 1–3 are in code (`_shared/fix-verify.ts`, `fix-verifier`, `.github/actions/fix-verify/`) | relevant | med | `docs/execplans/verified-fixes.md:244`-`:250` | — |
+| BL-128 | known-bug | Red-team #12: the console's "Report a bug" modal posts to `/v1/support/contact`, which needs a signed-in session (`jwtAuth`), so a signed-out visitor's report is lost on a 401. Whether the entry point still shows when signed out was not re-checked | relevant | med | `docs/red-team-2026-07-02/red-team-defect-report.md:243`-`:247`; `packages/server/supabase/functions/api/routes/admin-ops.ts:1908` | — |
+| BL-129 | tech-debt | Audit 2026-06-15 leftovers: FE-API-1 (no Zod check on `apiFetch` responses, now at `apps/admin/src/lib/supabase.ts:253`), DB-1/2/3 open, PERF-3 partial. FE-API-1 overlaps the zod tranche in BL-016 | relevant | low | `docs/audit-2026-06-15/findings.md:51`-`:53` | — |
+| BL-130 | decision-needed | Audit 2026-06-24 owner steps left: the long-lived IAM user `github-actions-deploy` still serves other kensaurus repos (move them to OIDC, then delete the key); confirm point-in-time recovery in the Supabase dashboard; smoke-test one admin deploy after the OIDC switch | relevant | high | `docs/audit-2026-06-24/pre-launch-hardening-complete.md:58`, `:230`-`:233` | — |
+| BL-131 | known-bug | glot.it: two scheduled jobs on main fail (neither is a required check): visual regression's preview server never starts (run 40273405398), and fixture staleness fails while opening its refresh PR (run 40298487204). Fix in glot.it's next release batch | relevant | low | glot.it Actions runs 40273405398, 40298487204; owner handoff `ci-cost-2026-10-26.md` | — |
+| BL-132 | tech-debt | tsumagoi: two file pairs differ only in letter case (`StayGuide.tsx` / `stayGuide.ts`, `Hud.tsx` / `hud.ts`), so its pre-push hook cannot pass on a Windows checkout (PR #929 was pushed from Linux for this). Rename them in tsumagoi's next batch, on its own PR with the deploy watched (a live inn) | relevant | med | tsumagoi repo; owner handoff `ci-cost-2026-10-26.md` | — |
+| BL-133 | tech-debt | yen-yen: workflow lint (actionlint) fails on every workflow PR because `shellcheck` is not installed on the self-hosted runner; a local run of the same linter is clean. Install shellcheck in the runner setup (owner) | relevant | low | yen-yen repo; owner handoff `ci-cost-2026-10-26.md` | — |
+| BL-134 | tech-debt | Host repos run advisory crons daily (security scans, OTA checks, store reviews); the owner's CI cost rule says advisory crons run weekly. Move them in each repo's next batch, except crons that drive a staged OTA rollout on purpose. The CI page's new `cron_too_frequent` rule will list them | relevant | low | owner rule `ci-cost-discipline.md` §2 and §9; owner handoff `ci-cost-2026-10-26.md` | — |
+| BL-135 | unfinished-feature | Per-app Home (2026-10-27) left out: Needs you does not list Cursor credits about to expire (`byok_keys.credits_expire_at`, needs the key-owner filter per app); `GET /v1/admin/projects/:id/home` has no MCP tool or `mushi` command (surface-parity `jwt-only`); a page's bug badge opens the 14-day report list because reports cannot be filtered by page URL | relevant | low | `packages/server/supabase/functions/api/routes/project-home.ts`; `apps/admin/src/components/home/SitemapCard.tsx`; `scripts/surface-parity.json` | — |
+| BL-136 | decision-needed | Set up rail vs activation step: the console's Set up rail finishes its last step only on a report from the app, while the server's `first_report_received` step (Steps, Home, activation, lifecycle emails) completes on any report, so mushi-demo reads 2 of 4 on the rail and 3 of 4 elsewhere. Aligning the server step changes who counts as activated and which emails go out | relevant | medium | `apps/admin/src/pages/OnboardingPage.tsx`; `packages/server/supabase/functions/_shared/setup-signals.ts`; `lifecycle-emails` | — |
+| BL-137 | known-bug | Local workers (ADR 0048): a worker can claim a report after `fix-worker`'s last lease check but before its agent starts, so a cloud run and a local run can overlap on one report. The lease is read, not held, by the dispatchers | relevant | low | `packages/server/supabase/functions/_shared/work-claims.ts`; `packages/server/supabase/functions/fix-worker/index.ts`; `docs/adr/0048-*.md` | — |
+| BL-138 | unfinished-feature | Local worker `ux` mode (console ops plan P3, row 4): a page's journey intents as charters for the local UX loop (`@mushi-mushi/ux`, ADRs 0045/0046) on the worker's cached browser profile, started from the console ("Run on my worker"). Left out of P3 on purpose so conflicts, audit and skill shipped finished: it needs a stored charter per intent with a closed schema the daemon parses, a check on the machine that the cached profile exists and is signed in, its own claim kind and lease, and an ADR 0045 amendment for runs no person starts in the CLI (ADR 0020 runs the UX agents in the CLI process). `ux` is not in the closed lane modes, so no daemon accepts it yet | relevant | med | `docs/execplans` console ops plan Part 2.2; `packages/ux/`; `packages/cli/src/worker/daemon.ts`; `packages/server/supabase/functions/_shared/work-lanes.ts` (`LANE_MODES`) | — |
+| BL-139 | tech-debt | Worker modes (ADRs 0049, 0050, 0042 amendment) left open: (1) /pipeline still says "needs a person" on a conflict row with follow-ups off even when a `conflicts` lane serves the app (the lane takes it on its own); (2) only spend-down skips a report queued for a local lane, while a person's Slack, Linear or voice dispatch (`dispatchFixForReport`, in `api`'s 5 MB closure) does not; (3) an audit `script` check installs the repo's dependencies and runs its whole script on the machine, bounded to one run a pass and 10 min, with no memory floor of its own; (4) the local conflict lane posts no PR comment (the cloud agent's push is visible on GitHub, the local one only as a merge-queue event) | relevant | low | `packages/server/supabase/functions/_shared/pipeline-view.ts` (`conflict_off`); `packages/server/supabase/functions/_shared/dispatch.ts`; `packages/cli/src/worker/audit.ts`; `packages/cli/src/worker/conflicts.ts` | — |
+| BL-140 | unfinished-feature | Local workers (ADR 0048, 0051): the lane setting `prune_own` is stored and sent but the daemon does not act on it. When on, the worker should remove its own merged or closed worktrees and local branches (only those it created, upstream gone or PR closed), never another lane's; parked because the daemon (`packages/cli/src/worker/`) was being changed by the local-worker lanes in the same release | relevant | low | `packages/cli/src/worker/daemon.ts`; `packages/cli/src/commands/work.ts`; `docs/adr/0051-repo-housekeeping-acts.md` | — |
+| BL-141 | known-bug | Repo clean-up (ADR 0051): a run the edge platform kills mid-flight stays `executing` in `connector_actions`; nothing sweeps it, Reject cannot clear it, and its items count as "already waiting" in the next preview. Needs a sweep that marks stale `executing` clean-ups failed (and their pending item rows) after the wall clock | relevant | low | `packages/server/supabase/functions/_shared/repo-housekeeping-run.ts`; `_shared/connector-actions.ts` | — |
 
 ---
 

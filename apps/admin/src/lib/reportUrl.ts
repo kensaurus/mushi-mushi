@@ -17,9 +17,10 @@
  * always correct regardless of deployment prefix.
  *
  * USAGE
- *   import { reportPermalink, reportDetailPath } from '@/lib/reportUrl'
+ *   import { reportPermalink, reportDetailPath, skillTriagePermalink } from '@/lib/reportUrl'
  *   navigate(reportDetailPath(report.id, activeProjectId))
  *   navigator.clipboard.writeText(reportPermalink(report.id, activeProjectId))
+ *   navigator.clipboard.writeText(skillTriagePermalink(report.id, projectId, skillSlug))
  */
 
 import { isValidProjectId } from './activeProject'
@@ -39,6 +40,29 @@ export function reportDetailPath(reportId: string, projectId?: string | null): s
  */
 export function reportPermalink(reportId: string, projectId?: string | null): string {
   return appUrl(reportDetailPath(reportId, projectId))
+}
+
+/**
+ * Absolute triage URL for one recommended skill on a report.
+ * Keeps `?project=` when the id is valid: the console pins the project from
+ * the URL before local storage, and a link without it opens under whatever
+ * app the recipient had open (the report-detail 404 calls that mismatch out).
+ * The skill slug is set as a query parameter, never concatenated, so a slug
+ * cannot inject extra parameters.
+ */
+export function skillTriagePermalink(
+  reportId: string,
+  projectId: string | null | undefined,
+  skillSlug: string,
+): string {
+  const path = reportDetailPath(reportId, projectId)
+  const q = path.indexOf('?')
+  const pathname = q === -1 ? path : path.slice(0, q)
+  const params = new URLSearchParams(q === -1 ? '' : path.slice(q + 1))
+  const slug = skillSlug.trim()
+  if (slug) params.set('skill', slug)
+  const merged = params.toString()
+  return appUrl(merged ? `${pathname}?${merged}` : pathname)
 }
 
 /**

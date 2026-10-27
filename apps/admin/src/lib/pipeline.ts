@@ -6,7 +6,9 @@
  *          each one changes before it runs, and calls its route:
  *
  *            re_review, rerun_ci, queue_merge → the existing fix and merge-queue routes
+ *            dismiss                          → the report's own close route (PATCH /v1/admin/reports/:id)
  *            everything else                  → POST /v1/admin/pipeline/actions
+ *                                               (requeue sends local worker run ids as claimIds)
  */
 
 import { apiFetch } from './supabase'
@@ -24,6 +26,8 @@ export type PipelineAction =
   | 'remove'
   | 'close'
   | 'followup'
+  | 'dismiss'
+  | 'requeue'
 
 export interface PipelineItem {
   id: string
@@ -41,6 +45,12 @@ export interface PipelineItem {
   failingChecks: string[]
   review: { verdict: string | null; summary: string | null; findings: string[] } | null
   queueDetail: string | null
+  /**
+   * The group's actions the server already knows it would refuse for this
+   * item, each with the reason it would give (report 69fcafcb). Shown
+   * disabled with that reason. Absent on an older server: every action offered.
+   */
+  blocked?: Partial<Record<PipelineAction, string>>
 }
 
 export interface PipelineGroup {
@@ -82,7 +92,15 @@ export interface DispatcherStatus {
   autofixOn: boolean
   opener: 'server' | 'local' | 'both' | 'nobody'
   server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
-  local: { runs24h: number; running: number; lastAt: string | null }
+  local: {
+    runs24h: number
+    running: number
+    lastAt: string | null
+    /** Registered local worker lanes (ADR 0048), those taking new reports, and their models. */
+    lanes?: number
+    lanesActive?: number
+    models?: string[]
+  }
   problem: string | null
 }
 
@@ -194,6 +212,20 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     needsReason: true,
     variant: 'ghost',
   },
+  dismiss: {
+    label: 'Not a code bug',
+    confirm: 'Closes each report with the reason below and tells its reporter. Nothing runs on it again unless someone reopens it.',
+    needsConfirm: true,
+    needsReason: false,
+    variant: 'ghost',
+  },
+  requeue: {
+    label: 'Requeue',
+    confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
+    needsConfirm: true,
+    needsReason: false,
+    variant: 'success',
+  },
   close: {
     label: 'Close PR',
     confirm: 'Closes each pull request on GitHub without merging and takes it out of the queue.',
@@ -219,7 +251,8 @@ async function viaPipelineRoute(action: PipelineAction, ids: string[], reason?: 
     const res = await apiFetch<{ results: ActionOutcome[] }>(ACTIONS_PATH, {
       method: 'POST',
       scope: 'enumeration',
-      body: JSON.stringify({ action, fixIds: chunk, reason }),
+      // Requeue items are local worker runs, not fixes.
+      body: JSON.stringify(action === 'requeue' ? { action, claimIds: chunk } : { action, fixIds: chunk, reason }),
     })
     if (!res.ok || !res.data) {
       const message = res.error?.message ?? 'The request failed.'
@@ -243,9 +276,45 @@ async function perFix(ids: string[], kind: 're_review' | 'rerun_ci'): Promise<Ac
   return out
 }
 
-/** Run one action on these fixes; every item gets its own result. */
-export async function runPipelineAction(action: PipelineAction, fixIds: string[], reason?: string): Promise<ActionOutcome[]> {
+/** "Not a code bug": close each item's report through the report route (the reporter is told). */
+async function dismissReports(fixIds: string[], reportIds: Array<string | null>, reason?: string): Promise<ActionOutcome[]> {
+  const out: ActionOutcome[] = []
+  for (let i = 0; i < fixIds.length; i++) {
+    const reportId = reportIds[i]
+    if (!reportId) {
+      out.push({ id: fixIds[i], ok: false, message: 'No report to close.' })
+      continue
+    }
+    const res = await apiFetch<unknown>(`/v1/admin/reports/${encodeURIComponent(reportId)}`, {
+      method: 'PATCH',
+      scope: 'enumeration',
+      body: JSON.stringify({ status: 'dismissed', ...(reason ? { closed_reason: reason } : {}) }),
+    })
+    out.push(res.ok ? { id: fixIds[i], ok: true, message: 'Report closed; its reporter is told.' } : { id: fixIds[i], ok: false, message: res.error?.message ?? 'The report was not closed.' })
+  }
+  return out
+}
+
+/**
+ * The ids an action may run on: items whose action the server does not
+ * already refuse. A bulk button runs on these only and says how many.
+ */
+export function actionableIds(items: readonly Pick<PipelineItem, 'id' | 'prUrl' | 'reportId' | 'blocked'>[], action: PipelineAction): string[] {
+  return items.filter((i) => (action === 'dismiss' || action === 'requeue' ? !!i.reportId : !!i.prUrl) && !i.blocked?.[action]).map((i) => i.id)
+}
+
+/** The one reason every item gives for an action, or null when they differ or some can run. */
+export function sharedBlockReason(items: readonly Pick<PipelineItem, 'blocked'>[], action: PipelineAction): string | null {
+  const reasons = new Set(items.map((i) => i.blocked?.[action] ?? ''))
+  if (reasons.size !== 1) return null
+  const [only] = reasons
+  return only || null
+}
+
+/** Run one action on these fixes; every item gets its own result. `reportIds` lines up with `fixIds` (dismiss). */
+export async function runPipelineAction(action: PipelineAction, fixIds: string[], reason?: string, reportIds: Array<string | null> = []): Promise<ActionOutcome[]> {
   if (fixIds.length === 0) return []
+  if (action === 'dismiss') return dismissReports(fixIds, reportIds, reason)
   if (action === 're_review' || action === 'rerun_ci') return perFix(fixIds, action)
   if (action === 'queue_merge') {
     const res = await apiFetch<{ queued: number; skipped: Array<{ fixId: string; reason: string }> }>('/v1/admin/merge-queue', {
@@ -298,4 +367,20 @@ export const TRAIN_STATE_TONE: Record<string, 'ok' | 'danger' | 'accent' | 'neut
   building: 'accent',
   testing: 'accent',
   abandoned: 'neutral',
+}
+
+/** One fix's place in the pipeline (GET /v1/admin/pipeline/fix/:id): its group, the group's actions and what the server would refuse. */
+export interface PipelineFixView {
+  generatedAt: string
+  stage: PipelineStageId | null
+  groupId: string | null
+  groupLabel: string | null
+  tone: GroupTone | null
+  actions: PipelineAction[]
+  item: PipelineItem | null
+}
+
+export async function loadPipelineFix(fixId: string): Promise<PipelineFixView | null> {
+  const res = await apiFetch<PipelineFixView>(`/v1/admin/pipeline/fix/${encodeURIComponent(fixId)}`, { scope: 'enumeration' })
+  return res.ok && res.data ? res.data : null
 }
