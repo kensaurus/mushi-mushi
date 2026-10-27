@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Badge, Btn, Card, Skeleton } from '../components/ui'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { IconShieldCheck } from '../components/icons'
@@ -199,18 +200,27 @@ export function ChecksPage() {
         helpHowToUse="Red means the check failed, amber that it found something to fix, green that its last run passed. Grey is not set up, not run yet, or could not be read: never a pass. Open a card to see that check. A Pro pill means the check needs a plan upgrade."
       />
 
-      <PageStatus
-        ariaLabel="Checks status"
-        tone={status.tone}
-        sentence={status.sentence}
-        action={
-          firstRed ? (
-            <Btn size="sm" variant="primary" to={firstRed.path}>
-              Open {firstRed.item.label}
-            </Btn>
-          ) : undefined
-        }
-        data-testid="checks-status"
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <PageStatus
+                ariaLabel="Checks status"
+                tone={status.tone}
+                sentence={status.sentence}
+                action={
+                  firstRed ? (
+                    <Btn size="sm" variant="primary" to={firstRed.path}>
+                      Open {firstRed.item.label}
+                    </Btn>
+                  ) : undefined
+                }
+                data-testid="checks-status"
+              />
+            ),
+          },
+        ]}
       />
 
       <ul className="grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3" aria-label="Checks, failing first">
