@@ -16,7 +16,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import type { TimeToFirstDiagnosis } from '../lib/setupRail'
+import { firstDiagnosisCardModel } from '../lib/setupRail'
+import { invalidateTimeToFirstDiagnosis, useTimeToFirstDiagnosis } from '../lib/useTimeToFirstDiagnosis'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -164,6 +165,9 @@ export function OnboardingPage() {
   const reloadAll = useCallback(() => {
     reloadStats()
     setup.reload()
+    // Report inserts and classification updates. The Verify card does not
+    // read /setup, so without this it stays on its first fetch.
+    invalidateTimeToFirstDiagnosis()
   }, [reloadStats, setup])
 
   useRealtimeReload(['projects', 'project_api_keys', 'reports', 'fix_attempts'], reloadAll)
@@ -1132,15 +1136,14 @@ function formatDiagnosisDuration(ms: number): string {
  * install — the one number to protect before spending on reach.
  */
 function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean; onOpenSdk: () => void }) {
-  const { data, loading } = usePageData<TimeToFirstDiagnosis>(
-    '/v1/admin/onboarding/time-to-first-diagnosis',
-  )
+  const { data, loading } = useTimeToFirstDiagnosis()
   if (!hasApiKey || loading) return null
 
-  const ms = data?.ms ?? null
+  const model = firstDiagnosisCardModel(data)
   const TARGET_MS = 2 * 60 * 1000
 
-  if (ms != null) {
+  if (model.kind === 'measured') {
+    const ms = model.ms
     const underTarget = ms <= TARGET_MS
     return (
       <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
@@ -1163,10 +1166,9 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
     )
   }
 
-  // Only test or seed reports so far: the pipeline works, and the clock is
-  // still waiting on the app (report 9b7624e6). Sending another test report
-  // never clears this card, so it points at the SDK instead.
-  if (data?.testDiagnosisAt) {
+  // Only test or seed reports so far (report 9b7624e6). The 2-minute clock
+  // still waits for a report from the app; the pipeline itself is proven.
+  if (model.kind === 'test_only') {
     return (
       <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
         <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
