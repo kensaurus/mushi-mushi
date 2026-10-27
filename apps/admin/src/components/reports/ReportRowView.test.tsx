@@ -135,6 +135,48 @@ describe('ReportRowView dispatch gate', () => {
     expect(queue?.disabled).toBe(true)
     expect(queue?.title).toBe('The reporter filed this as a feature request.')
   })
+
+  it('a bug in another app explains that, and does not show the pinned checklist', async () => {
+    const row = { ...ROW, status: 'classified', project_id: '542b34e0-019e-41fe-b900-7b637717bb86', project_name: 'yen-yen' } as ReportRow
+    const preflight = {
+      loading: false,
+      ready: false,
+      checks: [],
+      failing: [{ key: 'github', ready: false, label: 'GitHub connected', hint: '', fixHref: '/connect' }],
+      error: null,
+      reload: () => {},
+      repoUrl: 'https://github.com/acme/pinned',
+    }
+    await act(async () => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement('table', null, createElement('tbody', null,
+            createElement(ReportRowView, {
+              row,
+              index: 0,
+              isSelected: false,
+              isCursor: false,
+              onToggleSelect: vi.fn(),
+              onFocus: vi.fn(),
+              onOpen: vi.fn(),
+              onCopyLink: vi.fn(),
+              onDismiss: vi.fn(),
+              onDispatchFix: vi.fn(),
+              preflight: preflight as never,
+              dispatchScopeNote: 'This bug is in yen-yen. Open it to dispatch a fix for that app.',
+            }),
+          )),
+        ),
+      )
+    })
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')
+    await act(async () => trigger?.click())
+    const reason = document.body.querySelector('[data-testid="dispatch-block-reason"]')
+    expect(reason?.textContent).toContain('yen-yen')
+    expect(document.body.textContent).not.toContain('GitHub connected')
+  })
 })
 
 describe('ReportRowView sample reports', () => {

@@ -2,29 +2,27 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+Sends Mushi bug events to a Zapier "Catch Hook", so you can pass them on to
+Notion, Google Sheets, email or any other Zapier app without writing code.
 
-
-Reference Mushi Mushi plugin: forward any Mushi event to a Zapier "Catch
-Hook" trigger so non-engineers can wire Mushi into the rest of the org's
-automation surface (Notion, Sheets, Mailchimp, Slack channels, etc.).
-
-## Install
+**Do you need this package?** Not to get started: on Mushi Cloud you can
+install **Zapier Bridge** from the console's **Marketplace** page and paste
+the Catch Hook URL straight in. Run this package between Mushi and Zapier
+when you want the signature checked and a flat payload that is easier to map
+in Zapier.
 
 ```bash
 npm i @mushi-mushi/plugin-zapier
+export MUSHI_PLUGIN_SECRET=...   # the signing secret you set when installing "Zapier Bridge"
+export ZAPIER_HOOK_URL=https://hooks.zapier.com/hooks/catch/.../...
+export ALLOW_EVENTS=report.classified,fix.applied   # optional
+export DENY_EVENTS=report.status_changed            # optional
+npx -p @mushi-mushi/plugin-zapier mushi-plugin-zapier   # POST /mushi/webhook on PORT (default 3000)
 ```
 
-## Run as a stand-alone server
+Then set the Zapier Bridge webhook URL to `https://<your-host>/mushi/webhook`.
 
-```bash
-ZAPIER_HOOK_URL=https://hooks.zapier.com/hooks/catch/.../...
-MUSHI_PLUGIN_SECRET=...
-ALLOW_EVENTS=report.classified,sla.breached    # optional
-DENY_EVENTS=report.dedup_grouped               # optional
-PORT=3000
-npx mushi-plugin-zapier
-```
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/zapier
 
 The handler subscribes to `*` and forwards a flattened payload that Zapier
 can parse without diving into nested objects:
@@ -53,4 +51,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 506 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 76 edge functions · 509 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

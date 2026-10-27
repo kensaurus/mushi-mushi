@@ -78,3 +78,39 @@ the apps live in personal repos (ADR 0041).
   on 2026-10-24) gets a squash merge of the train instead. GitHub then leaves
   the member PRs open, so Mushi finalizes each member (report Fixed, reporter
   told, regression watch) and then closes its PR as shipped in the train.
+
+## Amendment 2026-10-26: only a PR whose own CI is green rides
+
+Status: Accepted 2026-10-26 by team-lead (Claude) under the owner's explicit delegation ("decide for me please").
+
+In the five days to 2026-10-26, few fixes merged: glot.it had 179 red
+trains, mushi-mushi 58, the-wanting-mind 37 and yen-yen 27. On glot.it, 37 of 40 queued PRs failed CI on their own heads.
+Every train was bisected 8 → 4 → 2 → 1. The member that then failed alone
+was held as `blocked`. But the train tick reads blocked rows too, so the
+held member rode the next train, and the cycle started again. The red-base
+check did not help either. glot.it's `gate` aggregator fails whenever a job
+it needs fails, but it is skipped on main. So main's red npm audit was
+blamed on the members.
+
+- **Who rides** (narrows Decision): every rule above still applies. On top
+  of them, the PR is not a draft and CI on its own head is green: nothing
+  pending, nothing failed. A repo with no checks at all counts as green.
+  A head with no runs, while the base branch has some, waits.
+  - A PR that fails on its own code is held, with the failing checks named.
+    The CI-repair follow-up (ADR 0032) picks it up. Once both rounds are
+    used, the row says a person must fix it.
+  - A PR whose failures are all the base branch's is not blamed. It waits
+    for the base to pass. A failure counts as the base's when the same
+    check fails on the base, or when it did not run there (an aggregator).
+- **Drafts:** an approved draft is marked ready so its CI runs. Only one
+  draft per repo per tick is marked, because each one starts a CI run.
+- **No cycling:** a member does not ride again at the same head if it
+  failed alone in a red train at that head, or if it rode 5 red trains at
+  it within 7 days. One bisection of a full train puts an innocent member
+  in at most 4 red trains. Both rules are read back from
+  `release_trains.members`, and a new commit clears them. Trains that
+  failed on a red base are not counted.
+- **Conflicts:** a train app's `resolving` rows are worked on every tick,
+  not only when the repo is otherwise idle. Before this, they were never
+  worked on, because the train tick held the repo on every tick. At most 2
+  conflict agents run per repo at a time. The rest show how many are ahead.

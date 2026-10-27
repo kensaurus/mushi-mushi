@@ -41,6 +41,7 @@ import {
   coerceSdkConfigUpdate,
   ingestReport,
   invokeFixWorker,
+  logReportRejected,
   normalizeSdkConfig,
   triggerClassification,
   type SdkConfigRow,
@@ -418,7 +419,10 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       // invalid payloads.  IMPORTANT: validate-only — pass original `body` (not
       // validation.data) to ingestReport so SDK fields not in the schema are preserved.
       const bodyValidation = safeParse(ApiReportBodySchema, body);
-      if (bodyValidation instanceof Response) return bodyValidation;
+      if (bodyValidation instanceof Response) {
+        logReportRejected(projectId, 'body', ApiReportBodySchema.safeParse(body).error?.issues ?? [], body);
+        return bodyValidation;
+      }
 
       if (
         typeof body?.projectId === 'string' &&
@@ -501,6 +505,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const { reports } = (await c.req.json()) as { reports: Record<string, any>[] };
 
     if (!Array.isArray(reports) || reports.length === 0) {
+      logReportRejected(projectId, 'batch', [{ path: ['reports'], code: Array.isArray(reports) ? 'too_small' : 'invalid_type' }]);
       return c.json(
         { ok: false, error: { code: 'VALIDATION_ERROR', message: 'reports array required' } },
         400,

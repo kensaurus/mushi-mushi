@@ -34,7 +34,8 @@ import {
 } from '../../_shared/report-status.ts'
 import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
-import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
+import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
+import { isSdkKey } from '../../_shared/setup-signals.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -374,16 +375,17 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: updateErr.message } }, 500)
     }
 
-    // Persist the triage note to report_notes (if the table exists).
-    // This is a best-effort write — we don't fail the PATCH if the insert fails.
+    // The note becomes a team note on the report: the console's "Triage
+    // note", internal and never sent to the reporter. A note-only request
+    // fails loudly when it is not saved; with a status or severity change it
+    // is reported as note_saved:false instead of failing the change.
+    let noteSaved: boolean | undefined
     if (note) {
-      await db.from('report_notes').insert({
-        report_id: id,
-        project_id: projectId,
-        body: note,
-        source: 'cli',
-        created_at: new Date().toISOString(),
-      }).then(() => null, () => null)
+      const saved = await postTeamNote(db, { projectId, reportId: id, body: note, authorName: 'CLI / MCP note' })
+      noteSaved = saved.ok
+      if (!saved.ok && status === undefined && severity === undefined) {
+        return c.json({ ok: false, error: { code: 'NOTE_NOT_SAVED', message: saved.error } }, 500)
+      }
     }
 
     // Fire reporter notification when status changes to resolved or dismissed.
@@ -420,7 +422,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         .then(() => null, () => null)
     }
 
-    return c.json({ ok: true, data: updated })
+    return c.json({ ok: true, data: updated, ...(noteSaved === undefined ? {} : { note_saved: noteSaved }) })
   })
 
   // ── POST /v1/sync/reports/:id/reply ──────────────────────────────────────
@@ -589,11 +591,11 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     const [keysRes, reportsRes, projectRes] = await Promise.all([
       db
         .from('project_api_keys')
-        .select('last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+        .select('scopes, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
         .eq('project_id', projectId)
         .eq('is_active', true)
         .order('last_seen_at', { ascending: false, nullsFirst: false })
-        .limit(1),
+        .limit(50),
       db
         .from('reports')
         .select('id, environment, created_at')
@@ -613,24 +615,20 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       )
     }
 
-    const heartbeat = keysRes.data?.[0] as {
+    // The freshest SDK key (a CLI or MCP key's calls are not the app's SDK).
+    const heartbeat = (keysRes.data ?? []).find((k) => isSdkKey((k as { scopes?: string[] | null }).scopes)) as {
       last_seen_at?: string | null
       last_seen_origin?: string | null
       last_seen_user_agent?: string | null
       last_seen_endpoint_host?: string | null
     } | undefined
 
-    let reportCount = 0
-    let sdkReportSignal = false
-    for (const r of reportsRes.data ?? []) {
-      reportCount += 1
-      const env = (r.environment ?? {}) as Record<string, unknown>
-      const platform = typeof env.platform === 'string' ? env.platform : ''
-      if (platform && platform !== 'mushi-admin') sdkReportSignal = true
-    }
+    const reportCount = (reportsRes.data ?? []).length
 
     const hasKey = (keysRes.data?.length ?? 0) > 0
-    const hasSdk = Boolean(heartbeat?.last_seen_at) || sdkReportSignal
+    // Only an SDK-key check-in installs the SDK: test reports, site audits and
+    // repo scans also carry a platform, and counted apps that never checked in.
+    const hasSdk = Boolean(heartbeat?.last_seen_at)
     const hasReport = reportCount > 0
 
     type Step = {
@@ -664,7 +662,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         complete: hasSdk,
         required: true,
         hint: hasSdk
-          ? 'SDK reached this backend (heartbeat or real report).'
+          ? 'An SDK key from the app checked in with this backend.'
           : 'Install the snippet, set env vars, restart your dev server.',
       },
       {

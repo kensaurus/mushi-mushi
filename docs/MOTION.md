@@ -56,8 +56,8 @@ The web widget reads them from `@mushi-mushi/core` inside Shadow DOM CSS.
 - **Admin** — `theme-tokens.css`, `components.css`, `lib/motion-tokens.ts`
 - **Docs landing** — native scroll + Motion `whileInView` / CSS only
   (`apps/docs/components/landing/*`, wired from `apps/docs/content/index.mdx`).
-  `ProofPinSection` is a **name only** — it uses `LandingStagger` (in-view
-  stagger), not ScrollTrigger / Lenis pins. See
+  The bug-loop row (`<LoopPipeline />` in `packages/marketing-ui`) is CSS
+  keyframes on transform + opacity, static under reduced motion. See
   [`docs/docs-site/LANDING-SYSTEMS.md`](./docs-site/LANDING-SYSTEMS.md).
 
 ## Related
