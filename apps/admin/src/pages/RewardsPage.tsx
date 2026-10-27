@@ -140,9 +140,6 @@ export function RewardsPage() {
                 stats={rewardsStats}
                 statsFetchedAt={rewardsStatsFetchedAt}
                 statsValidating={rewardsStatsValidating}
-                description={activeMeta.description}
-                compact={ux.compactSnapshot}
-                hideLinks={ux.hideSnapshotLinks}
               />
             ),
           },

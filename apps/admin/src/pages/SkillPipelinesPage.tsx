@@ -278,7 +278,6 @@ export function SkillPipelinesPage() {
                 stats={skillsStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                hint="Catalog size, active pipeline runs, and sync posture for kenji skills."
               />
             ),
           },

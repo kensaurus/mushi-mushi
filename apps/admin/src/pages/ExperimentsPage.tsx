@@ -143,7 +143,6 @@ export function ExperimentsPage() {
   // Every mode lands on the work tab that matches the posture (list, or New when empty); the URL wins.
   const rawTab = searchParams.get('tab')
   const activeTab: ExperimentsTabId = explicitExperimentsTab(rawTab) ?? resolveQuickExperimentsRedirect(stats, null) ?? 'experiments'
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: expData,
@@ -281,6 +280,8 @@ export function ExperimentsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Empty page: the snapshot below is its one first step (P3).
+            show: stats.topPriority !== 'no_experiments',
             children: (
               <ExperimentsStatusBanner
                 stats={stats}
@@ -299,9 +300,8 @@ export function ExperimentsPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onCreate={() => setActiveTab('new')}
               />
             ),
           },

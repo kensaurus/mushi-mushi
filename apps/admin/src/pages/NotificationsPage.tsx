@@ -378,8 +378,6 @@ export function NotificationsPage() {
                 stats={stats}
                 fetchedAt={fetchedAt}
                 isValidating={validating}
-                sectionTitle={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'}
-                hint={activeMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

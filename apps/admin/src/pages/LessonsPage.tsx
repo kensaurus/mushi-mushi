@@ -588,7 +588,6 @@ export function LessonsPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickLessonsTab(stats)
   const activeTab: LessonsTabId = explicitLessonsTab(tabParam) ?? (postureTab === 'overview' ? 'lessons' : postureTab)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setActiveTab = useCallback(
     (tab: LessonsTabId) => {
@@ -696,8 +695,6 @@ export function LessonsPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

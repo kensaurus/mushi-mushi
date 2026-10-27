@@ -92,7 +92,6 @@ export function IntelligencePage() {
   const ux = useIntelligenceUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveIntelligenceTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -485,8 +484,6 @@ export function IntelligencePage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

@@ -207,7 +207,6 @@ function HealthPageContent() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveHealthTab(tabParam)
-  const activeTabMeta = HEALTH_TABS.find((t) => t.id === activeTab) ?? HEALTH_TABS[0]
   const window = searchParams.get('window') ?? '24h'
   const recentFilter = searchParams.get('recent') ?? ''
   const fnFilter = searchParams.get('fn') ?? ''
@@ -584,8 +583,6 @@ function HealthPageContent() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

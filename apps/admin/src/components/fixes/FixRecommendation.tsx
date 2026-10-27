@@ -12,7 +12,6 @@
 
 import { RecommendedAction } from '../ui'
 import { credentialAdvice, failureCause, failureHeadline, fixCauseLabel, needsAttention, openPrReports } from '../../lib/fixReportTruth'
-import { pluralizeWithCount } from '../../lib/format'
 import { stoppedTitle } from '../../lib/countDefinitions'
 import type { DispatchJob, FixAttempt } from './types'
 

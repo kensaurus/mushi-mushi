@@ -1,95 +1,61 @@
 /**
  * FILE: LessonsSnapshotStrip.tsx
- * PURPOSE: Lessons library KPI strip using MetricStrip — replaces hand-rolled grid on LessonsPage.
+ * PURPOSE: Lessons status: how many rules Mushi learned from your bugs and
+ *          which recurring patterns are ready to become one (PageStatus, P1).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { LessonsStats } from './LessonsStatsTypes'
-import {
-  activeLessonsTooltip,
-  activeLessonsDetail,
-  criticalLessonsTooltip,
-  criticalLessonsDetail,
-  candidatesTooltip,
-  candidatesDetail,
-  promotedClustersTooltip,
-  promotedClustersDetail,
-  reportsClusteredTooltip,
-  reportsClusteredDetail,
-  highCoherenceTooltip,
-  highCoherenceDetail,
-} from '../../lib/statTooltips/lessons'
+import { pluralizeWithCount } from '../../lib/format'
 import { lessonsLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: LessonsStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
 }
 
-export function LessonsSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'LESSONS SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function lessonsSentence(stats: LessonsStats): string {
+  if (stats.activeLessons === 0 && stats.candidateClusters === 0) {
+    return 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.'
+  }
+  const active = `${pluralizeWithCount(stats.activeLessons, 'lesson')} in use${stats.criticalLessons > 0 ? ` (${stats.criticalLessons} critical)` : ''}`
+  const ready =
+    stats.candidateClusters > 0
+      ? `${pluralizeWithCount(stats.candidateClusters, 'recurring pattern')} ready to become one`
+      : 'no new patterns waiting'
+  return `${active}; ${ready}.`
+}
+
+export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="Lessons snapshot">
-        <StatCard
-          label={statLabels?.activeLessons ?? 'Active lessons'}
-          value={stats.activeLessons}
-          accent={stats.activeLessons > 0 ? 'text-ok' : undefined}
-          tooltip={activeLessonsTooltip(stats)}
-          detail={activeLessonsDetail(stats)}
-          to={lessonsLinks.activeLessons}
-        />
-        <StatCard
-          label={statLabels?.critical ?? 'Critical'}
-          value={stats.criticalLessons}
-          accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={criticalLessonsTooltip(stats)}
-          detail={criticalLessonsDetail()}
-          to={lessonsLinks.critical}
-        />
-        <StatCard
-          label={statLabels?.candidates ?? 'Candidates'}
-          value={stats.candidateClusters}
-          accent={stats.candidateClusters > 0 ? 'text-warn' : undefined}
-          tooltip={candidatesTooltip(stats)}
-          detail={candidatesDetail(stats)}
-          to={lessonsLinks.candidates}
-        />
-        <StatCard
-          label={statLabels?.promoted ?? 'Promoted clusters'}
-          value={stats.promotedClusters}
-          tooltip={promotedClustersTooltip(stats)}
-          detail={promotedClustersDetail()}
-          to={lessonsLinks.promoted}
-        />
-        <StatCard
-          label={statLabels?.reportsClustered ?? 'Reports clustered'}
-          value={stats.totalClusterReports}
-          tooltip={reportsClusteredTooltip(stats)}
-          detail={reportsClusteredDetail()}
-          to={lessonsLinks.reportsClustered}
-        />
-        <StatCard
-          label={statLabels?.highCoherence ?? 'High coherence'}
-          value={stats.highCoherenceCandidates}
-          accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined}
-          tooltip={highCoherenceTooltip(stats)}
-          detail={highCoherenceDetail()}
-          to={lessonsLinks.highCoherence}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Lessons status"
+      tone={stats.criticalLessons > 0 ? 'warn' : stats.candidateClusters > 0 ? 'info' : 'ok'}
+      sentence={lessonsSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.activeLessons ?? 'Lessons in use',
+          value: stats.activeLessons,
+          hint: 'Rules Mushi applies when it diagnoses a new report.',
+          to: lessonsLinks.activeLessons,
+        },
+        {
+          label: statLabels?.candidates ?? 'Ready to promote',
+          value: stats.candidateClusters,
+          tone: stats.candidateClusters > 0 ? 'warn' : 'neutral',
+          hint: 'Groups of similar reports that could become a lesson. Promote one to apply it.',
+          to: lessonsLinks.candidates,
+        },
+        {
+          label: statLabels?.reportsClustered ?? 'Reports grouped',
+          value: stats.totalClusterReports,
+          hint: 'Reports that belong to a recurring pattern.',
+          to: lessonsLinks.reportsClustered,
+        },
+      ]}
+    />
   )
 }

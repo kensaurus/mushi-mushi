@@ -118,7 +118,6 @@ export function AnomaliesPage() {
   const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveAnomaliesTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const {
     data: statsData,
@@ -325,7 +324,8 @@ export function AnomaliesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isAnomaliesStatusBannerCritical(stats),
+            // No metrics: the snapshot below is the page's one first step (P3).
+            show: isAnomaliesStatusBannerCritical(stats) && stats.topPriority !== 'no_metrics',
             children: (
               <AnomaliesStatusBanner
                 stats={stats}
@@ -344,9 +344,8 @@ export function AnomaliesPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onAddMetrics={() => setActiveTab('metrics')}
               />
             ),
           },

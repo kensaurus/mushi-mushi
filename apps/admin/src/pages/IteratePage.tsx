@@ -68,7 +68,6 @@ export function IteratePage() {
   const ux = useIterateUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveIterateTab(searchParams.get('tab'))
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -338,6 +337,8 @@ export function IteratePage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // No runs: the snapshot below is the page's one first step (P3).
+            show: stats.topPriority !== 'no_runs',
             children: (
               <IterateStatusBanner
                 stats={stats}
@@ -356,8 +357,6 @@ export function IteratePage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

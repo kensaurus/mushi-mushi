@@ -435,8 +435,6 @@ export function QueryPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'Query snapshot'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),

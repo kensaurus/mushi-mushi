@@ -126,7 +126,6 @@ export function DriftPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveDriftTab(tabParam)
-  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const [selectedFinding, setSelectedFinding] = useState<DriftFinding | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -435,7 +434,8 @@ export function DriftPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isDriftStatusBannerCritical(stats),
+            // Never scanned: the snapshot below is the page's one first step (P3).
+            show: isDriftStatusBannerCritical(stats) && stats.topPriority !== 'never_scanned',
             children: (
               <DriftStatusBanner
                 stats={stats}
@@ -454,9 +454,8 @@ export function DriftPage() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
+                onFirstScan={() => setActiveTab('scanner')}
               />
             ),
           },
