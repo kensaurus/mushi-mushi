@@ -298,6 +298,66 @@ mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
 
 Needs `cursor-agent` and `gh` signed in, and an API key with `mcp:write`.
 
+### `mushi worker`
+
+`mushi work --daemon` runs `mushi work` for you, all the time, as a local
+worker the console can see and steer (Pipeline → Workers). One process serves
+every lane on the machine. A lane is one app and one clone of its repo.
+
+Every minute it sends a heartbeat. The answer holds each lane's settings, set
+in the console: its model, mode, how many reports at once, paused, drain and a
+stop date, plus the machine's guards (agents at once, a free-memory floor, a
+GitHub API floor). The daemon then runs review follow-ups first, and claims
+reports: the lane's queue first, then the worst open reports. While a lane
+holds a report, no cloud agent is sent to it. Every outcome goes back to
+Mushi; a failure of the machine (a clone permission, the network, a hook that
+timed out under load) is kept apart from a failure of the code and never
+counts against the report.
+
+```bash
+# One lane: print what it would write, then write it after you say yes
+mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app --dry-run
+mushi worker install --lane my-app --project <projectId> --repo-dir ~/code/my-app
+
+# Import lanes.conf from the lane-v4 scripts (name profile clone projectId model mode)
+mushi worker install --lanes-conf ~/mushi-credits-handoff/lanes.conf --clone-root ~/.cache/mushi-work
+
+# A worker key made in the console instead of with your CLI login
+mushi worker install --lanes-conf lanes.conf --key-stdin --yes < worker.key
+
+# This machine's lanes and service, then every worker the console sees
+mushi worker status
+
+# Run it in the foreground (the service runs exactly this)
+mushi work --daemon
+
+# Revoke this machine's key and stop the service
+mushi worker revoke
+```
+
+`install` writes the lanes to `~/.config/mushi/worker.json` (the clone paths
+stay on your machine), stores a worker key in the OS keychain (or
+`~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
+service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
+scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
+`fix` become `fix`, `off` becomes a paused lane, and the profile column is
+dropped: one worker key serves every app.
+
+The worker key has the scope `worker:run`: it can take reports for its lanes,
+record their fixes and file reports, and nothing else. It cannot merge, change
+settings or read keys. `install` makes one with your CLI login (which needs
+`mcp:write` on every lane's app), or takes one from stdin. The daemon refuses
+your CLI key. The agent gets neither key.
+
+| Command | Flags |
+| --- | --- |
+| `mushi work --daemon` | `--worker-config <path>` (default `~/.config/mushi/worker.json`) |
+| `mushi worker install` | `--lanes-conf <path>`, `--clone-root <dir>`, or one lane: `--lane`, `--project`, `--repo-dir`, `--model`; `--endpoint`, `--key-stdin`, `--no-service`, `--yes`, `--dry-run` |
+| `mushi worker status` | `--project <id>`, `--json` |
+| `mushi worker revoke` | `--yes` |
+
+Operator guide (service, logs, moving existing lanes): [Local workers](https://github.com/kensaurus/mushi-mushi/blob/master/docs/operators/local-workers.md).
+
 ### `mushi verify`
 
 The `mushi-verify` workflow that proves an agent's fix with a test that fails
