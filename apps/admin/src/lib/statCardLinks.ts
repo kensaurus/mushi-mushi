@@ -97,13 +97,6 @@ export const settingsLinks = {
 
 // Every target below must be a real route / tab / element id:
 // statCardLinks.test.ts checks them (QA bugs 130, 131).
-export const billingLinks = {
-  plan: '/billing?tab=plans',
-  reportsPeriod: '/billing?tab=overview',
-  fixesPeriod: '/fixes',
-  llmCogs: '/cost',
-} as const
-
 export const mcpLinks = {
   activeKeys: '/mcp?tab=setup',
   mcpRead: '/mcp?tab=setup',

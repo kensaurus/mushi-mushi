@@ -1,22 +1,14 @@
 /**
  * FILE: BillingSnapshotStrip.tsx
- * PURPOSE: Billing KPI strip using MetricStrip — replaces hand-rolled StatCard grid on BillingPage.
+ * PURPOSE: The top of Billing: the plan in one line, then one usage meter per
+ *          limit (diagnoses or reports, seats), fixes merged, and the spend cap.
+ *          The meters come from billingMeters.ts; a plain count never shows
+ *          as a ratio (report 1c802df2: "Fixes · period 4/0").
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
-import { formatLlmCost } from '../../lib/format'
-import {
-  fixesPeriodDetail,
-  fixesPeriodTooltip,
-  llmCogsDetail,
-  llmCogsTooltip,
-  planDetail,
-  planTooltip,
-  reportsPeriodDetail,
-  reportsPeriodTooltip,
-} from '../../lib/statTooltips/billing'
-import { billingLinks } from '../../lib/statCardLinks'
+import { Link } from 'react-router-dom'
+import { Section } from '../ui'
+import { billingMeters, planLine, type MeterTone, type SeatUsage, type UsageMeter } from './billingMeters'
 import type { BillingStats } from './types'
 
 interface Props {
@@ -24,101 +16,65 @@ interface Props {
   fetchedAt: string | null
   isValidating?: boolean
   sectionTitle?: string
-  hint?: string
-  statLabels?: Record<string, string>
+  /** Seats used against the plan's limit, when the members stats loaded. */
+  seats?: SeatUsage | null
 }
 
-export function BillingSnapshotStrip({
-  stats,
-  fetchedAt,
-  isValidating,
-  sectionTitle = 'Billing snapshot',
-  hint,
-  statLabels,
-}: Props) {
-  const diagnosesLimit = stats.diagnosesLimit ?? null
-  const diagnosesUsed = stats.diagnosesUsed ?? null
-  const monthlySpendCapUsd = stats.monthlySpendCapUsd ?? null
+const BAR: Record<MeterTone, string> = {
+  ok: 'bg-ok',
+  warn: 'bg-warn',
+  danger: 'bg-danger',
+  neutral: 'bg-fg-faint',
+}
 
+const VALUE: Record<MeterTone, string> = {
+  ok: 'text-fg',
+  warn: 'text-warn',
+  danger: 'text-danger',
+  neutral: 'text-fg',
+}
+
+export function BillingSnapshotStrip({ stats, fetchedAt, isValidating, sectionTitle = 'Your plan and usage', seats = null }: Props) {
+  const meters = billingMeters(stats, seats)
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Billing snapshot">
-        <StatCard
-          label={statLabels?.plan ?? 'Plan'}
-          value={stats.planDisplayName}
-          accent={
-            stats.isComplimentary
-              ? 'text-brand'
-              : stats.planId === 'hobby' || stats.planId === 'free_cloud'
-                ? undefined
-                : 'text-ok'
-          }
-          tooltip={planTooltip(stats)}
-          detail={planDetail(stats)}
-          to={billingLinks.plan}
-        />
-        {diagnosesLimit != null ? (
-          <StatCard
-            label="Diagnoses · period"
-            value={
-              diagnosesLimit != null && diagnosesUsed != null
-                ? `${diagnosesUsed.toLocaleString()} / ${diagnosesLimit.toLocaleString()}`
-                : (diagnosesUsed ?? 0).toLocaleString()
-            }
-            accent={
-              stats.overDiagnosisQuota
-                ? 'text-danger'
-                : stats.approachingDiagnosisQuota
-                  ? 'text-warn'
-                  : 'text-ok'
-            }
-            tooltip="Completed AI diagnoses (Stage-2 classifications) this billing period."
-            detail={
-              stats.diagnosesUsagePct != null ? `${stats.diagnosesUsagePct}% used` : undefined
-            }
-            to={billingLinks.reportsPeriod}
-          />
-        ) : (
-          <StatCard
-            label={statLabels?.reports ?? 'Reports · period'}
-            value={
-              stats.reportsLimit != null
-                ? `${stats.reportsUsed.toLocaleString()} / ${stats.reportsLimit.toLocaleString()}`
-                : stats.reportsUsed.toLocaleString()
-            }
-            accent={stats.overQuota ? 'text-danger' : stats.approachingQuota ? 'text-warn' : 'text-ok'}
-            tooltip={reportsPeriodTooltip(stats)}
-            detail={reportsPeriodDetail(stats)}
-            to={billingLinks.reportsPeriod}
-          />
-        )}
-        <StatCard
-          label={statLabels?.fixes ?? 'Fixes · period'}
-          value={`${stats.fixesSucceeded}/${stats.fixesAttempted}`}
-          accent={stats.fixesAttempted > 0 ? 'text-info' : undefined}
-          tooltip={fixesPeriodTooltip(stats)}
-          detail={fixesPeriodDetail()}
-          to={billingLinks.fixesPeriod}
-        />
-        {monthlySpendCapUsd != null ? (
-          <StatCard
-            label="Spend cap · month"
-            value={`$${monthlySpendCapUsd}`}
-            tooltip="Hard monthly spend cap. Diagnoses pause when overage cost hits this limit — no surprise charges."
-            detail="Anti-surprise guard"
-            to={billingLinks.plan}
-          />
-        ) : (
-          <StatCard
-            label={statLabels?.llmCogs ?? 'LLM COGS · month'}
-            value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
-            tooltip={llmCogsTooltip(stats)}
-            detail={llmCogsDetail(stats)}
-            to={billingLinks.llmCogs}
-          />
-        )}
-      </MetricStrip>
+      <p className="mb-2.5 text-sm text-fg" data-testid="billing-plan-line">
+        {planLine(stats)}
+      </p>
+      <ul aria-label="Usage this period" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {meters.map((m) => (
+          <MeterCard key={m.id} meter={m} />
+        ))}
+      </ul>
     </Section>
+  )
+}
+
+function MeterCard({ meter }: { meter: UsageMeter }) {
+  const label = meter.to ? (
+    <Link to={meter.to} className="hover:text-fg hover:underline underline-offset-2">
+      {meter.label}
+    </Link>
+  ) : (
+    meter.label
+  )
+  return (
+    <li className="min-w-0 rounded-sm border border-edge-subtle bg-surface px-3 py-2.5" data-testid={`billing-meter-${meter.id}`}>
+      <p className="text-2xs font-medium text-fg-muted">{label}</p>
+      <p className={`mt-0.5 text-base font-semibold tabular-nums leading-tight ${VALUE[meter.tone]}`}>{meter.value}</p>
+      {meter.pct != null ? (
+        <div
+          role="meter"
+          aria-label={meter.label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={meter.pct}
+          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-hover"
+        >
+          <div className={`h-full rounded-full ${BAR[meter.tone]}`} style={{ width: `${Math.max(meter.pct, 2)}%` }} />
+        </div>
+      ) : null}
+      <p className="mt-1 text-2xs leading-snug text-fg-muted text-pretty">{meter.detail}</p>
+    </li>
   )
 }
