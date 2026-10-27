@@ -840,13 +840,13 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About experiments',
-        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi assigns users through the SDK and tells you when a winner is clear (statistically: CUPED variance reduction, mSPRT always-valid p-values and SRM checks).',
+        whatIsIt: 'Compare two or more versions of a screen and see which one more users finish. Mushi splits your users through the SDK and tells you when one version is clearly ahead.',
         useCases: [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on conversion rate',
-          'Use bandit mode for fast exploration with small samples',
+          'Send more users to the winning version while the test runs, when you have few users',
         ],
-        howToUse: 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: the test (mSPRT) does not cry wolf when you peek.',
+        howToUse: 'Create an experiment, add versions, start it. The SDK assigns users via mushi.experiment(). Check the result at any time: looking early does not fake a winner.',
       },
     },
     '/anomalies': {
