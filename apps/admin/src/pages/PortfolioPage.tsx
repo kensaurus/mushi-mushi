@@ -28,13 +28,14 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, Section, StatCard, StatGrid } from '../components/ui'
+import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section } from '../components/ui'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { findingGroupTitle, needsALook, sortPortfolioCards } from '../components/portfolio/portfolioView'
+import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards } from '../components/portfolio/portfolioView'
+import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { MonetizationCard } from '../components/portfolio/MonetizationCard'
@@ -99,7 +100,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const { isAdvanced } = useAdminMode()
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
-  const needsLook = cards.filter(needsALook).length
+  const status = useMemo(() => portfolioStatusSentence(cards), [cards])
+  const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
+  const firstNext = status.first ? appUrgency(status.first).next : null
   // Apps that need a look get a full card; the rest collapse to one row each.
   const attention = useMemo(() => cards.filter(needsALook), [cards])
   const healthy = useMemo(() => cards.filter((c) => !needsALook(c)), [cards])
@@ -138,16 +141,23 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             show: Boolean(page.data && page.data.cards.length > 0),
             children: page.data ? (
-              <StatGrid>
-                <StatCard label="Apps" value={String(page.data.totalProjects)} />
-                <StatCard label="Need a look" value={String(needsLook)} accent={needsLook > 0 ? 'text-warn' : undefined} hint="Apps with something to fix or not yet checked" />
-                <StatCard label="Fix once" value={String(page.data.repeatedGroups)} hint="Problems open in two or more apps" />
-                <StatCard
-                  label="Missing setups"
-                  value={page.data.holes === null ? '—' : String(page.data.holes)}
-                  hint={page.data.holes === null ? 'Could not read which integrations each app has' : 'Integrations most of your other apps have'}
-                />
-              </StatGrid>
+              <PageStatus
+                sentence={status.sentence}
+                tone={status.tone}
+                ariaLabel="Apps status"
+                metrics={[
+                  { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi setup chores do not count.' },
+                  { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
+                  { label: 'Fix once', value: page.data.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                ]}
+                action={
+                  status.first && firstNext ? (
+                    <Btn size="sm" variant="primary" to={firstNext.to} onClick={() => setActiveProjectIdSnapshot(status.first!.projectId)}>
+                      Open {status.first.name}
+                    </Btn>
+                  ) : undefined
+                }
+              />
             ) : null,
           },
         ]}
@@ -201,7 +211,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               {healthy.length > 0 && (
                 <Card className="p-0">
                   <p className="border-b border-edge px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
-                    Nothing to look at ({healthy.length})
+                    Nothing urgent ({healthy.length})
                   </p>
                   <ul className="divide-y divide-edge">
                     {healthy.map((card) => (

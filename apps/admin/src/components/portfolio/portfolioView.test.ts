@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import {
   budgetText,
-  cardNextStep,
+  appUrgency,
   cardStatusChips,
   findingGroupTitle,
   kindLabel,
   needsALook,
   openReportsText,
+  portfolioStatusSentence,
   radarLabel,
   groupRadarDetectors,
   radarErrorSentence,
@@ -36,15 +37,23 @@ const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
   ...over,
 })
 
+const SETUP_CHORE = {
+  element: 'gates' as const,
+  label: 'Automated checks',
+  state: 'drift' as const,
+  reason: '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks on the Recipe page.',
+}
+
 describe('portfolioView', () => {
-  it('puts the worst recipe state first, then the most open reports', () => {
+  it('puts the most urgent app first: broken, then the most open bugs, then a part to fix, then chores', () => {
     const out = sortPortfolioCards([
-      card({ name: 'ok', worst: 'ok', openReports: 9 }),
-      card({ name: 'err', worst: 'error' }),
-      card({ name: 'drift-few', worst: 'drift', openReports: 1 }),
-      card({ name: 'drift-many', worst: 'drift', openReports: 5 }),
+      card({ name: 'chore', worst: 'drift', needsLook: [SETUP_CHORE] }),
+      card({ name: 'ci-red', worst: 'drift', needsLook: [{ element: 'ci', label: 'CI', state: 'drift', reason: 'CI failure on your latest commit.' }] }),
+      card({ name: 'err', worst: 'error', error: 'could not be composed', needsLook: [] }),
+      card({ name: 'bugs-few', worst: 'drift', openReports: 1, needsLook: [] }),
+      card({ name: 'bugs-many', worst: 'drift', openReports: 5, needsLook: [] }),
     ])
-    expect(out.map((c) => c.name)).toEqual(['err', 'drift-many', 'drift-few', 'ok'])
+    expect(out.map((c) => c.name)).toEqual(['err', 'bugs-many', 'bugs-few', 'ci-red', 'chore'])
   })
 
   it('never shows a radar that has not run as a pass', () => {
@@ -55,17 +64,20 @@ describe('portfolioView', () => {
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Risk checks failed', tone: 'danger' })
   })
 
-  it('a card that says "Needs attention" names why, even when its risk badge says "No risks found"', () => {
-    // Live 2026-10-04: every app had an open Mushi setup check (no monthly AI budget)
-    // counted under Automated checks, while the risk-check badge read "No holes found".
+  it("a Mushi setup chore is named as a chore, never as the app's top problem", () => {
+    // Live 2026-10-27: every card read "Needs attention" with the same next
+    // step, the no-spend-cap setup check, while the app had 33 open bugs.
     const c = card({
       worst: 'drift',
       radar: { checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
-      needsLook: [{ element: 'gates', label: 'Automated checks', state: 'drift', reason: '1 problem to fix: Mushi setup check (1). Open each one for its fix.' }],
+      needsLook: [SETUP_CHORE],
     })
     expect(radarLabel(c.radar).text).toBe('No risks found')
-    expect(needsALook(c)).toBe(true)
-    expect(c.needsLook?.[0].reason).toMatch(/Mushi setup check/)
+    expect(needsALook(c)).toBe(false)
+    expect(appUrgency(c)).toMatchObject({ level: 'chores', chip: { text: 'Mushi setup' } })
+    const withBugs = appUrgency({ ...c, openReports: 33 })
+    expect(withBugs).toMatchObject({ level: 'bugs', chip: { text: 'Bugs to fix' }, next: { text: 'Fix the worst of 33 open bugs', to: '/reports' } })
+    expect(withBugs.next?.text).not.toMatch(/setup/i)
   })
 
   it('"Need a look" never counts an app whose only gap is something not set up', () => {
@@ -179,16 +191,47 @@ describe('cardStatusChips (chips instead of prose)', () => {
   })
 })
 
-describe('cardNextStep', () => {
-  it('offers only the worst problem and counts the rest', () => {
-    expect(
-      cardNextStep({
+describe('appUrgency', () => {
+  it('names a failing part and sends the user to the page that fixes it', () => {
+    const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi could not read your CI builds.' }] }))
+    expect(u).toMatchObject({ level: 'broken', chip: { text: 'CI failing', tone: 'danger' }, next: { to: '/ci' } })
+  })
+
+  it('offers the worst part to fix and counts the rest', () => {
+    const u = appUrgency(
+      card({
+        worst: 'drift',
         needsLook: [
           { element: 'env', state: 'drift', label: 'Env', reason: 'Missing from GitHub: VITE_MUSHI_API_KEY' },
           { element: 'ci', state: 'drift', label: 'CI', reason: 'A macOS job runs on every push' },
         ],
-      } as never),
-    ).toEqual({ label: 'Env', reason: 'Missing from GitHub: VITE_MUSHI_API_KEY', more: 1 })
-    expect(cardNextStep({ needsLook: [] })).toBeNull()
+      }),
+    )
+    expect(u.next).toEqual({ text: 'Env: Missing from GitHub: VITE_MUSHI_API_KEY', to: '/recipe', more: 1 })
+  })
+
+  it('an SDK update is a chore, and a clear app says so only once it was checked', () => {
+    const behind = [{ projectId: 'p', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.1.0', status: 'behind', reason: 'behind' }]
+    expect(appUrgency(card({ needsLook: [], sdk: behind as never }))).toMatchObject({ level: 'behind', chip: { text: 'SDK update' }, next: { to: '/connect' } })
+    expect(appUrgency(card({ needsLook: [] }))).toMatchObject({ chip: { text: 'Not checked yet' }, next: null })
+    const checked = { checkedAt: '2026-10-02T00:00:00Z', status: 'pass' as const, open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 }
+    expect(appUrgency(card({ needsLook: [], radar: checked }))).toMatchObject({ level: 'clear', chip: { text: 'All clear' }, next: null })
+  })
+
+  it('an older server without the problem list still flags a drifting app', () => {
+    expect(appUrgency(card({ worst: 'drift', needsLook: undefined }))).toMatchObject({ level: 'fix', chip: { text: 'Needs a look' } })
+  })
+})
+
+describe('portfolioStatusSentence', () => {
+  it('says how many apps need you and which one first', () => {
+    const cards = sortPortfolioCards([card({ name: 'calm', needsLook: [SETUP_CHORE] }), card({ name: 'yen-yen', openReports: 29, needsLook: [] })])
+    expect(portfolioStatusSentence(cards)).toMatchObject({ sentence: '1 of 2 apps need you. Start with yen-yen: 29 open bugs.', tone: 'warn' })
+  })
+
+  it('never says an app needs you when only chores are left', () => {
+    const out = portfolioStatusSentence([card({ name: 'a', needsLook: [SETUP_CHORE] }), card({ name: 'b', needsLook: [] })])
+    expect(out.first).toBeNull()
+    expect(out.sentence).toMatch(/^No app needs you right now\./)
   })
 })
