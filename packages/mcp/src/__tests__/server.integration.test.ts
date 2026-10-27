@@ -155,6 +155,7 @@ describe('MCP protocol handshake', () => {
       'reopen_report',
       // Sentry pull-import creates reports and spends classification budget
       'import_sentry_issues',
+      'file_report',
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.
       'ask_codebase',
@@ -163,6 +164,8 @@ describe('MCP protocol handshake', () => {
       'propose_recipe_change',
       'propose_portfolio_change',
       'request_connector_action',
+      // Changing where CI runs: a request a person approves (ADR 0037).
+      'request_ci_placement_change',
       // Run-now tools: each starts a server-side run (repo reads, live probes).
       'run_radar',
       'refresh_recipe',
@@ -403,7 +406,7 @@ describe('tool → REST contract', () => {
     expect(JSON.parse(content[0].text)).toEqual({ ok: true, fixId: 'fix_99' })
   })
 
-  it('transition_status PATCHes /reports/:id with reason', async () => {
+  it('transition_status PATCHes /reports/:id and sends its reason as the team note', async () => {
     fetchStub.enqueue({ ok: true, data: { id: 'rep_1', status: 'dismissed' } })
     await client.callTool({
       name: 'transition_status',
@@ -412,7 +415,8 @@ describe('tool → REST contract', () => {
     const call = fetchStub.calls[0]
     expect(call.method).toBe('PATCH')
     expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/reports/rep_1`)
-    expect(call.body).toEqual({ status: 'dismissed', reason: 'duplicate of rep_7' })
+    // The route keeps `note` as the console's internal Triage note; `reason` was dropped.
+    expect(call.body).toEqual({ status: 'dismissed', note: 'duplicate of rep_7' })
   })
 
   it('get_knowledge_graph clamps depth at 4', async () => {

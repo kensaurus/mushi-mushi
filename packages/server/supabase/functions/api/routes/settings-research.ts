@@ -528,6 +528,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       projectName: null as string | null,
       updatedAt: null as string | null,
       slackConfigured: false,
+      slackCanPost: false,
       sentryConfigured: false,
       reporterNotificationsEnabled: false,
       stage2Model: null as string | null,
@@ -598,6 +599,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       test_status: string | null;
       status: string;
       cooldown_until: string | null;
+      exhausted_until?: string | null;
       expires_at?: string | null;
     }>;
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
@@ -605,6 +607,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       status: k.status,
       test_status: k.test_status,
       cooldown_until: k.cooldown_until,
+      exhausted_until: k.exhausted_until ?? null,
       expires_at: k.expires_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
@@ -749,6 +752,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // removes the merge gate and stops spending the Anthropic key on
       // reviews, so project admins only. Validated below.
       'agent_pr_review_enabled',
+      // The reviewer model (migration 20261022021555). Null falls back to the
+      // platform default, so a newer Claude model is a setting, not a deploy.
+      // It spends the project's Anthropic key: project admins only.
+      'agent_pr_review_model',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract (and the same Vault names)
@@ -883,6 +890,25 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const forbidden = requireProjectAdmin(c, project);
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
+        if (!verdict.ok) {
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'agent_pr_review_model') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can change the agent PR review model.',
+        );
+        if (forbidden) return forbidden;
+        // Empty or null goes back to the platform default.
+        if (value === null || (typeof value === 'string' && value.trim() === '')) {
+          updates[key] = null;
+          continue;
+        }
+        const verdict = parseClaudeModelSetting(value);
         if (!verdict.ok) {
           return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
@@ -3348,7 +3374,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .select(
           withOwnerUserColumn(
-            'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
+            'id, provider_slug, label, priority, status, cooldown_until, exhausted_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
             await ownerUserColumnReady(db),
           ),
         )

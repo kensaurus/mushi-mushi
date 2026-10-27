@@ -227,10 +227,10 @@ Add Helm chart region awareness and operator documentation for multi-region depl
 Ship unit tests, CLI extract, CLI README updates, and framework adapter hooks from the CHANGELOG `pending` section.
 
 ### Deliverables
-- [ ] `packages/web/src/lifecycle-hooks.test.ts` — **Not shipped as a dedicated file.** Hooks `beforeSendFeedback` / `onCrashedLastRun` exist in `packages/web/src/mushi.ts` and are listed in presets (`packages/core/src/presets.test.ts`); drop/modify/throw/timeout contract tests were never added.
+- [x] `packages/web/src/lifecycle-hooks.test.ts` — `beforeSendFeedback` drop / modify / throw / 2s timeout, and `onCrashedLastRun` (first run, unclean exit, `pagehide` clean, thrown hook).
 - [x] `packages/web/src/rewards.test.ts` — `initRewards`, `updateRewardsUser`, `enqueue`, `flush`, `teardown` unit-tested.
 - [x] `packages/cli/src/project-bootstrap.ts` — `mushi project create` logic (shipped as `project-bootstrap.ts`, not `project-create.ts`; wired from `packages/cli/src/commands/project.ts`).
-- [ ] `packages/cli/src/project-create.test.ts` — **Not shipped.** No dedicated unit tests for `.env.local` / MCP merge / `saveConfig` at this path.
+- [x] `packages/cli/src/project-create.test.ts` — `persistProjectCreate` covers `.env.local` merge, `.cursor/mcp.json` merge, and `saveConfig`.
 - [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented (synced Jul 2026 docs pass).
 - [x] `packages/react/src/hooks.ts` — `usePulseTrigger`, `useBeforeSendFeedback`, `useOnCrashedLastRun` added.
 - [x] `packages/vue/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` composables added.
@@ -665,3 +665,13 @@ and a compose profile with no route out but an allowlisting proxy. Full
 plan: [`local-only.md`](local-only.md); decision:
 [ADR 0034](../adr/0034-verifiably-local-mode.md).
 
+---
+
+## Plan 024 — Verified fixes (2026-10-21) `IN PROGRESS`
+
+Agent PRs merge on their own only with proof: a fail-to-pass test run by
+the host's `mushi-verify` workflow on its own (or self-hosted) runners, no
+weakened tests, a diff budget, CI green, and two model families that may
+veto but never approve; then a 72-hour regression watch that opens a revert
+PR. Full plan: [`verified-fixes.md`](verified-fixes.md); decision:
+[ADR 0035](../adr/0035-verified-fixes-merge-on-proof-not-on-a-verdict.md).

@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-sdk
 
+## 0.9.1
+
+### Patch Changes
+
+- 271abb8: Each plugin's npm page now says up front whether you need it: most of these integrations are built into Mushi Cloud, and the package is for a self-hosted Mushi or a custom server. Environment variables, commands and event names in the setup steps match the source.
+
 ## 0.9.0
 
 ### Minor Changes

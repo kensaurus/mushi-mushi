@@ -116,6 +116,20 @@ describe('createCursorAgentV1', () => {
     expect((err as CursorApiError).message).toMatch(/^Cursor API 401 unauthorized/)
   })
 
+  it('names a timeout as a Cursor API error instead of a bare "Signal timed out." (MUSHI-MUSHI-SERVER-28)', async () => {
+    const fetchImpl = vi.fn(() => Promise.reject(new DOMException('Signal timed out.', 'TimeoutError'))) as unknown as typeof fetch
+    const err = await createCursorAgentV1({ apiKey: 'k', fetchImpl }, { prompt: 'p', repoUrl: 'https://github.com/o/r' }).catch((e) => e)
+    expect(err).toBeInstanceOf(CursorApiError)
+    expect((err as CursorApiError).status).toBe(0)
+    expect((err as CursorApiError).message).toBe('Cursor API 0 timeout: no answer in 30 s (POST /v1/agents)')
+  })
+
+  it('lets other network failures through unchanged', async () => {
+    const boom = new TypeError('fetch failed')
+    const fetchImpl = vi.fn(() => Promise.reject(boom)) as unknown as typeof fetch
+    await expect(createCursorAgentV1({ apiKey: 'k', fetchImpl }, { prompt: 'p', repoUrl: 'https://github.com/o/r' })).rejects.toBe(boom)
+  })
+
   it('rejects a 2xx body without agent/run ids', async () => {
     const fetchImpl = fetchMockReturning({ agent: {} }, 201)
     await expect(

@@ -1,45 +1,57 @@
 ---
 title: '@mushi-mushi/plugin-sdk'
-description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.
+description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express or Hono.
 ---
 
 # `@mushi-mushi/plugin-sdk`
 
-Build a Mushi plugin in TypeScript. Plugins are HTTPS receivers that
-subscribe to lifecycle events; the SDK handles signature verification,
-delivery deduplication, and structured error responses.
+Write your own small HTTPS server that reacts when Mushi files, triages or
+fixes a bug. The SDK checks Mushi's signature on each request, drops repeat
+deliveries and calls your handler for the event.
+
+You only need it to connect a tool Mushi does not cover. Slack, Discord,
+Teams, Linear, Jira, GitHub Issues, PagerDuty and Sentry are connected on the
+**Integrations** page of the console with no code.
 
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/plugin-sdk
+npm i @mushi-mushi/plugin-sdk express
 ```
 
 ## Express adapter
 
+`createPluginHandler` takes your secret and one handler per event (`'*'`
+catches the rest). `expressMiddleware` wraps it and reads the raw body
+itself, so mount it before `express.json()`.
+
 ```ts
 import express from 'express'
+import { createPluginHandler, createMushiClient } from '@mushi-mushi/plugin-sdk'
 import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
-import { createMushiClient } from '@mushi-mushi/plugin-sdk'
+
+const mushi = createMushiClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+})
+
+const handler = createPluginHandler({
+  secret: process.env.MUSHI_PLUGIN_SECRET!,
+  on: {
+    'report.classified': async (envelope) => {
+      const { report, classification } = envelope.data as {
+        report: { id: string }
+        classification: { severity: string }
+      }
+      if (classification.severity === 'critical') {
+        await mushi.comment(report.id, 'Triaged as critical, paging on-call.')
+      }
+    },
+  },
+})
 
 const app = express()
-const mushi = createMushiClient({ apiKey: process.env.MUSHI_API_KEY! })
-
-app.post(
-  '/mushi/webhook',
-  expressMiddleware({
-    secret: process.env.MUSHI_PLUGIN_SECRET!,
-    handlers: {
-      'report.classified': async (envelope) => {
-        const { report, classification } = envelope.data
-        if (classification.severity === 'critical') {
-          await mushi.comment(report.id, '🚨 Triaged as critical — paging on-call.')
-        }
-      },
-    },
-  }),
-)
-
+app.post('/mushi/webhook', expressMiddleware(handler))
 app.listen(8080)
 ```
 
@@ -47,33 +59,38 @@ app.listen(8080)
 
 ```ts
 import { Hono } from 'hono'
+import { createPluginHandler } from '@mushi-mushi/plugin-sdk'
 import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
 
-const app = new Hono()
-app.post('/mushi/webhook', honoHandler({
+const handler = createPluginHandler({
   secret: Deno.env.get('MUSHI_PLUGIN_SECRET')!,
-  handlers: {
-    '*': async (envelope) => console.log(envelope.event, envelope.data),
-  },
-}))
+  on: { '*': async (envelope) => console.log(envelope.event, envelope.data) },
+})
+
+const app = new Hono()
+app.post('/mushi/webhook', honoHandler(handler))
 ```
 
 ## Verify a signature manually
 
-If you'd rather use your own framework, just call `verifySignature` with
-the raw body and the `Mushi-Signature` header:
+Using another framework? Pass the exact raw body and the `X-Mushi-Signature`
+header to `verifySignature`:
 
 ```ts
 import { verifySignature } from '@mushi-mushi/plugin-sdk'
 
-const result = await verifySignature({
-  payload: rawBodyString,
-  header: req.headers['mushi-signature'] as string,
+const result = verifySignature({
+  rawBody,
+  header: req.headers['x-mushi-signature'] as string,
   secret: process.env.MUSHI_PLUGIN_SECRET!,
 })
 
-if (!result.valid) throw new Error(result.reason)
+if (!result.ok) throw new Error(result.reason)
 ```
+
+For the Standard Webhooks headers, use
+`verifyStandardWebhooksSignature({ rawBody, webhookId, webhookTimestamp, webhookSignature, secret })`.
+It returns the same `{ ok, reason }` shape.
 
 ## Wire format
 
@@ -81,9 +98,11 @@ Mushi POSTs JSON envelopes shaped like:
 
 ```json
 {
-  "id": "evt_01HXY…",
   "event": "report.classified",
-  "createdAt": "2026-04-17T18:42:00.000Z",
+  "deliveryId": "5b0e…",
+  "occurredAt": "2026-04-17T18:42:00.000Z",
+  "projectId": "8c1d…",
+  "pluginSlug": "your-plugin",
   "data": {
     "report": { "id": "rep_01HXY…", "status": "classified" },
     "classification": { "category": "bug", "severity": "high", "confidence": 0.92, "tags": ["payments.stripe-3ds"] }
@@ -91,13 +110,19 @@ Mushi POSTs JSON envelopes shaped like:
 }
 ```
 
-The signature header is Stripe-style:
+Each request carries two signatures over the same body:
 
 ```
-Mushi-Signature: t=1734460920,v1=hex(hmac_sha256(secret, "t=…,b=…"))
+X-Mushi-Signature: t=<unix-ms>,v1=<hex hmac_sha256(secret, "<t>.<rawBody>")>
+webhook-id:        <deliveryId>
+webhook-timestamp: <unix-secs>
+webhook-signature: v1,<base64 hmac_sha256(secret, "<webhook-id>.<webhook-timestamp>.<rawBody>")>
 ```
 
-with a tolerance of 5 minutes (configurable per plugin).
+`createPluginHandler` checks whichever is present. The default tolerance is
+5 minutes; pass `toleranceMs` to `verifySignature` to change it.
+`deliveryId` is unique per delivery, so use it to ignore repeats (the handler
+does this in memory by default; pass `dedupStore` to persist it).
 
 ## See also
 

@@ -174,6 +174,9 @@ export function ActionPillRow({ children, className = '', ...rest }: ActionPillR
 // ─── MetaChip ─────────────────────────────────────────────────
 // Labelled key-value chip: small label above, content below.
 // Used in report headers for metadata like "Reported" date, "Component".
+// The value row is a flex row: chips that pass several spans (reporter name +
+// short id + "· view all") would otherwise render glued together, since JSX
+// drops the newline between sibling elements.
 
 export interface MetaChipProps {
   children: ReactNode
@@ -187,7 +190,7 @@ export function MetaChip({ children, label, title, to, className = '' }: MetaChi
   const inner = (
     <>
       <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</span>
-      <span className="text-fg-muted">{children}</span>
+      <span className="inline-flex min-w-0 items-center gap-1 text-fg-muted">{children}</span>
     </>
   )
   const base = `flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs ${className}`

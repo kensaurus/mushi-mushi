@@ -232,6 +232,8 @@ const LOCK_FILE_NAMES = new Set([
   'Cargo.lock',
   'Gemfile.lock',
   'poetry.lock',
+  'uv.lock',
+  'Pipfile.lock',
   'composer.lock',
   'go.sum',
   'Podfile.lock',
@@ -393,7 +395,7 @@ Check, in this order:
 4. Decisions taken silently: product, copy, pricing, default or design choices, or visual changes across the app (images, layout, theme) with no screenshots, that an owner would want to make. Put the decision in needs_human_decision.
 5. Scope: changes the report did not ask for.
 6. Tests: do new or changed tests fail without the fix and pass with it? Tests that only render, snapshot or mock the thing under test, and deleted or weakened assertions, are findings.
-7. Security: secrets, injection, removed auth or permission checks, unsafe HTML, new network calls or dependencies.
+7. Security: secrets, injection, removed auth or permission checks, unsafe HTML, new network calls or dependencies. Exploit or proof-of-concept code for a vulnerability (a payload, an attack script, a test that performs the attack) is a blocker; a fix for a known advisory needs only the upgrade and, at most, a test that the fixed version is installed.
 8. Conventions visible in the diff: private or internal framework APIs (for example React's private hooks or __SECRET_INTERNALS), unstable or deprecated APIs, dead code and unused exports, disabled lint or type checks (eslint-disable, @ts-ignore, any), hard-coded colours or spacing where the code uses tokens, lock file edits without a matching manifest change.
 
 Severity: blocker = users would be hurt, data lost, or the app broken if merged as-is; major = a real defect or gap to fix in this PR; minor = worth fixing, safe to merge without.
@@ -489,12 +491,21 @@ export function describeCi(
   conclusion: string | null | undefined,
   status: string | null | undefined,
   ciInfra?: unknown,
+  prDraft = false,
 ): { text: string; failed: boolean; infra?: true } {
   const infra = readFixCiInfra(ciInfra)
   if (infra?.infra) {
     return { text: `did not finish (${describeCiInfra(infra)})`, failed: false, infra: true }
   }
   const c = (conclusion ?? '').toLowerCase()
+  // Host repos run no CI on a draft (their required gate fails on purpose
+  // with "Draft PRs run no CI") and run it when the PR is marked ready, which
+  // happens after this review. A red check on a draft is not a test result:
+  // reading it as one held good fixes as "CI failed, cause not shown" (25 of
+  // the holds on 2026-10-26). The merge gates still need green CI later.
+  if (prDraft && c !== 'success') {
+    return { text: 'not run yet (the PR is a draft; the repo runs CI when it is marked ready, after this review)', failed: false }
+  }
   if (c === 'success') return { text: 'passed', failed: false }
   if (c === 'failure' || c === 'timed_out' || c === 'cancelled' || c === 'action_required') {
     return { text: `failed (${c})`, failed: true }

@@ -5,8 +5,10 @@
  *          cloud coding agent opens as a fix, on the project's Anthropic key,
  *          and a "hold" verdict blocks merging from Mushi without an override.
  *
- *          Reads and writes `agent_pr_review_enabled` through
- *          GET / PATCH /v1/admin/settings (project admins only on write).
+ *          Reads and writes `agent_pr_review_enabled` and the reviewer model
+ *          `agent_pr_review_model` (ADR 0039; empty = the platform default)
+ *          through GET / PATCH /v1/admin/settings (project admins only on
+ *          write). The model saves as soon as it is picked.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -16,9 +18,12 @@ import { ErrorAlert, Toggle } from '../ui'
 import { IconShieldCheck } from '../icons'
 import { ConfigHelp } from '../ConfigHelp'
 import { SettingsList, SettingsRow } from './SettingsRow'
+import { ClaudeModelSelect } from './ClaudeModelSelect'
+import { modelLabel } from '../../lib/claudeModels'
 
 interface AgentPrReviewSettings {
   agent_pr_review_enabled?: boolean
+  agent_pr_review_model?: string | null
 }
 
 export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
@@ -28,6 +33,7 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
   const [available, setAvailable] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [model, setModel] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -39,6 +45,7 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
     const value = res.data?.agent_pr_review_enabled
     setAvailable(typeof value === 'boolean')
     setEnabled(value !== false)
+    setModel(res.data?.agent_pr_review_model ?? null)
   }, [])
 
   useEffect(() => {
@@ -60,6 +67,21 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
     toast.success(next ? 'Agent PR review is on' : 'Agent PR review is off')
   }
 
+  async function changeModel(next: string) {
+    const previous = model
+    setModel(next)
+    const res = await apiFetch('/v1/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ agent_pr_review_model: next }),
+    })
+    if (!res.ok) {
+      setModel(previous)
+      toast.error('Could not change the review model', res.error?.message)
+      return
+    }
+    toast.success(`Reviews now run on ${modelLabel(next)}`)
+  }
+
   return (
     <SettingsList title="Cloud agent pull requests">
       <SettingsRow
@@ -72,7 +94,7 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
         }
         purpose={
           <>
-            Claude Opus 5.5 reads every pull request that Cursor or a GitHub cloud agent opens as a fix, with the bug
+            The review model below reads every pull request that Cursor or a GitHub cloud agent opens as a fix, with the bug
             report and CI, and answers merge, fix first or hold. A hold stops merging from Mushi until a member chooses
             to merge anyway, with a reason. It runs on your Anthropic key (usually $0.05 to $0.20 a review) and is
             skipped without one.
@@ -87,6 +109,9 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
           />
         }
       >
+        {available && enabled !== null ? (
+          <ClaudeModelSelect role="pr_review" label="Review model" value={model} onChange={(id) => void changeModel(id)} />
+        ) : null}
         {!available && enabled !== null ? (
           <p className="text-2xs text-fg-faint">This setting becomes available after the next server update.</p>
         ) : null}

@@ -19,6 +19,12 @@
  *          and its override rules, and merges only the head it saw.
  *
  *          No other file calls `mergeGithubPullRequest` (a test scans for it).
+ *
+ *          A service caller (`caller: 'service'`, the fix-verifier worker's
+ *          verified merge, ADR 0035) can never override a hold or merge past
+ *          a pending review, whatever else it passes; it merges only a PR
+ *          whose current Opus verdict on this exact head is "merge", and only
+ *          the head it names (`expectedHeadSha`).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -26,6 +32,7 @@ import { mergeGithubPullRequest, type MergeMethod } from './fix-merge.ts'
 import { fetchPullRequest, type GithubRepoRef, type PullRequestSnapshot } from './github.ts'
 import { connectedRepoRefs, sameRepo } from './github-pr-checks.ts'
 import { decidePrGate, loadReviewsForPr, type GateCaller, type GateEvaluation } from './fix-review-db.ts'
+import { recordMergedHead, type MergedHeadTarget } from './fix-verify-db.ts'
 
 export interface GatedMergeInput extends GateCaller {
   projectId: string
@@ -37,7 +44,19 @@ export interface GatedMergeInput extends GateCaller {
   /** The PR the caller already read from GitHub (head and base repo); fetched when omitted. */
   pull?: Pick<PullRequestSnapshot, 'headSha' | 'baseRepoId' | 'baseRepoFullName'>
   merge: { mergeMethod: MergeMethod; commitTitle?: string; commitMessage?: string }
+  /**
+   * 'service': Mushi itself is merging (no person, no key). The override and
+   * pending-review fields above are ignored for it.
+   */
+  caller?: 'service'
+  /** Why a service caller merges (audited), e.g. 'verified_auto_merge'. */
+  reason?: string
+  /** The head the caller checked; any other head is refused (409 HEAD_MOVED) and GitHub merges only this one. */
+  expectedHeadSha?: string | null
 }
+
+/** What a service caller is held to: no override, no merge past a pending review, never a console session. */
+const SERVICE_CALLER: GateCaller = { override: false, overrideReason: null, confirmPendingReview: false, authMethod: 'service', role: null }
 
 type MergeResult = Awaited<ReturnType<typeof mergeGithubPullRequest>>
 
@@ -67,6 +86,19 @@ export async function gatedMergePullRequest(db: SupabaseClient, input: GatedMerg
     }
   }
   const currentHead = pull.headSha ?? null
+  const service = input.caller === 'service'
+  if (service && !input.expectedHeadSha) {
+    return { ok: false, status: 400, code: 'HEAD_REQUIRED', message: 'A service merge must name the head commit it checked.', review: null }
+  }
+  if (input.expectedHeadSha && currentHead !== input.expectedHeadSha) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'HEAD_MOVED',
+      message: 'The pull request got new commits after it was checked. Nothing was merged; the new commits are checked from the start.',
+      review: null,
+    }
+  }
   const asked = `${input.ref.owner}/${input.ref.repo}`.toLowerCase()
   // The repo as GitHub names it now. GitHub redirects an old name after a
   // rename, so the URL's spelling is not the PR's identity.
@@ -104,25 +136,131 @@ export async function gatedMergePullRequest(db: SupabaseClient, input: GatedMerg
     number: input.number,
     fixAttemptId: input.fixAttemptId ?? null,
   })
-  const gate = decidePrGate(found, currentHead, input, input.fixAttemptId ?? null)
+  const gate = decidePrGate(found, currentHead, service ? SERVICE_CALLER : input, input.fixAttemptId ?? null)
   if (!gate.ok) return gate
+  // A service merge needs a current "merge" verdict on this exact head: no
+  // review, a stale one or a fix-first is a person's call (ADR 0035).
+  if (service && (gate.review.state !== 'merge' || gate.review.headSha !== currentHead || gate.overridden || gate.mergedBeforeReview)) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'REVIEW_NOT_MERGE',
+      message: 'Mushi merges on its own only when the Opus review of this exact commit says merge.',
+      review: gate.review,
+    }
+  }
 
   const linked = gate.reviewIds.length > 0
   const result = await mergeGithubPullRequest(input.token, ref, input.number, {
     ...input.merge,
-    // Pin the commit whenever a review is linked: new commits after the
-    // check make GitHub refuse instead of merging code nobody reviewed.
-    ...(linked ? { sha: gate.expectedHeadSha ?? currentHead } : {}),
+    // Pin the commit whenever a review is linked or the caller named one:
+    // new commits after the check make GitHub refuse instead of merging code
+    // nobody reviewed.
+    ...(input.expectedHeadSha ? { sha: input.expectedHeadSha } : linked ? { sha: gate.expectedHeadSha ?? currentHead } : {}),
   })
 
-  const audit: Record<string, unknown> = linked || gate.attemptIds.length > 0
+  // Every merge Mushi makes records the head it merged and the merge commit
+  // on the linked fix attempts (ADR 0035), here where every merge route and
+  // the fix-verifier pass, so the 72-hour regression watch cannot miss one.
+  const mergedHead = input.expectedHeadSha ?? (linked ? (gate.expectedHeadSha ?? currentHead) : currentHead)
+  if (result.merged && !result.alreadyMerged && result.sha && mergedHead && gate.attemptIds.length > 0) {
+    await recordMergedHeads(db, gate.attemptIds, mergedHead, result.sha)
+  }
+
+  const audit: Record<string, unknown> = linked || gate.attemptIds.length > 0 || service
     ? {
         fix_attempt_ids: gate.attemptIds,
         review_state: gate.review.state,
-        merged_head_sha: linked ? (gate.expectedHeadSha ?? currentHead) : null,
+        merged_head_sha: input.expectedHeadSha ?? (linked ? (gate.expectedHeadSha ?? currentHead) : null),
+        ...(service ? { merged_by: 'service', service_reason: input.reason ?? null } : {}),
         ...(gate.overridden ? { review_override: true, override_reason: input.overrideReason } : {}),
         ...(gate.mergedBeforeReview ? { merged_before_review: true } : {}),
       }
     : {}
   return { ok: true, result, gate, audit }
+}
+
+/** recordMergedHead for each linked attempt. Never throws: the merge already happened. */
+async function recordMergedHeads(db: SupabaseClient, attemptIds: string[], headSha: string, mergeSha: string): Promise<void> {
+  try {
+    const { data } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url, pr_number').in('id', attemptIds)
+    const mergedAt = new Date().toISOString()
+    for (const a of (data ?? []) as MergedHeadTarget[]) {
+      await recordMergedHead(db, a, { headSha, mergeSha, mergedAt })
+    }
+  } catch {
+    // The regression watch misses this merge; the merge itself stands.
+  }
+}
+
+export interface TrainMember {
+  fixAttemptId: string
+  prNumber: number
+  /** The member PR's head the train merged in. */
+  headSha: string
+}
+
+export type GatedTrainOutcome =
+  | { ok: false; code: 'REPO_NOT_IN_PROJECT' | 'MEMBER_REFUSED' | 'REVIEW_UNAVAILABLE'; message: string; refused: Array<{ prNumber: number; reason: string }> }
+  | { ok: true; result: MergeResult }
+
+/**
+ * Merge a release train (ADR 0044): one PR that carries several fix PRs.
+ * Every member is held to what a service merge of it alone is held to
+ * (ADR 0030, 0035): an Opus "merge" verdict on the exact head the train
+ * merged in, no hold on any review of it, no pending first review. The train
+ * PR merges with a merge commit (so GitHub marks each member PR merged),
+ * pinned to the train head CI passed; each member's merged head is recorded
+ * for the regression watch.
+ */
+export async function gatedTrainMerge(
+  db: SupabaseClient,
+  input: { projectId: string; token: string; ref: GithubRepoRef; trainPr: number; trainHeadSha: string; members: TrainMember[]; commitTitle?: string; mergeMethod?: 'merge' | 'squash' },
+): Promise<GatedTrainOutcome> {
+  const own = await connectedRepoRefs(db, input.projectId)
+  if (!own.some((r) => sameRepo(r, input.ref))) {
+    return { ok: false, code: 'REPO_NOT_IN_PROJECT', message: `${input.ref.owner}/${input.ref.repo} is not one of this project's repositories.`, refused: [] }
+  }
+  const refused: Array<{ prNumber: number; reason: string }> = []
+  for (const m of input.members) {
+    const found = await loadReviewsForPr(db, {
+      projectId: input.projectId,
+      repo: `${input.ref.owner}/${input.ref.repo}`.toLowerCase(),
+      aliases: [],
+      repoId: null,
+      number: m.prNumber,
+      fixAttemptId: m.fixAttemptId,
+    })
+    const gate = decidePrGate(found, m.headSha, SERVICE_CALLER, m.fixAttemptId)
+    if (!gate.ok) {
+      if (gate.code === 'REVIEW_UNAVAILABLE') return { ok: false, code: 'REVIEW_UNAVAILABLE', message: gate.message, refused: [] }
+      refused.push({ prNumber: m.prNumber, reason: gate.message })
+      continue
+    }
+    if (gate.review.state !== 'merge' || gate.review.headSha !== m.headSha || gate.overridden || gate.mergedBeforeReview) {
+      refused.push({ prNumber: m.prNumber, reason: 'The Opus review of this exact commit does not say merge.' })
+    }
+  }
+  if (refused.length) {
+    return { ok: false, code: 'MEMBER_REFUSED', message: `${refused.length} pull request${refused.length === 1 ? '' : 's'} in the train no longer pass the review gate.`, refused }
+  }
+  const result = await mergeGithubPullRequest(input.token, input.ref, input.trainPr, {
+    // A merge commit lets GitHub mark every member merged; a linear-history repo takes a squash (the caller closes the members).
+    mergeMethod: input.mergeMethod ?? 'merge',
+    sha: input.trainHeadSha,
+    ...(input.commitTitle ? { commitTitle: input.commitTitle } : {}),
+  })
+  if (result.merged && !result.alreadyMerged && result.sha) {
+    try {
+      const { data } = await db.from('fix_attempts').select('id, project_id, report_id, pr_url, pr_number').in('id', input.members.map((m) => m.fixAttemptId))
+      const mergedAt = new Date().toISOString()
+      for (const a of (data ?? []) as MergedHeadTarget[]) {
+        const head = input.members.find((m) => m.fixAttemptId === a.id)?.headSha
+        if (head) await recordMergedHead(db, a, { headSha: head, mergeSha: result.sha, mergedAt })
+      }
+    } catch {
+      // The regression watch misses these merges; the merge itself stands.
+    }
+  }
+  return { ok: true, result }
 }

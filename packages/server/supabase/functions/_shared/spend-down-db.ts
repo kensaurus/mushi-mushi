@@ -12,6 +12,7 @@ import {
   classifySpendDownRun,
   SPEND_DOWN_SAMPLE_MAX_AGE_DAYS,
   SPEND_DOWN_SCOREBOARD_DAYS,
+  spendDownOutrankNote,
   spendDownProjectIds,
   type CursorPoolKey,
   type SpendDownKey,
@@ -56,6 +57,8 @@ interface AttemptRow {
   failure_category: string | null
   merged_at?: string | null
   llm_model?: string | null
+  /** ADR 0035: set when the fix regressed after a Mushi merge. */
+  regressed_at?: string | null
 }
 
 interface ReviewRow {
@@ -86,6 +89,20 @@ async function readByIds<T>(
 }
 
 /**
+ * The yield read of attempts, with `regressed_at` (ADR 0035). Before that
+ * migration is applied the column does not exist (42703): read without it,
+ * so the stop-loss keeps working on the reviews alone.
+ */
+async function yieldAttempts(db: SupabaseClient, ids: string[]): Promise<AttemptRow[]> {
+  try {
+    return await readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category, regressed_at', 'id', ids, 'yield attempts')
+  } catch (err) {
+    if (!/regressed_at/.test(err instanceof Error ? err.message : String(err))) throw err
+    return readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', ids, 'yield attempts')
+  }
+}
+
+/**
  * The stop-loss samples of one app: its spend-down runs (any key, never a
  * manual or auto-fix dispatch) dispatched in the last 14 days and after its
  * last Resume (`resetAt`), newest first, each with where it ended and the
@@ -113,7 +130,7 @@ export async function projectYieldSamples(
   const jobs = (data ?? []) as JobRow[]
   const attemptIds = jobs.map((j) => j.fix_attempt_id).filter((id): id is string => !!id)
   const [attempts, reviews] = await Promise.all([
-    readByIds<AttemptRow>(db, 'fix_attempts', 'id, status, pr_url, failure_category', 'id', attemptIds, 'yield attempts'),
+    yieldAttempts(db, attemptIds),
     readByIds<ReviewRow>(db, 'fix_reviews', 'fix_attempt_id, verdict, reviewed_at', 'fix_attempt_id', attemptIds, 'yield reviews'),
   ])
   const attemptById = new Map(attempts.map((a) => [a.id, a]))
@@ -127,6 +144,7 @@ export async function projectYieldSamples(
         verdict: review?.verdict ?? null,
         reviewedAt: review?.reviewed_at ?? null,
         probe: j.dispatch_metadata?.spend_down_probe === true,
+        regressedAt: (j.fix_attempt_id ? attemptById.get(j.fix_attempt_id)?.regressed_at : null) ?? null,
       }
     }),
   }
@@ -320,6 +338,8 @@ export async function keyDispatchesToday(
 export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promise<{
   ids: string[]
   settings: Map<string, Record<string, unknown>>
+  /** Set when this key pays for nothing because another key of the same scope is first. */
+  idleNote: string | null
 }> {
   let projectQuery
   if (key.project_id) {
@@ -334,16 +354,16 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
       .eq('role', 'owner')
     if (ownedErr) throw new Error(`spend-down: organization_members read failed: ${ownedErr.message}`)
     const ownedOrgIds = ((owned ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id)
-    if (ownedOrgIds.length === 0) return { ids: [], settings: new Map() }
+    if (ownedOrgIds.length === 0) return { ids: [], settings: new Map(), idleNote: null }
     projectQuery = db.from('projects').select('id, organization_id').in('organization_id', ownedOrgIds)
   } else {
-    return { ids: [], settings: new Map() }
+    return { ids: [], settings: new Map(), idleNote: null }
   }
   const { data: projectRows, error } = await projectQuery
   if (error) throw new Error(`spend-down: projects read failed: ${error.message}`)
   const projects = (projectRows ?? []) as Array<{ id: string; organization_id: string | null }>
   const allIds = projects.map((p) => p.id)
-  if (allIds.length === 0) return { ids: [], settings: new Map() }
+  if (allIds.length === 0) return { ids: [], settings: new Map(), idleNote: null }
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((o): o is string => !!o))]
   // Before migration 20261021051628 there are no universal keys to weigh.
   const columnReady = await ownerUserColumnReady(db)
@@ -351,7 +371,7 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
   const ownerIds = [...new Set([...ownersByOrg.values()].flat())]
   if (key.owner_user_id && !ownerIds.includes(key.owner_user_id)) {
     // Its owner no longer owns any of these organizations: it serves none.
-    return { ids: [], settings: new Map() }
+    return { ids: [], settings: new Map(), idleNote: null }
   }
 
   // Every Cursor key that could win for these apps: their own, their
@@ -363,12 +383,12 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
   const [settingsRes, reposRes, keysRes] = await Promise.all([
     db
       .from('project_settings')
-      .select('project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, cursor_api_key_ref')
+      .select('project_id, autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, autofix_max_concurrent, cursor_api_key_ref')
       .in('project_id', allIds),
     db.from('project_repos').select('project_id').in('project_id', allIds),
     db
       .from('byok_keys')
-      .select(withOwnerUserColumn('id, project_id, organization_id, priority, status, test_status', columnReady))
+      .select(withOwnerUserColumn('id, label, project_id, organization_id, priority, status, test_status, exhausted_until', columnReady))
       .eq('provider_slug', 'cursor')
       .or(filters.join(',')),
   ])
@@ -384,17 +404,15 @@ export async function keyProjects(db: SupabaseClient, key: SpendDownKey): Promis
     return typeof ref === 'string' && ref.trim() !== ''
   }
 
-  const ids = spendDownProjectIds(
-    key,
-    projects.map((p) => ({
-      id: p.id,
-      organization_id: p.organization_id,
-      autofix_enabled: settings.get(p.id)?.autofix_enabled === true,
-      has_repo: withRepo.has(p.id),
-      has_legacy_key: legacy(p.id),
-      org_owner_ids: p.organization_id ? (ownersByOrg.get(p.organization_id) ?? []) : [],
-    })),
-    (keysRes.data ?? []) as unknown as CursorPoolKey[],
-  )
-  return { ids, settings }
+  const pool = (keysRes.data ?? []) as unknown as Array<CursorPoolKey & { label?: string | null }>
+  const candidates = projects.map((p) => ({
+    id: p.id,
+    organization_id: p.organization_id,
+    autofix_enabled: settings.get(p.id)?.autofix_enabled === true,
+    has_repo: withRepo.has(p.id),
+    has_legacy_key: legacy(p.id),
+    org_owner_ids: p.organization_id ? (ownersByOrg.get(p.organization_id) ?? []) : [],
+  }))
+  const ids = spendDownProjectIds(key, candidates, pool)
+  return { ids, settings, idleNote: ids.length === 0 ? spendDownOutrankNote(key.id, candidates, pool) : null }
 }

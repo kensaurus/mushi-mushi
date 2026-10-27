@@ -1,5 +1,13 @@
 # @mushi-mushi/inventory-auth-runner
 
+## 0.1.6
+
+### Patch Changes
+
+- 15ba9ce: `refresh` now finds the scripted login where the inventory schema puts it, `app.auth`. It read a top-level `auth` that the schema never produces, so every real `inventory.yaml` failed with "no auth.scripted block". The README and docs examples now show `auth` inside `app`.
+- 15ba9ce: A `js:./scripts/login.js` login script now loads from your project. The path was imported relative to the runner's own file inside `node_modules`, so it was never found. It now resolves against the folder of your local `inventory.yaml`: `--inventory <path>` or `MUSHI_INVENTORY_FILE`, default `./inventory.yaml` (the working directory). `refresh()` takes the same `inventoryFile` option.
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+
 ## 0.1.5
 
 ### Patch Changes

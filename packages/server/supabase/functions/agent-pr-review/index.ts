@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * agent-pr-review — Supabase Edge Function (verify_jwt = false, internal)
  *
@@ -15,7 +15,7 @@
  *      cloud-agent PR that has none (newest first, at most `limit`);
  *   3. on `{ fixAttemptId, force }`, queues that attempt (again, with force)
  *      and reviews it now;
- *   4. claims up to 3 due reviews, at most one per project per tick, and runs
+ *   4. claims up to 8 due reviews, at most one per project per tick, and runs
  *      them side by side. A claim stamps a fresh `run_id`; every later write
  *      of that run is guarded on it, so a run that a re-queue or a newer run
  *      superseded can never overwrite the row.
@@ -56,7 +56,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
-import { isClaudeRefusal } from '../_shared/claude-request.ts'
+import { isClaudeRefusal, resolveClaudeModel } from '../_shared/claude-request.ts'
 import { estimateCallCostUsd } from '../_shared/pricing.ts'
 import { recordLlmUsage, extractLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
@@ -98,12 +98,17 @@ import {
 
 const log = rootLog.child('agent-pr-review')
 
-/** Reviews run per tick, side by side. */
-export const REVIEW_BATCH = 3
+/**
+ * Reviews run per tick, side by side (each call is capped at 100 s, so the
+ * tick stays inside the function's wall time). 3 a tick fell behind on
+ * 2026-10-23: 74 queued, the oldest 4 hours old, while the merge queue
+ * waited on re-reviews; one per app across 8 apps keeps every app moving.
+ */
+export const REVIEW_BATCH = 8
 /** Fairness: one project's backlog cannot take every slot of a tick. */
 export const REVIEW_MAX_PER_PROJECT_PER_TICK = 1
-/** Due rows read per tick to fill the batch fairly. */
-const QUEUE_SCAN = 30
+/** Due rows read per tick to fill the batch fairly (one app's backlog can fill 30). */
+const QUEUE_SCAN = 120
 export const REVIEW_MAX_TRIES = 3
 export const REVIEW_STALE_MS = REVIEW_RUN_STALE_MS
 /** A model error waits this long × tries before the next try. */
@@ -180,6 +185,8 @@ export interface ReviewDeps {
   fetchPr?: (token: string, ref: GithubRepoRef, n: number) => Promise<PullRequestDetails | null>
   fetchFiles?: (token: string, ref: GithubRepoRef, n: number) => Promise<{ files: PullRequestFile[]; complete: boolean } | null>
   callModel?: (input: ModelCallInput) => Promise<ModelCallResult>
+  /** The platform reviewer model (env `AGENT_PR_REVIEW_MODEL`); tests pin it. */
+  platformModel?: string | null
   upsertComment?: (
     token: string,
     ref: GithubRepoRef,
@@ -230,6 +237,41 @@ export interface ReviewRunOptions {
 async function defaultResolveGithubToken(db: SupabaseClient, attempt: AttemptRow): Promise<string | null> {
   const installationId = await installationIdForAttempt(db, attempt)
   return resolveProjectGithubToken(db, attempt.project_id, installationId)
+}
+
+/**
+ * The reviewer model: the project's `agent_pr_review_model`, else the
+ * platform's `AGENT_PR_REVIEW_MODEL` env, else the code default. A better
+ * Claude model is a setting away, never a deploy. Retired ids map back to the
+ * default (`resolveClaudeModel`), and a non-Claude id does too: the review
+ * always runs on the project's Anthropic key.
+ *
+ * @internal Exported for tests only.
+ */
+export function pickReviewModel(projectModel: string | null | undefined, platformModel: string | null | undefined): string {
+  const chosen = (projectModel ?? '').trim() || (platformModel ?? '').trim()
+  const resolved = resolveClaudeModel(chosen, AGENT_PR_REVIEW_MODEL)
+  return /^claude-/.test(resolved) ? resolved : AGENT_PR_REVIEW_MODEL
+}
+
+/**
+ * Whether reviews are on and which model the project chose. A failed read
+ * reviews on the default (the switch defaults to true). Before migration
+ * 20261022021555 adds `agent_pr_review_model`, naming it fails the read, so it
+ * is read again without it: a project that turned reviews off stays off.
+ *
+ * @internal Exported for tests only.
+ */
+export async function readReviewSettings(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<{ enabled: boolean; model: string | null }> {
+  const read = (columns: string) =>
+    db.from('project_settings').select(columns).eq('project_id', projectId).maybeSingle()
+  let { data, error } = await read('agent_pr_review_enabled, agent_pr_review_model')
+  if (error) ({ data, error } = await read('agent_pr_review_enabled'))
+  const row = (data as { agent_pr_review_enabled?: boolean | null; agent_pr_review_model?: string | null } | null) ?? null
+  return { enabled: row?.agent_pr_review_enabled !== false, model: row?.agent_pr_review_model ?? null }
 }
 
 async function defaultCallModel(input: ModelCallInput): Promise<ModelCallResult> {
@@ -476,14 +518,12 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   }
 
   // Default on: a missing row or a failed read reviews (the column defaults to true).
-  const { data: settings } = await db
-    .from('project_settings')
-    .select('agent_pr_review_enabled')
-    .eq('project_id', attempt.project_id)
-    .maybeSingle()
-  if ((settings as { agent_pr_review_enabled?: boolean | null } | null)?.agent_pr_review_enabled === false) {
-    return finishSkipped(attempt, 'review_off')
-  }
+  const settings = await readReviewSettings(db, attempt.project_id)
+  if (!settings.enabled) return finishSkipped(attempt, 'review_off')
+  const reviewModel = pickReviewModel(
+    settings.model,
+    deps.platformModel !== undefined ? deps.platformModel : typeof Deno !== 'undefined' ? Deno.env.get('AGENT_PR_REVIEW_MODEL') : undefined,
+  )
 
   let key: ResolvedKey | null
   try {
@@ -513,7 +553,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   if (listed.files.length === 0) return finishSkipped(attempt, 'no_files')
 
   const diff = buildReviewDiff(listed.files, { complete: listed.complete })
-  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra)
+  const ci = describeCi(attempt.check_run_conclusion, attempt.check_run_status, attempt.ci_infra, details.draft === true)
   let report: Record<string, unknown> | null = null
   if (attempt.report_id) {
     const { data } = await db.from('reports').select(REPORT_COLUMNS).eq('id', attempt.report_id).maybeSingle()
@@ -538,7 +578,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     stage: 'pr_review',
     projectId: attempt.project_id,
     reportId: attempt.report_id,
-    model: AGENT_PR_REVIEW_MODEL,
+    model: reviewModel,
     keySource: key.source,
     startedAt: Date.now(),
   } as const
@@ -546,7 +586,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   try {
     result = await (deps.callModel ?? defaultCallModel)({
       apiKey: key.key,
-      model: AGENT_PR_REVIEW_MODEL,
+      model: reviewModel,
       system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
       prompt,
       abortSignal: AbortSignal.timeout(REVIEW_CALL_TIMEOUT_MS + 5_000),
@@ -586,7 +626,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     sourceOmitted: diff.sourceOmitted.length > 0,
     fileListIncomplete: diff.fileListIncomplete,
   })
-  const model = servedModel(result, AGENT_PR_REVIEW_MODEL)
+  const model = servedModel(result, reviewModel)
   const tokens = extractLlmUsage(result)
   const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
 

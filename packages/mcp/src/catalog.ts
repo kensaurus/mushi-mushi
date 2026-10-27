@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * FILE: packages/mcp/src/catalog.ts
  * PURPOSE: Single source of truth for the MCP tool catalog — names, titles,
@@ -137,6 +137,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Why did this fix attempt fail — show me every step.',
   },
   {
+    name: 'get_fix_verification',
+    title: 'Fix merge checks',
+    description:
+      'Return whether one fix attempt\'s PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host\'s Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is { id, status (pass | fail | pending | unavailable | not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge { state (none | eligible | merged | skipped | failed), detail }, and regressions after a Mushi merge [{ signal (ci_failed_on_merge | report_reopened | new_report_in_changed_file), revertState, revertPrUrl }]. Returns { headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt\'s full lifecycle.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is this agent fix proven to work, and what is still missing before it can merge?',
+  },
+  {
     name: 'get_blast_radius',
     title: 'Blast radius',
     description:
@@ -189,7 +199,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | radar | portfolio_radar | portfolio_radar_ci | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
+      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift | radar | portfolio_radar | portfolio_radar_ci | portfolio_radar_vulns | store_review) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / portfolio_radar_vulns / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
@@ -382,6 +392,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Did my fix fail, or did the test machine stop? Why do my fixes wait to be tested?',
+  },
+  {
+    name: 'get_ci_costs',
+    title: 'CI cost and speed',
+    description:
+      'Return what this project\'s CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [{ repo, runnerClass (github_hosted | self_hosted | unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list | github_public_free | github_larger_unpriced | self_hosted | unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization\'s own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub\'s list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns { window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What does my CI cost, and would it be cheaper or faster on my own machine?',
+  },
+  {
+    name: 'request_ci_placement_change',
+    title: 'Ask to change where CI runs (needs approval)',
+    description:
+      'Ask to change where one repository\'s CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_<WORKFLOW> may be changed; value is one runner label, or null to remove the variable so jobs use the workflow\'s fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable\'s current value, which the change must still match when it runs. Your organization\'s CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns { id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
   },
   {
     name: 'explain_finding',
@@ -823,6 +853,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Pull my open Sentry issues into Mushi so I can triage and fix them.',
+  },
+  {
+    name: 'file_report',
+    title: 'File a report',
+    description:
+      'File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. ' +
+      'Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical | high | medium | low) and component are optional hints that triage may refine. ' +
+      'The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. ' +
+      'Returns { reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. ' +
+      'Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Log this bug I found (or this backlog item) in Mushi so it gets triaged and fixed.',
   },
   {
     name: 'triage_next_steps',

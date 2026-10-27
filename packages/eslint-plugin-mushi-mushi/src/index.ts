@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * eslint-plugin-mushi-mushi
  *
- * Two rules implementing whitepaper Gates 1 and 2:
+ * `recommended` ships the two rules implementing whitepaper Gates 1 and 2,
+ * plus the check that keeps their allowlist marker out of rendered text.
+ * The design-system rules live in the monorepo's own `internal` preset.
  *   - `no-dead-handler` — flags empty / placeholder handlers attached
  *      to UI elements. The single biggest agentic-coding failure mode.
  *   - `no-mock-leak`   — flags faker / msw imports + obvious placeholder
@@ -73,7 +75,26 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-allowlist-jsx-textnode': noAllowlistJsxTextnode,
 }
 
+/**
+ * `recommended` / `legacy`: the agentic-failure rules only, for any app.
+ * Gate 1 (empty handlers), Gate 2 (mock data in production paths) and the
+ * check that keeps their allowlist marker from rendering as page text.
+ * It used to switch on all 19 rules, including the Mushi console's own
+ * design-system rules, which fail on any other codebase (Mushi report
+ * c3ed8b60).
+ */
 const recommendedRules: Linter.RulesRecord = {
+  [`${PLUGIN_NAME}/no-dead-handler`]: 'error',
+  [`${PLUGIN_NAME}/no-mock-leak`]: 'error',
+  [`${PLUGIN_NAME}/no-allowlist-jsx-textnode`]: 'error',
+}
+
+/**
+ * `internal`: the Mushi monorepo's own preset (console, docs, widgets).
+ * Adds the design-system rules, which assume Mushi's tokens and
+ * components. Not meant for other apps; severities as before the split.
+ */
+const internalRules: Linter.RulesRecord = {
   [`${PLUGIN_NAME}/no-dead-handler`]: 'error',
   [`${PLUGIN_NAME}/no-mock-leak`]: 'error',
   [`${PLUGIN_NAME}/no-raw-palette-color`]: 'warn',
@@ -125,6 +146,10 @@ plugin.configs.recommended = {
 plugin.configs.legacy = {
   plugins: [PLUGIN_NAME],
   rules: recommendedRules,
+}
+plugin.configs.internal = {
+  plugins: { [PLUGIN_NAME]: plugin as unknown as ESLint.Plugin },
+  rules: internalRules,
 }
 
 export default plugin

@@ -12,7 +12,7 @@ import { MushiCliError } from '../errors.js';
 const KNOWN_GATES = [
   'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift',
   'orphan_endpoint', 'unknown_call', 'schema_drift', 'code_health', 'design_drift',
-  'ci_drift', 'deploy_drift', 'env_drift', 'portfolio_radar', 'portfolio_radar_ci', 'store_review',
+  'ci_drift', 'deploy_drift', 'env_drift', 'portfolio_radar', 'portfolio_radar_ci', 'portfolio_radar_vulns', 'store_review',
 ] as const;
 const SEVERITIES = ['info', 'warn', 'error'] as const;
 

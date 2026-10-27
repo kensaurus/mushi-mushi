@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -42,6 +42,7 @@ import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
+import { sdkHealthHref } from '../lib/sdkHealth'
 import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -51,12 +52,41 @@ import { MetricTooltipContent, Tooltip } from './ui'
 import { offerProjectCreate } from '../lib/orgPermissions'
 import type { OrganizationSummary } from './OrgSwitcher'
 import { HeaderContextChip, HeaderContextChipLink, HeaderContextChipSkeleton } from './ui/chrome'
+import {
+  ALL_APPS_VALUE,
+  OPEN_PROJECT_SWITCHER_EVENT,
+  PROJECT_SCOPE_QUERY_PARAM,
+  allAppsSupportFor,
+  getStoredProjectScopeMode,
+  setStoredProjectScopeMode,
+  useProjectScopeMode,
+} from '../lib/projectScope'
+
+/** Four tiles: "every app". Shared by the header chip and the dropdown row. */
+function AllAppsGlyph({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden className="shrink-0 text-fg-muted">
+      <rect x="2" y="2" width="5" height="5" rx="1" />
+      <rect x="9" y="2" width="5" height="5" rx="1" />
+      <rect x="2" y="9" width="5" height="5" rx="1" />
+      <rect x="9" y="9" width="5" height="5" rx="1" />
+    </svg>
+  )
+}
 
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
+  // "All apps" (lib/projectScope.ts) rides on top of the active project:
+  // `?project=` keeps the last concrete app for pages that show one.
+  const scopeMode = useProjectScopeMode()
+  // …which is why the chip names the app the page is *actually* showing: on a
+  // route that can't combine apps, "All apps" in the header contradicted the
+  // one app below it (report ee6547f5). The dropdown keeps the chosen mode.
+  const { pathname } = useLocation()
+  const pageCombinesApps = allAppsSupportFor(pathname) !== 'single'
   // Inline "create new project" affordance — exposed in the dropdown
   // footer so users don't have to navigate away to /projects to spin up
   // a fresh workspace. `creating` toggles the row from a chip to an input.
@@ -224,6 +254,34 @@ export function ProjectSwitcher() {
     setSearchParams(next, { replace: true })
   }, [setup.loading, setup.data, searchParams, listIsCurrent, setSearchParams])
 
+  // Keep `?apps=all` and the stored choice in step, like `?project=`: a
+  // shared link's `?apps=all` is remembered, and in-app links (which drop the
+  // query string) get it back from storage. Any other value is removed.
+  useEffect(() => {
+    const fromUrl = searchParams.get(PROJECT_SCOPE_QUERY_PARAM)
+    if (fromUrl === ALL_APPS_VALUE) {
+      setStoredProjectScopeMode('all')
+      return
+    }
+    if (fromUrl === null && getStoredProjectScopeMode() !== 'all') return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (getStoredProjectScopeMode() === 'all') next.set(PROJECT_SCOPE_QUERY_PARAM, ALL_APPS_VALUE)
+        else next.delete(PROJECT_SCOPE_QUERY_PARAM)
+        return next
+      },
+      { replace: true },
+    )
+  }, [searchParams, setSearchParams])
+
+  // The one-app notice's "Switch app" opens this dropdown.
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener(OPEN_PROJECT_SWITCHER_EVENT, onOpen)
+    return () => window.removeEventListener(OPEN_PROJECT_SWITCHER_EVENT, onOpen)
+  }, [])
+
   // Close on outside click so the dropdown doesn't stay pinned open behind nav.
   useEffect(() => {
     if (!open) return
@@ -246,22 +304,42 @@ export function ProjectSwitcher() {
     }
   }, [creating])
 
-  if (setup.loading) {
-    return <HeaderContextChipSkeleton label="Loading project" />
-  }
   if (!setup.data) {
     // The fetch failed and nothing is cached: say so and offer a retry
     // instead of a skeleton that never resolves (B1, 2026-10-20).
-    return setup.error ? (
-      <HeaderContextChip
-        label="Projects unavailable"
-        trailing={<span className="text-fg-faint">Retry</span>}
-        onClick={() => setup.reload()}
-        title={`Could not load your projects: ${setup.error}. Click to retry.`}
-      />
-    ) : (
-      <HeaderContextChipSkeleton label="Loading project" />
-    )
+    if (setup.error) {
+      return (
+        <HeaderContextChip
+          label="Projects unavailable"
+          trailing={<span className="text-fg-faint">Retry</span>}
+          onClick={() => setup.reload()}
+          title={`Could not load your projects: ${setup.error}. Click to retry.`}
+        />
+      )
+    }
+    // All apps is already known from the URL or storage. Waiting on
+    // /v1/admin/setup to label the chip left it greyed on "Loading project"
+    // for as long as that list took (and for good, if the fetch never settled).
+    if (scopeMode === 'all') {
+      // Clickable while the list is in flight: a fetch that never settles
+      // (the reported grey pill) must still offer a retry. aria-busy is left
+      // off so the control is not skipped as unavailable.
+      return (
+        <HeaderContextChip
+          data-testid="project-switcher-chip"
+          aria-label="Project: All apps — switch project"
+          title="All apps. The app list is still loading. Click to try again."
+          onClick={() => setup.reload()}
+          label={
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <AllAppsGlyph size={14} />
+              <span className="truncate">All apps</span>
+            </span>
+          }
+        />
+      )
+    }
+    return <HeaderContextChipSkeleton label="Loading project" />
   }
   if (setup.data.projects.length === 0) {
     return (
@@ -288,9 +366,11 @@ export function ProjectSwitcher() {
     setActiveOrgIdSnapshot(orgId)
     rememberTeamProject(orgId, projectId)
     setActiveProjectIdSnapshot(projectId)
+    setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_ORG_QUERY_PARAM, orgId)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, projectId)
+    next.delete(PROJECT_SCOPE_QUERY_PARAM)
     setSearchParams(next, { replace: true })
     setOpen(false)
   }
@@ -310,13 +390,36 @@ export function ProjectSwitcher() {
     const orgId = getActiveOrgIdSnapshot()
     if (orgId) rememberTeamProject(orgId, id)
     setActiveProjectIdSnapshot(id)
+    setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, id)
+    next.delete(PROJECT_SCOPE_QUERY_PARAM)
     setSearchParams(next, { replace: true })
     setOpen(false)
   }
 
+  /** Every app, combined on pages that support it (lib/projectScope.ts). */
+  function pickAll() {
+    setStoredProjectScopeMode('all')
+    const next = new URLSearchParams(searchParams)
+    next.set(PROJECT_SCOPE_QUERY_PARAM, ALL_APPS_VALUE)
+    setSearchParams(next, { replace: true })
+    setOpen(false)
+  }
+  const allApps = scopeMode === 'all'
+  // What this page is showing, which is what the chip must say.
+  const showingAllApps = allApps && pageCombinesApps
+  // Every app the caller can open, across teams once the directory is read
+  // (the combined pages read all of them), else this team's.
+  const appCount = Math.max(projects.length, directory.data?.projects.length ?? 0)
+
   const snapshot = snapshots.byId.get(active.project_id)
+  const chipName = showingAllApps ? 'All apps' : active.project_name
+  const chipTitle = showingAllApps
+    ? `All apps (pages that show one app use ${active.project_name})`
+    : allApps
+      ? `This page shows one app at a time: ${active.project_name}. All apps stays on elsewhere.`
+      : `Project: ${active.project_name}`
 
   return (
     <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
@@ -324,15 +427,20 @@ export function ProjectSwitcher() {
         // The favicon already says "project" — the uppercase PROJECT kicker
         // spent header width that long slugs needed, so it lives in the
         // tooltip now instead of truncating the name.
-        title={`Project: ${active.project_name}`}
-        aria-label={`Project: ${active.project_name} — switch project`}
+        title={chipTitle}
+        aria-label={`Project: ${chipName} — switch project`}
+        data-testid="project-switcher-chip"
         label={
           <span className="inline-flex items-center gap-1.5 min-w-0">
-            <ProjectFavicon
-              {...faviconSourceFromProject(active, snapshot)}
-              size={14}
-            />
-            <span className="truncate">{active.project_name}</span>
+            {showingAllApps ? (
+              <AllAppsGlyph size={14} />
+            ) : (
+              <ProjectFavicon
+                {...faviconSourceFromProject(active, snapshot)}
+                size={14}
+              />
+            )}
+            <span className="truncate">{chipName}</span>
           </span>
         }
         trailing={
@@ -387,13 +495,35 @@ export function ProjectSwitcher() {
             </div>
           )}
           <ul role="listbox" aria-label="Projects in this team" className="divide-y divide-edge-subtle/60">
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={allApps}
+                onClick={pickAll}
+                data-testid="project-switcher-all-apps"
+                title="Pages that can combine apps (like CI runners) show every app. Other pages keep showing one."
+                className={`flex w-full min-h-9 items-center gap-2 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay focus-visible:outline-none focus-visible:bg-surface-overlay motion-safe:transition-opacity ${
+                  allApps ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
+                }`}
+              >
+                <AllAppsGlyph size={16} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">All apps</span>
+                  <span className="block truncate text-3xs text-fg-faint">
+                    {appCount} {appCount === 1 ? 'app' : 'apps'} combined, where a page supports it
+                  </span>
+                </span>
+                {allApps && <span className="shrink-0 text-2xs text-brand">✓</span>}
+              </button>
+            </li>
             {shownProjects.length === 0 && (
               <li className="px-2.5 py-2 text-xs text-fg-faint">No projects in this group. Add some from Portfolio → Manage groups.</li>
             )}
             {shownProjects.map((p) => {
-              const isActive = p.project_id === active.project_id
+              const isActive = !allApps && p.project_id === active.project_id
               return (
-                <li key={p.project_id}>
+                <li key={p.project_id} className="relative">
                   <button
                     type="button"
                     role="option"
@@ -429,14 +559,18 @@ export function ProjectSwitcher() {
                       </div>
                       {isActive && <span className="shrink-0 text-2xs text-brand">✓</span>}
                     </div>
-                    <div className="flex justify-end">
-                      <ProjectHeartbeatStrip
-                        project={p}
-                        adminEndpointHost={setup.data?.admin_endpoint_host}
-                        placement="corner"
-                      />
-                    </div>
+                    {/* Room for the SDK readout, a link that cannot sit inside this button. */}
+                    <div aria-hidden className="h-3" />
                   </button>
+                  <div className="absolute bottom-2 right-2.5">
+                    <ProjectHeartbeatStrip
+                      project={p}
+                      adminEndpointHost={setup.data?.admin_endpoint_host}
+                      placement="corner"
+                      to={sdkHealthHref(p.project_id)}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </div>
                 </li>
               )
             })}

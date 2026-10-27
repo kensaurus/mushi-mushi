@@ -45,8 +45,8 @@ const MAX_TARGETS = 6
 const MAX_RADAR = 8
 /** Newest deploy observations read for the "after the merge" side and the shown targets. */
 export const RECENT_OBSERVATIONS = 100
-/** The radar's scheduled run and the host CI's run (radar/run.ts RADAR_GATE, RADAR_CI_GATE). */
-export const RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci'] as const
+/** The radar's scheduled run, the host CI's run and vuln-watch's run (radar/run.ts RADAR_GATE, RADAR_CI_GATE, RADAR_VULN_GATE). */
+export const RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci', 'portfolio_radar_vulns'] as const
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const ID = '[A-Za-z_][A-Za-z0-9_]*'

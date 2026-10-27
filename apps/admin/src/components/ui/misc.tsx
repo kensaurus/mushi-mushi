@@ -92,6 +92,17 @@ export function FilterChip({
     >
       {icon && <span aria-hidden className="inline-flex items-center">{icon}</span>}
       <span>{label}</span>
+      {/* null = the count is still loading: keep the badge's width, so the
+          chip does not widen and wrap the row when the number lands (Bugs
+          quick filters, layout shift 0.244, 2026-10-24). */}
+      {count === null && (
+        <span aria-hidden="true" className="inline-flex min-w-4 rounded-full px-1 font-mono text-3xs font-semibold leading-tight bg-surface-raised/40">
+          {/* As wide as a two-digit count, the common case: a 16px blank was
+              2px narrower per chip and the row still wrapped (measured after
+              PR 672, 2026-10-24). */}
+          <span className="invisible">00</span>
+        </span>
+      )}
       {typeof count === 'number' && (
         <span
           className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${

@@ -121,9 +121,11 @@ export const reportSubmissionSchema = z.object({
   /**
    * §3c: SDK-supplied SHA-256 hex of stable device characteristics.
    * Optional for back-compat with older SDK versions; when present we feed
-   * it into the anti-gaming cross-account check.
+   * it into the anti-gaming cross-account check. `rnfp_` is the React
+   * Native SDK's digest (no crypto.subtle under Hermes): until 2026-10-26
+   * this pattern rejected it, so every report from an RN app got a 400.
    */
-  fingerprintHash: z.string().regex(/^[a-f0-9]{64}$|^fbk_[a-f0-9]{8}$/).optional(),
+  fingerprintHash: z.string().regex(/^[a-f0-9]{64}$|^fbk_[a-f0-9]{8}$|^rnfp_[a-f0-9]{8}$/).optional(),
   appVersion: z.string().optional(),
   sdkPackage: z.string().max(120).optional(),
   sdkVersion: z.string().max(40).optional(),
@@ -396,6 +398,8 @@ export const runnerHeartbeatSchema = z
             swap_used_mb: megabytes.optional(),
             swap_total_mb: megabytes.optional(),
             disk_free_gb: z.number().min(0).max(1_000_000).optional(),
+            // WSL2 distros on one PC send the same hashed VM boot id (CI cost: one machine).
+            machine_id: runnerHostIdSchema.optional(),
           })
           .strict()
           .optional(),

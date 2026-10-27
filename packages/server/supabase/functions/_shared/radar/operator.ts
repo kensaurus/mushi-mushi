@@ -4,7 +4,8 @@
  *          them (Plan 020 Phase 2): heartbeats, reports and page views; the
  *          keys Mushi stores and their last tests (byok_keys); connector
  *          probes and current snapshots; the newest integration health check
- *          per integration; the recipe manifest's `spend` block. Called by
+ *          per integration; the recipe manifest's `spend` block; Cursor
+ *          spend-down keys this app can use (ADR 0028). Called by
  *          runRadar (radar-scan, daily, and "Run now").
  *
  * Every read is checked: a read that fails turns the rules that need it into
@@ -23,6 +24,7 @@ import {
   evaluateKillSwitches,
   evaluateProviderKeys,
   evaluateProviderLimits,
+  evaluateSpendDownIdle,
   evaluateStoreScopes,
   evaluateUnusedKeys,
   INTEGRATION_CREDENTIAL_KINDS,
@@ -39,11 +41,20 @@ import {
   type ProviderSpend,
   type ProviderUse,
   type ScopeCatalog,
+  type SpendDownRadarKey,
   type StoreCredentialState,
   type StoredKey,
 } from './operator-detectors.ts'
 import type { DetectorResult, RadarRuleId } from './types.ts'
 import { keyOwnerFilter, projectKeyOwner } from '../byok-scope.ts'
+import { keyDispatchesToday, keyProjects } from '../spend-down-db.ts'
+import {
+  SPEND_DOWN_DEFAULT_DAILY_LIMIT,
+  SPEND_DOWN_DEFAULT_WINDOW_DAYS,
+  spendDownWindow,
+  type SpendDownKey,
+  type SpendDownTick,
+} from '../spend-down.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 type Failure = CredentialObservation['failure']
@@ -55,6 +66,7 @@ export const OPERATOR_RULES = [
   'key_unused_90d',
   'paid_feature_no_kill_switch',
   'provider_limit_unset',
+  'spend_down_idle',
 ] as const satisfies readonly RadarRuleId[]
 type OperatorRule = (typeof OPERATOR_RULES)[number]
 
@@ -68,6 +80,7 @@ const NEEDS: Record<OperatorRule, ReadonlyArray<Read>> = {
   key_unused_90d: ['keys', 'byok'],
   paid_feature_no_kill_switch: ['connectors'],
   provider_limit_unset: ['connectors', 'byok'],
+  spend_down_idle: ['byok'],
 }
 
 /** Keys whose every use goes through apiKeyAuth, which stamps last_seen_at. */
@@ -112,6 +125,89 @@ function llmSpend(snap: SnapshotRow, projectId: string): { provider: string | nu
   return { provider, usd: typeof raw === 'number' && Number.isFinite(raw) ? raw : snap.ok ? 0 : null }
 }
 
+interface ByokSpendRow extends ByokCredentialRow {
+  created_at: string
+  last_used_at: string | null
+  project_id: string | null
+  organization_id: string | null
+  spend_down_enabled: boolean | null
+  spend_down_model: string | null
+  spend_down_daily_limit: number | null
+  spend_down_window_days: number | null
+  credits_expire_at: string | null
+  spend_down_last_summary: unknown
+}
+
+const BYOK_COLS =
+  'id, provider_slug, label, key_hint, status, test_status, last_tested_at, created_at, last_used_at, project_id, organization_id, credits_expire_at, spend_down_enabled, spend_down_model, spend_down_daily_limit, spend_down_window_days, spend_down_last_summary'
+
+/** A stored tick counts only when it carries today's dispatch count. */
+function spendDownTick(raw: unknown): SpendDownTick | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const o = raw as { dispatched?: unknown; projects?: unknown; at?: unknown }
+  if (typeof o.dispatched !== 'number') return null
+  const projects = Array.isArray(o.projects)
+    ? o.projects.flatMap((p) => {
+        if (!p || typeof p !== 'object') return []
+        const r = p as { projectId?: unknown; dispatched?: unknown; stopped?: unknown }
+        if (typeof r.projectId !== 'string') return []
+        return [{
+          projectId: r.projectId,
+          dispatched: typeof r.dispatched === 'number' ? r.dispatched : 0,
+          ...(typeof r.stopped === 'string' ? { stopped: r.stopped } : {}),
+        }]
+      })
+    : []
+  return { dispatched: o.dispatched, projects, ...(typeof o.at === 'string' ? { at: o.at } : {}) }
+}
+
+function asSpendDownKey(row: ByokSpendRow): SpendDownKey {
+  return {
+    id: row.id,
+    provider_slug: 'cursor',
+    project_id: row.project_id,
+    organization_id: row.organization_id,
+    status: row.status,
+    credits_expire_at: row.credits_expire_at,
+    spend_down_enabled: true,
+    spend_down_model: row.spend_down_model,
+    spend_down_daily_limit: row.spend_down_daily_limit ?? SPEND_DOWN_DEFAULT_DAILY_LIMIT,
+    spend_down_window_days: row.spend_down_window_days ?? SPEND_DOWN_DEFAULT_WINDOW_DAYS,
+  }
+}
+
+/**
+ * Cursor keys with spend-down on, plus the apps they pay for and today's count.
+ * A shared key that pays for other apps but not this one is left out, so its
+ * finding lands on the apps it serves. A shared key that serves no app stays on
+ * every app that can see it: any of them can turn auto-fix on to use it.
+ */
+async function loadSpendDownRadarKeys(db: Db, projectId: string, rows: readonly ByokSpendRow[], now: Date): Promise<SpendDownRadarKey[]> {
+  const out: SpendDownRadarKey[] = []
+  for (const row of rows) {
+    if (row.provider_slug !== 'cursor' || row.spend_down_enabled !== true) continue
+    const key = asSpendDownKey(row)
+    const idleFacts = {
+      servedProjectIds: [] as string[],
+      dispatchedToday: 0,
+      lastSummary: spendDownTick(row.spend_down_last_summary),
+      idleNote: null as string | null,
+    }
+    if (spendDownWindow(key, now).state === 'active') {
+      const [served, dispatchedToday] = await Promise.all([
+        keyProjects(db as never, key),
+        keyDispatchesToday(db as never, key.id, now),
+      ])
+      if (row.project_id == null && served.ids.length > 0 && !served.ids.includes(projectId)) continue
+      idleFacts.servedProjectIds = served.ids
+      idleFacts.dispatchedToday = dispatchedToday
+      idleFacts.idleNote = served.idleNote
+    }
+    out.push({ id: row.id, label: row.label, key, ...idleFacts })
+  }
+  return out
+}
+
 export async function operatorRadarResults(db: Db, projectId: string, manifest: unknown, now: Date): Promise<DetectorResult[]> {
   const errors: Partial<Record<Read, string>> = {}
   const note = (k: keyof typeof errors, what: string, err: { message: string } | null) => {
@@ -122,7 +218,7 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   const keyOwner = await projectKeyOwner(db as never, projectId)
   const [keysRes, byokRes, reportRes, eventRes, snapRes, bindRes, ownedRes] = await Promise.all([
     db.from('project_api_keys').select('id, label, scopes, is_active, created_at, last_seen_at, last_seen_origin, last_seen_user_agent').eq('project_id', projectId),
-    db.from('byok_keys').select('id, provider_slug, label, key_hint, status, test_status, last_tested_at, created_at, last_used_at, project_id').or(keyOwnerFilter(keyOwner)),
+    db.from('byok_keys').select(BYOK_COLS).or(keyOwnerFilter(keyOwner)),
     db.from('reports').select('created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('product_events').select('ts').eq('project_id', projectId).order('ts', { ascending: false }).limit(1).maybeSingle(),
     db.from('connector_snapshots').select('kind, connector_instance_id, ok, error_kind, observed_at, snapshot').eq('project_id', projectId).eq('is_current', true),
@@ -151,8 +247,8 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
   }
 
   const apiKeys = (keysRes.data ?? []) as Array<{ label: string | null; scopes: string[] | null; is_active: boolean | null; created_at: string; last_seen_at: string | null; last_seen_origin: string | null; last_seen_user_agent: string | null }>
-  const byok = ((byokRes.data ?? []) as Array<ByokCredentialRow & { created_at: string; last_used_at: string | null }>)
-    .filter((k) => k.status !== 'disabled')
+  const byokRows = (byokRes.data ?? []) as ByokSpendRow[]
+  const byok = byokRows.filter((k) => k.status !== 'disabled')
   const snaps = (snapRes.data ?? []) as SnapshotRow[]
   const llmSnaps = snaps.filter((s) => s.kind === 'llm_usage')
 
@@ -238,6 +334,16 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
     if (k.provider_slug === 'openai' || k.provider_slug === 'anthropic') uses.push({ provider: k.provider_slug, via: 'byok', spendUsd30d: null })
   }
 
+  let spendDownKeys: SpendDownRadarKey[] = []
+  let spendDownError: string | null = null
+  if (!errors.byok) {
+    try {
+      spendDownKeys = await loadSpendDownRadarKeys(db, projectId, byokRows, now)
+    } catch (err) {
+      spendDownError = `Could not read spend-down: ${err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200)}`
+    }
+  }
+
   // ── evaluate ──
   const evaluated: Record<OperatorRule, () => DetectorResult> = {
     dead_app_live_spend: () => evaluateDeadApp({
@@ -257,6 +363,9 @@ export async function operatorRadarResults(db: Db, projectId: string, manifest: 
     key_unused_90d: () => evaluateUnusedKeys(storedKeys, untracked, now),
     paid_feature_no_kill_switch: () => evaluateKillSwitches({ manifestPresent: manifest != null && typeof manifest === 'object', paidFeatures: paidFeaturesFromManifest(manifest), spend: spendRows }),
     provider_limit_unset: () => evaluateProviderLimits(uses, providerLimitsFromManifest(manifest)),
+    spend_down_idle: () => spendDownError
+      ? { ruleId: 'spend_down_idle', state: 'error', reason: spendDownError, findings: [] }
+      : evaluateSpendDownIdle(spendDownKeys, now),
   }
   return OPERATOR_RULES.map((ruleId) => {
     const failed = NEEDS[ruleId].map((k) => errors[k]).find(Boolean)
