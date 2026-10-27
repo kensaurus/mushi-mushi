@@ -111,7 +111,7 @@ export const LANDING_INSTALL = {
  * as quickstart/web.mdx, packages/web/src/loader.ts and the console's
  * LOADER_CDN_URL (docs-meta.test.ts and check:loader-cdn-url hold them equal).
  */
-export const LANDING_LOADER_URL = 'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js'
+const LANDING_LOADER_URL = 'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js'
 
 /**
  * The Lovable / Bolt tab. Their builders have no terminal, so there is no

@@ -12,7 +12,6 @@ import {
   LANDING_HERO_START,
   LANDING_INSTALL,
   LANDING_INSTALL_LOVABLE,
-  LANDING_LOADER_URL,
   LANDING_SAMPLE_LINK,
   LANDING_SETUP_PROMPT,
   LANDING_FIX_PROMPT,
@@ -95,8 +94,9 @@ describe('landing cinematic copy SSOT', () => {
     const tab = LANDING_INSTALL.tabs.find((t) => t.id === 'lovable')
     expect(tab?.label).toBe('Lovable or Bolt')
     // The same loader URL the script-tag quickstart documents.
-    expect(read('content', 'quickstart', 'web.mdx')).toContain(LANDING_LOADER_URL)
-    expect(LANDING_INSTALL_LOVABLE.prompt).toContain(`src="${LANDING_LOADER_URL}"`)
+    const loaderUrl = LANDING_INSTALL_LOVABLE.prompt.match(/src="([^"]+)"/)?.[1] ?? ''
+    expect(loaderUrl).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js$/)
+    expect(read('content', 'quickstart', 'web.mdx')).toContain(loaderUrl)
     expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-project="YOUR_PROJECT_ID"')
     expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-key="YOUR_API_KEY"')
     // No terminal step: Lovable and Bolt have none.
