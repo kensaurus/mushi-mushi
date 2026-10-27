@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp-ci
 
+## 0.6.8
+
+### Patch Changes
+
+- 271abb8: The `mushi-ux` and `mushi-mcp-ci` downloads no longer include source maps, like `@mushi-mushi/cli` and `@mushi-mushi/mcp`. That is about 1 MB less for every `npx @mushi-mushi/ux` and every CI job that runs the Action. The mcp-ci npm page also describes what the Action does for a pull request.
+- 15ba9ce: `action.yml` now declares every input and output the Action uses: the `spec-drift` inputs (`base-spec`, `head-spec`, `fail-on-breaking`) and the `findings`, `ready_to_propose`, `total_events`, `route_count` and `proposal_id` outputs, so GitHub no longer warns about unexpected inputs and workflows can read the outputs. The command list and the unknown-command error now include `spec-drift`.
+- 15ba9ce: `gates` now judges `dead_handler` and `mock_leak` on real evidence. Pass your ESLint JSON report (`eslint -f json`, made with `eslint-plugin-mushi-mushi`) as the new `eslint-report` input; its no-dead-handler and no-mock-leak findings are sent with the run. A run that asks for those gates without a report fails instead of passing on no findings. `all` no longer lists `crawl` (the server always skipped it; start a crawl with Inventory → Reconcile), an explicit `crawl` is refused with that reason, a skipped gate prints why, and an errored or missing gate result fails the step.
+
 ## 0.6.7
 
 ### Patch Changes

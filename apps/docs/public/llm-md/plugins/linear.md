@@ -4,60 +4,54 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/linear
 
 ---
 title: Linear
-description: File a Linear issue automatically when Mushi classifies a bug report — create a Linear API key, install the plugin, and choose the team and filters.
+description: File Linear issues from Mushi bug reports — connect Linear on the Integrations page, or run the self-hosted Linear plugin with an API key and team id.
 ---
 
 # Linear plugin
 
-Files a Linear issue automatically when the Mushi classifier categorises a report.
+Opens a Linear issue for each new Mushi report and updates it once the
+report is triaged.
 
-## Setup
+**Most people don't need the plugin.** Connect Linear on the console's
+**Integrations** page (OAuth or a pasted API key) and Mushi files Linear
+issues and closes them for you. The plugin below is for running the Linear
+calls from your own server.
+
+## Setup (self-run plugin)
 
 1. Create a Linear API key: **Settings → API → Personal API keys** → **New key**.
-2. In Mushi: **Marketplace → Linear → Install**.
-3. Fill in:
-   - **`apiKey`** — pasted into Vault, never echoed back to the UI
-   - **`teamId`** — the Linear team to file issues under (find it in Linear → Settings → Team → copy the team ID from the URL)
-   - **`labelMap`** *(optional)* — JSON object mapping `taxonomy_path → label_id[]`
+2. Start the server where Mushi can reach it over public HTTPS:
+
+   ```bash
+   npm i @mushi-mushi/plugin-linear
+   export MUSHI_PLUGIN_SECRET=...      # must match the signing secret in step 3
+   export LINEAR_API_KEY=lin_api_...
+   export LINEAR_TEAM_ID=...           # the Linear team to file issues under
+   npx -p @mushi-mushi/plugin-linear mushi-plugin-linear
+   ```
+
+3. In the console: **Marketplace → Linear Sync → Install**. Set the webhook
+   URL to `https://<your-host>/mushi/webhook`. Keep the signing secret Mushi
+   generates (or paste your own) and use the same value for
+   `MUSHI_PLUGIN_SECRET`.
 
 ## Behaviour
 
 | Event | Action |
 | --- | --- |
-| `report.classified` | Creates a Linear issue with title, Markdown summary, report link, and priority |
-| `report.status_changed → resolved` | Moves the linked Linear issue to *Done*, adds a comment with the merged PR URL |
+| `report.created` | Creates a Linear issue (title, plus the event JSON in the description) |
+| `report.classified` | Updates that issue's title and description |
+| `report.status_changed` | Moves the issue to the state in `stateMap[newStatus]`, if you passed a `stateMap` (programmatic use only) |
 
-Linear issue fields:
-
-| Linear field | Mushi source |
-| --- | --- |
-| `title` | report `title` |
-| `description` | Markdown summary + report permalink |
-| `priority` | `p0 → 1 (Urgent)`, `p1 → 2 (High)`, `p2 → 3 (Medium)`, `p3 → 4 (Low)` |
-| `labelIds` | `labelMap[taxonomy_path] ?? []` |
-
-## Label mapping example
-
-Map Mushi taxonomy paths to Linear label IDs so issues are automatically triage-labelled:
-
-```json
-{
-  "ui/layout": ["lab_abc123"],
-  "performance/slow-load": ["lab_def456", "lab_perf789"],
-  "crash/anr": ["lab_crash999"]
-}
-```
-
-Find label IDs via the Linear API:
-
-```bash
-curl -X POST https://api.linear.app/graphql \
-  -H "Authorization: $LINEAR_API_KEY" \
-  -d '{"query": "{ issueLabels { nodes { id name } } }"}'
-```
+The report → issue mapping is kept in memory unless you pass your own cache
+to `createLinearPlugin(cfg, cache)`, so a restart can lead to a second issue
+for the same report.
 
 ## Troubleshooting
 
-- **Issues not created** — check **Marketplace → Linear → Deliveries**. A `401` means the API key is expired; a `404` means the `teamId` is wrong.
-- **Priority not mapping** — Linear priorities are numeric (1–4). If your Linear project uses custom priorities, the mapping falls back to the default scale.
-- **Duplicate issues** — Mushi only fires `report.classified` once per report. If you see duplicates, check for multiple Linear plugin installs on the same project.
+- **Issues not created** — check the plugin's last delivery status on the
+  **Marketplace** page. A `401` from your server means the signing secret
+  differs from `MUSHI_PLUGIN_SECRET`; a Linear error in your server log
+  usually means the API key or `LINEAR_TEAM_ID` is wrong.
+- **Duplicate issues** — see the in-memory mapping above, and check you have
+  not connected Linear both on the Integrations page and through this plugin.

@@ -35,6 +35,7 @@ import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeS
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { withSetupRequiredCounts } from '../lib/setupProgress'
 import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -53,7 +54,6 @@ import {
 } from '../lib/statTooltips/onboarding'
 import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
-import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
@@ -154,7 +154,8 @@ export function OnboardingPage() {
   const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
   const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
-  const stats = statsData ?? EMPTY_ONBOARDING_STATS
+  // Required counts and "ready" follow GET /v1/admin/setup (see withSetupRequiredCounts).
+  const stats = withSetupRequiredCounts(statsData ?? EMPTY_ONBOARDING_STATS, legacySetup.activeProject)
 
   // In Quickstart mode the overview tab is hidden and the segmented control
   // shows "Create / Verify / Install" labels. Previously effectiveTab was hard-
@@ -701,6 +702,11 @@ export function OnboardingPage() {
                   sdkInstalled: stats.sdkInstalled,
                   reportCount: stats.reportCount,
                 }}
+                completedStepIds={
+                  legacySetup.activeProject && legacySetup.activeProject.project_id === (stats.projectId ?? legacySetup.activeProject.project_id)
+                    ? legacySetup.activeProject.steps.filter((s) => s.complete).map((s) => s.id)
+                    : undefined
+                }
               />
             ),
           },
@@ -1261,16 +1267,16 @@ export function OnboardingPage() {
           Restart tour
         </Btn>
         <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
-        {/* Re-entry point for a setup guide the user dismissed. The dock is
-            the only setup surface that follows you off this page, so hiding
-            it has to be reversible from somewhere stable. */}
+        {/* The Steps tab is the setup checklist (with Fix it on the SDK step).
+            This used to open a docked guide that is no longer mounted. */}
         <Btn
           variant="ghost"
           size="sm"
-          onClick={() => openSetupGuide()}
+          onClick={() => setActiveTab('steps')}
           className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
+          data-testid="onboarding-show-setup-steps"
         >
-          Show setup guide
+          Show setup steps
         </Btn>
       </p>
       ) : null}

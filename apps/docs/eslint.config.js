@@ -3,7 +3,8 @@ import mushiPlugin from 'eslint-plugin-mushi-mushi';
 
 export default [
   ...baseConfig,
-  mushiPlugin.configs.recommended,
+  // The monorepo's own preset: recommended plus the design-system rules.
+  mushiPlugin.configs.internal,
   {
     ignores: ['.next/**', 'node_modules/**', 'next-env.d.ts', 'playground/**', 'out/**'],
   },

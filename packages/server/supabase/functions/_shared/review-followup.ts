@@ -281,6 +281,22 @@ export type CiHeadState =
   | { state: 'base_failing'; failing: []; onBase: string[] }
   | { state: 'pending' | 'infra' | 'green' | 'none'; failing: [] }
 
+/**
+ * Host repos fail their required gate on a draft PR on purpose, in a first
+ * step named "Draft PRs run no CI" (a skipped required check would read as
+ * green and let a draft merge untested). Shortly after the review marks the
+ * PR ready, the newest collected row for the gate can still be that stop;
+ * read as a code failure it bought a CI-repair agent run (2026-10-26).
+ */
+const DRAFT_GUARD_STEP = /^draft prs? run no ci\b/i
+
+/** @internal Exported for tests only. A failed job whose only failed steps are the draft guard. */
+export function isDraftGuardStop(job: Pick<CiJobForRepair, 'conclusion' | 'steps'>): boolean {
+  if ((job.conclusion ?? '').toLowerCase() !== 'failure') return false
+  const failed = (job.steps ?? []).filter((s) => String(s?.conclusion ?? '').toLowerCase() === 'failure')
+  return failed.length > 0 && failed.every((s) => DRAFT_GUARD_STEP.test(String(s?.name ?? '').trim()))
+}
+
 /** Conclusions that are the code's fault. `action_required` (an approval) and `startup_failure` (the workflow file) are not an agent's to fix. */
 const CODE_FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out'])
 const PENDING_KINDS = new Set(['running', 'queued'])
@@ -312,7 +328,11 @@ export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: Readon
   }
   const jobs = [...latest.values()]
   if (jobs.length === 0) return { state: 'none', failing: [] }
+  // The draft run's intentional stop is not a test result: CI runs once the
+  // PR is marked ready, so it counts as pending until that run is collected.
+  const draftStopped = jobs.some(isDraftGuardStop)
   const failing = jobs
+    .filter((j) => !isDraftGuardStop(j))
     .filter((j) => j.ci_kind === 'code_failure' && !j.infra && CODE_FAILURE_CONCLUSIONS.has((j.conclusion ?? '').toLowerCase()))
     .map((j) => ({
       jobId: j.job_id,
@@ -331,7 +351,7 @@ export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: Readon
     if (own.length === 0) return { state: 'base_failing', failing: [], onBase }
     return onBase.length > 0 ? { state: 'code_failure', failing: own, onBase } : { state: 'code_failure', failing: own }
   }
-  if (jobs.some((j) => PENDING_KINDS.has(j.ci_kind))) return { state: 'pending', failing: [] }
+  if (draftStopped || jobs.some((j) => PENDING_KINDS.has(j.ci_kind))) return { state: 'pending', failing: [] }
   if (jobs.some((j) => INFRA_KINDS.has(j.ci_kind) || j.infra)) return { state: 'infra', failing: [] }
   return { state: 'green', failing: [] }
 }

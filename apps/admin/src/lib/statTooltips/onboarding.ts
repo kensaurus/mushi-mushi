@@ -24,8 +24,11 @@ export function requiredTooltip(stats: OnboardingStats): MetricTooltipData {
   )
 }
 
+/** The Required card's subtitle, from the same counts as its value. */
 export function requiredDetail(stats: OnboardingStats): string {
-  return stats.nextStepLabel ?? 'All required steps done'
+  const left = stats.requiredTotal - stats.requiredComplete
+  if (left <= 0) return 'All required steps done'
+  return `${left} required step${left === 1 ? '' : 's'} left${stats.nextStepLabel ? `: ${stats.nextStepLabel}` : ''}`
 }
 
 export function sdkTooltip(stats: OnboardingStats): MetricTooltipData {
