@@ -98,16 +98,26 @@ export async function loadRecorded(db: Db, projectId: string): Promise<Recorded>
     readAll<Run>(db, 'sdk_upgrade_jobs', 'id, branch, pr_url, pr_number, status', projectId, { optional: true }),
     readAll<Cost>(db, 'ci_cost_fix_jobs', 'id, repo, branch, pr_number, status', projectId, { optional: true }),
   ])
+  // A fix whose attempt finished can still get pushes: a cloud review follow-up
+  // (ADR 0032) or a merge-queue conflict agent (ADR 0041) working on its PR.
+  const busy = new Set<string>()
+  const followups = await db.from('fix_review_followups').select('fix_attempt_id, status').eq('project_id', projectId).in('status', ['queued', 'dispatched', 'running'])
+  if (followups.error && !isMissingTable(followups.error)) throw new Error(`fix_review_followups read failed: ${followups.error.message}`)
+  for (const r of (followups.data ?? []) as Array<{ fix_attempt_id: string | null }>) if (r.fix_attempt_id) busy.add(r.fix_attempt_id)
+  const conflicts = await db.from('fix_merge_queue').select('fix_attempt_id, state').eq('project_id', projectId).eq('state', 'resolving')
+  if (conflicts.error) throw new Error(`fix_merge_queue read failed: ${conflicts.error.message}`)
+  for (const r of (conflicts.data ?? []) as Array<{ fix_attempt_id: string | null }>) if (r.fix_attempt_id) busy.add(r.fix_attempt_id)
+
   const branches: RecordedBranch[] = []
   const attempts: FixAttemptPr[] = []
   const activeBranches = new Set<string>()
-  const add = (source: RecordedBranch['source'], id: string, repo: string | null, branch: string | null, pr: number | null, active: boolean) => {
+  const add =(source: RecordedBranch['source'], id: string, repo: string | null, branch: string | null, pr: number | null, active: boolean) => {
     if (!branch) return
     if (active) activeBranches.add(branch)
     if (repo) branches.push({ source, sourceId: id, repo: repo.toLowerCase(), branch, prNumber: pr, active })
   }
   for (const f of fixes) {
-    const active = !FIX_TERMINAL.has((f.status ?? '').toLowerCase())
+    const active = !FIX_TERMINAL.has((f.status ?? '').toLowerCase()) || busy.has(f.id)
     const repo = repoFromPrUrl(f.pr_url)
     const pr = prNumberOf(f.pr_url, f.pr_number)
     for (const b of new Set([f.branch, f.branch_name].filter((x): x is string => !!x))) add('fix_attempt', f.id, repo, b, pr, active)

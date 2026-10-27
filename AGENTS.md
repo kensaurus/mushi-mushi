@@ -946,7 +946,9 @@ and leave the approval unclaimed). Migration `20261027183000_repo_housekeeping_i
 
 At run time every item is checked again on fresh GitHub reads: the default
 branch, a protected branch, the head or base of an open PR, a running Mushi
-row and a moved tip are refused; a PR whose head moved, that merged or closed,
+row (an unfinished fix attempt, a queued or running cloud review follow-up, a
+merge-queue conflict agent, a running train, UX run, SDK upgrade or CI cost
+fix) and a moved tip are refused; a PR whose head moved, that merged or closed,
 or that rides a release train is refused. The branch and its commit are
 written to `repo_housekeeping_items` before the delete (no row, no delete); the
 delete is GraphQL `updateRefs` with `beforeOid`, else re-read then REST

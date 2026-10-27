@@ -151,6 +151,29 @@ describe('RepoCleanup', () => {
     expect(host.textContent).toContain('It moved to eeeeeee after the list was approved.')
   })
 
+  it('with more candidates than one clean-up takes, ticks the first 50 and says so', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ key: `branch:b${i}`, branch: `b${i}`, headSha: A, prNumber: i + 1, prState: 'merged', closedAt: null, reason: 'merged' }))
+    const v = view()
+    v.repos[0].branches = many as never
+    render(v)
+    const ask = button(/Ask to delete 50 branches/)
+    expect(ask?.disabled).toBe(false)
+    expect(host.textContent).toContain('At most 50 go in one clean-up; the first 50 are ticked.')
+    await act(async () => ask!.click())
+    expect(JSON.parse(mocks.apiFetchMutate.mock.calls[0][1].body).keys).toHaveLength(50)
+  })
+
+  it('reads again while a clean-up is running', () => {
+    vi.useFakeTimers()
+    try {
+      const { reload } = render(view({ actions: [pending('executing')] }))
+      act(() => { vi.advanceTimersByTime(5000) })
+      expect(reload).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('a missing database update is said plainly', () => {
     render(view({ migrationPending: true }))
     expect(host.textContent).toContain('20261027183000_repo_housekeeping_items')

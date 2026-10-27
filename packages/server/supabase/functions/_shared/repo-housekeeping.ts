@@ -23,7 +23,8 @@
  *     (a hold about an older head is stale and does not count);
  *   - stale: its newest commit is older than `staleDays` (the commit date,
  *     not the push date: GitHub does not list pushes).
- *   Never one riding a release train or the head of a running Mushi row.
+ *   Never one riding a release train, or whose fix is still running or has a
+ *   cloud review follow-up or a merge-queue conflict agent working on it.
  *
  * The item each preview lists carries the commit it was decided on; the
  * approval covers that exact list, and the run refuses an item whose commit

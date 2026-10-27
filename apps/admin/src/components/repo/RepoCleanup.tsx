@@ -16,7 +16,7 @@
  *       POST /v1/admin/projects/:id/repo-cleanup/requests/:actionId/approve|reject|execute
  */
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Badge, Btn, Callout, Card, Checkbox, DisclosurePanel, Loading } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { PageLoadError } from '../PageLoadError'
@@ -60,6 +60,13 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
     post(`${base}/requests`, { action, repo, ...(keys ? { keys } : {}) }, () => 'Asked. An owner or admin approves it under "Waiting for a decision" before anything changes on GitHub.')
 
   const waiting = useMemo(() => (data?.actions ?? []).filter((a) => a.status === 'pending_approval' || a.status === 'approved' || a.status === 'executing'), [data])
+  // A long run answers 202 and goes on: read again every 5 s until no clean-up is running.
+  const running = (data?.actions ?? []).some((a) => a.status === 'executing')
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(reload, 5000)
+    return () => clearInterval(t)
+  }, [running, reload])
   const finished = useMemo(() => (data?.actions ?? []).filter((a) => !waiting.includes(a)).slice(0, 10), [data, waiting])
 
   if (error) return <PageLoadError error={error} resource="clean-up list" endpoint={base} onRetry={reload} />
@@ -121,7 +128,7 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
       )}
 
       {data.repos.map((r) => (
-        <RepoCard key={r.repo} repo={r} canRequest={data.canRequest} busy={busy} staleDays={data.staleDays} onAsk={ask} />
+        <RepoCard key={r.repo} repo={r} canRequest={data.canRequest} busy={busy} staleDays={data.staleDays} maxItems={data.limits.maxItems} onAsk={ask} />
       ))}
       {data.repos.length === 0 && <p className="text-xs text-fg-muted">No GitHub repository is connected to this app.</p>}
 
@@ -208,15 +215,16 @@ function ActionRow({ action, children }: { action: CleanupAction; children?: Rea
   )
 }
 
-function RepoCard({ repo, canRequest, busy, staleDays, onAsk }: {
+function RepoCard({ repo, canRequest, busy, staleDays, maxItems, onAsk }: {
   repo: CleanupRepo
+  maxItems: number
   canRequest: boolean
   busy: boolean
   staleDays: number
   onAsk: (repo: string, action: 'delete_branches' | 'close_prs' | 'set_delete_branch_on_merge', keys?: string[]) => Promise<boolean>
 }) {
-  const [branches, setBranches] = useState<Set<string>>(() => new Set(repo.branches.map((b) => b.key)))
-  const [prs, setPrs] = useState<Set<string>>(() => new Set(repo.prs.map((p) => p.key)))
+  const [branches, setBranches] = useState<Set<string>>(() => new Set(repo.branches.slice(0, maxItems).map((b) => b.key)))
+  const [prs, setPrs] = useState<Set<string>>(() => new Set(repo.prs.slice(0, maxItems).map((p) => p.key)))
   const toggle = (set: Set<string>, key: string, on: boolean) => {
     const next = new Set(set)
     if (on) next.add(key)
@@ -255,10 +263,11 @@ function RepoCard({ repo, canRequest, busy, staleDays, onAsk }: {
                 ))}
               </ul>
               <div>
-                <Btn size="sm" disabled={busy || !canRequest || chosenBranches.length === 0 || chosenBranches.length > 50} onClick={() => onAsk(repo.repo, 'delete_branches', chosenBranches)}>
+                <Btn size="sm" disabled={busy || !canRequest || chosenBranches.length === 0 || chosenBranches.length > maxItems} onClick={() => onAsk(repo.repo, 'delete_branches', chosenBranches)}>
                   Ask to delete {chosenBranches.length} branch{chosenBranches.length === 1 ? '' : 'es'}
                 </Btn>
               </div>
+              {repo.branches.length > maxItems && <p className="text-2xs text-fg-muted">At most {maxItems} go in one clean-up; the first {maxItems} are ticked. Ask again for the rest after this one runs.</p>}
             </>
           )}
         </section>
@@ -283,10 +292,11 @@ function RepoCard({ repo, canRequest, busy, staleDays, onAsk }: {
                 ))}
               </ul>
               <div>
-                <Btn size="sm" disabled={busy || !canRequest || chosenPrs.length === 0 || chosenPrs.length > 50} onClick={() => onAsk(repo.repo, 'close_prs', chosenPrs)}>
+                <Btn size="sm" disabled={busy || !canRequest || chosenPrs.length === 0 || chosenPrs.length > maxItems} onClick={() => onAsk(repo.repo, 'close_prs', chosenPrs)}>
                   Ask to close {chosenPrs.length} pull request{chosenPrs.length === 1 ? '' : 's'}
                 </Btn>
               </div>
+              {repo.prs.length > maxItems && <p className="text-2xs text-fg-muted">At most {maxItems} go in one clean-up; the first {maxItems} are ticked.</p>}
             </>
           )}
         </section>

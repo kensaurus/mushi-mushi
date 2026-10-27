@@ -511,6 +511,22 @@ describe('execute: close_prs', () => {
   })
 })
 
+describe('fixes another Mushi agent is still pushing to', () => {
+  it('keeps a PR with a queued cloud follow-up or a conflict agent out of the list, and refuses it at run time', async () => {
+    const s = setup({ extra: { fix_review_followups: [{ project_id: P1, fix_attempt_id: F.f7, status: 'queued' }] } })
+    const repo = (await s.app.call('GET', URL_BASE)).body.data.repos[0]
+    expect(repo.prs.map((p: { prNumber: number }) => p.prNumber)).toEqual([5])
+    expect(repo.kept).toEqual(expect.arrayContaining([{ key: 'pr:7', reason: 'A Mushi run on this pull request is still going.' }]))
+
+    const t = setup()
+    const { actionId } = await requestAndApprove(t, { action: 'close_prs' })
+    t.db.table('fix_merge_queue').push({ project_id: P1, fix_attempt_id: F.f5, repo: REPO, pr_number: 5, state: 'resolving', train_id: null })
+    const res = await t.app.call('POST', `${URL_BASE}/requests/${actionId}/execute`)
+    expect(items(res)[0]).toMatchObject({ key: 'pr:5', outcome: 'refused', detail: expect.stringMatching(/still going/) })
+    expect(t.gh.pulls.find((p) => p.number === 5)?.state).toBe('open')
+  })
+})
+
 describe('restore and the repo setting', () => {
   it('restores a deleted branch at the commit Mushi kept, once, never over a branch that exists', async () => {
     const s = setup()

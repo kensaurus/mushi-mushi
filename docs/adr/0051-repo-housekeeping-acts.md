@@ -44,8 +44,12 @@ or that someone pushed to a second ago, is lost or closes other work.
    Mushi fix attempt and it is superseded (a newer attempt for the same report
    has an open or merged PR), held (the latest Opus review said hold about its
    current head) or stale (no new commit for 7–90 days, default 14; the commit
-   date, not the push date). Never a PR riding a release train, never anything
-   a running Mushi row may still push to.
+   date, not the push date). Never a PR riding a release train, never a branch
+   or PR that Mushi may still push to: a fix attempt not finished, a cloud
+   review follow-up queued or running on it, a merge-queue conflict agent on
+   it, or a running release train, UX run, SDK upgrade or CI cost fix. A local
+   follow-up (`mushi work --followups`) leaves no such row; if it pushes after
+   the approval, the head moved and the item is refused.
 2. **Four acts, one path.** `delete_branches`, `close_prs`,
    `restore_branches` and `set_delete_branch_on_merge` are legacy-backed
    GitHub `connector_actions`, like the runner variables. The server builds
