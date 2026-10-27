@@ -42,7 +42,7 @@ interface ReportPickerProps {
 
 const SEARCH_DEBOUNCE_MS = 250
 
-/** @internal Exported for tests. The bug's name as the reports list shows it. */
+/** The bug's name as the reports list shows it. */
 export function reportPickerTitle(report: PickableReport): string {
   const raw = report.title ?? report.summary ?? report.description ?? ''
   const oneLine = raw.replace(/\s+/g, ' ').trim()

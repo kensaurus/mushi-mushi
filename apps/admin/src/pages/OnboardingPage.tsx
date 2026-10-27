@@ -20,6 +20,7 @@ import type { TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
 import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
@@ -606,18 +607,27 @@ export function OnboardingPage() {
       )}
 
       {/* The four steps to a wired-up app, with the next one's button (Set up page intent). */}
-      {stats.hasAnyProject && (
-        <SetupProgressRail
-          project={project}
-          apiKey={apiKey?.key ?? null}
-          onTab={setActiveTab}
-          onMintKey={() => void generateKey()}
-          minting={generatingKey}
-          onSendTest={() => void submitTestReport()}
-          testing={testStatus === 'running'}
-          compact={effectiveTab !== 'overview'}
-        />
-      )}
+      <PagePosture
+        slots={[
+          {
+            id: 'setup-rail',
+            priority: POSTURE_PRIORITY.status,
+            show: stats.hasAnyProject,
+            children: (
+              <SetupProgressRail
+                project={project}
+                apiKey={apiKey?.key ?? null}
+                onTab={setActiveTab}
+                onMintKey={() => void generateKey()}
+                minting={generatingKey}
+                onSendTest={() => void submitTestReport()}
+                testing={testStatus === 'running'}
+                compact={effectiveTab !== 'overview'}
+              />
+            ),
+          },
+        ]}
+      />
 
       {/* Configuration that is missing or broken, before a button fails (console ops plan P1). */}
       {stats.hasAnyProject ? <SetupGapsSection projectId={activeProjectId ?? stats.projectId ?? null} /> : null}

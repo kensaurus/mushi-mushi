@@ -25,6 +25,7 @@ import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
 import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SectionAnchorNav } from '../components/connect/SectionAnchorNav'
 import { GithubConnectionCard } from '../components/connect/GithubConnectionCard'
 import { UpdateCenter } from '../components/connect/UpdateCenter'
@@ -256,18 +257,30 @@ export function ConnectPage() {
       />
 
       {/* Heartbeat, version and editor in three pills (Connect page intent). */}
-      <ConnectStatusPills
-        sdkLastSeenAt={sdkLastSeenAt}
-        sdkVersion={project?.sdk_version ?? null}
-        sdkLatestVersion={project?.sdk_latest_version ?? null}
-        sdkStatus={project?.sdk_status ?? null}
-        mcpStats={mcpStats}
-        loading={snapshotLoading}
+      <PagePosture
+        slots={[
+          {
+            id: 'connect-pills',
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ConnectStatusPills
+                sdkLastSeenAt={sdkLastSeenAt}
+                sdkVersion={project?.sdk_version ?? null}
+                sdkLatestVersion={project?.sdk_latest_version ?? null}
+                sdkStatus={project?.sdk_status ?? null}
+                mcpStats={mcpStats}
+                loading={snapshotLoading}
+              />
+            ),
+          },
+          {
+            id: 'connect-mcp-problem',
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
+            children: <McpStatusBanner stats={mcpStats} plainBanner />,
+          },
+        ]}
       />
-
-      {mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected' ? (
-        <McpStatusBanner stats={mcpStats} plainBanner />
-      ) : null}
 
       <SectionAnchorNav sections={visibleSections} ariaLabel="Connect page sections" />
 

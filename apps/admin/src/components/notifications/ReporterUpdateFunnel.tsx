@@ -49,7 +49,11 @@ export function ReporterUpdateFunnel({ funnel }: { funnel: ReporterFunnel }) {
         {stages.map((s) => {
           const pct = funnelPct(s.value, funnel.told)
           return (
-            <div key={s.key} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2">
+            <div
+              key={s.key}
+              // mushi-mushi-allowlist: label / bar / count columns; the label column fits the longest stage name
+              className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2"
+            >
               <dt className="text-xs text-fg-secondary">{s.label}</dt>
               <div aria-hidden="true" className="h-2.5 min-w-0 overflow-hidden rounded-full bg-surface-overlay">
                 <div className={`h-full rounded-full ${s.bar}`} style={{ width: `${s.key === 'told' ? (funnel.told > 0 ? 100 : 0) : pct}%` }} />

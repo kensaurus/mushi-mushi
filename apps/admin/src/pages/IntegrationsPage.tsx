@@ -48,6 +48,7 @@ import {
   type RoutingProviderDef,
 } from '../components/integrations/types'
 import { ConnectionGrid } from '../components/integrations/ConnectionGrid'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
 import { usePageCopy } from '../lib/copy'
 import { draftFromSaved, platformSaveBody } from '../lib/platformIntegrationForm'
@@ -457,18 +458,27 @@ export function IntegrationsPage() {
       />
 
       {/* Which tools are connected, what's broken, and the fix (Integrations page intent). */}
-      {setup.hasAnyProject ? (
-        <ConnectionGrid
-          platform={platformQuery.data ?? null}
-          history={history}
-          slack={{
-            configured: Boolean(settingsQuery.data?.slackConfigured),
-            canPost: Boolean(settingsQuery.data?.slackCanPost),
-            channelId: settingsQuery.data?.slackChannelId ?? null,
-          }}
-          linearConnected={linearConnected}
-        />
-      ) : null}
+      <PagePosture
+        slots={[
+          {
+            id: 'integrations-grid',
+            priority: POSTURE_PRIORITY.status,
+            show: setup.hasAnyProject,
+            children: (
+              <ConnectionGrid
+                platform={platformQuery.data ?? null}
+                history={history}
+                slack={{
+                  configured: Boolean(settingsQuery.data?.slackConfigured),
+                  canPost: Boolean(settingsQuery.data?.slackCanPost),
+                  channelId: settingsQuery.data?.slackChannelId ?? null,
+                }}
+                linearConnected={linearConnected}
+              />
+            ),
+          },
+        ]}
+      />
 
       {!setup.hasAnyProject && (
         <NextStep

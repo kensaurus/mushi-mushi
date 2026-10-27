@@ -19,6 +19,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { storageVerdict } from '../components/storage/storageVerdict'
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
@@ -714,13 +715,23 @@ export function StoragePage() {
         <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
       </PageHeaderBar>
 
-      <StorageSnapshotStrip
-        stats={stats}
-        statsFetchedAt={statsFetchedAt}
-        statsValidating={statsValidating}
-        onTab={setActiveTab}
-        onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
-        checking={checkingId === activeProjectId}
+      <PagePosture
+        slots={[
+          {
+            id: 'storage-status',
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <StorageSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                onTab={setActiveTab}
+                onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
+                checking={checkingId === activeProjectId}
+              />
+            ),
+          },
+        ]}
       />
 
       <SegmentedControl

@@ -14,7 +14,7 @@
 
 import { usePageData } from '../../lib/usePageData'
 import { pluralizeWithCount } from '../../lib/format'
-import { CHIP_TONE } from '../../lib/chipTone'
+import type { CHIP_TONE } from '../../lib/chipTone'
 import { Badge, Card, ErrorAlert, RelativeTime, Skeleton } from '../ui'
 
 /** @public The list row the timeline reads; the drawer takes the same row. */
@@ -30,6 +30,7 @@ export interface TimelineRelease {
   credit_summary?: { credited: number; told: number }
 }
 
+/** @internal Exported for tests. */
 export const RELEASE_TIMELINE_PATH = '/v1/admin/releases?limit=8&credits=1'
 
 /** @internal Exported for tests. How many reporters heard about this release. */

@@ -24,6 +24,7 @@ import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useNow } from '../lib/useNow'
 import { useScrollToHash } from '../lib/useScrollToHash'
 import type { SpendDownResponse } from '../components/settings/spendDown'
@@ -79,15 +80,24 @@ export function CreditsPage() {
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
       {/* First: one countdown per expiring key, and the one switch that matters. */}
-      {!spendDown.error && (
-        <CreditCountdowns
-          keys={spendDown.data ? cursorKeys : null}
-          balance={balance}
-          canManageOrg={followups.data?.canManage === true}
-          now={now}
-          onChanged={() => spendDown.reload()}
-        />
-      )}
+      <PagePosture
+        slots={[
+          {
+            id: 'credits-countdowns',
+            priority: POSTURE_PRIORITY.status,
+            show: !spendDown.error,
+            children: (
+              <CreditCountdowns
+                keys={spendDown.data ? cursorKeys : null}
+                balance={balance}
+                canManageOrg={followups.data?.canManage === true}
+                now={now}
+                onChanged={() => spendDown.reload()}
+              />
+            ),
+          },
+        ]}
+      />
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">

@@ -187,9 +187,4 @@ export function sdkFreshness(lastSeenAt: string | null | undefined, now: number 
   return 'cold'
 }
 
-export const SDK_FRESHNESS_LABEL: Record<SdkFreshness, string> = {
-  healthy: 'Healthy',
-  stale: 'Stale',
-  cold: 'Cold',
-  never: 'Not seen',
-}
+

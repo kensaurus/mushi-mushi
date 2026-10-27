@@ -49,6 +49,7 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
     <section
       aria-label="Setup progress"
       data-testid="setup-progress-rail"
+      // mushi-mushi-allowlist: a labelled <section> landmark; Card renders a plain div
       className="w-full min-w-0 rounded-md border border-edge-subtle bg-surface-raised p-3 sm:p-4"
     >
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

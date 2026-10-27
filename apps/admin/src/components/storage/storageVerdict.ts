@@ -11,7 +11,7 @@
 
 import type { StorageStats } from './types'
 
-export type StorageAction = 'configure' | 'probe' | 'reprobe'
+type StorageAction = 'configure' | 'probe' | 'reprobe'
 
 export interface StorageVerdict {
   tone: 'ok' | 'warn' | 'danger' | 'info'

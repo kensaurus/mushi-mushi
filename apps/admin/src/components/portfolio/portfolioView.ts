@@ -200,7 +200,7 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
  */
 const SETUP_ONLY_REASON = /^\d+ problems? to fix: Mushi setup checks? \(\d+\)\./
 
-export function isMushiSetupChore(p: Pick<PortfolioCardProblem, 'element' | 'reason'>): boolean {
+function isMushiSetupChore(p: Pick<PortfolioCardProblem, 'element' | 'reason'>): boolean {
   return p.element === 'gates' && SETUP_ONLY_REASON.test(p.reason)
 }
 
@@ -214,7 +214,7 @@ const ELEMENT_PAGE: Partial<Record<RecipeElementKey, string>> = {
 }
 
 /** Most urgent first: broken, bugs waiting, a part to fix, SDK behind, chores, clear. */
-export type UrgencyLevel = 'broken' | 'bugs' | 'fix' | 'behind' | 'chores' | 'clear'
+type UrgencyLevel = 'broken' | 'bugs' | 'fix' | 'behind' | 'chores' | 'clear'
 
 const URGENCY_RANK: Record<UrgencyLevel, number> = { broken: 0, bugs: 1, fix: 2, behind: 3, chores: 4, clear: 5 }
 
