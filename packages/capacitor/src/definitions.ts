@@ -25,8 +25,9 @@ export interface MushiCapacitorPluginConfig {
   /** Mushi API key (`mushi_...`). Mint one in the admin console under Projects → API Keys. */
   apiKey: string;
   /**
-   * Supabase Edge Function URL for the ingest endpoint.
-   * Required for reports to be delivered. Example: `https://xyz.supabase.co/functions/v1/api`.
+   * Mushi API base URL. Defaults to the hosted Mushi API (the same default as
+   * `@mushi-mushi/web`); set it only when self-hosting, e.g.
+   * `https://xyz.supabase.co/functions/v1/api`.
    */
   endpoint?: string;
   /** Defaults to `'shake'`. */

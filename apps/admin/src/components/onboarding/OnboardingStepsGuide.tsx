@@ -47,15 +47,18 @@ interface Props {
     | 'sdkInstalled'
     | 'reportCount'
   >
+  /** Step ids GET /v1/admin/setup marks complete, so each row shows its own state. */
+  completedStepIds?: readonly string[]
 }
 
-export function OnboardingStepsGuide({ stats }: Props) {
+export function OnboardingStepsGuide({ stats, completedStepIds }: Props) {
   const overlayStats = {
     requiredComplete: stats.requiredComplete,
     requiredTotal: stats.requiredTotal,
     sdkInstalled: stats.sdkInstalled,
     reportCount: stats.reportCount,
     nextStepId: stats.nextStepId,
+    completedStepIds,
   }
 
   return (

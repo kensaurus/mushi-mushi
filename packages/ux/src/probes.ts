@@ -11,7 +11,7 @@
 
 import { AxeBuilder } from '@axe-core/playwright'
 import type { Page } from 'playwright'
-import type { AxeViolation, ProbeResult } from './types.js'
+import type { AxeViolation, LayoutIssue, ProbeResult } from './types.js'
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const MAX_TARGETS = 5
@@ -88,7 +88,130 @@ export async function runProbes(
     smallTargets: layout.smallTargets,
     consoleErrors: [...consoleErrors],
     cls: Math.round(layout.cls * 1000) / 1000,
+    layout: await layoutIssues(page, skip),
   }
+}
+
+const MAX_LAYOUT_ISSUES = 8
+/** A collision or overhang smaller than this is antialiasing or a border, not a bug. */
+const LAYOUT_SLOP_PX = 4
+
+/**
+ * Boxes a person sees collide or stick out, measured, not judged: in-flow
+ * siblings drawn over each other, and controls that outgrow their container,
+ * wrap past two lines or cut their own label off. The Mushi console's Apps
+ * page had oversized, overflowing buttons and overlapping cards that no other
+ * probe saw (2026-10-26). Deliberate overlap is skipped: positioned layers,
+ * negative margins (avatar stacks), transforms, grid items placed in one cell,
+ * scroll containers.
+ */
+async function layoutIssues(page: Page, skipSelectors: readonly string[]): Promise<LayoutIssue[]> {
+  return page.evaluate(
+    ({ skipSelectors, max, slop }) => {
+      type Issue = { kind: 'overlap' | 'outgrows'; selector: string; detail: string }
+      const out: Issue[] = []
+      const seen = new Set<string>()
+      const add = (kind: Issue['kind'], el: Element, detail: string) => {
+        const selector = nameOf(el)
+        if (seen.has(kind + selector) || out.filter((i) => i.kind === kind).length >= max) return
+        seen.add(kind + selector)
+        out.push({ kind, selector, detail })
+      }
+      function nameOf(el: Element): string {
+        const id = el.id ? `#${el.id}` : ''
+        const cls =
+          typeof el.className === 'string'
+            ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((c) => `.${c}`).join('')
+            : ''
+        const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
+        return `${el.tagName.toLowerCase()}${id}${cls}${text ? ` "${text}"` : ''}`
+      }
+      const px = (v: string) => parseFloat(v) || 0
+      const skipped = (el: Element) => skipSelectors.some((sel) => el.closest(sel))
+      const visible = (s: CSSStyleDeclaration, r: DOMRect) =>
+        s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0.05 && r.width > 0 && r.height > 0
+      const placed = (s: CSSStyleDeclaration) =>
+        (s.position === 'relative' && ((s.top !== 'auto' && px(s.top) !== 0) || (s.left !== 'auto' && px(s.left) !== 0))) ||
+        s.transform !== 'none' ||
+        px(s.marginLeft) < 0 ||
+        px(s.marginTop) < 0 ||
+        px(s.marginRight) < 0 ||
+        px(s.marginBottom) < 0
+
+      // Overlap: siblings in normal flow whose boxes intersect.
+      for (const parent of Array.from(document.querySelectorAll('body *'))) {
+        if (parent.childElementCount < 2 || skipped(parent)) continue
+        const ps = getComputedStyle(parent)
+        const kids = Array.from(parent.children)
+          .slice(0, 40)
+          .map((el) => ({ el, s: getComputedStyle(el), r: el.getBoundingClientRect() }))
+          .filter(
+            ({ el, s, r }) =>
+              visible(s, r) &&
+              (s.position === 'static' || s.position === 'relative') &&
+              s.display !== 'inline' &&
+              s.display !== 'contents' &&
+              s.float === 'none' &&
+              !placed(s) &&
+              !skipped(el),
+          )
+        for (let i = 0; i < kids.length; i++) {
+          for (let j = i + 1; j < kids.length; j++) {
+            const a = kids[i]
+            const b = kids[j]
+            // Grid items put in one cell on purpose (a stack of layers).
+            if (ps.display.includes('grid') && a.s.gridArea === b.s.gridArea && !a.s.gridArea.startsWith('auto')) continue
+            const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left)
+            const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top)
+            if (w > slop && h > slop) {
+              add('overlap', b.el, `overlaps ${nameOf(a.el)} by ${Math.round(w)}×${Math.round(h)}px`)
+            }
+          }
+        }
+      }
+
+      // Outgrows: controls too big for where they sit.
+      const controls = document.querySelectorAll('button, [role=button], a[href], input[type=submit], input[type=button], select')
+      for (const el of Array.from(controls)) {
+        if (skipped(el)) continue
+        const s = getComputedStyle(el)
+        const r = el.getBoundingClientRect()
+        if (!visible(s, r) || s.position === 'fixed' || s.position === 'absolute' || placed(s)) continue
+        if (el.tagName === 'A' && s.display === 'inline') continue
+        let box: Element | null = el.parentElement
+        while (box && getComputedStyle(box).display === 'contents') box = box.parentElement
+        if (box) {
+          const bs = getComputedStyle(box)
+          const br = box.getBoundingClientRect()
+          const scrolls = /auto|scroll/.test(bs.overflowX)
+          if (!scrolls && br.width > 0) {
+            const right = r.right - br.right
+            const left = br.left - r.left
+            if (right > slop || left > slop) {
+              add('outgrows', el, `sticks ${Math.round(Math.max(right, left))}px out of its container (${Math.round(r.width)}px wide in ${Math.round(br.width)}px)`)
+              continue
+            }
+          }
+        }
+        // Label-only buttons: everything inside flows inline (text, icons).
+        const labelOnly = Array.from(el.querySelectorAll('*')).every(
+          (c) => getComputedStyle(c).display.startsWith('inline') || c.closest('svg') !== null,
+        )
+        const text = (el.textContent ?? '').trim()
+        if (!labelOnly || !text || el.tagName === 'A') continue
+        if (s.overflow !== 'visible' && el.scrollWidth > el.clientWidth + 1 && s.textOverflow !== 'ellipsis') {
+          add('outgrows', el, `label is cut off (needs ${el.scrollWidth}px, has ${el.clientWidth}px)`)
+          continue
+        }
+        const line = px(s.lineHeight) || px(s.fontSize) * 1.2
+        const inner = r.height - px(s.paddingTop) - px(s.paddingBottom) - px(s.borderTopWidth) - px(s.borderBottomWidth)
+        const lines = line > 0 ? Math.round(inner / line) : 1
+        if (lines > 2) add('outgrows', el, `label wraps to ${lines} lines (${Math.round(r.width)}×${Math.round(r.height)}px)`)
+      }
+      return out
+    },
+    { skipSelectors: [...skipSelectors], max: MAX_LAYOUT_ISSUES, slop: LAYOUT_SLOP_PX },
+  )
 }
 
 /**
@@ -116,7 +239,7 @@ const IMPACT_WEIGHT: Record<string, number> = { critical: 8, serious: 4, moderat
  */
 export function probePenalty(p: ProbeResult): number {
   const axe = p.axe.reduce((sum, v) => sum + (IMPACT_WEIGHT[v.impact ?? ''] ?? 1) * Math.max(1, v.count), 0)
-  return axe + (p.overflowX ? 10 : 0) + p.smallTargets + p.consoleErrors.length * 5 + clsPenalty(p.cls)
+  return axe + (p.overflowX ? 10 : 0) + p.smallTargets + p.consoleErrors.length * 5 + clsPenalty(p.cls) + (p.layout?.length ?? 0) * 3
 }
 
 /**

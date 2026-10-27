@@ -37,15 +37,22 @@ interface BadgeProps {
   children: ReactNode
   className?: string
   title?: string
+  /**
+   * Accessible name for chips whose visible text is an abbreviation or glyph
+   * ("↑ v1.33.1"). Callers passed this before it was declared, and it was
+   * dropped on the floor — the chip had no accessible name at all.
+   */
+  'aria-label'?: string
   /** WCAG-safe tinted chip — pairs muted bg with *-foreground text via chipTone.ts */
   tone?: BadgeTone
 }
 
-export function Badge({ children, className = '', title, tone }: BadgeProps) {
+export function Badge({ children, className = '', title, tone, 'aria-label': ariaLabel }: BadgeProps) {
   const toneClass = tone ? CHIP_TONE[tone] : ''
   return (
     <span
       title={title}
+      aria-label={ariaLabel}
       className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${toneClass} ${className}`.trim()}
     >
       {children}
