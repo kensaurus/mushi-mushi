@@ -1,11 +1,14 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.test.tsx
- * PURPOSE: Class-contract for the experiment list row (jsdom has no layout).
- *          Below sm the row stacks and Launch does not shrink. From sm to md
- *          the variant count and mode stay on the meta line (report fbea6eb6).
+ * PURPOSE: Contract for the experiment list row (report fbea6eb6).
+ *          Below sm the row stacks, Launch does not shrink, and the name wraps.
+ *          From sm to md the variant count and split stay on the meta line.
+ *          Explicit table roles stay on the stacked markup. A Chromium check,
+ *          when the browser is installed, measures Launch inside the card at 390px.
  */
 
-import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -102,6 +105,11 @@ let host: HTMLDivElement
 let root: Root
 
 beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  })
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -161,12 +169,12 @@ describe('Experiments list at phone width', () => {
     expect(classTokens(name?.className)).not.toContain('truncate')
 
     const cells = Array.from(row?.querySelectorAll(':scope > td') ?? [])
-    // Variants and Mode only. A bare `td.hidden` also matches Status and Created.
+    // Variants and Split only. A bare `td.hidden` also matches Status and Created.
     const hiddenUntilMd = cells.filter((td) => {
       const tokens = classTokens(td.className)
       return tokens.includes('hidden') && tokens.includes('md:table-cell') && !tokens.includes('sm:table-cell')
     })
-    expect(hiddenUntilMd.map((td) => td.textContent?.trim())).toEqual(['2', 'Static'])
+    expect(hiddenUntilMd.map((td) => td.textContent?.trim())).toEqual(['2', 'Even split'])
     const anyHidden = cells.filter((td) => classTokens(td.className).includes('hidden'))
     expect(anyHidden.length).toBeGreaterThan(hiddenUntilMd.length)
 
@@ -174,11 +182,11 @@ describe('Experiments list at phone width', () => {
     expect(meta).toBeTruthy()
     expect(classTokens(meta?.className)).not.toContain('sm:hidden')
     const variant = Array.from(meta?.querySelectorAll('span') ?? []).find((el) => el.textContent === '2 variants')
-    const mode = Array.from(meta?.querySelectorAll('span') ?? []).find((el) => el.textContent === 'Static')
+    const split = Array.from(meta?.querySelectorAll('span') ?? []).find((el) => el.textContent === 'Even split')
     expect(variant).toBeTruthy()
-    expect(mode).toBeTruthy()
+    expect(split).toBeTruthy()
     expect(variant?.closest('.sm\\:hidden')).toBeNull()
-    expect(mode?.closest('.sm\\:hidden')).toBeNull()
+    expect(split?.closest('.sm\\:hidden')).toBeNull()
     const hiddenFromSm = Array.from(meta?.querySelectorAll(':scope > .sm\\:hidden') ?? [])
     expect(hiddenFromSm).toHaveLength(2)
     expect(hiddenFromSm[0]?.textContent).toContain('Draft')
@@ -186,9 +194,126 @@ describe('Experiments list at phone width', () => {
     expect(hiddenFromSm[1]?.textContent?.trim().length).toBeGreaterThan(0)
   })
 
-  it('says the experiment name wraps', () => {
-    const source = readFileSync(join(__dirname, 'ExperimentsPage.tsx'), 'utf8')
-    expect(source).toContain('the name wraps')
-    expect(source).not.toContain('the name truncates')
+  it('wraps the experiment name instead of truncating it', () => {
+    render()
+    const name = host.querySelector('.wrap-break-word')
+    expect(name?.textContent).toContain('Button colour CTA test with a very long experiment name')
+    expect(classTokens(name?.className)).toContain('wrap-break-word')
+    expect(classTokens(name?.className)).not.toContain('truncate')
+  })
+
+  it('keeps an explicit table mapping when the row is display block', () => {
+    render()
+    const table = host.querySelector('table')
+    expect(table?.getAttribute('role')).toBe('table')
+    expect(table?.querySelector('thead')?.getAttribute('role')).toBe('rowgroup')
+    expect(table?.querySelector('tbody')?.getAttribute('role')).toBe('rowgroup')
+    const headerRow = table?.querySelector('thead tr')
+    expect(headerRow?.getAttribute('role')).toBe('row')
+    const headers = Array.from(table?.querySelectorAll('th') ?? [])
+    expect(headers.length).toBeGreaterThan(0)
+    for (const th of headers) expect(th.getAttribute('role')).toBe('columnheader')
+    const launch = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Launch')
+    const row = launch?.closest('tr')
+    expect(row?.getAttribute('role')).toBe('row')
+    const cells = Array.from(row?.querySelectorAll(':scope > td') ?? [])
+    expect(cells.length).toBeGreaterThan(0)
+    for (const td of cells) expect(td.getAttribute('role')).toBe('cell')
+  })
+
+  // The unit job does not install a browser. Skip there; run wherever Chromium is present.
+  const chromiumBin = (() => {
+    try {
+      const { chromium } = createRequire(import.meta.url)('playwright') as {
+        chromium: { executablePath: () => string }
+      }
+      const bin = chromium.executablePath()
+      return existsSync(bin) ? bin : null
+    } catch {
+      return null
+    }
+  })()
+
+  it.skipIf(!chromiumBin)('keeps Launch and the view button inside the card at a 390px viewport', async () => {
+    render()
+    const table = host.querySelector('table')
+    expect(table).toBeTruthy()
+    let card: HTMLElement | null = table!.parentElement
+    while (card && !classTokens(card.getAttribute('class') ?? '').includes('overflow-hidden')) {
+      card = card.parentElement
+    }
+    expect(card).toBeTruthy()
+
+    const classNames = new Set<string>(['px-4', 'w-full'])
+    for (const el of [card!, ...Array.from(card!.querySelectorAll('*'))]) {
+      for (const token of classTokens(el.getAttribute('class') ?? '')) classNames.add(token)
+    }
+    const require = createRequire(import.meta.url)
+    const fromVite = createRequire(require.resolve('@tailwindcss/vite'))
+    const { compile } = await import(fromVite.resolve('@tailwindcss/node')) as {
+      compile: (css: string, options: { base: string, onDependency: () => void }) => Promise<{ build: (candidates: string[]) => string }>
+    }
+    const compiler = await compile('@import "tailwindcss";\n', {
+      base: join(__dirname, '../..'),
+      onDependency() {},
+    })
+    const utilityCss = compiler.build([...classNames])
+    const componentCss = readFileSync(join(__dirname, '../styles/components.css'), 'utf8')
+    const tableRules = componentCss.match(/\.responsive-table \{[\s\S]*?\.responsive-table-scroll \{[^}]*\}/)
+    expect(tableRules?.[0]).toContain('overflow-x: auto')
+
+    const { chromium } = require('playwright') as {
+      chromium: { launch: () => Promise<{ newPage: (opts: { viewport: { width: number, height: number } }) => Promise<PwPage>, close: () => Promise<void> }> }
+    }
+    const browser = await chromium.launch()
+    try {
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+      await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${utilityCss}</style><style>:root{--row-py-comfy:0.5rem;--row-py-compact:0.25rem}${tableRules![0]}</style></head><body style="margin:0"><div id="viewport" style="width:390px;overflow:hidden"><div class="w-full px-4">${card!.outerHTML}</div></div></body></html>`, { waitUntil: 'load' })
+      const box = await page.evaluate(() => {
+        const viewport = document.getElementById('viewport')!
+        const cardEl = viewport.querySelector('.overflow-hidden')!
+        const launch = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Launch')!
+        const view = document.querySelector('button[aria-label^="View experiment"]')!
+        const cr = cardEl.getBoundingClientRect()
+        const vr = viewport.getBoundingClientRect()
+        const lr = launch.getBoundingClientRect()
+        const viewBox = view.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(launch)
+        const text = range.getBoundingClientRect()
+        const inside = (outer: DOMRect, inner: DOMRect) =>
+          inner.width > 0 && inner.height > 0
+          && inner.left >= outer.left - 0.5
+          && inner.right <= outer.right + 0.5
+          && inner.top >= outer.top - 0.5
+          && inner.bottom <= outer.bottom + 0.5
+        return {
+          launchText: launch.textContent?.trim() ?? '',
+          textWidth: text.width,
+          launchInside: inside(cr, lr),
+          textInside: inside(cr, text),
+          viewInside: inside(cr, viewBox),
+          cardInsideViewport: inside(vr, cr),
+          scrollOverflow: cardEl.scrollWidth - cardEl.clientWidth,
+          viewWidth: viewBox.width,
+        }
+      })
+      const detail = JSON.stringify(box)
+      expect(box.launchText, detail).toBe('Launch')
+      expect(box.textWidth, detail).toBeGreaterThan(24)
+      expect(box.viewWidth, detail).toBeGreaterThan(16)
+      expect(box.launchInside, detail).toBe(true)
+      expect(box.textInside, detail).toBe(true)
+      expect(box.viewInside, detail).toBe(true)
+      expect(box.cardInsideViewport, detail).toBe(true)
+      expect(box.scrollOverflow, detail).toBeLessThanOrEqual(1)
+    } finally {
+      await browser.close()
+    }
   })
 })
+
+interface PwPage {
+  setContent: (html: string, opts: { waitUntil: 'load' }) => Promise<void>
+  evaluate: <T>(fn: () => T) => Promise<T>
+}
