@@ -49,6 +49,17 @@ import { ComponentInventory } from '../components/design/ComponentInventory'
 import { DirectionsBoard } from '../components/design/DirectionsBoard'
 import { CssScopeColumns } from '../components/design/CssScopeColumns'
 import { describeDevianceSettle, useDeviancePoll, type DevianceSettle } from '../components/design/useDeviancePoll'
+import { DesignAtAGlance } from '../components/design/DesignAtAGlance'
+import { PageFirstStep } from '../components/ui/page-first-step'
+import { docsUrl } from '../lib/docsUrl'
+
+/**
+ * @internal Exported for tests only. No token was read: the page is one
+ * first step. A set with tokens, or any set at all, is a set-up page.
+ */
+export function designNotSetUp(design: Pick<DesignPlaneResponse, 'tokens' | 'sets'>): boolean {
+  return design.tokens.length === 0 && design.sets.length === 0
+}
 
 type DesignView = 'tokens' | 'directions'
 
@@ -181,8 +192,8 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         setRunNotice({
           tone: rateLimited ? 'warn' : 'danger',
           text: rateLimited
-            ? res.error?.message || 'Too many deviance checks — wait a moment and try again.'
-            : res.error?.message || 'The deviance check failed.',
+            ? res.error?.message || 'Too many drift checks. Wait a moment and try again.'
+            : res.error?.message || 'The drift check failed.',
         })
         return
       }
@@ -204,6 +215,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
   }, [projectId, running, reload, followScan])
 
   const sets = orderSets(data?.sets ?? stickySets?.sets ?? [])
+  const empty = data != null && designNotSetUp(data)
   const activeSet = data?.activeSet ?? stickySets?.activeSet ?? null
   const shownSet = direction ?? data?.shownSet ?? stickySets?.shownSet ?? null
 
@@ -212,8 +224,8 @@ function ProjectDesign({ projectId }: { projectId: string }) {
       <PageHeaderBar
         title="Design system"
         helpTitle="What is the design system page?"
-        helpWhatIsIt="Your app's design tokens, read from the files mushi.recipe.json points at, shown as swatches, contrast pairs, type, spacing, radius and motion — plus a deviance score for code that uses values outside the system. Diagnoses use these tokens so a fix stays on-system."
-        helpHowToUse="Pick a set, check the contrast pairs, then run a deviance check. To change a token or a rule, queue the edit, preview the diff, and confirm: Mushi opens a draft PR and never writes to your repo directly."
+        helpWhatIsIt="Your app's design: its colours, contrast, type, spacing, radius and motion, read from your token files, plus how far the code has drifted from it. Diagnoses use these so a fix stays in your design."
+        helpHowToUse="Check your colours and the drift line at the top, then run a drift check. To change a token or a rule, queue the edit, preview the diff and confirm: Mushi opens a draft PR and never writes to your repo directly."
         helpFlowPath="/design"
       >
         {/* One control, one tab stop (QA 293); named as the sidebar names the page. */}
@@ -226,13 +238,23 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: data != null,
+            show: data != null && !empty,
             children: data ? <DesignStateBanner design={data} tokenIssueCount={data.issues.length} /> : null,
           },
         ]}
       />
 
-      <div className="flex w-full min-w-0 flex-col gap-4">
+      {empty ? (
+        <PageFirstStep
+          title="No design files yet"
+          sentence="Point Mushi at the files where your colours, spacing and fonts live (a tokens.json, your Tailwind theme or a CSS file). It then shows them here and tells you when code drifts from them."
+          action={{ label: 'Show me how', href: docsUrl('/concepts/app-recipe#mushirecipejson') }}
+          learnMore={{ label: 'What the design page shows', href: docsUrl('/concepts/app-recipe#the-design-system-page') }}
+          data-testid="design-first-step"
+        />
+      ) : null}
+
+      <div className={empty ? 'hidden' : 'flex w-full min-w-0 flex-col gap-4'}>
         <SegmentedControl<DesignView> value={view} options={VIEW_OPTIONS} onChange={setView} ariaLabel="Design view" />
 
         {view === 'directions' && <DirectionsBoard projectId={projectId} />}
@@ -266,8 +288,8 @@ function ProjectDesign({ projectId }: { projectId: string }) {
 
         {view === 'tokens' && data && !data.editable.enabled && (
           <p className="text-xs text-fg-muted">
-            <span className="font-medium text-fg-secondary">Editing is off:</span>{' '}
-            {data.editable.reason ?? 'Token edits are not available for this project.'}
+            <span className="font-medium text-fg-secondary">Changing tokens from here is off.</span>{' '}
+            <span title={data.editable.reason ?? undefined}>Mushi can show your tokens but not open a PR that edits them for this app.</span>
           </p>
         )}
 
@@ -283,9 +305,12 @@ function ProjectDesign({ projectId }: { projectId: string }) {
           />
         )}
 
-        {/* The work first (issues, deviance, contrast, actions); the catalogue last, closed. */}
+        {/* Your colours and the drift line first, then the work (issues, drift,
+            contrast, actions); the catalogue last, closed. */}
         {view === 'tokens' && data && (
           <>
+            <DesignAtAGlance design={data} />
+
             <Section title="Token issues" action={<span className="text-2xs text-fg-faint">{data.issues.length} found</span>}>
               <RecipeIssueList issues={data.issues} empty="No token issues in this set." />
             </Section>
