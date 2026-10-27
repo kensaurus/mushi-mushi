@@ -145,12 +145,23 @@ describe('summarizeKeys', () => {
     ]
     expect(summarizeKeys(keys, [legacy()], NOW)).toEqual({
       working: 1,
-      attention: 2, // rejected key + superseded legacy key
+      attention: 0,
+      replaced: 2, // rejected key + superseded legacy key, both replaced by the working key
       expiring: 1,
       checking: 1,
       off: 1,
       total: 6,
     })
+  })
+
+  it('a rejected key with nothing to replace it still needs attention', () => {
+    const keys = [pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })]
+    expect(summarizeKeys(keys, [], NOW)).toMatchObject({ attention: 1, replaced: 0 })
+  })
+
+  it('a key turned off by hand never needs attention, even once it has expired', () => {
+    const off = pool({ id: 'k9', status: 'disabled', expires_at: iso(-24 * H) })
+    expect(summarizeKeys([pool(), off], [], NOW)).toMatchObject({ attention: 0, replaced: 0, off: 1 })
   })
 })
 
