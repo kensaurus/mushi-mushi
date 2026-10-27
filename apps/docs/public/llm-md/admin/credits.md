@@ -28,6 +28,7 @@ A **skill run** applies one skill from your synced skills catalog to one part of
 - **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
 - **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
 - **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+- **Run on**, when you have a [local worker](pipeline#workers) lane for the app in fix or skill mode: Cursor in the cloud, or that lane on your machine. A round for a lane waits in its queue and never goes to the cloud.
 
 Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
