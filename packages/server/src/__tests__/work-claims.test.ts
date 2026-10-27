@@ -51,8 +51,11 @@ describe('activeWorkClaims', () => {
     expect(res).toEqual({ ids: new Set(['r1']) })
   })
   it('reads a missing table as "no claims" and returns any other error', async () => {
-    const missing = makeFakeDb({}, { failRead: () => ({ code: '42P01', message: 'relation "work_claims" does not exist' }) })
-    expect(await claims.activeWorkClaims(missing as never, ['r1'], NOW)).toEqual({ ids: new Set() })
+    // Postgres says 42P01; hosted PostgREST says PGRST205 when its schema cache has no such table.
+    for (const code of ['42P01', 'PGRST205']) {
+      const missing = makeFakeDb({}, { failRead: () => ({ code, message: 'work_claims is not there' }) })
+      expect(await claims.activeWorkClaims(missing as never, ['r1'], NOW)).toEqual({ ids: new Set() })
+    }
     const broken = makeFakeDb({}, { failRead: () => 'connection reset' })
     expect(await claims.activeWorkClaims(broken as never, ['r1'], NOW)).toEqual({ error: 'connection reset' })
     expect(await claims.reportHasActiveWorkClaim(broken as never, 'r1', NOW)).toBeNull()

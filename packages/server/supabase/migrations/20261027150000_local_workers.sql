@@ -27,8 +27,9 @@
 --
 -- ADDITIVE: four tables, one appended project_api_keys.scopes value
 -- ('worker:run'). Apply BEFORE deploying api, api-ext, fix-worker,
--- spend-down-worker and skill-runs (their lease checks treat a missing table
--- as "no claims", so the order only matters for the new routes).
+-- spend-down-worker and skill-runs. Their lease checks read a missing table
+-- (42P01 / PGRST205) as "no claims", but any other read error stops a
+-- dispatch, so do not rely on the fallback.
 -- ============================================================================
 
 -- project_api_keys.scopes: allow 'worker:run'. Every value the CHECK allowed

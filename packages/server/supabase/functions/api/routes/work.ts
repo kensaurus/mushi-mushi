@@ -289,8 +289,8 @@ interface CandidateReport {
  * The reports a lane may claim now, in order: its queue (a person's order;
  * the 7-day cooldown does not apply, as `mushi work --report` never did), then
  * classified and reopened reports ranked worst first, newest first. Never a
- * report with an active claim or an in-flight cloud dispatch; a ranked one
- * also never with a live run, an open PR, or a local cooldown.
+ * report with an active claim, an in-flight cloud dispatch, a live run or an
+ * open PR; a ranked one also never in a local cooldown.
  */
 export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise<Array<CandidateReport & { fromQueue: boolean }>> {
   const { data: queueRows, error: qErr } = await db
@@ -349,7 +349,10 @@ export async function claimCandidates(db: Db, lane: LaneRow, now: Date): Promise
     for (const a of (att.data ?? []) as AttemptLite[]) attempts.set(a.report_id, [...(attempts.get(a.report_id) ?? []), a])
   }
   const free = (id: string) => !claimed.ids.has(id) && !inflight.has(id)
-  queuedReports = queuedReports.filter((r) => free(r.id))
+  // A queued report waits (it stays queued) while anything else works on it:
+  // a claim, a cloud dispatch, or a live run or open PR. The 7-day cooldown
+  // does not apply to it: a person put it there.
+  queuedReports = queuedReports.filter((r) => free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []))
   const queuedIds = new Set(queuedReports.map((r) => r.id))
   const rest = ranked.filter((r) => !queuedIds.has(r.id) && free(r.id) && !hasLiveAttempt(attempts.get(r.id) ?? []) && !inLocalCooldown(attempts.get(r.id) ?? [], now))
   return [...queuedReports.map((r) => ({ ...r, fromQueue: true })), ...rest.map((r) => ({ ...r, fromQueue: false }))]
@@ -666,7 +669,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   for (const part of chunks(projectIds)) {
     const { data, error } = await db.from('work_lanes').select(LANE_COLUMNS).in('project_id', part)
     if (error) {
-      if ((error as { code?: string }).code === '42P01') return c.json({ ok: true, data: empty })
+      if (['42P01', 'PGRST205'].includes((error as { code?: string }).code ?? '')) return c.json({ ok: true, data: empty })
       return err(c, 'DB_ERROR', 'Could not read the lanes.', 500)
     }
     lanes.push(...((data ?? []) as LaneRow[]))

@@ -16,8 +16,9 @@
  *          dead daemon blocks nobody once its lease runs out, even before
  *          anything marks it expired.
  *
- *          Failing the right way: a missing table (42P01, the migration is not
- *          applied yet) means no claim can exist, so callers go on; it is
+ *          Failing the right way: a missing table (42P01, or PostgREST's
+ *          PGRST205 when its schema cache has no such table; the migration is
+ *          not applied yet) means no claim can exist, so callers go on; it is
  *          logged once. Any other read error comes back as an error, and the
  *          caller skips the reports this tick rather than dispatching blind.
  *
@@ -37,12 +38,12 @@ type Db = ReturnType<typeof getServiceClient>
 /** How long a claim holds without a renewal (the heartbeat renews it every 60 s). */
 export const WORK_LEASE_MS = 45 * 60_000
 
-const TABLE_MISSING = '42P01'
+const TABLE_MISSING = new Set(['42P01', 'PGRST205'])
 const IN_CHUNK = 100
 let warnedMissing = false
 
 function missingTable(error: { code?: string } | null | undefined): boolean {
-  if (error?.code !== TABLE_MISSING) return false
+  if (!error?.code || !TABLE_MISSING.has(error.code)) return false
   if (!warnedMissing) {
     warnedMissing = true
     log.child('work-claims').error('work_claims is missing: apply migration 20261027150000_local_workers; until then no local claim is checked')

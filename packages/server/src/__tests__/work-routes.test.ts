@@ -227,6 +227,17 @@ describe('POST /v1/worker/claim', () => {
     expect(second.body.data.claim).toMatchObject({ fromQueue: false, report: { id: R(3) } })
   })
 
+  it('leaves a queued report queued while a cloud agent runs on it', async () => {
+    const s = await registered({
+      reports: [report(1), report(2)],
+      fix_attempts: [{ id: 'f1', report_id: R(1), project_id: P1, status: 'running', agent: 'cursor_cloud', pr_url: null, pr_state: null, merged_at: null, error: null, created_at: '2026-10-27T10:00:00Z' }],
+    })
+    s.db.table('work_queue').push({ id: 'q1', lane_id: s.laneA, project_id: P1, report_id: R(1), position: 0, source: 'console', created_at: '2026-10-27T00:00:00Z' })
+    const res = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    expect(res.body.data.claim).toMatchObject({ fromQueue: false, report: { id: R(2) } })
+    expect(s.db.table('work_queue').map((q) => q.report_id)).toEqual([R(1)])
+  })
+
   it('a paused lane takes nothing', async () => {
     const s = await registered({ reports: [report(1)] })
     s.db.table('work_lanes').find((l) => l.id === s.laneA)!.paused = true
