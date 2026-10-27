@@ -278,9 +278,10 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
     headline: 'No app activity in 7+ days',
     subtitle: 'The SDK may have been removed from a recent deploy, or the API key was rotated.',
   },
+  // Not installed yet is the next setup step, not a failure: no red for a new app.
   never: {
-    dot: 'bg-danger',
-    chip: CHIP_TONE.dangerSubtle,
+    dot: 'bg-info',
+    chip: CHIP_TONE.infoSubtle,
     headline: 'SDK not connected yet',
     subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },
@@ -300,7 +301,8 @@ const KEY_STATUS_CHIP: Record<
   'endpoint-mismatch': 'danger',
   stale: 'warn',
   cold: 'warn',
-  never: 'danger',
+  // A key the app hasn't used yet is a setup step, not a failure.
+  never: 'neutral',
   inactive: 'neutral',
 }
 
@@ -312,7 +314,7 @@ const CARD_BLOCK_TONE: Record<
   'endpoint-mismatch': 'danger',
   stale: 'warn',
   cold: 'warn',
-  never: 'danger',
+  never: 'muted',
   'no-key': 'muted',
 }
 
@@ -703,7 +705,7 @@ export function SdkHealthSummary({
               tone={
                 status === 'healthy'
                   ? 'ok'
-                  : status === 'endpoint-mismatch' || status === 'never'
+                  : status === 'endpoint-mismatch'
                     ? 'danger'
                     : status === 'stale' || status === 'cold'
                       ? 'warn'

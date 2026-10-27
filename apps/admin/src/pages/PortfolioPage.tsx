@@ -153,7 +153,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 action={
                   status.first && firstNext ? (
                     <Btn size="sm" variant="primary" to={firstNext.to} onClick={() => setActiveProjectIdSnapshot(status.first!.projectId)}>
-                      Open {status.first.name}
+                      Fix {status.first.name}
                     </Btn>
                   ) : undefined
                 }
