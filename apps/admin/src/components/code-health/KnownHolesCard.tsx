@@ -240,7 +240,7 @@ function RunLine({ view, pkgReason, eolReason }: { view: KnownHolesView; pkgReas
       </p>
       {run.error && <Callout tone="danger">The last check failed: {run.error}</Callout>}
       {pkgReason && (pkgReason.state === 'unknown' || pkgReason.state === 'error') && <Callout tone={pkgReason.state === 'error' ? 'danger' : 'warn'}>{pkgReason.reason}</Callout>}
-      {eolReason?.state === 'finding' && <Callout tone="warn">{eolReason.reason} See Risk checks on the App blueprint page for which pins.</Callout>}
+      {eolReason?.state === 'finding' && <Callout tone="warn">{eolReason.reason} Risk checks at the end of the <Link to="/recipe" className={LINK_ACCENT}>App blueprint</Link> page list which pins.</Callout>}
       {run.warnings.length > 0 && (
         <details className="text-2xs text-fg-faint">
           <summary className="cursor-pointer hover:text-fg-secondary">{run.warnings.length} note{run.warnings.length === 1 ? '' : 's'} from the check</summary>
