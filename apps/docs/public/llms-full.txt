@@ -21085,6 +21085,27 @@ Once the SDK sends its first real report from your app:
 
 ---
 
+## Setup gaps
+
+Once the app exists, **Setup gaps** lists the configuration that is missing or
+broken, before a button fails. Each line has a **Fix** link to the page where you
+fix it. Checks that pass fold into one line, and a check Mushi could not read says
+so: the page never reads "all fine" while a check is unknown.
+
+| Check | What it reads | Why it matters |
+| --- | --- | --- |
+| GitHub access, per repo | The Mushi GitHub App's permissions, a classic token's scopes, or a fine-grained token's harmless reads | Pushing fix branches, opening pull requests and re-running CI each need their own permission. Without secrets access, Mushi gives you copy-paste commands instead. |
+| Review follow-up key | Your team's follow-up setting and the Cursor key it uses | Mushi turns follow-ups off on its own when that key is deleted. |
+| Auto-fix agent key | Whether auto-fix is on and a Cursor key can start an agent | With no usable key, no fix starts on its own. |
+| Deploy events | The last deploy Mushi saw | With none in 14 days, reporters are not told when their fix goes live. |
+| Slack bot token | The latest Slack check (every 15 minutes) | Slack stops accepting a token when the app is removed from the workspace. |
+
+Mushi only reads to check. It never writes to GitHub to find out whether it may
+write, so a fine-grained token's write permissions read **can't tell**. Results are
+kept for 10 minutes; **Check again** re-checks.
+
+---
+
 ## Restarting the tour
 
 Click **Restart tour** at the bottom of the page to reset the checklist state and walk
@@ -21099,6 +21120,7 @@ POST /v1/admin/projects               { name }
 POST /v1/admin/projects/:id/keys      { scope: 'ingest' }
 POST /v1/admin/projects/:id/test-report
 GET  /v1/admin/onboarding/time-to-first-diagnosis   → { keyMintedAt, firstDiagnosisAt, ms }
+GET  /v1/admin/setup-gaps?projectId=                → { projects: [{ gaps: [{ id, status, title, summary, fixHref }] }] }
 ```
 
 ---
@@ -22380,6 +22402,34 @@ release still has its event recorded, and the answer gives the reason:
 One request releases at most once, for its last `release.published` event. The
 answer gives that version in `autoReleaseVersion` and lists any others in
 `autoReleaseIgnoredVersions`.
+
+---
+
+## Batch tab: what ships next
+
+The **Batch** tab shows, for each repo, the release train that is running now or
+leaves next. A release train collects your approved fix pull requests and merges
+them together, so they ship as one deploy. The tab only reads: re-run, merge and
+remove fixes from [Pipeline](/admin/pipeline).
+
+- **Each fix** shows whether it rides or waits, Opus's verdict at its current commit,
+  its CI, and why it waits.
+- **Rules to ride** count how many fixes pass each rule: Opus said merge at the
+  current commit, not a draft, its own CI is green, it did not keep failing trains
+  at that commit, and it is not urgent (urgent fixes merge on their own).
+- **Database migrations** lists migration files in the fixes' changes. Mushi looks
+  in the folder your app recipe names (`data.migrationsDir` in
+  `mushi.recipe.json`), or else in `supabase/migrations`, `prisma/migrations` and
+  `migrations`. Mushi never runs them; apply them when you deploy. If a change could
+  not be read, the list says it may be incomplete.
+- **Deploy after the last train** says whether the merge commit was seen running, or
+  a deploy was seen after the merge. With no deploy in 14 days it links to the
+  [setup gap](/admin/onboarding#setup-gaps) that explains why reporters are not
+  told.
+
+```bash
+GET /v1/admin/release-batch?projectId=   # one app, or every app you can open
+```
 
 ---
 
