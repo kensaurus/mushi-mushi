@@ -17,6 +17,7 @@ import { DetailRows, type DetailRowItem } from '../ui/fields'
 import { EndpointCodeRow, ReadoutSection, ReadoutPanel } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { StorageStats } from './types'
+import { storageVerdict } from './storageVerdict'
 import { IconGlobe, IconHealth } from '../icons'
 
 interface Props {
@@ -39,11 +40,11 @@ export function StorageReadout({ stats, fetchedAt, isValidating }: Props) {
 
   const rows: DetailRowItem[] = [
     {
-      label: 'Active project health',
+      label: 'This app',
       value: stats.activeProjectConfigured
-        ? `${stats.activeProjectHealthStatus} · ${stats.activeProjectProvider}`
-        : 'Not configured',
-      tone: stats.activeProjectConfigured ? healthTone(String(stats.activeProjectHealthStatus)) : 'warn',
+        ? `${storageVerdict(stats).chip} · ${stats.activeProjectProvider}`
+        : 'Built-in storage (nothing to check)',
+      tone: stats.activeProjectConfigured ? healthTone(String(stats.activeProjectHealthStatus)) : 'ok',
       wrap: true,
     },
     {
@@ -52,8 +53,8 @@ export function StorageReadout({ stats, fetchedAt, isValidating }: Props) {
       tone: stats.activeProjectObjects > 0 ? 'info' : 'muted',
     },
     {
-      label: 'Fleet posture',
-      value: `${stats.healthyCount} healthy · ${stats.degradedCount} degraded · ${stats.failingCount} failing`,
+      label: 'Apps with their own bucket',
+      value: stats.configuredCount === 0 ? 'None' : `${stats.healthyCount} working · ${stats.degradedCount} having trouble · ${stats.failingCount} failing`,
       tone: stats.failingCount > 0 ? 'danger' : stats.degradedCount > 0 ? 'warn' : 'ok',
       wrap: true,
     },

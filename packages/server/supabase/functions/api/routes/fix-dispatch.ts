@@ -16,6 +16,7 @@ import {
   type FeatureFlag,
 } from '../../_shared/entitlements.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
+import { reportHasActiveWorkClaim } from '../../_shared/work-claims.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
@@ -245,6 +246,13 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
               dispatchId: existing[0].id,
             },
           },
+          409,
+        );
+      }
+      // A local worker holds it (ADR 0048): its agent is on the report now.
+      if ((await reportHasActiveWorkClaim(db, body.reportId)) !== false) {
+        return c.json(
+          { ok: false, error: { code: 'ALREADY_DISPATCHED', message: 'A local worker (mushi work) holds this report right now, or its lease could not be read. Try again later.' } },
           409,
         );
       }

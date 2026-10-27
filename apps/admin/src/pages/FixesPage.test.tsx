@@ -14,6 +14,10 @@
  *   93   A "Common causes" chip narrows the failed list to that cause.
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
+ *   Journeys 2026-10-27: the page opens on Ready to merge (Opus merge on the
+ *        current commit, CI green) with "Merge when ready", and on stopped
+ *        reports grouped by reason with Retry beside each reason; the header
+ *        has no bulk paid Retry.
  */
 
 import { act, createElement } from 'react'
@@ -48,8 +52,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
-  usePageData: () => ({
-    data: { ...EMPTY_FIXES_STATS, hasAnyProject: true },
+  usePageData: (path: string | null) => ({
+    // The stats read; the pipeline read (release stations) is not under test here.
+    data: path?.startsWith('/v1/admin/pipeline') ? null : { ...EMPTY_FIXES_STATS, hasAnyProject: true },
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -222,7 +227,7 @@ describe('FixesPage', () => {
     await render('/fixes')
     const box = () => document.querySelector('input[aria-label="Select the fix for Login loops"]') as HTMLInputElement
     click(box())
-    click(buttons('Retry 1').find((b) => !b.closest('[role="dialog"]')))
+    click(buttons('Retry 1').find((b) => b.closest('[data-testid="fixes-bulk-action-bar"]')))
     click(buttons('Retry').find((b) => !b.closest('tr')))
     await flush()
     expect(box().disabled).toBe(true)
@@ -297,5 +302,67 @@ describe('FixesPage', () => {
     await flush()
     expect(mocks.apiFetch.mock.calls.some(([p]) => String(p).includes('offset=1'))).toBe(true)
     expect(document.body.textContent).toContain('2 attempts')
+  })
+
+  describe('what the page shows first (journeys 2026-10-27)', () => {
+    const open = (n: number, over: Partial<FixAttempt> = {}) =>
+      fix({
+        id: `pr${n}`,
+        report_id: `r${n}`,
+        report_title: `Fix ${n}`,
+        status: 'completed',
+        pr_url: `https://github.com/o/r/pull/${n}`,
+        pr_number: n,
+        pr_state: 'open',
+        report_fix_state: 'pr_open',
+        retryable: false,
+        commit_sha: `head${n}`,
+        check_run_conclusion: 'success',
+        review_verdict: 'merge',
+        review_head_sha: `head${n}`,
+        ...over,
+      })
+
+    it('lists Ready to merge only for an Opus merge on the current commit with CI green, and queues them', async () => {
+      mocks.fixes = [
+        open(1),
+        open(2, { review_head_sha: 'older' }),
+        open(3, { check_run_conclusion: 'failure' }),
+        open(4, { review_verdict: 'hold' }),
+      ]
+      mocks.total = 4
+      await render('/fixes')
+      const list = document.querySelector('[data-testid="fixes-ready-list"]')!
+      expect(list.textContent).toContain('Fix 1')
+      expect(list.textContent).not.toContain('Fix 2')
+      expect(list.textContent).not.toContain('Fix 3')
+      expect(list.textContent).not.toContain('Fix 4')
+      click(document.querySelector('[data-testid="fixes-ready-queue-all"]'))
+      await flush()
+      const call = mocks.apiFetch.mock.calls.find(([p]) => p === '/v1/admin/merge-queue')
+      expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ fixIds: ['pr1'] })
+    })
+
+    it('groups stopped reports by reason, with Retry beside a reason a retry can clear', async () => {
+      mocks.fixes = [
+        fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>),
+        fix({ id: 'b', report_id: 'r2', report_title: 'Ops task', failure_category: 'needs_human', retryable: false } as Partial<FixAttempt>),
+      ]
+      mocks.total = 2
+      await render('/fixes')
+      expect(buttons('Retry 1 unfixed')).toHaveLength(0)
+      const timeout = document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')!
+      expect(timeout.textContent).toContain('Ran out of time')
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-retry"]')).toBeNull()
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('would stop the same way')
+      click(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout-retry"]'))
+      expect(document.body.textContent).toContain('stopped by "Ran out of time"')
+      expect(mocks.apiFetch.mock.calls.some(([p]) => p === '/v1/admin/fixes/dispatch')).toBe(false)
+      click(buttons('Retry').find((b) => b.closest('[role="dialog"]')))
+      await flush()
+      const calls = mocks.apiFetch.mock.calls.filter(([p]) => p === '/v1/admin/fixes/dispatch')
+      expect(calls).toHaveLength(1)
+      expect(JSON.parse((calls[0][1] as RequestInit).body as string)).toMatchObject({ reportId: 'r1' })
+    })
   })
 })

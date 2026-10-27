@@ -17,6 +17,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
 import { FixReviewSummary } from './FixReviewSummary'
 import { FixGateChecklist } from './FixGateChecklist'
+import { CLOUD_FIX_AGENTS } from '../../lib/fixVerification'
 import type { CiInfraVerdict } from '../../lib/ciTypes'
 
 interface Props {
@@ -29,6 +30,10 @@ interface Props {
   ciUpdatedAt?: string | null
   ciInfra?: CiInfraVerdict | null
   projectId?: string | null
+  /** GitHub's PR state: the dialog says "draft" only for a draft (report 9831ade8). */
+  prState?: string | null
+  /** Who opened the PR. Mushi's merge checks run on cloud agents' PRs only. */
+  agent?: string | null
   busy?: boolean
   onMerged?: (reportStatus: string | null) => void
   /** Compact label for tight layouts (FixCard). */
@@ -45,6 +50,8 @@ export function MergeFixPreflight({
   ciUpdatedAt,
   ciInfra,
   projectId,
+  prState,
+  agent,
   busy = false,
   onMerged,
   compact = false,
@@ -179,7 +186,7 @@ export function MergeFixPreflight({
           className="absolute right-0 top-full mt-1 z-30 w-80 sm:w-96 rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
         >
           <div className="text-xs font-medium text-fg mb-1">
-            Merge draft PR{prNumber ? ` #${prNumber}` : ''}
+            {prState === 'draft' ? 'Merge draft PR' : 'Merge PR'}{prNumber ? ` #${prNumber}` : ''}
           </div>
           <p className="text-2xs text-fg-muted leading-relaxed">
             Squash-merge into your default branch via GitHub. This marks the linked report{' '}
@@ -205,7 +212,13 @@ export function MergeFixPreflight({
           </div>
 
           <div className="mt-2">
-            <FixGateChecklist fixId={fixId} heading="h4" />
+            {agent == null || CLOUD_FIX_AGENTS.has(agent) ? (
+              <FixGateChecklist fixId={fixId} heading="h4" />
+            ) : (
+              <p className="text-2xs text-fg-muted" data-testid="fix-gate-local">
+                Merge checks: a fix from your own lane is checked by its Opus review above and its CI. The extra gates run on cloud agents&apos; pull requests.
+              </p>
+            )}
           </div>
 
           {reviewPending && (

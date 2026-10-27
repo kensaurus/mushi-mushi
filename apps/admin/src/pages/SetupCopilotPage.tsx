@@ -283,9 +283,12 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                       API URL: <code className="font-mono">MUSHI_API_URL</code>
                     </li>
                     <li>Does not enable the in-app band — metrics POST /v1/ingest/metrics only.</li>
-                    <li>
-                      Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
-                    </li>
+                    {/* The secrets script lives in the yen-yen repo only (report fe489587). */}
+                    {isExpoReporterProject(projectRow.slug) ? (
+                      <li>
+                        Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
+                      </li>
+                    ) : null}
                   </ul>
                 </ContainedBlock>
               </div>
@@ -335,7 +338,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
           </Section>
 
           <Section title="4 · Verify both tracks">
-            <p className="text-xs text-fg-muted mb-3">Ingest 4/4 and dispatch 4/4 — different gates, both documented.</p>
+            <p className="text-xs text-fg-muted mb-3">Reports coming in and fixes going out pass different checks. Each list below shows its own count.</p>
             <VerifySetupPanel
               projectId={projectId}
               projectName={projectRow.name}

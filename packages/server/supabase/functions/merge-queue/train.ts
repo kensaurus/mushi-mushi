@@ -16,7 +16,7 @@ import type { GithubRepoRef, PullRequestDetails } from '../_shared/github.ts'
 import type { finalizeFixMerge } from '../_shared/fix-merge.ts'
 import type { gatedTrainMerge, TrainMember } from '../_shared/gated-merge.ts'
 import type { requeueReviewForNewHead } from '../_shared/fix-review-db.ts'
-import { MAX_CONFLICT_AGENTS, failuresOnBase, type ChecksView } from '../_shared/merge-queue.ts'
+import { MAX_CONFLICT_AGENTS, checkNameList, failuresOnBase, type ChecksView } from '../_shared/merge-queue.ts'
 import { FOLLOWUP_MAX_PER_PR } from '../_shared/review-followup.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
@@ -299,7 +299,7 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
   // bisecting would split a healthy train and hold an innocent fix.
   const baseSha = await deps.branchSha(token, ref, train.base_ref)
   if (baseSha && failuresOnBase(failed, await deps.checks(token, ref, baseSha))) {
-    const why = `${train.base_ref} is red too (${failed.slice(0, 4).join(', ')}); the train waits for it to pass.`
+    const why = `${train.base_ref} is red too (${checkNameList(failed)}); the train waits for it to pass.`
     await deps.closePr(token, ref, train.pr_number!, `${why} No pull request in it is blamed; they ride the next train.`)
     await deps.deleteBranch(token, ref, train.branch)
     await db.from('release_trains').update({ state: 'failed', updated_at: now, detail: why }).eq('id', train.id)
@@ -307,7 +307,7 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
     await trainEvent(db, memberRows(train), 'pending', 'Release train waits for the base branch', why, `train-base-red:${train.id}`)
     return 'base_red'
   }
-  const names = failed.slice(0, 4).join(', ')
+  const names = checkNameList(failed)
   const why = `CI failed: ${names}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)
@@ -480,7 +480,7 @@ export async function runTrainTick(
       } else {
         const { ci, failed } = await headCi(await deps.checks(args.token, ref, c.headSha!), pull.baseRef ?? null)
         c.ci = ci
-        const names = failed.slice(0, 4).join(', ')
+        const names = checkNameList(failed)
         if (ci === 'pending') {
           notes.set(r.id, { state: 'queued', detail: 'CI is running on its latest commit; it rides a release train once CI is green.' })
         } else if (ci === 'base_red') {

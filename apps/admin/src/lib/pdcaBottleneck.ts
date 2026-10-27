@@ -6,6 +6,7 @@
 
 import type { PdcaStageId } from './pdca'
 import { CHIP_TONE } from './chipTone'
+import { stoppedTitle } from './countDefinitions'
 
 export const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
   plan: CHIP_TONE.infoSubtle,
@@ -50,7 +51,7 @@ export function bottleneckHumanHeadline(ctx: BottleneckContext): string {
   switch (ctx.stage) {
     case 'do':
       if (isStoppedFixLabel(ctx.label)) {
-        return `Auto-fix stopped on ${count} report${count === 1 ? '' : 's'}`
+        return stoppedTitle(count)
       }
       if (ctx.label?.includes('in flight')) {
         return `${count} fix${count === 1 ? '' : 'es'} running now`
