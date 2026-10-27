@@ -341,7 +341,7 @@ test('a row a local lane holds waits for it: no cloud agent starts, even when th
   assertEquals(lastState(writes), undefined)
 })
 
-test('a local lane's pushed merge moves the row on and re-queues the Opus review of the new head', async () => {
+test("a local lane's pushed merge moves the row on and re-queues the Opus review of the new head", async () => {
   const r = localRow()
   const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...r }], fix_events: [], work_claims: [claim()] })
   const asked: unknown[] = []
@@ -381,7 +381,7 @@ test('a local claim the lane ended on refused checks keeps its cap slot', async 
   assertEquals(String(last.detail).includes('could not resolve it (conflict markers remain in a.ts)'), true)
 })
 
-test('a local lane's conflict counts as a running agent in its repo', () => {
+test("a local lane's conflict counts as a running agent in its repo", () => {
   const at = '2026-10-23T08:00:00Z'
   const rows = [
     { id: 'l', repo: 'o/r', cursor_agent_id: null, local_claim_id: LOCAL, state: 'resolving', queued_at: at, pr_number: 1 },
