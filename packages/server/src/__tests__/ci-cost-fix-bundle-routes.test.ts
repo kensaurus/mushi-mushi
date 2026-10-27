@@ -341,6 +341,15 @@ describe('GET /v1/admin/ci/cost-fix-bundles/:id', () => {
     expect(calls.invoke).toHaveBeenCalledWith(BUNDLE)
   })
 
+  it('fires a bundle again when a row is stuck running past the stale window, not a fresh run', async () => {
+    seed(rows({ status: 'running', started_at: '2026-10-27T11:55:00Z' }))
+    await call('GET', `/v1/admin/ci/cost-fix-bundles/${BUNDLE}`)
+    expect(calls.invoke).not.toHaveBeenCalled()
+    seed(rows({ status: 'running', started_at: '2026-10-27T11:45:00Z' }))
+    await call('GET', `/v1/admin/ci/cost-fix-bundles/${BUNDLE}`)
+    expect(calls.invoke).toHaveBeenCalledWith(BUNDLE)
+  })
+
   it('measures an opened bundle on read', async () => {
     seed(rows({ status: 'pr_opened', pr_url: 'https://github.com/acme/app/pull/5', pr_number: 5 }))
     const res = await call('GET', `/v1/admin/ci/cost-fix-bundles/${BUNDLE}`)
@@ -358,6 +367,11 @@ describe('GET /v1/admin/ci/cost-fix-bundles/:id', () => {
 
   it('the single-fix GET re-fires a stuck bundle row as its bundle, never alone', async () => {
     seed([job({ bundle_id: BUNDLE, created_at: '2026-10-27T11:50:00Z' })])
+    await call('GET', '/v1/admin/ci/cost-fixes/4000000a-0000-4000-8000-000000000000')
+    expect(calls.invoke).toHaveBeenCalledWith(BUNDLE)
+    // Also one left `running` past the stale window (a lost finish).
+    calls.invoke.mockReset()
+    seed([job({ bundle_id: BUNDLE, status: 'running', started_at: '2026-10-27T11:45:00Z' })])
     await call('GET', '/v1/admin/ci/cost-fixes/4000000a-0000-4000-8000-000000000000')
     expect(calls.invoke).toHaveBeenCalledWith(BUNDLE)
   })

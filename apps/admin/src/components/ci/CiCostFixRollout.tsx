@@ -351,7 +351,7 @@ function RolloutResults({ results }: { results: CiBundleResult[] }) {
         )
       })}
       {pending.length > 0 && polls >= BUNDLE_POLL_LIMIT && (
-        <li className="text-2xs text-fg-muted">Still opening. The fix cards below show each pull request when it is ready.</li>
+        <li className="text-2xs text-fg-muted">Still opening. Reload the CI page in a few minutes to see each pull request on its fix card.</li>
       )}
     </ul>
   )

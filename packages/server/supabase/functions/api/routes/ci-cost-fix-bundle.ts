@@ -22,7 +22,8 @@
  *   GET  /v1/admin/ci/cost-fix-bundles/:id       adminOrApiKey(mcp:read)
  *        The bundle: its PR, each fix's state, summary or refusal, and after
  *        the merge the saving measured per workflow. A bundle still queued
- *        after 2 minutes is fired again.
+ *        after 2 minutes, or with a row `running` past the 10-minute stale
+ *        window, is fired again (the worker reclaims it).
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -36,7 +37,7 @@ import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.t
 import { buildCiCompare } from '../../_shared/ci-compare.ts'
 import { loadCiCompareInput } from '../../_shared/ci-compare-load.ts'
 import type { CiOverviewAdvice } from '../../_shared/ci-overview-types.ts'
-import { COST_FIX_JOB_COLUMNS, findProjectRepo, toCostFixView, type CostFixJobRow } from '../../_shared/ci-cost-fix-runner.ts'
+import { COST_FIX_JOB_COLUMNS, COST_FIX_STALE_MS, findProjectRepo, toCostFixView, type CostFixJobRow } from '../../_shared/ci-cost-fix-runner.ts'
 import { BUNDLE_MAX_ITEMS, BUNDLE_MAX_REPOS, refreshCostFixBundle, toCostFixBundleView } from '../../_shared/ci-cost-fix-bundle.ts'
 import { buildRolloutPreview, rolloutKey, type RolloutJobRow } from '../../_shared/ci-cost-fix-rollout.ts'
 import { COST_FIXES_PER_HOUR, costFixRequestSchema, invokeCostFixWorker, REFIRE_AFTER_MS } from './ci-cost-fix.ts'
@@ -345,7 +346,14 @@ async function getBundle(c: Context, deps: CiCostFixBundleRouteDeps): Promise<Re
   if (!access.allowed) return jsonError(c, 'NOT_FOUND', 'Bundle not found', 404)
 
   const now = deps.now().getTime()
-  if (rows.some((r) => r.status === 'queued' && now - Date.parse(r.created_at) > REFIRE_AFTER_MS)) {
+  // Queued too long (the call was lost), or `running` past the stale window
+  // (the worker died, or its pr_opened write was lost): the worker reclaims it.
+  const stuck = rows.some(
+    (r) =>
+      (r.status === 'queued' && now - Date.parse(r.created_at) > REFIRE_AFTER_MS) ||
+      (r.status === 'running' && r.started_at != null && now - Date.parse(r.started_at) > COST_FIX_STALE_MS),
+  )
+  if (stuck) {
     deps.invokeBundleWorker(id)
   } else if (rows.some((r) => r.status === 'pr_opened')) {
     rows = await deps.refreshBundle(db, rows)
