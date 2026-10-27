@@ -663,8 +663,8 @@ export function StatCard(props: StatCardProps) {
 /** A linked card says where it goes from where the user is: "Show Trend" on
  *  the same page, "Go to Bugs" elsewhere (lib/statCardLinks.statLinkLabel). */
 function LinkedStatCard(props: StatCardProps & { to: string }) {
-  const { pathname } = useLocation()
-  const linkText = props.linkLabel ? `Go to ${props.linkLabel}` : statLinkLabel(props.to, pathname)
+  const { pathname, search } = useLocation()
+  const linkText = props.linkLabel ? `Go to ${props.linkLabel}` : statLinkLabel(props.to, `${pathname}${search}`)
   return (
     // The link fills the card: the card used to carry the padding and a
     // pointer cursor, so a click on its edge looked live and did nothing.

@@ -140,8 +140,8 @@ function MetricItem({ metric }: { metric: PageStatusMetric }) {
 }
 
 function MetricLink({ metric, to, className }: { metric: PageStatusMetric; to: string; className: string }) {
-  const { pathname } = useLocation()
-  const linkText = statLinkLabel(to, pathname)
+  const { pathname, search } = useLocation()
+  const linkText = statLinkLabel(to, `${pathname}${search}`)
   return (
     <Link
       to={to}

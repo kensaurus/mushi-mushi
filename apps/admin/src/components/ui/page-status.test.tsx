@@ -57,7 +57,7 @@ describe('PageStatus', () => {
     const links = Array.from(container.querySelectorAll('a'))
     expect(links).toHaveLength(2)
     // A link to a tab of the page you are on says "Show", not "Go to <this page>".
-    expect(links[0].getAttribute('aria-label')).toBe('39 Stopped — Show All fixes')
+    expect(links[0].getAttribute('aria-label')).toBe('39 Stopped — Show All fixes: Stopped')
     // A link elsewhere names the page in today's words.
     expect(links[1].getAttribute('aria-label')).toBe('7 PRs open — Go to Pull requests')
     expect(container.querySelectorAll('dd')).toHaveLength(3)

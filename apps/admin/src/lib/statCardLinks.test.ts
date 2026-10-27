@@ -168,15 +168,24 @@ describe('statDestinationLabel', () => {
 
   it('reads hub views and retired routes as the view they open', () => {
     expect(statDestinationLabel('/health?view=schema')).toBe('Schema changes')
-    expect(statDestinationLabel('/drift?tab=findings')).toBe('Schema changes · Findings')
+    expect(statDestinationLabel('/drift?tab=findings')).toBe('Schema changes · Changes')
     expect(statDestinationLabel('/cost?tab=breakdown')).toBe('AI spend · Breakdown')
     expect(statDestinationLabel('/repo?tab=branches')).toBe('Pull requests')
+    expect(statDestinationLabel('/repo?tab=branches&status=ci_failed')).toBe('Pull requests · Failing CI')
     expect(statDestinationLabel('/judge?tab=evaluations')).toBe('Triage grading · Grades')
+    expect(statDestinationLabel('/fixes?tab=attempts&status=failed')).toBe('Fixes · All fixes: Stopped')
   })
 
-  it('says "Show" for a tab of the page the user is on', () => {
+  it('says "Show" for a tab or filter of the page or hub view the user is on', () => {
     expect(statLinkLabel('/judge?tab=trend', '/judge')).toBe('Show Trend')
     expect(statLinkLabel('/judge?tab=trend', '/fixes')).toBe('Go to Triage grading · Trend')
-    expect(statLinkLabel('/team?view=billing', '/team')).toBe('Show Billing')
+    expect(statLinkLabel('/team?view=billing', '/team')).toBe('Go to Billing')
+    expect(statLinkLabel('/team?view=billing&tab=plans', '/team?view=billing')).toBe('Show Plans')
+    // A retired route is the hub view it opens: on /health?view=schema the
+    // Drift links are the same page.
+    expect(statLinkLabel('/drift?tab=findings', '/health?view=schema')).toBe('Show Changes')
+    expect(statLinkLabel('/drift?tab=findings', '/health')).toBe('Go to Schema changes · Changes')
+    // The filter is named, not just the tab.
+    expect(statLinkLabel('/fixes?tab=attempts&status=failed', '/fixes')).toBe('Show All fixes: Stopped')
   })
 })

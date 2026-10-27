@@ -309,9 +309,9 @@ const PAGE_LABEL_BY_PATH: ReadonlyMap<string, string> = new Map(
   NAV_REGISTRY.filter((e) => !e.path.includes('?')).map((e) => [e.path, e.label] as const),
 )
 
-/** `/drift` → "Schema changes": a retired route reads as the view it opens now. */
-const LEGACY_VIEW_LABEL: ReadonlyMap<string, string> = new Map(
-  legacyHubRoutes().map((r) => [r.path, r.hub.views.find((v) => v.id === r.viewId)?.label ?? r.hub.path] as const),
+/** `/drift` → `/health` + view `schema`: a retired route is the hub view it opens now. */
+const LEGACY_ROUTE: ReadonlyMap<string, { hub: PageHub; viewId: string }> = new Map(
+  legacyHubRoutes().map((r) => [r.path, { hub: r.hub, viewId: r.viewId }] as const),
 )
 
 const HUBS_BY_PATH: ReadonlyMap<string, PageHub> = new Map([HOME_HUB, HEALTH_HUB, TEAM_HUB].map((h) => [h.path, h] as const))
@@ -349,12 +349,13 @@ const TAB_LABELS: Record<string, string> = {
   tiers: 'Tiers',
   quests: 'Quests',
   plans: 'Plans',
-  inbox: 'Received',
+  inbox: 'Sent',
   anomalies: 'Spikes',
   metrics: 'Metrics',
-  findings: 'Findings',
+  findings: 'Changes',
   snapshots: 'Scans',
-  scanner: 'Scanner',
+  scanner: 'Run a scan',
+  detect: 'Check now',
   loop: 'Loop',
   history: 'History',
   search: 'Search',
@@ -372,66 +373,88 @@ const TAB_LABELS: Record<string, string> = {
   configure: 'Configure',
 }
 
+/** Status filters in plain words; unknown ones are title-cased. */
+const STATUS_LABELS: Record<string, string> = {
+  failed: 'Stopped',
+  merged: 'Fixed',
+  pr_open: 'PR open',
+  open: 'Open',
+  ci_failed: 'Failing CI',
+  ci_passing: 'CI passing',
+}
+
 function titleCase(slug: string): string {
   return slug
-    .split('-')
+    .split(/[-_]/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
 }
 
-/** The page (or hub view) a link target opens, in the sidebar's words. */
-function pageLabelFor(pathname: string, params: URLSearchParams): string {
-  const hub = HUBS_BY_PATH.get(pathname)
-  const viewId = params.get('view')
-  if (hub && viewId) {
-    const view = hub.views.find((v) => v.id === viewId)
+interface LinkTarget {
+  /** Hub or page path, legacy routes resolved: `/drift` → `/health`. */
+  path: string
+  /** Hub view id, when the target is a hub view other than its first. */
+  view: string | null
+  params: URLSearchParams
+}
+
+function parseTarget(to: string): LinkTarget {
+  const [rawPath, rawSearch = ''] = to.split('?')
+  const path = (rawPath.split('#')[0] || '/').replace(/\/$/, '') || '/'
+  const params = new URLSearchParams(rawSearch.split('#')[0])
+  const legacy = LEGACY_ROUTE.get(path)
+  if (legacy) {
+    const first = legacy.hub.views[0].id
+    return { path: legacy.hub.path, view: legacy.viewId === first ? null : legacy.viewId, params }
+  }
+  const hub = HUBS_BY_PATH.get(path)
+  const view = params.get('view')
+  return { path, view: hub && view && view !== hub.views[0].id ? view : null, params }
+}
+
+/** The page (or hub view) a target opens, in the sidebar's words. */
+function pageLabelFor(t: LinkTarget): string {
+  const hub = HUBS_BY_PATH.get(t.path)
+  if (hub && t.view) {
+    const view = hub.views.find((v) => v.id === t.view)
     if (view) return view.label
   }
-  return (
-    LEGACY_VIEW_LABEL.get(pathname) ??
-    PAGE_LABEL_BY_PATH.get(pathname) ??
-    PAGE_LABEL_BY_PATH.get(`/${pathname.replace(/^\//, '').split('/')[0]}`) ??
-    titleCase(pathname.replace(/^\//, '').split('/')[0] ?? '')
-  )
+  const top = `/${t.path.replace(/^\//, '').split('/')[0] ?? ''}`
+  return PAGE_LABEL_BY_PATH.get(t.path) ?? PAGE_LABEL_BY_PATH.get(top) ?? titleCase(top.slice(1))
+}
+
+/** "All fixes", "All fixes: Stopped", or null without a tab or status. */
+function sectionLabelFor(t: LinkTarget, page: string): string | null {
+  const tab = t.params.get('tab')
+  const status = t.params.get('status')
+  const tabLabel = tab ? TAB_LABELS[tab] ?? titleCase(tab) : null
+  const statusLabel = status ? STATUS_LABELS[status] ?? titleCase(status) : null
+  const tabPart = tabLabel && tabLabel !== page ? tabLabel : null
+  if (tabPart && statusLabel) return `${tabPart}: ${statusLabel}`
+  return tabPart ?? statusLabel
 }
 
 /** Human label for a link target — used in "Go to …" copy and aria-labels. */
 export function statDestinationLabel(to: string): string {
-  const [rawPath, search = ''] = to.split('?')
-  const pathname = (rawPath.split('#')[0] || '/').replace(/\/$/, '') || '/'
-  const params = new URLSearchParams(search.split('#')[0])
-  const page = pageLabelFor(pathname, params)
-
-  const tab = params.get('tab')
-  if (tab) {
-    const tabLabel = TAB_LABELS[tab] ?? titleCase(tab)
-    return tabLabel === page ? page : `${page} · ${tabLabel}`
-  }
-
-  const status = params.get('status')
-  if (status) return `${page} · ${titleCase(status.replace(/_/g, '-'))}`
-
-  return page
+  const t = parseTarget(to)
+  const page = pageLabelFor(t)
+  const section = sectionLabelFor(t, page)
+  return section ? `${page} · ${section}` : page
 }
 
 /**
- * The link's verb and destination as seen from the page the user is on: a
- * link to another tab of the same page reads "Show Trend", not
- * "Go to Triage grading · Trend".
+ * The link's verb and destination as seen from where the user is: a link to
+ * another tab or filter of the same page (or hub view) reads "Show Trend",
+ * not "Go to Triage grading · Trend". `current` is a pathname, optionally
+ * with its search string.
  */
-export function statLinkLabel(to: string, currentPathname: string | null): string {
-  const [rawPath, search = ''] = to.split('?')
-  const target = (rawPath.split('#')[0] || '/').replace(/\/$/, '') || '/'
-  const here = (currentPathname ?? '').replace(/\/$/, '') || '/'
-  if (currentPathname != null && target === here) {
-    const params = new URLSearchParams(search.split('#')[0])
-    const tab = params.get('tab')
-    if (tab) return `Show ${TAB_LABELS[tab] ?? titleCase(tab)}`
-    const view = params.get('view')
-    const hub = HUBS_BY_PATH.get(target)
-    const viewLabel = view && hub ? hub.views.find((v) => v.id === view)?.label : null
-    if (viewLabel) return `Show ${viewLabel}`
-    return 'Show the list'
+export function statLinkLabel(to: string, current: string | null): string {
+  if (current != null) {
+    const here = parseTarget(current)
+    const t = parseTarget(to)
+    if (t.path === here.path && t.view === here.view) {
+      return `Show ${sectionLabelFor(t, pageLabelFor(t)) ?? 'the list'}`
+    }
   }
   return `Go to ${statDestinationLabel(to)}`
 }

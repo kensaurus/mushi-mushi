@@ -19,6 +19,7 @@ import { RoutePageHelp } from './RoutePageHelp'
 import { PageFirstStep } from './ui/page-first-step'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { writePageHelpAlwaysOpen } from '../lib/pageHelpPrefs'
+import { isPageHelpRead, markPageHelpRead } from '../lib/pageHelpRead'
 
 let container: HTMLDivElement
 let root: Root
@@ -72,7 +73,8 @@ async function render(el: ReactElement) {
 }
 
 describe('RoutePageHelp', () => {
-  it('keeps the explainer in the header popover on a page with data', async () => {
+  it('keeps the explainer in the header popover on a page with data, once read', async () => {
+    markPageHelpRead('judge')
     await render(page(false))
     expect(container.querySelector('[data-testid="help-popover-trigger"]')).not.toBeNull()
     expect(container.textContent).not.toContain('What it is')
@@ -80,7 +82,15 @@ describe('RoutePageHelp', () => {
     expect(container.querySelector('nav[aria-label="Related pages"]')).not.toBeNull()
   })
 
+  it('shows it expanded on the first visit, then marks it read for the next', async () => {
+    expect(isPageHelpRead('judge')).toBe(false)
+    await render(page(false))
+    expect(container.querySelector('details')?.open).toBe(true)
+    expect(isPageHelpRead('judge')).toBe(true)
+  })
+
   it('shows the explainer expanded under an empty page', async () => {
+    markPageHelpRead('judge')
     await render(page(true))
     const details = container.querySelector('details')
     expect(details).not.toBeNull()
@@ -89,6 +99,7 @@ describe('RoutePageHelp', () => {
   })
 
   it('shows it expanded when the user keeps tips open', async () => {
+    markPageHelpRead('judge')
     writePageHelpAlwaysOpen(true)
     await render(page(false))
     expect(container.querySelector('details')?.open).toBe(true)
