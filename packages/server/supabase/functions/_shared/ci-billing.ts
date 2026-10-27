@@ -302,7 +302,7 @@ export function buildCiBill(input: BuildCiBillInput): CiBill {
   const monthFrom = `${today.slice(0, 7)}-01`
 
   const owners: CiBillOwner[] = input.sync
-    .map((s) => ({
+    .map((s): CiBillOwner => ({
       owner: s.owner,
       ownerType: s.owner_type === 'User' || s.owner_type === 'Organization' ? s.owner_type : null,
       lastOkAt: s.last_ok_at,
