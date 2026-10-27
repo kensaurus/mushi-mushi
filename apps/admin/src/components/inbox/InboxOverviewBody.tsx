@@ -1,7 +1,10 @@
 /**
  * FILE: apps/admin/src/components/inbox/InboxOverviewBody.tsx
  * PURPOSE: Overview tab — the ordered action list itself, or setup / inbox-zero
- *          when there is nothing to act on.
+ *          when there is nothing to act on. Up to five decisions are ranked
+ *          as cards; chores (re-grading recent fixes) sit in a footer, not
+ *          ranked beside a decision (console journeys 2026-10-27: "#2 Re-check
+ *          the quality of recent auto-fixes" read as a decision).
  */
 
 import type { InboxCard, InboxCardGroup } from '../../lib/actionInboxFromDashboard'
@@ -10,8 +13,20 @@ import { ClearChip, OpenInboxCard } from './inbox-card-parts'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { scopedHref } from '../../lib/humanPageHints'
+import { Link } from 'react-router-dom'
 
 export type InboxOverviewMode = 'setup' | 'actions' | 'clear'
+
+/** Cards that keep things tidy rather than decide anything. */
+const CHORE_SCOPES: ReadonlySet<string> = new Set(['judge'])
+/** Ranked decision cards shown; the rest wait for these. */
+export const MAX_DECISIONS = 5
+
+/** @internal Exported for tests only. Decisions in order (at most five) and the chores. */
+export function splitInboxCards(cards: InboxCard[]): { decisions: InboxCard[]; more: number; chores: InboxCard[] } {
+  const decisions = cards.filter((c) => !CHORE_SCOPES.has(c.scope))
+  return { decisions: decisions.slice(0, MAX_DECISIONS), more: Math.max(0, decisions.length - MAX_DECISIONS), chores: cards.filter((c) => CHORE_SCOPES.has(c.scope)) }
+}
 
 /** @internal Exported for tests only. */
 export function resolveInboxOverviewMode(stats: InboxStats, openCardCount: number): InboxOverviewMode {
@@ -43,6 +58,7 @@ export function InboxOverviewBody({
 }: Props) {
   const mode = resolveInboxOverviewMode(stats, openCards.length)
   const actions = copy?.actionLabels ?? {}
+  const { decisions, more, chores } = splitInboxCards(openCards)
 
   return (
     <div data-inbox-overview-state={mode} className="space-y-3">
@@ -67,23 +83,49 @@ export function InboxOverviewBody({
         <section aria-labelledby="inbox-open">
           <header className="mb-2 flex items-center gap-2">
             <h2 id="inbox-open" className="text-sm font-semibold text-fg">
-              Awaiting action
+              {decisions.length > 0 ? 'Awaiting action' : 'Only housekeeping left'}
             </h2>
-            {openCards.length > 1 ? (
+            {decisions.length > 1 ? (
               <span className="ml-auto text-2xs text-fg-muted">Work top to bottom</span>
             ) : null}
           </header>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {openCards.map((card, index) => (
-              <OpenInboxCard
-                key={card.id}
-                card={card}
-                priority={index + 1}
-                isFirst={index === 0}
-                activityAt={activityAtByGroup[card.group]}
-              />
-            ))}
-          </div>
+          {decisions.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="inbox-decisions">
+              {decisions.map((card, index) => (
+                <OpenInboxCard
+                  key={card.id}
+                  card={card}
+                  priority={index + 1}
+                  isFirst={index === 0}
+                  activityAt={activityAtByGroup[card.group]}
+                />
+              ))}
+            </div>
+          ) : null}
+          {more > 0 ? (
+            <p className="mt-2 text-2xs text-fg-muted">{more} more after these; they show here as you clear the top ones.</p>
+          ) : null}
+          {chores.length > 0 ? (
+            <footer className="mt-3 border-t border-edge-subtle pt-2" data-testid="inbox-chores">
+              <h3 className="text-2xs font-semibold text-fg-secondary">Housekeeping</h3>
+              <ul className="mt-1 space-y-1">
+                {chores.map((card) => (
+                  <li key={card.id} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
+                    <span>{card.action?.title ?? card.pageLabel}</span>
+                    {card.action?.primary && card.action.primary.kind === 'link' ? (
+                      <Link to={card.action.primary.to} className="font-medium text-brand hover:underline">
+                        {card.action.primary.label} →
+                      </Link>
+                    ) : (
+                      <Link to={card.pageTo} className="font-medium text-brand hover:underline">
+                        Open {card.pageLabel} →
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </footer>
+          ) : null}
         </section>
       ) : null}
 
