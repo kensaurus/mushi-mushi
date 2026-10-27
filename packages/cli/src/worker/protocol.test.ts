@@ -107,6 +107,11 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
       { name: 'glot', projectId: '542b34e0-019e-41fe-b900-7b637717bb86', repoDir: '/home/mushi-agent/.cache/mushi-work/glot.it', initial: { model: 'claude-opus-5-5-medium', mode: 'fix', paused: true } },
     ])
   })
+  it('imports the P3 modes as they are', () => {
+    for (const mode of ['conflicts', 'audit', 'skill'] as const) {
+      expect(parseLanesConf(`a default c ${P1} m ${mode}`, '/r')[0]!.initial).toEqual({ model: 'm', mode })
+    }
+  })
   it('refuses a clone that is a path and an unknown mode', () => {
     expect(() => parseLanesConf(`a default ../etc ${P1} m fix`, '/r')).toThrow(/folder name/)
     expect(() => parseLanesConf(`a default c ${P1} m shell`, '/r')).toThrow(/mode/)

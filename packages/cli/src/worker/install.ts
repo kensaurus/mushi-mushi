@@ -32,10 +32,10 @@ export function parseLanesConf(text: string, cloneRoot: string): LocalLane[] {
     if (!UUID_RE.test(projectId)) throw new MushiCliError('E_INVALID_INPUT', `lanes.conf line ${i + 1}: "${projectId}" is not an app id.`)
     if (!MODEL_RE.test(model)) throw new MushiCliError('E_INVALID_INPUT', `lanes.conf line ${i + 1}: "${model}" is not a model id.`)
     const initial: Partial<LaneConfig> = { model }
-    if (mode === 'followups') initial.mode = 'followups'
+    if (mode === 'followups' || mode === 'conflicts' || mode === 'audit' || mode === 'skill') initial.mode = mode
     else if (mode === 'queue' || mode === 'fix') initial.mode = 'fix'
     else if (mode === 'off') Object.assign(initial, { mode: 'fix', paused: true })
-    else throw new MushiCliError('E_INVALID_INPUT', `lanes.conf line ${i + 1}: mode "${mode}" is not fix, followups, queue or off.`)
+    else throw new MushiCliError('E_INVALID_INPUT', `lanes.conf line ${i + 1}: mode "${mode}" is not fix, followups, conflicts, audit, skill, queue or off.`)
     lanes.push({ name, projectId: projectId.toLowerCase(), repoDir: join(cloneRoot, clone), initial })
   }
   if (lanes.length === 0) throw new MushiCliError('E_INVALID_INPUT', 'lanes.conf lists no lanes.')

@@ -33,7 +33,7 @@ import {
   sinceLabel,
   workersSummary,
   type HostGuards,
-  type LaneConfig,
+  type LaneSettings,
   type WorkerHost,
   type WorkerLane,
   type WorkLanesData,
@@ -142,7 +142,7 @@ export function WorkersPanel({ projectId, now }: Props) {
   const toast = useToast()
 
   const onPatch = useCallback(
-    async (lane: WorkerLane, patch: Partial<LaneConfig>) => {
+    async (lane: WorkerLane, patch: LaneSettings) => {
       const res = await patchLane(lane.id, patch)
       if (res.ok) reload()
       else toast.error(res.message)
@@ -249,7 +249,7 @@ export function WorkersPanel({ projectId, now }: Props) {
         ) : (
           <ul className="space-y-2">
             {data.lanes.map((l) => (
-              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} />
+              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} />
             ))}
           </ul>
         )}

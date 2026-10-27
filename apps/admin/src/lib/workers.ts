@@ -12,7 +12,16 @@ import { apiFetch } from './supabase'
 export const LANES_PATH = '/v1/admin/work/lanes'
 const KEY_PATH = '/v1/admin/work/key'
 
-type LaneMode = 'fix' | 'followups'
+export type LaneMode = 'fix' | 'followups' | 'conflicts' | 'audit' | 'skill'
+
+/** What each mode does, as the Workers tab offers it (ADR 0048; P3: 0049, 0050, 0042 amendment). */
+export const LANE_MODES: ReadonlyArray<{ value: LaneMode; label: string; hint: string }> = [
+  { value: 'fix', label: 'Fix reports and follow-ups', hint: 'Takes its queue first, then the worst open reports, and opens a draft PR for each.' },
+  { value: 'followups', label: 'Review follow-ups only', hint: 'Fixes what Opus asked for on PRs a local agent opened.' },
+  { value: 'conflicts', label: 'Resolve merge conflicts', hint: "Merges the base branch into PRs of this clone's repository that wait in the merge queue. The agent may change only the conflicted files; anything else is refused." },
+  { value: 'audit', label: 'Audit the code, screen by screen', hint: 'A model proposes bugs; the machine files only those its own check reproduces. A fix lane for the same app on this machine gets them.' },
+  { value: 'skill', label: 'Run skill runs', hint: 'Takes only the rounds of skill runs started on /credits with this lane.' },
+]
 
 export interface LaneConfig {
   paused: boolean
@@ -50,13 +59,19 @@ export interface WorkerLane {
   projectName: string
   name: string
   config: LaneConfig
+  /** Audit lanes: the model that may veto a reproduced finding; null = no veto pass. */
+  reviewModel?: string | null
+  /** owner/name of the lane's clone, as the machine reports it. */
+  repo?: string | null
   status: Record<string, string | number>
   lastSeenAt: string
-  active: Array<{ claimId: string; reportId: string; title: string; since: string; leaseUntil: string; fromQueue: boolean }>
+  /** A conflict or audit run holds no report (reportId null). */
+  active: Array<{ claimId: string; kind?: ClaimKind; reportId: string | null; title: string; since: string; leaseUntil: string; fromQueue: boolean }>
   queue: Array<{ reportId: string; title: string; severity: string | null; status: string | null; source: string; position: number }>
   recent: Array<{
     claimId: string
-    reportId: string
+    kind?: ClaimKind
+    reportId: string | null
     title: string
     outcome: string | null
     failureKind: 'infra' | 'code' | null
@@ -66,8 +81,10 @@ export interface WorkerLane {
     finishedAt: string | null
     autoRequeued: boolean
   }>
-  counts7d: { runs: number; prs: number; noChange: number; timeouts: number; errors: number; infra: number }
+  counts7d: { runs: number; prs: number; merges?: number; filed?: number; noChange: number; timeouts: number; errors: number; infra: number }
 }
+
+type ClaimKind = 'fix' | 'conflict' | 'audit'
 
 export interface WorkLanesData {
   generatedAt: string
@@ -87,11 +104,24 @@ export function laneTaking(lane: WorkerLane, host: WorkerHost | undefined, now: 
   return !(c.stop_at && Date.parse(c.stop_at) <= now)
 }
 
-/** The lanes this user can send reports to for one app: on their own, unrevoked machines. */
-export function myLanesFor(data: WorkLanesData | null | undefined, projectId: string): WorkerLane[] {
+/**
+ * The lanes this user can send reports to for one app: on their own,
+ * unrevoked machines, in a mode that takes reports from its queue. A bug
+ * report goes to a `fix` lane; a skill run may also use a `skill` lane.
+ */
+export function myLanesFor(data: WorkLanesData | null | undefined, projectId: string, modes: readonly LaneMode[] = ['fix']): WorkerLane[] {
   if (!data || !Array.isArray(data.lanes) || !Array.isArray(data.hosts)) return []
   const mine = new Set(data.hosts.filter((h) => h.mine && !h.revoked).map((h) => h.id))
-  return data.lanes.filter((l) => l.projectId === projectId && mine.has(l.hostId))
+  return data.lanes.filter((l) => l.projectId === projectId && mine.has(l.hostId) && modes.includes(l.config.mode))
+}
+
+/** The 7-day line under a lane's name, in the words of what its mode does. */
+export function laneCountsLine(lane: Pick<WorkerLane, 'config' | 'counts7d'>): string {
+  const n = lane.counts7d
+  const errors = `${n.timeouts} timed out, ${n.errors} errors${n.infra > 0 ? ` (${n.infra} the machine's fault)` : ''}`
+  if (lane.config.mode === 'conflicts') return `${n.runs} conflicts tried, ${n.merges ?? 0} merged in, ${errors} in 7 days`
+  if (lane.config.mode === 'audit') return `${n.runs} screens read, ${n.filed ?? 0} with findings filed, ${errors} in 7 days`
+  return `${n.runs} runs, ${n.prs} PRs, ${errors} in 7 days`
 }
 
 /** One sentence on how the workers stand, and the three numbers that matter. */
@@ -135,6 +165,9 @@ export const OUTCOME_LABEL: Record<string, string> = {
   stopped: 'Stopped',
   failed: 'Failed',
   lease_expired: 'Worker went quiet',
+  pushed: 'Merged the base in',
+  refused: 'Refused by its checks',
+  filed: 'Filed findings',
 }
 
 export interface WriteResult {
@@ -144,8 +177,11 @@ export interface WriteResult {
 
 const fail = (res: { error?: { message?: string } | null }) => ({ ok: false, message: res.error?.message ?? 'The request failed.' })
 
+/** What the console may change on a lane: the closed settings, plus an audit lane's veto model. */
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+
 /** Change one lane setting (only the verbs that changed). */
-export async function patchLane(laneId: string, patch: Partial<LaneConfig>): Promise<WriteResult> {
+export async function patchLane(laneId: string, patch: LaneSettings): Promise<WriteResult> {
   const res = await apiFetch<{ id: string; config: LaneConfig }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}`, {
     method: 'PATCH',
     scope: 'enumeration',
