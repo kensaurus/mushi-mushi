@@ -38,6 +38,7 @@ import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
 import { antiGamingListScope, requestedOwnedProject } from '../../_shared/anti-gaming-scope.ts';
 import { canManageDataGovernance, manageableProjectIds } from '../../_shared/data-governance-role.ts';
+import { readReporterUpdateFunnel, type FunnelNotificationRow, type ReporterUpdateFunnel } from '../../_shared/reporter-update-funnel.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -372,6 +373,8 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       byType: {} as Record<string, number>,
       notificationsEnabled: false,
       fixFailedCount: 0,
+      /** Reports told / opened / replied over the same window; null when the replies could not be read. */
+      funnel: null as ReporterUpdateFunnel | null,
       topPriority: 'no_project' as
         | 'no_project'
         | 'disabled'
@@ -398,7 +401,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .maybeSingle(),
       db
         .from('reporter_notifications')
-        .select('notification_type, read_at, created_at, status')
+        .select('notification_type, read_at, created_at, status, report_id')
         .eq('project_id', project.id)
         .order('created_at', { ascending: false })
         .limit(500),
@@ -407,6 +410,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     if (error) return dbError(c, error);
 
     const list = rows ?? [];
+    const funnel = await readReporterUpdateFunnel(db, list as FunnelNotificationRow[]);
     const byType: Record<string, number> = {};
     let unread = 0;
     let held = 0;
@@ -469,6 +473,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         byType,
         notificationsEnabled,
         fixFailedCount,
+        funnel,
         topPriority,
         topPriorityLabel,
         topPriorityTo,

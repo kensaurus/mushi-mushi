@@ -49,7 +49,7 @@ export function ExperimentsReadout({ stats, fetchedAt, isValidating }: Props) {
     },
     {
       label: 'Variants',
-      value: `${stats.totalVariants} variants · ${stats.banditEnabledCount} bandit`,
+      value: `${stats.totalVariants} versions · ${stats.banditEnabledCount} shift to the winner`,
       tone: stats.totalVariants > 0 ? 'info' : 'muted',
     },
     {

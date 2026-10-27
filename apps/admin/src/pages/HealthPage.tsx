@@ -71,6 +71,7 @@ import { CHIP_TONE } from '../lib/chipTone'
 import { PageHubView } from '../components/PageHubView'
 import { HEALTH_HUB } from '../lib/pageHubs'
 import { PageLoadError } from '../components/PageLoadError'
+import { PlatformDoctorCard } from '../components/health/PlatformDoctorCard'
 
 const CodeHealthPage = lazy(() => import('./CodeHealthPage').then((m) => ({ default: m.CodeHealthPage })))
 const DriftPage = lazy(() => import('./DriftPage').then((m) => ({ default: m.DriftPage })))
@@ -183,7 +184,7 @@ export function HealthPage() {
   if (hubParams.get('hub') === 'check') {
     return <CheckVerificationHub />
   }
-  // App health (Plan 021): Code size, Schema changes and Unusual spikes are views here now.
+  // Mushi health (Plan 021; renamed from App health, P6): Code size, Schema changes and Unusual spikes are views here now.
   return (
     <PageHubView
       hub={HEALTH_HUB}
@@ -207,7 +208,6 @@ function HealthPageContent() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveHealthTab(tabParam)
-  const activeTabMeta = HEALTH_TABS.find((t) => t.id === activeTab) ?? HEALTH_TABS[0]
   const window = searchParams.get('window') ?? '24h'
   const recentFilter = searchParams.get('recent') ?? ''
   const fnFilter = searchParams.get('fn') ?? ''
@@ -516,23 +516,20 @@ function HealthPageContent() {
         />
       )
     }
-    return (
-      <RecommendedAction
-        tone="success"
-        title="All systems nominal"
-        description={`${llm.totalCalls} LLM calls · ${errorPct}% errors · ${fallbackPct}% fallbacks. No action needed.`}
-      />
-    )
+    // Healthy: the status sentence above already says so. A second
+    // "All systems nominal" card beside an amber error rate read as a
+    // contradiction (console journeys 2026-10-27).
+    return null
   })()
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
-        title={copy?.title ?? 'App health'}
+        title={copy?.title ?? 'Mushi health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        helpTitle={copy?.help?.title ?? 'About App health'}
+        helpTitle={copy?.help?.title ?? 'About Mushi health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
@@ -565,7 +562,8 @@ function HealthPageContent() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isHealthStatusBannerCritical(stats),
+            // The status sentence below says the same thing; the banner stands in only when it is hidden.
+            show: isHealthStatusBannerCritical(stats) && (ux.hideHealthSnapshot || !stats.hasAnyProject),
             children: (
               <HealthStatusBanner
                 stats={stats}
@@ -584,8 +582,6 @@ function HealthPageContent() {
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'}
-                hint={activeTabMeta.description}
                 statLabels={copy?.statLabels}
               />
             ),
@@ -625,7 +621,7 @@ function HealthPageContent() {
         <>
           <PageHero
             scope="health"
-            title={copy?.title ?? 'App health'}
+            title={copy?.title ?? 'Mushi health'}
             kicker="Pipeline vitals"
             decide={{
               label: stats.redCount > 0
@@ -977,6 +973,9 @@ function HealthPageContent() {
           </Section>
         </>
       )}
+
+      {/* Super-admins only: the server doctor with the platform secrets. */}
+      <PlatformDoctorCard />
     </div>
   )
 }

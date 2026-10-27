@@ -23,7 +23,13 @@
  * adviseCiCost (bottom of the file) adds the cost rules of
  * GET /v1/admin/ci/compare: paid_while_idle, public_on_busy_self_hosted,
  * missing_runner_variable, pinned_hosted_cost, tiny_job_rounding,
- * self_hosted_on_public_repo.
+ * self_hosted_on_public_repo, and from ci-cost-rules.ts (YAML + billed
+ * minutes): cron_too_frequent, missing_path_filter, push_reruns_pr_checks,
+ * duplicate_gate, no_affected_only, abandoned_pr_minutes, macos_on_pr.
+ *
+ * no_cancel_in_progress and drafts_not_skipped carry an `autofix` (a PR
+ * Mushi can open, `_shared/ci-cost-fix.ts`) when the project is known and
+ * the workflow is in a shape that fix edits.
  *
  * Runner names are folded to their base (runnerBaseName): a one-job runner
  * setup registers a new name per job, and is one runner here.
@@ -41,6 +47,9 @@ import type { CiOverviewAdvice } from './ci-overview-types.ts'
 import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'
 import type { CiCompareExplain, CiCompareMachine, CiCompareRow, RepoVisibility } from './ci-compare-types.ts'
 import type { ParsedWorkflow } from './ci-runs-on.ts'
+import type { CostFacts } from './ci-cost-facts.ts'
+import { adviseCostRules, type CostRulesInput } from './ci-cost-rules.ts'
+import { predictableRefusals } from './ci-cost-fix.ts'
 
 export interface AdvisorJob {
   repo: string
@@ -90,7 +99,7 @@ export interface AdvisorInput {
   hosts: AdvisorHost[]
   samples: AdvisorSample[]
   /** `.github/workflows/*.yml` texts per repo, from the GitHub connector snapshot. */
-  workflows: Array<{ repo: string; path: string; text: string }>
+  workflows: Array<{ projectId?: string; repo: string; path: string; text: string }>
   /** Earliest time Mushi saw any runner on each repo; unknown_runner needs history before the new one. */
   repoWatchedSince: Record<string, string>
 }
@@ -165,6 +174,8 @@ function workflowAdvice(workflows: AdvisorInput['workflows']): CiOverviewAdvice[
         evidence: `${w.repo}/${w.path}: ${noGroup ? 'no concurrency group' : 'a concurrency group without cancel-in-progress'}.`,
         fix: "Add at the top of the workflow:\nconcurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         repo: w.repo,
+        // ci-cost-fix-worker refuses concurrency on a deploy or release workflow.
+        autofix: noGroup && w.projectId && !predictableRefusals(w.text, w.path).deploy ? { kind: 'add_concurrency', projectId: w.projectId, repo: w.repo, workflowPath: w.path } : null,
       })
     }
 
@@ -177,6 +188,7 @@ function workflowAdvice(workflows: AdvisorInput['workflows']): CiOverviewAdvice[
         evidence: `${w.repo}/${w.path} runs on pull_request and never checks the draft flag.`,
         fix: "Add `types: [opened, synchronize, reopened, ready_for_review]` under `pull_request:` and `if: github.event.pull_request.draft == false` on the expensive jobs.",
         repo: w.repo,
+        autofix: names.includes('pull_request') && w.projectId ? { kind: 'skip_drafts', projectId: w.projectId, repo: w.repo, workflowPath: w.path } : null,
       })
     }
 
@@ -456,12 +468,16 @@ export interface CostAdvisorInput {
   repos: Array<{ projectId: string; repo: string; visibility: RepoVisibility }>
   rows: CiCompareRow[]
   machines: CiCompareMachine[]
-  workflows: Array<{ repo: string; path: string; text: string }>
+  workflows: Array<{ projectId?: string; repo: string; path: string; text: string }>
   /** Repo Actions variable names; null when the list could not be read. */
   variableNames: Record<string, string[] | null>
   parsed: Map<string, ParsedWorkflow[]>
   pinned: CiCompareExplain['pinned']
   tinyJobs: Array<{ repo: string; jobs: number; rawSeconds: number; billedMinutes: number; allJobs: number }>
+  /** Billed minutes per workflow job, event, branch kind, PR and step (ci_cost_facts); null = the rules that need them stay silent. */
+  facts?: CostFacts | null
+  /** ci_pull_requests rows; null when they could not be read. */
+  pullRequests?: CostRulesInput['pullRequests']
 }
 
 /** Idle below this busy share: a machine that could take more work. */
@@ -602,6 +618,17 @@ export function adviseCiCost(input: CostAdvisorInput): CiOverviewAdvice[] {
     })
   }
 
+  out.push(
+    ...adviseCostRules({
+      now: input.now,
+      spanDays: input.spanDays,
+      repos: input.repos,
+      workflows: input.workflows,
+      facts: input.facts ?? null,
+      pullRequests: input.pullRequests ?? null,
+    }),
+  )
+
   const rank = { high: 0, medium: 1, low: 2 } as const
-  return out.sort((a, b) => rank[a.severity] - rank[b.severity])
+  return out.sort((a, b) => rank[a.severity] - rank[b.severity] || (b.monthSavingUsd ?? 0) - (a.monthSavingUsd ?? 0))
 }

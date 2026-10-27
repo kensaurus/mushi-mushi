@@ -32,8 +32,6 @@ merged and deployed, and the person who reported it is told.
 
 <LoopPipeline caption="Steps 3 to 5 are optional. You can also copy the fix prompt into your own editor and fix it yourself." />
 
-<LandingInstallStrip />
-
 ## The problem it solves
 
 - A user hits a broken button. Nothing crashed, so error monitoring (such as Sentry) stays quiet.
@@ -94,6 +92,16 @@ A user writes a sentence or two. Mushi reads it with the screenshot and the brow
 <ScrollReveal>
   <DocsMediaShowcase />
 </ScrollReveal>
+
+## Spend less on CI
+
+AI agents open a lot of pull requests, and every one runs your tests on GitHub Actions. Mushi keeps that bill small:
+
+- **See what you really pay.** Your GitHub Actions bill per repo and per day, with public repos and free minutes shown as $0.
+- **Find the waste.** Tests that run on drafts, schedules that run every hour, docs-only changes that run every test.
+- **Fix it in one pull request.** Mushi opens a small workflow change for you to review, then shows the minutes saved after it merges.
+
+Mushi's own fix pull requests run your tests only after a review says they are worth merging. [How the CI page works →](/admin/ci)
 
 ## Get started
 

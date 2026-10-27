@@ -7,7 +7,7 @@
 
 import { Link } from 'react-router-dom'
 import type { CSSProperties, ReactNode } from 'react'
-import { Card, Badge, Tooltip, PANEL_HEADER_SEPARATOR } from './ui'
+import { Card, Tooltip, PANEL_HEADER_SEPARATOR } from './ui'
 import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { useBrushSelection } from '../lib/useBrushSelection'
 import { ChartFrame } from './charts/ChartFrame'
@@ -35,7 +35,6 @@ import {
   resolveChartMax,
   resolvePlotChartMax,
 } from './charts/chartAxis'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 /* ── KpiTile ────────────────────────────────────────────────────────────── */
 
@@ -733,51 +732,6 @@ export function BarSparkline({
         {bars}
       </ChartFrame>
     </div>
-  )
-}
-
-/* ── HealthPill ─────────────────────────────────────────────────────────── */
-
-export function HealthPill({ status }: { status: string | null | undefined }) {
-  if (status === 'ok')
-    return (
-      <Badge className={CHIP_TONE.okSubtle}>Healthy</Badge>
-    )
-  if (status === 'degraded')
-    return (
-      <Badge tone="warnSubtle">
-        Degraded
-      </Badge>
-    )
-  if (status === 'down')
-    return (
-      <Badge className={CHIP_TONE.dangerSubtle}>
-        Down
-      </Badge>
-    )
-  return (
-    <Badge className={CHIP_TONE.neutral}>
-      Unknown
-    </Badge>
-  )
-}
-
-/* ── StatusPill ─────────────────────────────────────────────────────────── */
-
-/** Pipeline statuses not covered by runStatusChipTone's lifecycle map. */
-const STATUS_CLASS_OVERRIDE: Record<string, string> = {
-  new: CHIP_TONE.warnSubtle,
-  classified: CHIP_TONE.okSubtle,
-  fixing: CHIP_TONE.brandSubtle,
-  fixed: CHIP_TONE.infoSubtle,
-  dismissed: CHIP_TONE.neutral,
-}
-
-export function StatusPill({ status }: { status: string | null | undefined }) {
-  const cls =
-    STATUS_CLASS_OVERRIDE[status ?? ''] ?? runStatusChipTone(status)
-  return (
-    <Badge className={`${cls} text-3xs`}>{status ?? 'unknown'}</Badge>
   )
 }
 

@@ -318,9 +318,10 @@ export function BillingPage() {
                 stats={stats}
                 fetchedAt={statsQuery.lastFetchedAt}
                 isValidating={statsQuery.isValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'Billing snapshot'}
-                hint={activeTabMeta.description}
-                statLabels={copy?.statLabels}
+                seats={{
+                  used: membersStats.seatsUsed,
+                  limit: membersStats.seatLimit ?? activePlan?.seatLimit ?? null,
+                }}
               />
             ),
           },

@@ -64,7 +64,8 @@ describe('MergeQueuePanel', () => {
     await render()
     const frame = host.querySelector('section[aria-label="Merge queue"]')
     expect(frame?.getAttribute('aria-busy')).toBe('true')
-    expect(host.textContent).toContain('Merge when ready')
+    // Named for what it holds; Fixes' own "Ready to merge" list sits above it.
+    expect(host.textContent).toContain('Merge queue')
   })
 
   it('starts the frame at the size the queue had last time', async () => {
@@ -77,7 +78,7 @@ describe('MergeQueuePanel', () => {
     await render()
     await answer([])
     expect(host.querySelector('section[aria-label="Merge queue"]')?.getAttribute('aria-busy')).toBeNull()
-    expect(host.textContent).toContain('Nothing waiting to merge.')
+    expect(host.textContent).toContain('Nothing in the merge queue.')
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('0')
   })
 

@@ -60,7 +60,7 @@ export const EMPTY_MCP_STATS: McpStats = {
   topPriorityTo: null,
 }
 
-interface McpKeyRow {
+export interface McpKeyRow {
   id: string
   key_prefix: string
   created_at: string

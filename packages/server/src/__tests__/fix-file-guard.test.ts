@@ -188,11 +188,21 @@ describe('fix-worker wiring', () => {
   it('a fix the model flagged reaches GitHub only as a draft PR labelled needs-review', () => {
     // Flagged + no way to apply edits to real files: stopped (the PR #424 case).
     expect(reviewGate).toBeGreaterThan(0)
-    // Flagged + edits applied cleanly: a draft that is never marked ready.
-    expect(src).toContain('markReady: fixReviewPassed(fix),')
+    // Every fix opens as a draft (ADR 0047); agent-pr-review readies only an
+    // unflagged one, after an Opus "merge" (src/__tests__/agent-pr-review.test.ts).
+    expect(src).toContain('markReady: false,')
+    expect(src).not.toContain('markReady: fixReviewPassed(fix)')
+    expect(src).toContain('review_passed: fixReviewPassed(fix),')
     expect(src).toContain("labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],")
     // A second failure to apply the edits still ends the attempt without a PR.
     expect(src).toMatch(/the fix's edits could not be applied/)
+  })
+
+  it('queues the Opus review once the draft PR is recorded (ADR 0047)', () => {
+    const recorded = src.indexOf('branch: prResult.branch,')
+    const enqueue = src.indexOf('await enqueueFixReview(db, {')
+    expect(recorded).toBeGreaterThan(prCreate)
+    expect(enqueue).toBeGreaterThan(recorded)
   })
 
   it('runs the blind-write guard on the patched files before the PR and commits only the files it kept', () => {

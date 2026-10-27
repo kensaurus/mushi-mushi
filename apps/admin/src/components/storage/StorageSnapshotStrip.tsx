@@ -1,82 +1,56 @@
 /**
  * FILE: StorageSnapshotStrip.tsx
- * PURPOSE: Storage health KPI strip using MetricStrip — replaces hand-rolled grid on StoragePage.
+ * PURPOSE: Storage status (PageStatus, P1): the open app's verdict
+ *          (storageVerdict) in one sentence, its one next step, and up to
+ *          three numbers. It replaces the status banner and the four-tile
+ *          strip whose team-wide "Healthy buckets 0/1" contradicted the
+ *          app's own state.
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
-import type { StorageStats } from './types'
-import {
-  healthyCountTooltip,
-  healthyCountDetail,
-  screenshotsTooltip,
-  screenshotsDetail,
-  providerTooltip,
-  providerDetail,
-  unconfiguredCountTooltip,
-  unconfiguredCountDetail,
-} from '../../lib/statTooltips/storage'
+import { Btn, PageStatus } from '../ui'
+import { relativeTime } from '../../lib/setupGuideSteps'
+import type { StorageStats, StorageTabId } from './types'
+import { storageVerdict } from './storageVerdict'
 import { storageLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: StorageStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
-  statLabels?: Record<string, string>
+  onTab: (tab: StorageTabId) => void
+  onHealthCheck?: () => void
+  checking?: boolean
 }
 
-export function StorageSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'Storage snapshot',
-  hint,
-  statLabels,
-}: Props) {
+export function StorageSnapshotStrip({ stats, statsFetchedAt, statsValidating, onTab, onHealthCheck, checking }: Props) {
+  const verdict = storageVerdict(stats)
+  const action =
+    verdict.action === 'configure' ? (
+      <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
+        Use your own bucket
+      </Btn>
+    ) : (verdict.action === 'probe' || verdict.action === 'reprobe') && onHealthCheck ? (
+      <Btn size="sm" variant="primary" onClick={onHealthCheck} loading={checking} disabled={checking}>
+        {verdict.action === 'probe' ? 'Check bucket' : 'Check again'}
+      </Btn>
+    ) : null
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={4} ariaLabel="Storage snapshot">
-        <StatCard
-          label={statLabels?.healthy ?? 'Healthy buckets'}
-          value={`${stats.healthyCount}/${stats.configuredCount}`}
-          accent={
-            stats.failingCount > 0
-              ? 'text-danger'
-              : stats.healthyCount > 0
-                ? 'text-ok'
-                : undefined
-          }
-          tooltip={healthyCountTooltip(stats)}
-          detail={healthyCountDetail(stats)}
-          to={storageLinks.healthy}
-        />
-        <StatCard
-          label={statLabels?.screenshots ?? 'Screenshots'}
-          value={stats.activeProjectObjects.toLocaleString()}
-          tooltip={screenshotsTooltip(stats)}
-          detail={screenshotsDetail(stats)}
-          to={storageLinks.screenshots}
-        />
-        <StatCard
-          label={statLabels?.provider ?? 'Provider'}
-          value={stats.activeProjectProvider}
-          accent="text-info"
-          tooltip={providerTooltip(stats)}
-          detail={providerDetail(stats)}
-          to={storageLinks.provider}
-        />
-        <StatCard
-          label={statLabels?.unconfigured ?? 'Unconfigured'}
-          value={stats.unconfiguredCount}
-          accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
-          tooltip={unconfiguredCountTooltip(stats)}
-          detail={unconfiguredCountDetail(stats)}
-          to={storageLinks.unconfigured}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Storage status"
+      tone={verdict.tone}
+      sentence={verdict.sentence}
+      action={action}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        { label: 'Screenshots', value: stats.activeProjectObjects.toLocaleString(), to: storageLinks.screenshots, hint: 'Screenshots stored for this app.' },
+        { label: 'Last saved', value: relativeTime(stats.activeProjectLastWrite) ?? 'Never', hint: 'When this app last stored a screenshot.' },
+        {
+          label: 'All apps',
+          value: stats.totalObjects.toLocaleString(),
+          to: storageLinks.screenshots,
+          hint: 'Screenshots stored across every app on your team.',
+        },
+      ]}
+    />
   )
 }

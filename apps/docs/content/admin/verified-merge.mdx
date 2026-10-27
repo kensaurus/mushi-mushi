@@ -58,7 +58,8 @@ name: Mushi verify
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # A draft runs nothing; marking it ready runs the check.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -72,11 +73,16 @@ jobs:
   verify:
     # Agent branches only (cursor/**, mushi/**, copilot/**), and never a fork:
     # `on.pull_request.branches` filters the base branch, so the head is checked here.
+    # Never a draft (it runs once the PR is marked ready), a Mushi release train
+    # (mushi/train/*, its fixes were proven on their own PRs) or a revert (mushi/revert-*).
     if: >-
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (startsWith(github.head_ref, 'cursor/') ||
        startsWith(github.head_ref, 'mushi/') ||
-       startsWith(github.head_ref, 'copilot/'))
+       startsWith(github.head_ref, 'copilot/')) &&
+      !startsWith(github.head_ref, 'mushi/train/') &&
+      !startsWith(github.head_ref, 'mushi/revert-')
     # Not "Mushi verify": that name belongs to the check run the action posts.
     name: Mushi verify run
     runs-on: [ubuntu-latest]
@@ -110,7 +116,14 @@ jobs:
 
 It runs only on PRs from `cursor/…`, `mushi/…` and `copilot/…` branches in
 your own repo, needs only `contents: read` and `checks: write`, and stops after
-20 minutes. It never uses `pull_request_target`, so a fork's code never runs
+20 minutes. It spends no Actions minutes on:
+
+- a **draft** PR: it runs when the PR is marked ready for review. Mushi opens
+  its own fix PRs as drafts and marks them ready once its review says `merge`;
+- a Mushi **release train** (`mushi/train/…`): each fix in it was proven on
+  its own PR first;
+- a Mushi **revert** PR (`mushi/revert-…`): it puts back code that was already
+  on your default branch. It never uses `pull_request_target`, so a fork's code never runs
 with your secrets. Mushi needs no secret in your repo: it reads the check with
 the GitHub access it already has.
 

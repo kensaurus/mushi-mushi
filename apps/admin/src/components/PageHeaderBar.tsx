@@ -9,9 +9,11 @@
  *
  *   The optional description renders in a smaller line below.
  *
- *   When helpTitle/helpWhatIsIt are supplied, props are registered with
- *   Layout's `<RoutePageHelp />` so the banner renders full-width above the
- *   page hero (same column width). Collapsed by default unless helpDefaultOpen.
+ *   When helpTitle/helpWhatIsIt are supplied, a "How this page works" button
+ *   at the header's right edge opens them as a popover. They are also
+ *   registered with Layout's `<RoutePageHelp />`, which shows them expanded
+ *   under the content only while the page is empty (a PageFirstStep card is
+ *   on screen) or the user keeps tips open.
  *
  * MIGRATION from PageHeader + PageHelp:
  *   Before:
@@ -40,33 +42,34 @@ import { useLocationChrome } from '../lib/locationChrome'
 import { useRegisterPageH1 } from '../lib/pageH1'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { Tooltip } from './ui'
-import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
+import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
+import { stageChipCopy } from '../lib/navRegistry'
+import { PageHelpPopover } from './ui/help-popover'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
 function HeaderPdcaChip({ chip }: { chip: string }) {
   const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip as keyof typeof PDCA_STAGES]
   if (!meta) return null
-  const ariaLabel = chip === 'overview'
-    ? `Overview: ${meta.hint}`
-    : `PDCA stage: ${meta.label}. ${meta.hint}`
+  // Colours from the stage; words from the cycle step the sidebar shows (ADR 0027).
+  const copy = stageChipCopy(chip as 'overview' | PdcaStageId)
   return (
-    // The chip must be able to shrink: the overview label ("Overview — your
-    // loop at a glance") is wider than the header column at 390px, and a
-    // non-shrinking chip overflowed its row and sat on top of the freshness
-    // pill. The hint tooltip and aria-label keep the full wording.
-    <Tooltip content={meta.hint} className="min-w-0 max-w-full">
+    // The chip must be able to shrink: a long label is wider than the header
+    // column at 390px, and a non-shrinking chip overflowed its row and sat
+    // on top of the freshness pill. The tooltip and aria-label keep the
+    // full wording.
+    <Tooltip content={copy.hint} className="min-w-0 max-w-full">
       <span
         className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
-        aria-label={ariaLabel}
+        aria-label={copy.ariaLabel}
       >
         <span
           className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-sm font-bold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
-          {meta.letter}
+          {copy.glyph}
         </span>
-        <span className="truncate">{meta.label}</span>
+        <span className="truncate">{copy.label}</span>
       </span>
     </Tooltip>
   )
@@ -213,10 +216,21 @@ export function PageHeaderBar({
           </TitleTag>
         </div>
 
-        {/* Right-side slot */}
-        {(children || showCopyLink) && (
+        {/* Right-side slot. "How this page works" sits at the edge (P2,
+            console journeys 2026-10-27): the explainer no longer takes a row
+            of the page. */}
+        {(children || showCopyLink || hasHelp) && (
           <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5">
             {children}
+            {hasHelp && helpTitle && helpWhatIsIt ? (
+              <PageHelpPopover
+                title={helpTitle}
+                whatIsIt={helpWhatIsIt}
+                useCases={helpUseCases}
+                howToUse={helpHowToUse}
+                flowPath={helpFlowPath}
+              />
+            ) : null}
             {showCopyLink && <CopyViewLinkButton />}
           </div>
         )}

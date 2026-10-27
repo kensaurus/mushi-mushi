@@ -10,8 +10,10 @@
 // Each tick reads runs on every branch updated in the last 2 h for every
 // repo in project_repos, the jobs of runs not stored as finished, and the
 // runner list (a refused list is retried once a day). At most 40 GitHub
-// calls per tick, shared across projects; then ci_jobs and
-// ci_runner_job_samples older than 30 days are deleted.
+// calls per tick, shared across projects. Closed pull requests are listed
+// once a day per repo, and with calls left over each GitHub owner's Actions
+// bill is read once a day (the project's own token only). Then ci_jobs,
+// ci_runner_job_samples and ci_pull_requests older than 30 days are deleted.
 // See _shared/ci-collector.ts.
 // ============================================================
 
@@ -32,6 +34,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const liveDeps: CollectorDeps = {
   resolveToken: (db, projectId, installationId) => resolveProjectGithubToken(db as never, projectId, installationId),
+  // The bill: the project's own stored token only (no App installation, no platform GITHUB_TOKEN).
+  resolveBillingToken: (db, projectId) => resolveProjectGithubToken(db as never, projectId, null, { allowEnvFallback: false }),
   now: () => new Date(),
 }
 
