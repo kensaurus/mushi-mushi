@@ -34,7 +34,7 @@ import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
-import { isAdvisoryCheckRun, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
+import { fetchLatestCheckRun, isAdvisoryCheckRun, parseGithubRepoUrl, resolveProjectGithubToken as resolveCiGithubToken } from '../_shared/github.ts';
 import {
   ciGithub,
   ciJobRow,
@@ -595,15 +595,46 @@ async function handleCheckRun(
     );
   }
 
-  const status = (run.status ?? '').toLowerCase();
-  const conclusion = (run.conclusion ?? '').toLowerCase();
-  const resolved = conclusion.length > 0;
+  const eventStatus = (run.status ?? '').toLowerCase();
+  const eventConclusion = (run.conclusion ?? '').toLowerCase();
+  // The row the report page reads is the head's rollup, not this one event.
+  // A failed or cancelled run of a workflow GitHub already replaced stays on
+  // the check-run list; storing it said "CI failed" while mergeStateStatus
+  // was CLEAN (report 9e2ec6f0). The timeline event below still records this
+  // delivery.
+  let status = eventStatus;
+  let conclusion = eventConclusion;
+  let rolledUp = false;
+  const full = repoFullName(payload.repository?.full_name);
+  const ghRef = full ? parseGithubRepoUrl(`https://github.com/${full}`) : null;
+  if (ghRef && headSha) {
+    try {
+      const token = await resolveCiGithubToken(db, attempt.project_id, payload.installation?.id ?? null);
+      if (token) {
+        const snapshot = await fetchLatestCheckRun(token, ghRef, headSha);
+        if (snapshot) {
+          rolledUp = true;
+          status = (snapshot.status ?? '').toLowerCase();
+          conclusion = (snapshot.conclusion ?? '').toLowerCase();
+        }
+      }
+    } catch (err) {
+      log.warn('check_run rollup read failed (non-fatal)', {
+        headSha,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  const eventResolved = eventConclusion.length > 0;
+  const eventRed = eventConclusion === 'cancelled' || eventConclusion === 'failure';
+  const storedRed = conclusion === 'cancelled' || conclusion === 'failure';
 
   // A cancelled / failed job may be the machine, not the code (Plan 022,
   // ADR 0033): read the job and its annotations (two calls at most) before
-  // telling the timeline "CI failed".
+  // telling the timeline "CI failed". Skip that when the head's rollup is
+  // already green — this delivery is an older run GitHub no longer scores.
   const infra =
-    resolved && (conclusion === 'cancelled' || conclusion === 'failure')
+    eventResolved && eventRed && (!rolledUp || storedRed)
       ? await classifyCheckRunJob(db, {
           projectId: attempt.project_id,
           repo: payload.repository?.full_name ?? null,
@@ -611,6 +642,7 @@ async function handleCheckRun(
           installationId: payload.installation?.id ?? null,
         })
       : null;
+  const greenRollup = rolledUp && (conclusion === 'success' || conclusion === 'neutral' || conclusion === 'skipped');
 
   await db
     .from('fix_attempts')
@@ -618,6 +650,7 @@ async function handleCheckRun(
       check_run_status: status || null,
       check_run_conclusion: conclusion || null,
       check_run_updated_at: new Date().toISOString(),
+      ...(greenRollup ? { ci_infra: null } : {}),
       ...(infra ? { ci_infra: infra } : {}),
     })
     .eq('id', attempt.id);
@@ -625,21 +658,21 @@ async function handleCheckRun(
   await emitFixEvent(db, {
     fix_attempt_id: attempt.id,
     project_id: attempt.project_id,
-    kind: resolved ? 'ci_resolved' : 'ci_started',
-    status: resolved ? (conclusion === 'success' ? 'ok' : infra?.infra ? 'pending' : 'fail') : 'pending',
-    label: resolved
+    kind: eventResolved ? 'ci_resolved' : 'ci_started',
+    status: eventResolved ? (eventConclusion === 'success' ? 'ok' : infra?.infra ? 'pending' : 'fail') : 'pending',
+    label: eventResolved
       ? infra?.infra
         ? `Tests did not run — ${describeCiInfra(infra)}`
-        : `CI ${conclusion}`
-      : `CI ${status.replace(/_/g, ' ') || 'running'}`,
+        : `CI ${eventConclusion}`
+      : `CI ${eventStatus.replace(/_/g, ' ') || 'running'}`,
     detail: run.name ?? null,
     at: run.completed_at ?? run.started_at ?? new Date().toISOString(),
-    dedupe_key: `check_run:${run.id ?? deliveryId}:${resolved ? 'done' : 'start'}`,
+    dedupe_key: `check_run:${run.id ?? deliveryId}:${eventResolved ? 'done' : 'start'}`,
     payload: { name: run.name, url: run.html_url },
   });
 
   return new Response(
-    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: resolved ? conclusion : status }),
+    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: conclusion || status }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 }

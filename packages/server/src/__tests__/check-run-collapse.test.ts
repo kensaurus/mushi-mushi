@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { collapseCheckRuns, installationIdForAttempt, isAdvisoryCheckRun, prNumberFromUrl } from '../../supabase/functions/_shared/github.ts'
+import { collapseCheckRuns, installationIdForAttempt, isAdvisoryCheckRun, prNumberFromUrl, supersededWorkflowRunIds, withoutSupersededWorkflowRuns } from '../../supabase/functions/_shared/github.ts'
 
 describe('collapseCheckRuns', () => {
   it('ignores the Copilot review run when the CI jobs passed', () => {
@@ -30,6 +30,82 @@ describe('collapseCheckRuns', () => {
       { name: 'lint', status: 'completed', conclusion: 'success' },
       { name: 'test', status: 'queued', conclusion: null },
     ])).toEqual({ status: 'in_progress', conclusion: null })
+  })
+
+  it('an older workflow run that overlaps the green re-run is not the head (report 9e2ec6f0)', () => {
+    // The re-run started before the first run finished, so name-and-time
+    // collapse keeps the failure. GitHub's merge box does not: it scores
+    // only the newest run of that workflow. yen-yen#364.
+    const checks = [
+      {
+        name: 'Lint, typecheck, build, doctor',
+        status: 'completed',
+        conclusion: 'failure',
+        started_at: '2026-10-26T20:50:00Z',
+        completed_at: '2026-10-26T21:00:00Z',
+        details_url: 'https://github.com/kensaurus/yen-yen/actions/runs/100/job/1',
+        check_suite: { id: 10 },
+      },
+      {
+        name: 'Lint, typecheck, build, doctor',
+        status: 'completed',
+        conclusion: 'success',
+        started_at: '2026-10-26T20:55:00Z',
+        completed_at: '2026-10-26T21:03:00Z',
+        details_url: 'https://github.com/kensaurus/yen-yen/actions/runs/200/job/2',
+        check_suite: { id: 20 },
+      },
+    ]
+    expect(collapseCheckRuns(checks).conclusion).toBe('failure')
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: 10, created_at: '2026-10-26T20:50:00Z' },
+      { id: 200, workflow_id: 7, check_suite_id: 20, created_at: '2026-10-26T20:55:00Z' },
+    ]
+    expect([...supersededWorkflowRunIds(runs)]).toEqual([100])
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs))).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('drops a superseded run by check suite when the job URL has no run id', () => {
+    const checks = [
+      { name: 'test', status: 'completed', conclusion: 'cancelled', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T21:00:00Z', details_url: 'https://github.com/o/r/runs/1', check_suite: { id: 10 } },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:55:00Z', completed_at: '2026-10-26T21:03:00Z', details_url: 'https://github.com/o/r/actions/runs/200/job/2', check_suite: { id: 20 } },
+    ]
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: 10, created_at: '2026-10-26T20:50:00Z' },
+      { id: 200, workflow_id: 7, check_suite_id: 20, created_at: '2026-10-26T20:55:00Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs)).conclusion).toBe('success')
+  })
+
+  it('a newer failed run of the same workflow still counts', () => {
+    const checks = [
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:56:00Z', details_url: 'https://github.com/o/r/actions/runs/100/job/1' },
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T21:00:00Z', completed_at: '2026-10-26T21:05:00Z', details_url: 'https://github.com/o/r/actions/runs/200/job/2' },
+    ]
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: 10, created_at: '2026-10-26T20:50:00Z' },
+      { id: 200, workflow_id: 7, check_suite_id: 20, created_at: '2026-10-26T21:00:00Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs)).conclusion).toBe('failure')
+  })
+
+  it('two workflows that share a job name both still count', () => {
+    const checks = [
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:56:00Z', details_url: 'https://github.com/o/r/actions/runs/1/job/1' },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:50:05Z', completed_at: '2026-10-26T20:58:00Z', details_url: 'https://github.com/o/r/actions/runs/2/job/2' },
+    ]
+    const runs = [
+      { id: 1, workflow_id: 10, check_suite_id: 10, created_at: '2026-10-26T20:50:00Z' },
+      { id: 2, workflow_id: 11, check_suite_id: 11, created_at: '2026-10-26T20:50:05Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs)).conclusion).toBe('failure')
+  })
+
+  it('a run without a workflow id is never treated as replaced', () => {
+    expect([...supersededWorkflowRunIds([
+      { id: 1, workflow_id: null, check_suite_id: null, created_at: '2026-10-26T20:50:00Z' },
+      { id: 2, workflow_id: null, check_suite_id: null, created_at: '2026-10-26T21:00:00Z' },
+    ])]).toEqual([])
   })
 
   it('a green re-run of a failed check replaces the red run (report 9e2ec6f0)', () => {

@@ -162,6 +162,7 @@ describe('webhooks-github-indexer wiring', () => {
     const body = fn('handleCheckRun')
     expect(body).toMatch(/projectIdsForRepo\(db, payload\.repository\?\.full_name\)/)
     expect(body).toMatch(/\.from\('fix_attempts'\)\.select\('id, project_id'\)\.in\('project_id', projectIds\)/)
+    expect(body).toMatch(/fetchLatestCheckRun\(token, ghRef, headSha\)/)
   })
 
   it('the cloud-agent head-ref fallback is scoped on both queries', () => {
