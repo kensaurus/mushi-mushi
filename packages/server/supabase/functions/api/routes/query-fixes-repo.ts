@@ -699,16 +699,18 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // The latest completed Opus verdict per attempt (ADR 0030), so /fixes can
     // list the open PRs the review already said to merge. A read failure
     // leaves it null: the list still loads.
-    const verdicts = new Map<string, string>();
+    // head_sha: the commit the verdict is about, so a review of an older
+    // commit never reads as "ready to merge" (console countDefinitions).
+    const verdicts = new Map<string, { verdict: string; headSha: string | null }>();
     if (fixes.length > 0) {
       const { data: reviews } = await db
         .from('fix_reviews')
-        .select('fix_attempt_id, verdict, created_at')
+        .select('fix_attempt_id, verdict, head_sha, created_at')
         .in('fix_attempt_id', fixes.map((f) => f.id as string))
         .eq('status', 'completed')
         .order('created_at', { ascending: false });
-      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null }>) {
-        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, r.verdict);
+      for (const r of (reviews ?? []) as Array<{ fix_attempt_id: string; verdict: string | null; head_sha: string | null }>) {
+        if (r.verdict && !verdicts.has(r.fix_attempt_id)) verdicts.set(r.fix_attempt_id, { verdict: r.verdict, headSha: r.head_sha ?? null });
       }
     }
     const enriched = fixes.map((f) => {
@@ -725,7 +727,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         is_latest_attempt: t ? t.latestAttemptId === f.id : null,
         retryable: t ? t.retryable && t.latestAttemptId === f.id : false,
         credential_block: t && t.latestAttemptId === f.id ? t.credential : null,
-        review_verdict: verdicts.get(f.id as string) ?? null,
+        review_verdict: verdicts.get(f.id as string)?.verdict ?? null,
+        review_head_sha: verdicts.get(f.id as string)?.headSha ?? null,
       };
     });
 
