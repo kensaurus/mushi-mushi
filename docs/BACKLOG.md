@@ -9,7 +9,7 @@ parked work is visible in one place.
 
 - **Last regenerated:** 2026-10-17 (third run; delta against 2026-10-16 below)
 - **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
-- **Closed 2026-10-20:** BL-090. Spend-down, Integrations, and review follow-ups pick a Cursor model from `GET /v1/admin/byok/cursor/models`.
+- **Closed 2026-10-27:** BL-090. Spend-down, Integrations, and review follow-ups pick a Cursor model from `GET /v1/admin/byok/cursor/models`.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
@@ -20,7 +20,7 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116..BL-117, parked parts of the site audit.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 61 · **Recently closed:** 25 (BL-090 on 2026-10-20; BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 56 · **Recently closed:** 25 (BL-090 on 2026-10-27; BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -29,13 +29,12 @@ parked work is visible in one place.
 | tech-debt | 12 |
 | known-bug | 1 |
 | decision-needed | 10 |
-| unfinished-feature | 24 |
+| unfinished-feature | 21 |
 | needs-triage | 0 |
-| dependency | 2 |
 
 | Status | Open |
 |---|---|
-| relevant | 58 |
+| relevant | 53 |
 | verify-done | 3 |
 | stale (propose removal) | 0 |
 
@@ -148,7 +147,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
-| BL-090 | Cursor model picker for spend-down and Integrations. The console took a free-text model spec validated by `parseCursorModelSpec` | 2026-10-20 | `GET /v1/admin/byok/cursor/models` calls Cursor `GET /v1/models` for the named byok key (spend-down) or the key the app would use (Integrations). Review follow-ups use the same picker. Settings → AI keys and Integrations → Cursor Cloud save the same spec (`id` or `id?param=value`); a missing list falls back to the text field. |
+| BL-090 | Cursor model picker for spend-down and Integrations. The console took a free-text model spec validated by `parseCursorModelSpec` | 2026-10-27 | `GET /v1/admin/byok/cursor/models` calls Cursor `GET /v1/models` for the named byok key (spend-down) or the key the app would use (Integrations). Review follow-ups use the same picker. Settings → AI keys and Integrations → Cursor Cloud save the same spec (`id` or `id?param=value`); a missing list falls back to the text field. |
 | BL-083 | `PATH_SLICES` could still ask nav-meta for slices only the deleted route hero read | 2026-10-23 | Audited against `resolveNavBadge`. Every remaining key is read by that badge or by the counters it fills (`projects`, `members`). Dropped the extra `dashboard` on `/health` (`navSlicesForPaths` already requests it). Layout no longer unions the current pathname into the sidebar request — that union existed for `layoutHeroFromStats`, deleted 2026-10-17. The one sidebar (core pages plus enabled Labs) asks only for visible badges. `apps/admin/src/lib/navBadges.test.ts`, `apps/admin/src/components/Layout.navSlices.test.tsx`. |
 | BL-089 | Radar `spend_down_idle` finding: a Cursor key with spend-down on, inside its window, that dispatched nothing | 2026-10-22 | `evaluateSpendDownIdle` (`_shared/radar/operator-detectors.ts`) runs with the operator detectors and writes rule `spend_down_idle`. It reuses `spendDownWindow` and `spendDownIdleReasons` (`_shared/spend-down.ts`): in-window and nothing dispatched because no app uses the key, auto-fix is off, or every open report is settled. Tests: `spend-down.test.ts`, `radar-operator-detectors.test.ts`, `radar-run.test.ts`. ADR 0028 consequences. |
 | BL-008 | Two planned test files never shipped: `packages/web/src/lifecycle-hooks.test.ts` and `packages/cli/src/project-create.test.ts` | 2026-10-22 | `packages/web/src/lifecycle-hooks.test.ts` covers `beforeSendFeedback` drop, modify, throw, and the 2s timeout, plus `onCrashedLastRun` (first run `null`, unclean exit `true`, `pagehide` sets `clean`, a thrown hook does not break init). `packages/cli/src/project-create.test.ts` covers `persistProjectCreate` (the `mushi project create` write step): `.env.local` merge, `.cursor/mcp.json` merge that keeps other servers and does not inline the API key, and `saveConfig` keeping `clientId` / `telemetryNoticeShown`. Plan 012 boxes in `docs/execplans/PLANS.md` are ticked. |

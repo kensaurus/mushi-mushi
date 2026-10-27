@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **752** routes.
+> Generated: 2026-10-27 · **751** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 195 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 389 |
+| `jwtAuth` | 388 |
 | `jwtOrApiKey` | 3 |
 | `public` | 61 |
 | `unknown` | 45 |
@@ -69,7 +69,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/browserbase/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/credits` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
-| GET | `/v1/admin/byok/cursor/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-cursor-models.ts` |
 | GET | `/v1/admin/byok/cursor/models` | `jwtAuth` | `packages/server/supabase/functions/api/routes/byok-review-followups.ts` |
 | DELETE | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

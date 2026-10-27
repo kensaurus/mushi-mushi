@@ -5,10 +5,11 @@
  *          GET /v1/admin/byok/cursor/models and writes a spec string
  *          (`id` or `id?param=value&…`). keyId asks for that Cursor account;
  *          omit it to use the key the app would use. A failed or empty list
- *          falls back to the text field.
+ *          falls back to the text field. Other mode closes when the saved
+ *          spec changes to a listed model, and when keyId changes.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Input, SelectField } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import {
@@ -41,7 +42,13 @@ function paramValues(param: CursorModelParam, current: string) {
   return values
 }
 
-export function CursorModelPicker({
+export function CursorModelPicker(props: Props) {
+  // A different Cursor account is a different list. Remounting drops Other
+  // mode left over from the previous key.
+  return <CursorModelPickerBody key={props.keyId ?? ''} {...props} />
+}
+
+function CursorModelPickerBody({
   value,
   onChange,
   keyId,
@@ -58,6 +65,20 @@ export function CursorModelPicker({
   const list = models.data?.models ?? []
   const listReady = !models.loading && !models.error && models.data != null
   const [otherPicked, setOtherPicked] = useState(false)
+  // Other stays open only until a saved spec that is on the list arrives
+  // from outside the picker (a form reset, or another field writing the draft).
+  const seenValue = useRef(value)
+  const pendingValue = useRef(false)
+  useEffect(() => {
+    if (seenValue.current !== value) {
+      seenValue.current = value
+      pendingValue.current = true
+    }
+    if (!pendingValue.current || !listReady) return
+    const incoming = cursorModelSelection(value, list, true)
+    pendingValue.current = false
+    if (list.some((m) => m.id === incoming.modelId)) setOtherPicked(false)
+  }, [value, list, listReady])
   const parsed = cursorModelSelection(value, list, listReady)
   // A blank or listed value maps back to its own option, so Other needs its
   // own flag to keep the typed-id field open.

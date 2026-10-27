@@ -12,7 +12,6 @@ import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
 import { registerByokSpendDownRoutes } from './routes/byok-spend-down.ts';
-import { registerByokCursorModelsRoutes } from './routes/byok-cursor-models.ts';
 import { registerByokReviewFollowupRoutes } from './routes/byok-review-followups.ts';
 import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
 import { registerDoctorRoutes } from './routes/doctor.ts';
@@ -655,12 +654,9 @@ registerAdminOpsRoutes(app);
 // Live-site watch: Firecrawl monitors that file broken pages as reports (ADR 0024).
 registerSiteWatchRoutes(app);
 registerByokSpendDownRoutes(app);
-// Review follow-ups (ADR 0032) register GET /v1/admin/byok/cursor/models
-// (cache, universal keys, another app's key for an owner or admin). Hono
-// serves that first handler. Spend-down and Integrations (BL-090) register
-// the same path.
+// Review follow-ups (ADR 0032). GET /v1/admin/byok/cursor/models is the
+// list spend-down, Integrations, and follow-ups share.
 registerByokReviewFollowupRoutes(app);
-registerByokCursorModelsRoutes(app);
 
 // In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
 registerBillingChangePlanRoutes(app);
