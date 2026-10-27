@@ -22,6 +22,7 @@ import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { DismissFindingButton } from './DismissFindingButton'
+import { CopyFixPromptButton } from './CopyFixPromptButton'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import {
@@ -46,9 +47,15 @@ interface Props {
   limit?: number
   /** Change it to read the findings again, e.g. after "Run audit". */
   refreshKey?: number
+  /**
+   * Exact open totals counted on the server (fullstack-audit/stats). The list
+   * route stops at 50 runs and 500 findings, so totals counted from it are a
+   * floor; when these are given they are shown instead, with no "at least".
+   */
+  totals?: { errors: number; warnings: number } | null
 }
 
-export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0 }: Props) {
+export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null }: Props) {
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
   const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? '', refreshKey] })
 
@@ -77,8 +84,10 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
   const open = groups.filter((g) => !isQuiet(g))
   const quiet = groups.filter(isQuiet)
   const allPass = quiet.every((g) => g.status === 'pass')
-  const errors = findings.filter((f) => f.severity === 'error').length
-  const warnings = findings.filter((f) => f.severity === 'warn').length
+  const errors = totals?.errors ?? findings.filter((f) => f.severity === 'error').length
+  const warnings = totals?.warnings ?? findings.filter((f) => f.severity === 'warn').length
+  // Counted from a cut-short list only when no exact totals came in.
+  const floor = truncated && !totals
   const withFindings = groups.filter((g) => g.findings.some((f) => f.severity === 'error' || f.severity === 'warn')).length
 
   return (
@@ -95,12 +104,14 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
       {errors + warnings > 0 && (
         <p className="text-xs text-fg-secondary" data-testid="gate-findings-totals">
           {/* Past the route's caps the list is cut short, so its totals are a floor. */}
-          {truncated ? 'At least ' : ''}
+          {floor ? 'At least ' : ''}
           <span className={errors > 0 ? 'font-semibold text-danger' : ''}>{errors.toLocaleString()} error{errors === 1 ? '' : 's'}</span>
           {' · '}
           <span className={warnings > 0 ? 'font-semibold text-warn' : ''}>{warnings.toLocaleString()} warning{warnings === 1 ? '' : 's'}</span>
-          {' open in '}
-          {withFindings} check{withFindings === 1 ? '' : 's'}
+          {' open'}
+          {/* A cut-short list can miss a whole check, so the check count is only given when the read is complete. */}
+          {truncated ? '' : ` in ${withFindings} check${withFindings === 1 ? '' : 's'}`}
+          {floor ? ' (only the newest 500 findings were read, so there may be more)' : ''}
         </p>
       )}
       {open.map((g) => (
@@ -184,6 +195,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
                   f={f}
                   action={
                     <>
+                      <CopyFixPromptButton finding={f} />
                       {caps && <ApplySuggestedCapsButton projectId={projectId} values={caps} />}
                       <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={onChanged} />
                     </>
