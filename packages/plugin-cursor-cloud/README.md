@@ -2,21 +2,37 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
-
-
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/plugin-cursor-cloud)](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
 [![license](https://img.shields.io/npm/l/@mushi-mushi/plugin-cursor-cloud)](./LICENSE)
 [![types](https://img.shields.io/npm/types/@mushi-mushi/plugin-cursor-cloud)](./src/index.ts)
 
-> Mushi Mushi plugin: dispatch a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent/api/endpoints) when a critical bug is classified or a fix is requested. The agent investigates, opens a draft PR, and reports back through the Cursor REST API (**v1**).
+Starts a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent/api/endpoints)
+on your repo when Mushi triages a critical bug or a fix is requested. The
+agent investigates and opens a draft PR for you to review.
 
-This is the **opt-in marketplace** path. Teams install it in the Mushi admin
-console, configure their Cursor API key + repo URL, and pick a severity
-threshold. For the **project-wide default** Cursor agent path (no plugin
-install needed) set `autofix_agent = 'cursor_cloud'` in the Mushi console —
-Mushi's own fix-worker then dispatches every fix through the same v1 API,
-polls it to completion, and closes the loop on the draft PR.
+**Do you need this package?** No, if you use Mushi Cloud. Mushi starts
+Cursor agents itself: add your Cursor API key on the **Integrations** page
+(Cursor Cloud card) and send any report to Cursor, or install **Cursor Cloud
+Agent** from the Marketplace page to start agents automatically. Either way
+Mushi calls Cursor's API directly and never sends events to this package. It is
+only for running the dispatch from your own server, for example next to a
+self-hosted Mushi.
+
+```bash
+npm i @mushi-mushi/plugin-cursor-cloud @mushi-mushi/plugin-sdk
+```
+
+```ts
+import { createCursorCloudPlugin } from '@mushi-mushi/plugin-cursor-cloud'
+
+const handler = createCursorCloudPlugin({
+  apiKey: process.env.CURSOR_API_KEY!,
+  webhookSecret: process.env.MUSHI_PLUGIN_WEBHOOK_SECRET!,
+  repoUrl: 'https://github.com/your-org/your-repo',
+})
+```
+
+Docs: https://kensaur.us/mushi-mushi/docs/plugins/cursor-cloud
 
 ## Why this exists
 
@@ -32,12 +48,12 @@ Mushi report → classify-report → report.classified (severity=critical)
   → @mushi-mushi/plugin-cursor-cloud
   → POST https://api.cursor.com/v1/agents
   → Cursor cloud agent investigates → opens draft PR
-  → audit log to Mushi console
+  → one log line on your server
 ```
 
 ## Spend safety
 
-This plugin spends real Cursor API credit. Three hard guards are baked in:
+This plugin spends real Cursor API credit. Four guards are built in:
 
 1. **Severity gate** — defaults to `critical` only. Set
    `severityThreshold: 'low'` to widen, but think before doing so.
@@ -51,12 +67,6 @@ This plugin spends real Cursor API credit. Three hard guards are baked in:
 4. **No double dispatch** — when Mushi's own fix-worker already handed the
    report to Cursor (`autofix_agent = 'cursor_cloud'`), the `fix.requested`
    payload carries `data.fix.externalAgentId` and this plugin logs and skips.
-
-## Install
-
-```bash
-pnpm add @mushi-mushi/plugin-cursor-cloud @mushi-mushi/plugin-sdk
-```
 
 ## Use
 
@@ -76,10 +86,16 @@ const handler = createCursorCloudPlugin({
   autoCreatePR: true,
 })
 
-// Wire to your serverless platform — Mushi calls handler with a Standard
-// Webhooks-signed POST body.
+// `handler({ rawBody, headers })` returns `{ status, body }`. Mount it with
+// expressMiddleware from '@mushi-mushi/plugin-sdk/express' or honoHandler
+// from '@mushi-mushi/plugin-sdk/hono'.
 export default handler
 ```
+
+For `skill_pipeline.step.dispatched`, set `MUSHI_API_KEY` and
+`MUSHI_API_URL` (your Mushi API base, e.g.
+`https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`) so the plugin
+can check the step back in. Without `MUSHI_API_KEY` the step stays `running`.
 
 ## Configuration
 
@@ -126,7 +142,7 @@ for the push webhook (its `cursor-webhook` edge function verifies the
 signature); this npm plugin has no completion tracking of its own and uses
 v1 only.
 
-## ⚠️ Breaking change in v0.3.0 — `webhookSecret` required
+## Breaking change in v0.3.0 — `webhookSecret` required
 
 Previous versions derived the HMAC secret from `workspaceId` internally,
 which was trivially forgeable. From v0.3.0 onward you **must** supply
@@ -141,18 +157,18 @@ which was trivially forgeable. From v0.3.0 onward you **must** supply
  })
 ```
 
-The secret is the same Standard Webhooks HMAC key Mushi signs outbound
-events with. Find it in Admin → Integrations → Cursor Cloud → Webhook secret.
+The secret is the signing secret of the webhook plugin that sends this
+server its events (the value set when that plugin is installed).
 
-## Audit log
+## Log line
 
-Every dispatch writes a structured audit line:
+Every dispatch writes one line to your server's log:
 
 ```
 [cursor-cloud] dispatched {"agentId":"agent_…","reportId":"…","model":"composer-2.5"}
 ```
 
-Subscribe to the Mushi `plugin.dispatched` audit stream to track spend.
+Mushi does not see these dispatches; check spend on your Cursor dashboard.
 
 ## Tests
 
@@ -177,4 +193,4 @@ MIT — see [LICENSE](./LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 506 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 514 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

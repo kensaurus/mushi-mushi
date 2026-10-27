@@ -53,10 +53,10 @@ export function CheckVerificationHub() {
         helpWhatIsIt="A grouped index of the 4 · Verify tools, so you can prove a fix works before you ship it without scanning a long flat list."
         helpUseCases={[
           'After a fix PR: run Scheduled tests and the Full-stack audit from App checks',
-          'Before release: open App health for schema changes and unusual spikes',
+          'Before release: open Mushi health for schema changes and unusual spikes',
           'Weekly: check Triage grading and Lessons under AI quality',
         ]}
-        helpHowToUse="Choose a tab, then open the tool you need. For live AI-call and job telemetry, open App checks → App health."
+        helpHowToUse="Choose a tab, then open the tool you need. For Mushi’s own AI calls and jobs, open App checks → Mushi health."
       >
         <Btn to="/health" size="sm" variant="ghost">
             Open live health dashboard →

@@ -1,5 +1,7 @@
 /**
- * Visible Skill Pipelines guide — handoff vs cloud, catalog, sources.
+ * Skill Pipelines guide — handoff vs cloud, catalog, sources. It sits at the
+ * page foot, closed (console journeys 2026-10-27): the page opens on what is
+ * running, and a bug is picked by its title, so no step copies an id.
  */
 
 import { Link } from 'react-router-dom'
@@ -21,12 +23,6 @@ interface Props {
 }
 
 export function SkillsPipelineGuide({ topPriority, stats }: Props) {
-  const needsGuidance =
-    topPriority === 'no_project' ||
-    topPriority === 'empty_catalog' ||
-    topPriority === 'failed_runs' ||
-    topPriority === 'awaiting_checkin'
-
   const live = stats ?? {
     activeRuns: 0,
     failedRuns: 0,
@@ -36,18 +32,17 @@ export function SkillsPipelineGuide({ topPriority, stats }: Props) {
 
   return (
     <FeatureExplainPanel
-      title="How to apply a skill to a report"
+      title="How to run a skill on a bug"
       summary={SKILLS_EXPLAINER_SUMMARY}
       category="workflow"
-      defaultOpen={needsGuidance}
+      defaultOpen={false}
     >
       <div className="rounded-md border border-brand/20 bg-brand/5 px-3 py-2.5 space-y-1">
         <p className="text-2xs font-semibold text-fg">Example: fix a bug with workflow-fix-and-ship</p>
         <ol className="list-decimal pl-4 space-y-0.5 text-2xs text-fg-secondary">
-          <li>Open a report → copy its ID from the URL (e.g. <code className="font-mono bg-surface-overlay px-0.5 rounded">abc123de</code>)</li>
-          <li>Go to <Link to="/skills?tab=catalog&skill=workflow-fix-and-ship" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Catalog → workflow-fix-and-ship</Link></li>
-          <li>Paste the report ID in "Report ID", choose Handoff mode, click <strong>Start pipeline</strong></li>
-          <li>Copy the generated context packet into your local Cursor agent — it knows exactly what to fix</li>
+          <li>Press <strong>Run a skill on a bug</strong> at the top, or open <Link to="/skills?tab=catalog&skill=workflow-fix-and-ship" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Catalog → workflow-fix-and-ship</Link></li>
+          <li>Search for the bug by its title and pick it, choose Handoff, and press <strong>Start pipeline</strong></li>
+          <li>Copy the context packet from Pipeline Runs into your editor's agent: it knows exactly what to fix</li>
         </ol>
       </div>
 

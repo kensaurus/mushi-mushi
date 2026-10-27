@@ -1,5 +1,34 @@
 # mushi-mushi
 
+## 0.8.10
+
+### Patch Changes
+
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+- Updated dependencies [271abb8]
+- Updated dependencies [15ba9ce]
+- Updated dependencies [15ba9ce]
+  - @mushi-mushi/cli@0.34.1
+
+## 0.8.9
+
+### Patch Changes
+
+- Updated dependencies [af68d85]
+- Updated dependencies [863ccf9]
+- Updated dependencies [7314cc5]
+- Updated dependencies [972ac1f]
+- Updated dependencies [3d73196]
+- Updated dependencies [2939281]
+- Updated dependencies [863ccf9]
+- Updated dependencies [11bca54]
+- Updated dependencies [3d73196]
+- Updated dependencies [60c5359]
+- Updated dependencies [be9fb01]
+- Updated dependencies [f10339f]
+- Updated dependencies [2939281]
+  - @mushi-mushi/cli@0.34.0
+
 ## 0.8.8
 
 ### Patch Changes

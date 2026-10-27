@@ -147,7 +147,7 @@ export function describeDevianceSettle(
       if (run.status === 'error') return { tone: 'danger', text: run.error || 'The scan failed.' }
       if (run.status === 'running') return { tone: 'warn', text: 'The scan is still running.' }
       if (run.score === null) return { tone: 'info', text: 'Scan finished — not scored.' }
-      return { tone: 'info', text: `Scan finished — deviance score ${Math.round(run.score)}.` }
+      return { tone: 'info', text: `Check finished: drift score ${Math.round(run.score)}.` }
     }
     case 'cleared':
       return { tone: 'info', text: 'The scan is no longer running. The latest results are shown below.' }

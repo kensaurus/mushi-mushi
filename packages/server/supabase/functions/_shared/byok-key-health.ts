@@ -9,9 +9,11 @@
  *          fixtures, so the badge and the rows can't disagree. Change both
  *          together.
  *
- *   superseded legacy key (a pooled key of the provider works) → attention
- *   expired (expires_at passed)                                → attention
  *   turned off                                                 → off
+ *   superseded legacy key (a pooled key of the provider works) → replaced
+ *   expired, another key of the provider works                 → replaced
+ *   expired                                                    → attention
+ *   rejected, another key of the provider works                → replaced
  *   rejected by the provider                                   → attention
  *   out of quota and still cooling down                        → attention
  *   provider unreachable on the last test                      → attention
@@ -20,7 +22,12 @@
  *   otherwise                                                  → working
  */
 
-export type ByokKeyHealth = 'working' | 'attention' | 'expiring' | 'checking' | 'off'
+/**
+ * `replaced`: a broken or old key another working key already took over. It
+ * is tidy-up, not a problem: the badge and hero never count it (console
+ * journeys 2026-10-27), while its row still offers Remove.
+ */
+export type ByokKeyHealth = 'working' | 'attention' | 'replaced' | 'expiring' | 'checking' | 'off'
 
 export interface ByokKeyHealthInput {
   provider_slug: string
@@ -52,14 +59,25 @@ export function byokKeyHealth(
   all: readonly ByokKeyHealthInput[],
   now: number = Date.now(),
 ): ByokKeyHealth {
+  // A key someone turned off is a choice, never a problem, even once it expires.
+  if (key.status === 'disabled') return 'off'
+
   const poolWorks = all.some((k) => k.provider_slug === key.provider_slug && isRuntimeEligible(k, now))
-  if (key.legacy && poolWorks) return 'attention'
+  if (key.legacy && poolWorks) return 'replaced'
+
+  // Another key of this provider that works and has not expired (the console's replacedByAnother).
+  const anotherWorks = all.some(
+    (k) =>
+      k !== key &&
+      k.provider_slug === key.provider_slug &&
+      isRuntimeEligible(k, now) &&
+      !(k.expires_at && Date.parse(k.expires_at) <= now),
+  )
 
   const expires = key.legacy || !key.expires_at ? NaN : Date.parse(key.expires_at)
-  if (Number.isFinite(expires) && expires <= now) return 'attention'
+  if (Number.isFinite(expires) && expires <= now) return anotherWorks ? 'replaced' : 'attention'
 
-  if (key.status === 'disabled') return 'off'
-  if (key.test_status === 'error_auth' || key.status === 'auth_failed') return 'attention'
+  if (key.test_status === 'error_auth' || key.status === 'auth_failed') return anotherWorks ? 'replaced' : 'attention'
 
   if (key.test_status === 'error_quota' || key.status === 'quota_exhausted') {
     const cooling = key.cooldown_until ? Date.parse(key.cooldown_until) > now : false
@@ -76,6 +94,7 @@ export function byokKeyHealth(
 export interface ByokHealthCounts {
   working: number
   attention: number
+  replaced: number
   expiring: number
   checking: number
   off: number
@@ -85,7 +104,7 @@ export function countByokKeyHealth(
   keys: readonly ByokKeyHealthInput[],
   now: number = Date.now(),
 ): ByokHealthCounts {
-  const counts: ByokHealthCounts = { working: 0, attention: 0, expiring: 0, checking: 0, off: 0 }
+  const counts: ByokHealthCounts = { working: 0, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0 }
   for (const key of keys) counts[byokKeyHealth(key, keys, now)] += 1
   return counts
 }

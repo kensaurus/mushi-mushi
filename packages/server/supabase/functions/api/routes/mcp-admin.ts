@@ -28,7 +28,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Keep in sync with packages/mcp/src/catalog.ts counts.
 // Update when tools/resources/prompts are added.
-const TOOL_COUNT = 124
+const TOOL_COUNT = 126
 const RESOURCE_COUNT = 8
 const PROMPT_COUNT = 4
 

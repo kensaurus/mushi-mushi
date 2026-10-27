@@ -132,7 +132,29 @@ describe('OpenPullRequests', () => {
     render([held, { ...pr(10, [check('gate', 'success')]), review: { state: 'merge', label: 'Opus review: merge', fixId: null, verdict: 'merge' } }])
     expect(host.textContent).toContain('Opus review: hold')
     expect(host.textContent).toContain('Opus review: merge')
-    const merges = [...host.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Merge')
-    expect(merges.map((b) => b.disabled)).toEqual([true, false])
+    const mergeIn = (group: string) => [...host.querySelectorAll(`[data-testid="open-prs-${group}"] button`)].find((b) => b.textContent?.trim() === 'Merge') as HTMLButtonElement
+    expect(mergeIn('hold').disabled).toBe(true)
+    expect(mergeIn('mergeable').disabled).toBe(false)
+  })
+
+  it('groups PRs by what can be done: mergeable first, then needs a fix, hold, waiting', () => {
+    const review = (state: string, verdict: string | null) => ({ state, label: `Opus review: ${state}`, fixId: null, verdict })
+    render([
+      { ...pr(1, [check('gate', 'success')]), review: review('hold', 'hold') },
+      { ...pr(2, [check('gate', 'failure')]) },
+      { ...pr(3, [check('gate', null)]) },
+      { ...pr(4, [check('gate', 'success')]), review: review('merge', 'merge') },
+      { ...pr(5, [check('gate', 'success')]), review: review('fix_first', 'fix_first') },
+      { ...pr(6, [check('gate', 'success')]), review: review('stale', 'merge') },
+      { ...pr(13, [check('gate', 'success')]) },
+    ])
+    const groups = [...host.querySelectorAll('[data-testid^="open-prs-"]')].map((g) => g.getAttribute('data-testid'))
+    expect(groups).toEqual(['open-prs-mergeable', 'open-prs-needs_fix', 'open-prs-hold', 'open-prs-waiting'])
+    const numbers = (group: string) => [...host.querySelectorAll(`[data-testid="open-prs-${group}"] a[href*="/pull/"]`)].map((a) => a.getAttribute('href')!.split('/').pop())
+    expect(numbers('mergeable')).toEqual(['4', '13'])
+    expect(numbers('needs_fix')).toEqual(['2', '5'])
+    expect(numbers('hold')).toEqual(['1'])
+    // A review of an older commit is not a "merge" yet; CI still running waits too.
+    expect(numbers('waiting')).toEqual(['3', '6'])
   })
 })

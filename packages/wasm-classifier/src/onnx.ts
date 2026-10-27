@@ -34,22 +34,32 @@ interface OrtModule {
 }
 
 const DEFAULT_TIMEOUT_MS = 750;
-const HEURISTIC_FALLBACK_REASON = 'ONNX classifier unavailable — falling back to heuristic';
+/** Every ONNX-path verdict carries this id: none of them comes from a model yet. */
+const FALLBACK_MODEL_ID = 'heuristic-fallback';
+const HEURISTIC_FALLBACK_REASON = 'ONNX inference is not implemented yet; heuristic verdict';
 
-/** Ensures the "ONNX not loaded, using heuristic" warning fires at most once per process/session. */
+/** Ensures the experimental-ONNX warning fires at most once per process/session. */
 let _heuristicFallbackWarned = false;
 
 function warnHeuristicFallbackOnce(): void {
   if (_heuristicFallbackWarned) return;
   _heuristicFallbackWarned = true;
   console.warn(
-    "[@mushi-mushi/wasm-classifier] ONNX model not loaded — using heuristic classifier. " +
-      "Set modelId to 'heuristic' to suppress this warning.",
+    '[@mushi-mushi/wasm-classifier] createOnnxClassifier is experimental: ONNX inference is ' +
+      'not implemented yet, so every verdict comes from the heuristic classifier ' +
+      `(modelId "${FALLBACK_MODEL_ID}"). Use createHeuristicClassifier() to skip loading ` +
+      'onnxruntime-web and the model.',
   );
 }
 
 /**
  * Creates a Phi-3-mini-class on-device classifier backed by `onnxruntime-web`.
+ *
+ * @experimental ONNX inference is a stub (Mushi report 75913f3d): the model
+ * session is created, but every verdict comes from the heuristic classifier
+ * with `modelId: 'heuristic-fallback'`, and a console warning says so once.
+ * Use `createHeuristicClassifier()` for the same verdicts without the
+ * download.
  *
  * Loading is fully lazy — the SDK consumer must list `onnxruntime-web` as a
  * peer dependency. If it cannot be loaded (for instance, on a CSP that blocks
@@ -63,16 +73,16 @@ function warnHeuristicFallbackOnce(): void {
 export async function createOnnxClassifier(
   config: OnnxClassifierConfig,
 ): Promise<WasmClassifier> {
-  const heuristic = createHeuristicClassifier(config);
+  const heuristic = wrapHeuristic(createHeuristicClassifier(config), FALLBACK_MODEL_ID, HEURISTIC_FALLBACK_REASON);
   const modelId = config.modelId ?? 'phi-3-mini-onnx-int4';
   const timeoutMs = config.classifyTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  warnHeuristicFallbackOnce();
 
   let ort: OrtModule | null = null;
   try {
     ort = (await loadOrt()) as OrtModule;
   } catch {
-    warnHeuristicFallbackOnce();
-    return wrapHeuristic(heuristic, 'heuristic-fallback', HEURISTIC_FALLBACK_REASON);
+    return heuristic;
   }
 
   if (config.numThreads && ort.env?.wasm) {
@@ -120,11 +130,11 @@ export async function createOnnxClassifier(
         if (!verdict) {
           return await heuristic.classify(input);
         }
-        // runInference currently delegates to the heuristic — flag that clearly.
-        warnHeuristicFallbackOnce();
+        // runInference delegates to the heuristic; say so in the result.
         return {
           ...verdict,
-          modelId: 'heuristic-fallback',
+          modelId: FALLBACK_MODEL_ID,
+          reason: `${HEURISTIC_FALLBACK_REASON} (${verdict.reason})`,
           durationMs: perfNow() - start,
         };
       } catch {
@@ -184,9 +194,9 @@ async function runInference(
   // bundled here. Hosting a self-trained quantized classifier head over the
   // Phi-3 embedding model is a production-time concern — see the
   // wasm-classifier README for the recommended training + export workflow.
-  // For now the ONNX path delegates classification to the heuristic so this
-  // module is shippable as a stable public surface; once the trained head is
-  // distributed via CDN the only change is to populate this function.
+  // Until then the ONNX path delegates classification to the heuristic and
+  // is marked experimental; once a trained head is distributed via CDN the
+  // only change is to populate this function.
   const heuristic = createHeuristicClassifier();
   const result = await heuristic.classify(input);
   return {

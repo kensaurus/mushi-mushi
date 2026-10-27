@@ -342,6 +342,8 @@ export interface SdkHeartbeat {
   last_seen_origin: string | null
   last_seen_user_agent: string | null
   last_seen_endpoint_host: string | null
+  /** The checked-in key's label, so the console can say which key the app uses. */
+  key_label?: string | null
 }
 
 /** Every signal a setup / onboarding step reads, for one project. */
@@ -357,6 +359,19 @@ export interface ProjectSetupSignals extends IntegrationSignals {
   indexedFileCount: number
 }
 
+/**
+ * A key an SDK uses: it sends reports (`report:write`) and carries no MCP
+ * scope. CLI and MCP keys (`mcp:*`, often with `report:write` too), runner and
+ * voice keys belong to agents and tools, not to an SDK in the app; counting
+ * their calls made a project with no SDK read "SDK 17d ago" (mushi-demo's
+ * read-only demo key, called by curl, 2026-10-26).
+ */
+export function isSdkKey(scopes: readonly string[] | null | undefined): boolean {
+  const s = scopes ?? []
+  return s.includes('report:write') && !s.some((x) => x.startsWith('mcp:'))
+}
+
+
 /** Freshest heartbeat across key rows, compared as instants. */
 export function freshestHeartbeat(
   keys: ReadonlyArray<{
@@ -364,6 +379,7 @@ export function freshestHeartbeat(
     last_seen_origin?: string | null
     last_seen_user_agent?: string | null
     last_seen_endpoint_host?: string | null
+    label?: string | null
   }>,
 ): SdkHeartbeat | null {
   let best: SdkHeartbeat | null = null
@@ -378,6 +394,7 @@ export function freshestHeartbeat(
       last_seen_origin: k.last_seen_origin ?? null,
       last_seen_user_agent: k.last_seen_user_agent ?? null,
       last_seen_endpoint_host: k.last_seen_endpoint_host ?? null,
+      key_label: k.label ?? null,
     }
   }
   return best
@@ -398,60 +415,53 @@ export async function loadProjectSetupSignals(
 
   const [
     keysRes,
-    recentReportsRes,
     qaRes,
-    observationsRes,
     integrationSignals,
     counts,
   ] = await Promise.all([
     db
       .from('project_api_keys')
-      .select('project_id, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+      .select('project_id, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
       .in('project_id', projectIds)
       .eq('is_active', true),
-    // Recent reports feed only the "a real SDK sent this" platform signal.
-    db
-      .from('reports')
-      .select('project_id, environment')
-      .in('project_id', projectIds)
-      .order('created_at', { ascending: false })
-      .limit(500),
     db
       .from('qa_stories')
       .select('project_id')
       .in('project_id', projectIds)
       .eq('last_run_status', 'passed'),
-    // The curated SDK observation (heartbeat / report / repo scan): the same
-    // source the Connect page's SDK version reads.
-    db.from('project_sdk_observations').select('project_id').in('project_id', projectIds),
     loadIntegrationSignals(db, projectIds),
     loadProjectCounts(db, projectIds),
   ])
 
-  const keysBy = new Map<string, Array<Record<string, string | null>>>()
-  for (const k of (keysRes.data ?? []) as Array<Record<string, string | null> & { project_id: string }>) {
+  type KeyRow = {
+    project_id: string
+    scopes?: string[] | null
+    label?: string | null
+    last_seen_at?: string | null
+    last_seen_origin?: string | null
+    last_seen_user_agent?: string | null
+    last_seen_endpoint_host?: string | null
+  }
+  const keysBy = new Map<string, KeyRow[]>()
+  for (const k of (keysRes.data ?? []) as KeyRow[]) {
     const list = keysBy.get(k.project_id) ?? []
     list.push(k)
     keysBy.set(k.project_id, list)
   }
-  const sdkReportSignal = new Set<string>()
-  for (const r of (recentReportsRes.data ?? []) as Array<{ project_id: string; environment: unknown }>) {
-    const env = (r.environment ?? {}) as Record<string, unknown>
-    const platform = typeof env.platform === 'string' ? env.platform : ''
-    if (platform && platform !== 'mushi-admin') sdkReportSignal.add(r.project_id)
-  }
   const qaPassing = new Set((qaRes.data ?? []).map((q: { project_id: string }) => q.project_id))
-  const observed = new Set((observationsRes.data ?? []).map((o: { project_id: string }) => o.project_id))
 
   for (const pid of projectIds) {
     const keys = keysBy.get(pid) ?? []
-    const heartbeat = freshestHeartbeat(keys)
+    const heartbeat = freshestHeartbeat(keys.filter((k) => isSdkKey(k.scopes)))
     const count = counts.get(pid)
     out.set(pid, {
       ...(integrationSignals.get(pid) ?? { hasGithub: false, hasSentry: false, hasByok: false, hasSlack: false }),
       hasKey: keys.length > 0,
       heartbeat,
-      hasSdk: Boolean(heartbeat) || sdkReportSignal.has(pid) || observed.has(pid),
+      // Only an SDK-key check-in. A report with a platform (test reports,
+      // site audits) or a repo-scan observation marked apps that had never
+      // checked in as set up (lets-talk, mushi-demo: "4/4 setup", 2026-10-26).
+      hasSdk: Boolean(heartbeat),
       reportCount: count?.reports ?? 0,
       fixCount: count?.fixes ?? 0,
       mergedFixCount: count?.mergedFixes ?? 0,
@@ -465,6 +475,21 @@ export async function loadProjectSetupSignals(
 /** A probe older than this no longer proves a connection works (matches the console card). */
 export const CONNECTION_VERIFIED_FRESH_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * sentry-seer-poll runs every 15 minutes (`8-53/15`). Three intervals without
+ * a finished auto-import means the job stalled. Must match
+ * SENTRY_AUTO_IMPORT_STALE_MS in apps/admin/src/lib/integrationConnection.ts.
+ */
+const SENTRY_AUTO_IMPORT_STALE_MS = 3 * 15 * 60 * 1000
+
+/** True when the last auto-import finished within SENTRY_AUTO_IMPORT_STALE_MS. */
+function sentryAutoImportRunFresh(lastRunAt: string | null | undefined, now: number): boolean {
+  if (!lastRunAt) return false
+  const at = Date.parse(lastRunAt)
+  if (!Number.isFinite(at)) return false
+  return now - at <= SENTRY_AUTO_IMPORT_STALE_MS
+}
+
 export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
 
 /**
@@ -473,14 +498,25 @@ export type PlatformConnectionVerdict = 'working' | 'down' | 'attention'
  * say "healthy" next to a card that says "Needs attention":
  *   - a failing probe is down;
  *   - no probe, or a probe older than 7 days, needs attention (not checked);
- *   - a connection that receives events (Sentry alerts) needs at least one
- *     accepted delivery — a passing API probe alone is only half the loop.
+ *   - a connection that receives events (Sentry alerts) needs an accepted
+ *     delivery, unless it imports by polling. Polling plus a fresh passing
+ *     probe is working only when a poll finished within the last three
+ *     15-minute intervals. No run yet, or an older run, is attention: the
+ *     token probe does not prove the import is running. The latest delivery
+ *     being rejected is still attention: a bad webhook secret is a real
+ *     misconfiguration. Same rule as the console's sentryConnection.
  */
 export function classifyPlatformConnection(input: {
   probeStatus: string | null | undefined
   probeCheckedAt: string | null | undefined
   needsInbound?: boolean
   inboundAccepted?: boolean
+  /** Latest inbound delivery exists and was not accepted. */
+  inboundRejected?: boolean
+  /** Issues are imported on a poll, so a webhook delivery is optional. */
+  inboundPolling?: boolean
+  /** When the poll last finished. Ignored unless inboundPolling and there is no accepted delivery. */
+  inboundPolledAt?: string | null
   now?: number
 }): PlatformConnectionVerdict {
   const now = input.now ?? Date.now()
@@ -489,6 +525,15 @@ export function classifyPlatformConnection(input: {
   if (input.probeStatus !== 'ok' || !Number.isFinite(at) || now - at > CONNECTION_VERIFIED_FRESH_MS) {
     return 'attention'
   }
-  if (input.needsInbound && !input.inboundAccepted) return 'attention'
+  if (input.needsInbound && input.inboundRejected) return 'attention'
+  if (input.needsInbound && !input.inboundAccepted && !input.inboundPolling) return 'attention'
+  if (
+    input.needsInbound &&
+    input.inboundPolling &&
+    !input.inboundAccepted &&
+    !sentryAutoImportRunFresh(input.inboundPolledAt, now)
+  ) {
+    return 'attention'
+  }
   return 'working'
 }

@@ -123,12 +123,12 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
   recipe: [
     { to: '/fullstack-audit', label: 'Full-stack audit', blurb: 'Every check, with findings' },
     { to: '/design', label: 'Design system', blurb: 'Tokens and drift' },
-    { to: '/health', label: 'App health', blurb: 'AI calls and jobs' },
+    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s AI calls and jobs' },
   ],
   'fullstack-audit': [
     { to: '/recipe', label: 'App blueprint', blurb: 'What the app is made of' },
     { to: '/inventory', label: 'User stories', blurb: 'The pages being checked' },
-    { to: '/health', label: 'App health', blurb: 'AI calls and jobs' },
+    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s AI calls and jobs' },
   ],
   'qa-coverage': [
     { to: '/reports', label: 'Bugs', blurb: 'Bugs a failing test found' },
@@ -166,7 +166,7 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
   integrations: [
     { to: '/mcp', label: 'Editor agents', blurb: 'Connect your editor' },
     { to: '/notifications', label: 'Reporter updates', blurb: 'What reporters see' },
-    { to: '/health', label: 'App health', blurb: 'Probe history' },
+    { to: '/health', label: 'Mushi health', blurb: 'Probe history' },
   ],
   mcp: [
     { to: '/connect', label: 'Connect', blurb: 'One-click editor install' },
@@ -187,7 +187,7 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
   ],
   queue: [
     { to: '/reports', label: 'Bugs', blurb: 'Reports being processed' },
-    { to: '/health', label: 'App health', blurb: 'Scheduled jobs' },
+    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s scheduled jobs' },
   ],
   settings: [
     { to: '/dashboard', label: 'Dashboard', blurb: 'See the effect of your config' },

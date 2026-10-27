@@ -59,6 +59,22 @@ describe('findingsFromProbes', () => {
     expect(out[2].severity).toBe('medium')
     expect(findingsFromProbes(screen, mobile, { ...clean, cls: 0.12 })[0].severity).toBe('low')
   })
+
+  it('files overlapping boxes and outgrown controls as one finding each, with the elements named', () => {
+    const out = findingsFromProbes(screen, mobile, {
+      ...clean,
+      layout: [
+        { kind: 'overlap', selector: 'div.card "glot.it"', detail: 'overlaps div.card "yen-yen" by 120×40px' },
+        { kind: 'outgrows', selector: 'button "Open in console"', detail: 'sticks 38px out of its container (180px wide in 142px)' },
+        { kind: 'outgrows', selector: 'button "Connect GitHub"', detail: 'label wraps to 3 lines (90×88px)' },
+      ],
+    })
+    expect(out.map((f) => f.rule)).toEqual(['overlapping-boxes', 'control-outgrows-container'])
+    expect(out.every((f) => f.kind === 'layout')).toBe(true)
+    expect(out[0].evidence[0]).toBe('mobile: div.card "glot.it" overlaps div.card "yen-yen" by 120×40px')
+    expect(out[1].summary).toBe('2 controls too big for their space at 390px wide')
+    expect(findingsFromProbes(screen, mobile, { ...clean, layout: [] })).toEqual([])
+  })
 })
 
 describe('mergeFindings and fingerprints', () => {

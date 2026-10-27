@@ -9,7 +9,7 @@
  * - Pipeline messages (fix started, fixed, closed) are `reviewable`: a project
  *   in review mode holds them in the console Outbox (Plan 018 decision 7).
  *   Reporters following the report (theirs was a duplicate) get a copy.
- * - closed_reason 'spam' closes silently: no message at all.
+ * - closed_reason 'spam' or 'false_alarm' closes silently: no message at all.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -22,6 +22,7 @@ import {
   type NotificationType,
 } from './notifications.ts';
 import { isReporterFixedStatus, toStoredStatus } from './report-status.ts';
+import { silentClosedReason } from './report-close-reasons.ts';
 import { log } from './logger.ts';
 
 const notifyLog = log.child('report-status-notify');
@@ -46,7 +47,7 @@ export interface ReportStatusTransitionNotifyInput {
   reporterTokenHash: string | null | undefined;
   previousStatus: string | null | undefined;
   newStatus: string;
-  /** For `dismissed`: why it was closed (shown to the reporter; 'spam' sends nothing). */
+  /** For `dismissed`: why it was closed. 'spam' and 'false_alarm' send nothing. */
   closedReason?: string | null;
 }
 
@@ -176,7 +177,7 @@ export async function notifyReportStatusTransition(
     }
 
     if (newStatus === 'dismissed' && previousStatus !== 'dismissed') {
-      if (input.closedReason === 'spam') return;
+      if (silentClosedReason(input.closedReason)) return;
       await awardPoints(db, projectId, reporterTokenHash, { action: 'dismissed' }).catch((e) =>
         notifyLog.warn('Reputation award failed', { action: 'dismissed', err: String(e) }),
       );

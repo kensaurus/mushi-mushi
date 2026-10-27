@@ -15,6 +15,7 @@ import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/Repor
 import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'
 import { readFixCi } from '../lib/ciInfra'
+import { agentFlaggedFix } from '../lib/pdcaAct'
 import type { CiInfraVerdict } from '../lib/ciTypes'
 
 interface FixAttempt {
@@ -36,6 +37,7 @@ interface FixAttempt {
   check_run_conclusion?: string | null
   ci_infra?: CiInfraVerdict | null
   review_passed?: boolean
+  review_reasoning?: string | null
   error?: string
   started_at: string
   completed_at?: string
@@ -241,7 +243,7 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
             </ActionPill>
           )
         })()}
-        {latest?.review_passed === false && (
+        {agentFlaggedFix(latest) && (
           <ActionPill tone="warn">Extra review flagged</ActionPill>
         )}
       </ActionPillRow>
