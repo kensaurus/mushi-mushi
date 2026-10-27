@@ -16,8 +16,9 @@
  *          the merge queue (ADR 0041), skill runs (ADR 0042), local review
  *          follow-ups for `mushi work` PRs (ADR 0032 amendment 2026-10-24),
  *          SDK health and its fix tasks, the pipeline view and its actions,
- *          and the tester marketplace (tester portal, public marketplace and
- *          roadmap, submission and redemption review, Tremendous webhook).
+ *          the tester marketplace (tester portal, public marketplace and
+ *          roadmap, submission and redemption review, Tremendous webhook),
+ *          and the per-app Home.
  */
 
 import { Hono } from 'npm:hono@4'
@@ -46,6 +47,7 @@ import { registerLocalFollowupRoutes } from '../api/routes/local-followups.ts'
 import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplace.ts'
+import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 
 ensureSentry('api-ext')
 
@@ -76,6 +78,7 @@ registerLocalFollowupRoutes(app)
 registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
 registerTesterMarketplaceRoutes(app)
+registerProjectHomeRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
