@@ -22,7 +22,7 @@ export function LocalWorkerModels() {
     return (
       <p className="text-xs text-fg-muted" data-testid="credits-worker-models-empty">
         No local worker lane yet. A worker runs <code>mushi work --daemon</code> on your machine with your own Cursor account;{' '}
-        <Link className="text-brand hover:underline" to="/pipeline?tab=workers">
+        <Link className="text-brand underline underline-offset-2" to="/pipeline?tab=workers">
           set one up
         </Link>
         .
@@ -59,7 +59,7 @@ export function LocalWorkerModels() {
           </tbody>
         </table>
       </div>
-      <Link className="text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
+      <Link className="text-2xs font-medium text-brand underline underline-offset-2" to="/pipeline?tab=workers">
         Change models and lanes on the Workers tab →
       </Link>
     </div>
