@@ -183,8 +183,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/dashboard",
     markdown: "admin/dashboard.md",
     keywords: ["admin", "dashboard"],
-    headings: ["What to look for first", "Flow canvas", "KPI tiles (14-day window)", "Charts row (14 days)", "Triage queue", "Insights row", "Common tasks", "Morning check (2 minutes)"],
-    excerpt: "The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.",
+    headings: ["App card", "Health lights", "Needs you", "Release", "Pages", "Access and details", "This week vs last week", "Recent activity"],
+    excerpt: "Home in the Mushi console shows how one app is doing — is it up, what needs you, what is shipping, which pages have bugs and who can reach it.",
   },
   {
     title: "Design system",
@@ -292,7 +292,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/health.md",
     keywords: ["admin", "health", "integration"],
     headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Related pages"],
-    excerpt: "The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.",
+    excerpt: "The Mushi health page shows whether Mushi itself is working (its AI calls, background jobs and provider connections), so you catch a degraded integration early.",
   },
   {
     title: "To-do",
@@ -498,7 +498,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/releases",
     markdown: "admin/releases.md",
     keywords: ["admin", "releases"],
-    headings: ["What it generates", "Creating a release", "Release automatically when you ship", "Release entry fields", "SDK surface", "Related pages"],
+    headings: ["What it generates", "Creating a release", "Release automatically when you ship", "Batch tab: what ships next", "Release entry fields", "SDK surface", "Related pages"],
     excerpt: "The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.",
   },
   {

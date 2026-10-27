@@ -22,6 +22,7 @@ import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type Resu
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
+import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
@@ -712,6 +713,9 @@ export function OnboardingPage() {
           },
         ]}
       />
+
+      {/* Configuration that is missing or broken, before a button fails (console ops plan P1). */}
+      {stats.hasAnyProject ? <SetupGapsSection projectId={activeProjectId ?? stats.projectId ?? null} /> : null}
 
       <OnboardingSetupReadout
         stats={stats}
