@@ -10,6 +10,10 @@
  *
  *          Every page stays reachable by URL and from ⌘K whether or not its
  *          Lab is on; the toggle only decides what the sidebar lists.
+ *
+ *          The choice follows the signed-in account (its user metadata,
+ *          `mushi_labs`), cached in this browser: on 2026-10-24 the owner
+ *          opened another browser and found every Lab "Off".
  */
 
 import { useCallback, useSyncExternalStore } from 'react'
@@ -31,6 +35,7 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'voice-reports', label: 'Voice reports', description: 'File a bug or a fix request by talking, from your phone or the console.', paths: ['/voice'], group: 'bugs' },
   { id: 'spam-abuse', label: 'Spam & abuse', description: 'Devices and tokens that flood the queue or game tester rewards.', paths: ['/anti-gaming'], group: 'bugs' },
   { id: 'pull-requests', label: 'Pull requests', description: 'Every fix branch and pull request in your repo with its CI status.', paths: ['/repo'], group: 'fixing' },
+  { id: 'ci-runners', label: 'CI runners', description: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.', paths: ['/ci'], group: 'fixing' },
   { id: 'code-map', label: 'Code map', description: 'A map of your indexed repository you can ask questions about.', paths: ['/explore'], group: 'fixing' },
   { id: 'ux-runs', label: 'UX runs', description: 'A coding agent works through your screens; you see what improved.', paths: ['/ux-runs'], group: 'fixing' },
   { id: 'improvement-runs', label: 'Improvement runs', description: 'One AI drafts a change and a second AI critiques it until it passes.', paths: ['/iterate'], group: 'fixing' },
@@ -105,12 +110,39 @@ function subscribe(listener: () => void): () => void {
 
 
 
+const ACCOUNT_KEY = 'mushi_labs'
+
+async function pushToAccount(ids: ReadonlySet<string>): Promise<void> {
+  try {
+    const { supabase } = await import('./supabase')
+    await supabase.auth.updateUser({ data: { [ACCOUNT_KEY]: [...ids] } })
+  } catch {
+    /* offline or signed out: this browser keeps the choice */
+  }
+}
+
+/**
+ * On sign-in: the account's Labs win; a browser that has choices while the
+ * account has none sends them up once.
+ */
+export function syncLabsFromAccount(value: unknown): void {
+  if (Array.isArray(value)) {
+    const account = new Set(value.filter((v): v is string => typeof v === 'string' && KNOWN.has(v)))
+    const local = read()
+    if (account.size !== local.size || [...account].some((id) => !local.has(id))) write(account)
+    return
+  }
+  const local = read()
+  if (local.size > 0) void pushToAccount(local)
+}
+
 function setLabEnabled(id: string, enabled: boolean): void {
   if (!KNOWN.has(id)) return
   const next = new Set(read())
   if (enabled) next.add(id)
   else next.delete(id)
   write(next)
+  void pushToAccount(next)
 }
 
 /** The Lab that owns a route, if any. */

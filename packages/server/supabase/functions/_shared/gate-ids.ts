@@ -25,5 +25,6 @@ export const GATE_IDS = [
   'radar',
   'portfolio_radar',
   'portfolio_radar_ci',
+  'portfolio_radar_vulns',
   'store_review',
 ] as const

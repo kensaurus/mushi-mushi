@@ -27,6 +27,7 @@ export default {
   mcp: '@mushi-mushi/mcp',
   'mcp-tools': 'MCP tools reference',
   'mcp-ci': '@mushi-mushi/mcp-ci',
+  ux: '@mushi-mushi/ux',
   skills: 'Agent skills',
   adapters: '@mushi-mushi/adapters',
   'wasm-classifier': '@mushi-mushi/wasm-classifier',

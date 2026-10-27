@@ -45,8 +45,6 @@ The third card in the landing page's "Where to start" grid promises *"Create a p
 
 `WhereToStartGrid` renders this as a raw `<a href>` (root-relative, ignoring the docs `basePath`), so it resolves to `kensaur.us/admin/onboarding`. The apex-redirect CloudFront Function ([`scripts/cloudfront-mushi-apex-redirect.js`](../../scripts/cloudfront-mushi-apex-redirect.js)) matches `/admin/` against its `DOCS_NESTED_PREFIXES` list *before* it ever checks `SPA_PREFIXES`, so this URL always 301s to `/mushi-mushi/docs/admin/onboarding` — the **documentation page about onboarding**, not the live console. A first-time operator clicks "operate the console" and lands on a doc page telling them what the console *would* look like.
 
-![Operator CTA lands on docs, not the live console](./screenshots/defect-01-operate-console-cta-lands-on-docs.png)
-
 **Fix:** point the card at the fully-qualified live URL so the apex-redirect script (which only rewrites root-relative apex paths) never gets a chance to intercept it. `ADMIN_DEMO_BASE` (`'https://kensaur.us/mushi-mushi/admin'`) already exists for exactly this purpose and is used by `DocsMediaShowcase.tsx` and `AdminDocHero.tsx`. *(Fixed — see Remediation.)*
 
 ### #2 — Global "v0.8.0 · shipped" banner is stale by 14 minor versions
@@ -61,8 +59,6 @@ const banner = (
 ```
 
 The changelog's own top entry is `v1.22` (packages published at `1.22.5`), with `SSR / non-DOM safety` and `Public-API error isolation` as the two headline highlights. Scrolling the same page that displays the "v0.8.0" banner shows a `v1.22` heading a few hundred pixels down — a visitor doesn't need to check source, the contradiction is on-screen.
-
-![Banner claims v0.8.0 while the changelog on the same page shows v1.22](./screenshots/defect-03-version-banner-vs-changelog.png)
 
 **Fix:** rewrite the banner copy to the real latest release and rotate `storageKey` so previously-dismissed visitors see it again. *(Fixed — see Remediation.)*
 
@@ -248,8 +244,6 @@ Net effect: the recovery job that exists specifically to un-stick reports has ne
 
 This was found during Phase 1 and is restated here with the backend confirmation: the `BetaBanner` component renders globally, including on the *unauthenticated* admin login page, and its "Report a bug" action calls the JWT-gated `/v1/support/contact` endpoint. I submitted a test report (`RT-TEST-` prefixed) through this exact flow from the logged-out login page and confirmed via `execute_sql` against `support_tickets` that **no row was written** — the report is silently discarded from the visitor's perspective (they see a raw JSON 401 body) and from the backend's perspective (nothing lands anywhere, not even a failed-attempt row).
 
-![Feedback widget renders a 401 with raw JSON on a logged-out page](./screenshots/defect-02-feedback-widget-401-on-logged-out-page.png)
-
 **Not fixed in this pass** (component/route change, larger than the "copy + routing constant" scope approved for this turn) — recommend either hiding the "Report a bug" affordance on unauthenticated routes, or making `/v1/support/contact` accept anonymous submissions (the route's own comments indicate anonymous support was the original intent).
 
 ### Also observed, lower confidence / not root-caused
@@ -265,7 +259,7 @@ This was found during Phase 1 and is restated here with the backend confirmation
 - **41/41** admin "open live demo" routes referenced from `data/admin-screenshots.ts` resolve to the SPA shell (200); the SPA's own auth gate was exercised directly via #12's probe.
 - `/connect` page's "MCP tools" stat (**68**) — computed live from `TOOL_CATALOG.length + TDD_TOOL_CATALOG.length + CODEBASE_TOOL_CATALOG.length`, not hardcoded. The plan's preliminary static-analysis note that this page claimed "71+" did not reproduce against current source; only `roadmap.mdx` (#4) has actually drifted.
 - **54 edge functions**, native iOS/Android/Flutter packages, pricing tiers, and the "comprehension layer / vibe coder / standalone-first" positioning all match `VISION.md` and the underlying code.
-- Signup form: HTML5 native validation correctly blocks an invalid email with a browser tooltip (screenshot on file, `signup-invalid-email-state.png`).
+- Signup form: HTML5 native validation correctly blocks an invalid email with a browser tooltip.
 - Zero console errors observed on landing, connect, pricing, cloud, roadmap, and changelog pages during the headed session.
 
 ## Methodology notes

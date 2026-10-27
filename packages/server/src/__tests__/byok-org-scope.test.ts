@@ -160,10 +160,10 @@ describe('key routes', () => {
   })
 
   it('every per-key write checks the viewer and shared-key rules first', () => {
-    expect(src.match(/await sharedKeyWriteGuard\(c, db, project, keyId\)/g)?.length).toBe(4)
+    expect(src.match(/await sharedKeyWriteGuard\(c, db, project, keyId, owner\)/g)?.length).toBe(4)
     const guard = src.slice(src.indexOf('async function sharedKeyWriteGuard('), src.indexOf("import {\n  countByokKeyHealth"))
     expect(guard).toContain("denyViewerWrite(c, project.organization_role, 'change AI keys')")
-    expect(guard).toContain('canManageOrgKeys(c, db, data.organization_id')
+    expect(guard).toContain('canManageOrgKeys(c, db, keyOrgId)')
   })
 
   it("shared-key rights come from a fresh membership read, never organization_role; API keys never manage them", () => {
@@ -178,7 +178,9 @@ describe('key routes', () => {
 
   it('a Supabase token cannot be shared, by adding or by moving', () => {
     const scopeRoute = src.slice(src.indexOf("'/v1/admin/byok/keys/:keyId/scope'"))
-    expect(scopeRoute.slice(0, scopeRoute.indexOf('.update('))).toContain('isShareableProvider(own.provider_slug)')
+    const head = src.slice(src.indexOf('const rescopeKey = async'), src.indexOf("'/v1/admin/byok/keys/:keyId/scope'"))
+    expect(scopeRoute.length).toBeGreaterThan(0)
+    expect(head.slice(0, head.indexOf('.update('))).toContain("if (target !== 'project' && !isShareableProvider(current.provider_slug)) return notShareable(c);")
   })
 
   it('no byok_keys query is limited to the project alone any more', () => {
@@ -191,7 +193,7 @@ describe('key routes', () => {
 
   it('the owner filter is used on byok_keys only (other tables have no organization_id)', () => {
     // The nearest .from() before each use must be byok_keys.
-    const uses = [...src.matchAll(/keyOwnerFilter\(keyOwnerOf\(/g)].map((m) => m.index ?? 0)
+    const uses = [...src.matchAll(/keyOwnerFilter\(/g)].map((m) => m.index ?? 0)
     expect(uses.length).toBeGreaterThan(10)
     for (const at of uses) {
       const table = [...src.slice(0, at).matchAll(/\.from\('([a-z_]+)'\)/g)].pop()?.[1]
@@ -204,13 +206,11 @@ describe('key routes', () => {
     // (they used `pid` / `projectId`, not `project.id`) and showed Research as
     // "not set up" for apps using a shared key (2026-10-10).
     const root = resolve(__dirname, '../../supabase/functions')
-    // Reviewed: these pair the project query with a separate organization query.
-    // spend-down-db.ts reads each app's OWN Cursor keys on purpose: a shared
-    // key must not spend on an app that has one (ADR 0023, ADR 0028).
+    // Reviewed: these pair the project query with a separate organization
+    // query and universalKeysByOrg (ADR 0031) for the owners' universal keys.
     const pairedWithOrgQuery = new Set([
       '_shared/fix-report-truth-load.ts',
       '_shared/setup-signals.ts',
-      '_shared/spend-down-db.ts',
     ])
     const offenders: string[] = []
     const walk = (dir: string) => {

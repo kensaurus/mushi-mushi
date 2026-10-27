@@ -65,6 +65,22 @@ export function humanizeFixError(
       raw,
     };
   }
+  if (category === 'not_actionable' || m.startsWith('agent found nothing it can tie to code')) {
+    return {
+      title: 'The agent found nothing it can tie to code.',
+      hint: 'The report does not point at a defect the agent could find: the event has too little detail, or it comes from a tool outside this repo. Read its notes on the attempt, then add detail to the report or dismiss it.',
+      severity: 'hard',
+      raw,
+    };
+  }
+  if (category === 'needs_human' || m.startsWith('agent says this needs a person')) {
+    return {
+      title: 'The agent needs a decision from you.',
+      hint: 'It stopped at a product, design or account question it should not answer alone. Read its notes on the attempt, decide, add the answer to the report, then dispatch again.',
+      severity: 'hard',
+      raw,
+    };
+  }
   if (category === 'wrong_repo' || m.startsWith('agent says the code is in another repo')) {
     return {
       title: 'The fix belongs in another repo.',

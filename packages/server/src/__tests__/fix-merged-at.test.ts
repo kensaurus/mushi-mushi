@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeDb, findQueries } from './__stubs__/fake-query-recorder.ts'
 
 const mocks = vi.hoisted(() => ({
+  updatePullRequestBranch: vi.fn(),
   fetchPullRequest: vi.fn(),
 }))
 
@@ -26,6 +27,7 @@ vi.mock('../../supabase/functions/_shared/github.ts', () => ({
   fetchPullRequest: (...args: unknown[]) => mocks.fetchPullRequest(...args),
   markPullRequestReady: vi.fn(async () => ({ ok: true })),
   parseGithubRepoUrl: vi.fn(),
+  updatePullRequestBranch: (...args: unknown[]) => mocks.updatePullRequestBranch(...args),
 }))
 vi.mock('../../supabase/functions/_shared/plugins.ts', () => ({ dispatchPluginEventDetached: vi.fn(async () => undefined) }))
 vi.mock('../../supabase/functions/_shared/team-notify.ts', () => ({ notifyTeamFixEvent: vi.fn(async () => undefined) }))
@@ -100,6 +102,7 @@ describe('mergeGithubPullRequest', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     mocks.fetchPullRequest.mockReset()
+    mocks.updatePullRequestBranch.mockReset()
   })
 
   it('returns GitHub\'s merge time for a PR that was already merged', async () => {
@@ -126,6 +129,41 @@ describe('mergeGithubPullRequest', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Pull Request is not mergeable' }), { status: 405 })))
     const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
     expect(out).toMatchObject({ merged: true, alreadyMerged: true, mergedAt: '2026-10-02T22:10:00Z' })
+  })
+
+  // ADR 0030: the merge pins the commit the review gate saw.
+  it('sends the checked head SHA, and reports a PR that moved since as headMoved', async () => {
+    mocks.fetchPullRequest.mockResolvedValue({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ message: 'Head branch was modified. Review and try the merge again.' }), { status: 409 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12, { sha: 'abc123' })
+    expect(JSON.parse(String((fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toMatchObject({ sha: 'abc123' })
+    expect(out).toMatchObject({ merged: false, alreadyMerged: false, headMoved: true })
+  })
+
+  // A repo that requires up-to-date branches refuses a behind PR with "N of N
+  // required status checks are expected" (the console showed it raw).
+  it('updates a behind branch and says why the merge waits', async () => {
+    mocks.fetchPullRequest
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null, mergeableState: 'behind', headSha: 'h1' })
+    mocks.updatePullRequestBranch.mockResolvedValue(true)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: '3 of 3 required status checks are expected.' }), { status: 405 })))
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
+    expect(mocks.updatePullRequestBranch).toHaveBeenCalledWith('tok', { owner: 'acme', repo: 'app' }, 12, 'h1')
+    expect(out).toMatchObject({ merged: false, alreadyMerged: false, behind: true })
+    expect(out.message).toContain('Mushi updated it')
+  })
+
+  it('says to update on GitHub when a behind branch cannot be updated', async () => {
+    mocks.fetchPullRequest
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null })
+      .mockResolvedValueOnce({ number: 12, draft: false, state: 'open', merged: false, mergedAt: null, mergeableState: 'behind', headSha: 'h1' })
+    mocks.updatePullRequestBranch.mockResolvedValue(false)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: '3 of 3 required status checks are expected.' }), { status: 405 })))
+    const out = await mergeGithubPullRequest('tok', { owner: 'acme', repo: 'app' }, 12)
+    expect(out).toMatchObject({ merged: false, behind: true })
+    expect(out.message).toContain('Update the branch on GitHub')
   })
 
   it('falls back to GitHub\'s message only when the PR cannot be re-read', async () => {

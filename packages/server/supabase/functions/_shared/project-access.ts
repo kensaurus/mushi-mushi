@@ -23,6 +23,7 @@
 // stays out of the runtime module graph for any function whose
 // import path doesn't otherwise need the live client.
 import type { getServiceClient } from './db.ts'
+import { dbDiagnosticMessage, isTransientDbConnectionError } from './error-codes.ts'
 import { fanoutMemo } from './request-memo.ts'
 import { log } from './logger.ts'
 import { limitToKeyProjects } from './key-project-scope.ts'
@@ -39,9 +40,19 @@ export interface AccessReadOptions {
 }
 
 export class ProjectAccessReadError extends Error {
-  constructor(what: string, detail: string) {
-    super(`project access read failed (${what}): ${detail}`)
+  /**
+   * The read failed on a pooler reset or a gateway HTML page, not a query
+   * bug. sentryHonoErrorHandler logs it and answers DB_ERROR instead of
+   * reporting it (MUSHI-a8a03270).
+   */
+  readonly transient: boolean
+
+  constructor(what: string, dbErr: { message?: string; code?: string | null }) {
+    // PostgREST puts a Cloudflare HTML page in `message` on a gateway blip.
+    // Keep the exception text to one line (the page title).
+    super(`project access read failed (${what}): ${dbDiagnosticMessage(dbErr.message)}`)
     this.name = 'ProjectAccessReadError'
+    this.transient = isTransientDbConnectionError(dbErr)
   }
 }
 
@@ -51,11 +62,12 @@ function checkRead(
   opts: AccessReadOptions,
 ): void {
   if (!res.error) return
-  if (opts.strict) throw new ProjectAccessReadError(what, res.error.message)
+  if (opts.strict) throw new ProjectAccessReadError(what, res.error)
   log.warn('project access read failed; treating as no access', {
     table: what,
     code: res.error.code ?? null,
-    err: res.error.message.slice(0, 500),
+    // Gateway HTML collapses to its title. Other messages cap at 500 chars.
+    err: dbDiagnosticMessage(res.error.message),
   })
 }
 

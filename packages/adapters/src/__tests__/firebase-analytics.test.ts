@@ -49,11 +49,10 @@ describe('translateFirebaseAnalytics', () => {
 })
 
 describe('createFirebaseAnalyticsAdapter', () => {
-  // The default code path requires a real Google JWKS fetch, which we don't
-  // want to do from unit tests. All tests here exercise the
-  // `verifySignature: false` fallback (`aud`-strict-equality only). A
-  // separate integration test covers the JWKS path against a fixture
-  // server — see `firebase-analytics.signature.test.ts` (TODO).
+  // The default code path fetches a JWKS. These tests use the
+  // `verifySignature: false` fallback (`aud` strict equality only).
+  // RS256 against a fixture server is covered in
+  // `firebase-analytics.signature.test.ts`.
   function makeHandler(opts: Partial<Parameters<typeof createFirebaseAnalyticsAdapter>[0]> = {}) {
     const { sink, calls } = makeSink()
     const handler = createFirebaseAnalyticsAdapter({

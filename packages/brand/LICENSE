@@ -1,6 +1,17 @@
 MIT License
 
-Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
+
+This package has two parts under two different terms:
+
+  1. Code, CSS, design tokens and scripts (everything except the files listed
+     in part 2): the MIT License below.
+  2. The Mushi Mushi logo and mark image files: all rights reserved, NOT
+     licensed under the MIT License. See "Logo and mark files" at the end.
+
+--------------------------------------------------------------------------------
+Part 1 — MIT License (code, CSS, design tokens, scripts)
+--------------------------------------------------------------------------------
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +30,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+Part 2 — Logo and mark files: all rights reserved
+--------------------------------------------------------------------------------
+
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社. All rights reserved.
+
+These files are the Mushi Mushi logo and bug mark:
+
+  src/logo.svg
+  src/logo-dark.svg
+  src/logo-wide.svg
+  src/logo-mark.svg
+  src/logo-mark-512.png
+
+They are not licensed under the MIT License above or under any other license
+in this repository. You may use them only as the trademark policy allows
+(TRADEMARK.md at the repository root, https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md):
+for example, unmodified, to refer or link to Mushi Mushi. A fork or a product
+built from this code must remove them and use its own name and logo.
+
+Versions of these files obtained before 2026-10-22 were published inside an
+MIT-licensed directory; this change does not take back rights anyone already
+had to those copies. The Mushi Mushi name and marks were never licensed.

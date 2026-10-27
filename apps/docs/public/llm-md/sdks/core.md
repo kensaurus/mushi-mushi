@@ -47,8 +47,8 @@ Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--befor
 ```ts
 interface MushiWidgetConfig {
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
-  theme?: 'light' | 'dark' | 'auto'
-  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+  theme?: 'auto' | 'light' | 'dark' | 'inherit'
+  trigger?: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
   /** 1.19+ — privacy caption under screenshot preview */
   screenshotSensitiveHint?: boolean | string
 }
@@ -57,24 +57,32 @@ interface MushiWidgetConfig {
 See [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 for the full preview + consent flow.
 
-### `submitReport(input)`
+### `captureEvent(input)`
+
+Send a report from code through the SDK instance (`Mushi.getInstance()` on
+web). The input is `MushiCaptureEventInput`:
 
 ```ts
-interface MushiReport {
+interface MushiCaptureEventInput {
   description: string
-  severity?: 'low' | 'medium' | 'high' | 'critical'
-  category?: 'bug' | 'feature_request' | 'usage_question' | 'other'
+  category?: 'bug' | 'slow' | 'visual' | 'confusing' | 'other'
+  severity?: 'critical' | 'high' | 'medium' | 'low'
   component?: string
-  screenshot?: Blob | string      // base64 or Blob
+  tags?: Record<string, string | number | boolean>
+  source?: string
+  error?: { name?: string; message?: string; stack?: string }
   metadata?: Record<string, unknown>
 }
 ```
 
-### `flushOfflineQueueNow()`
+The full wire shape the SDKs build for you is `MushiReport` (environment,
+console and network logs, `screenshotDataUrl`, reporter token, and more).
 
-Force any queued reports out before page unload or app suspend. The web,
-React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
-the appropriate lifecycle hook automatically.
+### Offline queue
+
+`createOfflineQueue()` is the IndexedDB queue the web SDK uses. Queued
+reports send automatically when the connection returns; there is no manual
+flush call to make.
 
 ### PII scrubbing utilities (1.27+)
 

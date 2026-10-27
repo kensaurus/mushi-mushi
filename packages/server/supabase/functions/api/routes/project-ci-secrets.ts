@@ -62,6 +62,7 @@ import {
 } from '../../_shared/sdk-diagnostics.ts'
 import { detectRepoStack } from '../../_shared/repo-stack.ts'
 import { mayRevokePriorCiKeys } from '../../_shared/api-key-rotation.ts'
+import { isSdkKey } from '../../_shared/setup-signals.ts'
 
 // ---------------------------------------------------------------------------
 // GitHub secrets / variables REST helpers
@@ -285,12 +286,13 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     // 2. Heartbeat: last seen + native origin detection.
     const { data: keys } = await db
       .from('project_api_keys')
-      .select('last_seen_at, last_seen_origin, last_seen_user_agent')
+      .select('scopes, last_seen_at, last_seen_origin, last_seen_user_agent')
       .eq('project_id', projectId)
       .eq('is_active', true)
       .order('last_seen_at', { ascending: false, nullsFirst: false })
 
-    const keyRows = (keys ?? []) as KeyHeartbeat[]
+    // SDK keys only: a CLI or MCP key's calls are not the app's SDK.
+    const keyRows = ((keys ?? []) as Array<KeyHeartbeat & { scopes?: string[] | null }>).filter((k) => isSdkKey(k.scopes))
     const lastSeenAt = lastHeartbeatAt(keyRows)
     const nativeEverSeen = anyNativeHeartbeat(keyRows)
 

@@ -65,6 +65,11 @@ const IGNORE_PATHS = [
 
 const MAX_FILE_SIZE_BYTES = 1_000_000 // 1 MB; anything bigger is suspicious.
 
+// Generated public text that grows with the docs by design. It is still
+// scanned line by line; only the size cap is raised, so a docs page never
+// forces a hook bypass.
+const LARGE_TEXT_FILES = new Map([['apps/docs/public/llms-full.txt', 4_000_000]])
+
 function listStagedFiles() {
   const out = execSync('git diff --cached --name-only --diff-filter=ACM', { encoding: 'utf8' })
   return out.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
@@ -85,7 +90,7 @@ function scanFile(path) {
   } catch {
     return []
   }
-  if (buf.length > MAX_FILE_SIZE_BYTES) {
+  if (buf.length > (LARGE_TEXT_FILES.get(path.replace(/\\/g, '/')) ?? MAX_FILE_SIZE_BYTES)) {
     return [{ path, line: 0, pattern: 'FILE_TOO_LARGE', snippet: `${buf.length} bytes` }]
   }
   const text = buf.toString('utf8')

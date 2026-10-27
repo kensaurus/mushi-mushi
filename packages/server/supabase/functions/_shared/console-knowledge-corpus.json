@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-20T05:05:18.718Z",
+  "generatedAt": "2026-10-26T09:34:11.818Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -165,6 +165,15 @@
       "content_hash": "84ac51ce36cd397d4b9240f3e57f95eb468a052b2cb0b8a779ecf336d6a32046"
     },
     {
+      "doc_path": "pages/pipeline.md",
+      "section": "main",
+      "title": "Pipeline",
+      "body": "# Pipeline\n\nEvery bug from report to deploy as one picture: what is stuck where, why, and one-click fixes.\n\nRoute: /pipeline\nSection: Do\n\nKeywords: pipeline, stuck, funnel, release train, merge queue, ci red, conflict, triage, retry, blocked\n\nUse this page when the user asks about: pipeline, stuck, funnel, release train, merge queue, ci red",
+      "route_path": "/pipeline",
+      "kind": "page",
+      "content_hash": "c45ffd614e7ba1f003a833ec68f2d420bea388f5e27154745ffa2a093b04b2e4"
+    },
+    {
       "doc_path": "pages/repo.md",
       "section": "main",
       "title": "Pull requests",
@@ -244,6 +253,15 @@
       "route_path": "/recipe",
       "kind": "page",
       "content_hash": "5dee8b49078a7d61b216d6bae02417d4235a5bd221562e85caff0648963e71b7"
+    },
+    {
+      "doc_path": "pages/ci.md",
+      "section": "main",
+      "title": "CI runners",
+      "body": "# CI runners\n\nWhere your tests run, how long they wait for a machine, and what slows your fixes down.\n\nRoute: /ci\nSection: Check\n\nKeywords: ci, ci runners, runners, self-hosted, github actions, actions, queue, build queue, test machine, runner, slow ci, jobs\n\nUse this page when the user asks about: ci, ci runners, runners, self-hosted, github actions, actions",
+      "route_path": "/ci",
+      "kind": "page",
+      "content_hash": "065ce88af30e0b627cb54bb0c2eede80d67aa943f55991482936336b946740a3"
     },
     {
       "doc_path": "pages/health.md",
@@ -343,6 +361,15 @@
       "route_path": "/research",
       "kind": "page",
       "content_hash": "bafe177221bcfd58fb7c5815dda0c9947ddef4d49dc25059ace9a19f905b2345"
+    },
+    {
+      "doc_path": "pages/credits.md",
+      "section": "main",
+      "title": "Spend credits",
+      "body": "# Spend credits\n\nExpiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.\n\nRoute: /credits\nSection: Workspace\n\nKeywords: credits, spend credits, spend down, spend-down, expiring credits, cursor credits, firecrawl credits, usage, site watch, follow-ups, budget\n\nUse this page when the user asks about: credits, spend credits, spend down, spend-down, expiring credits, cursor credits",
+      "route_path": "/credits",
+      "kind": "page",
+      "content_hash": "0bb8c5e4b71da5ac50e3cf671e62714670e134bbceb82e61fa82fc723f2825de"
     },
     {
       "doc_path": "pages/settings.md",

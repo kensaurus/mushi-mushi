@@ -1,4 +1,4 @@
-Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
 
 This repository is open core. Not all of it is MIT. Portions are licensed as
 follows:
@@ -8,25 +8,45 @@ follows:
   use of Enterprise Edition features needs a commercial license key or an
   Enterprise subscription.
 
-* Everything else under packages/server/, packages/agents/ and packages/verify/
-  is licensed under the GNU Affero General Public License, version 3 only
-  (AGPL-3.0-only). The full text is in the LICENSE file of each of those
-  directories. A commercial license is also available; see
-  COMMERCIAL-LICENSE.md.
+* Everything else under packages/server/, packages/agents/ and packages/verify/,
+  and the console (apps/admin/) and tester portal (apps/testers/), is licensed
+  under the GNU Affero General Public License, version 3 only
+  (AGPL-3.0-only). The full text is in LICENSES/AGPL-3.0-only.txt; each of
+  those directories has its own LICENSE file. A commercial license is also
+  available; see COMMERCIAL-LICENSE.md. apps/admin/ and apps/testers/ were MIT
+  up to and including commit 862e53ff (2026-10-22); copies of those earlier
+  versions keep their MIT terms.
+
+* Brand assets are not licensed under any license in this repository. The
+  Mushi Mushi logo, bug mark, app icons and mascot artwork are copyright
+  Kenji Sakuramoto / Kensaurus 合同会社, all rights reserved. They include
+  packages/brand/src/logo*.svg, packages/brand/src/logo-mark-512.png,
+  apps/docs/public/brand/logo-mark.svg,
+  apps/docs/public/integrations/mushi-mark-512.png, docs/mascot/,
+  packages/cursor-plugin/logo.svg, the Mushi favicons and app icons under
+  apps/*/public/, and the social preview cards that show them. TRADEMARK.md
+  says how you may use them (for example, unmodified, to refer or link to
+  Mushi Mushi).
+
+* No license in this repository grants rights to the Mushi Mushi names,
+  logos or marks, wherever they appear, including inline in code. The
+  trademarks are covered by TRADEMARK.md.
 
 * Third-party components keep their original licenses; see NOTICE.
 
 * Everything else in this repository, including every published SDK, the CLI,
-  the MCP server and the plugins, is licensed under the MIT License below.
+  the MCP server, the plugins and the code and design tokens in packages/brand,
+  is licensed under the MIT License below.
 
 Where a directory contains its own LICENSE file, that file governs the contents
-of that directory. The trademarks are covered separately in TRADEMARK.md.
+of that directory. Outside contributions are accepted under the Contributor
+License Agreement in CLA.md.
 
 --------------------------------------------------------------------------------
 
 MIT License
 
-Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

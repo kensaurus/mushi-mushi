@@ -7,6 +7,7 @@ import type { ApiErrorCode } from './error-codes.ts'
 import { trustedSubRequestUser } from './request-memo.ts'
 import { runWithKeyProjectScope } from './key-project-scope.ts'
 import { log } from './logger.ts'
+import { hashApiKey } from './api-key-mint.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -215,17 +216,9 @@ export function requireServiceRoleAuth(req: Request): Response | null {
  */
 const MUSHI_API_KEY_PREFIX = 'mushi_'
 
-/**
- * SHA-256 of a raw API key, lowercase hex — matches how keys are persisted
- * in `project_api_keys.key_hash`. Extracted so `apiKeyAuth` and
- * `adminOrApiKey` stay byte-compatible with the hash at rest.
- */
-async function hashApiKey(raw: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-}
+// SHA-256 of a raw API key, lowercase hex — matches how keys are persisted in
+// `project_api_keys.key_hash`. It lives in api-key-mint.ts, next to the
+// minter, so `apiKeyAuth`, `adminOrApiKey` and every minter share one hash.
 
 /**
  * SDK heartbeat: how recent must `last_seen_at` be for a key before we skip
@@ -460,7 +453,8 @@ async function authenticateApiKey(
     return authError(
       c,
       'INSUFFICIENT_SCOPE',
-      `API key is missing required scope ${wanted}. Mint a new key with the correct scope or upgrade this one in the admin console.`,
+      `This API key has ${scopes.length ? scopes.map((s) => `"${s}"`).join(', ') : 'no scopes'} but this needs ${wanted}. ` +
+        'From the CLI, run `mushi login --upgrade-scope` (add `--project-id <id>` for another app); in the console, create a key with that scope on Connect.',
       403,
     )
   }
@@ -564,8 +558,10 @@ export async function apiKeyAuth(c: Context, next: Next) {
   // pollers (`mushi connect --wait`, `mushi doctor --ingest`, MCP
   // diagnose_setup mode=ingest) authenticate with the same SDK key but are NOT the
   // SDK — stamping last_seen_at here would make the route's own
-  // "SDK heartbeat" step self-satisfy from the second poll onward.
-  if (!c.req.path.endsWith('/ingest-setup')) {
+  // "SDK heartbeat" step self-satisfy from the second poll onward. The runner
+  // ingest (Plan 022) is not the SDK either: a runner key pushing heartbeats
+  // must not make the project read "SDK installed".
+  if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner')) {
     const sdkPackage = c.req.header(MUSHI_SDK_PACKAGE_HEADER) ?? null
     const sdkVersion = c.req.header(MUSHI_SDK_VERSION_HEADER) ?? null
     recordSdkHeartbeat({
@@ -772,9 +768,12 @@ export async function jwtAuth(c: Context, next: Next) {
 /**
  * Scope required for a route. mcp:write implies mcp:read. `voice:write` is
  * the narrow scope for the phone-resident key behind POST /v1/intake/voice —
- * it grants nothing else, and no other scope implies it.
+ * it grants nothing else, and no other scope implies it. `runner:write` is the
+ * same for the key that lives on a CI runner host (POST /v1/ingest/runner,
+ * Plan 022): CI jobs run as the runner's user and can read it, so it unlocks
+ * that route only, and mcp:write does not imply it.
  */
-export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write'
+export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write' | 'runner:write'
 
 interface AdminOrApiKeyOptions {
   /**

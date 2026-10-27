@@ -121,9 +121,11 @@ export const reportSubmissionSchema = z.object({
   /**
    * §3c: SDK-supplied SHA-256 hex of stable device characteristics.
    * Optional for back-compat with older SDK versions; when present we feed
-   * it into the anti-gaming cross-account check.
+   * it into the anti-gaming cross-account check. `rnfp_` is the React
+   * Native SDK's digest (no crypto.subtle under Hermes): until 2026-10-26
+   * this pattern rejected it, so every report from an RN app got a 400.
    */
-  fingerprintHash: z.string().regex(/^[a-f0-9]{64}$|^fbk_[a-f0-9]{8}$/).optional(),
+  fingerprintHash: z.string().regex(/^[a-f0-9]{64}$|^fbk_[a-f0-9]{8}$|^rnfp_[a-f0-9]{8}$/).optional(),
   appVersion: z.string().optional(),
   sdkPackage: z.string().max(120).optional(),
   sdkVersion: z.string().max(40).optional(),
@@ -362,6 +364,88 @@ export const codeHealthIngestSchema = z
     (body) => (body.metrics?.length ?? 0) + (body.findings?.length ?? 0) > 0,
     { message: 'Provide at least one metric or one finding' },
   )
+
+// ---------------------------------------------------------------------------
+// POST /v1/ingest/runner (Plan 022 Phase 3): `mushi runner heartbeat` and the
+// runner job hooks. Strict: unknown keys are rejected, so nothing beyond
+// these numbers (no file contents, environment values or raw machine ids)
+// can ride along. host_id is the sha256 of the machine id, hashed on the
+// machine: 64 lowercase hex. A raw /etc/machine-id (32 hex) or a hostname
+// is refused.
+// ---------------------------------------------------------------------------
+const runnerHostIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/, 'host_id must be the sha256 (64 lowercase hex) of the machine id, hashed on the machine; never the raw id')
+const runnerRepoSchema = z.string().max(200).regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, 'repo must be owner/name')
+const runnerNameSchema = z.string().min(1).max(200)
+const megabytes = z.number().int().min(0).max(16_777_216)
+
+export const runnerHeartbeatSchema = z
+  .object({
+    kind: z.literal('heartbeat'),
+    host: z
+      .object({
+        host_id: runnerHostIdSchema,
+        hostname: z.string().min(1).max(80),
+        platform: z.enum(['linux', 'wsl2', 'macos', 'windows']),
+        cpu_count: z.number().int().min(1).max(4096).nullable().optional(),
+        mem_total_mb: megabytes.nullable().optional(),
+        mushi_version: z.string().max(40).nullable().optional(),
+        metrics: z
+          .object({
+            load1: z.number().min(0).max(100_000).optional(),
+            mem_used_mb: megabytes.optional(),
+            swap_used_mb: megabytes.optional(),
+            swap_total_mb: megabytes.optional(),
+            disk_free_gb: z.number().min(0).max(1_000_000).optional(),
+            // WSL2 distros on one PC send the same hashed VM boot id (CI cost: one machine).
+            machine_id: runnerHostIdSchema.optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+    runners: z
+      .array(
+        z
+          .object({
+            name: runnerNameSchema,
+            repo: runnerRepoSchema.nullable().optional(),
+            service: z.string().max(200).nullable().optional(),
+            active: z.boolean(),
+            restarts: z.number().int().min(0).max(1_000_000).nullable().optional(),
+            mem_current_mb: megabytes.nullable().optional(),
+            mem_max_mb: megabytes.nullable().optional(),
+            oom_kills: z.number().int().min(0).max(1_000_000).nullable().optional(),
+          })
+          .strict(),
+      )
+      .max(40, 'At most 40 runners per host'),
+  })
+  .strict()
+
+export const runnerJobSampleSchema = z
+  .object({
+    kind: z.literal('job'),
+    host_id: runnerHostIdSchema,
+    runner_name: runnerNameSchema,
+    repo: runnerRepoSchema,
+    run_id: z.number().int().positive(),
+    run_attempt: z.number().int().min(1).max(1000),
+    job_key: z.string().min(1).max(200),
+    phase: z.enum(['started', 'completed']),
+    at: z.string().datetime({ offset: true }),
+    mem_peak_mb: megabytes.nullable().optional(),
+    mem_max_mb: megabytes.nullable().optional(),
+    oom_kills: z.number().int().min(0).max(1_000_000).nullable().optional(),
+    swap_used_mb: megabytes.nullable().optional(),
+    load1: z.number().min(0).max(100_000).nullable().optional(),
+  })
+  .strict()
+
+export const runnerIngestSchema = z.discriminatedUnion('kind', [runnerHeartbeatSchema, runnerJobSampleSchema])
+
+export type RunnerIngestPayload = z.infer<typeof runnerIngestSchema>
 
 export type CodeHealthIngestPayload = z.infer<typeof codeHealthIngestSchema>
 export type MetricPoint = z.infer<typeof metricPointSchema>

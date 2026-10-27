@@ -63,6 +63,11 @@ function renderEntry(doc) {
   const range = doc.default?.range ? ` · range \`${doc.default.range}\`` : ''
   lines.push(`**Default** — \`${doc.default?.value ?? 'unset'}\`${range}`)
   lines.push('')
+  if (doc.recommended) {
+    const srcs = doc.recommended.sources.map((src) => `[${escapeMd(src.label)}](${src.href})`).join(', ')
+    lines.push(`**Recommended** — \`${doc.recommended.value}\`. ${doc.recommended.why} Sources: ${srcs} (read ${doc.recommended.sources[0]?.checked}).`)
+    lines.push('')
+  }
   if (doc.backend) {
     const parts = []
     if (doc.backend.table) {

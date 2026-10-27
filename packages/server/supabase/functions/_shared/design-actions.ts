@@ -14,13 +14,23 @@
  * Both the server scan (design-plane.ts executeScan) and the CI push
  * (POST /v1/ingest/recipe) call actOnDesignDeviance, so the two paths act the
  * same way. A first scan is a baseline: with no previous scan nothing is new.
+ *
+ * dispatchExistingDesignFindings is the explicit counterpart: an owner asks
+ * to send the findings the newest scan already has (which the auto-fix never
+ * picks up, since it only acts on NEW ones) to the agent, one report per
+ * file, a few files per call, through the same automatic (capped) dispatch.
+ *
+ * Token-definition files (design-scan.ts DEFAULT_TOKEN_DEFINITION_GLOBS or the
+ * recipe's own list) are never sent: their literals ARE the tokens, and an
+ * agent "fixing" them would break the design system.
  */
 
 import type { getServiceClient } from './db.ts'
 import { dispatchFixForReport, type DispatchResult } from './dispatch.ts'
+import { checkAutofixBudget } from './autofix-budget.ts'
 import { log } from './logger.ts'
-import type { DevianceFinding, FindingSeverity } from './design-engine-types.ts'
-import { SCAN_LIMITS } from './design-scan.ts'
+import type { DesignRuleId, DevianceFinding, FindingSeverity } from './design-engine-types.ts'
+import { isTokenDefinitionFile, SCAN_LIMITS, type DesignScanManifest } from './design-scan.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 const alog = log.child('design-actions')
@@ -171,6 +181,8 @@ export interface ActInput {
    */
   findings: readonly DevianceFinding[]
   branch: string | null
+  /** The recipe, for its token-definition list; defaults apply without it. */
+  manifest?: DesignScanManifest | null
 }
 
 /**
@@ -189,12 +201,39 @@ export type ActOutcome =
   | { action: 'dispatched'; reportId: string; dispatchId: string | null; newFindings: number }
   | { action: 'dispatch_refused'; reportId: string; code: DispatchResult['code']; message: string | undefined }
 
+/** Room for automatic dispatches today: `room` null means no daily cap. */
+export type DesignBudget = { allowed: true; room: number | null } | { allowed: false; reason: string }
+
 export interface ActDeps {
   dispatch: typeof dispatchFixForReport
   now: () => Date
+  /** dispatchExistingDesignFindings only: the app's auto-fix budget (throws when it cannot be read). */
+  budget?: (db: Db, projectId: string) => Promise<DesignBudget>
 }
 
-const defaultActDeps: ActDeps = { dispatch: dispatchFixForReport, now: () => new Date() }
+/**
+ * The app's auto-fix caps for an automatic dispatch (checkAutofixBudget):
+ * refused when the spend ceiling or the daily cap is reached, else the
+ * dispatches left today.
+ */
+export async function designAutofixBudget(db: Db, projectId: string): Promise<DesignBudget> {
+  const { data, error } = await db
+    .from('project_settings')
+    .select('autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error) throw new Error(`auto-fix caps read failed: ${error.message}`)
+  const s = (data ?? {}) as Record<string, number | null | undefined>
+  const check = await checkAutofixBudget(db as never, projectId, {
+    autofix_max_spend_usd: s.autofix_max_spend_usd ?? null,
+    autofix_max_dispatches_per_day: s.autofix_max_dispatches_per_day ?? null,
+    autofix_approval_cost_threshold_usd: s.autofix_approval_cost_threshold_usd ?? null,
+  }, { trigger: 'automatic' })
+  if (!check.allowed) return { allowed: false, reason: check.reason ?? 'The auto-fix limits are reached.' }
+  return { allowed: true, room: check.maxDispatchesPerDay == null ? null : Math.max(0, check.maxDispatchesPerDay - check.dispatchesToday) }
+}
+
+const defaultActDeps: ActDeps = { dispatch: dispatchFixForReport, now: () => new Date(), budget: designAutofixBudget }
 
 /** The findings a scan keeps (and acts on): the first SCAN_LIMITS.maxStoredFindings in sortFindings order. */
 export function storedFindingsOf<T>(findings: readonly T[]): T[] {
@@ -300,7 +339,10 @@ export async function actOnDesignDeviance(db: Db, input: ActInput, settings: Set
   try {
     const previous = await previousScan(db, input.projectId, input.runId)
     if (previous === null) return { action: 'baseline' }
+    // A push from an older CLI may still carry findings in token-definition
+    // files; those are never sent to an agent.
     const fresh = newFindings(storedFindingsOf(input.findings), previous.findings, previous.boundary)
+      .filter((f) => !isTokenDefinitionFile(f.file_path, input.manifest ?? null))
     if (fresh.length === 0) return { action: 'no_new_findings' }
     const text = driftReportText(fresh, input.score, input.branch)
     const severity = fresh.some((f) => f.severity === 'error') ? 'medium' : 'low'
@@ -318,5 +360,281 @@ export async function actOnDesignDeviance(db: Db, input: ActInput, settings: Set
     const message = (err as Error)?.message ?? String(err)
     alog.error('design drift auto-fix failed', { projectId: input.projectId, runId: input.runId, err: message })
     return { action: 'report_failed', error: message }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dispatch the findings the newest scan already has (one report per file)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Marks a per-file design-drift report; `environment.file` names the file. */
+export const DESIGN_FILE_REPORTER = 'design-drift:file'
+export const DISPATCH_FILES_DEFAULT = 5
+export const DISPATCH_FILES_MAX = 20
+/** Stored findings read from the newest scan (a scan stores at most SCAN_LIMITS.maxStoredFindings). */
+const NEWEST_SCAN_READ = SCAN_LIMITS.maxStoredFindings * 2
+
+export interface FileFindingGroup {
+  file: string
+  findings: DevianceFinding[]
+  errors: number
+}
+
+export interface GroupSkips {
+  /** Findings in token-definition files (never sent). */
+  tokenDefinition: number
+  /** Findings with no file (contrast pairs judged from the tokens). */
+  noFile: number
+  /** info findings (the auto-fix never acts on them either). */
+  info: number
+  /** Findings in files that already have an open per-file report. */
+  alreadyOpen: number
+}
+
+/**
+ * warn/error findings grouped one group per file, most errors first, then
+ * most findings, then path. Token-definition files, findings with no file and
+ * files with an open report are left out and counted.
+ */
+export function groupFindingsByFile(
+  findings: readonly DevianceFinding[],
+  opts: { manifest: DesignScanManifest | null; openFiles: ReadonlySet<string> },
+): { groups: FileFindingGroup[]; skipped: GroupSkips } {
+  const skipped: GroupSkips = { tokenDefinition: 0, noFile: 0, info: 0, alreadyOpen: 0 }
+  const byFile = new Map<string, FileFindingGroup>()
+  for (const f of findings) {
+    if (f.severity === 'info') { skipped.info++; continue }
+    if (!f.file_path) { skipped.noFile++; continue }
+    if (isTokenDefinitionFile(f.file_path, opts.manifest)) { skipped.tokenDefinition++; continue }
+    if (opts.openFiles.has(f.file_path)) { skipped.alreadyOpen++; continue }
+    const g = byFile.get(f.file_path) ?? { file: f.file_path, findings: [], errors: 0 }
+    g.findings.push(f)
+    if (f.severity === 'error') g.errors++
+    byFile.set(f.file_path, g)
+  }
+  const groups = [...byFile.values()]
+  for (const g of groups) g.findings.sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.col ?? 0) - (b.col ?? 0))
+  groups.sort((a, b) => b.errors - a.errors || b.findings.length - a.findings.length || a.file.localeCompare(b.file))
+  return { groups, skipped }
+}
+
+/** How many files one call sends: DISPATCH_FILES_DEFAULT when unset, 1 to DISPATCH_FILES_MAX. */
+export function clampDispatchFiles(n: number | null | undefined): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return DISPATCH_FILES_DEFAULT
+  return Math.min(DISPATCH_FILES_MAX, Math.max(1, Math.floor(n)))
+}
+
+/** The report a fixing agent reads for one file: each finding with the token to use instead. */
+export function fileDriftReportText(group: FileFindingGroup): { summary: string; description: string } {
+  const n = group.findings.length
+  const lines = group.findings.slice(0, MAX_LISTED_FINDINGS).map((f) => {
+    const at = f.line ? `line ${f.line}` : 'file'
+    const use = f.suggestion ? ` Use ${f.suggestion.cssVar ?? f.suggestion.ts ?? f.suggestion.token} (${f.suggestion.value}).` : ''
+    return `- ${at} — ${f.message}${use}`
+  })
+  const more = n > MAX_LISTED_FINDINGS ? `- … and ${n - MAX_LISTED_FINDINGS} more in the latest design_drift scan.` : ''
+  return {
+    summary: `Design drift in ${group.file}: ${n} value${n === 1 ? '' : 's'} off the design system`,
+    description: [
+      `[Design drift] The latest deviance scan found ${n} value${n === 1 ? '' : 's'} in ${group.file} that ${n === 1 ? 'is' : 'are'} not in this app's design tokens.`,
+      '',
+      ...lines,
+      ...(more ? [more] : []),
+      '',
+      `Replace each value in ${group.file} with the suggested token (or the closest one in mushi.recipe.json's token files). Change only this file and only these values; keep behaviour and layout the same.`,
+      'Do not edit token-definition files (theme or token files that define the design values) and do not add new tokens.',
+    ].join('\n').trim(),
+  }
+}
+
+/** One file sent by dispatchExistingDesignFindings. */
+export interface SentDesignFile {
+  file: string
+  reportId: string
+  findings: number
+  dispatchId: string | null
+  refused: { code: DispatchResult['code']; message: string | undefined } | null
+}
+
+export type DispatchFindingsOutcome =
+  | { action: 'settings_unavailable' | 'failed'; error: string }
+  | { action: 'autofix_disabled' }
+  /** The app's auto-fix caps leave no room today: nothing was filed or dispatched. */
+  | { action: 'budget_reached'; reason: string }
+  | { action: 'no_scan' }
+  | {
+      action: 'dispatched' | 'nothing_to_send'
+      runId: string
+      sent: SentDesignFile[]
+      /** Files left for a later call. */
+      remainingFiles: number
+      skipped: GroupSkips
+    }
+
+interface StoredFindingRow {
+  rule_id: string
+  severity: FindingSeverity
+  message: string
+  file_path: string | null
+  line: number | null
+  col: number | null
+  suggested_fix: { value?: string; suggestion?: DevianceFinding['suggestion'] } | null
+}
+
+/**
+ * Send the newest scan's open findings to the agent, one report per file, at
+ * most `maxFiles` files per call (newest scan only; info findings, findings
+ * without a file, token-definition files and files that already have an open
+ * per-file report are left out). Each report is dispatched with trigger
+ * 'automatic', so the project's auto-fix caps apply as for any other
+ * automatic fix. Never throws.
+ */
+export async function dispatchExistingDesignFindings(
+  db: Db,
+  input: { projectId: string; maxFiles?: number | null; requestedBy?: string | null; manifest?: DesignScanManifest | null },
+  deps: ActDeps = defaultActDeps,
+): Promise<DispatchFindingsOutcome> {
+  const read = await loadDesignActionSettings(db, input.projectId)
+  if (!read.ok) return { action: 'settings_unavailable', error: read.error }
+  if (!read.settings.autofixEnabled) return { action: 'autofix_disabled' }
+  try {
+    const { data: runs, error: runErr } = await db
+      .from('gate_runs')
+      .select('id')
+      .eq('project_id', input.projectId)
+      .eq('gate', 'design_drift')
+      .eq(DESIGN_PHASE_PATH, DESIGN_SCAN_PHASE)
+      .in('status', ['pass', 'warn', 'fail'])
+      .order('started_at', { ascending: false })
+      .limit(1)
+    if (runErr) throw new Error(`gate_runs read failed: ${runErr.message}`)
+    const run = ((runs ?? []) as Array<{ id: string }>)[0]
+    if (!run) return { action: 'no_scan' }
+
+    const [{ data: rows, error: fErr }, { data: open, error: oErr }] = await Promise.all([
+      db
+        .from('gate_findings')
+        .select('rule_id, severity, message, file_path, line, col, suggested_fix')
+        .eq('gate_run_id', run.id)
+        .eq('allowlisted', false)
+        .limit(NEWEST_SCAN_READ),
+      db
+        .from('reports')
+        .select('id, environment')
+        .eq('project_id', input.projectId)
+        .eq('reporter_token_hash', DESIGN_FILE_REPORTER)
+        .not('status', 'in', `(${OPEN_STATUSES_EXCLUDED.join(',')})`)
+        .limit(1000),
+    ])
+    if (fErr) throw new Error(`gate_findings read failed: ${fErr.message}`)
+    if (oErr) throw new Error(`reports read failed: ${oErr.message}`)
+    const openReports = ((open ?? []) as Array<{ id: string; environment: { file?: unknown } | null }>)
+      .filter((r): r is { id: string; environment: { file: string } } => typeof r.environment?.file === 'string')
+    // A file's open report whose latest dispatch was skipped (refused by the
+    // caps) or that was never dispatched is sent again, reusing that report;
+    // only a report with a live or finished job keeps its file out.
+    const latestJob = new Map<string, { status: string; at: string }>()
+    const openIds = openReports.map((r) => r.id)
+    for (let i = 0; i < openIds.length; i += 100) {
+      const { data: jobs, error: jErr } = await db
+        .from('fix_dispatch_jobs')
+        .select('report_id, status, created_at')
+        .eq('project_id', input.projectId)
+        .in('report_id', openIds.slice(i, i + 100))
+      if (jErr) throw new Error(`fix_dispatch_jobs read failed: ${jErr.message}`)
+      for (const j of (jobs ?? []) as Array<{ report_id: string; status: string; created_at: string }>) {
+        const prev = latestJob.get(j.report_id)
+        if (!prev || j.created_at > prev.at) latestJob.set(j.report_id, { status: j.status, at: j.created_at })
+      }
+    }
+    const openFiles = new Set<string>()
+    const reusable = new Map<string, string>()
+    for (const r of openReports) {
+      const job = latestJob.get(r.id)
+      if (!job || job.status === 'skipped') reusable.set(r.environment.file, r.id)
+      else openFiles.add(r.environment.file)
+    }
+    const findings: DevianceFinding[] = ((rows ?? []) as StoredFindingRow[]).map((r) => ({
+      rule_id: r.rule_id as DesignRuleId,
+      severity: r.severity,
+      file_path: r.file_path,
+      line: r.line,
+      col: r.col,
+      value: r.suggested_fix?.value ?? '',
+      message: r.message,
+      suggestion: r.suggested_fix?.suggestion ?? null,
+    }))
+    const { groups, skipped } = groupFindingsByFile(findings, { manifest: input.manifest ?? null, openFiles })
+    if (groups.length === 0) return { action: 'nothing_to_send', runId: run.id, sent: [], remainingFiles: 0, skipped }
+    // The caps before any report is filed. Every job of this batch is queued
+    // at once and counts against the daily cap of the next one the worker
+    // checks, so the batch never exceeds the room left today: a larger batch
+    // would be skipped wholesale by its own queued rows.
+    const budget = await (deps.budget ?? designAutofixBudget)(db, input.projectId)
+    if (!budget.allowed) return { action: 'budget_reached', reason: budget.reason }
+    const take = Math.min(clampDispatchFiles(input.maxFiles), budget.room ?? Number.POSITIVE_INFINITY)
+    if (take <= 0) return { action: 'budget_reached', reason: 'No automatic dispatches are left today under the auto-fix daily cap.' }
+    const picked = groups.slice(0, take)
+    const sent: SentDesignFile[] = []
+    for (const group of picked) {
+      const text = fileDriftReportText(group)
+      const reuseId = reusable.get(group.file)
+      if (reuseId) {
+        // Send the file again on its existing report, with the newest findings.
+        const { error: upErr } = await db
+          .from('reports')
+          .update({ description: text.description, summary: text.summary, environment: { source: 'design-drift', gateRunId: run.id, file: group.file } })
+          .eq('id', reuseId)
+        if (upErr) throw new Error(`report update failed: ${upErr.message}`)
+      }
+      const { data: report, error: insErr } = reuseId ? { data: { id: reuseId }, error: null } : await db
+        .from('reports')
+        .insert({
+          project_id: input.projectId,
+          category: 'visual',
+          source: 'api',
+          description: text.description,
+          summary: text.summary,
+          component: 'design system',
+          severity: group.errors > 0 ? 'medium' : 'low',
+          status: 'classified',
+          confidence: 1,
+          bug_ontology_tags: ['design_drift'],
+          reporter_token_hash: DESIGN_FILE_REPORTER,
+          environment: { source: 'design-drift', gateRunId: run.id, file: group.file },
+        })
+        .select('id')
+        .single()
+      if (insErr || !report) throw new Error(`report insert failed: ${insErr?.message ?? 'no row returned'}`)
+      const reportId = (report as { id: string }).id
+      const res = await deps.dispatch({
+        projectId: input.projectId,
+        reportId,
+        requestedBy: input.requestedBy ?? null,
+        skipMembershipCheck: true,
+        trigger: 'automatic',
+        metadata: { source: 'design_drift_findings', gateRunId: run.id, file: group.file, findings: group.findings.length },
+      })
+      sent.push({
+        file: group.file,
+        reportId,
+        findings: group.findings.length,
+        dispatchId: res.dispatchId ?? null,
+        refused: res.ok ? null : { code: res.code, message: res.message },
+      })
+      // Auto-fix was turned off in between: the rest would be refused too.
+      if (!res.ok && res.code === 'AUTOFIX_DISABLED') break
+    }
+    return {
+      action: sent.length > 0 ? 'dispatched' : 'nothing_to_send',
+      runId: run.id,
+      sent,
+      remainingFiles: groups.length - sent.length,
+      skipped,
+    }
+  } catch (err) {
+    const message = (err as Error)?.message ?? String(err)
+    alog.error('design findings dispatch failed', { projectId: input.projectId, err: message })
+    return { action: 'failed', error: message }
   }
 }

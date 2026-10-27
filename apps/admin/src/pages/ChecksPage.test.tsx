@@ -45,7 +45,7 @@ import { ChecksPage } from './ChecksPage'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const CARD_PATHS = [
-  '/qa-coverage', '/health', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content',
+  '/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content',
   '/judge', '/lessons', '/prompt-lab',
 ]
 

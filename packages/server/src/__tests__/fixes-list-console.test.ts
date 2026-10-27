@@ -8,6 +8,8 @@
  *        takes an offset and returns the exact total.
  *   IA   A fix of a report imported from Sentry links back to the Sentry
  *        issue (report_sentry_url), console IA pass 2026-10-14.
+ *   UX   Each row carries its latest completed Opus verdict (review_verdict),
+ *        so /fixes can list the open PRs waiting on a merge (2026-10-23).
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
@@ -129,5 +131,22 @@ describe('GET /v1/admin/fixes', () => {
     expect(byId.get('f1')).toMatchObject({ report_sentry_url: 'https://acme.sentry.io/issues/4501/' })
     expect(byId.get('f2')).toMatchObject({ report_sentry_url: null })
     reportRows = new Map()
+  })
+
+  it('carries the latest completed Opus verdict per attempt, ignoring running reviews', async () => {
+    db = makeFakeDb({
+      fix_attempts: [attempt(1), attempt(2), attempt(3)],
+      fix_reviews: [
+        { id: 'v1', fix_attempt_id: 'f1', status: 'completed', verdict: 'fix_first', created_at: '2026-10-20T00:00:00Z' },
+        { id: 'v2', fix_attempt_id: 'f1', status: 'completed', verdict: 'merge', created_at: '2026-10-21T00:00:00Z' },
+        { id: 'v3', fix_attempt_id: 'f1', status: 'running', verdict: null, created_at: '2026-10-22T00:00:00Z' },
+        { id: 'v4', fix_attempt_id: 'f2', status: 'completed', verdict: 'hold', created_at: '2026-10-21T00:00:00Z' },
+      ],
+    })
+    const res = await get('/v1/admin/fixes')
+    const byId = new Map(res.json.data.fixes.map((f: Row) => [f.id, f]))
+    expect(byId.get('f1')).toMatchObject({ review_verdict: 'merge' })
+    expect(byId.get('f2')).toMatchObject({ review_verdict: 'hold' })
+    expect(byId.get('f3')).toMatchObject({ review_verdict: null })
   })
 })

@@ -53,12 +53,12 @@ export function ConfirmDialog({
       {details && <div className="text-2xs text-fg-secondary">{details}</div>}
       {children}
       <div ref={wrapperRef} className="flex justify-end gap-1.5 pt-1">
-        <Btn variant="cancel" onClick={onCancel} disabled={loading}>
+        <Btn variant="ghost" onClick={onCancel} disabled={loading}>
           {cancelLabel}
         </Btn>
         <Btn
           data-primary
-          variant={tone === 'danger' ? 'danger' : 'primary'}
+          variant={tone === 'danger' ? 'destructive' : 'primary'}
           onClick={() => void onConfirm()}
           loading={loading}
           disabled={confirmDisabled}
@@ -144,7 +144,7 @@ export function PromptDialog({
           </p>
         )}
         <div className="flex justify-end gap-1.5 pt-1">
-          <Btn type="button" variant="cancel" onClick={onCancel} disabled={loading}>
+          <Btn type="button" variant="ghost" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Btn>
           <Btn type="submit" data-primary loading={loading}>

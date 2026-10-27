@@ -4,7 +4,9 @@
  *          Diagnostics and copy snippets previously hard-coded
  *          NEXT_PUBLIC_MUSHI_* everywhere, which misled Expo (yen-yen),
  *          Vite admin dogfood (mushi-mushi), and Vite SPA (solo-boss-cloud)
- *          integrators during setup.
+ *          integrators during setup. A detected framework (`next` / `nuxt` /
+ *          `vite`) overrides that slug guess so a Next or Nuxt repo is not
+ *          handed bare `MUSHI_*` names its bundler never inlines.
  */
 
 interface ProjectMushiCiVar {
@@ -55,8 +57,24 @@ export function expoReporterGithubRepo(slug: string | null | undefined): string 
   return isExpoReporterProject(slug) ? 'kensaurus/yen-yen' : null
 }
 
-/** Resolve env-var naming for a project slug. Falls back to Next.js web vars. */
-export function mushiEnvVarsForProjectSlug(slug: string | null | undefined): ProjectMushiEnvVars {
+/**
+ * Resolve env-var naming for a project slug.
+ * Pass `framework` when a connected repo (or the CLI detector) named the
+ * bundler. `next` / `nextjs` → `NEXT_PUBLIC_`, `nuxt` → `NUXT_PUBLIC_`,
+ * `vue` / `svelte` / `react` / `vite` → `VITE_`, `expo` → `EXPO_PUBLIC_`.
+ * An unknown framework keeps the slug table, whose default is
+ * `NEXT_PUBLIC_` — never the bare `MUSHI_*` names a Next bundle drops.
+ */
+export function mushiEnvVarsForProjectSlug(
+  slug: string | null | undefined,
+  framework?: string | null,
+): ProjectMushiEnvVars {
+  if (framework) {
+    const kind = bundlerKindForFramework(framework)
+    // `none` is "no bundler", not "Next". Keep the slug table so an
+    // unrecognised id cannot fall through to unprefixed MUSHI_*.
+    if (kind !== 'none') return mushiEnvVarsForBundler(kind)
+  }
   const s = normalizeProjectSlug(slug)
   if (s === 'mushi-mushi' || s === 'mushimushi') {
     return {
@@ -141,6 +159,42 @@ const BUNDLER_PREFIX: Record<MushiBundlerKind, MushiEnvPrefixInfo> = {
   expo: { prefix: 'EXPO_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Expo' },
   webpack: { prefix: 'NEXT_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Webpack/CRA' },
   none: { prefix: '', buildTimeInlined: false, bundlerLabel: 'No build (loader script)' },
+}
+
+/**
+ * Map a detected framework name to its bundler kind.
+ * Callers that have resolved Next.js or Nuxt (package.json `next` / `nuxt`,
+ * or the diagnostic stack id `nextjs`) must pass that id. `react` alone is
+ * ambiguous and maps to Vite; passing it for a Next app would emit `VITE_`.
+ */
+export function bundlerKindForFramework(framework: string | null | undefined): MushiBundlerKind {
+  switch (framework) {
+    case 'vite':
+    case 'vue':
+    case 'svelte':
+      // Vue/Svelte SPAs are overwhelmingly Vite-powered. Nuxt/Next are
+      // their own cases — a Nuxt app also depends on Vite.
+      return 'vite'
+    case 'react':
+      // React is ambiguous (Vite vs Next vs CRA). Callers that know it's
+      // Next pass 'next' or 'nextjs'.
+      return 'vite'
+    case 'next':
+    case 'nextjs':
+      // Without this case the value fell through to 'none' → unprefixed
+      // MUSHI_PROJECT_ID, which a Next bundle never inlines, silently
+      // disabling the SDK.
+      return 'next'
+    case 'nuxt':
+      return 'nuxt'
+    case 'react-native':
+    case 'expo':
+      return 'expo'
+    case 'vanilla':
+      return 'none'
+    default:
+      return 'none'
+  }
 }
 
 /**

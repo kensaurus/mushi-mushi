@@ -107,6 +107,8 @@ export interface LoopOptions {
   /** Selectors that are not the app's UI, on top of DEFAULT_IGNORE (ignore.ts). */
   ignore?: string[]
   profileDir?: string
+  /** Browser build for profileDir: 'chrome' for a profile Google Chrome made (`--profile-dir`). */
+  channel?: 'chrome' | 'chromium'
   regressionSample?: number
   /** Model for the final pairwise review; null turns it off. */
   judgeModel?: string | null
@@ -437,7 +439,7 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
     state.baseUrl = server.url
     persist()
 
-    const session: BrowserSession = await openSession({ profileDir: opts.profileDir, allow: opts.allow, ignore: opts.ignore })
+    const session: BrowserSession = await openSession({ profileDir: opts.profileDir, channel: opts.channel, allow: opts.allow, ignore: opts.ignore })
     try {
       if (state.surfaces.length === 0) {
         log('Mapping screens…')

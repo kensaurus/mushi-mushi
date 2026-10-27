@@ -118,9 +118,10 @@ changes only in items 4, 7, 8 and 9.
 
 Left as is, noted for later: `Hero.tsx:76` (a 3px, 0.22 CTA key) and `MushiCanvas.tsx:48`
 (a rule-coloured key) are different keycap variants and stay hand-written; the gate
-catches only the 2px rgba form. Light `text-warn` on `surface` is 2.64:1 (fails AA as
-text); warn is used as fills and dots in light, but any warn text there should use
-`text-warn-foreground`.
+catches only the 2px rgba form. BL-076 (2026-10-20): light `--color-warn` was
+`oklch(0.68 0.18 80)`, 2.64:1 as text on `surface` and 2.82:1 for `text-warn-fg` on
+the fill. Same hue, L 0.50 (`oklch(0.50 0.18 80)`): 5.50:1 on surface, 4.80:1 on
+surface-overlay, 5.87:1 for white text on the fill. Dark warn is unchanged.
 
 Found while doing item 3: Tailwind drops `@theme` colours that no utility uses, so the dark
 `--color-viz-*` values never reach the built CSS (only the light overrides do, from

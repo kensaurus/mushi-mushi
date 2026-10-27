@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
 
+/**
+ * The part of Hono's `Context` this handler and its fallback use. `text()`
+ * and `json()` let the fallback answer the way Hono's docs show,
+ * `(err, c) => c.text('Server error', 500)`; without them that example did
+ * not type-check (Mushi report 8aa2c40a).
+ */
 type HonoContext = {
   req: { raw: { headers: Headers; method: string; url: string } }
   res: Response
+  text(text: string, status?: number, headers?: Record<string, string>): Response
+  json(object: unknown, status?: number, headers?: Record<string, string>): Response
 }
 type HonoHandler = (err: Error, c: HonoContext) => Response | Promise<Response>
 

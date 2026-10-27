@@ -35,8 +35,19 @@
  *      Functions are deployed independently, so cross-function imports
  *      have the same missing-bundle-file risk.
  *
+ *   Exception: `api-ext` may import from `api/` (CROSS_FUNCTION_ALLOW). It
+ *   is the overflow half of `api` (deploy size limit, HTTP 413 on 2026-10-21)
+ *   and runs route groups whose files stay under `api/routes/`. The deploy
+ *   upload follows each function's import graph from its entrypoint wherever
+ *   it leads (`functionUploadFiles`, tested in deploy-edge-function.test.mjs),
+ *   so those files ship with `api-ext`. No other pair is allowed, and
+ *   `_shared/` may never import a function.
+ *
  * Run: node scripts/check-edge-fn-imports.mjs
  */
+
+/** fromFn -> function dirs it may import from. Keep this list short. */
+const CROSS_FUNCTION_ALLOW = new Map([['api-ext', new Set(['api'])]])
 
 import { readFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
@@ -120,6 +131,7 @@ async function main() {
         const targetTopDir = topLevelDir(resolved)
         if (targetTopDir === fnName) continue
         if (targetTopDir === '_shared' && fnName !== '_shared') continue
+        if (CROSS_FUNCTION_ALLOW.get(fnName)?.has(targetTopDir)) continue
         // Otherwise: cross-function or _shared → sibling function
         violations.push({
           file: fileRel,

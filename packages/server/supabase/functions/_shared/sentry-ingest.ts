@@ -13,6 +13,9 @@
  *   - `issue` (action created/resolved/…): `data.issue` carries the grouped
  *     issue summary.
  *
+ * Platform-outage text "Project not specified." is not filed (hosted gateway
+ * 400). A caller's own "project was not specified" sentence still is.
+ *
  * Dedup: one Mushi report per Sentry issue, linked through
  * `report_external_issues (system='sentry', external_id=<issueId>)` — the same
  * table plugin-sentry uses for the outbound mirror, so the resolve loop is
@@ -104,6 +107,24 @@ function tagValue(tags: Array<[string, string]> | undefined, key: string): strin
   return hit?.[1] ?? null;
 }
 
+/**
+ * Tags that say where a handled server error happened. A shared handler such
+ * as `dbError` is called from hundreds of routes, so its stack frame alone
+ * does not locate the failing query; the `path` tag does (MUSHI-MUSHI-SERVER-2E:
+ * the fix agent could not find the route because intake dropped it).
+ * Allow-listed: user, IP and device tags never reach the report.
+ */
+const LOCATION_TAGS = ['transaction', 'route', 'path', 'method', 'url', 'scope', 'error_type', 'db_code'] as const;
+
+export function sentryLocationTags(tags: Array<[string, string]> | undefined): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const key of LOCATION_TAGS) {
+    const value = tagValue(tags, key);
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim().slice(0, 300);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /** Render the first exception's stack as compact text for `console_logs` —
  *  the same evidence bucket the SDK fills, so Stage 1/2 triage reads it with
  *  zero special-casing. Bounded to the last 10 frames. */
@@ -146,14 +167,15 @@ export function formatSentryExtra(extra: Record<string, unknown> | null | undefi
 }
 
 /**
- * Supabase platform-outage signatures only: the Envoy pooler reset and
- * PostgREST reloading its schema cache (PGRST002). Deliberately narrower than
- * isTransientDbConnectionError: a bare ECONNRESET, "socket hang up" or
- * "connection reset by peer" in a user's own backend is often a real bug (a
- * crashed upstream, a missing retry) and still gets filed.
+ * Supabase platform-outage signatures only: the Envoy pooler reset,
+ * PostgREST reloading its schema cache (PGRST002), and the hosted gateway
+ * body "Project not specified." (the period is part of that body).
+ * Deliberately narrower than isTransientDbConnectionError: a bare ECONNRESET,
+ * "socket hang up" or "connection reset by peer" in a user's own backend is
+ * often a real bug (a crashed upstream, a missing retry) and still gets filed.
  */
 const PLATFORM_OUTAGE_RE =
-  /upstream connect error or disconnect\/reset before headers|delayed connect error: 111|remote connection failure|\bPGRST002\b|could not query the database for the schema cache/i;
+  /upstream connect error or disconnect\/reset before headers|delayed connect error: 111|remote connection failure|\bPGRST002\b|could not query the database for the schema cache|project not specified\./i;
 
 /**
  * True when the issue is a Supabase platform outage (PLATFORM_OUTAGE_RE) in
@@ -289,10 +311,12 @@ export async function ingestSentryError(
   const environment = event?.environment ?? tagValue(event?.tags, 'environment');
 
   const extraText = formatSentryExtra(event?.extra);
+  const location = sentryLocationTags(event?.tags);
   const description = [
     [title, culprit ? `in ${culprit}` : null, '(captured by Sentry — no user description)']
       .filter(Boolean)
       .join(' '),
+    location ? `Where: ${Object.entries(location).map(([k, v]) => `${k}=${v}`).join(' ')}` : null,
     extraText ? `Event extra:\n${extraText}` : null,
   ]
     .filter(Boolean)
@@ -325,6 +349,7 @@ export async function ingestSentryError(
       sentryIssueId,
       sentryShortId: issue?.shortId ?? null,
       sentryFrames: framePaths,
+      sentryLocation: location,
       culprit,
       platform: event?.platform ?? issue?.platform ?? null,
     },

@@ -9,8 +9,9 @@
   USAGE: Link from README, open-source.mdx, and sales inquiries.
 -->
 
-Mushi Mushi is **dual-licensed** for the server packages (`@mushi-mushi/server`,
-`@mushi-mushi/agents`, `@mushi-mushi/verify`):
+Mushi Mushi is **dual-licensed** for its AGPL parts: the server packages
+(`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) and the
+console (`apps/admin`) and tester portal (`apps/testers`):
 
 | License | Who it's for | What you get |
 | ------- | ------------ | ------------ |
@@ -18,7 +19,13 @@ Mushi Mushi is **dual-licensed** for the server packages (`@mushi-mushi/server`,
 | **Commercial license** (this document) | Companies offering Mushi (or a derivative) as a **hosted service to third parties** without AGPL copyleft obligations | A separate license from the copyright holder that replaces AGPL terms for the licensed use case. |
 
 The **SDK packages remain MIT** — embed them in proprietary apps with zero copyleft
-obligations. The commercial license applies to the **server**, not the widget.
+obligations. The commercial license applies to the **server and console**, not the
+widget.
+
+The copyright holder can offer this license because outside contributions come in
+under the [Contributor License Agreement](./CLA.md). A commercial license covers
+the code only; it does not include the Mushi Mushi name or logo (see
+[TRADEMARK.md](./TRADEMARK.md)).
 
 ## When you need a commercial license
 

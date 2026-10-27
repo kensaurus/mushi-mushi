@@ -8,15 +8,21 @@
  * Data: GET  /v1/admin/projects/:pid/pull-requests
  *       POST /v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge { method }
  * Nothing merges on its own (ADR 0017): a person reads the confirmation and clicks Confirm.
+ * A Mushi fix PR shows its Opus review (ADR 0030); a hold disables Merge here and
+ * points to the fix, whose merge dialog shows the findings and the override.
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout, Card, SelectField } from '../ui'
 import { IconExternalLink } from '../icons'
 import { formatRelative } from '../ui/metrics'
 import { apiFetchMutate } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { uxRequiredChecks, type UxPullRequest } from '../../lib/uxRuns'
+import { fixDeepLinkPath } from '../../lib/fixDeepLink'
+import { reviewTone, type FixReviewState } from '../../lib/fixReview'
+import { META_CHIP_TONE } from '../../lib/chipTone'
 
 type MergeMethod = 'squash' | 'merge' | 'rebase'
 
@@ -31,6 +37,15 @@ export interface OpenPullRequest {
   baseRef: string
   updatedAt: string
   checks: UxPullRequest['checks']
+  /** The Opus review when this PR is a Mushi fix (ADR 0030). */
+  review?: {
+    state: FixReviewState
+    label: string
+    fixId: string | null
+    verdict?: 'merge' | 'fix_first' | 'hold' | null
+    /** ANY review linked to the PR is still running, not only the one shown. */
+    pending?: boolean
+  }
 }
 
 const POLL_MS = 30_000
@@ -39,7 +54,8 @@ const POLL_MS = 30_000
  * Why Merge is off for this PR, in words for the person; null when it can merge.
  * @internal Exported for tests only.
  */
-export function openPrMergeBlocker(pr: Pick<OpenPullRequest, 'checks'>): string | null {
+export function openPrMergeBlocker(pr: Pick<OpenPullRequest, 'checks' | 'review'>): string | null {
+  if (pr.review?.verdict === 'hold') return 'The Opus review says hold: open the fix to read the findings.'
   const checks = uxRequiredChecks(pr.checks)
   const failing = checks.filter((c) => c.result === 'fail').map((c) => c.name)
   if (failing.length) return `Required check failing: ${failing.join(', ')}.`
@@ -95,6 +111,8 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
   const checks = uxRequiredChecks(pr.checks)
   const blocker = openPrMergeBlocker(pr)
   const passed = checks.filter((c) => c.result === 'pass').length
+  // Any linked review still running (the server says which); older servers only send the shown state.
+  const reviewPending = pr.review?.pending === true || pr.review?.state === 'queued'
 
   async function merge() {
     if (inFlight.current) return
@@ -104,7 +122,11 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
     const [owner, repo] = pr.repo.split('/')
     const res = await apiFetchMutate<{ merged: boolean; alreadyMerged: boolean; message?: string }>(
       `/v1/admin/projects/${projectId}/pull-requests/${owner}/${repo}/${pr.number}/merge`,
-      { method: 'POST', body: JSON.stringify({ method }) },
+      {
+        method: 'POST',
+        // The fix's first review is still running: confirming here is the person's choice (ADR 0030).
+        body: JSON.stringify(reviewPending ? { method, confirmPendingReview: true } : { method }),
+      },
     )
     inFlight.current = false
     setMerging(false)
@@ -128,6 +150,11 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
         </a>
         <span className="flex items-center gap-1.5">
           {pr.draft && <Badge tone="neutral">Draft</Badge>}
+          {pr.review && (
+            <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${META_CHIP_TONE[reviewTone({ state: pr.review.state, verdict: pr.review.verdict ?? null })]}`}>
+              {pr.review.fixId ? <Link to={fixDeepLinkPath(pr.review.fixId)} className="hover:underline">{pr.review.label}</Link> : pr.review.label}
+            </span>
+          )}
           {merged ? (
             <Badge tone="okSubtle">Merged</Badge>
           ) : (
@@ -148,7 +175,8 @@ function OpenPullRequestRow({ projectId, pr, showRepo, onMerged }: { projectId: 
         <Callout tone="warn">
           <div className="flex flex-col gap-2">
             <p className="text-xs text-fg">
-              Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
+              Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}
+              {reviewPending ? 'Its Opus review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <SelectField label="Merge method" value={method} disabled={merging} onChange={(e) => setMethod(e.target.value as MergeMethod)}>

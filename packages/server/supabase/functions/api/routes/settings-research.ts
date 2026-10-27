@@ -37,11 +37,138 @@ import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-r
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
 import { prepareByokSecret } from '../../_shared/byok-key-rules.ts';
 import { parseByokExpiry } from '../../_shared/byok-expiry.ts';
-import { canManageSharedKeys, keyOwnerFilter, ownKeysFirst, type KeyOwner } from '../../_shared/byok-scope.ts';
+import {
+  canManageSharedKeys,
+  keyOwnerFilter,
+  keyOwnerForProject,
+  ownKeysFirst,
+  ownerUserColumnReady,
+  rowScope,
+  withOwnerUserColumn,
+  universalKeyApplies,
+  type KeyOwner,
+  type KeyScope,
+} from '../../_shared/byok-scope.ts';
 
-/** The rows this project may use: its own keys and its organization's (ADR 0023). */
-function keyOwnerOf(project: { id: string; organization_id?: string | null }): KeyOwner {
-  return { projectId: project.id as string, organizationId: (project.organization_id as string | null | undefined) ?? null };
+/**
+ * The rows this project uses: its own keys, its organization's (ADR 0023)
+ * and the universal keys of its organization's owners (ADR 0031).
+ */
+function appKeyOwner(
+  db: ReturnType<typeof getServiceClient>,
+  project: { id: string; organization_id?: string | null },
+): Promise<KeyOwner> {
+  return keyOwnerForProject(db, project);
+}
+
+/**
+ * The rows a caller may see and manage from this project: the app's rows,
+ * plus the console user's own universal keys, so they can manage a universal
+ * key from any app even where it does not serve that app. API keys (CLI, MCP)
+ * see only the app's rows.
+ */
+async function manageKeyOwner(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  project: { id: string; organization_id?: string | null },
+): Promise<KeyOwner> {
+  const owner = await keyOwnerForProject(db, project);
+  const userId = c.get('authMethod') === 'jwt' ? (c.get('userId') as string | undefined) : undefined;
+  // Before migration 20261021051628 the filter must not name owner_user_id.
+  if (userId && (await ownerUserColumnReady(db)) && !(owner.universalUserIds ?? []).includes(userId)) {
+    owner.universalUserIds = [...(owner.universalUserIds ?? []), userId];
+  }
+  return owner;
+}
+
+/**
+ * May the console user add a universal key from this app, so that it serves
+ * this app? Only an owner of its organization (ADR 0031): a universal key
+ * serves the organizations its owner owns. API keys never may.
+ */
+async function canAddUniversalKey(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  organizationId: string | null | undefined,
+): Promise<boolean> {
+  if (!organizationId || c.get('authMethod') !== 'jwt') return false;
+  const userId = c.get('userId') as string | undefined;
+  if (!userId) return false;
+  const { data, error } = await db
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return false;
+  return universalKeyApplies((data?.role as string | undefined) ?? null);
+}
+
+function universalOwnerOnly(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'UNIVERSAL_KEY_OWNER_ONLY',
+        message: 'This key belongs to another owner and serves all of their apps. Only they can change it, in the console.',
+      },
+    },
+    403,
+  );
+}
+
+function universalConsoleOnly(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'UNIVERSAL_KEY_CONSOLE_ONLY',
+        message: 'A key for all your apps is added in the console (Settings → AI keys). The CLI and MCP add keys to one app.',
+      },
+    },
+    403,
+  );
+}
+
+function universalNotYours(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'UNIVERSAL_KEY_NOT_YOURS',
+        message:
+          'Someone else added this key, so it cannot become a key for all your apps. Add your own key and choose "All my apps".',
+      },
+    },
+    409,
+  );
+}
+
+function universalUnavailable(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'UNIVERSAL_KEYS_UNAVAILABLE',
+        message: 'Keys for all your apps are not available yet. Add the key to this organization or this app for now.',
+      },
+    },
+    503,
+  );
+}
+
+function universalNeedsOwner(c: Context): Response {
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'UNIVERSAL_KEY_NEEDS_OWNER',
+        message:
+          "A key for all your apps serves the organizations you own. You don't own this app's organization, so add the key to this app or this organization instead.",
+      },
+    },
+    403,
+  );
 }
 
 /**
@@ -103,18 +230,27 @@ async function sharedKeyWriteGuard(
   db: ReturnType<typeof getServiceClient>,
   project: { id: string; organization_id?: string | null; organization_role?: string | null },
   keyId: string,
+  owner: KeyOwner,
 ): Promise<Response | null> {
   const viewerDenied = denyViewerWrite(c, project.organization_role, 'change AI keys');
   if (viewerDenied) return viewerDenied;
   const { data, error } = await db
     .from('byok_keys')
-    .select('organization_id')
+    .select(withOwnerUserColumn('organization_id', await ownerUserColumnReady(db)))
     .eq('id', keyId)
-    .or(keyOwnerFilter(keyOwnerOf(project)))
+    .or(keyOwnerFilter(owner))
     .maybeSingle();
   if (error) return dbError(c, error);
   if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
-  if (data.organization_id && !(await canManageOrgKeys(c, db, data.organization_id as string))) {
+  // A universal key serves every app of its owner (ADR 0031): only that
+  // owner changes it, in the console. Co-owners see it read-only.
+  const keyOwnerId = (data as { owner_user_id?: string | null }).owner_user_id;
+  if (keyOwnerId) {
+    const isOwner = c.get('authMethod') === 'jwt' && c.get('userId') === keyOwnerId;
+    return isOwner ? null : universalOwnerOnly(c);
+  }
+  const keyOrgId = (data as { organization_id?: string | null }).organization_id;
+  if (keyOrgId && !(await canManageOrgKeys(c, db, keyOrgId))) {
     return c.json(
       {
         ok: false,
@@ -392,6 +528,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       projectName: null as string | null,
       updatedAt: null as string | null,
       slackConfigured: false,
+      slackCanPost: false,
       sentryConfigured: false,
       reporterNotificationsEnabled: false,
       stage2Model: null as string | null,
@@ -434,7 +571,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // select('*') so expires_at (migration 20261004150000) is read when it
       // exists without failing when it doesn't, in this one round trip. This
       // route returns counts only, never the rows.
-      db.from('byok_keys').select('*').or(keyOwnerFilter(keyOwnerOf(project))),
+      db.from('byok_keys').select('*').or(keyOwnerFilter(await appKeyOwner(db, project))),
       loadIntegrationSignals(db, [project.id]),
     ]);
 
@@ -462,6 +599,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       test_status: string | null;
       status: string;
       cooldown_until: string | null;
+      exhausted_until?: string | null;
       expires_at?: string | null;
     }>;
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
@@ -469,6 +607,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       status: k.status,
       test_status: k.test_status,
       cooldown_until: k.cooldown_until,
+      exhausted_until: k.exhausted_until ?? null,
       expires_at: k.expires_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
@@ -609,6 +748,14 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // features read. The token itself is a BYOK key (slug `supabase`),
       // never a settings column. Validated below.
       'supabase_project_ref',
+      // Agent PR review (ADR 0030, migration 20261020172855): turning it off
+      // removes the merge gate and stops spending the Anthropic key on
+      // reviews, so project admins only. Validated below.
+      'agent_pr_review_enabled',
+      // The reviewer model (migration 20261022021555). Null falls back to the
+      // platform default, so a newer Claude model is a setting, not a deploy.
+      // It spends the project's Anthropic key: project admins only.
+      'agent_pr_review_model',
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract (and the same Vault names)
@@ -694,6 +841,22 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         updates[key] = value;
         continue;
       }
+      if (key === 'agent_pr_review_enabled') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can turn the agent PR review on or off.',
+        );
+        if (forbidden) return forbidden;
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { ok: false, error: { code: 'VALIDATION_ERROR', message: 'The agent PR review can only be turned on or off.' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
       if (key === 'known_issues_search_enabled') {
         const forbidden = requireProjectAdmin(
           c,
@@ -727,6 +890,25 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         const forbidden = requireProjectAdmin(c, project);
         if (forbidden) return forbidden;
         const verdict = parseSupabaseProjectRefSetting(value);
+        if (!verdict.ok) {
+          return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
+        continue;
+      }
+      if (key === 'agent_pr_review_model') {
+        const forbidden = requireProjectAdmin(
+          c,
+          project,
+          'Only organization owners and admins can change the agent PR review model.',
+        );
+        if (forbidden) return forbidden;
+        // Empty or null goes back to the platform default.
+        if (value === null || (typeof value === 'string' && value.trim() === '')) {
+          updates[key] = null;
+          continue;
+        }
+        const verdict = parseClaudeModelSetting(value);
         if (!verdict.ok) {
           return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
         }
@@ -2866,9 +3048,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .maybeSingle(),
       db
         .from('byok_keys')
-        .select('key_hint, test_status, status, cooldown_until, priority, project_id')
-        // The project's own keys or its organization's shared ones (ADR 0023).
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .select('key_hint, test_status, status, cooldown_until, priority, project_id, organization_id')
+        // The project's own keys, its organization's shared ones (ADR 0023)
+        // and its organization owners' universal ones (ADR 0031).
+        .or(keyOwnerFilter(await appKeyOwner(db, project)))
         .eq('provider_slug', 'firecrawl')
         .order('priority', { ascending: true })
         .order('created_at', { ascending: true }),
@@ -3108,8 +3291,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const [keysRes, spendRes] = await Promise.all([
       db
         .from('byok_keys')
-        .select('id, provider_slug, key_hint, label, base_url, vault_secret_id, status')
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .select(withOwnerUserColumn('id, provider_slug, key_hint, label, base_url, vault_secret_id, status', await ownerUserColumnReady(db)))
+        .or(keyOwnerFilter(await appKeyOwner(db, project)))
         .in('status', ['active', 'quota_exhausted']),
       db
         .from('llm_invocations')
@@ -3121,11 +3304,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (keysRes.error) return dbError(c, keysRes.error);
     if (spendRes.error) return dbError(c, spendRes.error);
 
+    const creditsViewer = c.get('authMethod') === 'jwt' ? (c.get('userId') as string | undefined) : undefined;
     const keys = await Promise.all(
-      (keysRes.data ?? []).map(async (k) => {
-        const { data: secret } = await db.rpc('vault_get_secret', { secret_id: k.vault_secret_id });
-        const credits =
-          typeof secret === 'string'
+      ((keysRes.data ?? []) as unknown as Array<Record<string, unknown>>).map(async (k) => {
+        // Another owner's universal key (ADR 0031) is never decrypted here:
+        // its balance is theirs to read.
+        const othersUniversal = Boolean(k.owner_user_id) && k.owner_user_id !== creditsViewer;
+        const { data: secret } = othersUniversal
+          ? { data: null }
+          : await db.rpc('vault_get_secret', { secret_id: k.vault_secret_id });
+        const credits = othersUniversal
+          ? ({ kind: 'unavailable', reason: "Only the key's owner sees its balance." } as const)
+          : typeof secret === 'string'
             ? await fetchProviderCredits(k.provider_slug as string, secret, k.base_url as string | null)
             : ({ kind: 'error', message: 'The key could not be read from Vault.' } as const);
         return {
@@ -3171,14 +3361,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const owner = await manageKeyOwner(c, db, project);
+    // Whose universal keys serve this app: its organization's owners (ADR 0031).
+    const appOwners = new Set((await appKeyOwner(db, project)).universalUserIds ?? []);
 
     const [poolResult, legacyResult] = await Promise.all([
       db
         .from('byok_keys')
         .select(
-          'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, organization_id',
+          withOwnerUserColumn(
+            'id, provider_slug, label, priority, status, cooldown_until, exhausted_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at, project_id, organization_id, created_by',
+            await ownerUserColumnReady(db),
+          ),
         )
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .order('provider_slug', { ascending: true })
         .order('priority', { ascending: true }),
       db
@@ -3197,20 +3393,39 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const expiryResult = await db
       .from('byok_keys')
       .select('id, expires_at')
-      .or(keyOwnerFilter(keyOwnerOf(project)));
+      .or(keyOwnerFilter(owner));
     if (!expiryResult.error) {
       for (const row of (expiryResult.data ?? []) as Array<{ id: string; expires_at?: string | null }>) {
         expiryById.set(row.id, row.expires_at ?? null);
       }
     }
-    // Own keys first, then the organization's shared keys (ADR 0023).
-    const poolKeys = ((poolResult.data ?? []) as Array<Record<string, unknown>>)
-      .map((key) => ({
-        ...key,
-        scope: key.organization_id ? 'organization' : 'project',
-        expires_at: expiryById.get(String(key.id)) ?? null,
-      }))
-      .sort((a, b) => (a.scope === b.scope ? 0 : a.scope === 'project' ? -1 : 1));
+    // Own keys first, then the organization's shared keys (ADR 0023), then
+    // universal ones (ADR 0031). Who owns a universal key is not returned:
+    // only whether it is the caller's and whether it serves this app.
+    const viewerId = c.get('authMethod') === 'jwt' ? (c.get('userId') as string | undefined) : undefined;
+    const scopeRank: Record<KeyScope, number> = { project: 0, organization: 1, universal: 2 };
+    const poolKeys = ((poolResult.data ?? []) as unknown as Array<Record<string, unknown>>)
+      .map(({ owner_user_id: keyOwnerId, project_id: keyProjectId, created_by: keyCreatedBy, ...key }) => {
+        const scope = rowScope({
+          project_id: keyProjectId as string | null,
+          organization_id: key.organization_id as string | null,
+        });
+        return {
+          ...key,
+          scope,
+          // Only the user who added a key may make it universal (ADR 0031);
+          // the console offers "All my apps" on those rows only.
+          addedByMe: Boolean(viewerId) && keyCreatedBy === viewerId,
+          ...(scope === 'universal'
+            ? {
+                ownedByMe: Boolean(viewerId) && keyOwnerId === viewerId,
+                servesThisApp: appOwners.has(String(keyOwnerId)),
+              }
+            : {}),
+          expires_at: expiryById.get(String(key.id)) ?? null,
+        };
+      })
+      .sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope]);
 
     const legacyRow = (legacyResult.data as Record<string, unknown> | null) ?? {};
     const legacyKeys = LEGACY_BYOK_PROVIDERS.flatMap(
@@ -3259,15 +3474,46 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       };
     }
 
+    // "All my apps" (ADR 0031): whether this console user may add a
+    // universal key here (they own this app's organization) and how many apps
+    // it would serve (every app in every organization they own).
+    let universal: { canAdd: boolean; appCount: number; organizationCount: number } | null = null;
+    if (viewerId && (await ownerUserColumnReady(db))) {
+      const { data: ownedOrgs } = await db
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', viewerId)
+        .eq('role', 'owner');
+      const orgIds = ((ownedOrgs ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id);
+      let appCount = 0;
+      if (orgIds.length > 0) {
+        const { count } = await db
+          .from('projects')
+          .select('id', { count: 'exact', head: true })
+          .in('organization_id', orgIds);
+        appCount = count ?? 0;
+      }
+      universal = {
+        canAdd: Boolean(project.organization_id) && orgIds.includes(project.organization_id as string),
+        appCount,
+        organizationCount: orgIds.length,
+      };
+    }
+
     return c.json({
       ok: true,
-      data: { projectId: project.id, keys: poolKeys, legacyKeys, sharing },
+      data: { projectId: project.id, keys: poolKeys, legacyKeys, sharing, universal },
     });
   });
 
   /**
    * POST /v1/admin/byok/keys
-   * Add a key to the pool. Body: { provider, key, label?, priority? }
+   * Add a key to the pool. Body: { provider, key, label?, priority?, scope? }
+   * scope: 'universal' (every app in every organization the console user
+   * owns, ADR 0031), 'organization' (every app in this organization, ADR
+   * 0023) or 'project' (this app). Omitted: 'project' for every caller; the
+   * console form sends 'universal' itself, pre-selected. API keys (CLI, MCP)
+   * may not add organization or universal keys.
    */
   app.post(
     '/v1/admin/byok/keys',
@@ -3315,14 +3561,29 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       }
       const viewerDenied = denyViewerWrite(c, project.organization_role, 'add AI keys');
       if (viewerDenied) return viewerDenied;
-      // "organization": one key for every app in the organization (ADR 0023).
+      const owner = await manageKeyOwner(c, db, project);
+      const ownsOrganization = await canAddUniversalKey(c, db, project.organization_id as string | null | undefined);
+      // "universal": every app its owner owns (ADR 0031); "organization": every
+      // app in the organization (ADR 0023); "project": this app. Omitted means
+      // "project" for every caller; the console sends "universal" itself,
+      // pre-selected in its form.
       const rawScope = raw.scope ?? 'project';
-      if (rawScope !== 'project' && rawScope !== 'organization') {
+      if (rawScope !== 'project' && rawScope !== 'organization' && rawScope !== 'universal') {
         return c.json(
-          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'scope must be "project" or "organization".' } },
+          {
+            ok: false,
+            error: { code: 'VALIDATION_ERROR', message: 'scope must be "universal", "organization" or "project".' },
+          },
           400,
         );
       }
+      if (rawScope === 'universal') {
+        if (c.get('authMethod') !== 'jwt') return universalConsoleOnly(c);
+        if (!(await ownerUserColumnReady(db))) return universalUnavailable(c);
+        if (!ownsOrganization) return universalNeedsOwner(c);
+        if (!isShareableProvider(rawProvider)) return notShareable(c);
+      }
+      const universalUserId = rawScope === 'universal' ? (userId as string) : null;
       const sharedOrgId = rawScope === 'organization' ? ((project.organization_id as string | null | undefined) ?? null) : null;
       if (rawScope === 'organization') {
         if (!sharedOrgId) {
@@ -3402,7 +3663,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // Refuse a key that is already pooled; remember whether it is the legacy
       // credential, which a validated pooled copy retires below. Runs before
       // the Vault write so a 409 leaves no orphaned secret.
-      const duplicate = await findDuplicateByokKey(db, keyOwnerOf(project), provider, keyVal, baseUrl ?? null);
+      const duplicate = await findDuplicateByokKey(db, owner, provider, keyVal, baseUrl ?? null);
       if ('error' in duplicate) return dbError(c, duplicate.error);
       if (duplicate.pool) {
         return c.json(
@@ -3440,8 +3701,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const { data: row, error: insertErr } = await db
         .from('byok_keys')
         .insert({
-          project_id: sharedOrgId ? null : project.id,
+          project_id: sharedOrgId || universalUserId ? null : project.id,
           organization_id: sharedOrgId,
+          ...(universalUserId ? { owner_user_id: universalUserId } : {}),
           provider_slug: provider,
           vault_secret_id: secretData,
           key_hint: hint,
@@ -3488,12 +3750,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           cooldown_until: cooldownUntil,
         })
         .eq('id', row.id)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
         )
         .single();
       if (validationUpdateError) return dbError(c, validationUpdateError);
+      const addedScope: KeyScope = universalUserId ? 'universal' : sharedOrgId ? 'organization' : 'project';
 
       // Separate write so a database without the column (migration
       // 20261004150000 not applied yet) still saves the key, and says so.
@@ -3504,7 +3767,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           .from('byok_keys')
           .update({ expires_at: expiry.value })
           .eq('id', row.id)
-          .or(keyOwnerFilter(keyOwnerOf(project)));
+          .or(keyOwnerFilter(owner));
         if (expiryError) {
           log.warn('byok key saved but its expiry date was not', { provider, code: expiryError.code });
           expiryWarning = 'The key was saved, but not its expiry date. Add the date again from the key row.';
@@ -3515,7 +3778,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
       try {
         await db.from('byok_audit_log').insert([
-          { project_id: project.id, provider, action: 'added', actor_user_id: userId },
+          { project_id: project.id, provider, action: 'added', actor_user_id: userId, meta: { key_id: row.id, scope: addedScope } },
           {
             project_id: project.id,
             provider,
@@ -3573,6 +3836,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         ok: true,
         data: {
           ...validatedRow,
+          scope: addedScope,
           expires_at: expiresAt,
           validation: {
             status: probe.status,
@@ -3618,7 +3882,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
-      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      const owner = await manageKeyOwner(c, db, project);
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
       const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -3631,7 +3896,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .update({ expires_at: expiry.value })
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .select('id, expires_at')
         .maybeSingle();
       if (error) return dbError(c, error);
@@ -3669,7 +3934,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
-      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      const owner = await manageKeyOwner(c, db, project);
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
       const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -3693,7 +3959,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           .from('byok_keys')
           .select('test_status')
           .eq('id', keyId)
-          .or(keyOwnerFilter(keyOwnerOf(project)))
+          .or(keyOwnerFilter(owner))
           .maybeSingle();
         if (currentError) return dbError(c, currentError);
         if (!current) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3720,7 +3986,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .update(updates)
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until',
         )
@@ -3760,14 +4026,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
-      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      const owner = await manageKeyOwner(c, db, project);
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
       const { data: keyRow, error: keyError } = await db
         .from('byok_keys')
         .select('id, provider_slug, vault_secret_id, base_url')
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .maybeSingle();
       if (keyError) return dbError(c, keyError);
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3833,7 +4100,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           cooldown_until: cooldownUntil,
         })
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .select(
           'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
         )
@@ -3910,14 +4177,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
-      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId);
+      const owner = await manageKeyOwner(c, db, project);
+      const sharedDenied = await sharedKeyWriteGuard(c, db, project, keyId, owner);
       if (sharedDenied) return sharedDenied;
 
       const { data: keyRow } = await db
         .from('byok_keys')
         .select('provider_slug, vault_secret_id')
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)))
+        .or(keyOwnerFilter(owner))
         .single();
 
       if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -3926,11 +4194,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('byok_keys')
         .delete()
         .eq('id', keyId)
-        .or(keyOwnerFilter(keyOwnerOf(project)));
+        .or(keyOwnerFilter(owner));
       if (error) return dbError(c, error);
 
-      // vault_delete_secret matches by name; pool rows keep the secret's id.
-      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret_by_id', {
+      // Delete the secret only if nothing else references it: a pool row can
+      // share its secret with the project's legacy `byok_<provider>_key_ref`,
+      // which the resolver still uses (review 2026-10-21: yen-yen's Anthropic
+      // key). vault_delete_secret_by_id deleted it regardless. Before
+      // migration 20261021051628 this RPC is missing and the secret is left in
+      // Vault, never deleted unchecked.
+      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret_if_unused', {
         secret_id: keyRow.vault_secret_id,
       });
       if (vaultDeleteError) {
@@ -3960,83 +4233,140 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
    * GET /v1/admin/byok/health
    * Summarise pool health across all providers.
    */
-  // Share a key with every app in the organization, or bring a shared key back
-  // to this app only (ADR 0023). Moves the row; the Vault secret is unchanged.
-  app.post(
-    '/v1/admin/byok/keys/:keyId/scope',
-    adminOrApiKey({ scope: 'mcp:write' }),
-    requireFeature('byok'),
-    async (c) => {
-      const userId = c.get('userId') as string;
-      const keyId = c.req.param('keyId')!;
-      if (!byokKeyIdSchema.safeParse(keyId).success) {
-        return c.json({ ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } }, 400);
-      }
-      const body = (await c.req.json().catch(() => ({}))) as { scope?: unknown };
-      if (body.scope !== 'project' && body.scope !== 'organization') {
-        return c.json(
-          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'scope must be "project" or "organization".' } },
-          400,
-        );
-      }
-      const db = getServiceClient();
-      const apiKeyProjectId =
-        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
-      const resolvedProject = await resolveOwnedProject(
-        c,
-        db,
-        userId,
-        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+  // Change where a key is used (ADR 0023, ADR 0031): this app only, every app
+  // in this organization, or every app its owner owns (universal). Moves the
+  // row; the Vault secret is unchanged. PATCH is the documented verb; POST
+  // stays for consoles and scripts written against ADR 0023.
+  //
+  // Rules (console users only; API keys never change shared keys):
+  //   - an app or organization key moves only for an organization owner or
+  //     admin (canManageOrgKeys);
+  //   - to universal: the caller must own this organization (so the key keeps
+  //     serving this app) and becomes the key's owner;
+  //   - a universal key moves only by its owner, and only to this app or this
+  //     organization (owner/admin rules as above).
+  // Every move writes a `rescoped` byok_audit_log row and an audit_logs row.
+  const rescopeKey = async (c: Context) => {
+    const userId = c.get('userId') as string;
+    const keyId = c.req.param('keyId')!;
+    if (!byokKeyIdSchema.safeParse(keyId).success) {
+      return c.json({ ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { scope?: unknown };
+    const target = body.scope;
+    if (target !== 'project' && target !== 'organization' && target !== 'universal') {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'scope must be "universal", "organization" or "project".' },
+        },
+        400,
       );
-      if ('response' in resolvedProject) return resolvedProject.response;
-      const project = resolvedProject.project;
-      const orgId = (project.organization_id as string | null | undefined) ?? null;
-      if (!orgId) {
-        return c.json(
-          { ok: false, error: { code: 'NO_ORGANIZATION', message: 'This app is not in an organization, so its key cannot be shared.' } },
-          400,
-        );
-      }
-      if (!(await canManageOrgKeys(c, db, orgId))) {
-        return c.json(
-          {
-            ok: false,
-            error: { code: 'SHARED_KEY_ADMIN_ONLY', message: 'Only an organization owner or admin can share a key with every app.' },
-          },
-          403,
-        );
-      }
+    }
+    const db = getServiceClient();
+    const apiKeyProjectId =
+      c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+    const resolvedProject = await resolveOwnedProject(
+      c,
+      db,
+      userId,
+      apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+    );
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+    const viewerDenied = denyViewerWrite(c, project.organization_role, 'change AI keys');
+    if (viewerDenied) return viewerDenied;
+    const orgId = (project.organization_id as string | null | undefined) ?? null;
+    if (!orgId) {
+      return c.json(
+        { ok: false, error: { code: 'NO_ORGANIZATION', message: 'This app is not in an organization, so its key cannot be shared.' } },
+        400,
+      );
+    }
+    if (!(await canManageOrgKeys(c, db, orgId))) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'SHARED_KEY_ADMIN_ONLY', message: 'Only an organization owner or admin can change where a key is used.' },
+        },
+        403,
+      );
+    }
 
-      // Only this project's own key can be shared, and only this
-      // organization's key can be brought back to this project.
-      const toOrg = body.scope === 'organization';
-      if (toOrg) {
-        const { data: own, error: ownErr } = await db
-          .from('byok_keys')
-          .select('provider_slug, project_id')
-          .eq('id', keyId)
-          .or(keyOwnerFilter(keyOwnerOf(project)))
-          .maybeSingle();
-        if (ownErr) return dbError(c, ownErr);
-        if (own?.project_id === project.id && !isShareableProvider(own.provider_slug)) return notShareable(c);
-      }
-      const { data, error } = await db
-        .from('byok_keys')
-        .update(toOrg ? { project_id: null, organization_id: orgId } : { project_id: project.id, organization_id: null })
-        .eq('id', keyId)
-        .eq(toOrg ? 'project_id' : 'organization_id', toOrg ? project.id : orgId)
-        .select('id, provider_slug, organization_id')
-        .maybeSingle();
-      if (error) return dbError(c, error);
-      if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    const columnReady = await ownerUserColumnReady(db);
+    if (target === 'universal' && !columnReady) return universalUnavailable(c);
+    const owner = await manageKeyOwner(c, db, project);
+    const { data: currentRow, error: currentErr } = await db
+      .from('byok_keys')
+      .select(withOwnerUserColumn('id, provider_slug, project_id, organization_id, created_by', columnReady))
+      .eq('id', keyId)
+      .or(keyOwnerFilter(owner))
+      .maybeSingle();
+    if (currentErr) return dbError(c, currentErr);
+    if (!currentRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    const current = currentRow as unknown as {
+      id: string;
+      provider_slug: string;
+      project_id: string | null;
+      organization_id: string | null;
+      owner_user_id?: string | null;
+      created_by: string | null;
+    };
+    const from = rowScope(current);
+    // Only this app's own key, this organization's key, or the caller's own
+    // universal key can move from here.
+    if (from === 'project' && current.project_id !== project.id) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (from === 'organization' && current.organization_id !== orgId) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (from === 'universal' && current.owner_user_id !== userId) return universalOwnerOnly(c);
+    if (from === target) {
+      return c.json({ ok: true, data: { id: current.id, scope: from, unchanged: true } });
+    }
+    if (target !== 'project' && !isShareableProvider(current.provider_slug)) return notShareable(c);
+    if (target === 'universal' && !(await canAddUniversalKey(c, db, orgId))) return universalNeedsOwner(c);
+    // A universal key belongs to one user. Making someone else's app or
+    // organization key yours would take it over (review 2026-10-21): only the
+    // user who added a key may turn it into a key for all their apps.
+    if (target === 'universal' && current.created_by !== userId) return universalNotYours(c);
 
-      await logAudit(db, project.id, userId, 'settings.updated', 'byok', keyId, {
-        provider: data.provider_slug,
-        scope: body.scope,
-      }).catch(() => {});
-      return c.json({ ok: true, data: { id: data.id, scope: data.organization_id ? 'organization' : 'project' } });
-    },
-  );
+    const clearOwner = columnReady ? { owner_user_id: null } : {};
+    const next =
+      target === 'universal'
+        ? { project_id: null, organization_id: null, owner_user_id: userId }
+        : target === 'organization'
+          ? { project_id: null, organization_id: orgId, ...clearOwner }
+          : { project_id: project.id, organization_id: null, ...clearOwner };
+    // Conditional on the row still having the owner read above, so a
+    // concurrent move cannot be overwritten.
+    const ownerColumn = from === 'project' ? 'project_id' : from === 'organization' ? 'organization_id' : 'owner_user_id';
+    const ownerValue = from === 'project' ? project.id : from === 'organization' ? orgId : userId;
+    const { data, error } = await db
+      .from('byok_keys')
+      .update(next)
+      .eq('id', keyId)
+      .eq(ownerColumn, ownerValue)
+      .select('id, provider_slug, project_id, organization_id')
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    const to = rowScope(data);
+
+    const { error: auditErr } = await db.from('byok_audit_log').insert({
+      project_id: project.id,
+      provider: data.provider_slug,
+      action: 'rescoped',
+      actor_user_id: userId,
+      meta: { key_id: keyId, from, to },
+    });
+    if (auditErr) log.warn('byok rescope audit row not written', { keyId, code: auditErr.code });
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', keyId, {
+      provider: data.provider_slug,
+      scope: to,
+      from,
+    }).catch(() => {});
+    return c.json({ ok: true, data: { id: data.id, scope: to, from } });
+  };
+  app.patch('/v1/admin/byok/keys/:keyId/scope', adminOrApiKey({ scope: 'mcp:write' }), requireFeature('byok'), rescopeKey);
+  app.post('/v1/admin/byok/keys/:keyId/scope', adminOrApiKey({ scope: 'mcp:write' }), requireFeature('byok'), rescopeKey);
 
   app.get('/v1/admin/byok/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
@@ -4053,7 +4383,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const { data } = await db
       .from('byok_keys')
       .select('provider_slug, status, test_status, cooldown_until')
-      .or(keyOwnerFilter(keyOwnerOf(project)));
+      .or(keyOwnerFilter(await appKeyOwner(db, project)));
 
     const rows = data ?? [];
     const byProvider: Record<

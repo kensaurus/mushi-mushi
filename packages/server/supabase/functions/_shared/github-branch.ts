@@ -117,6 +117,36 @@ export async function resolveBranchForConnect(opts: {
   }
 }
 
+/**
+ * The base branch to hand a cloud agent. Cursor rejects a launch whose ref
+ * GitHub does not have ("Failed to verify existence of branch 'main'"), so a
+ * stored branch that 404s is swapped for the repo's GitHub default. Without
+ * a token, or when GitHub cannot be asked, the stored branch goes through.
+ */
+export async function confirmBaseRef(opts: {
+  token: string | null
+  owner: string
+  repo: string
+  branch: string
+  fetchImpl?: FetchLike
+}): Promise<{ branch: string; correctedFrom: string | null }> {
+  const kept = { branch: opts.branch, correctedFrom: null }
+  if (!opts.token) return kept
+  const fetchImpl = opts.fetchImpl ?? fetch
+  try {
+    const res = await fetchImpl(
+      `https://api.github.com/repos/${opts.owner}/${opts.repo}/branches/${encodeURIComponent(opts.branch)}`,
+      ghInit(opts.token),
+    )
+    if (res.status !== 404) return kept
+    const lookup = await lookupGithubDefaultBranch(opts.token, opts.owner, opts.repo, fetchImpl)
+    if (!lookup.ok || lookup.branch === opts.branch) return kept
+    return { branch: lookup.branch, correctedFrom: opts.branch }
+  } catch {
+    return kept
+  }
+}
+
 /** A recursive tree of a few thousand files can take seconds; repo metadata cannot. */
 const TREE_TIMEOUT_MS = 30_000
 

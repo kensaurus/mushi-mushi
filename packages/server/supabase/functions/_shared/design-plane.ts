@@ -397,7 +397,7 @@ async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, rep
     const stored = await storeScanFindings(db, projectId, runId, result.findings)
     // Opt-in actions (off by default): may dispatch a fix for new findings. Never throws.
     // Only the stored slice: the next scan compares against these stored rows.
-    const acted = await actOnDesignDeviance(db, { projectId, runId, score: result.score, findings: storedFindingsOf(result.findings), branch: null })
+    const acted = await actOnDesignDeviance(db, { projectId, runId, score: result.score, findings: storedFindingsOf(result.findings), branch: null, manifest: snapshot.manifest })
     if (acted.action !== 'off') dlog.info('design deviance action', { projectId, runId, ...acted })
     const completedAt = new Date().toISOString()
     const summary = {

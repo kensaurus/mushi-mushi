@@ -7,6 +7,61 @@ Users turn it on from **Inventory → Discovery → Watch your live site**; the
 user-facing description is in
 [`apps/docs/content/admin/inventory.mdx`](../../apps/docs/content/admin/inventory.mdx).
 
+## A broken page files only when it is seen failing twice
+
+[ADR 0029](../adr/0029-site-watch-files-a-page-only-after-a-second-failure.md)
+amends 0024's filing rule. A page a check finds broken is a *suspect*:
+`site_watch_pages.confirmed_at` and `report_id` are both null. A row that
+the pre-0029 poll filed has `report_id` set and counts as filed.
+`site-watch-poll` files a suspect when:
+
+- a **confirm scrape** (`POST /v2/scrape`, `waitFor` 10 s, `maxAge: 0`, the
+  project's own Firecrawl key, same User-Agent) still sees it broken. The
+  ADR's table gives the exact rule per kind of suspect. In short:
+  - an error status again;
+  - an unreachable site (DNS/connection/TLS), for 5xx/4xx and load failures;
+  - a 408, for load failures;
+  - a settled page that is still blank, only a skip link, a loading screen
+    or an error screen;
+- for a 5xx/4xx or a load failure only, **two checks in a row** saw it, when
+  no confirm scrape was conclusive;
+- at low severity, as **unconfirmed**: a confident judged break after 2
+  checks in which all 3 of that check's confirm attempts came back
+  inconclusive (`inconclusive_checks`; one 429 does not count a check). A
+  fail-open judgment (`judge_fail_open`) never files this way;
+- at low severity, as **intermittent**: a 5xx that confirms found healthy
+  3 times in 7 days (`flap_dismissals`).
+
+A confirm scrape that finds the page healthy drops the suspect. A judged
+break shown unchanged (`same`) stays open. Reports no longer carry a
+viewport.
+
+**Apps on the platform key.** An app with no Firecrawl key of its own runs
+its watch on the platform `FIRECRAWL_API_KEY` and never gets a confirm
+scrape. Its suspects file this way:
+- a confident judged break files as unconfirmed (low severity) after 2 checks
+  that still show it;
+- 5xx/4xx and load failures file on the second check in a row, so a down site
+  takes until the next daily check;
+- fail-open judgments never file.
+
+Add a Firecrawl key in Settings → AI keys to get confirms and same-hour
+outage reports.
+
+Cost:
+- at most 6 confirm scrapes per poll run, shared across watches (oldest
+  pending suspect first, one per watch before any gets a second; watches with
+  only fail-open judgments pending come last);
+- at most 3 per watch, run in parallel, and 3 per page per check;
+- none within 10 minutes of that page's last confirm;
+- none on the platform `FIRECRAWL_API_KEY` fallback;
+- none that could not finish within 120 s of the run's start.
+
+Each confirm is 1 credit when Firecrawl returns the page, and 0 when it fails
+on its side. If our 55 s abort fires first, Firecrawl may still charge.
+`site_watch_pages.last_confirm` keeps the last verdict. The poll's response
+lists `confirmScrapes` and `dismissed` per watch.
+
 ## Filter the crawler out of your monitoring and analytics
 
 Every page fetch the watch makes sends this `User-Agent` header (a normal

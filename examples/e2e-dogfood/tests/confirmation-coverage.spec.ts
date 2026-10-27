@@ -1,69 +1,67 @@
 /**
  * FILE: examples/e2e-dogfood/tests/confirmation-coverage.spec.ts
- * PURPOSE: Phase 9 of the May 20 QA PDCA cycle.
+ * PURPOSE: Assert each destructive admin surface asks before it mutates.
  *
- * Verifies that each of the 11 destructive/irreversible surfaces identified in
- * Phase 3g has *either* a confirm modal (ConfirmDialog / DangerConfirm) *or*
- * an 8-second undo toast — never a bare fire-and-forget mutation.
+ * OVERVIEW:
+ * Opens the page, requires the control, clicks it, asserts the confirm
+ * dialog, then cancels. A missing control fails the test. The spec never
+ * confirms, so nothing is deleted.
  *
- * The spec does NOT execute the actual mutations (no real data is deleted).
- * Instead it:
- *  1. Navigates to the page that hosts the surface.
- *  2. Triggers the destructive action.
- *  3. Asserts that a confirm dialog or undo-toast is visible in the DOM.
- *  4. Cancels / dismisses before any real side-effect fires.
+ * DEPENDENCIES:
+ * - @playwright/test
+ * - Admin at MUSHI_ADMIN_URL (default http://localhost:6464)
+ * - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, TEST_USER_EMAIL, TEST_USER_PASSWORD
  *
- * Surfaces covered (§3g numbering):
- *  #1  Row-kebab Dismiss (ReportsPage)      → undo toast
- *  #3  Comment delete (ReportDetailPage)    → ConfirmDialog
- *  #6  Retry-all-failed (FixesPage)         → ConfirmDialog
- *  #7  Prompt activate 100% (PromptLabPage) → ConfirmDialog   ← Round 4 fix
- *  #8  Integrations routing disconnect      → ConfirmDialog
- *  #9  Org role change (OrgSettingsPage)    → ConfirmDialog
- *  #10 BYOK delete (SettingsPage)           → ConfirmDialog
+ * USAGE:
+ * pnpm --filter @mushi-mushi/e2e-dogfood exec playwright test confirmation-coverage
  *
- * Surfaces NOT tested here (intentional — see comments):
- *  #2  Bulk Dismiss — already tested in reports-bulk-undo.spec.ts
- *  #4  Triage PATCH undo — covered by user-story-triage.spec.ts
- *  #5  Project key rotation — tested in dead-buttons sweep (Projects page)
- *  #11 QA story delete — new ConfirmDialog added Round 4; basic smoke in
- *      this file via qa-story-crud block
+ * NOTES:
+ * The describe-level skip is a credential guard. A missing control must fail
+ * the test (BL-064). Skipping it lets the spec pass without asserting.
+ * The signed-in project must already have a report, your own comment, an
+ * unfixed fix, an inactive prompt, a connected routing, a BYOK key, and a QA story.
  */
 
-import { test, expect } from '@playwright/test'
+import { test, expect, type Locator, type Page, type APIRequestContext } from '@playwright/test'
 
 const ADMIN_URL = process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464'
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? ''
-// supabase-js stores the session under sb-<first host label>-auth-token
-// (the admin client sets no storageKey), so derive it from the URL.
+// supabase-js stores the session under sb-<first host label>-auth-token.
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_URL ? new URL(SUPABASE_URL).hostname.split('.')[0] : 'unset'}-auth-token`
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? ''
 const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? ''
 const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? ''
 
-/**
- * Set up a real auth session via the Supabase password grant.
- * Re-used across all tests via beforeEach.
- */
-async function setupSession(page: import('@playwright/test').Page, request: import('@playwright/test').APIRequestContext) {
+async function setupSession(page: Page, request: APIRequestContext) {
   const res = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
     data: { email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD },
   })
   expect(res.ok()).toBeTruthy()
-  const { access_token, refresh_token } = await res.json() as {
-    access_token: string
-    refresh_token: string
-  }
+  const body = await res.json() as { access_token: string; refresh_token: string }
   await page.addInitScript((tokens) => {
     window.localStorage.setItem(
       tokens.storageKey,
       JSON.stringify({ access_token: tokens.access_token, refresh_token: tokens.refresh_token }),
     )
-  }, { access_token, refresh_token, storageKey: AUTH_STORAGE_KEY })
+  }, { access_token: body.access_token, refresh_token: body.refresh_token, storageKey: AUTH_STORAGE_KEY })
 }
 
-test.describe('Confirmation coverage — all destructive surfaces have confirm or undo', () => {
+/** A skip here would pass the spec without checking the confirm gate. */
+async function requireControl(locator: Locator, what: string): Promise<void> {
+  await expect(locator, `${what} must be visible so the confirm gate is asserted`).toBeVisible()
+}
+
+async function expectConfirmThenCancel(page: Page, name: RegExp): Promise<void> {
+  // Match the dialog's accessible name (its title). A text filter also
+  // matches an ancestor dialog, such as the QA story drawer.
+  const modal = page.getByRole('dialog', { name })
+  await expect(modal).toBeVisible()
+  await modal.getByRole('button', { name: /cancel|keep/i }).click()
+  await expect(modal).toBeHidden()
+}
+
+test.describe('Confirmation coverage — destructive surfaces ask first', () => {
   test.skip(
     !SUPABASE_URL || !SUPABASE_ANON_KEY || !TEST_USER_EMAIL || !TEST_USER_PASSWORD,
     'Requires VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY + TEST_USER_EMAIL + TEST_USER_PASSWORD',
@@ -73,159 +71,68 @@ test.describe('Confirmation coverage — all destructive surfaces have confirm o
     await setupSession(page, request)
   })
 
-  // ── #1: Row-kebab Dismiss → undo toast ────────────────────────────────────
-  test('#1 ReportsPage row-kebab Dismiss shows undo toast', async ({ page }) => {
+  test('#1 ReportsPage row Dismiss asks before closing the report', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/reports`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    // Click the kebab menu on the first report row
-    const kebab = page.locator('[aria-label="Dismiss"]').first()
-    if (await kebab.count() === 0) {
-      test.skip() // no reports loaded — can't test
-      return
-    }
-    await kebab.click()
-
-    // Expect an undo toast to appear within 2 s
-    await expect(page.locator('[role="status"], [data-toast]').filter({ hasText: /undo|dismiss/i }))
-      .toBeVisible({ timeout: 2000 })
-      .catch(() => {
-        // Also accept a generic toast with an "Undo" button
-        return expect(page.getByRole('button', { name: /undo/i })).toBeVisible({ timeout: 1000 })
-      })
+    const row = page.locator('tbody tr').first()
+    await requireControl(row, 'A report row')
+    await row.hover()
+    const dismiss = row.getByRole('button', { name: 'Dismiss' })
+    await requireControl(dismiss, 'Reports row Dismiss')
+    await dismiss.click()
+    await expectConfirmThenCancel(page, /dismiss this report/i)
   })
 
-  // ── #3: Comment delete → ConfirmDialog ────────────────────────────────────
-  test('#3 ReportDetail comment delete shows ConfirmDialog', async ({ page }) => {
-    // Navigate to reports list and open the first report
+  test('#3 ReportDetail comment delete asks first', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/reports`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    const firstRow = page.locator('[data-report-row]').first()
-    if (await firstRow.count() === 0) {
-      // No reports — find any report link in the DOM
-      const link = page.locator('a[href*="/reports/"]').first()
-      if (await link.count() === 0) { test.skip(); return }
-      await link.click()
-    } else {
-      await firstRow.click()
-    }
-    await page.waitForTimeout(2000)
-
-    // Look for a comment delete button (× or trash icon)
-    const deleteBtn = page.locator('button[aria-label*="delete" i], button[title*="delete" i]').first()
-    if (await deleteBtn.count() === 0) {
-      // No comments present — add one first or skip
-      test.skip()
-      return
-    }
+    const opener = page.locator('a[href*="/reports/"]').first()
+    await requireControl(opener, 'A report to open')
+    await opener.click()
+    const deleteBtn = page.getByRole('button', { name: 'Delete comment' }).first()
+    await requireControl(deleteBtn, 'Comment delete')
     await deleteBtn.click()
-
-    // Expect a ConfirmDialog modal to appear
-    await expect(page.getByRole('dialog').filter({ hasText: /delete|remove|permanent/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    // Cancel — never execute the delete
-    await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+    await expectConfirmThenCancel(page, /delete this comment/i)
   })
 
-  // ── #6: Retry-all-failed → ConfirmDialog ──────────────────────────────────
-  test('#6 FixesPage "Retry all failed" shows ConfirmDialog', async ({ page }) => {
+  test('#6 FixesPage retry of unfixed reports asks first', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/fixes`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    const retryBtn = page.getByRole('button', { name: /retry.*fail/i }).first()
-    if (await retryBtn.count() === 0) {
-      // No failed fixes — check the action bar kebab menu
-      const kebab = page.locator('[aria-label*="more action" i], [data-action-bar-more]').first()
-      if (await kebab.count() === 0) { test.skip(); return }
-      await kebab.click()
-      const menuItem = page.getByRole('menuitem', { name: /retry.*fail/i })
-      if (await menuItem.count() === 0) { test.skip(); return }
-      await menuItem.click()
-    } else {
-      await retryBtn.click()
-    }
-
-    await expect(page.getByRole('dialog').filter({ hasText: /retry|token|LLM/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+    const retry = page.getByRole('button', { name: /retry \d+ unfixed/i }).first()
+    await requireControl(retry, 'Retry unfixed')
+    await retry.click()
+    await expectConfirmThenCancel(page, /retry .+ unfixed/i)
   })
 
-  // ── #7: Prompt activate 100% → ConfirmDialog (Round 4 fix) ────────────────
-  test('#7 PromptLabPage "Activate" shows ConfirmDialog', async ({ page }) => {
+  test('#7 PromptLabPage Activate asks before 100% traffic', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/prompt-lab`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    const activateBtn = page.getByRole('button', { name: /activate/i }).first()
-    if (await activateBtn.count() === 0) { test.skip(); return }
-
-    await activateBtn.click()
-
-    await expect(page.getByRole('dialog').filter({ hasText: /100%|traffic|activat/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+    const activate = page.getByRole('button', { name: 'Activate' }).first()
+    await requireControl(activate, 'Activate prompt')
+    await activate.click()
+    await expectConfirmThenCancel(page, /at 100%/i)
   })
 
-  // ── #8: Integrations routing disconnect → ConfirmDialog ───────────────────
-  test('#8 IntegrationsPage routing disconnect shows ConfirmDialog', async ({ page }) => {
+  test('#8 Integrations routing disconnect asks first', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/integrations/config`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    const disconnectBtn = page.getByRole('button', { name: /disconnect/i }).first()
-    if (await disconnectBtn.count() === 0) { test.skip(); return }
-
-    await disconnectBtn.click()
-
-    await expect(page.getByRole('dialog').filter({ hasText: /disconnect|credential|wipe/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    await page.getByRole('button', { name: /cancel|keep/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+    const disconnect = page.getByRole('button', { name: 'Disconnect integration' }).first()
+    await requireControl(disconnect, 'Routing disconnect')
+    await disconnect.click()
+    await expectConfirmThenCancel(page, /^disconnect /i)
   })
 
-  // ── #10: BYOK delete → ConfirmDialog ──────────────────────────────────────
-  test('#10 SettingsPage BYOK key delete shows ConfirmDialog', async ({ page }) => {
-    await page.goto(`${ADMIN_URL}/settings`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    const deleteBtn = page.getByRole('button', { name: /delete.*key|remove.*key/i }).first()
-    if (await deleteBtn.count() === 0) { test.skip(); return }
-
-    await deleteBtn.click()
-
-    await expect(page.getByRole('dialog').filter({ hasText: /delete|remove|key/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+  test('#10 SettingsPage BYOK remove asks first', async ({ page }) => {
+    await page.goto(`${ADMIN_URL}/settings?tab=byok`, { waitUntil: 'domcontentloaded' })
+    const remove = page.getByRole('button', { name: /remove( old)? key|^remove /i }).first()
+    await requireControl(remove, 'BYOK remove')
+    await remove.click()
+    await expectConfirmThenCancel(page, /^remove this /i)
   })
 
-  // ── #11: QA story delete → ConfirmDialog (Round 4 fix) ────────────────────
-  test('#11 QaCoveragePage story delete shows ConfirmDialog', async ({ page }) => {
+  test('#11 QaCoveragePage story delete asks first', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/qa-coverage`, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(3000)
-
-    // Click the first story card to open the drawer
-    const storyCard = page.locator('.group').filter({ hasText: /.+/ }).first()
-    if (await storyCard.count() === 0) { test.skip(); return }
-    await storyCard.click()
-    await page.waitForTimeout(1000)
-
-    // The drawer's Delete button
-    const deleteBtn = page.getByRole('button', { name: 'Delete' })
-    if (await deleteBtn.count() === 0) { test.skip(); return }
+    const card = page.locator('[id^="qa-story-"]').first()
+    await requireControl(card, 'QA story card')
+    await card.click()
+    const deleteBtn = page.getByRole('button', { name: 'Delete story' })
+    await requireControl(deleteBtn, 'Delete story')
     await deleteBtn.click()
-
-    await expect(page.getByRole('dialog').filter({ hasText: /delete|permanent|story/i }))
-      .toBeVisible({ timeout: 2000 })
-
-    await page.getByRole('button', { name: /cancel/i }).click()
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 1000 })
+    await expectConfirmThenCancel(page, /^delete /i)
   })
 })

@@ -1,7 +1,8 @@
 {
   "extends": "../../tooling/tsconfig/node.json",
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "node16",
+    "moduleResolution": "node16",
     "outDir": "dist",
     "rootDir": "src",
     "noUncheckedIndexedAccess": true,
@@ -9,7 +10,6 @@
       "node",
       "vscode"
     ],
-    "moduleResolution": "node10",
     "verbatimModuleSyntax": false
   },
   "include": [

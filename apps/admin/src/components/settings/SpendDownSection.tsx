@@ -6,15 +6,33 @@
  *          that key's Cursor account), fixes per day and how many days ahead
  *          to start. The spend-down worker does the
  *          dispatching, inside each app's auto-fix caps; fixes open draft PRs.
+ *          Each key also shows what its last 7 days produced (runs → PRs →
+ *          mergeable → merged, Opus review cost) and the apps the stop-loss
+ *          paused, with why. A paused app still gets one probe fix a day;
+ *          Resume clears its stop-loss evidence (owner or admin). One line
+ *          above the keys shows what review follow-ups (ADR 0032) made of
+ *          fix-first PRs in the same period. When a key has credits but no
+ *          app has a report left to send, it says so and links to where new
+ *          work comes from (reports, a watched live site, QA stories).
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
 import { Btn, Checkbox, Input, ResultChip } from '../ui';
 import { CursorModelPicker } from './CursorModelPicker';
-import { spendDownLine, spendDownStops, type SpendDownKeyStatus, type SpendDownResponse } from './spendDown';
+import {
+  spendDownLine,
+  spendDownOutOfWork,
+  spendDownPauses,
+  spendDownScoreLine,
+  spendDownStops,
+  type SpendDownKeyStatus,
+  type SpendDownResponse,
+} from './spendDown';
+import { followupScoreLine } from './reviewFollowups';
 
 interface Draft {
   enabled: boolean;
@@ -40,14 +58,27 @@ const TONE: Record<'muted' | 'ok' | 'warn', string> = {
   warn: 'text-warn',
 };
 
-export function SpendDownSection({ canManageShared }: { canManageShared: boolean }) {
-  const status = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down');
+interface Props {
+  canManageShared: boolean;
+  /**
+   * The Cursor keys this panel belongs to, as one string. Spend-down is read
+   * from its own endpoint, so without this a key removed (or added) in the key
+   * list above would stay listed here until the page reloaded.
+   */
+  keysToken: string;
+}
+
+export function SpendDownSection({ canManageShared, keysToken }: Props) {
+  const status = usePageData<SpendDownResponse>('/v1/admin/byok/spend-down', { deps: [keysToken] });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ id: string; ok: boolean; message: string } | null>(null);
+  const [resuming, setResuming] = useState<string | null>(null);
 
   const keys = status.data?.keys ?? [];
+  // What the review follow-ups (ADR 0032) turned fix-first PRs into.
+  const followups = followupScoreLine(status.data?.reviewFollowups);
   if (status.loading || keys.length === 0) return null;
 
   async function save(k: SpendDownKeyStatus) {
@@ -77,19 +108,42 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
     }
   }
 
+  async function resume(keyId: string, projectId: string) {
+    setResuming(projectId);
+    const res = await apiFetch(`/v1/admin/byok/spend-down/projects/${projectId}/resume`, { method: 'POST' });
+    setResuming(null);
+    if (res.ok) {
+      setNotice({ id: keyId, ok: true, message: 'Resumed. The app starts again with fresh evidence.' });
+      status.reload();
+    } else {
+      setNotice({
+        id: keyId,
+        ok: false,
+        message: describeByokError(res.error, 'Spend-down was not resumed. Retry in a moment.').message,
+      });
+    }
+  }
+
   return (
     <section aria-label="Spend down expiring credits" className="space-y-2 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Spend down expiring credits</h4>
       <p className="text-xs text-fg-muted">
         Before a key&apos;s credits expire, Mushi sends open bugs to Cursor on its own, best first, so the credits
         fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
-        every fix opens a draft pull request for you to review.
+        every fix opens a draft pull request for you to review.{' '}
+        <Link className="text-brand underline-offset-2 hover:underline" to="/credits">
+          Every way to spend expiring credits
+        </Link>
       </p>
+      {followups && <p className="text-xs tabular-nums text-fg-secondary">{followups}</p>}
       <ul className="divide-y divide-edge-subtle">
         {keys.map((k) => {
           const line = spendDownLine(k);
           const stops = spendDownStops(k);
-          const readOnly = k.scope === 'organization' && !canManageShared;
+          const score = spendDownScoreLine(k);
+          const pauses = spendDownPauses(k);
+          const readOnly =
+            (k.scope === 'organization' && !canManageShared) || (k.scope === 'universal' && !k.ownedByMe);
           const open = editing === k.id && draft;
           return (
             <li key={k.id} className="space-y-1.5 py-2">
@@ -98,13 +152,57 @@ export function SpendDownSection({ canManageShared }: { canManageShared: boolean
                 {k.label && <span className="text-fg-muted">{k.label}</span>}
               </p>
               <p className={`text-xs ${TONE[line.tone]}`}>{line.text}</p>
+              {score && <p className="text-xs tabular-nums text-fg-secondary">{score}</p>}
+              {k.projectsNote && <p className="text-xs text-fg-muted">{k.projectsNote}</p>}
+              {k.scoreboardNote && <p className="text-xs text-fg-muted">{k.scoreboardNote}</p>}
+              {k.stopLossNote && <p className="text-xs text-fg-muted">{k.stopLossNote}</p>}
+              {pauses.map((p) => (
+                <p key={p.projectId} className="flex flex-wrap items-center gap-x-2 text-xs text-warn">
+                  <span>{p.text}</span>
+                  <span className="text-fg-muted">· probing 1/day{p.canResume ? ' ·' : ''}</span>
+                  {p.canResume && (
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      type="button"
+                      loading={resuming === p.projectId}
+                      onClick={() => void resume(k.id, p.projectId)}
+                    >
+                      Resume
+                    </Btn>
+                  )}
+                </p>
+              ))}
               {stops.map((s) => (
                 <p key={s} className="text-xs text-fg-muted">
                   {s}
                 </p>
               ))}
+              {spendDownOutOfWork(k) && (
+                <div className="space-y-1 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2.5 py-2 text-xs">
+                  <p className="text-fg-secondary">
+                    Nothing left to send: every open report was tried in the last 7 days or the agent said it needs a
+                    person. These credits wait until new bugs come in.
+                  </p>
+                  <p className="flex flex-wrap gap-x-3 gap-y-1">
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/reports">
+                      See open reports
+                    </Link>
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/inventory?tab=discovery">
+                      Watch a live site for broken pages
+                    </Link>
+                    <Link className="text-brand underline-offset-2 hover:underline" to="/qa-coverage">
+                      Add QA stories
+                    </Link>
+                  </p>
+                </div>
+              )}
               {readOnly && !open && (
-                <p className="text-xs text-fg-muted">Shared by your organization. An owner or admin can change it.</p>
+                <p className="text-xs text-fg-muted">
+                  {k.scope === 'universal'
+                    ? "Another owner's key for all of their apps. Only they can change it."
+                    : 'Shared by your organization. An owner or admin can change it.'}
+                </p>
               )}
               {!readOnly && !open && (
                 <Btn

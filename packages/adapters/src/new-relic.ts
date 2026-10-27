@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * New Relic Alerts webhook → Mushi adapter.
  *
@@ -22,12 +22,21 @@ export interface NewRelicPayload {
   incidentId?: string | number
   conditionName?: string
   conditionType?: string
+  /** `critical` / `warning`, or a workflow's `CRITICAL` / `HIGH` / `MEDIUM` / `LOW`. */
   priority?: 'critical' | 'warning' | string
   state?: 'open' | 'closed' | string
   details?: string
   link?: string
   accountName?: string
   targets?: Array<{ name?: string; type?: string; product?: string }>
+  // Fields of a New Relic workflow's default webhook payload.
+  id?: string
+  title?: string
+  issueUrl?: string
+  impactedEntities?: string[]
+  alertConditionNames?: string[]
+  alertPolicyNames?: string[]
+  workflowName?: string
 }
 
 /**
@@ -35,17 +44,19 @@ export interface NewRelicPayload {
  * Pure function — no side effects, safe to call in tests.
  */
 export function translateNewRelic(raw: NewRelicPayload): MushiCaptureEventInput {
+  const condition = raw.conditionName ?? raw.alertConditionNames?.[0]
   return {
-    description: raw.details ?? raw.conditionName ?? `New Relic incident ${raw.incidentId ?? ''}`.trim(),
+    description: raw.details ?? raw.title ?? condition ?? `New Relic incident ${raw.incidentId ?? raw.id ?? ''}`.trim(),
     category: raw.conditionType?.toLowerCase().includes('apm') ? 'slow' : 'bug',
-    severity: raw.priority === 'critical' ? 'critical' : raw.priority === 'warning' ? 'medium' : undefined,
+    severity: mapPriority(raw.priority),
     source: 'new-relic',
-    component: raw.targets?.[0]?.name,
+    component: raw.targets?.[0]?.name ?? raw.impactedEntities?.[0],
     metadata: {
-      incidentId: raw.incidentId,
-      condition: raw.conditionName,
+      incidentId: raw.incidentId ?? raw.id,
+      condition,
+      policy: raw.alertPolicyNames?.[0],
       state: raw.state,
-      link: raw.link,
+      link: raw.link ?? raw.issueUrl,
       accountName: raw.accountName,
     },
   }
@@ -80,6 +91,17 @@ export function createNewRelicWebhookHandler(opts: NewRelicHandlerOptions) {
     try { payload = JSON.parse(req.rawBody) as NewRelicPayload } catch { return { status: 400, body: { ok: false, error: 'INVALID_JSON' } } }
     const id = await opts.sink(translateNewRelic(payload))
     return { status: 200, body: { ok: true, reportId: id } }
+  }
+}
+
+function mapPriority(p: string | undefined): MushiCaptureEventInput['severity'] {
+  switch ((p ?? '').toLowerCase()) {
+    case 'critical': return 'critical'
+    case 'high': return 'high'
+    case 'warning':
+    case 'medium': return 'medium'
+    case 'low': return 'low'
+    default: return undefined
   }
 }
 

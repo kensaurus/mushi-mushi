@@ -38,6 +38,18 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 | Self-hosting one-click | 🔄 In-flight | Railway / Render deploy button, `MUSHI_INIT_*` headless bootstrap |
 | Launch Week | ⏭ Next | Public Show HN + Product Hunt + Reddit coordinated launch |
 
+## Agent fixes you can trust (October 2026)
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| [Agent PR review](/concepts/agent-pr-review) | ✅ Shipped | Claude Opus reviews every cloud-agent pull request on your own key; a **hold** blocks merging from Mushi |
+| Review follow-ups | ✅ Shipped | A "fix first" pull request goes back to a new agent once, with the findings |
+| Spend-down safety stop | ✅ Shipped | Spend-down pauses an app whose agent pull requests review poorly; 7-day scoreboard per key |
+| All-apps AI keys | ✅ Shipped | One key you own serves every app in the organizations you own ([BYOK](/security/byok)) |
+| [CI runners](/operating/ci-runners) | ✅ Shipped | `/ci` shows where tests run and why a fix waits; a stopped test machine is never called a failed fix; `mushi runner add` |
+| Verified merge | 🔄 In progress | An agent pull request merges on its own only with proof: a test that fails without the fix and passes with it, no weakened tests, a small diff, and two AI reviews that can stop it. Off by default |
+| Run Mushi on your own machines | ⏭ Planned | A local-only mode with a self-test that proves nothing leaves your network (`mushi local verify`) |
+
 ## Wave D highlights (shipped)
 
 - **One-click SDK install & upgrade** — `npx mushi-mushi` + `npm create mushi-mushi` wizard, SDK upgrade PRs from the Connect hub

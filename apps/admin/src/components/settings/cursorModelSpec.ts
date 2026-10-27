@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/settings/cursorModelSpec.ts
  * PURPOSE: Turn a Cursor model list plus the operator's choices into the
  *          spec string parseCursorModelSpec accepts
- *          (`id` or `id?param=value&…`). Shared by spend-down and Integrations.
+ *          (`id` or `id?param=value&…`). Shared by CursorModelPicker
+ *          (spend-down, Integrations, and review follow-ups).
  */
 
 export interface CursorModelParamValue {

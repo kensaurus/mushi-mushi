@@ -24,6 +24,11 @@
  *          PDCA receipt's "Check" stage is honest (red stays red even if a
  *          later retry passed).
  *
+ *          A head that is red, or still queued / running 10 min after the
+ *          PR opened, also gets its jobs read (Plan 022): they go to ci_jobs
+ *          and the verdict to `fix_attempts.ci_infra`, so a runner that died
+ *          reads "the test machine stopped", not "CI failed". Green clears it.
+ *
  * SEC-1: Internal-only — `requireServiceRoleAuth` blocks public callers.
  *        The api function (/refresh-ci) proxies JWT-authorised user calls
  *        through this function using the internal caller secret.
@@ -45,6 +50,8 @@ import {
 } from '../_shared/github.ts'
 import { finalizeFixClosedUnmerged, finalizeFixMerge, reconcileStuckFixingReports } from '../_shared/fix-merge.ts'
 import { prLifecycleFrom, type PrLifecycle } from '../_shared/fix-loop-status.ts'
+import { ciGithub, refreshFixCiInfra } from '../_shared/ci-jobs.ts'
+import type { FixCiInfra } from '../_shared/ci-infra.ts'
 
 const log = rootLog.child('ci-sync')
 const app = new Hono()
@@ -70,10 +77,12 @@ interface FixAttemptRow {
   pr_state: PrLifecycle | null
   merged_at: string | null
   repo_id: string | null
+  created_at: string | null
+  completed_at: string | null
 }
 
 const ATTEMPT_COLUMNS =
-  'id, project_id, report_id, agent, branch, commit_sha, pr_number, pr_url, pr_state, merged_at, repo_id'
+  'id, project_id, report_id, agent, branch, commit_sha, pr_number, pr_url, pr_state, merged_at, repo_id, created_at, completed_at'
 
 /**
  * The webhook is the fast path for PR lifecycle, but it drops (App not
@@ -117,6 +126,47 @@ async function syncPrLifecycle(
   return { state, headSha: pr.headSha ?? null }
 }
 
+/** A head still queued / running this long gets its jobs read (is a runner missing?). */
+const PENDING_INFRA_CHECK_MS = 10 * 60_000
+/** GitHub calls one head may spend: 1 run list + ≤5 job lists + ≤3 annotations. */
+const CI_INFRA_CALLS_PER_HEAD = 9
+const GREEN = new Set(['success', 'neutral', 'skipped'])
+const RED = new Set(['failure', 'cancelled', 'timed_out', 'stale'])
+
+/**
+ * Is the fix broken, or is the test machine? (Plan 022, ADR 0033.) For a
+ * head that is not green, read its jobs and the check-run annotations,
+ * store them in ci_jobs and return the verdict for `fix_attempts.ci_infra`.
+ * A green head returns null (clears the column). undefined = leave the
+ * stored verdict alone: still running and young, or GitHub could not be
+ * read (no Actions: read on the token).
+ */
+async function readCiInfra(
+  db: ReturnType<typeof getServiceClient>,
+  token: string,
+  repo: string,
+  attempt: FixAttemptRow,
+  headSha: string,
+  snapshot: CheckRunSnapshot,
+): Promise<FixCiInfra | null | undefined> {
+  const conclusion = (snapshot.conclusion ?? '').toLowerCase()
+  if (GREEN.has(conclusion)) return null
+  const pending = !conclusion && (snapshot.status === 'in_progress' || snapshot.status === 'queued')
+  if (!RED.has(conclusion) && !pending) return undefined
+  if (pending) {
+    const since = Date.parse(attempt.completed_at ?? attempt.created_at ?? '')
+    if (!Number.isFinite(since) || Date.now() - since < PENDING_INFRA_CHECK_MS) return undefined
+  }
+  try {
+    const gh = ciGithub(token, CI_INFRA_CALLS_PER_HEAD)
+    const out = await refreshFixCiInfra(db, gh, { projectId: attempt.project_id, repo, headSha, now: new Date() })
+    return out.read ? out.verdict : undefined
+  } catch (err) {
+    log.warn('CI job read failed', { attemptId: attempt.id, error: err instanceof Error ? err.message : String(err) })
+    return undefined
+  }
+}
+
 async function syncOne(
   db: ReturnType<typeof getServiceClient>,
   attempt: FixAttemptRow,
@@ -152,10 +202,12 @@ async function syncOne(
     if (!sha) return { ok: prState != null, reason: 'no_commit_sha', prState }
     const snapshot = await fetchLatestCheckRun(token, ref, sha)
     if (!snapshot) return { ok: prState != null, reason: 'check_runs_404', prState }
+    const ciInfra = await readCiInfra(db, token, `${ref.owner}/${ref.repo}`, attempt, sha, snapshot)
     await db.from('fix_attempts').update({
       check_run_status: snapshot.status,
       check_run_conclusion: snapshot.conclusion,
       check_run_updated_at: new Date().toISOString(),
+      ...(ciInfra !== undefined ? { ci_infra: ciInfra } : {}),
     }).eq('id', attempt.id)
     return { ok: true, snapshot, prState }
   } catch (err) {

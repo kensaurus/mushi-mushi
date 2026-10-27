@@ -42,6 +42,7 @@ import {
 import { logAudit } from '../../_shared/audit.ts'
 import { dbError } from '../shared.ts'
 import { GATE_IDS } from '../../_shared/gate-ids.ts'
+import { gateEvidenceFromBody } from '../../_shared/gate-evidence.ts'
 import { loadLatestGateRuns } from './recipe-compose.ts'
 import {
   assertProjectScope,
@@ -206,7 +207,6 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       summaryRpc,
       discoveryRes,
       proposalsRes,
-      openFindingsRead,
       gateRunRes,
       projectRes,
     ] = await Promise.all([
@@ -226,7 +226,6 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id)
         .eq('status', 'draft'),
-      countLatestOpenFindings(db, activeProject.id),
       db
         .from('gate_runs')
         .select('started_at')
@@ -240,6 +239,11 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         .eq('id', activeProject.id)
         .maybeSingle(),
     ])
+    // After the banner reads release their connections. Counting open findings
+    // looks up every gate, and holding those lookups together with the queries
+    // above exhausted the pool (gate_runs (store_review): timed out acquiring
+    // a connection).
+    const openFindingsRead = await countLatestOpenFindings(db, activeProject.id)
 
     const summaryRaw = summaryRpc.data
     const summary =
@@ -1431,11 +1435,27 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const verdict = applyRateLimit(gatesRunRateLimiter, projectId, 'gates.run')
       if (!verdict.allowed) return rateLimitResponse(c, verdict, 'gates.run')
 
-      let body: { commit_sha?: string; pr_number?: number; gates?: string[]; story_node_id?: string | null }
+      let body: {
+        commit_sha?: string
+        pr_number?: number
+        gates?: string[]
+        story_node_id?: string | null
+        findings?: unknown
+        discovered_apis?: unknown
+        spec_diff_findings?: unknown
+      }
       try {
         body = await c.req.json()
       } catch {
         body = {}
+      }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) body = {}
+      // CI-supplied evidence (mcp-ci): lint findings for dead_handler /
+      // mock_leak, the discover-api route list, the oasdiff output. These used
+      // to be dropped here, so those gates always saw nothing and passed.
+      const evidence = gateEvidenceFromBody(body)
+      if (!evidence.ok) {
+        return c.json({ ok: false, error: { code: 'INVALID_BODY', message: evidence.message } }, 400)
       }
 
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -1466,10 +1486,17 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           gates: body.gates ?? ['status_claim', 'api_contract'],
           triggered_by: scope.userId,
           ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
+          ...evidence.fields,
         }),
       })
-      const json = await resp.json().catch(() => ({}))
-      return c.json({ ok: resp.ok, data: json })
+      // inventory-gates answers { ok, data: { runs, overall } }; pass its
+      // payload through instead of nesting it a second time, which left
+      // callers reading `data.runs` with nothing.
+      const json = (await resp.json().catch(() => ({}))) as { ok?: boolean; data?: unknown; error?: unknown }
+      if (!resp.ok || json.ok === false) {
+        return c.json({ ok: false, error: json.error ?? { code: 'GATES_FAILED', message: `inventory-gates answered ${resp.status}` } }, 502)
+      }
+      return c.json({ ok: true, data: json.data ?? json })
     },
   )
 

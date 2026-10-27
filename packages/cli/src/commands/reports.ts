@@ -1,6 +1,53 @@
 import type { Command } from 'commander';
 import { apiCall, die, requireConfig, fmtDate, pad, outputIsJson, printResult } from '../cli-shared.js';
 import type { ReportListData, ReportDetail } from '../cli-types.js';
+import { resolveProjectId } from '../command-helpers.js';
+import { MushiCliError } from '../errors.js';
+
+/** The severities `reports file` accepts (the server checks the same set). */
+const FILE_REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+
+interface FileReportFlags {
+  title?: string;
+  description?: string;
+  severity?: string;
+  component?: string;
+}
+
+/** The POST /v1/admin/projects/:id/reports body, validated with the server's bounds before any call. */
+function buildFileReportBody(flags: FileReportFlags): Record<string, string> {
+  const title = (flags.title ?? '').trim();
+  const description = (flags.description ?? '').trim();
+  if (title.length < 3 || title.length > 200) {
+    throw new MushiCliError('E_INVALID_INPUT', '--title must be 3 to 200 characters.');
+  }
+  if (description.length < 1 || description.length > 10_000) {
+    throw new MushiCliError('E_INVALID_INPUT', '--description must be 1 to 10000 characters.');
+  }
+  const body: Record<string, string> = { title, description };
+  if (flags.severity !== undefined) {
+    const severity = flags.severity.trim().toLowerCase();
+    if (!(FILE_REPORT_SEVERITIES as readonly string[]).includes(severity)) {
+      throw new MushiCliError('E_INVALID_INPUT', `--severity must be one of: ${FILE_REPORT_SEVERITIES.join(', ')}.`);
+    }
+    body['severity'] = severity;
+  }
+  if (flags.component !== undefined) {
+    const component = flags.component.trim();
+    if (component.length > 200) throw new MushiCliError('E_INVALID_INPUT', '--component is at most 200 characters.');
+    if (component) body['component'] = component;
+  }
+  return body;
+}
+
+interface FiledReport {
+  reportId: string;
+  projectId: string;
+  title: string;
+  status: string;
+  severity: string | null;
+  component: string | null;
+}
 
 export function registerReportsCommands(program: Command): void {
 // ─── reports ──────────────────────────────────────────────────────────────────
@@ -337,6 +384,43 @@ Examples:
           if (text) console.log(`    ${text.slice(0, 80)}`)
           console.log('')
         }
+      },
+    })
+  })
+
+
+reports
+  .command('file')
+  .description('File a report by hand (a backlog item, a bug you found yourself); it is triaged like any other report')
+  .requiredOption('--title <text>', 'One-line title (3-200 characters)')
+  .requiredOption('--description <text>', 'What happens, steps, what you expected (up to 10000 characters)')
+  .option('--severity <severity>', 'Your hint: critical|high|medium|low (triage may refine it)')
+  .option('--component <name>', 'Area of the app, e.g. checkout')
+  .option('--project <id>', 'Project ID (defaults to the configured project)')
+  .option('--project-id <id>', 'Same as --project')
+  .option('--json', 'Output as JSON (alias for -o json)')
+  .addHelpText('after', `
+Needs a key with the mcp:write scope (or an account key that reaches the app).
+At most 30 reports an hour per app.
+
+Examples:
+  mushi reports file --title "Checkout adds tax twice" --description "Cart of 2 items shows tax x2 on /checkout"
+  mushi reports file --title "Bump sharp to 0.34" --description "..." --severity low --component build --project <uuid>`)
+  .action(async (opts: FileReportFlags & { project?: string; projectId?: string; json?: boolean }) => {
+    const body = buildFileReportBody(opts)
+    const config = requireConfig()
+    const projectId = resolveProjectId(opts.project ?? opts.projectId, config.projectId)
+    const result = await apiCall<FiledReport>(`/v1/admin/projects/${projectId}/reports`, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) die(result)
+    printResult(result.data, {
+      json: opts.json,
+      render(d) {
+        console.log(`✓ Filed report ${d.reportId}`)
+        console.log(`  ${d.title}`)
+        console.log(`  Triage runs now; see it with: mushi reports show ${d.reportId}`)
       },
     })
   })

@@ -225,6 +225,22 @@ describe('FixesPage', () => {
     expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped1')
   })
 
+  it('Opus: merge lists only open PRs the review said to merge (?status=review_merge)', async () => {
+    const pr = (n: number) => ({ status: 'completed', pr_url: `https://github.com/o/r/pull/${n}`, pr_state: 'open' as const, report_fix_state: 'pr_open' as const })
+    mocks.fixes = [
+      fix({ id: 'a', report_id: 'r1', report_title: 'Approved fix', review_verdict: 'merge', ...pr(1) }),
+      fix({ id: 'b', report_id: 'r2', report_title: 'Held fix', review_verdict: 'hold', ...pr(2) }),
+      fix({ id: 'c', report_id: 'r3', report_title: 'Merged fix', review_verdict: 'merge', status: 'completed', pr_url: 'https://github.com/o/r/pull/3', pr_state: 'merged' as const, merged_at: '2026-10-22T00:00:00Z' }),
+    ]
+    mocks.total = 3
+    await render('/fixes?status=review_merge')
+    const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
+    expect(segments.find((b) => b.textContent?.startsWith('Opus: merge'))?.textContent).toBe('Opus: merge1')
+    expect(document.body.textContent).toContain('Approved fix')
+    expect(document.body.textContent).not.toContain('Held fix')
+    expect(document.body.textContent).not.toContain('Merged fix')
+  })
+
   it('?report= (Voice reports link) narrows the list to that report', async () => {
     mocks.fixes = [fix({ id: 'a', report_id: 'r1' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
     mocks.total = 2

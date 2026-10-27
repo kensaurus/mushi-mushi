@@ -98,7 +98,7 @@ function buildSpec(apiBase: string): Record<string, unknown> {
           type: 'apiKey',
           in: 'header',
           name: 'X-Mushi-Api-Key',
-          description: 'Per-project API key with mcp:read or mcp:write scope.',
+          description: 'Per-project API key with mcp:read or mcp:write scope (voice:write and runner:write keys reach only their own routes).',
         },
         bearerAuth: {
           type: 'http',
@@ -424,6 +424,30 @@ function buildSpec(apiBase: string): Record<string, unknown> {
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['token'], properties: { token: { type: 'string' } } } } } },
           responses: { '200': { description: '{ ok, session: { id, status: cancelled } }' }, '403': { description: 'INVALID_CONFIRM_TOKEN' }, '409': { description: 'CONFLICT' }, '410': { description: 'EXPIRED' } },
+        },
+      },
+      // ── CI runners (Plan 022): host telemetry on a narrow key ──────────────
+      '/v1/ingest/runner': {
+        post: {
+          summary: 'Runner host heartbeat or job memory sample (`mushi runner heartbeat`, runner job hooks)',
+          description:
+            'Body { kind: "heartbeat", host, runners[≤40] } or { kind: "job", host_id, runner_name, repo, run_id, run_attempt, job_key, phase, at, mem_peak_mb?, … }. Strict schema; host_id is the sha256 of the machine id (64 hex), never the raw id. Requires a project key carrying runner:write (mint one with POST /v1/admin/projects/{id}/runner-key); the SDK key and mcp:* keys are refused with 403 INSUFFICIENT_SCOPE. 60 a minute per project.',
+          operationId: 'ingestRunner',
+          tags: ['ci'],
+          security: [{ mushiApiKey: ['runner:write'] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['kind'], properties: { kind: { type: 'string', enum: ['heartbeat', 'job'] } } } } } },
+          responses: { '200': { description: '{ ok, data }' }, '400': { description: 'VALIDATION_ERROR' }, '403': { description: 'INSUFFICIENT_SCOPE' }, '429': { description: 'RATE_LIMITED' } },
+        },
+      },
+      '/v1/admin/projects/{id}/runner-key': {
+        post: {
+          summary: 'Mint a runner:write-only key for a CI runner host (plaintext returned once)',
+          operationId: 'mintRunnerKey',
+          tags: ['ci'],
+          security: [{ mushiApiKey: ['mcp:write'] }, { bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: { label: { type: 'string', maxLength: 56 } } } } } },
+          responses: { '201': { description: '{ ok, data: { id, key, prefix, scopes: ["runner:write"], label } }' }, '403': { description: 'FORBIDDEN (viewer)' }, '404': { description: 'NOT_FOUND' }, '429': { description: 'RATE_LIMITED' } },
         },
       },
       // ── Slack Events API + slash commands (voice inbox) ───────────────────

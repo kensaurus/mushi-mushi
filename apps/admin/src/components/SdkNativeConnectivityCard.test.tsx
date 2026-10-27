@@ -109,6 +109,32 @@ describe('SdkNativeConnectivityCard', () => {
     expect(document.body.textContent).toContain('Revoked the previous CI key mushi_old111…')
   })
 
+  it('a Next repo’s env snippet uses NEXT_PUBLIC_, not bare MUSHI_*', async () => {
+    await mount(diag({
+      stack: 'nextjs',
+      stackSource: 'repo',
+      requiredVars: ['NEXT_PUBLIC_MUSHI_PROJECT_ID', 'NEXT_PUBLIC_MUSHI_API_KEY'],
+    }))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Next.js')
+    expect(text).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID')
+    expect(text).toContain('NEXT_PUBLIC_MUSHI_API_KEY')
+  })
+
+  it('a Nuxt repo’s env snippet uses NUXT_PUBLIC_', async () => {
+    await mount(diag({
+      stack: 'nuxt',
+      stackSource: 'repo',
+      requiredVars: ['NUXT_PUBLIC_MUSHI_PROJECT_ID', 'NUXT_PUBLIC_MUSHI_API_KEY'],
+      missingVars: ['NUXT_PUBLIC_MUSHI_API_KEY'],
+    }))
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Nuxt')
+    expect(text).toContain('NUXT_PUBLIC_MUSHI_PROJECT_ID')
+    expect(text).toContain('NUXT_PUBLIC_MUSHI_API_KEY')
+    expect(text).not.toContain('NEXT_PUBLIC_MUSHI_')
+  })
+
   it('without a GitHub token the primary button opens the commands, using this console’s endpoint', async () => {
     await mount(diag({ hasGithubToken: false, repoUrl: null, missingVars: diag().requiredVars }))
     const cta = button(/Copy setup commands/)!
@@ -119,5 +145,33 @@ describe('SdkNativeConnectivityCard', () => {
     expect(text).toContain('https://self-hosted.example/functions/v1/api')
     expect(text).not.toContain('dxptnwrhwsqckaftyymj')
     expect(api.apiFetchMutate).not.toHaveBeenCalled()
+  })
+
+  it('the CI env block is a keyboard scroll region', async () => {
+    await mount(diag())
+    act(() => button(/Sync CI secrets/)!.click())
+    api.apiFetchMutate.mockResolvedValue({
+      ok: false,
+      data: {
+        fallback: {
+          commands: ['gh secret set NEXT_PUBLIC_MUSHI_API_KEY --body "<your-mushi-api-key>" --repo acme/app'],
+          envBlock: 'env:\n  NEXT_PUBLIC_MUSHI_API_ENDPOINT: https://self-hosted.example/functions/v1/api',
+        },
+      },
+      error: { code: 'GH_SECRETS_FORBIDDEN', message: 'denied' },
+    })
+    act(() => button(/Write secrets/)!.click())
+    await flush()
+    act(() => button(/Show manual setup commands/)!.click())
+    const pre = document.querySelector('pre')
+    expect(pre?.getAttribute('tabindex')).toBe('0')
+    expect(pre?.getAttribute('role')).toBe('region')
+    expect(pre?.getAttribute('aria-label')).toBe('CI env block')
+    expect(pre?.textContent).toContain('NEXT_PUBLIC_MUSHI_API_ENDPOINT')
+    const classes = pre?.className.split(/\s+/) ?? []
+    expect(classes).toContain('focus-visible:ring-2')
+    expect(classes).toContain('focus-visible:ring-brand')
+    expect(classes).not.toContain('focus-visible:ring-1')
+    expect(classes).not.toContain('focus-visible:ring-brand/40')
   })
 })

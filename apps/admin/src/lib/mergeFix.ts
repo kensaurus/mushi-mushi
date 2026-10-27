@@ -12,11 +12,14 @@ export interface MergeFixResult {
   reportStatus?: string | null
   alreadyMerged?: boolean
   error?: string
+  /** Server error code; `REVIEW_HOLD` when the Opus review says hold (ADR 0030). */
+  code?: string
 }
 
 export async function mergeFixAttempt(
   fixId: string,
   mergeMethod: MergeMethod = 'squash',
+  opts: { override?: boolean; overrideReason?: string; confirmPendingReview?: boolean } = {},
 ): Promise<MergeFixResult> {
   const res = await apiFetch<{
     merged?: boolean
@@ -24,13 +27,19 @@ export async function mergeFixAttempt(
     reportStatus?: string | null
   }>(`/v1/admin/fixes/${fixId}/merge`, {
     method: 'POST',
-    body: JSON.stringify({ mergeMethod }),
+    body: JSON.stringify({
+      mergeMethod,
+      ...(opts.override ? { override: true } : {}),
+      ...(opts.overrideReason ? { overrideReason: opts.overrideReason } : {}),
+      ...(opts.confirmPendingReview ? { confirmPendingReview: true } : {}),
+    }),
   })
 
   if (!res.ok) {
     return {
       ok: false,
       error: res.error?.message ?? 'Merge failed',
+      code: res.error?.code,
     }
   }
 

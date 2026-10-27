@@ -15,4 +15,20 @@ describe('appChrome shell tokens', () => {
     const { DESKTOP_SUBHEADER_OFFSET } = await import('./appChrome')
     expect(DESKTOP_SUBHEADER_OFFSET).toContain('--chrome-row-height')
   })
+
+  it('writes each overlay offset class out in full, so Tailwind generates it', async () => {
+    const { drawerBelowAppChromeClass, stageDrawerBelowAppChromeClass, mobileNavBelowAppChromeClass, DESKTOP_SUBHEADER_OFFSET } =
+      await import('./appChrome')
+    const source = readFileSync(resolve(__dirname, './appChrome.ts'), 'utf8')
+    for (const cls of [drawerBelowAppChromeClass, stageDrawerBelowAppChromeClass, mobileNavBelowAppChromeClass]) {
+      const tokens = cls.split(/\s+/)
+      const mdTop = tokens.find((t) => t.startsWith('md:top-['))
+      expect(mdTop).toContain(DESKTOP_SUBHEADER_OFFSET)
+      for (const t of tokens) {
+        // A bracket left open means a space split one arbitrary value in two.
+        expect(t.split('[').length, t).toBe(t.split(']').length)
+        if (t.includes('[')) expect(source, `${t} must appear literally in appChrome.ts`).toContain(t)
+      }
+    }
+  })
 })

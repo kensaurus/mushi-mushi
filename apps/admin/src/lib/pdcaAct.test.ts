@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker } from './pdcaAct'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_STAMP, actBlocker, fixFailureBucket } from './pdcaAct'
 import { STAMP_VISUAL } from './pdcaStamp'
 import { getMergeBlockerReason, pickPrimaryFixAttempt } from './mergeFix'
 
@@ -35,6 +35,30 @@ describe('actBlocker', () => {
     expect(actBlocker({ ...PR_424, check_run_conclusion: 'success', review_passed: true })).toBeNull()
     expect(actBlocker({ ...PR_424, merged_at: '2026-10-02T02:00:00Z' })).toBeNull()
     expect(actBlocker({ ...PR_424, pr_url: null })).toBeNull()
+  })
+})
+
+describe('a test machine that stopped (ADR 0033)', () => {
+  const OOM = {
+    ...PR_424,
+    check_run_conclusion: 'cancelled',
+    review_passed: null,
+    ci_infra: { infra: true, kind: 'runner_lost' },
+  }
+
+  it('blocks as "not tested", never as a CI failure', () => {
+    expect(actBlocker(OOM)).toBe('ci_infra')
+    expect(ACT_BLOCKER_COPY.ci_infra).toMatch(/^Not tested/)
+    expect(ACT_BLOCKER_COPY.ci_infra).not.toMatch(/failed/i)
+  })
+
+  it('counts the attempt in the ci_infra bucket, not ci_failed', () => {
+    expect(fixFailureBucket(OOM)).toBe('ci_infra')
+    expect(fixFailureBucket({ ...OOM, ci_infra: null })).toBe('ci_failed')
+  })
+
+  it('a non-infra verdict keeps the plain CI reading', () => {
+    expect(actBlocker({ ...OOM, ci_infra: { infra: false, kind: 'code_failure' }, check_run_conclusion: 'failure' })).toBe('ci_failed')
   })
 })
 

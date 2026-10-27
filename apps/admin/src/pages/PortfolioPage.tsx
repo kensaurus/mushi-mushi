@@ -15,6 +15,7 @@
  *       GET|POST|PATCH|DELETE /v1/admin/orgs/:orgId/accounts (AccountsRegisterCard)
  *       GET /v1/admin/orgs/:orgId/spend + bill imports (SpendLedgerCard)
  *       GET /v1/admin/orgs/:orgId/monetization (MonetizationCard)
+ *       GET /v1/admin/ci/overview?days=7 (CiRunnersCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
  * that was never checked renders as healthy. A read the server could not
  * finish is listed in a callout (`readErrors`) and its cells read "Could not
@@ -42,6 +43,7 @@ import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 import { FunnelCard } from '../components/portfolio/FunnelCard'
 import { AccountsRegisterCard } from '../components/portfolio/AccountsRegisterCard'
 import { SpendLedgerCard } from '../components/portfolio/SpendLedgerCard'
+import { CiRunnersCard } from '../components/portfolio/CiRunnersCard'
 import { PortfolioCardTile, PortfolioCompactRow } from '../components/portfolio/PortfolioCardTile'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -221,6 +223,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             </PanelErrorBoundary>
             <PanelErrorBoundary label="Funnel across apps">
               <FunnelCard orgId={orgId} />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary label="CI runners">
+              <CiRunnersCard />
             </PanelErrorBoundary>
           </section>
 

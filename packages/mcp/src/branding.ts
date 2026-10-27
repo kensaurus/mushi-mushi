@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+// Copyright (c) 2024–2026 Kenji Sakuramoto / Kensaurus 合同会社 — Mushi Mushi
 /**
  * Canonical MCP server branding — icons, title, website.
  * Used by stdio + hosted HTTP initialize payloads (MCP 2025-11 icons spec).

@@ -8,6 +8,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, callerCanAccessProject } from '../shared.ts';
 import { parseRotateBody, pickRotationTarget, type RotatableKeyRow } from '../../_shared/api-key-rotation.ts';
+import { mintProjectApiKey } from '../../_shared/api-key-mint.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,8 +18,10 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // rejects bad input with a 400 and a helpful message, rather than letting
   // Postgres surface a noisy `23514` error.
   // `voice:write` is the phone-resident scope for POST /v1/intake/voice
-  // (migration 20260912001000). It unlocks that route only.
-  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write'] as const;
+  // (migration 20260912001000). It unlocks that route only. `runner:write`
+  // is the same for POST /v1/ingest/runner, the key that lives on a CI runner
+  // host (migration 20261021111344, Plan 022).
+  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write'] as const;
   type AllowedScope = (typeof ALLOWED_KEY_SCOPES)[number];
 
   function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {
@@ -207,20 +210,21 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
     if (access.role !== 'owner' && access.role !== 'admin') {
+      // Say who approved, what they are, where, and who can fix it: "Owner or
+      // admin access required" alone left the owner guessing (2026-10-24).
+      const details = await keyMintRefusalDetails(db, projectId, c.get('userEmail') as string | undefined, access.role ?? null);
       return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: keyMintRefusalMessage(details),
+            details,
+          },
+        },
         403,
       );
     }
-
-    const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
-    const prefix = rawKey.slice(0, 12);
-
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey));
-    const keyHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
 
     const label =
       typeof body.label === 'string' && body.label.trim().length > 0
@@ -231,20 +235,10 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
             ? 'mcp-readonly'
             : 'default';
 
-    const { data: inserted, error } = await db
-      .from('project_api_keys')
-      .insert({
-        project_id: projectId,
-        key_hash: keyHash,
-        key_prefix: prefix,
-        label,
-        scopes,
-        is_active: true,
-      })
-      .select('id')
-      .single();
-
-    if (error) return dbError(c, error);
+    const mint = await mintProjectApiKey(db, { projectId, label, scopes });
+    if (!mint.ok) return dbError(c, mint.error);
+    const { key: rawKey, prefix } = mint.minted;
+    const inserted = { id: mint.minted.id };
     // Company funnel (mushi-self): fire-and-forget. The prefix is the 12-char
     // head of a fresh UUID-derived key, unique enough for an idempotency key.
     void emitProductEvent(db, {
@@ -500,3 +494,52 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   });
 
 }
+
+export interface KeyMintRefusal {
+  signedInAs: string | null
+  role: string | null
+  organization: string | null
+  /** Owners and admins who can promote the caller (at most 3). */
+  canPromote: string[]
+  teamUrl: string
+}
+
+async function keyMintRefusalDetails(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  email: string | undefined,
+  role: string | null,
+): Promise<KeyMintRefusal> {
+  const consoleBase = (Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://kensaur.us/mushi-mushi/admin').replace(/\/$/, '');
+  const out: KeyMintRefusal = { signedInAs: email ?? null, role, organization: null, canPromote: [], teamUrl: `${consoleBase}/team` };
+  try {
+    const { data: project } = await db.from('projects').select('organization_id, organizations(name)').eq('id', projectId).maybeSingle();
+    const p = project as { organization_id?: string | null; organizations?: { name?: string | null } | null } | null;
+    out.organization = p?.organizations?.name ?? null;
+    if (p?.organization_id) {
+      const { data: members } = await db
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', p.organization_id)
+        .in('role', ['owner', 'admin'])
+        .limit(3);
+      for (const m of (members ?? []) as Array<{ user_id: string }>) {
+        const { data } = await db.auth.admin.getUserById(m.user_id);
+        if (data?.user?.email) out.canPromote.push(data.user.email);
+      }
+    }
+  } catch {
+    // The refusal stands; only the extra detail is missing.
+  }
+  return out;
+}
+
+/** One plain message a person can act on without reading code. */
+export function keyMintRefusalMessage(d: KeyMintRefusal): string {
+  const who = d.signedInAs ? `You approved as ${d.signedInAs}` : 'The account that approved';
+  const what = d.role ? `, a ${d.role}` : '';
+  const where = d.organization ? ` of ${d.organization}` : '';
+  const ask = d.canPromote.length ? ` Owners and admins here: ${d.canPromote.join(', ')}.` : '';
+  return `${who}${what}${where}. Creating a CLI or MCP key needs an owner or admin.${ask} Ask one of them to make you an admin on Team (${d.teamUrl}), or approve with an owner or admin account, then run the same command again.`;
+}
+

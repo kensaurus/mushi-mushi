@@ -1,5 +1,17 @@
 # @mushi-mushi/inventory-schema
 
+## 0.4.5
+
+### Patch Changes
+
+- 271abb8: The npm pages link to each package's docs page, and their commands, flags and rule names match the current release. The eslint plugin and inventory packages describe what you get instead of internal pipeline names.
+
+## 0.4.4
+
+### Patch Changes
+
+- 6b485ac: Require zod 4.6.7 or later, which fixes GHSA-mrhx-c7xc-m3w5: validating an oversized constrained collection could exhaust memory.
+
 ## 0.4.3
 
 ### Patch Changes

@@ -74,6 +74,7 @@ export async function readProjectDirectory(): Promise<DirectoryRead> {
     return { status: 'error' }
   }
   rememberProjectTeams(res.data.projects)
+  rememberTeamNames(res.data.teams)
   return { status: 'ok', directory: res.data }
 }
 
@@ -116,18 +117,33 @@ export async function resolveTeamForProject(
   if (!project.organizationId) return 'unknown'
   if (project.organizationId === getActiveOrgIdSnapshot()) return 'same'
   const team = read.directory.teams.find((t) => t.id === project.organizationId)
-  setActiveOrgIdSnapshot(project.organizationId)
-  rememberTeamProject(project.organizationId, projectId)
+  switchTeam(project.organizationId, team?.name ?? null, projectId)
+  return 'switched'
+}
+
+/**
+ * Switch at once to the team this browser last saw `projectId` in, without
+ * reading the directory. The read waits up to 3 s and then lets requests go
+ * out anyway; on 2026-10-23 a slow API made a deep link's first requests
+ * leave with the old team and 404. False when the project's team is unknown
+ * or already active (the caller then reads the directory).
+ */
+export function switchToKnownTeam(projectId: string): boolean {
+  const teamId = knownProjectTeam(projectId)
+  if (!teamId || teamId === getActiveOrgIdSnapshot()) return false
+  switchTeam(teamId, readMap(TEAM_NAME_KEY)[teamId] ?? null, projectId)
+  return true
+}
+
+/** Team first, then project, so no request pairs the new project with the old team. */
+function switchTeam(teamId: string, teamName: string | null, projectId: string): void {
+  setActiveOrgIdSnapshot(teamId)
+  rememberTeamProject(teamId, projectId)
   setActiveProjectIdSnapshot(projectId)
   if (typeof window !== 'undefined') {
-    const detail: TeamAutoSwitchDetail = {
-      teamId: project.organizationId,
-      teamName: team?.name ?? 'another team',
-      projectId,
-    }
+    const detail: TeamAutoSwitchDetail = { teamId, teamName: teamName ?? 'another team', projectId }
     window.dispatchEvent(new CustomEvent(TEAM_AUTO_SWITCH_EVENT, { detail }))
   }
-  return 'switched'
 }
 
 /**
@@ -146,6 +162,7 @@ export function urlProjectNeedsTeamCheck(projectId: string, activeOrgId: string 
 const LAST_PROJECT_KEY = 'mushi:last_project_by_org'
 const PROJECT_TEAM_KEY = 'mushi:project_team_by_id'
 const PROJECT_TEAM_MAX = 200
+const TEAM_NAME_KEY = 'mushi:team_name_by_id'
 
 function readMap(key: string): Record<string, string> {
   if (typeof window === 'undefined') return {}
@@ -200,6 +217,19 @@ export function rememberProjectTeams(
   const keys = Object.keys(map)
   for (const k of keys.slice(0, Math.max(0, keys.length - PROJECT_TEAM_MAX))) delete map[k]
   writeMap(PROJECT_TEAM_KEY, map)
+}
+
+/** Team names from the directory, so a switch from memory can still say which team. */
+function rememberTeamNames(teams: ReadonlyArray<{ id: string; name: string }>): void {
+  if (typeof window === 'undefined') return
+  const map = readMap(TEAM_NAME_KEY)
+  let changed = false
+  for (const t of teams) {
+    if (!t.id || !t.name || map[t.id] === t.name) continue
+    map[t.id] = t.name
+    changed = true
+  }
+  if (changed) writeMap(TEAM_NAME_KEY, map)
 }
 
 /** The team `projectId` was last seen in, if this browser has seen it. */

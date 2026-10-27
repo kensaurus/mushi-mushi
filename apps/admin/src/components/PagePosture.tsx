@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react'
 import { useAdminMode, type AdminMode } from '../lib/mode'
-import { PAGE_STACK } from '../lib/pageLayout'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPostureHasStatusBanner } from '../lib/postureChromeStore'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
@@ -72,7 +72,7 @@ export function PagePosture({ slots, maxRows, className }: PagePostureProps) {
   if (visible.length === 0) return null
 
   return (
-    <div className={className ?? PAGE_STACK} data-page-posture="">
+    <div className={className ?? PAGE_CONTENT_STACK} data-page-posture="">
       {visible.map((slot, idx) => (
         <SpringChromeEnter key={slot.id ?? slot.priority} delay={idx * 0.04}>
           {slot.children}

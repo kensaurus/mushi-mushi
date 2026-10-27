@@ -364,10 +364,12 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   if (mintError) {
     // Leave the saved login as it was: pairing the old key with the newly
     // chosen project would make every later command act on the wrong app.
-    process.stderr.write(`\n  ✗ No key was created for ${chosenProjectName ?? chosenProjectId}: ${mintError}\n`)
-    if (/owner or admin|forbidden|403/i.test(mintError)) {
-      process.stderr.write('    Only the project\'s owners and admins can create keys. Ask one of them to make you an admin, then run this again.\n')
+    process.stderr.write(`\n  ✗ No key was created for ${chosenProjectName ?? chosenProjectId}.\n    ${mintError}\n`)
+    // Older servers answer only "Owner or admin access required": say what it means.
+    if (/owner or admin|forbidden|403/i.test(mintError) && !/approved as/i.test(mintError)) {
+      process.stderr.write('    The account that approved in the browser is not an owner or admin of this app. Ask an owner to make it an admin on Team, or approve with an owner or admin account.\n')
     }
+    process.stderr.write(`    Then run again: mushi login${opts.upgradeScope ? ' --upgrade-scope' : ''}${chosenProjectId ? ` --project-id ${chosenProjectId}` : ''}\n`)
     process.stderr.write('    Your saved login was not changed.\n\n')
     process.exit(1)
   }
@@ -396,7 +398,7 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
     } else {
       console.log(`  ✓ CLI key saved (${apiKey.slice(0, 12)}…)`)
       console.log(`    Scopes: report:write · mcp:read — SDK ingest + MCP read tools.`)
-      console.log(`    Admin writes (billing cap, fix merge, pipeline start) need: mushi login --upgrade-scope`)
+      console.log(`    Admin writes (mushi work, fix merge, billing cap, pipeline start) need: mushi login --upgrade-scope${chosenProjectId ? ` --project-id ${chosenProjectId}` : ''}`)
     }
   } else {
     console.log(`  ℹ  Get an SDK key at: ${apiKeyHint(consoleBase)}`)

@@ -23,6 +23,7 @@ import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
 import { Card, Btn, Badge, ErrorAlert, Input, SecretInput, SelectField, SegmentedControl } from '../components/ui'
+import { SettingDefaultActions } from '../components/settings/SettingDefaultActions'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -482,6 +483,13 @@ export function StoragePage() {
                 type="number"
                 value={String(m.signed_url_ttl_secs)}
                 onChange={(e) => updateDraft(s.project_id, { signed_url_ttl_secs: parseInt(e.target.value, 10) || 3600 })}
+              />
+              <SettingDefaultActions
+                id={`ttl-${s.project_id}`}
+                current={m.signed_url_ttl_secs}
+                defaultValue={3600}
+                format={(v) => `${v} s`}
+                onApply={(v) => updateDraft(s.project_id, { signed_url_ttl_secs: v })}
               />
               {/* Raw keys: the server stores them in Vault and keeps only the
                   name. These fields never show a saved key back. */}
