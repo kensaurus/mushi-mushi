@@ -105,6 +105,7 @@ export function PageActionMap({
           const shown = page.actions.slice(0, ACTIONS_PER_PAGE)
           const more = page.actions.length - shown.length
           return (
+            // mushi-mushi-allowlist: list-item card; a <Card> here would put a div between the ul and its items
             <li
               key={page.path}
               data-testid="inventory-page-map-page"

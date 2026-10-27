@@ -69,11 +69,11 @@ export function PromptScoreboard({
           const verdict = stageVerdict(row)
           return (
             <li key={row.stage} className="min-w-0">
-              {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
               <button
                 type="button"
                 onClick={() => onOpen(row.stage)}
                 aria-current={selected === row.stage ? 'true' : undefined}
+                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas): four aligned columns from sm up
                 className={`grid w-full min-w-0 grid-cols-1 gap-x-4 gap-y-0.5 px-3 py-2 text-left text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/50 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] ${selected === row.stage ? 'bg-surface-hover' : ''}`}
               >
                 <span className="font-medium text-fg">{STAGE_LABELS[row.stage] ?? row.stage}</span>

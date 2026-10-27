@@ -11,7 +11,7 @@
  *       GET /v1/admin/releases?limit=50  (published ones become markers)
  */
 
-import { Btn, Loading } from '../ui'
+import { Btn, Card, Loading } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { MetricTimeline } from '../charts/MetricTimeline'
 import { usePageData } from '../../lib/usePageData'
@@ -107,7 +107,7 @@ export function SpikesOverview({
         Your metrics, with releases and spikes
       </h2>
       {shown.map((v) => (
-        <div key={v.name} className="space-y-2 rounded-md border border-edge-subtle bg-surface-raised p-3">
+        <Card key={v.name} className="space-y-2 p-3">
           <MetricTimeline
             title={v.name}
             points={v.points}
@@ -145,7 +145,7 @@ export function SpikesOverview({
           ) : (
             <p className="text-2xs text-fg-muted">No spike waiting on this metric.</p>
           )}
-        </div>
+        </Card>
       ))}
       {views.length > shown.length ? (
         <p className="text-2xs text-fg-muted">{pluralizeWithCount(views.length - shown.length, 'more metric')} on the Metrics tab.</p>

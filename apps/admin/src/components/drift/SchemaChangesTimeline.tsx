@@ -9,7 +9,7 @@
  *       GET /v1/admin/releases?limit=50&status=published
  */
 
-import { Loading } from '../ui'
+import { Card, Loading } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { MetricTimeline } from '../charts/MetricTimeline'
 import { usePageData } from '../../lib/usePageData'
@@ -66,8 +66,8 @@ export function SchemaChangesTimeline({ projectId }: { projectId: string }) {
     .map((r) => ({ ts: r.published_at as string, label: r.version ?? r.title ?? 'Release' }))
 
   return (
-    <section aria-labelledby="schema-changes-timeline" className="space-y-2 rounded-md border border-edge-subtle bg-surface-raised p-3" data-testid="schema-changes-timeline">
-      <h2 id="schema-changes-timeline" className="sr-only">
+    <Card className="space-y-2 p-3" data-testid="schema-changes-timeline">
+      <h2 className="sr-only">
         Changes found per day
       </h2>
       <MetricTimeline
@@ -84,6 +84,6 @@ export function SchemaChangesTimeline({ projectId }: { projectId: string }) {
           }))}
         formatValue={(v) => String(Math.round(v))}
       />
-    </section>
+    </Card>
   )
 }

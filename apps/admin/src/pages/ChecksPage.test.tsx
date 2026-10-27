@@ -21,6 +21,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from '../lib/extendedNavMeta'
 import { NAV_REGISTRY } from '../lib/navRegistry'
+import type * as LabsModule from '../lib/labs'
 
 const state = vi.hoisted(() => ({
   slices: null as unknown,
@@ -45,7 +46,7 @@ vi.mock('../lib/useEntitlements', () => ({
   useEntitlements: () => ({ isSuperAdmin: false, has: (flag: string) => state.features.has(flag) }),
 }))
 vi.mock('../lib/labs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/labs')>()
+  const actual = await importOriginal<typeof LabsModule>()
   return { ...actual, useLabs: () => ({ enabled: state.labs, isEnabled: (id: string) => state.labs.has(id), setEnabled: () => {} }) }
 })
 vi.mock('../lib/pageContext', () => ({ usePublishPageContext: () => {} }))
