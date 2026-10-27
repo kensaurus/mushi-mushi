@@ -30,7 +30,8 @@ Cursor credits. Two facts:
   an agent can measure and that need no product decision are offered
   (`SKILL_RUN_SKILLS`: accessibility, responsive layouts, UI states, page UX,
   readability, forms, native feel, one design system, translations, SEO,
-  performance, bundle size, error handling, dead code, unit tests). Each names
+  performance, bundle size, error handling, dead code, unit tests, and since
+  2026-10-27 the parked-work register, measured by its diff). Each names
   what to measure before and after; the numbers go in the PR.
 - **Each round is a report** (`source = 'skill_run'`, filed `classified`, no
   model triage) whose description carries the task, the measurement and the
