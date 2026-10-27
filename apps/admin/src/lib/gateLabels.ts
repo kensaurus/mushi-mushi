@@ -81,7 +81,7 @@ const GATE_INFO: Record<GateId, GateInfo> = {
   radar: { checks: 'Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
   portfolio_radar: { checks: 'App hole checks, daily (04:05 UTC): store listings, domains, certificates, security headers, provider keys.', page: { label: 'Open the portfolio', to: '/portfolio' } },
   portfolio_radar_ci: { checks: 'App hole checks pushed from your CI (mushi radar scan --push).', page: { label: 'Open the portfolio', to: '/portfolio' } },
-  portfolio_radar_vulns: { checks: 'Lockfiles and pinned runtimes checked against OSV.dev, CISA KEV and EPSS, daily (05:25 UTC).', page: { label: 'Open dependency holes', to: '/health?view=code' } },
+  portfolio_radar_vulns: { checks: 'Lockfiles and pinned runtimes checked against OSV.dev, CISA KEV and EPSS, daily (05:25 UTC).', page: { label: 'Open dependency holes', to: '/fullstack-audit#dependency-holes' } },
   store_review: { checks: 'The App Store and Play review checklist, read from the repo.', page: { label: 'Open the store checks', to: '/releases?tab=store' } },
 }
 

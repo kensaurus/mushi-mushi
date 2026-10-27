@@ -12,14 +12,14 @@
 export const INVENTORY_HELP = {
   title: 'How this page works',
   whatIsIt:
-    "Inventory is your app's user story, page, and action map. Once you install @mushi-mushi/web with discoverInventory: true, the SDK passively reports what users do; Claude drafts an inventory.yaml from those observations; you review & accept it. From there, gates and crawlers verify each action against your code & DB.",
+    "Your app's map: every page, what a user can do on it, and whether each action still works. Turn on discovery (discoverInventory: true in @mushi-mushi/web) and the SDK notes which pages people open and what they click; Claude drafts user stories from that and you accept them. After that, Mushi checks each action against your code.",
   useCases: [
-    'Discovery: install the SDK; we observe routes, testids, outbound APIs, and a 200-char DOM summary on every navigation (PII-safe — user IDs are SHA-256 hashed before they leave the browser).',
-    'Proposal: when ≥3 routes & ≥10 events have been observed, click Generate on the Discovery tab and Claude drafts user stories, pages, and actions, with one-line rationales.',
-    "Acceptance: review the draft (Stories tab is the primary view, YAML is the editable raw form), tweak persona names or merge stories, then click Accept — that becomes your project's active inventory.",
-    'Verification: gates (dead_handler, mock_leak, status_claim, api_contract) run in CI on every PR; the crawler revisits each page.path and the synthetic monitor probes critical actions every 15 min.',
-    "Status: every action's colour (verified · wired · mocked · stub · regressed) is derived from the gate + crawler + synthetic results — never hand-authored.",
+    'Discovery: the SDK notes routes, test ids, the APIs a page calls and a short page summary on every navigation. User ids are hashed before they leave the browser.',
+    'Draft: once Mushi has seen 3 pages and 10 visits, click Generate on the Discovery tab and Claude drafts user stories, pages and actions, each with a one-line reason.',
+    "Accept: review the draft (User stories is the main view; Map file is the editable raw form), rename or merge stories, then Accept. It becomes this app's map.",
+    'Checking: code checks look for buttons that do nothing, fake data left in, and API calls that do not match. The crawler opens each page, and live probes try key actions every 15 minutes.',
+    "Colours: red is broken (stopped working, or no code behind it yet), amber uses fake data, green works. Mushi sets them from the checks; you never set them by hand.",
   ],
   howToUse:
-    "First time? Open Discovery — the lifecycle stepper there shows where you are in the install → observe → propose → accept loop. Once you have an active inventory, Stories shows it as user-readable cards, Tree shows the page × element grid, Gates lists open findings, Synthetic shows production probes, Drift shows what the crawler found that the YAML didn't (and vice-versa).",
+    'Empty? Click Turn on discovery. Once the map exists, User stories leads with each page and its actions (broken ones red and first), All actions is the full table, Code checks lists open findings, Live probes shows the 15-minute checks, and Out of sync lists what the crawler found that the map file does not have, and the reverse.',
 }

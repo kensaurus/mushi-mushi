@@ -376,7 +376,7 @@ export function McpPage() {
           Refresh
         </Btn>
         {/* /connect mints a key and installs it in the editor in one click. */}
-        <Btn size="sm" variant="ghost" to="/connect" data-testid="mcp-connect-editor-link">
+        <Btn size="sm" variant="primary" to="/connect" data-testid="mcp-connect-editor-link">
           Connect an editor
         </Btn>
       </PageHeaderBar>
@@ -426,9 +426,11 @@ export function McpPage() {
       {activeTab === 'overview' && (
         <McpOverviewPanel
           stats={stats}
+          keys={projectsQuery.data ? (activeProject?.api_keys ?? []) : null}
           lastFetchedAt={lastFetchedAt}
           isValidating={isValidating}
           onOpenExamples={() => setTab('examples')}
+          onOpenSetup={() => setTab('setup')}
         />
       )}
 

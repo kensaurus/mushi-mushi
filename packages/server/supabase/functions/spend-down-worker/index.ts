@@ -14,6 +14,7 @@
  *     auto-fix caps (checked here, and again by fix-worker for every
  *     automatic dispatch);
  *   - reports: classified or reopened, not dispatched in the last 7 days,
+ *     not held by a local worker's lease (ADR 0048),
  *     and not settled by an agent verdict (latest attempt already_fixed,
  *     wrong_repo, not_actionable or needs_human), ranked by severity × judge
  *     score × named component × 1.3 when the report already has Sentry or
@@ -44,6 +45,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { checkAutofixBudget, type AutofixBudgetCheck, type AutofixBudgetSettings } from '../_shared/autofix-budget.ts'
 import { dispatchFixForReport, type DispatchResult } from '../_shared/dispatch.ts'
+import { activeWorkClaims } from '../_shared/work-claims.ts'
 import {
   SPEND_DOWN_REDISPATCH_COOLDOWN_DAYS,
   SPEND_DOWN_STOP_AUTOFIX_OFF,
@@ -210,9 +212,17 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
   // A report still `fixing` is picked only when its PR was held (with what the
   // held attempt did in the new prompt); an open PR that waits to merge is not.
   const held = await heldRetries(db, attemptRows.filter((a) => fixing.has(a.report_id)), now)
+  // A local worker's lease (ADR 0048): its agent is on the report now. An
+  // unreadable lease skips this app's reports for this tick.
+  const claimed = await activeWorkClaims(db, rows.map((r) => r.id), now)
+  if ('error' in claimed) {
+    log.warn('spend-down: local worker claims unreadable; skipping the app this tick', { projectId, err: claimed.error })
+    return []
+  }
   return rankSpendDownCandidates(
     rows.filter((r) =>
-      fixing.has(r.id) ? held.has(r.id) : (!recentlyDispatched.has(r.id) || keyLimited.has(r.id)) && !settled.has(r.id),
+      !claimed.ids.has(r.id) &&
+      (fixing.has(r.id) ? held.has(r.id) : (!recentlyDispatched.has(r.id) || keyLimited.has(r.id)) && !settled.has(r.id)),
     ),
   )
 }

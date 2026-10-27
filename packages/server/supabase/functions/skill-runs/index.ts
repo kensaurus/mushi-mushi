@@ -12,7 +12,8 @@
  *   - the round's PR has an Opus "merge" verdict and the run merges when
  *     ready → hand it to the merge queue (ADR 0041), whose gates decide;
  *   - the agent found nothing left → done; it needs a person, the code is in
- *     another repo, the round was dismissed or its PR closed → stopped.
+ *     another repo, the round was dismissed or its PR closed → stopped;
+ *   - a local worker holds the round's report (ADR 0048) → wait for it.
  *
  * Auth: `requireServiceRoleAuth`. `POST { runId }` runs that run now.
  */
@@ -24,6 +25,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parsePrRepoRef } from '../_shared/fix-merge.ts'
 import { nextSkillRunStep, skillRunReport, skillRunSkill, type RoundHistory } from '../_shared/skill-runs.ts'
+import { reportHasActiveWorkClaim } from '../_shared/work-claims.ts'
 
 const log = rootLog.child('skill-runs')
 const LEASE_MS = 4 * 60_000
@@ -109,6 +111,12 @@ export async function processRun(db: SupabaseClient, run: RunRow): Promise<strin
   let reviewVerdict: string | null = null
   let queued = false
   if (run.current_report_id) {
+    // A local worker holds the round's report (ADR 0048): its run is not
+    // finished, so its attempt says nothing yet. An unreadable lease waits too.
+    if ((await reportHasActiveWorkClaim(db, run.current_report_id)) !== false) {
+      await db.from('skill_runs').update({ claimed_until: null }).eq('id', run.id)
+      return 'waiting_local'
+    }
     const { data: rep } = await db.from('reports').select('status').eq('id', run.current_report_id).maybeSingle()
     reportStatus = (rep as { status?: string } | null)?.status ?? 'dismissed'
     const { data: att } = await db

@@ -295,7 +295,10 @@ describe('S1: integration settings validate sentry_dsn', () => {
 })
 
 describe('K1: settings stats count keys like the console rows', () => {
-  it('counts a superseded legacy key as needing attention and an expiring key separately', async () => {
+  // 2026-10-27: a legacy key a pooled key already replaced is tidy-up, not a
+  // failure. It no longer counts as failing, so the sidebar badge and the
+  // Settings banner stop nagging while its row still offers Remove.
+  it('counts a superseded legacy key as configured but not failing, and an expiring key separately', async () => {
     const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
     db = makeFakeDb(
       {
@@ -323,13 +326,26 @@ describe('K1: settings stats count keys like the console rows', () => {
     expect(status).toBe(200)
     expect(json.data).toMatchObject({
       byokKeysPassing: 1,
-      byokKeysFailing: 1, // the old anthropic key, replaced by the pooled one
+      byokKeysFailing: 0, // the old anthropic key is replaced by the pooled one, so not failing
       byokKeysExpiring: 1,
       byokKeysUntested: 0,
       byokKeysConfigured: 3, // the turned-off cursor key is not counted
       byokAnthropicConfigured: true,
       byokOpenaiConfigured: true,
     })
+  })
+
+  it('still counts a rejected key as failing when no other key of the provider works', async () => {
+    db = makeFakeDb(
+      {
+        project_settings: [{ project_id: P }],
+        byok_keys: [{ ...POOL_ROW, provider_slug: 'anthropic', status: 'auth_failed', test_status: 'error_auth' }],
+      },
+      { autoId: true },
+    )
+    const { status, json } = await call('GET', '/v1/admin/settings/stats')
+    expect(status).toBe(200)
+    expect(json.data).toMatchObject({ byokKeysFailing: 1, byokKeysConfigured: 1 })
   })
 
   it('counts a quota key whose cooldown has ended as working', async () => {

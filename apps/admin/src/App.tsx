@@ -168,7 +168,7 @@ function NotFoundPage() {
 function SetupCopilotRedirect() {
   const { search } = useLocation()
   const params = new URLSearchParams(search)
-  params.set('tab', 'copilot')
+  params.set('tab', 'diagnose')
   return <Navigate to={`/onboarding?${params.toString()}`} replace />
 }
 

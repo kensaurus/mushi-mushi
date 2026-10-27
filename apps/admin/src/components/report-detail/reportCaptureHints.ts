@@ -1,4 +1,5 @@
 import type { ReportDetail } from './types'
+import { isSampleReport } from '../../lib/diagnosisViewed'
 
 /**
  * Sentry-style "best-effort capture" messaging. Distinguishes between:
@@ -34,8 +35,16 @@ export function screenshotEmptyText(
 }
 
 export function timelineEmpty(
-  report: Pick<ReportDetail, 'sdk_package' | 'sdk_version'>,
+  report: Pick<ReportDetail, 'sdk_package' | 'sdk_version' | 'custom_metadata'>,
 ): { title: string; description: string } {
+  // "Send a test report" and the demo seed come from no SDK at all: telling a
+  // brand-new user to upgrade an SDK they haven't installed was report 9b7624e6.
+  if (isSampleReport(report.custom_metadata)) {
+    return {
+      title: 'Sample report: no timeline recorded',
+      description: 'Test reports are sent without an app, so nothing was recorded. Reports from your app carry the clicks, routes, logs and requests before the bug.',
+    }
+  }
   if (hasSdkStamp(report)) {
     return {
       title: 'No repro timeline',

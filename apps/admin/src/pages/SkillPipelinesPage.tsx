@@ -38,7 +38,6 @@ import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, F
 import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Drawer } from '../components/Drawer'
 import { useSkillsUx, resolveQuickSkillsTab } from '../lib/skillsModeUx'
@@ -60,6 +59,8 @@ import {
 } from '../components/skills/SkillsStatusBanner'
 import { SkillsPipelineGuide } from '../components/skills/SkillsPipelineGuide'
 import { SkillsSnapshotStrip } from '../components/skills/SkillsSnapshotStrip'
+import { SkillsRunningNow } from '../components/skills/SkillsRunningNow'
+import { ReportPicker, type PickableReport } from '../components/reports/ReportPicker'
 import { SkillsEndpointReadout } from '../components/skills/SkillsEndpointReadout'
 import {
   EMPTY_SKILLS_STATS,
@@ -281,17 +282,13 @@ export function SkillPipelinesPage() {
               />
             ),
           },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: !shouldHideGuideWhenBannerActive(
-              isSkillsBannerVisible(skillsStats),
-              COMMON_HEALTHY_PRIORITIES,
-              skillsStats.topPriority,
-            ),
-            children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} stats={skillsStats} />,
-          },
         ]}
       />
+
+      {/* First: what is running on this app, and the one way to start more. */}
+      {projectId ? (
+        <SkillsRunningNow projectId={projectId} onRunOnBug={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })} />
+      ) : null}
 
       {!ux.hideTabs && (
         <SegmentedControl<Tab>
@@ -325,6 +322,7 @@ export function SkillPipelinesPage() {
               projectId={projectId}
               addToast={addToast}
               initialSkillSlug={skillSlug}
+              initialReport={searchParams.get('report')}
               onPipelineStarted={(runId) => setTab('pipelines', { run: runId })}
               onSkillChange={(slug) => setTab('catalog', { skill: slug ?? undefined })}
               onGoToSources={() => setTab('sources')}
@@ -351,6 +349,8 @@ export function SkillPipelinesPage() {
           )}
         </>
       )}
+
+      <SkillsPipelineGuide topPriority={skillsStats.topPriority} stats={skillsStats} />
     </div>
   )
 }
@@ -360,8 +360,8 @@ export function SkillPipelinesPage() {
 function SkillDetailPanel({
   selected,
   projectId,
-  reportId,
-  setReportId,
+  report,
+  setReport,
   mode,
   setMode,
   cloudReadiness,
@@ -372,8 +372,9 @@ function SkillDetailPanel({
 }: {
   selected: AgentSkill
   projectId: string | null
-  reportId: string
-  setReportId: (v: string) => void
+  /** The bug the skill works on, picked by title (never a pasted id). */
+  report: PickableReport | null
+  setReport: (v: PickableReport | null) => void
   mode: 'handoff' | 'cloud'
   setMode: (v: 'handoff' | 'cloud') => void
   cloudReadiness: CloudReadiness | null | undefined
@@ -384,8 +385,6 @@ function SkillDetailPanel({
   embedded?: boolean
 }) {
   const meta = getSkillCategoryMeta(selected.category)
-  const reportIdCheck = parseReportIdInput(reportId)
-  const reportIdHelpId = embedded ? 'skill-report-id-drawer-help' : 'skill-report-id-help'
   const body = (
     <>
       <div className="flex items-start gap-2.5">
@@ -442,24 +441,7 @@ function SkillDetailPanel({
           <p className="text-2xs font-semibold text-fg">Apply to a report</p>
           <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Browse reports →</Link>
         </div>
-        <div className="space-y-1">
-          <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}>
-            Report ID <span className="text-fg-faint">(optional — gives the agent exact bug context)</span>
-          </label>
-          <input
-            id={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}
-            type="text"
-            placeholder="Paste the report link or its full ID"
-            value={reportId}
-            onChange={(e) => setReportId(e.target.value)}
-            aria-invalid={reportIdCheck.kind === 'invalid'}
-            aria-describedby={reportIdCheck.kind === 'invalid' ? reportIdHelpId : undefined}
-            className="input text-xs"
-          />
-          {reportIdCheck.kind === 'invalid' ? (
-            <p id={reportIdHelpId} className="text-2xs text-danger">{reportIdCheck.message}</p>
-          ) : null}
-        </div>
+        <ReportPicker label="Bug (optional: gives the agent the exact bug)" value={report} onChange={setReport} limit={5} />
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-mode-drawer' : 'skill-mode'}>Mode</label>
           <select
@@ -499,18 +481,11 @@ function SkillDetailPanel({
           disabled={
             startingSlug === selected.slug ||
             !projectId ||
-            reportIdCheck.kind === 'invalid' ||
             (mode === 'cloud' && !cloudReadiness?.cloudReady)
           }
         >
           {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline →'}
         </Btn>
-        {!reportId ? (
-          <p className="text-2xs text-fg-faint">
-            Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
-            <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Reports</Link>.
-          </p>
-        ) : null}
       </div>
     </>
   )
@@ -530,6 +505,7 @@ function CatalogTab({
   projectId,
   addToast,
   initialSkillSlug,
+  initialReport,
   onPipelineStarted,
   onSkillChange,
   onGoToSources,
@@ -537,6 +513,7 @@ function CatalogTab({
   projectId: string | null
   addToast: (t: { type: string; message: string }) => void
   initialSkillSlug: string | null
+  initialReport?: string | null
   onPipelineStarted: (runId: string) => void
   onSkillChange: (slug: string | null) => void
   onGoToSources: () => void
@@ -545,7 +522,11 @@ function CatalogTab({
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selected, setSelected] = useState<AgentSkill | null>(null)
   const [startingSlug, setStartingSlug] = useState<string | null>(null)
-  const [reportId, setReportId] = useState('')
+  // `?report=<id or link>` (from a report page) picks the bug up front.
+  const [report, setReport] = useState<PickableReport | null>(() => {
+    const fromUrl = parseReportIdInput(initialReport ?? '')
+    return fromUrl.kind === 'ok' ? { id: fromUrl.id } : null
+  })
   const [mode, setMode] = useState<'handoff' | 'cloud'>('handoff')
 
   const { data: cloudReadiness } = usePageData<CloudReadiness>(
@@ -622,11 +603,6 @@ function CatalogTab({
       return
     }
     if (startingSlug) return
-    const parsedReport = parseReportIdInput(reportId)
-    if (parsedReport.kind === 'invalid') {
-      addToast({ type: 'error', message: parsedReport.message })
-      return
-    }
     setStartingSlug(slug)
     try {
       const res = await apiFetch(`/v1/admin/skills/pipelines`, {
@@ -634,7 +610,7 @@ function CatalogTab({
         body: JSON.stringify({
           project_id: projectId,
           root_skill_slug: slug,
-          report_id: parsedReport.kind === 'ok' ? parsedReport.id : null,
+          report_id: report?.id ?? null,
           mode,
         }),
       })
@@ -660,7 +636,7 @@ function CatalogTab({
     } finally {
       setStartingSlug(null)
     }
-  }, [projectId, reportId, mode, addToast, startingSlug, onPipelineStarted])
+  }, [projectId, report, mode, addToast, startingSlug, onPipelineStarted])
 
   const searchPending = searchInput.trim() !== debouncedSearch
   const searching = searchPending || isValidating
@@ -821,8 +797,8 @@ function CatalogTab({
         <SkillDetailPanel
           selected={selected}
           projectId={projectId}
-          reportId={reportId}
-          setReportId={setReportId}
+          report={report}
+          setReport={setReport}
           mode={mode}
           setMode={setMode}
           cloudReadiness={cloudReadiness}
@@ -845,8 +821,8 @@ function CatalogTab({
             <SkillDetailPanel
               selected={selected}
               projectId={projectId}
-              reportId={reportId}
-              setReportId={setReportId}
+              report={report}
+              setReport={setReport}
               mode={mode}
               setMode={setMode}
               cloudReadiness={cloudReadiness}

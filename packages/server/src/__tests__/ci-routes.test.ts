@@ -280,14 +280,17 @@ describe('POST /v1/admin/fixes/:id/ci/rerun', () => {
     expect((await rerun(s)).body.error?.code).toBe('CI_RUNNING')
   })
 
-  it('says when the token cannot write Actions', async () => {
+  it('says when the token cannot write Actions, and remembers it so /pipeline stops offering the re-run (69fcafcb)', async () => {
     const s = setup({ fix_attempts: [fix] })
     s.github['/actions/runs?head_sha=head1'] = { status: 200, body: { workflow_runs: [{ id: 9001, status: 'completed', conclusion: 'failure' }] } }
     s.github['/rerun-failed-jobs'] = { status: 403, body: { message: 'Resource not accessible by personal access token' } }
     const res = await rerun(s)
     expect(res.status).toBe(403)
     expect(res.body.error?.code).toBe('GITHUB_ACTIONS_WRITE_MISSING')
-    expect(s.db.table('fix_events')).toHaveLength(0)
+    const events = s.db.table('fix_events')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ fix_attempt_id: FIX, project_id: P1, kind: 'ci_started', status: 'fail', payload: { rerunRefused: 'actions_write' } })
+    expect(String(events[0].dedupe_key)).toMatch(/^ci_rerun_refused:/)
   })
 })
 

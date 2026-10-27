@@ -130,7 +130,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps and release-batch paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, release-batch and local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -291,7 +291,7 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
-| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
+| **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **CI runners** (ADR 0033, 0037, 0047) | `mushi runner status/compare/bill/placement show/preview/request/revert/fix/fix-status/heartbeat/hooks install/key/add/audit` |
@@ -894,6 +894,33 @@ Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
 | LLM transient retry before key rotation | `_shared/llm-failover.ts` |
 
 ---
+
+## Local workers (Oct 2026)
+
+`mushi work --daemon` (ADR 0048, console ops plan P2) replaces the hand-made
+lane services: one process per machine, set up with `mushi worker install`
+(lanes file `~/.config/mushi/worker.json`, a worker key in the OS keychain or
+a 0600 file, a systemd user unit or a Windows scheduled task). Routes in
+`api/routes/work.ts` (served by `api-ext`); logic in `_shared/work-lanes.ts`
+(closed verb parser, ranking, outcomes) and `_shared/work-claims.ts` (the
+lease every dispatcher reads). Migration `20261027150000_local_workers.sql`.
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `POST /v1/worker/heartbeat` | `worker:run` key only | Register the machine and its lanes, renew leases; answers only each lane's closed settings (paused, concurrency, model, mode, stop_at, drain, prune_own) and the host guards (max_agents, min_free_mem_gb, gh_floor) |
+| `POST /v1/worker/claim` | `worker:run` key only | The lane's queue first, then classified/reopened reports ranked as `pickReports` does; never a report with an active claim, an in-flight cloud dispatch, a live run or an open PR; returns the report, fix packet and earlier reviews |
+| `POST /v1/worker/claims/:id/renew` / `…/done` | `worker:run` key only | Extend the lease; record the outcome with an infra/code split (infra requeues once a week, then /pipeline `requeue`) |
+| `POST /v1/worker/revoke` | `worker:run` key only | The key revokes itself |
+| `GET /v1/admin/work/lanes` | `adminOrApiKey(mcp:read)` | Hosts, lanes, queues, recent runs (`mushi worker status`, the /pipeline Workers tab) |
+| `PATCH /v1/admin/work/lanes/:id`, `PUT …/queue` | `jwtAuth`, non-viewers | Lane settings; the queue (replace or append) |
+| `PATCH` / `DELETE /v1/admin/work/hosts/:id` | `jwtAuth`, the host's owner | Host guards; revoke the host and its key |
+| `POST /v1/admin/work/key` | `adminOrApiKey(mcp:write)` | Mint a `worker:run` account key for apps the caller reaches as a non-viewer |
+
+| Object | Role |
+| --- | --- |
+| `work_hosts` / `work_lanes` / `work_queue` / `work_claims` | Machines (sha256 host id, as `ci_runner_hosts`), lanes (one app on one machine; clones stay local), queues, and the 45-minute lease (one active claim per report). RLS service role only |
+| `worker:run` scope | Reaches `/v1/worker/*`, the local follow-up routes, report filing (`queue.laneId`, own lanes only) and `POST/PATCH /v1/admin/fixes` + `POST /v1/admin/fixes/:id/review` only on its own active claim (`workerClaimDenial`). Never merge, settings or keys; mcp:write does not imply it |
+| Lease checks | `dispatchFixForReport`, `POST /v1/admin/fixes/dispatch`, spend-down's candidates, `fix-worker` before an agent starts, `skill-runs` (waits). A claim counts while `status = 'active' AND lease_until > now()`; a failed read skips the report; a missing table (42P01 / PGRST205) means no claims |
 
 ## Per-app Home (Oct 2026)
 

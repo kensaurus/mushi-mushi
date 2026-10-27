@@ -139,6 +139,15 @@ describe('freshestHeartbeat', () => {
     expect(hb?.last_seen_origin).toBe('new')
   })
 
+  it('names the key that checked in, so Set up can say which key the app uses', () => {
+    const hb = freshestHeartbeat([
+      { last_seen_at: '2026-10-20T10:00:00Z', label: 'old-key' },
+      { last_seen_at: '2026-10-26T10:00:00Z', label: 'web-prod' },
+    ])
+    expect(hb?.key_label).toBe('web-prod')
+    expect(freshestHeartbeat([{ last_seen_at: '2026-10-26T10:00:00Z' }])?.key_label).toBeNull()
+  })
+
   it('returns null when no key has checked in', () => {
     expect(freshestHeartbeat([{ last_seen_at: null }])).toBeNull()
   })

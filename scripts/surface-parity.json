@@ -98,6 +98,12 @@
     "GET /v1/admin/pipeline": { "allow": "jwt-only", "note": "Console /pipeline: stages, stuck groups and release trains. The editor reads one fix with get_fix_timeline and get_fix_verification." },
     "POST /v1/admin/pipeline/actions": { "allow": "jwt-only", "note": "Console /pipeline one-click fixes (CI repair, update branch, conflict agent, mark ready, remove or close with a reason, run the merge queue now); each changes a PR or queue row a person confirmed." },
     "PUT /v1/admin/projects/:id/release-settings": {"allow": "jwt-only", "note": "ADR 0044: how an app ships approved fixes (release trains or each PR), set on /fixes."},
+    "GET /v1/admin/work/lanes": {"cli": ["worker status"], "note": "ADR 0048: the Workers tab on /pipeline; mushi worker status prints the same hosts and lanes."},
+    "PATCH /v1/admin/work/lanes/:id": {"allow": "jwt-only", "note": "ADR 0048: a lane's settings (paused, model, mode, concurrency, stop date, drain) change from the console; the worker reads them on its next heartbeat."},
+    "PUT /v1/admin/work/lanes/:id/queue": {"allow": "jwt-only", "note": "ADR 0048: a lane's queue order is set from the console. Scripts queue a filed report with POST /v1/admin/projects/:id/reports {queue: {laneId}} (mushi reports file)."},
+    "PATCH /v1/admin/work/hosts/:id": {"allow": "jwt-only", "note": "ADR 0048: a worker's machine guards (agents at once, memory and GitHub quota floors), set by the machine's owner in the console."},
+    "DELETE /v1/admin/work/hosts/:id": {"allow": "credentials", "note": "ADR 0048: revokes a worker and its key from the console. On the machine itself, mushi worker revoke does the same with the worker key."},
+    "POST /v1/admin/work/key": {"cli": ["worker install"], "note": "ADR 0048: mints a worker:run key for the apps a lane serves; shown once."},
     "POST /v1/admin/projects/:id/skill-runs": {"allow": "jwt-only"},
     "POST /v1/admin/projects/:id/skill-runs/:runId/stop": {"allow": "jwt-only"},
     "PUT /v1/admin/ci/policy": {"allow": "jwt-only", "note": "ADR 0037: owners and admins save it in the console; only an owner lifts the no-spend rule."},
@@ -358,6 +364,7 @@
     "GET /v1/admin/telegram/status": {"allow": "jwt-only"},
     "GET /v1/admin/tester-redemptions/withheld": {"allow": "jwt-only"},
     "GET /v1/admin/tester-submissions": {"allow": "jwt-only"},
+    "GET /v1/admin/pipeline/fix/:id": {"allow": "jwt-only", "note": "One fix's place on /pipeline (group, actions and the server's refusals) for report detail; mushi fixes tail and get_fix_timeline already show a fix's state."},
     "GET /v1/admin/workspace/nav-meta": {"allow": "jwt-only"},
     "GET /v1/admin/workspace/projects": {"allow": "jwt-only"},
     "GET /v1/cli/auth/device/status": {"allow": "jwt-only"},
@@ -656,6 +663,9 @@
     "PUT /v1/tester/me": {"allow": "jwt-only"}
   },
   "dynamicCalls": {
+    "apps/admin/src/components/reports/ReportPicker.tsx": {
+      "value ? null : reportPickerPath(debounced, limit, query)": "reportPickerPath builds GET /v1/admin/reports with search and sort parameters (mapped as GET /v1/admin/reports); null while a report is picked."
+    },
     "apps/admin/src/components/pdca-flow/PipelineActionPanel.tsx": {
       "judgeRunEndpoint": "A prop that defaults to '/v1/admin/judge/run' (mapped as POST /v1/admin/judge/run); the only caller, PdcaFlow, passes none."
     }

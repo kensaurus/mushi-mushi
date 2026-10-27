@@ -60,6 +60,8 @@ describe('lookupOwner and fetchActionsUsage', () => {
     expect(await fetchActionsUsage(f.fn, 't', 'acme-org', 'Organization', 2026, 9)).toEqual({ items: [], incomplete: true })
     const refused = await fetchActionsUsage(fetchFrom({}).fn, 't', 'acme', 'User', 2026, 9)
     expect(refused).toEqual({ error: expect.stringContaining('Plan: read') })
+    // gh makes a classic token, which reads a personal bill only with the user scope.
+    expect(refused).toEqual({ error: expect.stringContaining('gh auth refresh -s user') })
     const org = await fetchActionsUsage(fetchFrom({}).fn, 't', 'acme-org', 'Organization', 2026, 9)
     expect(org).toEqual({ error: expect.stringContaining('Administration: read') })
     expect(await lookupOwner(fetchFrom({}).fn, 't', 'acme')).toEqual({ error: expect.stringContaining('404') })

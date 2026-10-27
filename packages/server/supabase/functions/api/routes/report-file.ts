@@ -9,6 +9,10 @@
  *          as `reports_ingested` the way SDK ingest meters one. The report is stored with source 'api', queued for stage-1
  *          triage and classified like any other report; the audit log records
  *          who filed it and how.
+ *
+ *          `queue: { laneId }` also puts it at the end of one of the caller's
+ *          local worker lanes (ADR 0048). A local worker's own key
+ *          (worker:run) may file too, and queue only into its own lanes.
  */
 
 import type { Hono } from 'npm:hono@4'
@@ -22,6 +26,7 @@ import { denyViewerWrite } from '../viewer-gate.ts'
 import { triggerClassification } from '../helpers.ts'
 import { checkIngestQuota } from '../../_shared/quota.ts'
 import { runInBackground } from '../../_shared/background.ts'
+import { enqueueReports, isWorkerOnlyKey, laneForQueue, type QueueLane } from '../../_shared/work-claims.ts'
 import {
   FILE_REPORT_RATE_SCOPE,
   FILED_REPORTS_PER_HOUR,
@@ -35,7 +40,7 @@ const log = rootLog.child('report-file')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): void {
-  app.post('/v1/admin/projects/:id/reports', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  app.post('/v1/admin/projects/:id/reports', adminOrApiKey({ scope: ['mcp:write', 'worker:run'] }), async (c) => {
     const userId = c.get('userId') as string
     const projectId = c.req.param('id') ?? ''
     if (!UUID_RE.test(projectId)) {
@@ -58,6 +63,18 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
     }
     const viewerDenied = denyViewerWrite(c, access.role, 'file reports')
     if (viewerDenied) return viewerDenied
+
+    // The lane is checked before anything is filed: a wrong lane files nothing.
+    let lane: QueueLane | null = null
+    if (parsed.value.queue) {
+      const found = await laneForQueue(db, parsed.value.queue.laneId, {
+        projectId,
+        userId,
+        apiKeyId: isWorkerOnlyKey(c) ? (c.get('apiKeyId') as string | undefined) ?? '' : null,
+      })
+      if ('error' in found) return c.json({ ok: false, error: { code: 'LANE_NOT_FOUND', message: found.error } }, found.status)
+      lane = found.lane
+    }
 
     // Per app, shared by every caller. A limiter error refuses the request
     // rather than letting an unbounded number of diagnoses through.
@@ -125,6 +142,13 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
     }
     triggerClassification(reportId, projectId)
 
+    let queued: { laneId: string } | null = null
+    if (lane) {
+      const q = await enqueueReports(db, lane, [reportId], { source: 'report_file', addedBy: userId })
+      if ('error' in q) log.warn('filed report not queued for its lane', { reportId, laneId: lane.id, err: q.error })
+      else queued = { laneId: lane.id }
+    }
+
     // Metered like SDK ingest (helpers.ts ingestReport): kept alive past the
     // response; the usage-aggregator cron rolls these up for billing.
     runInBackground(
@@ -163,6 +187,7 @@ export function registerReportFileRoutes(app: Hono<{ Variables: Variables }>): v
           status: 'new',
           severity: parsed.value.severity ?? null,
           component: parsed.value.component ?? null,
+          queued,
         },
       },
       201,

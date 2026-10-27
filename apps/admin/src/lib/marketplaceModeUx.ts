@@ -13,7 +13,6 @@ export interface MarketplaceUxFlags {
   hideTabs: boolean
   plainBanner: boolean
   hideOverviewChrome: boolean
-  hideMarketplaceSnapshot: boolean
 }
 
 export function useMarketplaceUx(): MarketplaceUxFlags {
@@ -27,7 +26,6 @@ export function useMarketplaceUx(): MarketplaceUxFlags {
     hideTabs: false,
     plainBanner: !isAdvanced,
     hideOverviewChrome: !isAdvanced,
-    hideMarketplaceSnapshot: isQuickstart,
   }
 }
 
