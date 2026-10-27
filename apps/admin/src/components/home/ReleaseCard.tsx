@@ -11,7 +11,8 @@
 
 import { Link } from 'react-router-dom'
 import { Badge, RelativeTime, Section, Skeleton } from '../ui'
-import { SEVERITIES, SEVERITY_BAR, type HomeRelease, type HomeSection, type SeverityKey } from '../../lib/projectHome'
+import { SEVERITIES, SEVERITY_LABEL, type HomeRelease, type HomeSection, type SeverityKey } from '../../lib/projectHome'
+import { severityTrafficBg } from '../../lib/severityTraffic'
 import { HomeSectionBody } from './HomeSectionBody'
 
 const TRAIN_STATE: Record<string, string> = {
@@ -19,6 +20,11 @@ const TRAIN_STATE: Record<string, string> = {
   testing: 'is running CI',
   merged: 'merged',
   failed: 'failed CI',
+}
+
+/** The traffic-light fill for a severity ("not rated yet" is the palette's unscored grey). */
+function severityBar(s: SeverityKey): string {
+  return severityTrafficBg(s === 'unrated' ? 'unscored' : s) ?? 'bg-fg-faint'
 }
 
 function severityHref(s: SeverityKey): string {
@@ -100,17 +106,17 @@ function WaitingBar({ waiting, error }: { waiting: HomeRelease['waiting']; error
           {waiting.total} {waiting.total === 1 ? 'bug' : 'bugs'} waiting for a fix
         </Link>
       </div>
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-overlay" role="img" aria-label={parts.map((s) => `${SEVERITY_BAR[s].label} ${waiting.counts[s]}`).join(', ') || 'None waiting'}>
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-overlay" role="img" aria-label={parts.map((s) => `${SEVERITY_LABEL[s]} ${waiting.counts[s]}`).join(', ') || 'None waiting'}>
         {parts.map((s) => (
-          <span key={s} className={SEVERITY_BAR[s].bar} style={{ width: `${(waiting.counts[s] / waiting.total) * 100}%` }} />
+          <span key={s} className={severityBar(s)} style={{ width: `${(waiting.counts[s] / waiting.total) * 100}%` }} />
         ))}
       </div>
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
         {SEVERITIES.map((s) => (
           <li key={s}>
             <Link to={severityHref(s)} className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary hover:text-fg">
-              <span aria-hidden className={`h-2 w-2 rounded-full ${SEVERITY_BAR[s].bar}`} />
-              {SEVERITY_BAR[s].label} <span className="tabular-nums font-medium text-fg">{waiting.counts[s]}</span>
+              <span aria-hidden className={`h-2 w-2 rounded-full ${severityBar(s)}`} />
+              {SEVERITY_LABEL[s]} <span className="tabular-nums font-medium text-fg">{waiting.counts[s]}</span>
             </Link>
           </li>
         ))}

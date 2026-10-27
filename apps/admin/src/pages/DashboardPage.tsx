@@ -21,7 +21,7 @@ import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { useEntitlements } from '../lib/useEntitlements'
 import { Confetti } from '../components/Confetti'
-import { FreshnessPill, RefreshIconButton } from '../components/ui'
+import { EmptySectionMessage, FreshnessPill, RefreshIconButton } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -177,6 +177,8 @@ export function DashboardPage() {
 
       {error && !data ? (
         <PageLoadError error={error} onRetry={reload} resource="Home" endpoint="/v1/admin/projects/:id/home" />
+      ) : !activeProjectId && setup.resolved && !setup.loading ? (
+        <EmptySectionMessage text="Pick an app in the switcher at the top to see how it is doing." />
       ) : !data || !activeProjectId ? (
         <HomeSkeleton />
       ) : (

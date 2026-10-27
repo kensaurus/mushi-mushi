@@ -5,9 +5,9 @@
  *          and small display helpers its sections share.
  */
 
-export type SectionStatus = 'ok' | 'not_connected' | 'error'
+type SectionStatus = 'ok' | 'not_connected' | 'error'
 
-export interface ConnectHint {
+interface ConnectHint {
   label: string
   to: string
 }
@@ -20,7 +20,7 @@ export interface HomeSection<T> {
 }
 
 export type Light = 'good' | 'warn' | 'bad' | 'busy' | 'off'
-export type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
+type HealthId = 'site' | 'errors' | 'sdk' | 'ci'
 
 export interface HealthSignal {
   id: HealthId
@@ -62,9 +62,9 @@ export interface NeedsYouItem {
   action: ConnectHint
 }
 
-export type StationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
+type StationId = 'fix' | 'ci' | 'train' | 'merged' | 'deployed'
 
-export interface Station {
+interface Station {
   id: StationId
   label: string
   count: number
@@ -157,12 +157,13 @@ export const LIGHT_WORD: Record<Light, string> = {
   off: 'No signal',
 }
 
-export const SEVERITY_BAR: Record<SeverityKey, { label: string; bar: string }> = {
-  critical: { label: 'Critical', bar: 'bg-danger' },
-  high: { label: 'High', bar: 'bg-warn' },
-  medium: { label: 'Medium', bar: 'bg-sev-medium' },
-  low: { label: 'Low', bar: 'bg-info' },
-  unrated: { label: 'Not rated yet', bar: 'bg-fg-faint' },
+/** Severity names on Home; colours come from the console's one severity palette (lib/severityTraffic). */
+export const SEVERITY_LABEL: Record<SeverityKey, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  unrated: 'Not rated yet',
 }
 
 /** Initials for an avatar with no picture. */

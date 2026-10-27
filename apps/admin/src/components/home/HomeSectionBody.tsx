@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react'
 import { Btn, EmptySectionMessage } from '../ui'
 import type { HomeSection } from '../../lib/projectHome'
+import { semanticBannerTone } from '../../lib/tokens'
 
 interface Props<T> {
   section: HomeSection<T>
@@ -21,7 +22,7 @@ interface Props<T> {
 export function HomeSectionBody<T>({ section, what, notConnectedText, children }: Props<T>) {
   if (section.status === 'error') {
     return (
-      <p role="alert" className="rounded-md border border-danger/30 bg-danger-muted/40 px-3 py-2 text-xs text-danger-foreground">
+      <p role="alert" className={`rounded-md border px-3 py-2 text-xs ${semanticBannerTone('danger')}`}>
         Could not read {what} just now. Refresh to try again.
         {section.error ? <span className="mt-0.5 block font-mono text-2xs opacity-80 break-all">{section.error}</span> : null}
       </p>

@@ -7,7 +7,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Btn, Card, RelativeTime, Skeleton } from '../ui'
+import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_DOT, LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
 
@@ -32,15 +32,20 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
 function HealthTile({ signal: s }: { signal: HealthSignal }) {
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <Link to={s.href} className="min-w-0 truncate text-2xs font-medium uppercase tracking-wider text-fg-muted hover:text-fg">
-          {s.label}
-        </Link>
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-2xs text-fg-secondary">
-          <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${LIGHT_DOT[s.light]}`} />
-          <span>{s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]}</span>
-        </span>
-      </div>
+      <PanelHeader
+        className="mb-1"
+        title={
+          <Link to={s.href} className="hover:text-fg">
+            {s.label}
+          </Link>
+        }
+        action={
+          <span className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
+            <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${LIGHT_DOT[s.light]}`} />
+            <span>{s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]}</span>
+          </span>
+        }
+      />
       <Link to={s.href} className="text-base font-semibold leading-tight text-fg hover:underline">
         {s.headline}
       </Link>
