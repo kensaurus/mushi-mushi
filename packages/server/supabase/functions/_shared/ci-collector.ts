@@ -8,8 +8,14 @@
  *                     runs not already stored as finished, and the runner
  *                     list. ≤ 40 GitHub calls per tick, shared fairly
  *                     (projects least recently collected go first, each gets
- *                     an even share). Then deletes ci_jobs and
- *                     ci_runner_job_samples older than 30 days.
+ *                     an even share). Within each project's share it also
+ *                     lists closed pull requests once a day per repo and
+ *                     reads up to two PR file lists (ci_pull_requests, for
+ *                     the cost rules). With the calls left over it reads each
+ *                     GitHub owner's Actions bill once a day (syncBilling →
+ *                     ci_billing_daily). Then deletes ci_jobs,
+ *                     ci_runner_job_samples and ci_pull_requests older than
+ *                     30 days, and bill rows older than 400.
  *   settleStaleLiveJobs — after both: re-reads, one job at a time, every
  *                     job still stored as queued or running that no read has
  *                     refreshed in 10 min. A run's later attempts list only
@@ -42,8 +48,10 @@ import {
   fetchRepoVisibility,
   needsAnnotations,
   upsertCiJobs,
+  listClosedPullRequests,
   listRepoRunners,
   listRunsByStatus,
+  pullRequestDocsOnly,
   listRunsUpdatedSince,
   repoFullName,
   runnerRowsFromList,
@@ -51,6 +59,7 @@ import {
   type GhRun,
 } from './ci-jobs.ts'
 import { evaluateWatch, type WatchJob } from './ci-placement.ts'
+import { billingRowsFromUsage, fetchBillingUsage, isGithubLogin, monthsToSync, nextCoveredFrom, type BillingOwnerType } from './ci-billing.ts'
 
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
@@ -90,10 +99,21 @@ export interface RepoPermissions {
   visibilityCheckedAt?: string
   /** The repo owner's login: GitHub's included minutes are per owner account. */
   owner?: string
+  /** GitHub's owner type, 'User' or 'Organization': which billing endpoint reads the owner's bill. */
+  ownerType?: string
+  /** When the closed pull requests were last listed (once a day). */
+  prsCheckedAt?: string
 }
 
 export interface CollectorDeps {
   resolveToken: (db: Db, projectId: string, installationId: number | null) => Promise<string | null>
+  /**
+   * The project's own stored GitHub token for the billing read: never the
+   * GitHub App installation (GitHub refuses it the user bill) and never the
+   * platform token (it would read the platform owner's bill). Unset = no
+   * billing read.
+   */
+  resolveBillingToken?: (db: Db, projectId: string) => Promise<string | null>
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
 }
@@ -176,7 +196,7 @@ async function collectRepo(
   prior: RepoPermissions | undefined,
   now: Date,
   opts: { mode: 'collect' | 'live' },
-): Promise<{ jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null }; stored: number; error: string | null }> {
+): Promise<{ jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null; ownerType?: string | null }; stored: number; error: string | null }> {
   let runs: GhRun[] = []
   let jobsState: PermissionState | undefined
   if (opts.mode === 'collect') {
@@ -218,11 +238,11 @@ async function collectRepo(
   }
 
   // Visibility once a day, after the runner list, and only with budget to spare.
-  let visibility: { value: RepoVisibility; owner: string | null } | undefined
+  let visibility: { value: RepoVisibility; owner: string | null; ownerType?: string | null } | undefined
   const visibilityDue = !prior?.visibilityCheckedAt || now.getTime() - Date.parse(prior.visibilityCheckedAt) >= VISIBILITY_RECHECK_MS
   if (opts.mode === 'collect' && visibilityDue && gh.budget.remaining > 1) {
     const v = await fetchRepoVisibility(gh, binding.repo)
-    if (v.status !== 0) visibility = { value: v.visibility, owner: v.owner }
+    if (v.status !== 0) visibility = { value: v.visibility, owner: v.owner, ownerType: v.ownerType }
   }
 
   const due = await runsToRead(db, binding.projectId, binding.repo, runs)
@@ -239,7 +259,7 @@ async function collectRepo(
 
 function mergePermissions(
   prior: RepoPermissions | undefined,
-  got: { jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null } },
+  got: { jobs?: PermissionState; runners?: PermissionState; visibility?: { value: RepoVisibility; owner: string | null; ownerType?: string | null } },
   now: Date,
 ): RepoPermissions {
   const nowIso = now.toISOString()
@@ -256,6 +276,9 @@ function mergePermissions(
   if (checked) out.visibilityCheckedAt = checked
   const owner = got.visibility?.owner ?? prior?.owner
   if (owner) out.owner = owner
+  const ownerType = got.visibility?.ownerType ?? prior?.ownerType
+  if (ownerType) out.ownerType = ownerType
+  if (prior?.prsCheckedAt) out.prsCheckedAt = prior.prsCheckedAt
   return out
 }
 
@@ -270,6 +293,10 @@ export interface CollectorSummary {
   deleted: { jobs: number | null; samples: number | null }
   /** CI placement watches updated this tick (ADR 0037). */
   watches: number
+  /** Closed pull requests listed and PR file lists read this tick. */
+  prs: { repos: number; stored: number; classified: number }
+  /** GitHub bills read this tick (once a day per owner). */
+  billing: { owners: number; calls: number; rows: number; unavailable: number }
 }
 
 export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projectIds?: string[]; calls?: number } = {}): Promise<CollectorSummary> {
@@ -287,7 +314,18 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
 
   let remaining = opts.calls ?? COLLECTOR_CALLS_PER_TICK
   const share = Math.max(COLLECTOR_MIN_CALLS_PER_PROJECT, Math.ceil(remaining / Math.max(1, order.length)))
-  const summary: CollectorSummary = { projects: 0, repos: 0, calls: 0, stored: 0, skippedForBudget: 0, settled: 0, deleted: { jobs: null, samples: null }, watches: 0 }
+  const summary: CollectorSummary = {
+    projects: 0,
+    repos: 0,
+    calls: 0,
+    stored: 0,
+    skippedForBudget: 0,
+    settled: 0,
+    deleted: { jobs: null, samples: null },
+    watches: 0,
+    prs: { repos: 0, stored: 0, classified: 0 },
+    billing: { owners: 0, calls: 0, rows: 0, unavailable: 0 },
+  }
   const tokens = new Map<string, string | null>()
 
   for (const projectId of order) {
@@ -314,6 +352,14 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
         permissions[binding.repo] = mergePermissions(permissions[binding.repo], got, now)
         summary.stored += got.stored
         if (got.error) lastError = got.error
+        // Pull request states for the cost rules, with what budget this project has left.
+        const prs = await collectPullRequests(db, gh, binding, permissions[binding.repo], now).catch(() => ({ checkedAt: undefined, stored: 0, classified: 0 }))
+        if (prs.checkedAt) {
+          permissions[binding.repo] = { ...permissions[binding.repo], prsCheckedAt: prs.checkedAt }
+          summary.prs.repos++
+        }
+        summary.prs.stored += prs.stored
+        summary.prs.classified += prs.classified
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
       }
@@ -329,10 +375,226 @@ export async function runCiCollector(db: Db, deps: CollectorDeps, opts: { projec
     )
   }
 
+  // The real bill, once a day per owner, from the calls this tick left over.
+  if (deps.resolveBillingToken && remaining > 0) {
+    try {
+      const billing = await syncBilling(db, deps, { calls: remaining, now, bindings, permissionsByProject: await readCiPermissionsByProject(db, [...byProject.keys()]) })
+      summary.billing = billing
+      summary.calls += billing.calls
+      remaining -= billing.calls
+    } catch {
+      // A billing failure never fails the tick; each owner's status records its own errors.
+    }
+  }
+
   summary.settled = await settleStaleLiveJobs(db, deps, { calls: SETTLE_CALLS_PER_TICK, now, bindings, tokens })
   summary.watches = await runPlacementWatches(db, now).catch(() => 0)
   summary.deleted = await deleteExpiredCiRows(db, now)
   return summary
+}
+
+/** Closed pull requests are listed once a day per repo. */
+export const PR_RECHECK_MS = 24 * 60 * 60_000
+/** PR file lists read per repo per tick (docs-only or not), when budget is left. */
+export const PR_FILES_PER_REPO_PER_TICK = 2
+const PR_WINDOW_MS = CI_RETENTION_DAYS * 24 * 60 * 60_000
+
+/**
+ * Closed pull requests of the last 30 days (merged or not, draft, head
+ * branch) once a day, then the file list of up to two PRs not read yet:
+ * whether each changed only documentation. Feeds abandoned_pr_minutes and
+ * missing_path_filter. Before ci_pull_requests exists the writes fail and
+ * nothing is stored; the list is still asked only once a day.
+ */
+async function collectPullRequests(
+  db: Db,
+  gh: CiGithub,
+  binding: RepoBinding,
+  prior: RepoPermissions | undefined,
+  now: Date,
+): Promise<{ checkedAt?: string; stored: number; classified: number }> {
+  const out: { checkedAt?: string; stored: number; classified: number } = { stored: 0, classified: 0 }
+  const since = now.getTime() - PR_WINDOW_MS
+  const due = !prior?.prsCheckedAt || now.getTime() - Date.parse(prior.prsCheckedAt) >= PR_RECHECK_MS
+  if (due && gh.budget.remaining > 0) {
+    const res = await listClosedPullRequests(gh, binding.repo)
+    if (res.status !== 0) out.checkedAt = now.toISOString()
+    if (res.status === 200 && res.body) {
+      const rows = res.body
+        .filter((p) => Date.parse(p.updated_at ?? p.closed_at ?? '') >= since)
+        .map((p) => ({
+          project_id: binding.projectId,
+          repo: binding.repo,
+          number: p.number,
+          state: p.state === 'open' ? 'open' : 'closed',
+          merged: !!p.merged_at,
+          draft: p.draft === true,
+          head_ref: p.head?.ref ? String(p.head.ref).slice(0, 255) : null,
+          closed_at: p.closed_at ?? null,
+          gh_updated_at: p.updated_at ?? null,
+          updated_at: now.toISOString(),
+        }))
+      if (rows.length > 0) {
+        const { error } = await db.from('ci_pull_requests').upsert(rows, { onConflict: 'project_id,repo,number' })
+        if (!error) out.stored = rows.length
+      }
+    }
+  }
+  if (gh.budget.remaining <= 0) return out
+  const { data, error } = await db
+    .from('ci_pull_requests')
+    .select('number')
+    .eq('project_id', binding.projectId)
+    .eq('repo', binding.repo)
+    .is('files_checked_at', null)
+    .gte('closed_at', new Date(since).toISOString())
+    .order('closed_at', { ascending: false })
+    .limit(PR_FILES_PER_REPO_PER_TICK)
+  if (error || !Array.isArray(data)) return out
+  for (const r of data as Array<{ number: number }>) {
+    if (gh.budget.remaining <= 0) break
+    const files = await pullRequestDocsOnly(gh, binding.repo, Number(r.number))
+    if (files.status === 0) break
+    await db
+      .from('ci_pull_requests')
+      .update({ docs_only: files.docsOnly, files_checked_at: now.toISOString(), updated_at: now.toISOString() })
+      .eq('project_id', binding.projectId)
+      .eq('repo', binding.repo)
+      .eq('number', r.number)
+    out.classified++
+  }
+  return out
+}
+
+/** An owner's bill is read once a day. */
+export const BILLING_RECHECK_MS = 24 * 60 * 60_000
+/** Bill rows are kept this long. */
+export const BILLING_RETENTION_DAYS = 400
+const BILLING_UPSERT_CHUNK = 500
+export const NO_BILLING_TOKEN =
+  "No GitHub token is saved for this project, so Mushi cannot read the bill (it never uses the GitHub App or a shared token for billing). Save a token with billing read access in the project's GitHub settings, or run `mushi runner bill --push`."
+
+/** ci_collector_state.permissions per project. */
+async function readCiPermissionsByProject(db: Db, projectIds: string[]): Promise<Map<string, Record<string, RepoPermissions>>> {
+  const states = await readStates(db, projectIds)
+  return new Map([...states.values()].map((s) => [s.project_id, s.permissions ?? {}]))
+}
+
+/**
+ * Once a day per (organization, GitHub owner) of the bound repos: read this
+ * month and last month of the owner's Actions bill (plus older months the
+ * previous-period comparison still needs) with the project's own token, and
+ * store it in ci_billing_daily. Every attempt is recorded in ci_billing_sync
+ * with the plain reason when it failed, so a refusal is retried tomorrow,
+ * not every tick. Owners whose months do not fit in `calls` wait for a tick
+ * with more budget left. Before the tables exist this does nothing.
+ */
+export async function syncBilling(
+  db: Db,
+  deps: CollectorDeps,
+  opts: { calls: number; now: Date; bindings: RepoBinding[]; permissionsByProject: Map<string, Record<string, RepoPermissions>> },
+): Promise<CollectorSummary['billing']> {
+  const out = { owners: 0, calls: 0, rows: 0, unavailable: 0 }
+  const { now } = opts
+  const resolveBillingToken = deps.resolveBillingToken
+  const projectIds = [...new Set(opts.bindings.map((b) => b.projectId))]
+  if (projectIds.length === 0 || !resolveBillingToken) return out
+  const { data: projects, error } = await db.from('projects').select('id, organization_id').in('id', projectIds)
+  if (error) return out
+  const orgOf = new Map(((projects ?? []) as Array<{ id: string; organization_id: string | null }>).map((p) => [p.id, p.organization_id]))
+
+  const targets = new Map<string, { orgId: string; owner: string; projectIds: string[]; ownerType: string | null }>()
+  for (const b of opts.bindings) {
+    const orgId = orgOf.get(b.projectId)
+    const owner = b.repo.split('/')[0]
+    if (!orgId || !isGithubLogin(owner)) continue
+    const key = `${orgId}|${owner.toLowerCase()}`
+    const t = targets.get(key) ?? { orgId, owner, projectIds: [], ownerType: null }
+    if (!t.projectIds.includes(b.projectId)) t.projectIds.push(b.projectId)
+    t.ownerType = t.ownerType ?? opts.permissionsByProject.get(b.projectId)?.[b.repo]?.ownerType ?? null
+    targets.set(key, t)
+  }
+  if (targets.size === 0) return out
+
+  const { data: syncRows, error: syncErr } = await db
+    .from('ci_billing_sync')
+    .select('organization_id, owner, owner_type, last_attempt_at, last_ok_at, last_source, covered_from')
+    .in('organization_id', [...new Set([...targets.values()].map((t) => t.orgId))])
+  if (syncErr) return out
+  type Prior = { organization_id: string; owner: string; owner_type: string | null; last_attempt_at: string | null; last_ok_at: string | null; last_source: string | null; covered_from: string | null }
+  const prior = new Map(((syncRows ?? []) as Prior[]).map((p) => [`${p.organization_id}|${p.owner.toLowerCase()}`, p]))
+  const attemptedAt = (k: string) => Date.parse(prior.get(k)?.last_attempt_at ?? '') || 0
+  const due = [...targets.entries()]
+    .filter(([k]) => now.getTime() - attemptedAt(k) >= BILLING_RECHECK_MS)
+    .sort((a, b) => attemptedAt(a[0]) - attemptedAt(b[0]))
+
+  let remaining = opts.calls
+  for (const [key, t] of due) {
+    const p = prior.get(key)
+    const months = monthsToSync(now, p?.covered_from ?? null)
+    if (remaining < months.length) break
+    out.owners++
+    const owner = p?.owner ?? t.owner
+    let token: string | null = null
+    for (const pid of t.projectIds) {
+      token = await resolveBillingToken(db, pid).catch(() => null)
+      if (token) break
+    }
+    const knownType = t.ownerType === 'User' || t.ownerType === 'Organization' ? t.ownerType : p?.owner_type === 'Organization' || p?.owner_type === 'User' ? p.owner_type : null
+    const ownerType: BillingOwnerType = knownType === 'Organization' ? 'Organization' : 'User'
+    let lastError: string | null = null
+    const results: Array<{ year: number; month: number; ok: boolean }> = []
+    if (!token) {
+      lastError = NO_BILLING_TOKEN
+      out.unavailable++
+    } else {
+      for (const m of months) {
+        remaining--
+        out.calls++
+        const res = await fetchBillingUsage({ token, owner, ownerType, year: m.year, month: m.month, fetchImpl: deps.fetchImpl })
+        if (!res.ok) {
+          results.push({ ...m, ok: false })
+          lastError = res.reason
+          if (res.unavailable) {
+            out.unavailable++
+            break
+          }
+          continue
+        }
+        const { rows } = billingRowsFromUsage(owner, res.items)
+        let stored = true
+        for (let i = 0; i < rows.length && stored; i += BILLING_UPSERT_CHUNK) {
+          const chunk = rows.slice(i, i + BILLING_UPSERT_CHUNK).map((r) => ({ ...r, organization_id: t.orgId, source: 'api', fetched_at: now.toISOString() }))
+          const { error: upErr } = await db.from('ci_billing_daily').upsert(chunk, { onConflict: 'organization_id,owner,day,repo,sku' })
+          if (upErr) stored = false
+        }
+        if (!stored) {
+          results.push({ ...m, ok: false })
+          lastError = 'The bill was read but could not be stored.'
+          break
+        }
+        out.rows += rows.length
+        if (res.incomplete) lastError = 'GitHub returned more usage than one page, so part of a month may be missing.'
+        results.push({ ...m, ok: !res.incomplete })
+      }
+    }
+    const currentOk = results[0]?.ok === true
+    await db.from('ci_billing_sync').upsert(
+      {
+        organization_id: t.orgId,
+        owner,
+        owner_type: knownType,
+        last_attempt_at: now.toISOString(),
+        last_ok_at: currentOk ? now.toISOString() : (p?.last_ok_at ?? null),
+        last_error: lastError?.slice(0, 500) ?? null,
+        last_source: currentOk ? 'api' : (p?.last_source ?? null),
+        covered_from: nextCoveredFrom(p?.covered_from ?? null, results, now, p?.last_ok_at ?? null),
+        updated_at: now.toISOString(),
+      },
+      { onConflict: 'organization_id,owner' },
+    )
+  }
+  return out
 }
 
 interface StaleLiveRow {
@@ -470,6 +732,9 @@ export async function deleteExpiredCiRows(db: Db, now: Date): Promise<{ jobs: nu
   const cutoff = new Date(now.getTime() - CI_RETENTION_DAYS * 24 * 60 * 60_000).toISOString()
   const jobs = await db.from('ci_jobs').delete({ count: 'exact' }).lt('gh_created_at', cutoff)
   const samples = await db.from('ci_runner_job_samples').delete({ count: 'exact' }).lt('at', cutoff)
+  // Best effort: these tables may not be applied yet.
+  await db.from('ci_pull_requests').delete().lt('updated_at', cutoff)
+  await db.from('ci_billing_daily').delete().lt('day', new Date(now.getTime() - BILLING_RETENTION_DAYS * 24 * 60 * 60_000).toISOString().slice(0, 10))
   return { jobs: jobs?.error ? null : jobs?.count ?? null, samples: samples?.error ? null : samples?.count ?? null }
 }
 
