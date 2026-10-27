@@ -26,9 +26,16 @@ describe('time-to-first-diagnosis skips test and seed reports', () => {
   it('filters the classified reports with the shared first-report predicate (fixtures and hand-filed reports)', () => {
     expect(start).toBeGreaterThan(-1)
     expect(src).toContain("import { isNotFirstReportSource } from '../../_shared/first-report.ts'")
-    expect(route).toContain("select('created_at, custom_metadata')")
+    expect(route).toContain("select('id, created_at, custom_metadata')")
     expect(route).toMatch(/\.find\(\(row\) => !isNotFirstReportSource\(row\.custom_metadata\)\)/)
     expect(route).not.toMatch(/\.limit\(1\)\s*\.maybeSingle\(\),\s*\]\);/)
+  })
+
+  it('names the first real report and when a test report was diagnosed, so Set up stops waiting on a test (9b7624e6)', () => {
+    expect(route).toContain('firstReportId: firstReal?.id ?? null')
+    expect(route).toMatch(/testDiagnosisAt = classified\.find\(\(row\) => isNotFirstReportSource\(row\.custom_metadata\)\)/)
+    // The no-project answer has the same shape.
+    expect(route).toContain('firstReportId: null, testDiagnosisAt: null')
   })
 
   it('the shared predicate covers the console test report and the marketing seed', () => {

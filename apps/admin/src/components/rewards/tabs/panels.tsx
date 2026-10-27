@@ -43,17 +43,8 @@ import {
 } from '../../icons'
 import { Drawer } from '../../Drawer'
 import { TableSkeleton } from '../../skeletons/TableSkeleton'
-import { MetricStrip } from '../../MetricStrip'
-import {
-  overviewContributorsTooltip,
-  overviewContributorsDetail,
-  overviewPointsTooltip,
-  overviewPointsDetail,
-  overviewTierHoldersTooltip,
-  overviewTierHoldersDetail,
-  overviewPendingLiabilityTooltip,
-  overviewPendingLiabilityDetail,
-} from '../../../lib/statTooltips/rewards'
+import { RewardsOverviewHighlights } from '../RewardsOverviewHighlights'
+import { eventsInLast24h, tierEmptyMessage } from '../overviewHelpers'
 import { CHIP_TONE } from '../../../lib/chipTone'
 import { httpsUrl, numberInRange, token } from '../../../lib/validators'
 import { plainApiError } from '../../../lib/humanizeApiError'
@@ -187,38 +178,15 @@ export function OverviewTab() {
   const tierEntries = Object.entries(data?.tier_distribution ?? {})
     .sort((a, b) => b[1] - a[1])
 
-  const totalHolders = tierEntries.reduce((s, [, n]) => s + n, 0)
+  const totalHolders = tierEntries.reduce((sum, [, n]) => sum + n, 0)
   const pendingLiability = data?.pending_payout_liability_usd ?? 0
+  // The server's feed can reach past a day; the section promises the last 24 h.
+  const recentEvents = eventsInLast24h(feedData?.events ?? [])
 
   return (
     <div className="space-y-4">
-      <MetricStrip cols={4} ariaLabel="Rewards overview metrics">
-        <StatCard
-          label="Active contributors (30d)"
-          value={data?.active_contributors_30d ?? 0}
-          tooltip={overviewContributorsTooltip(data?.active_contributors_30d ?? 0)}
-          detail={overviewContributorsDetail()}
-        />
-        <StatCard
-          label="Points awarded (30d)"
-          value={(data?.points_awarded_30d ?? 0).toLocaleString()}
-          tooltip={overviewPointsTooltip(data?.points_awarded_30d ?? 0)}
-          detail={overviewPointsDetail()}
-        />
-        <StatCard
-          label="Tier holders"
-          value={totalHolders}
-          tooltip={overviewTierHoldersTooltip(totalHolders)}
-          detail={overviewTierHoldersDetail()}
-        />
-        <StatCard
-          label="Pending liability"
-          value={`$${pendingLiability.toFixed(2)}`}
-          accent={pendingLiability > 0 ? 'text-warn' : undefined}
-          tooltip={overviewPendingLiabilityTooltip(pendingLiability)}
-          detail={overviewPendingLiabilityDetail()}
-        />
-      </MetricStrip>
+      {/* First: who earns most, what you owe, and what testers are working on. */}
+      <RewardsOverviewHighlights pendingPayoutUsd={pendingLiability} />
 
       <Section
         title="Tier distribution"
@@ -226,7 +194,7 @@ export function OverviewTab() {
         freshness={{ at: lastFetchedAt, isValidating }}
       >
         {tierEntries.length === 0 ? (
-          <EmptyState title="No contributors yet" description="Enable rewards on a project to start tracking users." />
+          <EmptyState {...tierEmptyMessage(data?.active_contributors_30d ?? 0)} />
         ) : (
           <div className="space-y-2">
             {tierEntries.map(([slug, count]) => {
@@ -255,12 +223,6 @@ export function OverviewTab() {
         )}
       </Section>
 
-      {pendingLiability > 0 && (
-        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
-          <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
-          monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
-        </div>
-      )}
 
       {/* ── Debug: 24h activity feed ── */}
       <Section
@@ -304,11 +266,11 @@ export function OverviewTab() {
           </div>
         )}
 
-        {!feedData || feedData.events.length === 0 ? (
+        {recentEvents.length === 0 ? (
           <EmptyState title="No events in last 24 hours" description="Activity events will appear here as SDK clients send data." />
         ) : (
           <div className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs">
-            {feedData.events.map((ev) => {
+            {recentEvents.map((ev) => {
               const rejected = !!ev.rejected_reason
               return (
                 <div key={ev.id} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`}>

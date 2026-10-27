@@ -22,9 +22,11 @@ import {
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
-import { ActionPill, ActionPillRow } from '../components/report-detail/ReportSurface'
-import { NextStep } from '../components/NextStep'
-import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
+import { PageStatus } from '../components/ui/page-status'
+import { PageFirstStep } from '../components/ui/page-first-step'
+import { PageActionMap } from '../components/inventory/PageActionMap'
+import { gateLabel } from '../lib/gateLabels'
+import { pluralize } from '../lib/format'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import { UserStoryMap } from '../components/inventory/UserStoryMap'
 import { InventoryTree, type TreeRow } from '../components/inventory/InventoryTree'
@@ -44,15 +46,21 @@ type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 
 
 // One tab row: the page is already Advanced-only, so a second
 // "Primary / Advanced" toggle above it only hid half the tabs.
+// Ids stay as they were: other pages and the docs deep-link `?tab=gates`,
+// `?tab=discovery` and so on. Only the words on the tabs changed.
 const INVENTORY_TABS: Array<{ id: Tab; label: string }> = [
   { id: 'stories', label: 'User stories' },
-  { id: 'tree', label: 'Tree' },
-  { id: 'gates', label: 'Gates' },
-  { id: 'synthetic', label: 'Synthetic' },
-  { id: 'drift', label: 'Drift' },
+  { id: 'tree', label: 'All actions' },
+  { id: 'gates', label: 'Code checks' },
+  { id: 'synthetic', label: 'Live probes' },
+  { id: 'drift', label: 'Out of sync' },
   { id: 'discovery', label: 'Discovery' },
-  { id: 'yaml', label: 'Yaml' },
+  { id: 'yaml', label: 'Map file' },
 ]
+
+function parseTab(raw: string | null): Tab {
+  return INVENTORY_TABS.some((t) => t.id === raw) ? (raw as Tab) : 'stories'
+}
 
 interface Summary {
   total?: number
@@ -164,12 +172,23 @@ export function InventoryPage() {
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
-  // `?tab=discovery` opens a tab directly (Settings → Spend-down links to the site watch).
-  const [params] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(() => {
-    const asked = params.get('tab')
-    return INVENTORY_TABS.some((t) => t.id === asked) ? (asked as Tab) : 'stories'
-  })
+  // The tab lives in `?tab=` so links (Settings → Spend-down, Home's site
+  // map, this page's own first step) open it, also while already here.
+  const [params, setParams] = useSearchParams()
+  const tab = parseTab(params.get('tab'))
+  const setTab = useCallback(
+    (next: Tab) =>
+      setParams(
+        (prev) => {
+          const out = new URLSearchParams(prev)
+          if (next === 'stories') out.delete('tab')
+          else out.set('tab', next)
+          return out
+        },
+        { replace: true },
+      ),
+    [setParams],
+  )
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string
@@ -229,14 +248,14 @@ export function InventoryPage() {
     })
     if (res.ok) {
       toast.success(
-        storyNodeId ? 'Gates triggered for this story' : 'Gates triggered',
-        'Watch the Gates tab for results.',
+        storyNodeId ? 'Checking this story' : 'Checking every action',
+        'Results show on the Code checks tab.',
       )
       findingsQuery.reload()
     } else {
       toast.push({
         tone: 'error',
-        message: 'Gates run failed',
+        message: 'Could not start the checks',
         description: res.error?.message ?? '',
       })
     }
@@ -251,10 +270,10 @@ export function InventoryPage() {
     if (res.ok) {
       toast.success(
         storyNodeId ? 'Crawler started for this story' : 'Crawler started',
-        'Drift tab updates when the crawl finishes.',
+        'The Out of sync tab updates when the crawl finishes.',
       )
     } else {
-      toast.push({ tone: 'error', message: 'Reconcile failed', description: res.error?.message ?? '' })
+      toast.push({ tone: 'error', message: 'Could not start the crawler', description: res.error?.message ?? '' })
     }
   }
 
@@ -265,7 +284,7 @@ export function InventoryPage() {
       body: JSON.stringify({ yaml, source: 'cli' }),
     })
     if (res.ok) {
-      toast.success('Inventory ingested')
+      toast.success('Map file saved')
       reloadAll()
     } else {
       const issues = (res.error?.issues ?? []) as Array<{ path?: string; message?: string }>
@@ -273,7 +292,7 @@ export function InventoryPage() {
         ? issues.slice(0, 3).map((i) => `${i.path ?? '$'}: ${i.message ?? 'invalid'}`).join(' · ') +
           (issues.length > 3 ? ` · and ${issues.length - 3} more` : '')
         : apiErrorMessage(res.error, 'The file could not be ingested. Check that it is a valid inventory.yaml.')
-      toast.push({ tone: 'error', message: 'Ingest failed', description: detail })
+      toast.push({ tone: 'error', message: 'Could not read the map file', description: detail })
     }
   }
 
@@ -411,6 +430,8 @@ export function InventoryPage() {
   const verified = Number(summary.verified ?? 0)
   const regressed = Number(summary.regressed ?? 0)
   const stub = Number(summary.stub ?? 0)
+  const broken = regressed + stub
+  const hasInventory = snapshot != null
 
   return (
     <div className="space-y-3" data-testid="mushi-page-inventory">
@@ -423,22 +444,6 @@ export function InventoryPage() {
         helpWhatIsIt={INVENTORY_HELP.whatIsIt}
         helpUseCases={INVENTORY_HELP.useCases}
         helpHowToUse={INVENTORY_HELP.howToUse}
-      />
-
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.guide,
-            show: Boolean(projectId),
-            children: (
-              <InventoryWorkspaceReadout
-                projectId={projectId!}
-                storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
-                nodeCount={total}
-              />
-            ),
-          },
-        ]}
       />
 
       {isAdvanced ? (
@@ -487,6 +492,38 @@ export function InventoryPage() {
         }}
       />
       ) : null}
+
+      {hasInventory ? (
+        <PageStatus
+          tone={broken > 0 ? 'danger' : total > 0 && verified === total ? 'ok' : 'warn'}
+          sentence={inventorySentence({ total, verified, regressed, stub })}
+          metrics={[
+            { label: 'Broken actions', value: broken, tone: broken > 0 ? 'danger' : 'neutral', hint: 'Actions that stopped working (regressed) or have no code behind them yet (stub).' },
+            { label: 'Verified', value: `${verified} of ${total}`, tone: verified > 0 ? 'ok' : 'neutral', hint: 'Actions a test proves still work.' },
+            { label: 'Open code findings', value: findings.length, to: '/inventory?tab=gates', tone: findings.length > 0 ? 'warn' : 'neutral' },
+          ]}
+          action={
+            <span className="flex flex-wrap items-center gap-2" data-dav-anchor="inventory:act">
+              <Btn size="sm" variant="primary" onClick={() => void runGates()}>
+                Check every action
+              </Btn>
+              <Btn size="sm" variant="ghost" onClick={() => void reconcile()}>
+                Crawl the app
+              </Btn>
+            </span>
+          }
+          data-testid="inventory-status"
+        />
+      ) : tab === 'stories' ? (
+        <PageFirstStep
+          title="No user stories yet"
+          sentence="Turn on discovery and Mushi watches which pages people open and what they click, then drafts your user stories for you to accept. Nothing to write by hand."
+          action={{ label: 'Turn on discovery', to: '/inventory?tab=discovery' }}
+          learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
+          data-testid="inventory-first-step"
+        />
+      ) : null}
+
       <SegmentedControl<Tab>
         size="sm"
         scrollable
@@ -496,50 +533,16 @@ export function InventoryPage() {
         options={INVENTORY_TABS}
         className="w-full sm:w-auto"
       />
-      <ActionPillRow className="mb-2" data-dav-anchor="inventory:act">
-        <ActionPill tone="neutral" onClick={() => void runGates()}>
-          Run gates
-        </ActionPill>
-        <ActionPill tone="neutral" onClick={() => void reconcile()}>
-          Run crawler
-        </ActionPill>
-      </ActionPillRow>
-
-{/* PageHelp migrated to PageHeaderBar above */}
-
-      {!snapshot && (
-        <NextStep
-          variant="inline"
-          requires={['github_connected']}
-          emptyTitle="No inventory yet"
-          emptyDescription="Either install @mushi-mushi/web with discoverInventory: true and let the SDK observe your app — Claude will draft an inventory.yaml — or hand-author one and paste it from the Yaml tab."
-          emptyIcon={<HeroGraphNodes />}
-          blockedIcon={<HeroGraphNodes accent="text-fg-faint" />}
-          emptyAction={
-            <div className="flex flex-wrap gap-2">
-              <Btn size="sm" onClick={() => setTab('discovery')}>
-                Open Discovery →
-              </Btn>
-              <Btn size="sm" variant="ghost" onClick={() => setTab('yaml')}>
-                Paste YAML
-              </Btn>
-            </div>
-          }
-          emptyHints={[
-            'Discovery (recommended): SDK observes → Claude proposes → you accept. Open the Discovery tab to see the four-step lifecycle.',
-            'Manual: author inventory.yaml directly and paste from the Yaml tab.',
-            'Either path supports auth-gated apps: cookie-paste from the Yaml tab\'s crawler settings card, or an inventory.yaml auth.scripted block.',
-          ]}
-        />
-      )}
 
       {tab === 'stories' && (
-        <div data-dav-anchor="inventory:decide" className="space-y-3">
+        hasInventory ? (
+        <div data-dav-anchor="inventory:decide" className="space-y-4">
+          <PageActionMap rows={treeRows} onSelect={openDrawerForRow} onShowAll={() => setTab('tree')} />
           {unattachedFindings > 0 && (
             <p className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-              {unattachedFindings} open finding{unattachedFindings === 1 ? ' is' : 's are'} not tied to a story action.
+              {unattachedFindings} open code finding{unattachedFindings === 1 ? ' is' : 's are'} not tied to an action on this map.
               <Btn size="sm" variant="ghost" onClick={() => setTab('gates')}>
-                Open Gates →
+                Show code checks
               </Btn>
             </p>
           )}
@@ -551,6 +554,7 @@ export function InventoryPage() {
             onRunCrawlerForStory={(storyId) => void reconcile(storyId)}
           />
         </div>
+        ) : null
       )}
 
       {tab === 'tree' && <InventoryTree rows={treeRows} onRowClick={openDrawerForRow} />}
@@ -564,9 +568,9 @@ export function InventoryPage() {
               const open = latest ? Math.max(0, (latest.findings_count ?? 0) - (dismissedPerRun.get(latest.id) ?? 0)) : 0
               return (
                 <Card key={g} className="p-3">
-                  <p className="text-2xs uppercase text-fg-faint">{g.replace(/_/g, ' ')}</p>
-                  <p className="text-sm font-semibold">{latest?.status ?? '—'}</p>
-                  <p className="text-2xs text-fg-muted">{open} open findings</p>
+                  <p className="text-2xs text-fg-faint">{gateLabel(g)}</p>
+                  <p className="text-sm font-semibold">{latest ? gateRunWord(latest.status) : 'Not run yet'}</p>
+                  <p className="text-2xs text-fg-muted">{open} open {pluralize(open, 'finding')}</p>
                 </Card>
               )
             })}
@@ -597,7 +601,7 @@ export function InventoryPage() {
       {tab === 'synthetic' && (
         <div className="grid gap-3 md:grid-cols-2">
           {synthActions.length === 0 ? (
-            <p className="text-xs text-fg-muted">Ingest inventory with user stories to list Action nodes for probes.</p>
+            <p className="text-xs text-fg-muted">Live probes start once your app has user stories. Turn on discovery to draft them.</p>
           ) : (
             synthActions.slice(0, 16).map((a) => (
               <SyntheticPreview key={a.id} projectId={projectId} actionId={a.id} label={`${a.storyLabel} · ${a.label}`} />
@@ -625,7 +629,7 @@ export function InventoryPage() {
             <InventoryYamlDropzone onParsed={(y) => setYamlDraft(y)} onCleared={() => setYamlDraft(null)} />
             <div className="flex gap-2">
               <Btn type="button" size="sm" onClick={() => yamlDraft && ingestYaml(yamlDraft)} disabled={!yamlDraft}>
-                Ingest selected file
+                Save this map file
               </Btn>
             </div>
             {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
@@ -638,6 +642,23 @@ export function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Endpoints and raw signals: developer detail, at the foot of the page. */}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: Boolean(projectId),
+            children: (
+              <InventoryWorkspaceReadout
+                projectId={projectId!}
+                storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
+                nodeCount={total}
+              />
+            ),
+          },
+        ]}
+      />
 
       <ActionDetailDrawer
         open={drawer != null}
@@ -653,6 +674,51 @@ export function InventoryPage() {
       />
     </div>
   )
+}
+
+/** Exported for tests; page modules are knip entries, so it carries no tag. The status line: what is broken first, then how much is proven. */
+export function inventorySentence({
+  total,
+  verified,
+  regressed,
+  stub,
+}: {
+  total: number
+  verified: number
+  regressed: number
+  stub: number
+}): string {
+  if (total === 0) return 'The map file has no actions yet. Accept a discovery draft to fill it.'
+  const broken = regressed + stub
+  if (broken > 0) {
+    const parts = [
+      regressed > 0 ? `${regressed} stopped working` : null,
+      stub > 0 ? `${stub} ${stub === 1 ? 'has' : 'have'} no code behind ${stub === 1 ? 'it' : 'them'} yet` : null,
+    ].filter(Boolean)
+    return `${broken} of ${total} ${pluralize(total, 'action')} ${broken === 1 ? 'is' : 'are'} broken: ${parts.join(', ')}.`
+  }
+  if (verified === total) return `All ${total} ${pluralize(total, 'action')} work and a test proves each one.`
+  return `Nothing is broken. ${verified} of ${total} ${pluralize(total, 'action')} ${verified === 1 ? 'has' : 'have'} a test that proves ${verified === 1 ? 'it works' : 'they work'}.`
+}
+
+function gateRunWord(status: string): string {
+  switch (status) {
+    case 'pass':
+      return 'Passed'
+    case 'fail':
+      return 'Found problems'
+    case 'running':
+    case 'queued':
+      return 'Running'
+    case 'warn':
+      return 'Passed with warnings'
+    case 'skipped':
+      return 'Skipped'
+    case 'error':
+      return 'Could not run'
+    default:
+      return status
+  }
 }
 
 function SyntheticPreview({

@@ -45,6 +45,9 @@ export const fileReportSchema = z
       .transform(clean)
       .pipe(z.string().max(200, 'component is at most 200 characters'))
       .optional(),
+    // Put the filed report first in one of the caller's local worker lanes
+    // (ADR 0048): the lane must serve this app and belong to the caller.
+    queue: z.object({ laneId: z.string().uuid('queue.laneId must be a lane id') }).strict().optional(),
   })
   .strict()
 

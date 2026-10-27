@@ -1,94 +1,69 @@
 /**
  * FILE: ReleasesSnapshotStrip.tsx
- * PURPOSE: Releases KPI strip using MetricStrip — replaces hand-rolled 6-col grid.
+ * PURPOSE: Releases status: what shipped, what is drafted, and which fixed
+ *          reports have not been in release notes yet (PageStatus, P1). With
+ *          nothing at all it is the page's one first step (P3).
  */
 
-import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
+import { PageStatus } from '../ui'
 import type { ReleasesStats } from './ReleasesStatsTypes'
-import {
-  contributorsDetail,
-  contributorsTooltip,
-  draftsDetail,
-  draftsTooltip,
-  feedbackDetail,
-  feedbackTooltip,
-  fixedReportsDetail,
-  fixedReportsTooltip,
-  fixesLinkedDetail,
-  fixesLinkedTooltip,
-  publishedDetail,
-  publishedTooltip,
-} from '../../lib/statTooltips/releases'
+import { pluralizeWithCount } from '../../lib/format'
 import { releasesLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: ReleasesStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  sectionTitle?: string
-  hint?: string
   statLabels?: Record<string, string>
+  /** Opens the draft form: the first step on a project with no releases. */
+  onDraft?: () => void
 }
 
-export function ReleasesSnapshotStrip({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-  sectionTitle = 'RELEASES SNAPSHOT',
-  hint,
-  statLabels,
-}: Props) {
+function releasesSentence(stats: ReleasesStats): string {
+  if (stats.totalReleases === 0) {
+    return stats.fixedReportsCount > 0
+      ? `No releases yet; ${pluralizeWithCount(stats.fixedReportsCount, 'fixed report')} can go into your first release notes.`
+      : 'No releases yet.'
+  }
+  const published = `${pluralizeWithCount(stats.publishedCount, 'release')} published`
+  const drafts = stats.draftCount > 0 ? `, ${pluralizeWithCount(stats.draftCount, 'draft')} waiting` : ''
+  const told = stats.creditsPending > 0 ? `; ${pluralizeWithCount(stats.creditsPending, 'reporter')} not told yet` : ''
+  return `${published}${drafts}${told}.`
+}
+
+export function ReleasesSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onDraft }: Props) {
   return (
-    <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-      {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="Releases snapshot">
-        <StatCard
-          label={statLabels?.drafts ?? 'Drafts'}
-          value={stats.draftCount}
-          accent={stats.draftCount > 0 ? 'text-warn' : undefined}
-          tooltip={draftsTooltip(stats)}
-          detail={draftsDetail()}
-          to={releasesLinks.drafts}
-        />
-        <StatCard
-          label={statLabels?.published ?? 'Published'}
-          value={stats.publishedCount}
-          accent={stats.publishedCount > 0 ? 'text-ok' : undefined}
-          tooltip={publishedTooltip(stats)}
-          detail={publishedDetail()}
-          to={releasesLinks.published}
-        />
-        <StatCard
-          label={statLabels?.fixesLinked ?? 'Fixes linked'}
-          value={stats.totalFixesLinked}
-          tooltip={fixesLinkedTooltip(stats)}
-          detail={fixesLinkedDetail()}
-          to={releasesLinks.fixesLinked}
-        />
-        <StatCard
-          label={statLabels?.contributors ?? 'Contributors'}
-          value={stats.totalContributors}
-          tooltip={contributorsTooltip(stats)}
-          detail={contributorsDetail(stats)}
-          to={releasesLinks.contributors}
-        />
-        <StatCard
-          label={statLabels?.fixedReports ?? 'Fixed reports'}
-          value={stats.fixedReportsCount}
-          tooltip={fixedReportsTooltip(stats)}
-          detail={fixedReportsDetail()}
-          to={releasesLinks.fixedReports}
-        />
-        <StatCard
-          label={statLabels?.feedback ?? 'Feedback shipped'}
-          value={stats.fulfilledTicketsShipped}
-          accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined}
-          tooltip={feedbackTooltip(stats)}
-          detail={feedbackDetail(stats)}
-          to={releasesLinks.feedback}
-        />
-      </MetricStrip>
-    </Section>
+    <PageStatus
+      ariaLabel="Releases status"
+      tone={stats.draftCount > 0 || stats.creditsPending > 0 ? 'warn' : stats.publishedCount > 0 ? 'ok' : 'neutral'}
+      sentence={releasesSentence(stats)}
+      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      metrics={[
+        {
+          label: statLabels?.published ?? 'Published',
+          value: stats.publishedCount,
+          hint: 'Release notes your reporters and users can read.',
+          to: releasesLinks.published,
+        },
+        {
+          label: statLabels?.drafts ?? 'Drafts',
+          value: stats.draftCount,
+          tone: stats.draftCount > 0 ? 'warn' : 'neutral',
+          hint: 'Release notes written from merged fixes, waiting for you to publish.',
+          to: releasesLinks.drafts,
+        },
+        {
+          label: statLabels?.fixedReports ?? 'Fixed reports',
+          value: stats.fixedReportsCount,
+          hint: 'Reports a merged fix closed. A release credits the people who reported them.',
+          to: releasesLinks.fixedReports,
+        },
+      ]}
+      empty={{
+        title: 'No releases yet',
+        sentence: 'Once a fix merges, Mushi drafts release notes from it and credits the people who reported the bug.',
+        action: onDraft ? { label: 'Draft release notes', onClick: onDraft } : { label: 'Draft release notes', to: '/releases?tab=draft' },
+      }}
+    />
   )
 }

@@ -128,15 +128,15 @@ export function GraphStatusBanner({
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? `Bug map is current on ${projectLabel}` : `Graph current on ${projectLabel}`}
+      title={`Bug map is current on ${projectLabel}`}
       subtitle={
         stats.topPriorityLabel ?? (
           <>
-            {stats.nodeCount} nodes · {stats.edgeCount} edges
+            {stats.reportNodes} bug group{stats.reportNodes === 1 ? '' : 's'} · {stats.edgeCount} link{stats.edgeCount === 1 ? '' : 's'} between them
             {stats.lastNodeAt ? (
               <>
                 {' '}
-                · last node <RelativeTime value={stats.lastNodeAt} />
+                · last change <RelativeTime value={stats.lastNodeAt} />
               </>
             ) : null}
           </>

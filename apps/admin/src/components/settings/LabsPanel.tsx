@@ -20,8 +20,8 @@ export function LabsPanel() {
   return (
     <div className="space-y-4" data-testid="settings-labs">
       <p className="text-sm text-fg-muted">
-        Labs are pages outside the core bug → diagnosis → fix loop. Switch one on to add it to your
-        sidebar. Every page stays reachable from ⌘K and by link.
+        Labs are pages outside the core bug → diagnosis → fix loop. Each one works whether its switch is
+        on or off: on pins it to your sidebar. Every page stays reachable from ⌘K and by link.
       </p>
       {GROUPS.map((group) => {
         const features = LAB_FEATURES.filter((f) => f.group === group)
@@ -38,9 +38,12 @@ export function LabsPanel() {
                   purpose={f.description}
                   action={
                     <>
+                      {/* The switch only decides the sidebar: "Off" read as "this page
+                          is turned off" while it kept working (console journeys
+                          2026-10-27). */}
                       <Toggle
-                        ariaLabel={f.label}
-                        label={on ? 'On' : 'Off'}
+                        ariaLabel={`${f.label} in the sidebar`}
+                        label={on ? 'In sidebar' : 'Not in sidebar'}
                         checked={on}
                         onChange={(next) => setEnabled(f.id, next)}
                       />
