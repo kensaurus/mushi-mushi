@@ -25,6 +25,7 @@ import { PageFirstStep, type PageFirstStepProps } from './page-first-step'
 
 export type PageStatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral'
 
+/** @public */
 export interface PageStatusMetric {
   label: string
   value: number | string
@@ -35,7 +36,7 @@ export interface PageStatusMetric {
   tone?: PageStatusTone
 }
 
-/** At most three numbers: a fourth is a type error, not a style choice. */
+/** @public At most three numbers: a fourth is a type error, not a style choice. */
 export type PageStatusMetrics =
   | readonly []
   | readonly [PageStatusMetric]
@@ -73,7 +74,7 @@ const TONE_VALUE: Record<PageStatusTone, string> = {
   neutral: 'text-fg',
 }
 
-/** 0, "0", "0%", "—", "-", "" and "n/a" carry no information on their own. */
+/** @internal Exported for tests only. 0, "0", "0%", "—", "-", "" and "n/a" carry no information on their own. */
 export function isEmptyMetricValue(value: number | string | null | undefined): boolean {
   if (value == null) return true
   if (typeof value === 'number') return value === 0 || Number.isNaN(value)

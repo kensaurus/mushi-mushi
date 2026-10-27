@@ -1143,7 +1143,7 @@ const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {
  * A stage chip in the user's words: the cycle step it belongs to (ADR 0027),
  * e.g. "Verify", "step 4", never "PDCA stage: Check".
  */
-export function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; hint: string } {
+function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; hint: string } {
   const meta = NAV_SECTION_META[SECTION_BY_STAGE[stage]]
   return { step: meta.step ?? 0, title: meta.title, hint: meta.hint }
 }

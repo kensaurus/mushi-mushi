@@ -434,7 +434,7 @@ function sectionLabelFor(t: LinkTarget, page: string): string | null {
   return tabPart ?? statusLabel
 }
 
-/** Human label for a link target — used in "Go to …" copy and aria-labels. */
+/** @internal Exported for tests. Human label for a link target, used in "Go to …" copy and aria-labels. */
 export function statDestinationLabel(to: string): string {
   const t = parseTarget(to)
   const page = pageLabelFor(t)

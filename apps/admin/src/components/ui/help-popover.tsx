@@ -27,6 +27,7 @@ import { AnchoredPopoverPanel, useAnchoredPopover } from './anchored-popover'
 
 const HELP_POPOVER_WIDTH = 400
 
+/** @public Shared with Home's "How Mushi works" (wave 2, feat/project-home). */
 export interface HelpPopoverProps {
   /** Visible trigger text; hidden below `sm`, where the "?" glyph stays. */
   label?: string
@@ -40,6 +41,7 @@ export interface HelpPopoverProps {
   align?: 'start' | 'end'
 }
 
+/** @public A help popover for any content, e.g. Home's "How Mushi works" loop. */
 export function HelpPopover({
   label = 'How this page works',
   title,
@@ -106,7 +108,7 @@ export interface PageHelpContent {
   howToUse?: string
 }
 
-/** The "What it is / When to use it / How to use it" body. */
+/** @public The "What it is / When to use it / How to use it" body. */
 export function PageHelpSections({ whatIsIt, useCases, howToUse, columns = 1 }: PageHelpContent & { columns?: 1 | 2 }) {
   return (
     <div className={`grid w-full min-w-0 grid-cols-1 gap-2.5 ${columns === 2 ? 'md:grid-cols-2' : ''}`}>

@@ -20,11 +20,13 @@ import { useMarkPageEmpty } from '../../lib/pageHelpContext'
 import { Btn } from './forms'
 import { Card } from './layout'
 
+/** @public */
 export type FirstStepAction =
   | { label: string; to: string; href?: never; onClick?: never; loading?: never; disabled?: boolean }
   | { label: string; href: string; to?: never; onClick?: never; loading?: never; disabled?: boolean }
   | { label: string; onClick: () => void; to?: never; href?: never; loading?: boolean; disabled?: boolean }
 
+/** @public */
 export type FirstStepLink =
   | { label?: string; to: string; href?: never }
   | { label?: string; href: string; to?: never }
