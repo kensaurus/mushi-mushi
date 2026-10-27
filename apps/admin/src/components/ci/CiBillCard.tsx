@@ -25,18 +25,20 @@ function RepoBars({ bill }: { bill: CiBill }) {
   return (
     <ul className="flex flex-col gap-1.5" data-testid="ci-bill-repos">
       {repos.map((r) => (
-        <li key={r.repo || '(none)'} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 text-xs">
-          <span className="truncate font-mono text-fg" title={r.repo || 'No repository'}>
-            {r.repo || 'No repository'}
-          </span>
-          <span className="text-right tabular-nums font-semibold text-fg">{formatMoney(r.netUsd)}</span>
-          <div className="col-span-2 h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
+        <li key={r.repo || '(none)'} className="flex flex-col gap-0.5 text-xs">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="min-w-0 truncate font-mono text-fg" title={r.repo || 'No repository'}>
+              {r.repo || 'No repository'}
+            </span>
+            <span className="shrink-0 tabular-nums font-semibold text-fg">{formatMoney(r.netUsd)}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
             {/* Gross is the whole bar; the darker part is what was charged. */}
             <div className="relative h-full bg-brand/30" style={{ width: `${Math.max(2, Math.round((r.grossUsd / max) * 100))}%` }}>
               <div className="absolute inset-y-0 left-0 bg-brand" style={{ width: r.grossUsd > 0 ? `${Math.round((r.netUsd / r.grossUsd) * 100)}%` : '0%' }} />
             </div>
           </div>
-          <span className="col-span-2 text-2xs text-fg-muted">
+          <span className="text-2xs text-fg-muted">
             {r.netUsd === 0 && r.grossUsd > 0 ? 'free: ' : ''}gross {formatMoney(r.grossUsd)}
             {r.minutes > 0 ? ` · ${formatMinutes(r.minutes)}` : ''}
           </span>

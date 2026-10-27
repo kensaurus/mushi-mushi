@@ -17,7 +17,7 @@
  *          packages/server/supabase/functions/_shared/ci-billing.ts.
  */
 
-export const GITHUB_API = 'https://api.github.com'
+const GITHUB_API = 'https://api.github.com'
 
 export type OwnerType = 'User' | 'Organization'
 
@@ -35,7 +35,7 @@ export interface UsageItem {
   repositoryName?: string | null
 }
 
-export interface BillRepo {
+interface BillRepo {
   repo: string
   grossUsd: number
   discountUsd: number

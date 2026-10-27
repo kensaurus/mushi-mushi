@@ -6,13 +6,13 @@
  *          measured from GitHub's bill; the agent PR share is estimated.
  */
 
-export interface CiBillMoney {
+interface CiBillMoney {
   grossUsd: number
   discountUsd: number
   netUsd: number
 }
 
-export interface CiBillOwner {
+interface CiBillOwner {
   owner: string
   ownerType: 'User' | 'Organization' | null
   /** The last successful read (API or CLI push); null when none ever worked. */
