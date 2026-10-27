@@ -446,11 +446,6 @@ export function InventoryPage() {
         helpHowToUse={INVENTORY_HELP.howToUse}
       />
 
-            ),
-          },
-        ]}
-      />
-
       {isAdvanced ? (
       <PageHero
         scope="inventory"
@@ -660,6 +655,10 @@ export function InventoryPage() {
                 storyCount={storiesQuery.data ? storiesQuery.data.tree.length : null}
                 nodeCount={total}
               />
+            ),
+          },
+        ]}
+      />
 
       <ActionDetailDrawer
         open={drawer != null}
