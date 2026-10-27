@@ -11,7 +11,7 @@ import { apiCall, die } from '../cli-shared.js'
 import type { CliConfig } from '../config.js'
 import type { CostFixJob } from './cost-fix.js'
 
-export interface RolloutItem {
+interface RolloutItem {
   key: string
   projectId: string
   repo: string
@@ -23,7 +23,7 @@ export interface RolloutItem {
   prUrl: string | null
 }
 
-export interface RolloutRepo {
+interface RolloutRepo {
   projectId: string
   projectName: string | null
   repo: string
@@ -41,7 +41,7 @@ export interface RolloutPreview {
   partial: string | null
 }
 
-export interface BundleRequestRepo {
+interface BundleRequestRepo {
   projectId: string
   repo: string
   items: Array<{ workflowPath: string; kind: string }>

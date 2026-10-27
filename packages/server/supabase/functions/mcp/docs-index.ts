@@ -111,7 +111,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ci",
     markdown: "admin/ci.md",
     keywords: ["admin", "ci", "runners"],
-    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "Your real bill", "Cost advice that reads your workflows", "Fix it in one PR", "When nothing has reported in"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "Your real bill", "Cost advice that reads your workflows", "Fix it in one PR", "Apply to every app"],
     excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {

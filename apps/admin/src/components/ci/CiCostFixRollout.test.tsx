@@ -131,9 +131,9 @@ afterEach(() => {
   host.remove()
 })
 
-async function render(projectId: string | null = null) {
+async function render() {
   await act(async () => {
-    root.render(createElement(MemoryRouter, null, createElement(CiCostFixRollout, { projectId })))
+    root.render(createElement(MemoryRouter, null, createElement(CiCostFixRollout)))
   })
 }
 
@@ -170,10 +170,9 @@ describe('CiCostFixRollout', () => {
       ok: true,
       data: { queued: 1, results: [{ projectId: A, repo: 'acme/api', status: 'queued', bundleId: BUNDLE, jobs: [], skipped: [], error: null }] },
     })
-    await render(A)
+    await render()
     await click(document.querySelector('[data-testid="ci-rollout-open"]'))
     await flush()
-    expect(state.apiFetch).toHaveBeenCalledWith(`/v1/admin/ci/cost-fix-rollout?project_id=${A}`, expect.objectContaining({ scope: 'project' }))
     await click(document.querySelector('[data-testid="ci-rollout-continue"]'))
     expect(document.body.textContent).toContain('Open 1 draft pull request?')
     await click(byText('Open draft PRs'))

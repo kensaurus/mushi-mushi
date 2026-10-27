@@ -78,7 +78,7 @@ export function costFixBundlePrTitle(changes: ReadonlyArray<{ kind: CiCostFixKin
   return `ci: ${changes.length} fixes in ${where} to save Actions minutes`
 }
 
-export interface BundleBodyItem {
+interface BundleBodyItem {
   kind: CiCostFixKind
   workflowPath: string
   /** What changed, or why nothing did. */
@@ -88,7 +88,7 @@ export interface BundleBodyItem {
   monthSavingUsd: number | null
 }
 
-export function costFixBundlePrBody(input: {
+function costFixBundlePrBody(input: {
   repo: string
   items: readonly BundleBodyItem[]
   /** Billed minutes over the 14 days before, per changed workflow path. */
@@ -143,7 +143,7 @@ function capital(s: string): string {
 // Run one bundle
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface BundleItemOutcome {
+interface BundleItemOutcome {
   jobId: string
   workflowPath: string
   kind: CiCostFixKind
@@ -152,7 +152,7 @@ export interface BundleItemOutcome {
   errorCode: string | null
 }
 
-export type CostFixBundleRunResult =
+type CostFixBundleRunResult =
   | { ok: true; status: 'pr_opened'; prUrl: string; items: BundleItemOutcome[] }
   | { ok: true; status: 'nothing_opened'; items: BundleItemOutcome[] }
   | { ok: false; status: 'failed'; code: CostFixErrorCode; error: string; items: BundleItemOutcome[] }
@@ -311,16 +311,41 @@ export async function runCiCostFixBundle(db: SupabaseClient, bundleId: string, d
       return await failAll(/→ (403|404)/.test(message) ? 'GITHUB_WORKFLOWS_WRITE_MISSING' : 'GITHUB_ERROR', message, changedRows)
     }
 
+    // Every changed row moves to pr_opened in ONE update. A lost or partial
+    // finish would otherwise leave some rows `running`, and their reclaim
+    // would push a fresh copy of the base file to the same branch, dropping
+    // the edits of the rows already marked opened.
+    const at = deps.now().toISOString()
+    const { error: openErr } = await db
+      .from('ci_cost_fix_jobs')
+      .update({ status: 'pr_opened', pr_url: pr.url, pr_number: pr.number, branch: pr.branch, commit_sha: pr.commitSha, error_code: null, error: null, finished_at: at, updated_at: at })
+      .in('id', changedRows.map((r) => r.id))
+      .eq('status', 'running')
+    if (openErr) {
+      // All of them stay `running`; the reclaim applies every kind again and pushes the same branch.
+      log.warn('ci_cost_fix_jobs pr_opened update failed', { bundleId, err: openErr.message })
+      return { ok: true, status: 'pr_opened', prUrl: pr.url, items: items() }
+    }
+    // Then each row's own summary and measurement (only rows the update above opened).
     for (const f of files) {
       const [measured, ...shared] = f.changed
-      const prPatch = { workflow_name: f.workflowName, pr_url: pr.url, pr_number: pr.number, branch: pr.branch, commit_sha: pr.commitSha, error_code: null, error: null }
-      await finish(measured, 'pr_opened', { ...prPatch, summary: changeSummary.get(measured.id), baseline: baselines.get(f.path) ?? null })
-      for (const r of shared) {
-        await finish(r, 'pr_opened', {
-          ...prPatch,
-          summary: `${changeSummary.get(r.id)} This change shares its pull request and workflow with "${KIND_TITLE[measured.kind]}", so the workflow's minutes are measured once, on that fix.`,
-          baseline: null,
-        })
+      const details = (r: CostFixJobRow, summary: string, baseline: MinutesSeries | null) => {
+        outcomes.set(r.id, { jobId: r.id, workflowPath: r.workflow_path, kind: r.kind, status: 'pr_opened', summary, errorCode: null })
+        return db.from('ci_cost_fix_jobs').update({ workflow_name: f.workflowName, summary, baseline }).eq('id', r.id).eq('status', 'pr_opened')
+      }
+      const writes = [
+        details(measured, changeSummary.get(measured.id) ?? '', baselines.get(f.path) ?? null),
+        ...shared.map((r) =>
+          details(
+            r,
+            `${changeSummary.get(r.id)} This change shares its pull request and workflow with "${KIND_TITLE[measured.kind]}", so the workflow's minutes are measured once, on that fix.`,
+            null,
+          ),
+        ),
+      ]
+      for (const w of writes) {
+        const { error } = await w
+        if (error) log.warn('ci_cost_fix_jobs details update failed', { bundleId, err: error.message })
       }
     }
     return { ok: true, status: 'pr_opened', prUrl: pr.url, items: items() }
@@ -333,7 +358,7 @@ export async function runCiCostFixBundle(db: SupabaseClient, bundleId: string, d
 // Reading a bundle
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type CostFixBundleStatus = 'queued' | 'running' | 'pr_opened' | 'nothing_opened' | 'failed'
+type CostFixBundleStatus = 'queued' | 'running' | 'pr_opened' | 'nothing_opened' | 'failed'
 
 /** The bundle's state from its rows: in flight, its PR, nothing to change, or failed. */
 export function bundleStatusOf(rows: ReadonlyArray<Pick<CostFixJobRow, 'status'>>): CostFixBundleStatus {
@@ -366,7 +391,7 @@ export async function refreshCostFixBundle(
   return out
 }
 
-export interface CostFixBundleView {
+interface CostFixBundleView {
   id: string
   projectId: string
   repo: string

@@ -21,9 +21,9 @@
 
 import type { CiCostFixKind, CiOverviewAdvice } from './ci-overview-types.ts'
 
-export type RolloutItemState = 'ready' | 'pr_open' | 'in_progress'
+type RolloutItemState = 'ready' | 'pr_open' | 'in_progress'
 
-export interface RolloutItem {
+interface RolloutItem {
   /** `projectId:repo(lowercase):workflowPath:kind`, the key the console's fix buttons use. */
   key: string
   projectId: string
@@ -40,14 +40,14 @@ export interface RolloutItem {
   prUrl: string | null
 }
 
-export interface RolloutBlock {
+interface RolloutBlock {
   code: 'GITHUB_WORKFLOWS_WRITE_MISSING'
   message: string
   /** Where Mushi learned it: the setup check's probe, or the last fix attempt. */
   source: 'setup_check' | 'last_attempt'
 }
 
-export interface RolloutRepo {
+interface RolloutRepo {
   projectId: string
   projectName: string | null
   repo: string
@@ -61,7 +61,7 @@ export interface RolloutRepo {
   block: RolloutBlock | null
 }
 
-export interface RolloutPreview {
+interface RolloutPreview {
   generatedAt: string
   repos: RolloutRepo[]
   totals: { repos: number; readyItems: number; monthSavingUsd: number; unpricedItems: number }
@@ -84,7 +84,7 @@ export interface RolloutJobRow {
   created_at: string
 }
 
-export const WORKFLOWS_WRITE_MISSING_MESSAGE =
+const WORKFLOWS_WRITE_MISSING_MESSAGE =
   'The GitHub access Mushi uses cannot change workflow files in this repo, so its pull request would fail. Give the GitHub App "Workflows: Read and write" (or use a token with the workflow scope) first.'
 
 export function rolloutKey(f: { projectId: string; repo: string; workflowPath: string; kind: string }): string {

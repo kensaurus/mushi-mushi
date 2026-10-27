@@ -47,11 +47,11 @@ import type { Variables } from '../types.ts'
 const blog = log.child('ci-cost-fix-bundle-routes')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Apps whose roles the preview reads; more are left out and the preview says so. */
-export const ROLLOUT_MAX_PROJECTS = 50
+const ROLLOUT_MAX_PROJECTS = 50
 const ROLLOUT_JOB_COLUMNS = 'project_id, repo, workflow_path, kind, status, pr_url, merged_at, closed_at, error_code, created_at'
 
 const shape = costFixRequestSchema.shape
-export const bundleRequestSchema = z.object({
+const bundleRequestSchema = z.object({
   repos: z
     .array(
       z.object({
@@ -88,7 +88,7 @@ export interface CiCostFixBundleRouteDeps {
 const DAY_MS = 24 * 60 * 60_000
 
 /** The autofix advice of both CI views, as GET /v1/admin/ci/overview and /compare build it. */
-export async function loadAutofixAdvice(db: Db, projectIds: string[], now: Date): Promise<{ advice: CiOverviewAdvice[]; partial: string | null }> {
+async function loadAutofixAdvice(db: Db, projectIds: string[], now: Date): Promise<{ advice: CiOverviewAdvice[]; partial: string | null }> {
   const from7 = new Date(now.getTime() - 7 * DAY_MS)
   const from30 = new Date(now.getTime() - 30 * DAY_MS)
   const [overview, compare] = await Promise.allSettled([

@@ -258,7 +258,7 @@ export function CiPage() {
             title="Speed it up"
             id="ci-advice"
             icon={<IconBolt />}
-            action={<CiCostFixRollout projectId={scope === 'project' ? projectId : null} />}
+            action={<CiCostFixRollout />}
           >
             <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />

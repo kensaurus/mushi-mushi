@@ -11,7 +11,7 @@
 import type { CiCostFixKind } from './ciTypes'
 import type { CiCostFixJob } from './ciCostFix'
 
-export interface CiRolloutItem {
+interface CiRolloutItem {
   key: string
   projectId: string
   repo: string
@@ -44,7 +44,7 @@ export interface CiRolloutPreview {
   partial: string | null
 }
 
-export interface CiBundleRequestRepo {
+interface CiBundleRequestRepo {
   projectId: string
   repo: string
   items: Array<{ workflowPath: string; kind: CiCostFixKind }>
@@ -60,7 +60,7 @@ export interface CiBundleResult {
   error: { code: string; message: string } | null
 }
 
-export type CiBundleStatus = 'queued' | 'running' | 'pr_opened' | 'nothing_opened' | 'failed'
+type CiBundleStatus = 'queued' | 'running' | 'pr_opened' | 'nothing_opened' | 'failed'
 
 export interface CiCostFixBundle {
   id: string

@@ -46,20 +46,20 @@ const KIND_LABEL: Record<string, string> = {
 
 const fileOf = (path: string) => path.split('/').pop() ?? path
 
-export function CiCostFixRollout({ projectId }: { projectId: string | null }) {
+/** Always every app the caller may change, whatever app the page shows: that is the point of it. */
+export function CiCostFixRollout() {
   const [open, setOpen] = useState(false)
   return (
     <>
       <Btn size="sm" variant="ghost" onClick={() => setOpen(true)} data-testid="ci-rollout-open">
         Apply to every app
       </Btn>
-      {open && <RolloutModal projectId={projectId} onClose={() => setOpen(false)} />}
+      {open && <RolloutModal onClose={() => setOpen(false)} />}
     </>
   )
 }
 
-function RolloutModal({ projectId, onClose }: { projectId: string | null; onClose: () => void }) {
-  const path = projectId ? `/v1/admin/ci/cost-fix-rollout?project_id=${encodeURIComponent(projectId)}` : '/v1/admin/ci/cost-fix-rollout'
+function RolloutModal({ onClose }: { onClose: () => void }) {
   const [preview, setPreview] = useState<CiRolloutPreview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -70,7 +70,7 @@ function RolloutModal({ projectId, onClose }: { projectId: string | null; onClos
 
   useEffect(() => {
     let live = true
-    void apiFetch<CiRolloutPreview>(path, { cache: 'no-store', scope: projectId ? 'project' : 'enumeration' }).then((res) => {
+    void apiFetch<CiRolloutPreview>('/v1/admin/ci/cost-fix-rollout', { cache: 'no-store', scope: 'enumeration' }).then((res) => {
       if (!live) return
       if (res.ok && res.data) {
         setPreview(res.data)
@@ -82,14 +82,17 @@ function RolloutModal({ projectId, onClose }: { projectId: string | null; onClos
     return () => {
       live = false
     }
-  }, [path, projectId])
+  }, [])
 
   const request = useMemo(() => (preview ? selectionRequest(preview, selected) : null), [preview, selected])
 
   const toggle = useCallback((keys: string[], on: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      for (const k of keys) (on ? next.add(k) : next.delete(k))
+      for (const k of keys) {
+        if (on) next.add(k)
+        else next.delete(k)
+      }
       return next
     })
   }, [])
@@ -101,7 +104,7 @@ function RolloutModal({ projectId, onClose }: { projectId: string | null; onClos
     const res = await apiFetchMutate<{ results: CiBundleResult[]; queued: number }>('/v1/admin/ci/cost-fix-rollout', {
       method: 'POST',
       body: JSON.stringify({ repos: request.repos }),
-      scope: projectId ? 'project' : 'enumeration',
+      scope: 'enumeration',
     })
     setBusy(false)
     setConfirming(false)

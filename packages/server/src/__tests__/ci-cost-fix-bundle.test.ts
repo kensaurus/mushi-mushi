@@ -245,6 +245,37 @@ describe('runCiCostFixBundle', () => {
     expect(createPr.mock.calls[1][0].branch).toBe(createPr.mock.calls[0][0].branch)
   })
 
+  it('a lost pr_opened write leaves every changed row running, and the reclaim pushes ALL their edits again', async () => {
+    seed([item('.github/workflows/ci.yml', 'skip_drafts'), item('.github/workflows/ci.yml', 'add_concurrency')])
+    // The one update that opens the rows fails once (the function died, or the write was lost).
+    let failOpen = true
+    const flaky = {
+      from(table: string) {
+        const q = db.from(table)
+        const update = q.update.bind(q)
+        q.update = (payload: Row) => {
+          if (failOpen && payload.status === 'pr_opened') {
+            failOpen = false
+            return { in: () => ({ eq: async () => ({ data: null, error: { message: 'connection reset' } }) }) } as never
+          }
+          return update(payload)
+        }
+        return q
+      },
+    }
+    await runCiCostFixBundle(flaky as never, BUNDLE, deps())
+    // Never a mix: neither row says opened while the branch could lose its edit.
+    expect(rows().map((r) => r.status)).toEqual(['running', 'running'])
+    for (const r of rows()) r.started_at = '2026-10-27T11:00:00Z'
+    expect(await runCiCostFixBundle(db as never, BUNDLE, deps())).toMatchObject({ ok: true, status: 'pr_opened' })
+    const second = createPr.mock.calls[1][0]
+    expect(second.branch).toBe(createPr.mock.calls[0][0].branch)
+    // The file pushed again carries both edits, not just one.
+    expect(second.files[0].contents).toContain('concurrency:')
+    expect(second.files[0].contents).toContain('ready_for_review')
+    expect(rows().map((r) => r.status)).toEqual(['pr_opened', 'pr_opened'])
+  })
+
   it('a bundle row is never run on its own (that would open a second PR)', async () => {
     const one = item('.github/workflows/ci.yml', 'skip_drafts')
     seed([one])
