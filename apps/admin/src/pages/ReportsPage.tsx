@@ -35,6 +35,7 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
+import { FixFirstQueue } from '../components/reports/FixFirstQueue'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import {
@@ -848,6 +849,9 @@ export function ReportsPage() {
           },
         ]}
       />
+
+      {/* Which bug to fix first: worst severity, most people hit, no fix on the way (journeys 2026-10-27). */}
+      <FixFirstQueue scope={fetchScope} />
 
       <DogfoodNarrativeBanner />
 
