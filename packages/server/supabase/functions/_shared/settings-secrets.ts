@@ -74,6 +74,34 @@ export async function storeSettingsSecret(
 export const SECRET_MASK = '••••••••'
 
 /**
+ * Shown on an integration card when the column holds a Vault ref. The ref's
+ * tail is the column name (`…_ref`), which is not a key hint. A PATCH or PUT
+ * that sends this back leaves the column untouched.
+ */
+export const SAVED_SECRET_LABEL = 'Saved'
+
+/**
+ * Value safe to put on an integration card. A vault ref becomes `Saved`.
+ * A legacy raw secret keeps its last four characters (`…abcd`).
+ */
+export function integrationSecretHint(value: unknown): string {
+  if (typeof value !== 'string') return '****'
+  // Copy first: isVaultRef's `value is string` predicate would narrow the
+  // false branch to `never` once this is already a string.
+  const text: string = value
+  if (text.trim().toLowerCase().startsWith(VAULT_REF_PREFIX)) return SAVED_SECRET_LABEL
+  return `…${text.slice(-4)}`
+}
+
+/** True for a display placeholder, not a new secret the caller typed. */
+export function isIntegrationSecretPlaceholder(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    (value === SAVED_SECRET_LABEL || (value.startsWith('…') && value.length <= 6))
+  )
+}
+
+/**
  * Credential-bearing columns of project_settings / organization_integration_settings
  * that the pattern below does not catch: webhook URLs carry their own token,
  * and the two jsonb columns can hold crawler cookies or API tokens.
@@ -142,7 +170,7 @@ export function planSecretSettingWrite(value: unknown, stored: string | null | u
   const raw = value.trim()
   // Whitespace is an untouched input, not a request to delete the secret.
   if (!raw) return { action: 'skip' }
-  if (raw === SECRET_MASK || (raw.startsWith('…') && raw.length <= 6)) return { action: 'skip' }
+  if (raw === SECRET_MASK || raw === SAVED_SECRET_LABEL || (raw.startsWith('…') && raw.length <= 6)) return { action: 'skip' }
   if (stored != null && value === stored) return { action: 'skip' }
   if (isVaultRef(raw)) return { action: 'reject' }
   return { action: 'store', value: raw }
