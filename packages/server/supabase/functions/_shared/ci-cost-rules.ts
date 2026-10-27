@@ -246,7 +246,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
       title: `${w.path} runs on a schedule ${Math.round(weekly)} times a week`,
       detail: 'A scheduled workflow runs whether or not anything changed. Checks like audits, freshness and link scans rarely need more than a weekly run.',
       evidence: `${w.repo}/${w.path}: ${w.crons.map((c) => `cron "${c}"`).join(', ')} is about ${Math.round(weekly)} runs a week; Mushi recorded ${runs} scheduled runs that billed ${mins(billed)} in ${days} days.`,
-      fix: "Run it weekly, e.g. `- cron: '17 3 * * 1'` (Monday 03:17 UTC; avoid minute 0, when GitHub's schedules are busiest). Keep `workflow_dispatch:` so you can still run it by hand.",
+      fix: "Run it once a week: keep its minute and hour and name one weekday, e.g. `'30 4 * * 1'` for 04:30 UTC on Mondays. Keep `workflow_dispatch:` so you can still run it by hand. Leave release and rollout schedules as they are.",
       repo: w.repo,
       monthSavingUsd: saving,
       autofix: autofix('weekly_cron', w),
@@ -279,7 +279,8 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         fix: "Under `pull_request:` add\npaths-ignore:\n  - '**/*.md'\n  - '**/*.mdx'\n  - 'docs/**'\n  - 'LICENSE*'\n  - '.github/ISSUE_TEMPLATE/**'\nIf a required check must still report, give the skipped case a tiny job instead.",
         repo: w.repo,
         monthSavingUsd: saving,
-        autofix: autofix('ignore_docs_paths', w),
+        // GitHub refuses paths and paths-ignore on one event, and the fix filters push too.
+        autofix: pushHasPaths(w) ? null : autofix('ignore_docs_paths', w),
       })
     }
   }
@@ -455,6 +456,11 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
   }
 
   return out.map((a) => (a.monthSavingUsd != null ? { ...a, monthSavingUsd: r2(a.monthSavingUsd) } : a))
+}
+
+function pushHasPaths(w: ReadWorkflow): boolean {
+  const push = w.triggerConfig('push')
+  return !!push && ('paths' in push || 'paths-ignore' in push)
 }
 
 function groupByRepo(workflows: ReadWorkflow[]): Map<string, ReadWorkflow[]> {
