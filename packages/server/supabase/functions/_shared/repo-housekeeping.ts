@@ -21,7 +21,8 @@
  *   - superseded: a newer attempt for the same report has an open or merged PR;
  *   - hold: the latest Opus review said hold about the PR's current head
  *     (a hold about an older head is stale and does not count);
- *   - stale: its head commit is older than `staleDays`.
+ *   - stale: its newest commit is older than `staleDays` (the commit date,
+ *     not the push date: GitHub does not list pushes).
  *   Never one riding a release train or the head of a running Mushi row.
  *
  * The item each preview lists carries the commit it was decided on; the
@@ -283,7 +284,7 @@ export function prCandidates(
     const at = facts.headCommitAt.get(a.prNumber) ?? null
     if (at && Date.parse(at) < staleBefore) {
       why.push('stale')
-      words.push(`nothing was pushed since ${day(at)}`)
+      words.push(`no new commit since ${day(at)}`)
     }
     if (why.length === 0) continue
     candidates.push({

@@ -171,6 +171,26 @@ describe('connector action approval', () => {
     expect(calls.filter((x) => x.startsWith('PUT'))).toHaveLength(0)
   })
 
+  it('repo clean-ups (ADR 0051) are neither listed, requested nor run on the org routes', async () => {
+    clock = new Date('2026-10-02T12:00:00Z')
+    const cleanup = {
+      id: '4000000a-0000-4000-8000-000000000000', organization_id: ORG, project_id: P1, connector_instance_id: null, connector_kind: 'github',
+      action: 'delete_branches', payload: { repo: 'k/glot', defaultBranch: 'main', items: [] }, payload_sha256: 'f'.repeat(64),
+      status: 'approved', requested_by: 'user:owner', requested_at: '2026-10-02T11:50:00Z', approved_by: 'owner', approved_at: '2026-10-02T11:55:00Z', expires_at: '2026-10-02T12:55:00Z',
+    }
+    const db = seed({ connector_actions: [cleanup] })
+    const { app, calls } = harness(db)
+    expect((await app.call('GET', ACTIONS)).body.data.actions).toEqual([])
+    const asked = await app.call('POST', ACTIONS, { body: { connectorId: INST, action: 'close_prs', payload: { repo: 'k/glot', items: [] } } })
+    expect(asked.body.error.code).toBe('USE_REPO_CLEANUP')
+    const ran = await app.call('POST', `${ACTIONS}/${cleanup.id}/execute`)
+    expect(ran.body.error.code).toBe('USE_REPO_CLEANUP')
+    // Refused before the claim: the approval is still there for Repo → Clean up.
+    expect(db.table('connector_actions')[0].status).toBe('approved')
+    expect(db.table('connector_actions')[0].executed_at).toBeUndefined()
+    expect(calls).toHaveLength(0)
+  })
+
   it('refuses to approve when the stored payload changed after the person saw it', async () => {
     clock = new Date('2026-10-02T12:00:00Z')
     const db = seed()

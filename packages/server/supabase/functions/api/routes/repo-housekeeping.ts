@@ -31,7 +31,7 @@ import { log } from '../../_shared/logger.ts'
 import { resolveProjectGithubToken } from '../../_shared/github.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
-import { closePullRequest } from '../../_shared/fix-close.ts'
+import { closePull, ghClient } from '../../_shared/repo-housekeeping-github.ts'
 import {
   approveConnectorAction,
   executeConnectorAction,
@@ -114,10 +114,7 @@ function runDeps(deps: RepoHousekeepingRouteDeps): HousekeepingRunDeps {
     now: deps.now,
     sleep: deps.sleep,
     token: deps.token,
-    closePull: (token, repo, n) => {
-      const [owner, name] = repo.split('/')
-      return closePullRequest(token, { owner, repo: name }, n)
-    },
+    closePull: (token, repo, n) => closePull(ghClient(deps.fetch, token), repo, n),
   }
 }
 
@@ -149,13 +146,13 @@ async function orgRole(db: Db, orgId: string, userId: string): Promise<string | 
 
 type Access = { projectId: string; orgId: string; role: string | null }
 
-async function access(c: Context, deps: RepoHousekeepingRouteDeps, db: Db): Promise<Access | Response> {
+async function access(c: Context, deps: RepoHousekeepingRouteDeps, db: Db): Promise<Access | { refused: Response }> {
   const projectId = c.req.param('id') ?? ''
-  if (!UUID_RE.test(projectId)) return jsonError(c, 'VALIDATION_ERROR', 'The project id must be a uuid.', 400)
+  if (!UUID_RE.test(projectId)) return { refused: jsonError(c, 'VALIDATION_ERROR', 'The project id must be a uuid.', 400) }
   const a = await deps.callerCanAccessProject(c, db, c.get('userId') as string, projectId)
-  if (!a.allowed) return jsonError(c, 'NOT_FOUND', 'Project not found.', 404)
+  if (!a.allowed) return { refused: jsonError(c, 'NOT_FOUND', 'Project not found.', 404) }
   const orgId = await projectOrg(db, projectId)
-  if (!orgId) return jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization.', 409)
+  if (!orgId) return { refused: jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization.', 409) }
   return { projectId, orgId, role: (a.role as string | null | undefined) ?? null }
 }
 
@@ -235,7 +232,7 @@ async function buildPreview(db: Db, deps: RepoHousekeepingRouteDeps, projectId: 
 async function previewRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promise<Response> {
   const db = deps.getServiceClient()
   const a = await access(c, deps, db)
-  if (a instanceof Response) return a
+  if ('refused' in a) return a.refused
   const staleDays = clampStaleDays(c.req.query('staleDays'))
   try {
     const actions = await loadActions(db, a.projectId)
@@ -298,7 +295,7 @@ async function store(c: Context, db: Db, a: Access, action: string, payload: Rec
 async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promise<Response> {
   const db = deps.getServiceClient()
   const a = await access(c, deps, db)
-  if (a instanceof Response) return a
+  if ('refused' in a) return a.refused
   const viewer = denyViewerWrite(c, a.role, 'ask for a repo clean-up')
   if (viewer) return viewer
   const parsed = requestSchema.safeParse(await c.req.json().catch(() => null))
@@ -368,7 +365,7 @@ const restoreSchema = z
 async function restoreRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promise<Response> {
   const db = deps.getServiceClient()
   const a = await access(c, deps, db)
-  if (a instanceof Response) return a
+  if ('refused' in a) return a.refused
   const viewer = denyViewerWrite(c, a.role, 'ask to restore branches')
   if (viewer) return viewer
   const parsed = restoreSchema.safeParse(await c.req.json().catch(() => null))

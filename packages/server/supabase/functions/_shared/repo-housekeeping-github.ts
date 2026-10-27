@@ -219,6 +219,12 @@ export async function createRef(gh: Gh, repo: string, branch: string, sha: strin
   return (await call(gh, `/repos/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }) })).status
 }
 
+/** Close a pull request (used through fix-close.ts's closeFixPullRequest). */
+export async function closePull(gh: Gh, repo: string, n: number): Promise<boolean> {
+  const r = await call(gh, `/repos/${repo}/pulls/${n}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed' }) })
+  return r.status === 200
+}
+
 /** Turn on "Automatically delete head branches"; the value GitHub reports after, or null. */
 export async function enableDeleteBranchOnMerge(gh: Gh, repo: string): Promise<{ status: number; value: boolean | null }> {
   const r = await call(gh, `/repos/${repo}`, { method: 'PATCH', body: JSON.stringify({ delete_branch_on_merge: true }) })

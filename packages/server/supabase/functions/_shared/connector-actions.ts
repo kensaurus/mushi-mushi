@@ -81,6 +81,9 @@ export async function requestConnectorAction(
   db: Db,
   input: { organizationId: string; instanceId: string; action: string; payload: Record<string, unknown>; requestedBy: string; reason?: string | null; projectId?: string | null },
 ): Promise<ActionOutcome<{ id: string; payloadSha256: string }>> {
+  if (isHousekeepingAction(input.action)) {
+    return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
+  }
   const { data: inst } = await db.from('connector_instances').select('id, kind, organization_id').eq('id', input.instanceId).eq('organization_id', input.organizationId).maybeSingle()
   if (!inst) return { ok: false, code: 'NOT_FOUND', message: 'Connector not found in this team.', status: 404 }
   const connector = getConnector((inst as { kind: string }).kind)
@@ -89,9 +92,6 @@ export async function requestConnectorAction(
   }
   if (isPlacementAction(input.action)) {
     return { ok: false, code: 'USE_CI_PLACEMENT', message: 'Ask to change where CI runs through /v1/admin/ci/placement/requests (CI runners → Where CI runs): Mushi builds that change from a preview.', status: 400 }
-  }
-  if (isHousekeepingAction(input.action)) {
-    return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
   }
   const payloadSha256 = await payloadHash(input.payload)
   const { data, error } = await db.from('connector_actions').insert({
