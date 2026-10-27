@@ -1738,6 +1738,28 @@
   box-shadow: 6px 0 10px -4px color-mix(in oklch, var(--color-fg) 18%, transparent);
 }
 
+/* Reports triage: the summary column is 34rem and sticky. On a phone-width
+   scrollport that box covers Status, Severity, Confidence, and Action, so
+   elementFromPoint at those sort-header centers hits the summary and the
+   buttons never receive the click. Unpin the summary until the scrollport
+   is wide enough for every trailing header center to clear its right edge
+   (stripe + checkbox + summary + trailing columns − status/2).
+   The rem is locked to reportsStickySummaryUnpinMaxRem() by
+   reportsTableLayout.test.ts — update both together. */
+.responsive-table:has(table.reports-triage-table) {
+  container-type: inline-size;
+  container-name: reports-triage;
+}
+@container reports-triage (max-width: 52.875rem) {
+  .responsive-table[data-sticky-lead="3"] table.reports-triage-table thead th:nth-child(3),
+  .responsive-table[data-sticky-lead="3"] table.reports-triage-table tbody td:nth-child(3) {
+    position: static;
+    left: auto;
+    z-index: auto;
+    box-shadow: none;
+  }
+}
+
 /* Row kebab — visible on touch; hover-reveal on fine pointers (NN/g #7). */
 @media (hover: hover) and (pointer: fine) {
   .row-kebab-reveal {
