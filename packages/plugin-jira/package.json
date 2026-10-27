@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/plugin-jira",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "license": "MIT",
-  "description": "First-party Jira plugin for Mushi Mushi — OAuth 2.0 (3LO) connect flow, bidirectional sync (create issues from reports, mirror status changes back), and Jira webhook handler.",
+  "description": "Mushi Mushi plugin for Jira Cloud — opens a Jira issue per bug report, moves it as the report status changes, and comments when the fix lands. OAuth 2.0 (3LO) helpers included.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

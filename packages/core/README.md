@@ -6,6 +6,20 @@ The shared types, API client and utilities under every [Mushi Mushi](https://git
 
 **You probably don't need to install this directly.** Run `npx mushi-mushi` and the wizard installs the SDK for your framework ([`react`](https://npmjs.com/package/@mushi-mushi/react), [`vue`](https://npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) or [`web`](https://npmjs.com/package/@mushi-mushi/web)), which depends on this one. Reach for `core` when you build your own adapter or need the types.
 
+```bash
+npm install @mushi-mushi/core
+```
+
+```ts
+import { createPreFilter, captureEnvironment } from '@mushi-mushi/core';
+
+const filter = createPreFilter();
+filter.check('asdf');      // { passed: false, reason: 'Too short (min 10 characters)' }
+const env = captureEnvironment(); // viewport, user agent, connection, page timing
+```
+
+Docs: [Core SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/core)
+
 ```mermaid
 flowchart LR
     A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi API"]

@@ -145,12 +145,23 @@ describe('summarizeKeys', () => {
     ]
     expect(summarizeKeys(keys, [legacy()], NOW)).toEqual({
       working: 1,
-      attention: 2, // rejected key + superseded legacy key
+      attention: 0,
+      replaced: 2, // rejected key + superseded legacy key, both replaced by the working key
       expiring: 1,
       checking: 1,
       off: 1,
       total: 6,
     })
+  })
+
+  it('a rejected key with nothing to replace it still needs attention', () => {
+    const keys = [pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })]
+    expect(summarizeKeys(keys, [], NOW)).toMatchObject({ attention: 1, replaced: 0 })
+  })
+
+  it('a key turned off by hand never needs attention, even once it has expired', () => {
+    const off = pool({ id: 'k9', status: 'disabled', expires_at: iso(-24 * H) })
+    expect(summarizeKeys([pool(), off], [], NOW)).toMatchObject({ attention: 0, replaced: 0, off: 1 })
   })
 })
 
@@ -165,10 +176,23 @@ describe('providerStatusView', () => {
     })
   })
 
-  it('a working provider with a broken spare key still asks for attention', () => {
+  it('a working provider with a rejected key it already replaced reads Working, with the key to remove', () => {
+    // The rejected key's row says "Another key is working, so remove this one";
+    // the banner and badge no longer count it, so the provider row agrees.
     const v = providerStatusView(
       'anthropic',
       [pool(), pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })],
+      [],
+      opts,
+    )
+    expect(v.state).toBe('working')
+    expect(v.detail).toMatch(/· 1 old key to remove below$/)
+  })
+
+  it('a working provider with a spare key out of quota still asks for attention', () => {
+    const v = providerStatusView(
+      'anthropic',
+      [pool(), pool({ id: 'k2', status: 'quota_exhausted', test_status: 'error_quota', cooldown_until: iso(H) })],
       [],
       opts,
     )

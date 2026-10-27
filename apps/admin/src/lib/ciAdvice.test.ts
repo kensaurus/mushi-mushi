@@ -57,4 +57,21 @@ describe('groupCiAdvice', () => {
   it('is empty for no advice', () => {
     expect(groupCiAdvice([])).toEqual([])
   })
+
+  it('lists one "Open fix PR" target per workflow that carries an autofix, with its saving', () => {
+    const P = 'p1'
+    const fixable = (path: string, repo = REPO, saving: number | null = 2.5): CiAdvice => ({
+      ...drafts(path, repo),
+      monthSavingUsd: saving,
+      autofix: { kind: 'skip_drafts', projectId: P, repo, workflowPath: `.github/workflows/${path}` },
+    })
+    const [g] = groupCiAdvice([fixable('ci.yml'), fixable('ci.yml'), drafts('nightly.yml'), fixable('e2e.yml', REPO, null)])
+    expect(g.count).toBe(4)
+    expect(g.fixable.map((f) => [f.label, f.monthSavingUsd])).toEqual([['ci.yml', 2.5], ['e2e.yml', null]])
+    expect(g.fixable[0].autofix).toEqual({ kind: 'skip_drafts', projectId: P, repo: REPO, workflowPath: '.github/workflows/ci.yml' })
+    expect(g.fixable[0].evidence).toContain('never checks the draft flag')
+    const across = groupCiAdvice([fixable('ci.yml'), fixable('ci.yml', 'kensaurus/glot.it')])[0]
+    expect(across.fixable.map((f) => f.label)).toEqual(['tsumagoi · ci.yml', 'glot.it · ci.yml'])
+    expect(groupCiAdvice([drafts('ci.yml')])[0].fixable).toEqual([])
+  })
 })

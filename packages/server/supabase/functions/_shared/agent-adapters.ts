@@ -74,6 +74,13 @@ export type CloudAgentKind = 'cursor_cloud' | 'github_cloud_agent' | 'anthropic_
  *  project_settings.autofix_agent). `anthropic_managed` is interface-only. */
 export const DISPATCHABLE_CLOUD_AGENTS: ReadonlySet<string> = new Set(['cursor_cloud', 'github_cloud_agent'])
 
+/**
+ * `fix_attempts.agent` values written by fix-worker's own LLM path (it opens
+ * the PR itself, as a draft; ADR 0047). Kept beside the cloud kinds so the
+ * review worker can tell the two apart.
+ */
+export const FIX_WORKER_AGENTS: ReadonlySet<string> = new Set(['claude_code', 'rest_fix_worker', 'llm'])
+
 export function isDispatchableCloudAgent(agent: string | null | undefined): agent is 'cursor_cloud' | 'github_cloud_agent' {
   return !!agent && DISPATCHABLE_CLOUD_AGENTS.has(agent)
 }

@@ -74,6 +74,7 @@ export function normalizeNavSlices(raw: Partial<NavStatSlices> | undefined): Nav
     graph: (s.graph as NavStatSlices['graph']) ?? null,
     inventory: (s.inventory as NavStatSlices['inventory']) ?? null,
     health: (s.health as NavStatSlices['health']) ?? null,
+    judge: (s.judge as NavStatSlices['judge']) ?? null,
     fixes: (s.fixes as NavStatSlices['fixes']) ?? null,
     repo: (s.repo as NavStatSlices['repo']) ?? null,
     mcp: (s.mcp as NavStatSlices['mcp']) ?? null,

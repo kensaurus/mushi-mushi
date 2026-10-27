@@ -23,6 +23,7 @@ Mushi into your app, start at [Quickstart](/quickstart) instead.
 | --- | --- | --- |
 | [Deployment & releases](/operating/deployment) | Maintainers | npm SDK publish (Changesets + OIDC), edge functions, admin SPA, docs, DB migrations |
 | [CI runners](/operating/ci-runners) | Anyone running GitHub Actions | Where your tests run and why a fix waits, a broken fix vs a stopped test machine, and `mushi runner add` |
+| [Local workers](https://github.com/kensaurus/mushi-mushi/blob/master/docs/operators/local-workers.md) | Anyone fixing reports on their own machine | `mushi work --daemon` as a service, its guards and key, and the console's Pipeline → Workers tab |
 
 ## The four independent deploy paths
 

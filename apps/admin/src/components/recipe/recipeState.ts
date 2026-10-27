@@ -48,7 +48,8 @@ const OK: ElementStateMeta = {
   tone: 'okSubtle',
   glyph: 'check',
   description: 'Checked recently, and nothing needs fixing.',
-  cardEdge: 'border border-edge-subtle',
+  // Green edge: every box reads red, amber or green at a glance (journeys 2026-10-27).
+  cardEdge: 'border-2 border-ok/45',
 }
 
 const DRIFT: ElementStateMeta = {

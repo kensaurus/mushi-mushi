@@ -208,9 +208,9 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
         const setup = openRuns.some((r) => r.gate === MUSHI_SETUP_GATE)
         const others = openRuns.some((r) => r.gate !== MUSHI_SETUP_GATE)
         const where = setup && others
-          ? 'Mushi setup checks and their fixes are under Risk checks on the Recipe page; the rest are in Full-stack audit.'
+          ? 'Mushi setup checks and their fixes are under Risk checks at the end of the App blueprint page; the rest are in Full-stack audit.'
           : setup
-            ? 'They and their fixes are under Risk checks on the Recipe page.'
+            ? 'They and their fixes are under Risk checks at the end of the App blueprint page.'
             : 'Open Full-stack audit for each one and its fix.'
         return { state: 'drift', reason: `${plural(open, 'problem')} to fix: ${withOpen.join(', ')}. ${where}${staleNote}` }
       }

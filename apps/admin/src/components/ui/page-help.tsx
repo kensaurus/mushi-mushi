@@ -1,113 +1,17 @@
 import { useState, useEffect } from 'react';
-import type { ReactNode, ReactEventHandler } from 'react';
+import type { ReactEventHandler } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../../lib/pdca';
 import { PAGE_FLOW_LINKS, flowLinkBlurb, resolveFlowPath, type PageFlowLink } from '../../lib/pageLinks';
 import { navIconForPath } from '../../lib/pageNavIcons';
 import { HelpBulletList, HelpRichText } from '../HelpRichText';
 import { HelpSection } from '../HelpSection';
-import { CopyViewLinkButton } from '../CopyViewLinkButton';
 import { isPageHelpRead, markPageHelpRead } from '../../lib/pageHelpRead';
-import { isDevFacingHint } from '../../lib/devHintCopy';
 import {
   PAGE_HELP_BANNER_INNER_BORDER,
   PAGE_HELP_BANNER_SHELL,
   PAGE_HELP_BANNER_SUMMARY_HOVER,
 } from '../../lib/pageHelpSurfaces';
-import { Tooltip } from './misc';
 
-
-/* ── PageHeader ─────────────────────────────────────────────────────────── */
-
-interface PageHeaderProps {
-  title: string
-  description?: string
-  children?: ReactNode
-  /** Override the leading chip slot. Pass an explicit chip (e.g. a custom
-   *  <PdcaContextHint stage="…" />) to override the URL-derived default, or
-   *  pass `null` to suppress the chip entirely on pages that aren't part of
-   *  the PDCA loop (login, settings, etc.). Leave undefined to inherit the
-   *  default URL-driven chip — that's the path almost every page should take. */
-  contextChip?: ReactNode | null
-  /** Project name to anchor the page in the user's reality
-   *  (e.g. `Reports · glot-it`). Pass `null` or omit to keep the bare title.
-   * every PDCA page surfaces the active project so the user
-   *  can tell which app a bug came from without scanning the switcher. */
-  projectScope?: string | null
-  showCopyLink?: boolean
-}
-
-export function PageHeader({ title, description, children, contextChip, projectScope, showCopyLink = true }: PageHeaderProps) {
-  // `undefined` = render the auto URL-derived stage chip; `null` = explicitly
-  // suppressed; anything else = caller-provided chip. This keeps the audit
-  // invariant ("every PDCA page shows its stage above the title") without
-  // forcing every page to import PdcaContextHint manually.
-  const chip = contextChip === undefined ? <AutoPdcaChip /> : contextChip
-  return (
-    <div className="mb-5 w-full min-w-0 space-y-1.5">
-      {chip && <div>{chip}</div>}
-      {/* Wraps on phones (B26): the title takes the full row and the
-          actions drop below it, instead of squeezing the title into a
-          130px column that broke it mid-phrase. */}
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <h2 className="min-w-0 flex-1 basis-full sm:basis-0 text-base font-semibold text-fg leading-snug text-balance">
-          {title}
-          {projectScope && (
-            <>
-              <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
-              <span className="font-mono text-fg-secondary">{projectScope}</span>
-            </>
-          )}
-        </h2>
-        {(children || showCopyLink) && (
-          <div className="flex items-center gap-2 shrink-0">
-            {showCopyLink && <CopyViewLinkButton />}
-            {children}
-          </div>
-        )}
-      </div>
-      {description && !isDevFacingHint(description) && (
-        <p className="w-full max-w-none text-xs text-fg-muted leading-relaxed text-pretty text-balance">
-          {description}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/**
- * URL-derived PDCA stage chip rendered inline (rather than re-using
- * `<PdcaContextHint />`) to sidestep the circular import that would arise if
- * ui.tsx imported a component which itself imports Tooltip from ui.tsx. The
- * styling stays in lock-step with `PdcaContextHint` because both surfaces
- * read from the shared `PDCA_STAGES` map.
- */
-function AutoPdcaChip() {
-  const { pathname } = useLocation()
-  const chip = chipForPath(pathname)
-  if (!chip) return null
-  const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip]
-  const ariaLabel = chip === 'overview'
-    ? `Overview: ${meta.hint}`
-    : `PDCA stage: ${meta.label}. ${meta.hint}`
-  return (
-    <Tooltip content={meta.hint}>
-      <span
-        role="img"
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
-        aria-label={ariaLabel}
-      >
-        <span
-          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
-          aria-hidden="true"
-        >
-          {meta.letter}
-        </span>
-        {meta.label}
-      </span>
-    </Tooltip>
-  )
-}
 
 /* ── PageHelp (collapsible "About this page") ──────────────────────────── */
 
@@ -293,16 +197,38 @@ export function PageHelpBanner({
         </div>
       </div>
     </details>
-    {visibleLinks.length > 0 && (
-      <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
-        <span>Related:</span>
-        {visibleLinks.map((l) => (
-          <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-    )}
+    <RelatedLinksRow links={visibleLinks} />
+    </div>
+  )
+}
+
+function RelatedLinksRow({ links }: { links: PageFlowLink[] }) {
+  if (links.length === 0) return null
+  return (
+    <nav aria-label="Related pages" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-2xs text-fg-muted">
+      <span>Related:</span>
+      {links.map((l) => (
+        <Link key={l.to} to={l.to} title={flowLinkBlurb(l)} className="text-fg-secondary underline decoration-edge underline-offset-2 hover:text-fg">
+          {l.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+/**
+ * The "Related:" row on its own, for a page whose help sits in the header
+ * popover. It stays visible under the content: the owner could not find the
+ * cross-links while they sat inside the closed help (2026-10-08).
+ */
+export function PageRelatedRow({ relatedLinks, flowPath }: { relatedLinks?: PageFlowLink[]; flowPath?: string }) {
+  const { pathname } = useLocation()
+  const routeKey = resolveFlowPath(flowPath ?? pathname)
+  const links = (relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []).filter((l) => l.to.split('#')[0] !== pathname)
+  if (links.length === 0) return null
+  return (
+    <div className="mb-3 w-full min-w-0">
+      <RelatedLinksRow links={links} />
     </div>
   )
 }

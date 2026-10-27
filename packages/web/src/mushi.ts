@@ -808,13 +808,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // report the user opened themselves says nothing about the prompts.
       if (pendingProactiveTrigger) proactiveManager?.recordSubmission();
       await autoCaptureScreenshot('submit');
-      const outcome = await submitReport(category, description, intent, userCategory);
-      // Surface the server-confirmed id back to the widget so the
-      // success step renders a real receipt rather than a fake stamp.
-      // `undefined` happens when the pre-filter/rate-limiter blocked
-      // the report — degrade to the "queued offline" copy so the user
-      // still sees acknowledgement instead of a silent close.
-      return outcome ?? { reportId: null, queuedOffline: true };
+      // Surface the server-confirmed id back to the widget so the success
+      // step renders a real receipt. A report stopped on the device comes
+      // back as `blocked` / `throttled`: the widget keeps the text and says
+      // it was not sent, never "sent" or "queued".
+      return submitReport(category, description, intent, userCategory);
     },
     onOpen: () => {
       log.debug('Widget opened');
@@ -1337,11 +1335,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     description: string,
     intent?: string,
     userCategory?: string,
-  ): Promise<WidgetSubmitOutcome | undefined> {
+  ): Promise<WidgetSubmitOutcome> {
+    const notSent = (failureKind: 'blocked' | 'throttled'): WidgetSubmitOutcome =>
+      ({ reportId: null, queuedOffline: false, failureKind });
     const filterResult = preFilter.check(description);
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
-      return undefined;
+      return notSent('blocked');
     }
 
     const wasm = config.preFilter?.wasmClassifier;
@@ -1363,7 +1363,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             confidence: verdict.confidence,
             reason: verdict.reason,
           });
-          return undefined;
+          return notSent('blocked');
         }
         log.debug('On-device classifier verdict', { ...verdict });
       } catch (err) {
@@ -1380,13 +1380,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (isAutomatic && config.sampleRate !== undefined && config.sampleRate < 1) {
       if (config.sampleRate <= 0 || Math.random() > config.sampleRate) {
         log.debug('Report dropped by sampleRate', { sampleRate: config.sampleRate, trigger: pendingProactiveTrigger });
-        return undefined;
+        return notSent('blocked');
       }
     }
 
     if (!rateLimiter.tryConsume()) {
       log.warn('Report throttled — rate limit exceeded');
-      return undefined;
+      return notSent('throttled');
     }
 
     const scrubbedDescription = piiScrubber.scrub(preFilter.truncate(description));
@@ -1515,7 +1515,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         ]);
         if (hookResult === null) {
           log.info('Report dropped by beforeSend hook', { reportId: report.id });
-          return;
+          return notSent('blocked');
         }
         finalReport = hookResult;
       } catch (err) {

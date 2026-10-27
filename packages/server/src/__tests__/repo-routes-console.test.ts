@@ -170,6 +170,11 @@ describe('repo branch counting rule', () => {
     expect(classifyRepoBranch({ pr_url: 'u', check_run_conclusion: 'cancelled' })).toBe('open')
     expect(classifyRepoBranch({ pr_url: 'u', check_run_conclusion: 'success' })).toBe('ci_passing')
     expect(classifyRepoBranch({ pr_url: 'u', pr_state: 'closed' })).toBe('closed')
+    // "Failing CI" means the code failed: not a draft (no CI runs), not a
+    // stopped test machine (ADR 0033; apps/admin/src/lib/countDefinitions.ts).
+    expect(classifyRepoBranch({ pr_url: 'u', pr_state: 'draft', check_run_conclusion: 'failure' })).toBe('open')
+    expect(classifyRepoBranch({ pr_url: 'u', pr_state: 'open', check_run_conclusion: 'failure', ci_infra: { kind: 'runner_lost', infra: true } })).toBe('open')
+    expect(classifyRepoBranch({ pr_url: 'u', pr_state: 'open', check_run_conclusion: 'failure', ci_infra: { kind: 'code_failure', infra: false } })).toBe('ci_failed')
   })
 
   it('never counts a merged PR as open or failing', () => {

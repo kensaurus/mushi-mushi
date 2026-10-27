@@ -371,6 +371,13 @@ verify_jwt = false
 [functions.review-followup]
 verify_jwt = false
 
+# ci-cost-fix-worker opens one CI cost "Open fix PR" job (ADR 0047): reads the
+# workflow, applies the edit (_shared/ci-cost-fix.ts) and opens a draft PR.
+# Fired by POST /v1/admin/ci/cost-fixes (api-ext). Auth inside via
+# requireServiceRoleAuth.
+[functions.ci-cost-fix-worker]
+verify_jwt = false
+
 # ci-jobs-collector is invoked by pg_cron (mushi-ci-jobs-collector, 2-52/10)
 # through the internal caller token; requireServiceRoleAuth inside (Plan 022).
 [functions.ci-jobs-collector]

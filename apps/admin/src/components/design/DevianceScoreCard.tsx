@@ -52,7 +52,7 @@ function RunStatusBadge({ status }: { status: unknown }) {
 }
 
 function notScoredReason(run: DevianceRun | null): string {
-  if (!run) return 'No deviance scan has run for this project yet.'
+  if (!run) return 'No drift check has run for this project yet.'
   if (run.error) return run.error
   if (run.status === 'running') return 'The scan is still running.'
   if (run.scannedFiles === 0) return 'The scan matched no files, so there was nothing to judge.'

@@ -1,0 +1,38 @@
+{
+  "receiver": "mushi-webhook",
+  "status": "firing",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "CheckoutErrorLogs",
+        "service": "checkout-api",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "checkout-api logged 142 errors in 5m",
+        "description": "Loki query count_over_time({service=\"checkout-api\"} |= \"level=error\" [5m]) is 142, above 50",
+        "runbook_url": "https://wiki.example.com/runbooks/checkout-errors"
+      },
+      "startsAt": "2026-10-26T09:51:03.157076+09:00",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://grafana.example.com/alerting/grafana/c7a1d2/view",
+      "fingerprint": "c6eadffa33fcdf37",
+      "silenceURL": "https://grafana.example.com/alerting/silence/new?alertmanager=grafana&matcher=alertname%3DCheckoutErrorLogs",
+      "dashboardURL": "",
+      "panelURL": "",
+      "values": { "B": 142, "C": 1 }
+    }
+  ],
+  "groupLabels": { "alertname": "CheckoutErrorLogs" },
+  "commonLabels": { "alertname": "CheckoutErrorLogs", "service": "checkout-api", "severity": "critical" },
+  "commonAnnotations": { "summary": "checkout-api logged 142 errors in 5m" },
+  "externalURL": "https://grafana.example.com/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"CheckoutErrorLogs\"}",
+  "truncatedAlerts": 0,
+  "title": "[FIRING:1] CheckoutErrorLogs (checkout-api critical)",
+  "state": "alerting",
+  "message": "**Firing**\n\nLabels:\n - alertname = CheckoutErrorLogs\n - service = checkout-api\n - severity = critical\n"
+}

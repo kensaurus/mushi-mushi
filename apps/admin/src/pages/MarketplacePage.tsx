@@ -41,7 +41,7 @@ import { InstallForm } from '../components/marketplace/InstallForm'
 import { InstalledList } from '../components/marketplace/InstalledList'
 import { PluginCard } from '../components/marketplace/PluginCard'
 import { MarketplaceStatusBanner } from '../components/marketplace/MarketplaceStatusBanner'
-import { MarketplaceSnapshotStrip } from '../components/marketplace/MarketplaceSnapshotStrip'
+import { InstalledHealthList } from '../components/marketplace/InstalledHealthList'
 import { MarketplaceReadout } from '../components/marketplace/MarketplaceReadout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -616,20 +616,6 @@ export function MarketplacePage() {
               />
             ),
           },
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideMarketplaceSnapshot && !isEmpty,
-            children: (
-              <MarketplaceSnapshotStrip
-                stats={stats}
-                statsFetchedAt={lastFetchedAt}
-                statsValidating={isValidating}
-                sectionTitle={copy?.sections?.snapshot ?? 'MARKETPLACE SNAPSHOT'}
-                hint={activeMeta.description}
-                statLabels={copy?.statLabels}
-              />
-            ),
-          },
         ]}
       />
 
@@ -674,7 +660,14 @@ export function MarketplacePage() {
       )}
 
       {!isEmpty && activeTab === 'overview' && (
-        <MarketplaceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
+        <>
+          {/* First: what you installed and whether it delivers; then what you could add. */}
+          <Section title="Your plugins">
+            <InstalledHealthList installed={installed} reliabilityBySlug={reliabilityBySlug} />
+          </Section>
+          <Section title="Add a plugin">{catalogGrid}</Section>
+          <MarketplaceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
+        </>
       )}
 
       {!isEmpty && activeTab !== 'overview' && (

@@ -15,6 +15,8 @@ yarn create mushi-mushi
 bun create mushi-mushi
 ```
 
+Docs: [the setup wizard](https://kensaur.us/mushi-mushi/docs/sdks/launcher) (same wizard as `npx mushi-mushi`)
+
 ## What it does
 
 1. **Detects your framework** — Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS.
@@ -50,7 +52,7 @@ npm run dev       # npm start for the node starter
 
 ```bash
 npm create mushi-mushi -- --framework next
-npm create mushi-mushi -- --project-id proj_xxx --api-key mushi_xxx
+npm create mushi-mushi -- --project-id <project-uuid> --api-key mushi_xxx
 npm create mushi-mushi -- --skip-install
 npm create mushi-mushi -- --skip-test-report
 npm create mushi-mushi -- --cwd apps/web
@@ -71,11 +73,11 @@ npx @mushi-mushi/cli init     # scoped name
 
 ## Troubleshooting
 
-- **Wrong framework detected?** Pass `--framework <id>` explicitly. Valid IDs: `next, react, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, vanilla`.
+- **Wrong framework detected?** Pass `--framework <id>` explicitly. Valid IDs: `next, react, cra, remix, astro, solid, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, express, fastify, hono, vanilla`.
 - **Running in a monorepo?** `cd` into the package you want Mushi in first, or pass `--cwd apps/web`.
 - **`npx` cache serving an old version?** Run `npm cache clean --force` or `npx mushi-mushi@latest`.
 - **Non-interactive (CI)?** Pass all of `--yes`, `--project-id`, and `--api-key`. The wizard exits with a clear error otherwise.
-- **Key pasted with quotes/whitespace?** The wizard strips them, but still validates against `mushi_[A-Za-z0-9_-]{10,}` / `proj_[A-Za-z0-9_-]{10,}`.
+- **Key pasted with quotes/whitespace?** The wizard strips them, then checks the format: the API key starts with `mushi_` or `mush_pk_` followed by 10 or more characters, and the project ID is a UUID (or `proj_` followed by 10 or more characters).
 
 ## Security
 
@@ -87,7 +89,7 @@ npx @mushi-mushi/cli init     # scoped name
 
 - [Console](https://kensaur.us/mushi-mushi/)
 - [GitHub](https://github.com/kensaurus/mushi-mushi)
-- [Docs](https://github.com/kensaurus/mushi-mushi#readme)
+- [Docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)
 - [Report a bug](https://github.com/kensaurus/mushi-mushi/issues)
 
 ## License
@@ -98,4 +100,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 76 edge functions · 506 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 514 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -20,26 +20,33 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-  **Today:** a report is sorted and explained within seconds, with a paste-ready fix prompt on the report page or a fix brief through the MCP tools. **Target:** the whole diagnosis in under 10 seconds. MCP needs a Mushi account and a project key, not a separate OpenAI or Anthropic key.
+- A user reports a bug in your live app. Mushi explains it in plain English.
+- Your editor pulls the diagnosis and a ready fix prompt over MCP.
+- Your AI applies the fix; you review and ship. No extra AI key needed.
 
 ## No MCP? Copy the fix prompt
 
-Open the report in the console and click **Copy fix prompt** under **Fix it with
-your coding agent**. You get one self-contained prompt (diagnosis, suggested fix,
-repro steps, page and browser, the key console lines, likely files, and what
-"done" means), ready to paste into Claude Code, Cursor, Codex or Windsurf. No
-MCP or editor setup is needed. The steps below are the MCP route, which lets
-the agent fetch the details and close the report itself.
+Open the report in the console and click **Copy fix prompt** (under **Fix it
+with your coding agent**). Paste it into Claude Code, Cursor, Codex or Windsurf.
 
-## Prerequisites
+What the fix prompt contains
 
-1. A Mushi project + API key ([credentials](/concepts/credentials))
-2. At least one report (SDK capture, test report from `npx mushi-mushi`, or Sentry inbound)
-3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**. The key it creates can read and write by default; the agent needs write access to mark the report fixed.
+One self-contained prompt: the diagnosis, the suggested fix, repro steps, page
+and browser, the key console lines, likely files, and what "done" means. No MCP
+or editor setup is needed. The steps below are the MCP route, which lets the
+agent fetch the details and close the report itself.
 
-## Step 1 — Capture or pick a report
+## Before you start
 
-**New project:**
+- A Mushi project and API key ([credentials](/concepts/credentials)).
+- At least one report: from the SDK, the test report `npx mushi-mushi` offers, or a Sentry alert.
+- MCP connected to your editor ([MCP quickstart](/quickstart/mcp)). The agent needs write access to mark the report fixed; the default key has it.
+
+## The loop
+
+### Capture or pick a report
+
+New project:
 
 ```bash
 npx mushi-mushi
@@ -47,27 +54,37 @@ npx mushi-mushi
 mushi connect --wait
 ```
 
-**Existing report:** open Admin → Reports and copy a report UUID, or ask the agent: *"list recent mushi reports"*.
+Existing report: open **Reports** in the console and copy its ID, or ask the agent *"list recent mushi reports"*.
 
-## Step 2 — Pull fix context
+**You'll see:** a report ID, and the report in the console with a plain-English title.
+
+### Pull the fix context
 
 In Cursor, ask:
 
 > Use Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
 
-`get_fix_context` returns classification, repro steps, blast radius, and inventory spec context in one payload — plus a **`fixPrompt`**: a paste-ready, agent-ready fix brief composed server-side (diagnosis + reproduction + suggested fix + relevant code hints). No second LLM key required to build it. For most bugs you can paste `fixPrompt` straight into Cursor and skip to [Step 4](#step-4--paste-and-ship); Step 3 below adds blast-radius and similar-bug context when you want a deeper plan.
+`get_fix_context` returns the classification, repro steps, blast radius and a
+**`fixPrompt`**: a paste-ready fix brief built on the server. For most bugs you
+can paste `fixPrompt` straight into Cursor and skip to the last step.
 
-## Step 3 — Generate the fix prompt
+**You'll see:** the root cause in plain English, and a `fixPrompt` you can paste.
+
+### Get a deeper fix plan (optional)
 
 Run the MCP prompt **`summarize_report_for_fix`** with the same report ID, or ask:
 
 > Run the Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
 
-The prompt orchestrates `get_fix_context`, `get_blast_radius`, and `get_similar_bugs` into a structured fix plan.
+It combines `get_fix_context`, `get_blast_radius` and `get_similar_bugs` into one plan.
 
-## Step 4 — Paste and ship
+### Paste and ship
 
-Copy the agent's output into a new Cursor chat (or continue in the same thread) and ask it to implement the fix. Optionally dispatch a draft PR later via `dispatch_fix` when GitHub is linked.
+Paste the agent's output into a Cursor chat (or keep going in the same thread)
+and ask it to implement the fix. When GitHub is linked, `dispatch_fix` can open
+a draft PR instead.
+
+**You'll see:** the code change in your editor, ready to review and commit.
 
 ## Troubleshooting
 
@@ -90,15 +107,43 @@ description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug
 
 # MCP server
 
-**Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
+- MCP is how your AI editor (Cursor, Claude Code, VS Code) talks to Mushi.
+- Add the server in one click, sign in once in your browser. No key to paste.
+- Then ask your editor about bugs: it gets the report, the diagnosis and a fix brief.
 
-**[Add to Cursor](https://kensaur.us/mushi-mushi/docs/connect)** · **[Add to VS Code](https://kensaur.us/mushi-mushi/docs/connect)** · **[Try the demo, no signup](https://kensaur.us/mushi-mushi/docs/connect)**
+## Connect in three steps
 
-  [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
-  and install in one click, or try the read-only demo with no signup. Terminal
-  one-liner below if you prefer the CLI.
+### Add the Mushi server
 
-## OAuth login (recommended — no keys to copy)
+One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+No signup needed for the read-only demo. Or run one command:
+
+```bash
+# Claude Code
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+
+# Cursor (writes .cursor/mcp.json)
+npx mushi-mushi setup --ide cursor
+```
+
+### Sign in
+
+The first time your editor calls Mushi, your browser opens. Sign in, pick which
+projects it may see, and click **Approve**. In Claude Code, run `claude mcp login mushi`
+(or `/mcp`) to start it.
+
+**You'll see:** Mushi listed as connected in your editor's MCP settings.
+
+### Ask your editor
+
+Try *"list mushi tools"*, then *"Get the latest Mushi report and fix it."*
+
+**You'll see:** the Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+
+The rest of this page is detail: how sign-in works, manual config files,
+the hosted transport for headless agents, and the tool list.
+
+## How sign-in works (OAuth, no keys to copy)
 
 The hosted MCP endpoint speaks the standard MCP OAuth flow (authorization
 code + PKCE), so clients that support MCP login connect with **zero manual
@@ -119,17 +164,15 @@ connection reaches, and click **Approve**:
 | **Only the projects I pick** | An account key limited to the ticked projects | **MCP → Account keys** |
 | **One project** | A project key (label `mcp-oauth`); needs owner or admin | **Projects → Keys** |
 
-An account key does in each project only what your role there allows. The
-agent calls `list_projects` to see your projects and passes `projectId` to
-project tools. To keep one connection on a single project, add
-`?project=<project-id>` to the server URL, for example
-`https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`. A pinned
-connection, or one limited to picked projects, leaves out the
-organization-wide tools (portfolio, connectors, spend, accounts register):
-they reach every project in the team. Cursor and VS Code follow the same flow when you add the
-hosted URL as a remote MCP server; do **not** configure an `Authorization`
-header if you want the login flow — a static header tells the client that
-OAuth isn't needed.
+- An account key does in each project only what your role there allows. The
+  agent calls `list_projects` and passes `projectId` to project tools.
+- To keep one connection on a single project, add `?project=<project-id>` to the
+  server URL, for example `https://kensaur.us/mushi-mushi/hosted-mcp/?project=<project-id>`.
+- A pinned connection, or one limited to picked projects, leaves out the
+  organization-wide tools (portfolio, connectors, spend, accounts register).
+- Cursor and VS Code follow the same flow when you add the hosted URL as a
+  remote MCP server. Do **not** set an `Authorization` header if you want the
+  login flow: a static header tells the client that OAuth isn't needed.
 
 Use the `kensaur.us/mushi-mushi/hosted-mcp/` URL for the login flow. Clients
 look for the OAuth metadata at the root of the server's host
@@ -201,7 +244,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -227,7 +270,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.29.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.29.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -312,53 +355,60 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-## What you need
+- One command, `npx mushi-mushi`, adds a report button to your app.
+- When a user reports a bug, Mushi writes a plain-English diagnosis.
+- Your AI editor reads it and writes the fix.
+
+### Install
+
+Run this in your app's folder. It finds your framework, signs you in through
+your browser, installs the SDK and writes your settings to `.env.local`.
+
+```bash
+npx mushi-mushi
+```
+
+**You'll see:** a report button in your app, and a new project in the [console](https://kensaur.us/mushi-mushi/admin).
+
+### Send your first report
+
+Tap the report button in your app and write one sentence. Or say yes when the
+wizard offers to send a test report.
+
+**You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
+
+### Get your first fix
+
+Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or:
+
+```bash
+npx mushi-mushi setup --ide cursor
+```
+
+Then ask your editor: *"Get the latest Mushi report and fix it."*
+
+**You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Pick your framework
+
+The wizard detects your framework for you. Pick yours to see what it installs
+and the one line it adds to your code.
+
+- **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
+- **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
+
+What you need first
 
 - An app you are building, for the web or for phones.
-- A Mushi account. The free plan is enough, and the setup wizard signs you in through your browser.
-- Optional: an AI code editor such as Cursor or Claude Code, so it can read bug reports and fix them for you.
-
-## The fastest way: one command
-
-Run this in your app's folder:
-
-```bash
-npx mushi-mushi
-```
+- A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
+- Optional: an AI code editor such as Cursor or Claude Code.
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
-installing it for good. This one is the Mushi setup wizard: it works out which
-framework your app uses, signs you in through your browser, installs the SDK
-(the small library that adds the report button), saves your settings and can
-send a test report.
+installing it for good. Here it runs the Mushi setup wizard.
 
-## Start here (editor first)
+## Keys and settings
 
-1. [Incident loop](/quickstart/incident-loop): a bug in your live app → a plain-English diagnosis → a fix in your editor
-2. [MCP server](/quickstart/mcp): connect Cursor, VS Code or Claude to Mushi
-
-## Pick your stack
-
-**Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
-
-**Mobile:** [React Native](/quickstart/react-native) · [Capacitor](/quickstart/capacitor) · native previews, installed from the GitHub repo: [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter)
-
-**CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
-
-## How do I install the SDK?
-
-**Option A — wizard (recommended):**
-
-```bash
-npx mushi-mushi
-```
-
-The wizard opens your browser so you can click **Approve**. It then picks or
-creates a project, installs the SDK and writes your settings to `.env.local`.
-
-**Option B — manual:**
-
-See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
+Setting it up yourself? See [Project ID & API keys](/concepts/credentials) for the setting names each framework expects.
 
   The SDK needs only two settings: your project ID and API key, named with the
   prefix your framework expects (see
@@ -829,12 +879,25 @@ Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
 **SEP-1686 Tasks** envelope so long-running fixes can stream progress back
 into your IDE.
 
+## Quick start
+
+```bash
+npx mushi-mushi setup --ide cursor   # or: claude, continue, zed
+```
+
+Restart the editor and ask "what's broken in prod?". For Cursor and Claude
+Code, `setup` writes the hosted server entry
+(`https://kensaur.us/mushi-mushi/hosted-mcp/`, URL only): the editor opens a
+browser sign-in on first use and no API key is stored on disk. Pass
+`--stdio` for a local server instead. Continue and Zed always get the stdio
+entry.
+
 ## Two transports
 
-- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.0`. The default for
-  Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
-  Windsurf. Your client launches the server as a subprocess and pipes
-  JSON-RPC over stdio.
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@0.29.2`. What
+  `mushi setup --stdio` writes, and the only option for Claude Desktop,
+  Continue, Cline and Zed. Your client launches the server as a subprocess
+  and pipes JSON-RPC over stdio.
 - **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
   at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
   `application/json` or `text/event-stream` per content negotiation,
@@ -843,15 +906,19 @@ into your IDE.
   subprocess (typical for OpenAI Agents SDK, ChatGPT Agent, hosted
   CrewAI, or any orchestrator that talks remote MCP).
 
+For browser sign-in, use the URL-only entry `mushi setup` writes. To pass a
+key yourself instead (for an orchestrator that cannot open a browser), send
+it as a header. A static key header turns the client's sign-in off:
+
 ```jsonc
-// .cursor/mcp.json — Streamable HTTP example
+// .cursor/mcp.json — Streamable HTTP with an API key
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
-        "X-Mushi-Project-Id": "proj_…"
+        "X-Mushi-Project-Id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       }
     }
   }
@@ -883,7 +950,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **124-tool** catalog and
+on npm for the full **126-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 

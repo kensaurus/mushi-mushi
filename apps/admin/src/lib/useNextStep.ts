@@ -23,9 +23,8 @@
  *            - `setup`: a setup checklist with a "Do this next" row is on
  *              screen. The loop sources then name real work only
  *              (NbaOptions.setupGuideOpen).
- *          The docked setup guide (read from setupGuidePrefs) and a running
- *          tour are guided flows: while either is open the banner and the
- *          card stand down entirely. Inline blockers stay: they are the
+ *          A running tour is a guided flow: while it is open the banner and
+ *          the card stand down entirely. Inline blockers stay: they are the
  *          page's empty state, not chrome.
  *          Refcounted because one page can mount several inline slots
  *          (Releases and Storage mount three).
@@ -36,7 +35,6 @@ import { useLocation } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { computeNextAction, type NbaAction, type NbaTone } from './nextBestAction'
 import { usePostureHasStatusBanner } from './postureChromeStore'
-import { isSetupGuideOpen, useSetupGuideView } from './setupGuidePrefs'
 import { nextSetupStepId } from './setupGuideSteps'
 import { useNavCounts } from './useNavCounts'
 import { useSetupStatus, type SetupProject, type SetupStepId, type UseSetupStatusResult } from './useSetupStatus'
@@ -163,7 +161,6 @@ export function useNextStep(source: NextStepSource): UseNextStepResult {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const work = useNavCounts()
-  const [guideView] = useSetupGuideView()
 
   const projectId = setup.activeProject?.project_id ?? null
 
@@ -187,12 +184,6 @@ export function useNextStep(source: NextStepSource): UseNextStepResult {
   if (claims.overlay) return none
   if (source.placement === 'layout' && claims.page) return none
 
-  // The docked setup guide is a guided flow with its own "Do this next": while
-  // it is open the banner and card stand down entirely, like for the tour.
-  const project = setup.activeProject
-  if (project && isSetupGuideOpen(guideView, project.required_complete >= project.required_total, pathname)) {
-    return none
-  }
   // A setup checklist on the page lists the setup steps: name real work only.
   const action = computeNextAction(setup, work, pathname, { setupGuideOpen: claims.setup })
   return { ...none, step: action }

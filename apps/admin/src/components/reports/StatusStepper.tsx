@@ -14,8 +14,10 @@
  *
  *          The bar row is one `role="img"` named with the current step
  *          (`Status: Fixing, step 3 of 4`). Segments are `aria-hidden`, and
- *          so are the sighted captions (compact label, table "n/4", full
- *          step names): they repeat that name. A screen reader hears it
+ *          so are the sighted captions (the step's word, or the full step
+ *          names): they repeat that name. The captions say the word
+ *          ("Fixing"), never a bare "3/4", which needed a legend (console
+ *          journeys 2026-10-27). A screen reader hears it
  *          once. A bare span is generic, and axe `aria-prohibited-attr`
  *          rejects `aria-label` on that role (reports table Status column).
  *          Tooltips still show each step. Their triggers are plain spans,
@@ -143,7 +145,6 @@ export function StatusStepper({
       {size === 'compact' && (
         <span aria-hidden="true" className="text-2xs text-fg-muted leading-none font-medium">
           {activeLabel}
-          <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
       )}
       {isTable ? (
@@ -156,10 +157,10 @@ export function StatusStepper({
       {isTable && (
         <span
           aria-hidden="true"
-          className="shrink-0 text-2xs text-fg-muted tabular-nums leading-none font-medium"
+          className="shrink-0 text-2xs text-fg-muted leading-none font-medium"
           title={tableSummary}
         >
-          {activeIdx + 1}/4
+          {activeLabel}
         </span>
       )}
       {size === 'full' && (

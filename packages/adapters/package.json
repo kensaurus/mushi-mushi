@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/adapters",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "license": "MIT",
-  "description": "Bidirectional adapters — translate Datadog, Honeycomb, New Relic, Grafana Loki errors into Mushi reports (and vice versa). Each adapter is tree-shakeable from its own subpath import.",
+  "description": "Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? Forward their webhooks into Mushi for a plain-English diagnosis and a ready fix. One subpath import per source.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

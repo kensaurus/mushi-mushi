@@ -5,7 +5,8 @@
  *          machines: included minutes per GitHub account, the per repo ×
  *          runner table, your machines' busy time, speed measured on jobs
  *          that passed on both, what-ifs, why it costs what it costs, and
- *          cost advice. Read-only: nothing here changes where CI runs.
+ *          cost advice. On top, the real bill from GitHub (CiBillCard,
+ *          GET /v1/admin/ci/bill). Read-only: nothing here changes where CI runs.
  *
  *          Bucket B under ADR 0016: it sits below "Speed it up", never the
  *          top of /ci. Data: GET /v1/admin/ci/compare (same scope as the
@@ -22,6 +23,7 @@ import { IconAlertTriangle, IconCost, IconServer } from '../icons'
 import { CiAdviceList } from './CiSections'
 import { CiCompareTable } from './CiCompareTable'
 import { CiCostExplainer } from './CiCostExplainer'
+import { CiBillCard } from './CiBillCard'
 
 const CI_COST_SETTINGS_HREF = '/settings?tab=ci-cost'
 
@@ -182,15 +184,22 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
   const path = scope === 'project' && projectId ? `/v1/admin/ci/compare?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/compare?days=30'
   const page = usePageData<CiCompare>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const data = page.data
+  // The measured bill reads its own route: it shows while the estimates load or fail.
+  const bill = <CiBillCard projectId={projectId} scope={scope} />
 
   if (!data) {
-    if (page.error) return <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} />
-    return page.loading ? <Loading text="Working out what CI costs…" /> : null
+    return (
+      <div className="flex flex-col gap-4">
+        {bill}
+        {page.error ? <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} /> : page.loading ? <Loading text="Working out what CI costs…" /> : null}
+      </div>
+    )
   }
 
   const exampleFigures = data.settings.every((s) => s.source === 'default')
   return (
     <div className="flex flex-col gap-4" data-testid="ci-cost-section">
+      {bill}
       <p className="text-xs text-fg-muted">
         GitHub-hosted runners versus your own machines, over the last {data.window.days} days. Wait and run times are measured; minutes billed and money are
         estimated from GitHub’s list prices (read {data.rates.fetchedAt}). GitHub’s bill is the real figure.
