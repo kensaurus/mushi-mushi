@@ -18,7 +18,8 @@
  *          SDK health and its fix tasks, the pipeline view and its actions,
  *          the tester marketplace (tester portal, public marketplace and
  *          roadmap, submission and redemption review, Tremendous webhook),
- *          and the per-app Home.
+ *          the per-app Home, setup gaps and the release batch (console ops
+ *          plan P1).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -49,6 +50,8 @@ import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplace.ts'
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
+import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
+import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 
 ensureSentry('api-ext')
 
@@ -81,6 +84,8 @@ registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
 registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
+registerSetupGapsRoutes(app)
+registerReleaseBatchRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

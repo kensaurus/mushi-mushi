@@ -38,6 +38,15 @@ async function importPkcs8(pem: string): Promise<CryptoKey> {
  *         GitHub returns non-2xx (caller should fall back to PAT).
  */
 export async function mintInstallationToken(installationId: number): Promise<string> {
+  return (await mintInstallationAccess(installationId)).token
+}
+
+/**
+ * The same mint, also returning the installation's permissions as GitHub
+ * states them in the answer (`{ contents: 'write', actions: 'read', … }`).
+ * Setup gaps read them to say what the App can do before anything needs it.
+ */
+export async function mintInstallationAccess(installationId: number): Promise<{ token: string; permissions: Record<string, string> | null }> {
   const appId = Deno.env.get('GITHUB_APP_ID')
   const pem = Deno.env.get('GITHUB_APP_PRIVATE_KEY')
   if (!appId || !pem) throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY required')
@@ -67,8 +76,8 @@ export async function mintInstallationToken(installationId: number): Promise<str
     },
   )
   if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`)
-  const body = await res.json() as { token: string }
-  return body.token
+  const body = await res.json() as { token: string; permissions?: Record<string, string> }
+  return { token: body.token, permissions: body.permissions && typeof body.permissions === 'object' ? body.permissions : null }
 }
 
 /**
