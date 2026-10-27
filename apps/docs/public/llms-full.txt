@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 222
+Pages: 223
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -1273,6 +1273,165 @@ The tag takes a few `data-*` settings, such as `data-position` and
   `data-key` match the Script tag tab exactly, with no spaces.
 - **Still stuck:** the [troubleshooting list](/quickstart#troubleshooting)
   covers the other cases.
+
+---
+
+## Ask Lovable why it broke
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/lovable-mcp
+
+---
+title: Ask Lovable why it broke
+description: Add Mushi to Lovable as a custom MCP connector in three steps, then ask what your users reported. Lovable reads the plain-English diagnosis and the fix prompt, and fixes it. One-paste installs for Claude Code and Cursor too.
+---
+
+# Ask Lovable why it broke
+
+A user says your app is broken. Ask Lovable *"what did my users report?"* and it
+reads Mushi's diagnosis of each report, gets the fix prompt and fixes the code.
+The same connection works in Claude Code and Cursor.
+
+- Add Mushi to Lovable as a custom MCP server: one URL, sign in, approve.
+- Ask in the Lovable chat: "what did my users report?"
+- Lovable gets the report, the plain-English cause and a fix prompt, then fixes it.
+
+You need a Mushi project that receives reports. A Lovable app gets the
+reporting widget from one [script tag](/quickstart/web#no-bundler-script-tag).
+No real report yet? Step 4 files a test one.
+
+## Add Mushi to Lovable
+
+Custom MCP servers are available on every Lovable plan
+([Lovable docs](https://docs.lovable.dev/integrations/custom-mcp)).
+
+### Open the custom MCP form
+
+In Lovable, open [Connectors](https://lovable.dev/dashboard?connectors), select
+**Add custom** at the top right, and choose **MCP server**.
+
+If **MCP server** is greyed out, a workspace admin has turned off custom MCP
+servers. Ask them to turn on **Custom MCP** under **Connectors → Admin settings**.
+
+### Fill in the form
+
+| Field | Value |
+| --- | --- |
+| **Server name** | `Mushi` |
+| **Connection** (shown only on some workspaces) | **Direct connection** |
+| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Authentication** | **OAuth** (the default) |
+
+Click **Add & authorize**.
+
+### Sign in and approve
+
+A Mushi page opens. Sign in, choose which projects Lovable may see, and click
+**Approve**. You never copy a key: the sign-in creates one for this connection,
+and you can revoke it from the Mushi console at any time.
+
+**You'll see:** Mushi in your list of chat connectors in Lovable.
+
+### Ask Lovable
+
+In a project chat, try:
+
+```text
+Using the Mushi connector, what did my users report this week?
+```
+
+```text
+Get the Mushi fix context for the checkout report and fix it.
+```
+
+```text
+That's deployed. Mark the report fixed in Mushi and tell the reporter.
+```
+
+No reports yet? Ask for a test one. Mushi diagnoses it like a real user report:
+
+```text
+Using Mushi, file a test report: "The Save button on the settings page does nothing."
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Lovable's edit.
+
+Lovable runs read-only tools without asking. Before a tool that changes
+something (mark fixed, reply to the reporter, file a report) it shows an
+approval card; choose **Always allow** to skip it next time.
+
+## Claude Code: one paste
+
+```bash
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
+```
+
+Then run `/mcp` in a session, pick `mushi` and sign in in your browser. Ask:
+*"What did my users report in Mushi? Fix the top one."*
+
+## Cursor: one click
+
+[Add Mushi to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8%2FZmVhdHVyZXM9dmliZSJ9)
+(opens Cursor), or paste this into `.cursor/mcp.json`:
+
+```json filename=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "mushi": {
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
+    }
+  }
+}
+```
+
+Cursor asks you to sign in the first time the agent calls Mushi. Leave out any
+`headers` block: a static `Authorization` header turns the sign-in off.
+
+## Bolt
+
+Bolt also accepts a custom MCP server under **Connectors (MCP) → Custom MCP
+server** ([Bolt docs](https://support.bolt.new/integrations/mcp)). Use the same
+URL. We have not tested Mushi in Bolt yet.
+
+## What `?features=vibe` gives you
+
+`?features=vibe` keeps the connection to the 12 tools this loop needs. Without
+it the connection lists about 80. A chat assistant picks the right tool more
+often from a short list, and some clients, Cursor among them, warn once all
+their servers together pass about 40 tools.
+
+| Tool | What it does | Changes anything? |
+| --- | --- | --- |
+| `triage_next_steps` | What to fix first | No |
+| `get_recent_reports` | The latest reports from your users | No |
+| `search_reports` | Find reports by words ("checkout") | No |
+| `get_report_detail` | One report: what the user saw, logs, screenshot, diagnosis | No |
+| `get_fix_context` | The cause, the files to change and a ready fix prompt | No |
+| `transition_status` | Mark a report fixed, or dismiss a duplicate | Yes |
+| `reply_to_reporter` | Tell the user in your app that it's fixed | Yes |
+| `file_report` | File a report yourself (or a test one) | Yes |
+| `diagnose_setup` | Why reports aren't arriving, and the next step | No |
+| `use_mushi` | Which tool to use for a task | No |
+| `search_mushi_docs` / `get_mushi_doc` | Answers from these docs | No |
+
+If you approved more than one app, the connection also lists `list_projects`
+and `get_account_overview`, so Lovable can find the app you mean.
+
+Want more? Drop `?features=vibe` for the default set (reports, fixes, app
+inventory, setup, docs), or use `?features=all` for every tool. You can also
+combine them, for example `?features=vibe,qa`.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Sign-in fails with "404" | Use the `kensaur.us` URL above. Sign-in does not work on a `supabase.co` URL. |
+| "tool … is not enabled for this connection" | The tool is outside `vibe`. Ask `use_mushi` which group it needs and add that group to `?features=`, or use `?features=all`. |
+| Answers mix up your apps | Pin the connection to one app: add `&project=<project-id>` to the URL. |
+| You can't use OAuth | Choose **Bearer token or API key** in Lovable and paste a Mushi API key with MCP access, minted in the Mushi console. Sign-in is safer: its key is made for this one connection. |
+| You want to disconnect | Remove the connector in Lovable, and revoke its key under **MCP → Account keys** in the Mushi console. |
+
+  More on the sign-in, project scopes and other clients: [MCP server](/quickstart/mcp).
+  The full fix loop from your editor: [Incident loop](/quickstart/incident-loop).
 
 ---
 
@@ -5052,7 +5211,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>126 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>129 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -5100,7 +5259,7 @@ your client:
 }
 ```
 
-The full tool catalog (126 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (129 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -5276,7 +5435,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 126 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 129 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -7117,9 +7276,17 @@ every lane on the machine. A lane is one app and one clone of its repo.
 Every minute it sends a heartbeat. The answer holds each lane's settings, set
 in the console: its model, mode, how many reports at once, paused, drain and a
 stop date, plus the machine's guards (agents at once, a free-memory floor, a
-GitHub API floor). The daemon then runs review follow-ups first, and claims
-reports: the lane's queue first, then the worst open reports. While a lane
-holds a report, no cloud agent is sent to it. Every outcome goes back to
+GitHub API floor). The daemon then works by each lane's mode:
+
+| Mode | What the lane does |
+| --- | --- |
+| `fix` | Runs review follow-ups first, then claims reports: the lane's queue first, then the worst open reports |
+| `followups` | Review follow-ups only |
+| `conflicts` | Merges the base branch into a merge-queue PR of the clone's repository at the commit Mushi saw; the agent may change only the conflicted files; refused on a leftover marker or any other change; commits with your hooks and pushes the merge, fast-forward only |
+| `audit` | A model (read-only) proposes bugs for one screen with the line, the code there and a check; the machine runs the check itself and files only what reproduces; a second model may only veto |
+| `skill` | Only the rounds of skill runs started with this lane on Spend credits |
+
+While a lane holds a report, no cloud agent is sent to it. Every outcome goes back to
 Mushi; a failure of the machine (a clone permission, the network, a hook that
 timed out under load) is kept apart from a failure of the code and never
 counts against the report.
@@ -7150,8 +7317,11 @@ stay on your machine), stores a worker key in the OS keychain (or
 `~/.config/mushi/worker.key`, mode 0600, where there is none), and writes the
 service: a systemd user unit (`mushi-worker.service`) on Linux and WSL2, a
 scheduled task that starts at logon on Windows. From `lanes.conf`, `queue` and
-`fix` become `fix`, `off` becomes a paused lane, and the profile column is
-dropped: one worker key serves every app.
+`fix` become `fix`, `followups`, `conflicts`, `audit` and `skill` stay as they
+are, `off` becomes a paused lane, and the profile column is dropped: one worker
+key serves every app. The heartbeat names each lane's repository (`owner/name`
+from its `origin` remote) so a conflicts lane takes only that repository's
+PRs; the clone's path never leaves the machine.
 
 The worker key has the scope `worker:run`: it can take reports for its lanes,
 record their fixes and file reports, and nothing else. It cannot merge, change
@@ -7291,6 +7461,23 @@ mushi repo diagram unpublish --yes
 `publish` shows where the page will go before it publishes. It sends the hash
 of exactly what the preview showed, so a diagram that changed in between is
 refused. A private repo can only be published from the console.
+
+### Clean up branches and pull requests
+
+```bash
+mushi repo cleanup show [--stale-days 14]       # branches and fix PRs Mushi opened that can go, with why and the commit
+mushi repo cleanup request delete-branches --repo owner/app [--keys branch:a,branch:b]
+mushi repo cleanup request close-prs --repo owner/app [--keys pr:12]
+mushi repo cleanup request auto-delete --repo owner/app   # turn on GitHub's "Automatically delete head branches"
+mushi repo cleanup restore <itemId>…            # bring back a branch Mushi deleted, at the commit it kept
+```
+
+Only branches and pull requests Mushi itself opened are listed: a branch whose
+pull request merged or closed and that still points at that pull request's last
+commit, or an open fix PR that a newer fix replaced, that the Opus review held,
+or that got no new commit for 14 days. The CLI only asks. A team owner or admin
+approves the exact list in the console (Repo → Clean up) within an hour, and
+Mushi checks every item again before it deletes or closes anything.
 
 ---
 
@@ -8466,7 +8653,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **126-tool** catalog and
+on npm for the full **129-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -8619,7 +8806,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**126 tools** · **8 resources** · **4 prompts**
+**129 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -8653,6 +8840,8 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_ci_overview` | CI runners and why fixes wait | Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online \| offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats \{ queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [\{ id, severity (high \| medium \| low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions \{ jobs, runners } is ok \| missing \| unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns \{ generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code. |
 | `get_ci_costs` | CI cost and speed | Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [\{ repo, runnerClass (github_hosted \| self_hosted \| unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list \| github_public_free \| github_larger_unpriced \| self_hosted \| unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns \{ window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate. |
 | `get_ci_bill` | Real GitHub Actions bill | Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns \{ window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [\{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api \| cli), coveredFrom }], month \{ label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals \{ grossUsd, discountUsd, netUsd, minutes }, previousTotals and change \{ netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [\{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare \{ share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only. |
+| `preview_ci_cost_fix_rollout` | Preview CI cost fixes for every app | Preview 'Apply to every app' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo \{ projectId, projectName, repo, items [\{ key, workflowPath, kind (add_concurrency \| skip_drafts \| weekly_cron \| ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi cannot price it), state (ready \| pr_open \| in_progress), prUrl }], readyItems, monthSavingUsd (the ready items' priced saving), unpricedItems, block (set when Mushi already knows the repo's GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps \{ reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout. |
+| `get_ci_cost_fix_bundle` | CI cost fix bundle (one PR, several fixes) | Read one CI cost fix bundle (one draft PR for several fixes in one repo, from apply_ci_cost_fix_rollout) by its bundleId: \{ bundle: \{ id, projectId, repo, status (queued \| running \| pr_opened \| nothing_opened \| failed), prUrl, prNumber, items (each fix: workflowPath, kind, status, summary, error, prUrl, baseline, measured, saving), measuredUsdPerMonth (after the merge: the saving measured per workflow, each workflow once) } }. After the merge it reads GitHub once and stores the minutes per day since. Read-only on GitHub. |
 | `explain_finding` | Explain one finding | Explain one gate finding by its id (from list_gate_findings, get_radar, get_recipe_drift, get_code_health, get_store_status or the console): which check raised it and what that check is for, the rule, why it fired (reason), the file, line and column or the target it is about, the fix in one sentence (fix.text, with fix.kind, fix.command, fix.consolePath and the stored fix object in fix.detail), and whether it is still open: state open (in the latest run of that check, the latest run found the same problem in the same file or target, or no finished run has looked again yet), not_in_latest_run (the latest run checked that rule clean and no longer has it: fixed or moved), unknown (the latest run could not confirm a fix: it errored or skipped, stored only part of its findings, did not run or could not decide the rule, or read only part of the project; stateReason says which) or allowlisted. The latest run is the newest one that looked at the same thing: a design server scan is compared only with server scans and a CI push only with CI pushes, and a run scoped to another story is skipped. Treat unknown as still open. A finding in a project the key cannot reach is a 404. Returns \{ id, projectId, gate, gateLabel, gateMeaning, ruleId, rule, severity, reason, fix, location, state, stateReason, run, latestRun }. Read-only. |
 | `get_auto_release_status` | Auto-release blocker | Return the automatic release draft that is blocking auto-release for one project, if any. Only one automatic draft can exist at a time, so a draft whose publish failed stops every later automatic release until a person publishes or deletes it (mushi releases publish / delete, or the console Releases page). Optional projectId (defaults to the configured project). Returns \{ blockingDraft: \{ id, version, createdAt, autoSource, stale } \| null }. Read-only. |
 | `get_design_settings` | Design score actions | Return what the design deviance score may do on its own for one project: threshold (0–100; the actions fire above it), failCi (mushi recipe check --push fails CI above it), autofix (new warn/error findings above it dispatch a fix) and autofixEnabled (the project auto-fix switch, without which the design auto-fix does nothing), plus canEdit. Optional projectId. Read-only. |
@@ -8718,6 +8907,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
 | `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER and RUNNER_\ may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
 | `open_ci_cost_fix` | Open a CI cost fix PR (draft) | Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix \{ kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/\{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns \{ job: \{ id, status (queued \| running \| pr_opened \| no_change \| refused \| failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write. |
+| `apply_ci_cost_fix_rollout` | Open CI cost fixes for every app (one draft PR per repo) | Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [\{ projectId, repo, items: [\{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview's ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project's 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App's Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns \{ queued, results [\{ projectId, repo, status (queued \| skipped \| error), bundleId, jobs, skipped [\{ workflowPath, kind, code (NOT_ADVISED \| PR_ALREADY_OPEN \| COST_FIX_IN_PROGRESS), message, prUrl }], error \{ code (NOT_FOUND \| FORBIDDEN \| REPO_NOT_IN_PROJECT \| RATE_LIMITED \| COST_FIX_IN_PROGRESS \| MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
 | `pull_store_reviews` | Pull store reviews now | Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns \{ status, filed, stores }. Write. |
 | `set_store_review_intake` | Set store review intake | Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -17399,7 +17589,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you turn them on in Settings → Labs.
+A Pro pill means the check needs a plan upgrade. AI prompts and CI runners are Labs: their cards appear once you keep them in the sidebar in Settings → Display & sidebar. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
 
 ## The checks
 
@@ -17560,6 +17750,20 @@ After the merge, the card shows the saving Mushi measured. That is the workflow'
 Writing a workflow file needs the GitHub App's **Workflows: Read and write** permission, or a token with the `workflow` scope. Without it, the card says so. You can still copy the fix and commit it yourself.
 
 From the terminal, run `mushi runner fix --repo <owner/repo> --workflow .github/workflows/ci.yml --kind skip_drafts`, and follow it with `mushi runner fix-status`. In your editor, use the MCP tool `open_ci_cost_fix`.
+
+## Apply to every app
+
+Every pull request runs CI once, and each run costs minutes. So when a repo has several fixes, it's cheaper to open them as **one** pull request. **Apply to every app**, next to the advice list, does that for all your apps at once:
+
+1. **Preview.** Mushi lists every fix it can open in the apps you may change, grouped by repo, with the estimated saving per fix and per repo. A fix whose pull request is still open, or is being opened, can't be picked again. Mushi can't price every fix: those say "not priced", never $0. A repo where Mushi already knows its GitHub access can't edit workflow files starts unticked, with the reason. Mushi knows this from the setup check or the last attempt.
+2. **Pick and confirm.** Tick the fixes you want, then confirm once. Mushi opens at most 10 repos at a time and 20 fixes per repo. Each repo counts once against its app's 10 CI fix pull requests an hour.
+3. **Results.** Each repo gets **one draft pull request** with a `ci:` title. The body lists every change with what it changed and why, plus the workflow's minutes over the last 14 days. Each fix keeps the refusals above. A fix Mushi refused is listed in the pull request and in the result, never dropped. When Mushi refuses every fix in a repo, it opens no pull request there and says why.
+
+Before opening anything, Mushi rebuilds the advice. It opens only fixes it still advises, so a stale preview can't open something the advice no longer says.
+
+After the merge, Mushi measures each changed workflow once, even when two fixes changed the same file. The saving isn't counted twice.
+
+From the terminal, run `mushi runner fix --all` to preview and `mushi runner fix --all --apply` to open. Follow each repo with `mushi runner fix-status --bundle `. In your editor, use the MCP tools `preview_ci_cost_fix_rollout`, `apply_ci_cost_fix_rollout` and `get_ci_cost_fix_bundle`.
 
 ## When nothing has reported in
 
@@ -18147,9 +18351,10 @@ Each Cursor key shows its hint, label and expiry ("expires Oct 28 (6 days)").
 
 A **skill run** applies one skill from your synced skills catalog to one part of one app, for a few rounds, on that app's own Cursor key. Pick:
 
-- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code and unit tests. Under the picker, the page says what each round measures.
+- **App** and **Skill**: only skills whose result an agent can measure and that need no product decision are offered, such as accessibility, layouts at every width, loading/empty/error states, page UX, readability, forms, native feel, one design system, translations, SEO, performance, bundle size, error handling, dead code, unit tests and the parked-work register (BACKLOG.md, measured by what it adds and closes). Under the picker, the page says what each round measures.
 - **What to work on**: a part of the app, such as "the /settings pages", "the checkout flow" or "src/components/cards". A run never works outside it.
 - **Rounds at most** (1 to 5) and **Merge each round when Opus approves and CI passes** (on by default).
+- **Run on**, when you have a [local worker](pipeline#workers) lane for the app in fix or skill mode: Cursor in the cloud, or that lane on your machine. A round for a lane waits in its queue and never goes to the cloud.
 
 Each round is a report that spend-down sends to Cursor with the skill's instructions. The agent measures first, makes the changes in that part only, and opens a pull request with the numbers before and after. Opus reviews it like any fix. With merging on, an approved round goes into the [merge queue](fixes#merge-when-ready), and the next round builds on what merged. A run ends when the agent finds nothing left to change or after its last round. It stops when the agent says the rest needs your decision, when you dismiss a round, or when you press **Stop**. Each app can have up to 5 runs going.
 
@@ -20238,15 +20443,14 @@ description: The User stories page manages your inventory.yaml — every page, a
 
 # User stories · Inventory
 
-The **User stories** surface (sidebar → User stories) is the v2 positive
+The **User stories** surface (sidebar → Checks → User stories) is the v2 positive
 side of the loop. Where Reports / Graph / Fixes catch what your users
 *felt* break, the inventory describes what should *exist* — every page,
 every action, every expected outcome — so the gates can fail when the
 two diverge.
 
-  Inventory routes are gated behind **Advanced** mode in the sidebar
-  while the surface is still maturing. A workspace owner can promote
-  them via Settings → Workspace → *Surface advanced features*.
+  User stories sits under **Checks** in the sidebar: open Checks and the
+  sidebar lists it with the other checks.
 
 ## What you see
 
@@ -20962,7 +21166,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**126 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**129 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -21022,6 +21226,9 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
 ```
 
 Full catalog: append `?features=all` (or set `MUSHI_FEATURES=all` for stdio).
+Smallest set: `?features=vibe` lists a dozen tools for the reported-bug loop (reports,
+diagnosis, fix context, mark fixed, reply, setup, docs); chat connectors such as
+Lovable use it ([guide](/quickstart/lovable-mcp)).
 
 ---
 
@@ -21490,7 +21697,7 @@ description: The console Pipeline page shows every bug from report to deploy, wh
 
 # Pipeline
 
-**Route:** `/pipeline`
+**Route:** `/pipeline` (sidebar: Pipeline, under Fixes)
 
 Every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
@@ -21553,9 +21760,19 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 | Part | What it shows |
 | --- | --- |
 | **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent slot), and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
-| **Lanes** | One app on one machine: its model, mode (fix reports, or review follow-ups only), how many reports it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). |
+| **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
+
+A lane's **mode** says what it does:
+
+| Mode | What the lane does |
+| --- | --- |
+| Fix reports and follow-ups | Its queue first, then the worst open reports; a draft PR for each |
+| Review follow-ups only | Fixes what Opus asked for on PRs a local agent opened |
+| Resolve merge conflicts | Merges the base branch into this repository's PRs that wait in the merge queue for a conflict agent. The agent may change only the conflicted files; anything else is refused. It counts toward the 2 conflict agents a PR may have, cloud and local together |
+| Audit the code, screen by screen | A model proposes bugs; the machine files only those its own check reproduces, at most 12 an hour per app, into a fix lane for the same app on that machine |
+| Run skill runs | Only the rounds of skill runs started on Spend credits with **Run on** set to this lane |
 
 A lane change reaches the machine at its next heartbeat, within a minute. The machine opens no port: it asks Mushi for its settings, and the settings are values (a model id, a number, a date), never a command or a path. Viewers can read this tab but cannot change it.
 
@@ -21891,7 +22108,7 @@ description: The Prompt lab lets you edit, test and A/B compare the classificati
 
 **Route:** `/prompt-lab`
 
-AI prompts is a Lab: turn it on in Settings → Labs to list it in the sidebar. The page
+AI prompts is a Lab: it is under **More pages** in the sidebar, and Settings → Display & sidebar can keep it in the sidebar. The page
 works by URL either way.
 
 **First on the page:** **Versions and their grades**, one row per AI step (Fast
@@ -23677,6 +23894,14 @@ includes the SDK reference (project API keys from **Settings → SDK install** �
 
 Debug logging flag and other local-only developer flags for this project. These settings
 are never sent to the SDK or end users.
+
+### Display & sidebar
+
+How the console looks in this browser: theme (system, dark, light), density, table rows
+and focus mode (Ctrl/Cmd + . toggles it, Esc exits). The same controls open from your name
+at the foot of the sidebar. Below them, choose which extra pages (Labs) stay in the
+sidebar. Every other page is under **More pages** in the sidebar. `?tab=labs` links still
+open this tab.
 
 ---
 
