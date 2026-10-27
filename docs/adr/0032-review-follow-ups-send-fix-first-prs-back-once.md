@@ -449,3 +449,14 @@ for merge with red CI had no path except a person.
   returns. Their log and commit message still say "finding(s)" and "address
   the Opus review" for a CI repair.
 
+
+## Amendment (2026-10-27): a local conflict lane may push a merge commit
+
+Recorded in ADR [0049](0049-local-conflict-lane.md) (Accepted, owner
+delegation). A local worker lane in `conflicts` mode may push one merge commit
+to an agent PR's branch: the base branch merged into the head Mushi saw, with
+only the files git stopped on changed, committed with the hooks and pushed
+fast-forward only from the machine's own git and `gh`. It counts against ADR
+0041's cap of 2 conflict agents per PR, together with cloud agents, and its new
+head is re-reviewed like any other push. This also answers the 2026-10-26
+amendment's rejected "teaching the CLI to merge the base branch".

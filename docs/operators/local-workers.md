@@ -2,8 +2,11 @@
 
 A local worker fixes reports with a coding agent (the Cursor CLI) on your own
 machine and pushes with your own `git` and `gh`. The console sees it and
-steers it from **Pipeline → Workers**. Decision record:
-[ADR 0048](../adr/0048-local-workers.md). Command reference:
+steers it from **Pipeline → Workers**. Decision records:
+[ADR 0048](../adr/0048-local-workers.md) (workers),
+[ADR 0049](../adr/0049-local-conflict-lane.md) (conflicts mode),
+[ADR 0050](../adr/0050-code-read-audit.md) (audit mode) and
+[ADR 0042's amendment](../adr/0042-skill-runs-apply-a-catalog-skill-round-by-round.md) (skill mode). Command reference:
 [`mushi worker`](https://kensaur.us/mushi-mushi/docs/sdks/cli#mushi-worker).
 
 ## What runs where
@@ -73,6 +76,69 @@ daemon starts when you log on. Remove it with `mushi worker revoke` or
 ### macOS
 
 Not automated yet: run `mushi work --daemon` under launchd yourself.
+
+## Lane modes
+
+Each lane does one thing, set on the Workers tab (**Mode**). The machine reads
+it at its next heartbeat. A daemon older than the mode leaves the lane idle and
+logs "lane settings refused": update the CLI on the machine first.
+
+| Mode | What the lane does |
+| --- | --- |
+| Fix reports and follow-ups (`fix`) | Its queue first, then the worst open reports; a draft PR each; review follow-ups on its own PRs first |
+| Review follow-ups only (`followups`) | Only the Opus "fix first" findings on PRs a local agent opened |
+| Resolve merge conflicts (`conflicts`) | Merge-queue PRs of this clone's repository that wait for a conflict agent (see below) |
+| Audit the code, screen by screen (`audit`) | Files only bugs the machine reproduces itself (see below) |
+| Run skill runs (`skill`) | Only the rounds of skill runs started on /credits with **Run on** set to this lane |
+
+### Conflicts
+
+The daemon tells Mushi which repository each clone is (`owner/name` from its
+`origin` remote), so a conflicts lane takes only that repository's PRs. It
+takes a PR that waits in the merge queue for a conflict agent, while fewer
+than 2 conflict agents (cloud and local together) have tried that PR. Then:
+
+1. It checks the PR is open, from the same repository, and still at the
+   commit Mushi saw.
+2. It merges the base branch in, in a worktree under
+   `~/.cache/mushi/conflicts/`.
+3. The agent may edit only the conflicted files.
+4. The result is refused if a conflict marker is left, or any other file
+   changed.
+5. It commits with your hooks and pushes the merge commit, fast-forward
+   only, after checking the branch did not move.
+
+Mushi then asks Opus to review the new head, and the merge queue goes on. A
+machine failure (a clone permission, the network) gives the PR its attempt
+back. A result the checks refused does not. A lane does not try the same PR
+again within the hour.
+
+### Audit
+
+One pass reads one screen (a page file, or a UI file in an app without page
+folders) of the default branch, in a worktree under `~/.cache/mushi/audit/`:
+
+1. The lane's model, in read-only ask mode, proposes up to 3 bugs. Each
+   comes with the line, the code on it, and a check: a pattern near that
+   line, or one of the repo's own `lint`, `typecheck`, `test` or `check`
+   scripts that must fail and name the file.
+2. The machine runs each check itself, with no model.
+3. **Second model (may only veto)**, when set, can drop a reproduced
+   finding. It cannot add one. A missing answer counts as a veto.
+4. What is left is filed as a report (`source = code_audit`), once per file,
+   rule and line of code, at most 12 an hour per app. It goes into the queue
+   of a fix lane for the same app on the same machine, when there is one.
+
+The screens done, and findings the hourly cap held back, live in
+`~/.cache/mushi/audit/<lane>.json`. Delete it to start the screens over. An
+audit lane runs one pass at a time.
+
+### Skill runs
+
+On /credits, **Run on** offers your fix and skill lanes for the app. Each round
+of that run is put into the lane's queue as it is filed, and never goes to
+a cloud agent: spend-down leaves any report waiting in a local lane's queue.
+A `skill` lane takes nothing else; a `fix` lane takes the rounds too.
 
 ## Guards
 

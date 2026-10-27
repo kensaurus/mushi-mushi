@@ -57,3 +57,44 @@ Cursor credits. Two facts:
   measurement the agent cannot tell when it is done and Opus cannot check it.
 - **Plan skills (pricing, GTM, privacy, onboarding).** They need a person's
   decision; a loop would only produce holds.
+
+## Amendment (2026-10-27): a skill run can run on a local worker lane
+
+Status: Accepted 2026-10-27 by team-lead (Claude) under the owner's explicit
+delegation (console ops plan P3; ADR [0048](0048-local-workers.md) local workers).
+
+### Context
+
+A skill run's rounds went only to spend-down, on the app's pooled Cursor key in
+the cloud. The owner's machines run local worker lanes on their own Cursor
+credits, which could run the same rounds, but nothing could send a round there:
+spend-down would race a lane for any classified report.
+
+### Decision
+
+- **"Run on"** on /credits: the cloud (as before) or one of the caller's own
+  lanes for the app in `fix` or `skill` mode (`skill_runs.lane_id`;
+  `POST /v1/admin/projects/:id/skill-runs` takes `laneId`, console only, and
+  checks the lane is the caller's and serves the app).
+- **Each round of a local run goes into that lane's queue** when it is filed
+  (`work_queue.source = 'skill_run'`). If it cannot be queued the round is
+  taken back and filed again next tick: a local run never falls through to a
+  cloud agent.
+- **Spend-down leaves any report waiting in a local lane's queue**
+  (`queuedForLocalLanes`), not only a claimed one: a person (or a local skill
+  run) chose that machine. A fix lane also leaves a report queued for another
+  lane.
+- **A lane mode `skill`** takes only skill-run rounds from its own queue and
+  never a ranked bug report, so a machine can spend its credits on planned
+  improvement work only. A `fix` lane takes queued rounds too.
+- The round itself is unchanged: the same report, task, measurement and
+  SKILL.md; the lane's agent runs it as `mushi work` runs a report, the PR gets
+  the Opus review, follow-ups and the merge queue, and `skill-runs` files the
+  next round after a merge (and waits while a lane holds the round, ADR 0048).
+
+### Rejected
+
+- **A separate local skill-run engine.** The fix loop already runs a round end
+  to end; a second engine would need its own review and merge path.
+- **Letting spend-down and the lane race for the round.** Two agents on one
+  round doubles the cost and leaves two PRs for the review to sort out.
