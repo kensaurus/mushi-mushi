@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-27 · **757** routes.
+> Generated: 2026-10-27 · **760** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 197 |
+| `adminOrApiKey` | 200 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 392 |
 | `jwtOrApiKey` | 3 |

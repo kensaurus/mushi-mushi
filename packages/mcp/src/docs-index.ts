@@ -111,7 +111,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ci",
     markdown: "admin/ci.md",
     keywords: ["admin", "ci", "runners"],
-    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "Your real bill", "Cost advice that reads your workflows", "When nothing has reported in", "Related pages"],
+    headings: ["Test machine or your code", "Queue and wait", "Runner map", "What would make fixes land sooner", "Your real bill", "Cost advice that reads your workflows", "Fix it in one PR", "When nothing has reported in"],
     excerpt: "The console CI runners page shows where tests run, how long they wait for a machine, and whether a red check was your code or the test machine.",
   },
   {
@@ -286,11 +286,11 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.",
   },
   {
-    title: "Integration health",
+    title: "Mushi health",
     url: docUrl("/admin/health"),
     route: "/admin/health",
     markdown: "admin/health.md",
-    keywords: ["admin", "health", "integration"],
+    keywords: ["admin", "health"],
     headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Related pages"],
     excerpt: "The Mushi health page shows whether Mushi itself is working (its AI calls, background jobs and provider connections), so you catch a degraded integration early.",
   },
