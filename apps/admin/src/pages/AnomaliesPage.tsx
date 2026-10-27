@@ -31,7 +31,6 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconCheck, IconClose } from '../components/icons'
@@ -47,6 +46,7 @@ import { AnomaliesStatusBanner, isAnomaliesStatusBannerCritical } from '../compo
 import { AnomaliesDetectionGuide } from '../components/anomalies/AnomaliesDetectionGuide'
 import { AnomaliesSnapshotStrip } from '../components/anomalies/AnomaliesSnapshotStrip'
 import { AnomaliesReadout } from '../components/anomalies/AnomaliesReadout'
+import { SpikesOverview } from '../components/anomalies/SpikesOverview'
 import {
   EMPTY_ANOMALIES_STATS,
   type AnomaliesStats,
@@ -278,13 +278,13 @@ export function AnomaliesPage() {
 
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Anomaly detection'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Send any number your app tracks (error rate, latency, sign-ups) from the Metrics tab or the SDK. Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Detect crash-rate spikes after a release',
           'Flag latency regressions against rolling baseline',
           'Auto-open a bug report when a regression is confirmed',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -351,8 +351,11 @@ export function AnomaliesPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
+            // With no metrics the first-step card is the one thing to do; the
+            // guide would be a second, competing block (P3).
             show:
               activeTab === 'overview' &&
+              stats.metricPointCount > 0 &&
               !shouldHideGuideWhenBannerActive(
                 isAnomaliesStatusBannerCritical(stats),
                 COMMON_HEALTHY_PRIORITIES,
@@ -376,34 +379,16 @@ export function AnomaliesPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          {/* The metrics themselves, with releases and spikes on them: the
+              status sentence above already says how many spikes wait. */}
+          {projectId && stats.metricPointCount > 0 ? (
+            <SpikesOverview projectId={projectId} onConfirm={confirm} onDismiss={dismiss} />
+          ) : null}
           <AnomaliesReadout
             stats={stats}
             fetchedAt={statsFetchedAt}
             isValidating={statsValidating}
           />
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="No open anomalies"
-              description={`${stats.distinctMetrics} metric series · ${stats.metricPointCount} data points · detection can run on demand.`}
-            />
-          )}
-          {stats.topPriority === 'no_metrics' && (
-            <RecommendedAction
-              tone="info"
-              title="Seed metric data first"
-              description="Spike detection needs a normal range to compare with: send some metric values first."
-              cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
-            />
-          )}
-          {(stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
-            <RecommendedAction
-              tone="info"
-              title="Triage open anomalies"
-              description={stats.topPriorityLabel ?? 'Confirm real regressions or dismiss false positives.'}
-              cta={{ label: 'Open Anomalies', to: '/anomalies?tab=anomalies' }}
-            />
-          )}
         </div>
       )}
 

@@ -778,10 +778,10 @@ const COPY: CopyRegistry = {
         'Whether your API routes or database tables changed since the last scan, and which change can break a caller.',
       sections: { snapshot: 'Summary' },
       statLabels: {
-        openFindings: 'Open findings',
-        critical: 'Critical',
+        openFindings: 'Changes to review',
+        critical: 'Serious',
         warnings: 'Warnings',
-        snapshots: 'Snapshots',
+        snapshots: 'Scans',
         contractEdges: 'Routes and tables tracked',
         surfaces: 'Surfaces',
       },
@@ -796,19 +796,19 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        findings: 'Findings',
-        snapshots: 'Snapshots',
-        scanner: 'Scanner',
+        findings: 'Changes',
+        snapshots: 'Scans',
+        scanner: 'Run a scan',
       },
       help: {
-        title: 'About contract drift',
-        whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
+        title: 'About schema changes',
+        whatIsIt: 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before. A change that can break a caller (a removed route, a dropped column) is marked serious.',
         useCases: [
-          'Find API endpoints present in inventory but missing in OpenAPI spec',
-          'Detect DB columns expected by the FE but removed from the schema',
-          'Promote high-severity findings to candidate lessons',
+          'Find an API route your app calls that no longer exists',
+          'Catch a database column the frontend reads that was dropped',
+          'Turn a serious change into a lesson so it is not repeated',
         ],
-        howToUse: 'Run a scan from the Scanner tab, then review findings. Dismiss false positives to train the sampler.',
+        howToUse: 'Run a scan from the Run a scan tab, then review the changes. Dismiss the ones that are fine; Mushi checks those routes less often.',
       },
     },
     '/experiments': {
@@ -855,11 +855,11 @@ const COPY: CopyRegistry = {
         'Metrics that jumped far outside their normal range, and whether the jump started with a release.',
       sections: { snapshot: 'Summary' },
       statLabels: {
-        open: 'Open',
-        releaseRegressions: 'Release regressions',
+        open: 'Spikes to review',
+        releaseRegressions: 'After a release',
         highScore: 'High score',
         autoReported: 'Auto-reported',
-        metricPoints: 'Metric points',
+        metricPoints: 'Metrics watched',
         dismissed: 'Dismissed',
       },
       actionLabels: {
@@ -872,19 +872,19 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        anomalies: 'Anomalies',
+        anomalies: 'Spikes',
         metrics: 'Metrics',
-        detect: 'Detect',
+        detect: 'Check now',
       },
       help: {
-        title: 'About anomaly detection',
-        whatIsIt: 'Send numeric metrics (error rate, latency, conversion) and run detectors for spikes and release regressions. Confirmed regressions can auto-open bug reports.',
+        title: 'About unusual spikes',
+        whatIsIt: 'Send any number your app tracks (error rate, latency, sign-ups). Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.',
         useCases: [
-          'Detect crash-rate spikes after a release',
-          'Flag latency regressions against rolling baseline',
-          'Auto-open a bug report when a regression is confirmed',
+          'See a crash-rate jump that started with a release',
+          'Notice latency creeping up after a deploy',
+          'Get a bug report opened for a confirmed regression',
         ],
-        howToUse: 'Add metric data in the Metrics tab, then run detection or wait for the hourly cron. Confirm or dismiss each finding.',
+        howToUse: 'Send some values from the Metrics tab, then click Check now or wait for the hourly check. Confirm a real spike or dismiss noise under its chart.',
       },
     },
     '/cost': {
@@ -1590,7 +1590,7 @@ const COPY: CopyRegistry = {
     },
     '/drift': {
       title: 'Schema changes',
-      description: 'Where the live app no longer matches its declared routes and API.',
+      description: 'Whether your API routes or database tables changed since the last scan.',
     },
     '/experiments': {
       title: 'Experiments',
@@ -1598,7 +1598,7 @@ const COPY: CopyRegistry = {
     },
     '/anomalies': {
       title: 'Unusual spikes',
-      description: 'Unusual spikes in reports, errors or AI spend, and what caused them.',
+      description: 'Metrics that jumped outside their normal range, drawn with your releases.',
     },
     '/cost': {
       title: 'AI spend',

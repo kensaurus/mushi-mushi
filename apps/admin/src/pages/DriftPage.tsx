@@ -30,7 +30,6 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
   Tooltip,
 } from '../components/ui'
 import { IconClose, IconEye } from '../components/icons'
@@ -41,6 +40,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { DriftStatusBanner, isDriftStatusBannerCritical } from '../components/drift/DriftStatusBanner'
 import { DriftReadout } from '../components/drift/DriftReadout'
+import { SchemaChangesTimeline } from '../components/drift/SchemaChangesTimeline'
 import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
@@ -322,7 +322,7 @@ export function DriftPage() {
 
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Find API endpoints present in inventory but missing in OpenAPI spec',
           'Detect DB columns expected by the FE but removed from the schema',
@@ -456,13 +456,16 @@ export function DriftPage() {
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
                 onFirstScan={() => setActiveTab('scanner')}
+                onReview={() => setActiveTab('findings')}
               />
             ),
           },
           {
             priority: POSTURE_PRIORITY.guide,
+            // Never scanned: the first-step card is the one thing to do (P3).
             show:
               activeTab === 'overview' &&
+              stats.topPriority !== 'never_scanned' &&
               !shouldHideGuideWhenBannerActive(
                 isDriftStatusBannerCritical(stats),
                 COMMON_HEALTHY_PRIORITIES,
@@ -491,33 +494,11 @@ export function DriftPage() {
         />
       ) : null}
 
-      {activeTab === 'overview' && (
-        <div className="space-y-4">
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="No schema changes"
-              description={`${stats.snapshotCount} scan${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} routes and tables tracked · nothing changed.`}
-            />
-          )}
-          {stats.topPriority === 'never_scanned' && (
-            <RecommendedAction
-              tone="info"
-              title="Run your first schema scan"
-              description="A scan reads your API routes and database tables. Later scans tell you what changed since. (The scanner compares your OpenAPI spec, user-story map and Postgres schema.)"
-              cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
-            />
-          )}
-          {(stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
-            <RecommendedAction
-              tone="info"
-              title="Triage open drift findings"
-              description={stats.topPriorityLabel ?? 'Review findings and dismiss false positives or promote critical gaps to lessons.'}
-              cta={{ label: 'Open Findings', to: '/drift?tab=findings' }}
-            />
-          )}
-        </div>
-      )}
+      {/* Changes over time with releases on them; the status sentence above
+          already says what waits, so no second "recommended" card. */}
+      {activeTab === 'overview' && projectId && stats.snapshotCount > 0 ? (
+        <SchemaChangesTimeline projectId={projectId} />
+      ) : null}
 
       {activeTab === 'findings' && (
         <FindingsTab
