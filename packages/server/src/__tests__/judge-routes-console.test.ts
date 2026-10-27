@@ -186,3 +186,20 @@ describe('64c2b3df "recent" disagreement share is really recent', () => {
     expect(d.topPriorityLabel).not.toMatch(/recent grades/)
   })
 })
+
+describe('agreement trend reads past the 1,000-row page', () => {
+  it('counts every grade in the 12 weeks when PostgREST caps each answer at 1,000 rows', async () => {
+    const day = 86_400_000
+    const rows: Row[] = Array.from({ length: 1500 }, (_, i) =>
+      evaluation(1000 + i, { created_at: new Date(Date.now() - (i % 70) * day - 3_600_000).toISOString(), classification_agreed: i % 5 !== 0 }),
+    )
+    db = makeFakeDb(
+      { classification_evaluations: rows, reports: [], prompt_versions: [] },
+      { maxRows: 1000, rpc: () => [{ week_start: '2026-10-19', avg_score: 0.9, eval_count: 10 }] },
+    )
+    const d = (await get('/v1/admin/judge/stats')).json.data
+    const graded = d.agreementWeeks.reduce((n: number, w: { graded: number }) => n + w.graded, 0)
+    expect(graded).toBe(1500)
+    expect(d.agreementCapped).toBe(false)
+  })
+})

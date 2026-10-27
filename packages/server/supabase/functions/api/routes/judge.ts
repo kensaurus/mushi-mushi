@@ -18,6 +18,33 @@ const AGREEMENT_WEEKS = 12;
 const RECENT_DAYS = 14;
 /** Rows read for the trend; a project grading more than this in 12 weeks gets its newest rows only. */
 const AGREEMENT_ROW_CAP = 5000;
+/** PostgREST answers at most 1,000 rows a request, so the trend is read in pages of this size. */
+const AGREEMENT_PAGE = 1000;
+
+type AgreementRow = { created_at: string; classification_agreed: boolean | null };
+
+/**
+ * The (created_at, classification_agreed) rows since `since`, newest first, in
+ * pages up to AGREEMENT_ROW_CAP. Null when a page fails, so the page shows no
+ * trend instead of a partial one.
+ */
+async function readAgreementRows(db: ReturnType<typeof getServiceClient>, pid: string, since: string): Promise<AgreementRow[] | null> {
+  const rows: AgreementRow[] = [];
+  for (let from = 0; from < AGREEMENT_ROW_CAP; from += AGREEMENT_PAGE) {
+    const { data, error } = await db
+      .from('classification_evaluations')
+      .select('created_at, classification_agreed')
+      .eq('project_id', pid)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .range(from, Math.min(from + AGREEMENT_PAGE, AGREEMENT_ROW_CAP) - 1);
+    if (error) return null;
+    const page = (data ?? []) as AgreementRow[];
+    rows.push(...page);
+    if (page.length < AGREEMENT_PAGE) break;
+  }
+  return rows;
+}
 
 /** Monday 00:00 UTC of the week holding `ms` (the same week date_trunc('week') uses). */
 function weekStartUtc(ms: number): string {
@@ -31,7 +58,7 @@ function weekStartUtc(ms: number): string {
  * (created_at, classification_agreed) rows. `capped` is true when the read
  * hit AGREEMENT_ROW_CAP, so the oldest weeks may be partial.
  */
-function agreementSummary(rows: Array<{ created_at: string; classification_agreed: boolean | null }>, now: number) {
+function agreementSummary(rows: AgreementRow[], now: number) {
   const weeks = new Map<string, { weekStart: string; graded: number; agreed: number }>();
   const recentFrom = now - RECENT_DAYS * 86_400_000;
   let recentGraded = 0;
@@ -162,22 +189,11 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
             .in('status', [...JUDGE_ELIGIBLE_STATUSES])
             .is('judge_evaluated_at', null),
         ),
-        // Two narrow columns over 12 weeks: the agreement trend and the
-        // recent window, so "recent" on the page is really recent (64c2b3df).
-        db
-          .from('classification_evaluations')
-          .select('created_at, classification_agreed')
-          .eq('project_id', pid)
-          .gte('created_at', agreementSince)
-          .order('created_at', { ascending: false })
-          .limit(AGREEMENT_ROW_CAP),
+        // Two narrow columns over 12 weeks, read in pages: the agreement
+        // trend and the recent window, so "recent" is really recent (64c2b3df).
+        readAgreementRows(db, pid, agreementSince),
       ]);
-    const agreement = agreementRes.error
-      ? null
-      : agreementSummary(
-          (agreementRes.data ?? []) as Array<{ created_at: string; classification_agreed: boolean | null }>,
-          Date.now(),
-        );
+    const agreement = agreementRes === null ? null : agreementSummary(agreementRes, Date.now());
 
     const weeks = (weekRes.data ?? []) as Array<{
       week_start: string;
