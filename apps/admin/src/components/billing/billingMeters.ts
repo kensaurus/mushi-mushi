@@ -45,7 +45,7 @@ function toneFor(pct: number, over?: boolean, approaching?: boolean): MeterTone 
   return 'ok'
 }
 
-/** "resets in 5 days" from the period end, or null when unknown. */
+/** @internal Exported for tests. "resets in 5 days" from the period end, or null when unknown. */
 export function resetsIn(periodEnd: string | null, now: number = Date.now()): string | null {
   if (!periodEnd) return null
   const end = Date.parse(periodEnd)
@@ -55,7 +55,7 @@ export function resetsIn(periodEnd: string | null, now: number = Date.now()): st
   return `resets in ${days} day${days === 1 ? '' : 's'}`
 }
 
-/** The fixes line: merged this period, never a ratio. */
+/** @internal Exported for tests. The fixes line: merged this period, never a ratio. */
 export function fixesMeter(stats: Pick<BillingStats, 'fixesSucceeded' | 'fixesAttempted'>): UsageMeter {
   const merged = Math.max(0, stats.fixesSucceeded)
   const byServer = Math.max(0, stats.fixesAttempted)

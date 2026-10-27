@@ -28,7 +28,7 @@ export interface PickableReport {
   created_at?: string | null
 }
 
-export interface ReportPickerProps {
+interface ReportPickerProps {
   /** The picked bug, or null. */
   value: PickableReport | null
   onChange: (report: PickableReport | null) => void

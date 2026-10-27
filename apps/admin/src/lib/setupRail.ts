@@ -27,8 +27,8 @@ export interface TimeToFirstDiagnosis {
   testDiagnosisAt?: string | null
 }
 
-export type SetupRailStepId = 'project' | 'key' | 'sdk' | 'report'
-export type SetupRailState = 'done' | 'current' | 'todo'
+type SetupRailStepId = 'project' | 'key' | 'sdk' | 'report'
+type SetupRailState = 'done' | 'current' | 'todo'
 
 export interface SetupRailStep {
   id: SetupRailStepId
@@ -40,7 +40,7 @@ export interface SetupRailStep {
   tab: OnboardingTabId
 }
 
-export interface SdkHeartbeatView {
+interface SdkHeartbeatView {
   seenAt: string
   ago: string | null
   origin: string | null

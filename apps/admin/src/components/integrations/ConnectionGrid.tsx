@@ -49,7 +49,7 @@ function jumpTo(anchor: string) {
   }
 }
 
-export type ConnectionGridProps = Omit<ConnectionGridInput, 'sentryDeliveries' | 'sentryDeliveriesFailed'>
+type ConnectionGridProps = Omit<ConnectionGridInput, 'sentryDeliveries' | 'sentryDeliveriesFailed'>
 
 export function ConnectionGrid(props: ConnectionGridProps) {
   // The same request the Sentry card makes (cached), only once Sentry is set up.

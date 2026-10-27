@@ -205,6 +205,7 @@ export function diagnoseKey(
  * read-only key, called by curl) are not the app's SDK: counting them told a
  * never-installed app it went "Cold, removed from a deploy" (report fe489587).
  * Rows without scopes (an older API) count, as before.
+ * @internal Exported for tests.
  */
 export function activeSdkKeys<T extends Pick<SdkHealthApiKey, 'is_active' | 'scopes'>>(apiKeys: readonly T[]): T[] {
   return apiKeys.filter((k) => k.is_active && (k.scopes == null || isSdkKeyScopes(k.scopes)))

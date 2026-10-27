@@ -19,7 +19,7 @@
 
 import { fixBranchTemplate } from '../../lib/validators'
 
-export interface FixBranchFieldState {
+interface FixBranchFieldState {
   /** The message under the field, or null when the pattern is fine. */
   error: string | null
   /** True only when the user changed the pattern to one the server refuses. */

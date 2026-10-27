@@ -15,15 +15,16 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { SDK_HEALTH_ANCHOR } from '../../lib/sdkHealth'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { sdkFreshness } from '../../lib/heartbeat'
 import type { McpStats } from '../mcp/types'
 import type { SdkStatus } from '../SdkVersionBadge'
 
-export type PillTone = 'ok' | 'warn' | 'neutral'
+type PillTone = 'ok' | 'warn' | 'neutral'
 
-export interface ConnectPill {
+interface ConnectPill {
   id: 'heartbeat' | 'version' | 'editor'
   label: string
   value: string
@@ -34,7 +35,7 @@ export interface ConnectPill {
   badge?: string
 }
 
-export interface ConnectPillsInput {
+interface ConnectPillsInput {
   sdkLastSeenAt: string | null
   sdkVersion: string | null
   sdkLatestVersion: string | null
@@ -49,6 +50,7 @@ export function sdkIsBehind(input: Pick<ConnectPillsInput, 'sdkVersion' | 'sdkLa
   return Boolean(input.sdkVersion && input.sdkLatestVersion && input.sdkVersion !== input.sdkLatestVersion)
 }
 
+/** @internal Exported for tests. */
 export function connectPills(input: ConnectPillsInput): ConnectPill[] {
   const now = input.now ?? Date.now()
   const freshness = sdkFreshness(input.sdkLastSeenAt, now)
@@ -120,7 +122,7 @@ export function ConnectStatusPills(props: ConnectPillsInput & { loading?: boolea
               <span className="shrink-0 text-fg-muted">{p.label}</span>
               <span className="min-w-0 truncate font-medium text-fg">{p.value}</span>
               {p.badge ? (
-                <span className="shrink-0 rounded-full bg-warn/15 px-1.5 py-px text-2xs font-medium text-warn">{p.badge}</span>
+                <span className={`shrink-0 rounded-full px-1.5 py-px text-2xs font-medium ${CHIP_TONE.warnSubtle}`}>{p.badge}</span>
               ) : null}
             </Link>
           </li>

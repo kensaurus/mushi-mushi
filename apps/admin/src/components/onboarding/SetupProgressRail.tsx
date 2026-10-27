@@ -25,7 +25,7 @@ import { relativeTime } from '../../lib/setupGuideSteps'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingTabId } from './types'
 
-export interface SetupProgressRailProps {
+interface SetupProgressRailProps {
   project: SetupProject | null
   /** A key minted on this page, so the snippet carries it. */
   apiKey: string | null

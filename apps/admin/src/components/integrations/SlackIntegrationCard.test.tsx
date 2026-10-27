@@ -20,6 +20,7 @@ vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => mocks.toast }))
 
 import { SlackIntegrationCard, isSlackInstallUnavailable } from './SlackIntegrationCard'
+import { coerceApiResult } from '../../lib/apiEnvelope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -59,6 +60,14 @@ describe('isSlackInstallUnavailable', () => {
     expect(isSlackInstallUnavailable({ code: 'NOT_CONFIGURED' })).toBe(true)
     expect(isSlackInstallUnavailable({ code: 'NO_PROJECT_SELECTED' })).toBe(false)
     expect(isSlackInstallUnavailable(null)).toBe(false)
+  })
+
+  it("survives apiFetch's error mapping: the route's 503 body keeps its code", () => {
+    // apiFetch returns coerceApiResult(body) for a non-2xx body with an error envelope.
+    const body = { ok: false, error: { code: 'NOT_CONFIGURED', message: "One-click Slack install isn't set up on this server. Paste an incoming webhook URL instead." } }
+    const res = coerceApiResult(body)
+    expect(res.ok).toBe(false)
+    expect(isSlackInstallUnavailable(res.ok ? null : res.error)).toBe(true)
   })
 })
 
