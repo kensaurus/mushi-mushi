@@ -28,6 +28,11 @@ export type FixAttemptFailureCategory =
   | 'github_other_error'
   | 'no_relevant_code'
   | 'context_assembly_failed'
+  // A cloud agent's own no-PR verdict (server fix-report-truth.ts).
+  | 'needs_human'
+  | 'already_fixed'
+  | 'not_actionable'
+  | 'wrong_repo'
   | 'unknown'
 
 export interface ReportFixAttempt {
@@ -48,6 +53,8 @@ export interface ReportFixAttempt {
   files_changed: string[] | null
   lines_changed: number | null
   review_passed: boolean | null
+  /** The agent's own reason when it flagged the fix. */
+  review_reasoning?: string | null
   check_run_status: string | null
   check_run_conclusion: string | null
   check_run_updated_at?: string | null

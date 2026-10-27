@@ -57,6 +57,7 @@ import { ReportDetailHeader } from '../components/report-detail/ReportDetailHead
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
+import { ReportFixActions } from '../components/report-detail/ReportFixActions'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { ReportDiagnosisGraph } from '../components/report-detail/ReportDiagnosisGraph'
@@ -494,11 +495,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   // Every dispatch control on this page (triage bar, recommendation CTA and
   // its retries) goes through this one gate + confirm.
+  const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
+  const openFixPr = useMemo(() => (mergeTarget ? { number: mergeTarget.pr_number } : null), [mergeTarget])
   const confirmed = useConfirmedDispatch({
     report,
     preflight,
     repoChoice,
     busy: isDispatchBusy,
+    openPr: openFixPr,
     dispatch,
   })
   const { request: requestDispatch, block: dispatchBlockState } = confirmed
@@ -528,7 +532,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
-  const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
   const handleMerged = useCallback(
     (reportStatus: string | null) => {
@@ -600,6 +603,13 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         ]}
       />
 
+      {/* Where the open fix PR is stuck, its failing checks, and only the actions the server would take. */}
+      {latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed' ? (
+        <div className="mb-3">
+          <ReportFixActions fixId={latestFix.id} onChanged={onReload} />
+        </div>
+      ) : null}
+
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
       <RegressionChain report={report} className="mb-3" />
@@ -658,6 +668,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             ciUpdatedAt={mergeTarget.check_run_updated_at}
             ciInfra={mergeTarget.ci_infra}
             projectId={report.project_id}
+            prState={mergeTarget.pr_state}
+            agent={mergeTarget.agent}
             onMerged={handleMerged}
           />
         </div>
