@@ -1541,11 +1541,30 @@ html:has(.landing-cinematic-hero) {
   background: var(--mushi-paper-wash);
 }
 
-/* A prompt for an AI editor wraps; a shell command scrolls. */
+/* A prompt for an AI editor wraps and reads as prose; a shell command scrolls. */
 .landing-oneclick__cmd-row--prompt code {
   white-space: normal;
   overflow-x: visible;
+  font-family: inherit;
+  font-size: 0.9rem;
   line-height: 1.5;
+}
+
+/* The Copy button copies the whole command, so the scroll only needs a hint. */
+.landing-install-box .landing-oneclick__cmd-row code {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 479px) {
+  /* One row of tabs on a phone: the tablist's aria-label already says "Install with". */
+  .landing-install-box__tabs-label {
+    display: none;
+  }
+
+  .landing-install-box__tab {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.88rem;
+  }
 }
 
 
