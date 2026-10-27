@@ -1,6 +1,8 @@
 /**
  * FILE: packages/cli/src/commands/repo.ts
- * PURPOSE: `mushi repo digest` and `mushi repo diagram show|generate|publish|unpublish`
+ * PURPOSE: `mushi repo digest`, `mushi repo cleanup show|request|restore`
+ *          (ADR 0051; approving and running stay in the console) and
+ *          `mushi repo diagram show|generate|publish|unpublish`
  *          — console parity for the Explore page's repo digest (one
  *          token-budgeted text of the connected repo for an LLM) and the
  *          architecture diagram (/v1/admin/projects/:id/codebase/{digest,diagram}).
@@ -106,10 +108,66 @@ function renderDiagram(data: DiagramData): string[] {
   return lines
 }
 
+// ── mushi repo cleanup (ADR 0051) ───────────────────────────────────────────
+
+/** The preview reads GitHub's branch and pull request lists for every connected repo. */
+const PREVIEW_TIMEOUT_MS = 90_000
+
+interface CleanupRepoView {
+  repo: string
+  error: string | null
+  deleteBranchOnMerge: boolean | null
+  branches: Array<{ key: string; branch: string; headSha: string; reason: string }>
+  prs: Array<{ key: string; prNumber: number; headSha: string; reason: string }>
+  keptCount: number
+  gone: number
+}
+
+interface CleanupView {
+  repos: CleanupRepoView[]
+  actions: Array<{ id: string; action: string; repo: string | null; itemCount: number; status: string; requestedAt: string }>
+  restorable: Array<{ id: string; repo: string; branch: string; deleted_sha: string }>
+  raceNote: string
+}
+
+const ACTIONS: Record<string, 'delete_branches' | 'close_prs' | 'set_delete_branch_on_merge'> = {
+  'delete-branches': 'delete_branches',
+  'close-prs': 'close_prs',
+  'auto-delete': 'set_delete_branch_on_merge',
+}
+
+function renderCleanup(v: CleanupView): string[] {
+  const lines: string[] = []
+  for (const r of v.repos) {
+    lines.push(r.repo)
+    if (r.error) {
+      lines.push(`  ${oneLine(r.error, 200)}`)
+      continue
+    }
+    lines.push(`  branches to delete: ${r.branches.length}${r.gone ? ` (${r.gone} recorded branches already gone)` : ''}`)
+    for (const b of r.branches) lines.push(`    ${b.key}  ${b.headSha.slice(0, 7)}  ${oneLine(b.reason, 120)}`)
+    lines.push(`  fix pull requests to close: ${r.prs.length}`)
+    for (const p of r.prs) lines.push(`    ${p.key}  ${p.headSha.slice(0, 7)}  ${oneLine(p.reason, 120)}`)
+    if (r.keptCount) lines.push(`  kept: ${r.keptCount} (see the console for why)`)
+    if (r.deleteBranchOnMerge === false) lines.push('  "Automatically delete head branches" is off: mushi repo cleanup request auto-delete --repo ' + r.repo)
+  }
+  const waiting = v.actions.filter((a) => a.status === 'pending_approval' || a.status === 'approved')
+  if (waiting.length) {
+    lines.push('Waiting for a decision in the console:')
+    for (const a of waiting) lines.push(`  ${a.id}  ${a.action} ×${a.itemCount} in ${a.repo ?? '?'}  (${a.status})`)
+  }
+  if (v.restorable.length) {
+    lines.push('Restorable (mushi repo cleanup restore <id…>):')
+    for (const i of v.restorable) lines.push(`  ${i.id}  ${i.repo} ${i.branch} at ${i.deleted_sha.slice(0, 7)}`)
+  }
+  lines.push(v.raceNote)
+  return lines
+}
+
 export function registerRepoCommands(program: Command): void {
   const repo = program
     .command('repo')
-    .description('Your connected GitHub repo: a digest for an LLM and an architecture diagram')
+    .description('Your connected GitHub repo: a digest for an LLM, clean-up and an architecture diagram')
 
   repo
     .command('digest')
@@ -146,6 +204,8 @@ export function registerRepoCommands(program: Command): void {
       for (const line of digestSummary(result.data)) process.stderr.write(`${line}\n`)
       process.stdout.write(result.data.text.endsWith('\n') ? result.data.text : `${result.data.text}\n`)
     })
+
+  registerRepoCleanupCommands(repo)
 
   const diagram = repo
     .command('diagram')
@@ -237,5 +297,80 @@ export function registerRepoCommands(program: Command): void {
       const result = await apiCall<{ published: false }>(`/v1/admin/projects/${projectId}/codebase/diagram/publish`, config, { method: 'DELETE' })
       if (!result.ok) die(result)
       console.log('The public diagram page is down.')
+    })
+}
+
+/** Declared after registerRepoCommands: the parity check reads command chains top to bottom. */
+function registerRepoCleanupCommands(repo: Command): void {
+  const cleanup = repo
+    .command('cleanup')
+    .description('Branches and fix PRs Mushi made that can go; you ask here, an owner or admin approves in the console')
+
+  cleanup
+    .command('show')
+    .description('What a clean-up would delete or close, why, and at which commit')
+    .option('--stale-days <n>', 'Days without a new commit before a fix PR counts as stale (7–90, default 14)')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (opts: { staleDays?: string; projectId?: string; json?: boolean }) => {
+      const config = requireConfig()
+      const projectId = resolveProjectId(opts.projectId, config.projectId)
+      const qs = opts.staleDays ? `?staleDays=${encodeURIComponent(opts.staleDays)}` : ''
+      const result = await apiCall<CleanupView>(`/v1/admin/projects/${projectId}/repo-cleanup${qs}`, config, {}, { timeoutMs: PREVIEW_TIMEOUT_MS })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      for (const line of renderCleanup(result.data)) console.log(line)
+    })
+
+  cleanup
+    .command('request <kind>')
+    .description('Ask for a clean-up: delete-branches, close-prs or auto-delete (nothing changes until it is approved)')
+    .requiredOption('--repo <owner/name>', 'The repository')
+    .option('--keys <keys>', 'Comma-separated item keys from `show` (default: every listed item, up to 50)')
+    .option('--reason <text>', 'Why, kept with the request')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (kind: string, opts: { repo: string; keys?: string; reason?: string; projectId?: string; json?: boolean }) => {
+      const action = ACTIONS[kind]
+      if (!action) throw new MushiCliError('E_INVALID_INPUT', `Unknown clean-up "${kind}".`, `use one of ${Object.keys(ACTIONS).join(', ')}`)
+      const config = requireConfig()
+      const projectId = resolveProjectId(opts.projectId, config.projectId)
+      const keys = opts.keys ? opts.keys.split(',').map((k) => k.trim()).filter(Boolean) : undefined
+      const body = { action, repo: opts.repo, ...(keys ? { keys } : {}), ...(opts.reason ? { reason: opts.reason.slice(0, 500) } : {}) }
+      const result = await apiCall<{ id: string; payloadSha256: string; next: string; payload: { items?: unknown[] } }>(
+        `/v1/admin/projects/${projectId}/repo-cleanup/requests`,
+        config,
+        { method: 'POST', body: JSON.stringify(body) },
+        { timeoutMs: PREVIEW_TIMEOUT_MS },
+      )
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      console.log(`Asked: ${result.data.id} (${result.data.payload.items?.length ?? 1} item(s)).`)
+      console.log(result.data.next)
+    })
+
+  cleanup
+    .command('restore <itemIds...>')
+    .description('Ask to recreate branches Mushi deleted, at the commit it kept (one repository at a time)')
+    .option('--project-id <id>', 'Project ID (defaults to the configured project)')
+    .option('--json', 'Machine-readable JSON output')
+    .action(async (itemIds: string[], opts: { projectId?: string; json?: boolean }) => {
+      const ids = itemIds.map((i) => requireUuid(i, 'item id'))
+      const config = requireConfig()
+      const projectId = resolveProjectId(opts.projectId, config.projectId)
+      const result = await apiCall<{ id: string; next: string }>(`/v1/admin/projects/${projectId}/repo-cleanup/restore`, config, { method: 'POST', body: JSON.stringify({ itemIds: ids }) })
+      if (!result.ok) die(result)
+      if (outputIsJson(opts.json)) {
+        console.log(JSON.stringify(result.data, null, 2))
+        return
+      }
+      console.log(`Asked to restore: ${result.data.id}.`)
+      console.log(result.data.next)
     })
 }

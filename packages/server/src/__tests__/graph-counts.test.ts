@@ -65,3 +65,19 @@ describe('graphTotal', () => {
     expect(graph.GRAPH_CANVAS_EDGE_LIMIT).toBe(500)
   })
 })
+
+// Report 4659acc8: bug groups on the map read "6f6a3044-f1b6-…".
+describe('reportGroupDisplayLabel', () => {
+  it('names a group by its title, else its first report, with the report count', () => {
+    expect(graph.reportGroupDisplayLabel({ groupTitle: 'Login button does nothing', reportCount: 3 })).toBe('Login button does nothing (3 reports)')
+    expect(graph.reportGroupDisplayLabel({ groupTitle: null, report: { title: 'Crash on start' }, reportCount: 1 })).toBe('Crash on start')
+    expect(graph.reportGroupDisplayLabel({ report: { title: null, summary: '  The   receipt upload fails after a save  ' } })).toBe('The receipt upload fails after a save')
+  })
+
+  it('cuts a long name at 60 characters and gives null when there is nothing to show', () => {
+    const name = graph.reportGroupDisplayLabel({ report: { description: 'x'.repeat(200) }, reportCount: 2 })!
+    expect(name.startsWith(`${'x'.repeat(59)}…`)).toBe(true)
+    expect(name.endsWith('(2 reports)')).toBe(true)
+    expect(graph.reportGroupDisplayLabel({ report: { title: '', summary: null } })).toBeNull()
+  })
+})

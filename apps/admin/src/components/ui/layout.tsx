@@ -175,13 +175,12 @@ export function Card({
  *
  * Every dashboard tile, chart card, and table panel uses this for the
  * title→content boundary. Do not roll ad-hoc uppercase labels — import
- * PanelHeader (inside Card) or CardPanel (Card + header bundled).
+ * PanelHeader inside a Card, or use Section (Card + header bundled).
  *
  * NN/g #4 Consistency: one separator rhythm across the admin console.
  */
 
 export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
-const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
 
 interface PanelHeaderProps {
   title: ReactNode
@@ -228,23 +227,6 @@ export function PanelHeader({
   )
 }
 
-export function PanelSubheader({ title, className = '' }: { title: string; className?: string }) {
-  return (
-    <p
-      className={`mb-1 pb-1 text-3xs font-medium uppercase tracking-wider text-fg-faint ${PANEL_SUBHEADER_SEPARATOR} ${className}`}
-    >
-      {title}
-    </p>
-  )
-}
-
-interface CardPanelProps {
-  title: ReactNode
-  children: ReactNode
-  className?: string
-  action?: ReactNode
-}
-
 /** Opaque bordered panel — use instead of ad-hoc bg-surface-raised divs. */
 export function SurfacePanel({
   children,
@@ -285,18 +267,6 @@ export function PanelSectionLabel({
   className?: string
 }) {
   return <p className={`panel-section-label mb-2 ${className}`}>{children}</p>
-}
-
-
-
-/** Card + PanelHeader — standard dashboard / insight tile shell. */
-export function CardPanel({ title, children, className = '', action }: CardPanelProps) {
-  return (
-    <Card className={`min-w-0 p-3 ${className}`}>
-      <PanelHeader title={title} action={action} />
-      {children}
-    </Card>
-  )
 }
 
 /* ── Section (labeled card for detail views) ────────────────────────────── */

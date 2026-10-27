@@ -16,6 +16,11 @@ export type Row = Record<string, unknown>
 interface FakeDbOptions {
   /** table → columns that form a unique key (insert conflicts return 23505). */
   uniques?: Record<string, string[]>
+  /**
+   * table → a partial unique index (`CREATE UNIQUE INDEX … WHERE …`): rows for
+   * which `where` holds may not share `keys`; an insert that would returns 23505.
+   */
+  partialUniques?: Record<string, { keys: string[]; where: (row: Row) => boolean }>
   rpc?: (fn: string, args: Record<string, unknown>) => unknown
   /** Make an rpc fail as PostgREST does (e.g. PGRST202 for a function that is not applied yet); null lets it run. */
   rpcError?: (fn: string) => { code: string; message: string } | null
@@ -292,6 +297,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         for (const item of items) {
           if (uniques && rows.some((r) => uniques.every((k) => r[k] === item[k]))) {
             return { data: null, error: { code: '23505', message: `duplicate key on ${this.table}` } }
+          }
+          const partial = this.db.options.partialUniques?.[this.table]
+          if (partial && partial.where(item) && rows.some((r) => partial.where(r) && partial.keys.every((k) => r[k] === item[k]))) {
+            return { data: null, error: { code: '23505', message: `duplicate key on ${this.table} (partial unique index)` } }
           }
           if (this.db.options.autoId && item.id === undefined) item.id = crypto.randomUUID()
           rows.push({ ...item })

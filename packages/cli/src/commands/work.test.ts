@@ -10,6 +10,7 @@ import {
   failureTail,
   agentEnv,
   branchNameFor,
+  runProc,
   buildLocalPrompt,
   commitBody,
   earlierAttemptsBlock,
@@ -25,6 +26,8 @@ import {
   missingWriteScope,
   runningPayload,
   stoppedPayload,
+  classifyFailure,
+  WORK_INFRA_PREFIX,
 } from './work.js'
 
 const R1 = '11111111-1111-4111-8111-111111111111'
@@ -380,7 +383,47 @@ describe('checkCursorSignIn', () => {
 
   it('stays unknown, not signed out, when both checks time out', async () => {
     const run = answers({ code: null, timedOut: true }, { code: null, timedOut: true })
-    await expect(checkCursorSignIn(run, noWait)).resolves.toEqual({ state: 'unknown', detail: 'timed out after 90 s' })
+    await expect(checkCursorSignIn(run, noWait)).resolves.toMatchObject({ state: 'unknown', detail: 'timed out after 90 s' })
     expect(run).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('local workers (ADR 0048): infra failures never count against a report', () => {
+  const now = Date.parse('2026-10-27T12:00:00Z')
+  const failed = { id: 'a', status: 'failed', pr_url: null, agent: 'mcp', created_at: '2026-10-27T08:00:00Z' }
+
+  it('a run closed as an infra failure starts no cooldown', () => {
+    expect(inLocalCooldown([{ ...failed, error: `${WORK_INFRA_PREFIX} git fetch failed: Permission denied` }], now)).toBe(false)
+    expect(inLocalCooldown([{ ...failed, error: 'mushi work: git commit failed: 1 test failed' }], now)).toBe(true)
+  })
+
+  it("splits infra from code: before the agent, every failure is the machine's", () => {
+    expect(classifyFailure('git commit failed: lint error in src/a.ts', 'prepare')).toBe('infra')
+    expect(classifyFailure('git push failed: pre-push hook timed out', 'push')).toBe('infra')
+    expect(classifyFailure('git fetch: fatal: unable to access https://github.com/o/r: Could not resolve host', 'commit')).toBe('infra')
+    expect(classifyFailure("fatal: Unable to create '/x/.git/index.lock': File exists", 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: ✗ check-dead-buttons: 1 violation', 'commit')).toBe('code')
+    expect(classifyFailure('gh pr create failed: a pull request already exists', 'pr')).toBe('code')
+  })
+
+  it('agentEnv still strips every key, the worker key included', () => {
+    const env = agentEnv({ PATH: '/bin', HOME: '/h', MUSHI_API_KEY: 'k', MUSHI_WORKER_KEY: 'mushi_worker', CREDENTIALS_DIRECTORY: '/run/cred', XDG_RUNTIME_DIR: '/run/user/1000' }, '/tmp/empty')
+    expect(env.MUSHI_WORKER_KEY).toBeUndefined()
+    expect(env.MUSHI_API_KEY).toBeUndefined()
+    expect(env.CREDENTIALS_DIRECTORY).toBeUndefined()
+    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k))).toEqual([])
+  })
+})
+
+describe('runProc', () => {
+  it('answers when the process exited but something it started still holds the output (the 51-minute audit hang)', async () => {
+    // The grandchild inherits stdout and lives on; Node then never fires 'close'.
+    const hold = "require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 8000)'], { stdio: 'inherit', detached: true }).unref(); console.log('parent done')"
+    const t0 = Date.now()
+    const r = await runProc(process.execPath, ['-e', hold], { closeGraceMs: 300 })
+    expect(Date.now() - t0).toBeLessThan(5000)
+    expect(r.code).toBe(0)
+    expect(r.stdout).toContain('parent done')
+    expect(r.stderr).toMatch(/output pipes still open/)
   })
 })

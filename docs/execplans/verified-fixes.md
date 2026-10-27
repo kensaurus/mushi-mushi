@@ -212,7 +212,9 @@ Surface parity:
   `cursor/**`, `mushi/**` and `copilot/**` branches. It sets `runs-on:`
   from the project's labels, `permissions: contents: read, checks: write`,
   a 20-minute timeout, and pins actions by SHA as the lockfile template
-  does. It never uses `pull_request_target`.
+  does. It never uses `pull_request_target`. (2026-10-27, ADR 0047: it
+  also runs on `ready_for_review` and skips drafts, `mushi/train/*` and
+  `mushi/revert-*` heads.)
 
 ### Console
 

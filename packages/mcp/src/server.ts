@@ -1797,6 +1797,48 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_ci_bill',
+    {
+      title: titleOf('get_ci_bill'),
+      description: descOf('get_ci_bill'),
+      annotations: annotationsFor('get_ci_bill'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project; omitted with an account-level key, every project you can read'),
+        days: z.number().int().min(1).max(90).optional().describe('Window in days (default 30)'),
+      }),
+      outputSchema: z.looseObject({
+        window: z.unknown().optional(),
+        previousWindow: z.unknown().optional(),
+        provenance: z.string().optional().describe('measured: from GitHub\'s bill'),
+        currency: z.string().optional(),
+        available: z.boolean().optional(),
+        repoScoped: z.boolean().optional().describe('Only your projects\' repos: you are not a member of the organization'),
+        unavailableReason: z.string().nullable().optional().describe('Why there is no bill, and how to connect one'),
+        owners: z.array(z.looseObject({})).optional(),
+        month: z.looseObject({}).optional().describe('This calendar month so far: grossUsd, discountUsd, netUsd'),
+        totals: z.looseObject({}).optional(),
+        previousTotals: z.looseObject({}).nullable().optional(),
+        change: z.looseObject({}).nullable().optional(),
+        windowComplete: z.boolean().optional(),
+        byRepo: z.array(z.looseObject({})).optional(),
+        bySku: z.array(z.looseObject({})).optional(),
+        byDay: z.array(z.looseObject({})).optional(),
+        dataThrough: z.string().nullable().optional(),
+        agentShare: z.looseObject({}).nullable().optional().describe('Paid minutes on Mushi agent branches (estimated)'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = new URLSearchParams({ days: String(args.days ?? 30) });
+      if (pid) qs.set('project_id', pid);
+      return jsonResult(await apiCall(`/v1/admin/ci/bill?${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
     'request_ci_placement_change',
     {
       title: titleOf('request_ci_placement_change'),
@@ -1814,6 +1856,89 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const pid = await resolveProjectId(args.projectId);
       const body = { projectId: pid, repo: args.repo, variable: args.variable, value: args.value, ...(args.reason ? { reason: args.reason } : {}) };
       return jsonText(await apiCall('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'open_ci_cost_fix',
+    {
+      title: titleOf('open_ci_cost_fix'),
+      description: descOf('open_ci_cost_fix'),
+      annotations: annotationsFor('open_ci_cost_fix'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project'),
+        repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo, connected to the project'),
+        workflowPath: z
+          .string()
+          .max(200)
+          .regex(/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/)
+          .describe('The workflow file, e.g. .github/workflows/ci.yml'),
+        kind: z.enum(['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths']).describe('The fix (advice[].autofix.kind)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = { projectId: pid, repo: args.repo, workflowPath: args.workflowPath, kind: args.kind };
+      return jsonText(await apiCall('/v1/admin/ci/cost-fixes', { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
+  const COST_FIX_KIND = z.enum(['add_concurrency', 'skip_drafts', 'weekly_cron', 'ignore_docs_paths']);
+  const WORKFLOW_PATH = z.string().max(200).regex(/^\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/);
+  server.registerTool(
+    'preview_ci_cost_fix_rollout',
+    {
+      title: titleOf('preview_ci_cost_fix_rollout'),
+      description: descOf('preview_ci_cost_fix_rollout'),
+      annotations: annotationsFor('preview_ci_cost_fix_rollout'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Limit it to one app; omitted with an account-level key, every app you may change'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId || undefined;
+      const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : '';
+      return jsonText(await apiCall(`/v1/admin/ci/cost-fix-rollout${qs}`, undefined, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'apply_ci_cost_fix_rollout',
+    {
+      title: titleOf('apply_ci_cost_fix_rollout'),
+      description: descOf('apply_ci_cost_fix_rollout'),
+      annotations: annotationsFor('apply_ci_cost_fix_rollout'),
+      inputSchema: z.object({
+        repos: z
+          .array(
+            z.object({
+              projectId: z.string().describe('The app the repo is connected to (preview repos[].projectId)'),
+              repo: z.string().regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/).describe('owner/repo'),
+              items: z.array(z.object({ workflowPath: WORKFLOW_PATH, kind: COST_FIX_KIND })).min(1).max(20),
+            }),
+          )
+          .min(1)
+          .max(10)
+          .describe('One entry per repo: the ready items from preview_ci_cost_fix_rollout'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall('/v1/admin/ci/cost-fix-rollout', { method: 'POST', body: JSON.stringify({ repos: args.repos }) }, { minTimeoutMs: 60_000 }));
+    },
+  );
+
+  server.registerTool(
+    'get_ci_cost_fix_bundle',
+    {
+      title: titleOf('get_ci_cost_fix_bundle'),
+      description: descOf('get_ci_cost_fix_bundle'),
+      annotations: annotationsFor('get_ci_cost_fix_bundle'),
+      inputSchema: z.object({
+        bundleId: z.string().uuid().describe('results[].bundleId from apply_ci_cost_fix_rollout'),
+      }),
+    },
+    async (args) => {
+      return jsonText(await apiCall(`/v1/admin/ci/cost-fix-bundles/${encodeURIComponent(args.bundleId)}`));
     },
   );
 

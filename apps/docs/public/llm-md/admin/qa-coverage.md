@@ -69,6 +69,10 @@ with `local` provider and a weekly cron.
 The main grid shows one card per story with:
 - **Provider badge** — Local / Browserbase / Firecrawl
 - **24h pass rate** — colour-coded bar and percentage
+- **7 days** — one square per UTC day: red when a run failed that day, green when
+  every finished run passed, grey with none. Skipped runs never count as failures.
+  From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
+  could not be read).
 - **Run count** and **last run** time
 - **Disabled / Queued** chip when applicable
 - Link to last failure Browserbase replay session
