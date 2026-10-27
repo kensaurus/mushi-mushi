@@ -492,3 +492,53 @@ describe('GET /v1/admin/pipeline/fix/:id', () => {
     expect((await app.call('GET', '/v1/admin/pipeline/fix/:id', undefined, { id: 'nope' })).status).toBe(400)
   })
 })
+
+describe('local workers on /pipeline (ADR 0048)', () => {
+  const C1 = '5000000a-0000-4000-8000-000000000000'
+  const seedInfra = (db: FakeDb, over: Record<string, unknown> = {}) => {
+    db.table('work_lanes').push({ id: 'lane-1', host_id: 'host-1', project_id: P1, name: 'glot', paused: false, drain: false, stop_at: null, mode: 'fix', model: 'grok-4.7-xhigh-fast' })
+    db.table('work_hosts').push({ id: 'host-1', last_heartbeat_at: '2026-10-26T11:59:00Z', revoked_at: null })
+    db.table('work_claims').push({
+      id: C1, project_id: P1, report_id: 'r-new', lane_id: 'lane-1', host_id: 'host-1', status: 'done', outcome: 'failed', failure_kind: 'infra',
+      detail: 'git fetch: Permission denied', auto_requeued: false, claimed_at: '2026-10-26T10:00:00Z', finished_at: '2026-10-26T10:05:00Z', ...over,
+    })
+  }
+
+  it('lists runs the machine stopped, with Requeue, and counts the registered lane as an opener', async () => {
+    const { app, db } = setup()
+    seedInfra(db)
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    const stages = (res.body.data as { stages: Array<{ groups: Array<{ id: string; actions: string[]; items: Array<{ id: string; reportId: string | null }> }> }> }).stages
+    const group = stages.flatMap((s) => s.groups).find((g) => g.id === 'local_infra')
+    expect(group?.actions).toEqual(['requeue'])
+    expect(group?.items.map((i) => [i.id, i.reportId])).toEqual([[C1, 'r-new']])
+    const openers = (res.body.data as { dispatchers: Array<{ projectId: string; opener: string; problem: string | null; local: { lanes: number; lanesActive: number; models: string[] } }> }).dispatchers
+    const p1 = openers.find((d) => d.projectId === P1)!
+    expect(p1.local).toMatchObject({ lanes: 1, lanesActive: 1, models: ['grok-4.7-xhigh-fast'] })
+    // Auto-fix is on with no agent key, but a lane takes the app's reports: nothing is left unopened.
+    expect(p1.problem).toBeNull()
+  })
+
+  it('a run already put back once on its own is not listed', async () => {
+    const { app, db } = setup()
+    seedInfra(db, { auto_requeued: true })
+    const res = await app.call('GET', '/v1/admin/pipeline')
+    const stages = (res.body.data as { stages: Array<{ groups: Array<{ id: string }> }> }).stages
+    expect(stages.flatMap((s) => s.groups).some((g) => g.id === 'local_infra')).toBe(false)
+  })
+
+  it('requeue puts the report at the front of its lane; a viewer is refused', async () => {
+    const { app, db } = setup()
+    seedInfra(db)
+    db.table('work_queue').push({ id: 'q-old', lane_id: 'lane-1', project_id: P1, report_id: 'r-other', position: 1_800_000_000, source: 'console' })
+    state.roles = { [P1]: 'viewer' }
+    const refused = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'requeue', claimIds: [C1] })
+    expect((refused.body.data as { results: Array<{ ok: boolean }> }).results[0]!.ok).toBe(false)
+    state.roles = {}
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'requeue', claimIds: [C1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({ ok: true })
+    const queue = [...db.table('work_queue')].sort((a, b) => Number(a.position) - Number(b.position))
+    expect(queue.map((q) => q.report_id)).toEqual(['r-new', 'r-other'])
+    expect(queue[0]).toMatchObject({ source: 'requeue', lane_id: 'lane-1' })
+  })
+})

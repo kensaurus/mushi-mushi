@@ -25,6 +25,8 @@
  *   remove          take the PR out of the merge queue, with a reason
  *   close           close the PR without merging, with a reason
  *   train_retry     run the merge queue for the app now
+ *   requeue         put a report a local worker's machine stopped (ADR 0048)
+ *                   back at the front of its lane; `claimIds`, not fixIds
  *
  * Every item carries `blocked`: the group's actions this file would refuse
  * for it, with the same words (readActionFacts → pipeline-view
@@ -67,6 +69,8 @@ import {
   dispatcherGroup,
   intakeGroup,
   keyServes,
+  localInfraGroup,
+  type InfraClaimRow,
   summarizeIntake,
   withDispatcherGroup,
   type ActionFacts,
@@ -87,6 +91,8 @@ import {
 } from '../../_shared/pipeline-view.ts';
 import { dbError, enumerateAccessibleProjectIds, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
+import { activeWorkClaims, enqueueReports } from '../../_shared/work-claims.ts';
+import { hostOnline } from '../../_shared/work-lanes.ts';
 
 const plog = log.child('pipeline-routes');
 
@@ -101,7 +107,7 @@ export const MAX_ACTION_ITEMS = 10;
 /** How long "Run merge queue now" waits for the worker before answering; the run goes on either way. */
 const TRAIN_RETRY_WAIT_MS = 20_000;
 
-export const PIPELINE_ACTIONS = ['ci_repair', 'followup', 'update_branch', 'conflict_agent', 'mark_ready', 'remove', 'close', 'train_retry'] as const;
+export const PIPELINE_ACTIONS = ['ci_repair', 'followup', 'update_branch', 'conflict_agent', 'mark_ready', 'remove', 'close', 'train_retry', 'requeue'] as const;
 export type PipelineActionId = (typeof PIPELINE_ACTIONS)[number];
 
 const ATTEMPT_COLUMNS =
@@ -282,8 +288,11 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const intake = await readIntake(db, projectIds, now);
   const names = new Map(((projectsRes.data ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]));
   const withDispatch = withDispatcherGroup(
-    dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages,
-    intakeGroup(intake, names),
+    withDispatcherGroup(
+      dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages,
+      intakeGroup(intake, names),
+    ),
+    await readLocalInfra(db, projectIds, now),
   );
   const deploys = (deploysRes.data ?? []) as DeployRow[];
   return {
@@ -360,6 +369,51 @@ async function readActionFacts(db: Db, projectIds: string[], attempts: AttemptRo
 }
 
 /**
+ * Local worker runs the machine stopped (ADR 0048) that were not put back on
+ * their own, whose report no worker took again since and is not queued. Never
+ * fails the pipeline: an unreadable (or not yet created) table shows nothing.
+ */
+async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
+  const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
+  try {
+    const claims = await inChunks<InfraClaimRow & { auto_requeued: boolean }>(projectIds, (ids) =>
+      db
+        .from('work_claims')
+        .select('id, project_id, report_id, lane_id, outcome, detail, claimed_at, finished_at, auto_requeued')
+        .in('project_id', ids)
+        .eq('failure_kind', 'infra')
+        .in('status', ['done', 'expired'])
+        .gte('claimed_at', since7)
+        .order('claimed_at', { ascending: false })
+        .limit(500) as never,
+    );
+    if (claims.length === 0) return null;
+    const reportIds = [...new Set(claims.map((x) => x.report_id))];
+    const [later, queued, reports, lanes] = await Promise.all([
+      inChunks<{ report_id: string; claimed_at: string }>(reportIds, (ids) => db.from('work_claims').select('report_id, claimed_at').in('report_id', ids).gte('claimed_at', since7) as never),
+      inChunks<{ report_id: string }>(reportIds, (ids) => db.from('work_queue').select('report_id').in('report_id', ids) as never),
+      inChunks<{ id: string; summary: string | null; title: string | null; status: string }>(reportIds, (ids) => db.from('reports').select('id, summary, title, status').in('id', ids) as never),
+      inChunks<{ id: string; name: string }>([...new Set(claims.map((x) => x.lane_id))], (ids) => db.from('work_lanes').select('id, name').in('id', ids) as never),
+    ]);
+    const queuedIds = new Set(queued.map((q) => q.report_id));
+    const open = new Map(reports.filter((r) => !['fixed', 'verified', 'dismissed'].includes(r.status)).map((r) => [r.id, r.summary ?? r.title ?? `Report ${r.id.slice(0, 8)}`]));
+    // The newest claim per report only, and only when nothing took the report after it.
+    const newest = new Map<string, string>();
+    for (const l of later) if ((newest.get(l.report_id) ?? '') < l.claimed_at) newest.set(l.report_id, l.claimed_at);
+    const seen = new Set<string>();
+    const stuck = claims.filter((x) => {
+      if (seen.has(x.report_id)) return false;
+      seen.add(x.report_id);
+      return !x.auto_requeued && open.has(x.report_id) && !queuedIds.has(x.report_id) && newest.get(x.report_id) === x.claimed_at;
+    });
+    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])));
+  } catch (err) {
+    plog.warn('local worker runs read failed', { err: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+/**
  * Rejected ingests of the last 7 days per app (`report_ingest_rejections`,
  * written by the api's fire-and-forget counter). null when nothing was ever
  * counted or the table cannot be read.
@@ -406,6 +460,7 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
       db.from('fix_attempts').select('project_id, agent, status, created_at').in('project_id', projectIds).gte('created_at', since7).limit(5000),
     ]);
     for (const r of [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes]) if (r.error) throw new Error(r.error.message);
+    const lanes = await readRegisteredLanes(db, projectIds, now);
     const orgOwners = new Map<string, Set<string>>();
     for (const m of (ownersRes.data ?? []) as Array<{ organization_id: string; user_id: string }>) {
       orgOwners.set(m.organization_id, (orgOwners.get(m.organization_id) ?? new Set()).add(m.user_id));
@@ -418,6 +473,7 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
       cursorKeys: (keysRes.data ?? []) as AgentKeyRow[],
       jobs: (jobsRes.data ?? []) as Array<{ project_id: string; created_at: string }>,
       attempts: (attemptsRes.data ?? []) as Array<{ project_id: string; agent: string | null; status: string; created_at: string }>,
+      lanes,
     });
   } catch (err) {
     plog.warn('dispatcher read failed', { err: err instanceof Error ? err.message : String(err) });
@@ -441,6 +497,24 @@ function findPipelineFix(stages: PipelineStage[], fixId: string): {
     }
   }
   return { stage: null, groupId: null, groupLabel: null, tone: null, actions: [], item: null };
+}
+
+/** Registered local worker lanes (ADR 0048) and whether their machine is online. Empty when none or unreadable. */
+async function readRegisteredLanes(db: Db, projectIds: string[], now: Date) {
+  try {
+    const lanes = await inChunks<{ project_id: string; host_id: string; paused: boolean; drain: boolean; stop_at: string | null; mode: string; model: string | null }>(projectIds, (ids) =>
+      db.from('work_lanes').select('project_id, host_id, paused, drain, stop_at, mode, model').in('project_id', ids) as never,
+    );
+    if (lanes.length === 0) return [];
+    const hosts = await inChunks<{ id: string; last_heartbeat_at: string; revoked_at: string | null }>([...new Set(lanes.map((l) => l.host_id))], (ids) =>
+      db.from('work_hosts').select('id, last_heartbeat_at, revoked_at').in('id', ids) as never,
+    );
+    const online = new Set(hosts.filter((h) => !h.revoked_at && hostOnline(h.last_heartbeat_at, now)).map((h) => h.id));
+    return lanes.map((l) => ({ project_id: l.project_id, online: online.has(l.host_id), paused: l.paused, drain: l.drain, stop_at: l.stop_at, mode: l.mode, model: l.model }));
+  } catch (err) {
+    plog.warn('local worker lanes read failed', { err: err instanceof Error ? err.message : String(err) });
+    return [];
+  }
 }
 
 interface ActionResult {
@@ -678,6 +752,8 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
       return c.json({ ok: true, data: { results } });
     }
 
+    if (action === 'requeue') return requeueClaims(c, db, userId, (body as { claimIds?: unknown }).claimIds, now);
+
     const fixIds = Array.isArray(body.fixIds) ? [...new Set(body.fixIds.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))] : [];
     if (fixIds.length === 0 || fixIds.length > MAX_ACTION_ITEMS) {
       return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: `Send 1 to ${MAX_ACTION_ITEMS} fix ids.` } }, 400);
@@ -724,6 +800,64 @@ export function registerPipelineRoutes(app: Hono<{ Variables: Variables }>, deps
     }
     return c.json({ ok: true, data: { results } });
   });
+}
+
+/**
+ * "Requeue" (ADR 0048): put each report a local worker's machine stopped back
+ * at the front of the lane that ran it. A person's call, so it is not limited
+ * to once as the automatic requeue is, and it never counts against the report.
+ */
+async function requeueClaims(c: Ctx, db: Db, userId: string, raw: unknown, now: Date): Promise<Response> {
+  const claimIds = Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))] : [];
+  if (claimIds.length === 0 || claimIds.length > MAX_ACTION_ITEMS) {
+    return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: `Send 1 to ${MAX_ACTION_ITEMS} claim ids.` } }, 400);
+  }
+  const { data, error } = await db.from('work_claims').select('id, project_id, report_id, lane_id, host_id, status').in('id', claimIds);
+  if (error) return dbError(c, error);
+  const rows = (data ?? []) as Array<{ id: string; project_id: string; report_id: string; lane_id: string; host_id: string; status: string }>;
+  const held = await activeWorkClaims(db, rows.map((r) => r.report_id), now);
+  const roles = new Map<string, string | null>();
+  const results: ActionResult[] = [];
+  for (const id of claimIds) {
+    const cl = rows.find((r) => r.id === id);
+    if (!cl) {
+      results.push({ id, ok: false, message: 'Run not found.' });
+      continue;
+    }
+    if (!roles.has(cl.project_id)) {
+      const access = await userCanAccessProject(db, userId, cl.project_id);
+      roles.set(cl.project_id, access.allowed ? access.role ?? 'member' : null);
+    }
+    const role = roles.get(cl.project_id);
+    if (!role) {
+      results.push({ id, ok: false, message: 'Not a member of this app.' });
+      continue;
+    }
+    if (role === 'viewer') {
+      results.push({ id, ok: false, message: "Viewers cannot change a lane's queue." });
+      continue;
+    }
+    if ('error' in held) {
+      results.push({ id, ok: false, message: 'Could not read the local workers; try again in a minute.' });
+      continue;
+    }
+    if (held.ids.has(cl.report_id)) {
+      results.push({ id, ok: false, message: 'A worker already has this report again.' });
+      continue;
+    }
+    const q = await enqueueReports(db, { id: cl.lane_id, projectId: cl.project_id, hostId: cl.host_id }, [cl.report_id], { source: 'requeue', addedBy: userId, front: true, now });
+    if ('error' in q) {
+      results.push({ id, ok: false, message: 'Could not put it back in the lane.' });
+      continue;
+    }
+    results.push({ id, ok: true, message: q.queued ? 'Back at the front of its lane; the worker takes it next.' : "It was already in the lane's queue." });
+  }
+  for (const p of [...new Set(rows.map((r) => r.project_id))]) {
+    if (roles.get(p) && roles.get(p) !== 'viewer') {
+      await logAudit(db, p, userId, 'settings.updated', 'pipeline_action', undefined, { action: 'requeue', claims: results.filter((r) => r.ok).length }).catch(() => {});
+    }
+  }
+  return c.json({ ok: true, data: { results } });
 }
 
 async function runAction(

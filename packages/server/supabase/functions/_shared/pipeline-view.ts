@@ -51,6 +51,8 @@ export type PipelineAction =
   | 'followup'
   /** Close the report with a reason (the console's report dismiss route). */
   | 'dismiss'
+  /** Put a report a local worker could not run (the machine failed, ADR 0048) back in its lane. Item ids are work_claims ids. */
+  | 'requeue'
 
 export type GroupTone = 'stuck' | 'moving' | 'done'
 
@@ -253,6 +255,8 @@ export const FOLLOWUPS_SETTING = {
 }
 /** Spend-down (ADR 0028) is the server's automatic dispatcher; its on/off switch per Cursor key. */
 export const DISPATCH_SETTING = { label: 'Cursor keys and spend-down', to: '/credits#cursor-fix-bugs' }
+/** Local workers (ADR 0048): their lanes, queues and runs. */
+export const WORKERS_SETTING = { label: 'Local workers', to: '/pipeline?tab=workers' }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -863,6 +867,8 @@ export interface DispatcherInput {
   jobs: Array<{ project_id: string; created_at: string }>
   /** fix attempts of the last 7 days: who opened them and when. */
   attempts: Array<{ project_id: string; agent: string | null; status: string; created_at: string }>
+  /** Registered local worker lanes (ADR 0048), with whether their machine is online. */
+  lanes?: Array<{ project_id: string; online: boolean; paused: boolean; drain: boolean; stop_at: string | null; mode: string; model: string | null }>
 }
 
 export interface DispatcherStatus {
@@ -872,7 +878,16 @@ export interface DispatcherStatus {
   /** Who opened fixes in the last 7 days. */
   opener: 'server' | 'local' | 'both' | 'nobody'
   server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
-  local: { runs24h: number; running: number; lastAt: string | null }
+  local: {
+    runs24h: number
+    running: number
+    lastAt: string | null
+    /** Registered lanes for this app, and those whose machine is online and that take new reports. */
+    lanes: number
+    lanesActive: number
+    /** The models those lanes run (null = the agent's default). */
+    models: string[]
+  }
   /** Plain words when auto-fix is on but the server cannot or does not dispatch. */
   problem: string | null
 }
@@ -902,16 +917,26 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
     const dispatches48h = jobs.filter((j) => within(j.created_at, 48 * HOUR)).length
     const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null }
     const localTimes = localAttempts.map((a) => a.created_at).sort()
+    // Registered lanes, not inferred from runs (ADR 0048): one that is online,
+    // not paused or draining, before its stop date and fixing new reports.
+    const lanes = (input.lanes ?? []).filter((l) => l.project_id === p.id)
+    const taking = lanes.filter((l) => l.online && !l.paused && !l.drain && l.mode === 'fix' && !(l.stop_at && Date.parse(l.stop_at) <= now))
     const local = {
       runs24h: localAttempts.filter((a) => within(a.created_at, 24 * HOUR)).length,
       running: localAttempts.filter((a) => a.status === 'running' || a.status === 'pending').length,
       lastAt: localTimes[localTimes.length - 1] ?? null,
+      lanes: lanes.length,
+      lanesActive: taking.length,
+      models: [...new Set(lanes.map((l) => l.model ?? 'default'))].sort(),
     }
     const byServer = serverAttempts.length > 0 || jobs.length > 0
-    const byLocal = localAttempts.length > 0
+    const byLocal = localAttempts.length > 0 || taking.length > 0
     const autofixOn = input.autofixOn.has(p.id)
     let problem: string | null = null
-    if (autofixOn && agentKeys === 0) {
+    if (autofixOn && agentKeys === 0 && taking.length > 0) {
+      // A local worker lane takes this app's reports: nothing is left unopened.
+      problem = null
+    } else if (autofixOn && agentKeys === 0) {
       problem = `Auto-fix is on but has no agent key${keys.length ? ` (${keys.length} Cursor key${keys.length === 1 ? '' : 's'} off or spend-down off)` : ''}; ${dispatches48h} dispatches in 48h`
     } else if (autofixOn && dispatches48h === 0) {
       problem = 'Auto-fix has an agent key but dispatched nothing in 48h'
@@ -949,7 +974,12 @@ export function dispatcherGroup(dispatchers: DispatcherStatus[], now: Date): Pip
     failingChecks: [],
     review: null,
     blocked: {},
-    queueDetail: d.local.lastAt ? `Local mushi work lanes opened ${d.local.runs24h} in 24h (${d.local.running} running).` : 'No local lane either: nobody opens fixes.',
+    queueDetail:
+      d.local.lanes > 0
+        ? `${plural(d.local.lanes, 'local worker lane')} registered, none taking new reports (offline, paused, draining or past its stop date).`
+        : d.local.lastAt
+          ? `Local mushi work lanes opened ${d.local.runs24h} in 24h (${d.local.running} running).`
+          : 'No local lane either: nobody opens fixes.',
   }))
   items.sort((a, b) => a.since.localeCompare(b.since))
   return {
@@ -1122,4 +1152,58 @@ export function summarizeTrains(rows: TrainRow[], perRepo = 60): TrainSummary[] 
       }
     })
     .sort((a, b) => b.failed - a.failed || a.repo.localeCompare(b.repo))
+}
+
+// ── Local worker runs the machine stopped (ADR 0048) ────────────────────────
+
+/** A work_claims row that ended on an infra failure and was not put back on its own. */
+export interface InfraClaimRow {
+  id: string
+  project_id: string
+  report_id: string
+  lane_id: string
+  outcome: string | null
+  detail: string | null
+  claimed_at: string
+  finished_at: string | null
+}
+
+/**
+ * Reports a local worker could not run because of the machine (a lost lease,
+ * a clone permission, a hook refusing under load), already put back once on
+ * their own: a person decides whether to queue them again ("Requeue").
+ * Item ids are claim ids; never counted against the report.
+ */
+export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>): PipelineGroup | null {
+  if (claims.length === 0) return null
+  const items: PipelineItem[] = claims
+    .map((cl) => ({
+      id: cl.id,
+      projectId: cl.project_id,
+      reportId: cl.report_id,
+      title: titles.get(cl.report_id) ?? `Report ${cl.report_id.slice(0, 8)}`,
+      repo: null,
+      prNumber: null,
+      prUrl: null,
+      queueId: null,
+      since: cl.finished_at ?? cl.claimed_at,
+      lastError: clip(cl.detail) ?? (cl.outcome === 'lease_expired' ? 'The worker stopped renewing its lease.' : 'The machine failed, not the code.'),
+      lastEventAt: cl.finished_at,
+      lastEventLabel: `local lane ${laneNames.get(cl.lane_id) ?? cl.lane_id.slice(0, 8)}`,
+      failingChecks: [],
+      review: null,
+      queueDetail: null,
+    }))
+    .sort((a, b) => a.since.localeCompare(b.since))
+  return {
+    id: 'local_infra',
+    stage: 'pr',
+    tone: 'stuck',
+    label: `${plural(items.length, 'report')}: a local worker's machine stopped the run again (not the code); requeue to try once more`,
+    count: items.length,
+    oldestAt: items[0]?.since ?? null,
+    actions: ['requeue'],
+    settings: WORKERS_SETTING,
+    items: items.slice(0, MAX_ITEMS_PER_GROUP),
+  }
 }

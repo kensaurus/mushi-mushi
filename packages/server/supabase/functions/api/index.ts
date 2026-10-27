@@ -814,6 +814,8 @@ forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sd
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
+// work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
+forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 
 registerA2ATaskRoutes(app);
 
