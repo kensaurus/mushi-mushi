@@ -82,7 +82,7 @@ export function nextQueueStep(pr: PullView, checks: ChecksView): QueueStep {
   if (s === 'behind') return { do: 'update' }
   if (pr.mergeable == null || s === 'unknown') return { do: 'wait', reason: 'GitHub is still working out whether it can merge.' }
   if (checks.failed.length) {
-    return { do: 'blocked', reason: `CI failed: ${checks.failed.slice(0, 4).join(', ')}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
+    return { do: 'blocked', reason: `CI failed: ${checkNameList(checks.failed)}. A CI-repair agent may fix it (review follow-ups); the queue looks again after each push.` }
   }
   if (checks.pending > 0) return { do: 'wait', reason: `CI is running (${checks.pending} check${checks.pending === 1 ? '' : 's'} left).` }
   if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return { do: 'merge' }
@@ -147,6 +147,38 @@ export function checksView(runs: Array<{ id?: number; name?: string; status?: st
     }
   }
   return { pending, failed, ran }
+}
+
+/**
+ * Check names for a queue or train `detail`, each in double quotes:
+ * `"Lint, typecheck, build, doctor", "pgTAP RLS suite"`. Names contain
+ * commas, so a bare ", " list could not be read back (report 7426815e).
+ */
+export function checkNameList(names: string[], max = 4): string {
+  return names.slice(0, max).map((n) => `"${n.replace(/"/g, "'")}"`).join(', ')
+}
+
+/**
+ * The names in a list `checkNameList` wrote. Rows written before 2026-10-27
+ * joined bare names with ", "; those are split there and pieces put back
+ * together while a parenthesis is open, or when a lower-case piece follows a
+ * capitalised one ("Lint, typecheck, build, doctor" is one check).
+ */
+export function parseCheckNameList(list: string): string[] {
+  const quoted = [...list.matchAll(/"([^"]*)"/g)].map((m) => m[1].trim()).filter(Boolean)
+  if (quoted.length > 0) return quoted
+  const out: string[] = []
+  let depth = 0
+  for (const raw of list.split(',')) {
+    const piece = raw.trim()
+    if (!piece) continue
+    const prev = out[out.length - 1]
+    const continues = prev !== undefined && (depth > 0 || (/^[a-z]/.test(piece) && /^[A-Z]/.test(prev)))
+    if (continues) out[out.length - 1] = `${prev}, ${piece}`
+    else out.push(piece)
+    depth = Math.max(0, depth + (piece.match(/\(/g)?.length ?? 0) - (piece.match(/\)/g)?.length ?? 0))
+  }
+  return out
 }
 
 /** The task a Cursor agent gets for a conflicting PR. Pure text; no report content goes in. */
