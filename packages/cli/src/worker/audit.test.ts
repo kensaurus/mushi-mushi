@@ -1,5 +1,8 @@
+import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { checkSummary, evidenceLine, listScreens, nextScreen, parseProposals, patternReproduces, safePath, safeRegex, scriptReproduces, vetoed } from './audit.js'
+import { checkSummary, evidenceLine, listScreens, nextScreen, parseProposals, patternReproduces, readWorktreeFile, safePath, safeRegex, scriptReproduces, vetoed } from './audit.js'
 
 describe('which screens an audit reads', () => {
   it('page files first, never tests, stories or layouts', () => {
@@ -103,5 +106,25 @@ describe('the second model may only veto', () => {
     expect(vetoed('{"veto": true, "reason": "intended"}').vetoed).toBe(true)
     expect(vetoed('Looks fine to me!').vetoed).toBe(true)
     expect(vetoed('{"veto": "no"}').vetoed).toBe(true)
+  })
+})
+
+describe('a model-named file is read once, inside the clone', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mushi-audit-read-'))
+  writeFileSync(join(dir, 'a.ts'), 'const x = 1\n')
+  writeFileSync(join(dir, 'big.ts'), 'x'.repeat(64))
+
+  it('reads a regular file and refuses a missing or oversized one', () => {
+    expect(readWorktreeFile(join(dir, 'a.ts'))).toBe('const x = 1\n')
+    expect(readWorktreeFile(join(dir, 'missing.ts'))).toBeNull()
+    expect(readWorktreeFile(join(dir, 'big.ts'), 32)).toBeNull()
+    expect(readWorktreeFile(dir)).toBeNull()
+  })
+
+  it.skipIf(process.platform === 'win32')('never follows a symlink out of the clone', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'mushi-audit-outside-'))
+    writeFileSync(join(outside, 'secret.json'), '{"key":"x"}')
+    symlinkSync(join(outside, 'secret.json'), join(dir, 'link.ts'))
+    expect(readWorktreeFile(join(dir, 'link.ts'))).toBeNull()
   })
 })

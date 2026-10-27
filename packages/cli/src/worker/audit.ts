@@ -25,7 +25,7 @@
  *          never touched.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, constants as fsConstants, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { agentEnv, clearWorktree, defaultBranch, failureTail, git, installCommand, installDeps, runProc, type Api } from '../commands/work.js'
@@ -36,6 +36,34 @@ const SCRIPT_TIMEOUT_MS = 10 * 60_000
 const MAX_FINDINGS_PER_SCREEN = 3
 const MAX_PENDING = 20
 const MAX_FILE_BYTES = 1_000_000
+
+/**
+ * @internal Exported for tests only. A file in the worktree read in one go: opened once without
+ * following a symlink (a model-named path must not leave the clone), checked on the open handle
+ * (a regular file, at most MAX_FILE_BYTES), then read from that same handle. Null when it is not.
+ */
+export function readWorktreeFile(path: string, maxBytes = MAX_FILE_BYTES): string | null {
+  let fd: number
+  try {
+    fd = openSync(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+  } catch {
+    return null
+  }
+  try {
+    const st = fstatSync(fd)
+    if (!st.isFile() || st.size > maxBytes) return null
+    const buf = Buffer.alloc(st.size)
+    let off = 0
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off)
+      if (n === 0) break
+      off += n
+    }
+    return buf.subarray(0, off).toString('utf8')
+  } finally {
+    closeSync(fd)
+  }
+}
 const SCRIPT_NAMES = ['lint', 'typecheck', 'test', 'check'] as const
 
 type AuditCheck =
@@ -352,14 +380,14 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
     let depsReady = false
     let scriptRuns = 0
     for (const p of proposals) {
-      const path = join(wt, p.file)
-      if (!existsSync(path) || statSync(path).size > MAX_FILE_BYTES) continue
-      const evidence = evidenceLine(readFileSync(path, 'utf8'), p.line, p.quote)
+      const source = readWorktreeFile(join(wt, p.file))
+      if (source === null) continue
+      const evidence = evidenceLine(source, p.line, p.quote)
       if (!evidence) continue
       let ok = false
       if (p.check.kind === 'pattern') {
-        const cpath = join(wt, p.check.file)
-        ok = existsSync(cpath) && statSync(cpath).size <= MAX_FILE_BYTES && patternReproduces(readFileSync(cpath, 'utf8'), p.check)
+        const checked = readWorktreeFile(join(wt, p.check.file))
+        ok = checked !== null && patternReproduces(checked, p.check)
       } else if (scriptRuns < 1) {
         // One script run per pass: they are slow and take memory.
         const pkg = existsSync(join(wt, 'package.json')) ? (JSON.parse(readFileSync(join(wt, 'package.json'), 'utf8')) as { scripts?: Record<string, string> }) : {}
